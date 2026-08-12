@@ -518,6 +518,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("printLayout")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PageLayoutDefinitionManifest? PrintLayout { get; set; }
+
+        [JsonPropertyName("physicalPages")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<PhysicalPageModel>? PhysicalPages { get; set; }
     }
 
     /// <summary>Metadata for a CREATE DATASET entry.</summary>

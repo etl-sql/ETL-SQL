@@ -16,7 +16,9 @@ CREATE PAGE Revenue AS PAGINATED (
 );
 ```
 
-- **SIZE** — The paper size format (e.g., `'Letter'`, `'A4'`).
+- **SIZE** — The paper size format (e.g., `'Letter'`, `'A4'`, `'Custom'`).
+- **CUSTOM_WIDTH** — The custom width of the page. Only valid when `SIZE = 'Custom'`.
+- **CUSTOM_HEIGHT** — The custom height of the page. Only valid when `SIZE = 'Custom'`.
 - **ORIENTATION** — `'Portrait'` or `'Landscape'`.
 - **MARGINS** — A 4-tuple of margins `(Top, Right, Bottom, Left)` in the configured `UNITS`.
 - **UNITS** — The unit of measurement (`'in'`, `'cm'`, `'mm'`, `'px'`).

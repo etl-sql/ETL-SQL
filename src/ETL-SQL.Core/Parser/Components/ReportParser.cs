@@ -257,6 +257,18 @@ public class ReportParser : ParserComponent
                 Match(TokenType.EQUALS);
                 layout = layout with { Orientation = ConsumeReportOptionValue() };
             }
+            else if (IsCurrentValue("CUSTOM_WIDTH"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { CustomWidth = decimal.Parse(ConsumeReportOptionValue()) };
+            }
+            else if (IsCurrentValue("CUSTOM_HEIGHT"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { CustomHeight = decimal.Parse(ConsumeReportOptionValue()) };
+            }
             else if (IsCurrentValue("MARGINS") || Match(TokenType.MARGIN))
             {
                 if (IsCurrentValue("MARGINS") || IsCurrentValue("MARGIN")) Advance();

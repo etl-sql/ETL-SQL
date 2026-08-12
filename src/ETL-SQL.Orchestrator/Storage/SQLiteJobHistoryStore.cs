@@ -2342,6 +2342,54 @@ namespace ETL_SQL.Orchestrator.Storage
                     await cmd.ExecuteNonQueryAsync();
                 }
 
+                using (var gcFiles = connection.CreateCommand())
+                {
+                    gcFiles.Transaction = transaction;
+                    gcFiles.CommandText = @"
+                        DELETE FROM BundleFiles
+                        WHERE BundleName = @bundle
+                          AND Version NOT IN (
+                              SELECT Version FROM BundleVersions
+                              WHERE BundleName = @bundle
+                              ORDER BY Version DESC
+                              LIMIT 5
+                          );";
+                    gcFiles.AddParam("@bundle", request.BundleName);
+                    await gcFiles.ExecuteNonQueryAsync();
+                }
+
+                using (var gcDeps = connection.CreateCommand())
+                {
+                    gcDeps.Transaction = transaction;
+                    gcDeps.CommandText = @"
+                        DELETE FROM BundleDependencies
+                        WHERE BundleName = @bundle
+                          AND Version NOT IN (
+                              SELECT Version FROM BundleVersions
+                              WHERE BundleName = @bundle
+                              ORDER BY Version DESC
+                              LIMIT 5
+                          );";
+                    gcDeps.AddParam("@bundle", request.BundleName);
+                    await gcDeps.ExecuteNonQueryAsync();
+                }
+
+                using (var gcVersions = connection.CreateCommand())
+                {
+                    gcVersions.Transaction = transaction;
+                    gcVersions.CommandText = @"
+                        DELETE FROM BundleVersions
+                        WHERE BundleName = @bundle
+                          AND Version NOT IN (
+                              SELECT Version FROM BundleVersions
+                              WHERE BundleName = @bundle
+                              ORDER BY Version DESC
+                              LIMIT 5
+                          );";
+                    gcVersions.AddParam("@bundle", request.BundleName);
+                    await gcVersions.ExecuteNonQueryAsync();
+                }
+
                 await transaction.CommitAsync();
             }
             catch

@@ -89,6 +89,15 @@ namespace ETL_SQL.Reporting
                 manifest.Pages.Add(await _pageBuilder.BuildAsync(name, pStmt, _ctx, reportStyles));
             }
 
+            var compiler = new PhysicalPageCompiler();
+            foreach (var page in manifest.Pages)
+            {
+                if (page.Mode.Equals("PAGINATED", StringComparison.OrdinalIgnoreCase) || page.PrintLayout != null)
+                {
+                    page.PhysicalPages = compiler.Compile(page, manifest);
+                }
+            }
+
             // ── Containers ───────────────────────────────────────────────────
             if (_ctx.ReportContext.ContainerDefinitions.Count > 0)
             {

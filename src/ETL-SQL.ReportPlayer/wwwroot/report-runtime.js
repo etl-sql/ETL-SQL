@@ -1113,8 +1113,76 @@
         div.appendChild(content);
 
         pageSections[page.name] = div;
-        renderLayout(content, page, manifest, pageTheme);
+        
+        if (page.mode === 'PAGINATED' && page.physicalPages && page.physicalPages.length > 0) {
+            renderPhysicalPages(content, page, manifest, pageTheme);
+        } else {
+            renderLayout(content, page, manifest, pageTheme);
+        }
+        
         return div;
+    }
+
+    function renderPhysicalPages(container, pageDef, manifest, pageTheme) {
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.alignItems = 'center';
+        container.style.gap = '20px';
+        container.style.padding = '20px';
+        container.style.backgroundColor = '#f0f0f0';
+
+        pageDef.physicalPages.forEach(pPage => {
+            const sheet = document.createElement('div');
+            sheet.className = 'physical-page-sheet';
+            
+            const layout = pPage.layout || {};
+            const width = layout.customWidth || (layout.orientation === 'Landscape' ? 11.0 : 8.5);
+            const height = layout.customHeight || (layout.orientation === 'Landscape' ? 8.5 : 11.0);
+            const unit = layout.units || 'in';
+
+            sheet.style.width = width + unit;
+            sheet.style.height = height + unit;
+            sheet.style.backgroundColor = 'white';
+            sheet.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+            sheet.style.position = 'relative';
+            sheet.style.overflow = 'hidden';
+
+            const marginT = (layout.marginTop ?? 1.0) + unit;
+            const marginR = (layout.marginRight ?? 1.0) + unit;
+            const marginB = (layout.marginBottom ?? 1.0) + unit;
+            const marginL = (layout.marginLeft ?? 1.0) + unit;
+
+            const printArea = document.createElement('div');
+            printArea.style.position = 'absolute';
+            printArea.style.top = marginT;
+            printArea.style.right = marginR;
+            printArea.style.bottom = marginB;
+            printArea.style.left = marginL;
+
+            (pPage.visuals || []).forEach(pv => {
+                const wrapper = document.createElement('div');
+                wrapper.style.position = 'absolute';
+                wrapper.style.top = pv.topOffset + unit;
+                wrapper.style.left = '0';
+                wrapper.style.right = '0';
+                wrapper.style.height = pv.height + unit;
+                
+                if (pv.visual) {
+                    let visToRender = pv.visual;
+                    if (pv.startRowIndex !== undefined && pv.endRowIndex !== undefined && visToRender.visualType === 'TABLE') {
+                        visToRender = JSON.parse(JSON.stringify(pv.visual));
+                        if (visToRender.rows) {
+                            visToRender.rows = visToRender.rows.slice(pv.startRowIndex, pv.endRowIndex + 1);
+                        }
+                    }
+                    renderVisual(wrapper, visToRender, pageTheme, manifest);
+                }
+                printArea.appendChild(wrapper);
+            });
+
+            sheet.appendChild(printArea);
+            container.appendChild(sheet);
+        });
     }
 
     function renderContainer(container, containerDef, manifest, pageTheme) {

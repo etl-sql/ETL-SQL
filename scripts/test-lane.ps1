@@ -379,6 +379,10 @@ switch ($Lane) {
 
         & $PSCommandPath -Lane "slt" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        Write-Host "Running layout/page regression evidence generation..." -ForegroundColor Cyan
+        & (Join-Path $scriptRoot "Test-ReportLayoutEvidence.ps1")
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     "spill" {
         # Re-runs the engine and SLT suites with the spill/batch thresholds set to a handful of

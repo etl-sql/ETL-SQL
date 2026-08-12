@@ -166,6 +166,21 @@ namespace ETL_SQL.Reporting
                 descPara.Format.Font.Color = _greyDark2;
             }
 
+            if (manifest.Parameters.Count > 0)
+            {
+                var paramPara = section.AddParagraph();
+                paramPara.Format.SpaceBefore = Unit.FromPoint(8);
+                paramPara.Format.Font.Size = Unit.FromPoint(9);
+                paramPara.Format.Font.Color = _greyDark1;
+                paramPara.AddFormattedText("Export State / Active Filters:", TextFormat.Bold);
+                paramPara.AddLineBreak();
+                
+                foreach (var (key, value) in manifest.Parameters)
+                {
+                    paramPara.AddText($"• {key} = {value}");
+                    paramPara.AddLineBreak();
+                }
+            }
 
             var sep = section.AddParagraph();
             sep.Format.SpaceBefore = Unit.FromPoint(10);
