@@ -784,7 +784,7 @@ raw `CMD` connector or arbitrary shell execution.
 - [x] Implement the governed tool catalog and lifecycle (`Staged`, `Approved`, `Disabled`, `Revoked`),
       immutable artifact digest/signature verification, publisher/approver separation, tenant/environment
       ownership, grants, promotion preflight, and portable logical aliases.
-- [ ] Implement the Standard direct-process binding for approved pure transforms: no shell, sanitized
+- [x] Implement the Standard direct-process binding for approved pure transforms: no shell, sanitized
       allowlisted environment, dedicated identity, canonical scratch root, process-tree containment,
       bounded CPU/memory/process/time/output limits, cancellation, and cleanup.
 - [ ] Implement the versioned typed streaming protocol, beginning with JSON Lines compatibility and a

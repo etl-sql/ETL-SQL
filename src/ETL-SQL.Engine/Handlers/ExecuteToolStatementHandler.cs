@@ -154,158 +154,194 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
         else
         {
             startInfo.FileName = command;
-            startInfo.Arguments = args;
-            startInfo.WorkingDirectory = workingDir;
-        }
-
-        using var process = new Process { StartInfo = startInfo };
-        
-        var operationId = $"{context.SessionId ?? "temp"}_{stmt.ToolAlias}_{stmt.Line}";
-        
-        if (context.Ledger != null && stmt.TargetTable == null)
-        {
-            var existingOp = await context.Ledger.GetStateAsync(operationId);
-            if (existingOp?.Status == ETL_SQL.Core.Execution.OperationStatus.Completed)
+            if (!string.IsNullOrWhiteSpace(args))
             {
-                _logger.Info("Tool '{ToolAlias}' already completed successfully in a previous run (Idempotency Key: {OpId}). Skipping.", stmt.ToolAlias, operationId);
-                return;
-            }
-            
-            await context.Ledger.RecordStartAsync(operationId, "ToolExecution", stmt.ToolAlias);
-        }
-
-        try
-        {
-            if (context.Ledger != null && stmt.TargetTable == null)
-            {
-                startInfo.EnvironmentVariables["ETLSQL_IDEMPOTENCY_KEY"] = operationId;
-            }
-            process.Start();
-        }
-        catch (Exception ex)
-        {
-            throw new ExecutionException($"Failed to start tool '{stmt.ToolAlias}': {ex.Message}", null, stmt.Line, stmt.Column);
-        }
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSecs));
-        
-        var inputTask = StreamInputAsync(stmt.SourceTable, process.StandardInput, context, cts.Token);
-        var outputTask = StreamOutputAsync(stmt.TargetTable, process.StandardOutput, context, stmt.ExpectedSchema, cts.Token);
-        
-        var errorOutput = new System.Text.StringBuilder();
-        var errorTask = Task.Run(async () =>
-        {
-            var line = await process.StandardError.ReadLineAsync(cts.Token);
-            while (line != null)
-            {
-                errorOutput.AppendLine(line);
-                line = await process.StandardError.ReadLineAsync(cts.Token);
-            }
-        }, cts.Token);
-
-        IDataSource? stagedOutput = null;
-        try
-        {
-            await Task.WhenAll(inputTask, outputTask, errorTask);
-            stagedOutput = await outputTask;
-            await process.WaitForExitAsync(cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            if (!process.HasExited)
-                process.Kill(true);
-
-            var actor = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
-            var effective = context.ExecutionIdentity?.EffectiveUser ?? context.ExecutionPolicy?.Actor ?? actor;
-            
-            SecurityEventRuntime.Emit(SecurityEventContract.Create(
-                SecurityEventSeverity.Error,
-                SecurityEventType.ResourceLimitViolation,
-                actor,
-                effective,
-                $"Tool:{stmt.ToolAlias}",
-                SecurityEventDecision.Failed,
-                $"Tool execution timed out after {timeoutSecs} seconds.") with
-            {
-                ScriptHash = context.ExecutionPolicy?.ScriptHash,
-                JobId = context.ExecutionPolicy?.JobId,
-                CorrelationId = context.ExecutionPolicy?.CorrelationId,
-                PolicyVersion = context.ExecutionPolicy?.PolicyVersion,
-                PolicyHash = context.ExecutionPolicy?.PolicyHash
-            });
-
-            throw new ExecutionException($"Tool '{stmt.ToolAlias}' execution timed out after {timeoutSecs} seconds.", null, stmt.Line, stmt.Column);
-        }
-
-        if (process.ExitCode != 0)
-        {
-            if (context.Ledger != null && stmt.TargetTable == null)
-            {
-                await context.Ledger.RecordCompletionAsync(operationId, process.ExitCode, errorOutput.ToString());
-            }
-
-            var errStr = errorOutput.ToString();
-            var actor = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
-            var effective = context.ExecutionIdentity?.EffectiveUser ?? context.ExecutionPolicy?.Actor ?? actor;
-
-            SecurityEventRuntime.Emit(SecurityEventContract.Create(
-                SecurityEventSeverity.Error,
-                SecurityEventType.OperationDenied,
-                actor,
-                effective,
-                $"Tool:{stmt.ToolAlias}",
-                SecurityEventDecision.Failed,
-                $"Tool execution failed with exit code {process.ExitCode}. Error: {errStr}") with
-            {
-                ScriptHash = context.ExecutionPolicy?.ScriptHash,
-                JobId = context.ExecutionPolicy?.JobId,
-                CorrelationId = context.ExecutionPolicy?.CorrelationId,
-                PolicyVersion = context.ExecutionPolicy?.PolicyVersion,
-                PolicyHash = context.ExecutionPolicy?.PolicyHash
-            });
-
-            throw new ExecutionException($"Tool '{stmt.ToolAlias}' failed with exit code {process.ExitCode}. Error: {errStr}", null, stmt.Line, stmt.Column);
-        }
-        
-        if (context.Ledger != null && stmt.TargetTable == null)
-        {
-            await context.Ledger.RecordCompletionAsync(operationId, process.ExitCode, null);
-        }
-
-        if (stmt.TargetTable != null && stagedOutput != null)
-        {
-            var targetName = stmt.TargetTable.TableName;
-            if (targetName.StartsWith("#"))
-            {
-                context.Connections[targetName] = stagedOutput;
-            }
-            else
-            {
-                if (context.Connections.TryGetValue(targetName, out var realTarget))
+                var splitArgs = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach(var arg in splitArgs) 
                 {
-                    await foreach (var batch in stagedOutput.ReadBatches(1000, cts.Token))
-                    {
-                        await realTarget.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true, cts.Token);
-                    }
+                    startInfo.ArgumentList.Add(arg);
                 }
             }
 
-            if (stmt.SourceTable != null)
-            {
-                context.LineageContext.LineageTracker.Record(
-                    targetName,
-                    new[] { stmt.SourceTable.TableName },
-                    "EXECUTE_TOOL",
-                    null, null, null, null,
-                    stmt.Line, stmt.Column, stmt.Line, stmt.Column,
-                    null,
-                    TransformationKind.Unknown,
-                    $"EXECUTE TOOL {stmt.ToolAlias}"
-                );
-            }
+            // Sanitized environment: explicitly clear and only allowlist PATH
+            var path = startInfo.EnvironmentVariables.ContainsKey("PATH") ? startInfo.EnvironmentVariables["PATH"] : null;
+            startInfo.EnvironmentVariables.Clear();
+            if (path != null) startInfo.EnvironmentVariables["PATH"] = path;
+
+            // Canonical scratch root
+            workingDir = Path.Combine(Path.GetTempPath(), "etlsql_tool_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(workingDir);
+            startInfo.WorkingDirectory = workingDir;
         }
 
-        context.Log($"Tool '{stmt.ToolAlias}' execution completed successfully.");
+        try
+        {
+            using var process = new Process { StartInfo = startInfo };
+            
+            var operationId = $"{context.SessionId ?? "temp"}_{stmt.ToolAlias}_{stmt.Line}";
+            
+            if (context.Ledger != null && stmt.TargetTable == null)
+            {
+                var existingOp = await context.Ledger.GetStateAsync(operationId);
+                if (existingOp?.Status == ETL_SQL.Core.Execution.OperationStatus.Completed)
+                {
+                    _logger.Info("Tool '{ToolAlias}' already completed successfully in a previous run (Idempotency Key: {OpId}). Skipping.", stmt.ToolAlias, operationId);
+                    return;
+                }
+                
+                await context.Ledger.RecordStartAsync(operationId, "ToolExecution", stmt.ToolAlias);
+            }
+
+            try
+            {
+                if (context.Ledger != null && stmt.TargetTable == null)
+                {
+                    startInfo.EnvironmentVariables["ETLSQL_IDEMPOTENCY_KEY"] = operationId;
+                }
+                process.Start();
+            }
+            catch (Exception ex)
+            {
+                throw new ExecutionException($"Failed to start tool '{stmt.ToolAlias}': {ex.Message}", null, stmt.Line, stmt.Column);
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSecs));
+            
+            var inputTask = StreamInputAsync(stmt.SourceTable, process.StandardInput, context, cts.Token);
+            var outputTask = StreamOutputAsync(stmt.TargetTable, process.StandardOutput, context, stmt.ExpectedSchema, cts.Token);
+            
+            var errorOutput = new System.Text.StringBuilder();
+            var errorTask = Task.Run(async () =>
+            {
+                var line = await process.StandardError.ReadLineAsync(cts.Token);
+                while (line != null)
+                {
+                    errorOutput.AppendLine(line);
+                    line = await process.StandardError.ReadLineAsync(cts.Token);
+                }
+            }, cts.Token);
+
+            IDataSource? stagedOutput = null;
+            try
+            {
+                await Task.WhenAll(inputTask, outputTask, errorTask);
+                stagedOutput = await outputTask;
+                await process.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!process.HasExited)
+                    process.Kill(true);
+
+                var actor = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
+                var effective = context.ExecutionIdentity?.EffectiveUser ?? context.ExecutionPolicy?.Actor ?? actor;
+                
+                SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                    SecurityEventSeverity.Error,
+                    SecurityEventType.ResourceLimitViolation,
+                    actor,
+                    effective,
+                    $"Tool:{stmt.ToolAlias}",
+                    SecurityEventDecision.Failed,
+                    $"Tool execution timed out after {timeoutSecs} seconds.") with
+                {
+                    ScriptHash = context.ExecutionPolicy?.ScriptHash,
+                    JobId = context.ExecutionPolicy?.JobId,
+                    CorrelationId = context.ExecutionPolicy?.CorrelationId,
+                    PolicyVersion = context.ExecutionPolicy?.PolicyVersion,
+                    PolicyHash = context.ExecutionPolicy?.PolicyHash
+                });
+
+                throw new ExecutionException($"Tool '{stmt.ToolAlias}' execution timed out after {timeoutSecs} seconds.", null, stmt.Line, stmt.Column);
+            }
+
+            if (process.ExitCode != 0)
+            {
+                if (context.Ledger != null && stmt.TargetTable == null)
+                {
+                    await context.Ledger.RecordCompletionAsync(operationId, process.ExitCode, errorOutput.ToString());
+                }
+
+                var errStr = errorOutput.ToString();
+                var actor = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
+                var effective = context.ExecutionIdentity?.EffectiveUser ?? context.ExecutionPolicy?.Actor ?? actor;
+
+                SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                    SecurityEventSeverity.Error,
+                    SecurityEventType.OperationDenied,
+                    actor,
+                    effective,
+                    $"Tool:{stmt.ToolAlias}",
+                    SecurityEventDecision.Failed,
+                    $"Tool execution failed with exit code {process.ExitCode}. Error: {errStr}") with
+                {
+                    ScriptHash = context.ExecutionPolicy?.ScriptHash,
+                    JobId = context.ExecutionPolicy?.JobId,
+                    CorrelationId = context.ExecutionPolicy?.CorrelationId,
+                    PolicyVersion = context.ExecutionPolicy?.PolicyVersion,
+                    PolicyHash = context.ExecutionPolicy?.PolicyHash
+                });
+
+                throw new ExecutionException($"Tool '{stmt.ToolAlias}' failed with exit code {process.ExitCode}. Error: {errStr}", null, stmt.Line, stmt.Column);
+            }
+            
+            if (context.Ledger != null && stmt.TargetTable == null)
+            {
+                await context.Ledger.RecordCompletionAsync(operationId, process.ExitCode, null);
+            }
+
+            if (stmt.TargetTable != null && stagedOutput != null)
+            {
+                var targetName = stmt.TargetTable.TableName;
+                if (targetName.StartsWith("#"))
+                {
+                    context.Connections[targetName] = stagedOutput;
+                }
+                else
+                {
+                    if (context.Connections.TryGetValue(targetName, out var realTarget))
+                    {
+                        await foreach (var batch in stagedOutput.ReadBatches(1000, cts.Token))
+                        {
+                            await realTarget.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true, cts.Token);
+                        }
+                    }
+                }
+
+                if (stmt.SourceTable != null)
+                {
+                    context.LineageContext.LineageTracker.Record(
+                        targetName,
+                        new[] { stmt.SourceTable.TableName },
+                        "EXECUTE_TOOL",
+                        null, null, null, null,
+                        stmt.Line, stmt.Column, stmt.Line, stmt.Column,
+                        null,
+                        TransformationKind.Unknown,
+                        $"EXECUTE TOOL {stmt.ToolAlias}"
+                    );
+                }
+            }
+
+            context.Log($"Tool '{stmt.ToolAlias}' execution completed successfully.");
+        }
+        finally
+        {
+            if (toolType == "EXECUTABLE" && !string.IsNullOrEmpty(workingDir) && workingDir.StartsWith(Path.GetTempPath()))
+            {
+                try
+                {
+                    if (Directory.Exists(workingDir))
+                    {
+                        Directory.Delete(workingDir, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning("Failed to clean up scratch root {Dir}: {Error}", workingDir, ex.Message);
+                }
+            }
+        }
     }
 
     private string? GetOptionString(IReadOnlyDictionary<string, string>? options, string key)
