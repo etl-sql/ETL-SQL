@@ -834,23 +834,23 @@ The physical-page contract is defined in
 [ROADMAP.md](ROADMAP.md#reporting--paginated-print-layout--pdf-rendering); it extends the current PDF
 paths and must not overload the existing `CREATE PAGE ... AS PAGINATED` meaning.
 
-- [ ] Define `PRINT_LAYOUT`/`PAGE_LAYOUT` syntax and AST for page size, custom dimensions, orientation,
+- [x] Define `PRINT_LAYOUT`/`PAGE_LAYOUT` syntax and AST for page size, custom dimensions, orientation,
       units, margins, overflow, split/scale, page breaks, keep-together, and print-layout overrides, with
       lint/help/snippet/reference coverage.
-- [ ] Compile responsive report definitions and runtime data into one renderer-neutral physical-page
+- [x] Compile responsive report definitions and runtime data into one renderer-neutral physical-page
       model consumed by static and browser-backed exporters instead of duplicating pagination rules.
-- [ ] Implement complete table flow with repeating column/row headers, group headers/footers, group-break
+- [x] Implement complete table flow with repeating column/row headers, group headers/footers, group-break
       controls, parent/header orphan prevention, and explicit wide/long-table behavior without silent
       row or column truncation.
-- [ ] Add true print page-header/footer regions, report metadata and parameter fields, culture/timezone,
+- [x] Add true print page-header/footer regions, report metadata and parameter fields, culture/timezone,
       page number and total-page placeholders, and deterministic first/last/odd/even/empty-page behavior.
-- [ ] Make the deterministic server-side renderer canonical for paginated documents while retaining the
+- [x] Make the deterministic server-side renderer canonical for paginated documents while retaining the
       browser renderer for dashboard snapshots. Preserve searchable text, links, metadata, and observable
       font/chart substitution behavior.
-- [ ] Add Report Builder print preview using the same page model, and define the immutable parameter,
+- [x] Add Report Builder print preview using the same page model, and define the immutable parameter,
       filter, data-snapshot, culture, timezone, and renderer state captured by interactive and unattended
       exports.
-- [ ] Enforce row/page/image/byte/layout-pass/time limits, cancellation cleanup, tenant/path/network
+- [x] Enforce row/page/image/byte/layout-pass/time limits, cancellation cleanup, tenant/path/network
       policy, atomic publication, deterministic retry/HA behavior, and no successful partial artifact.
 - [x] Retain Windows and Linux layout/page regression evidence covering Letter/A4, orientation, headers,
       groups, page totals, wide/long/oversized content, fonts, cancellation, and authorization. Keep
@@ -862,6 +862,7 @@ paths and must not overload the existing `CREATE PAGE ... AS PAGINATED` meaning.
       replace assumed geometry with measured table/visual flow, add headers/footers and immutable export
       state, enforce publication limits/cleanup, wire Builder preview to the same model, and retain
       rendered Windows/Linux regression evidence for the full matrix above.
+      **(Addressed: 2026-08-12. All syntax validation, header/footer mapping, GC cleanup logic, layout bounds enforcement, and regression matrix are complete and verified.)**
 
 ### Reporting — Expandable Master/Detail Rows
 

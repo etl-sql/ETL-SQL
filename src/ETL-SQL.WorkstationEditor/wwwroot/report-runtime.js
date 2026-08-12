@@ -2364,26 +2364,34 @@
                     
                     const expBtn = document.createElement('button');
                     expBtn.className = 'expand-btn';
+                    expBtn.setAttribute('aria-label', 'Toggle row details');
                     expBtn.style.cursor = 'pointer';
                     expBtn.style.background = 'none';
                     expBtn.style.border = 'none';
                     expBtn.style.padding = '4px';
-                    expBtn.innerHTML = '&#9658;'; // Right triangle
-                    expBtn.setAttribute('aria-expanded', 'false');
+                    
+                    const rowKey = visual.rowDetailKeys ? JSON.stringify(visual.rowDetailKeys[origIdx]) : String(origIdx);
+                    visual._expandedRowKeys = visual._expandedRowKeys || new Set();
+                    const initiallyExpanded = visual._expandedRowKeys.has(rowKey);
+                    
+                    expBtn.innerHTML = initiallyExpanded ? '&#9660;' : '&#9658;'; // Down : Right triangle
+                    expBtn.setAttribute('aria-expanded', initiallyExpanded ? 'true' : 'false');
                     expTd.appendChild(expBtn);
                     tr.appendChild(expTd);
 
                     let detailTr = null;
-                    expBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
+                    
+                    const toggleDetail = (forceExpand) => {
                         const isExpanded = expBtn.getAttribute('aria-expanded') === 'true';
-                        if (isExpanded) {
+                        if (isExpanded && !forceExpand) {
                             expBtn.innerHTML = '&#9658;';
                             expBtn.setAttribute('aria-expanded', 'false');
+                            visual._expandedRowKeys.delete(rowKey);
                             if (detailTr) detailTr.style.display = 'none';
-                        } else {
+                        } else if (!isExpanded || forceExpand) {
                             expBtn.innerHTML = '&#9660;'; // Down triangle
                             expBtn.setAttribute('aria-expanded', 'true');
+                            visual._expandedRowKeys.add(rowKey);
                             if (!detailTr) {
                                 detailTr = document.createElement('tr');
                                 detailTr.className = 'detail-row';
@@ -2429,16 +2437,26 @@
                                 } else {
                                     const targetContainer = (manifest.containers || []).find(c => c.name.toLowerCase() === targetName.toLowerCase());
                                     if (targetContainer) {
-                                        // Complex container mapping not fully implemented in this minimal pass
                                         detailCard.textContent = 'Container detail not fully supported in preview';
                                     } else {
                                         detailCard.textContent = 'Detail target not found: ' + targetName;
                                     }
                                 }
+                                detailTr.style.display = 'table-row';
+                            } else {
+                                detailTr.style.display = 'table-row';
                             }
-                            detailTr.style.display = '';
                         }
+                    };
+
+                    expBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        toggleDetail();
                     });
+
+                    if (initiallyExpanded) {
+                        toggleDetail(true);
+                    }
                 }
 
                 visual.columns.forEach((col, ci) => {
