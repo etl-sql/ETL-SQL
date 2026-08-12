@@ -792,7 +792,7 @@ raw `CMD` connector or arbitrary shell execution.
       size limits, compression, backpressure, stderr diagnostics, cancellation, and terminal outcome.
 - [x] Validate every returned value and stage output until protocol completion, schema/type/size/row
       limits, and data-quality rules all pass. Stream with bounded memory and never publish partial output.
-- [ ] Add lineage, metrics, sanitized diagnostics, and audit for catalog lifecycle, policy decisions,
+- [x] Add lineage, metrics, sanitized diagnostics, and audit for catalog lifecycle, policy decisions,
       execution, capability access, cancellation, denial, and publication without retaining payloads or
       secret values.
 

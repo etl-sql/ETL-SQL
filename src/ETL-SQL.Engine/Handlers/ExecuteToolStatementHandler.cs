@@ -325,6 +325,25 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                 }
             }
 
+            var actorSuccess = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
+            var effectiveSuccess = context.ExecutionIdentity?.EffectiveUser ?? context.ExecutionPolicy?.Actor ?? actorSuccess;
+            
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                SecurityEventSeverity.Information,
+                SecurityEventType.ExecutionCompleted,
+                actorSuccess,
+                effectiveSuccess,
+                $"Tool:{stmt.ToolAlias}",
+                SecurityEventDecision.Allowed,
+                $"Tool execution completed successfully without violating resource limits or boundary policy.") with
+            {
+                ScriptHash = context.ExecutionPolicy?.ScriptHash,
+                JobId = context.ExecutionPolicy?.JobId,
+                CorrelationId = context.ExecutionPolicy?.CorrelationId,
+                PolicyVersion = context.ExecutionPolicy?.PolicyVersion,
+                PolicyHash = context.ExecutionPolicy?.PolicyHash
+            });
+
             context.Log($"Tool '{stmt.ToolAlias}' execution completed successfully.");
         }
         finally

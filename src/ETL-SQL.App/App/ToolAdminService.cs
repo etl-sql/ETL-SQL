@@ -141,6 +141,16 @@ internal static class ToolAdminService
                 Disabled: false);
 
             await writable.StoreAsync(def, ct);
+            
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                SecurityEventSeverity.Information,
+                SecurityEventType.CatalogMutation,
+                Environment.UserName,
+                Environment.UserName,
+                $"Tool:{ctx.ToolName.Trim()}",
+                SecurityEventDecision.Allowed,
+                $"Tool '{ctx.ToolName.Trim()}' ({ctx.ToolType.Trim().ToUpperInvariant()}) added or updated in machine catalog."));
+
             logger.WriteLine($"Machine tool '{ctx.ToolName.Trim()}' stored ({ctx.ToolType.Trim().ToUpperInvariant()}, " +
                              $"{options.Count} option(s)).");
             return 0;
@@ -166,6 +176,16 @@ internal static class ToolAdminService
         try
         {
             await writable.DeleteAsync(ctx.ToolName.Trim(), ct);
+
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                SecurityEventSeverity.Information,
+                SecurityEventType.CatalogMutation,
+                Environment.UserName,
+                Environment.UserName,
+                $"Tool:{ctx.ToolName.Trim()}",
+                SecurityEventDecision.Allowed,
+                $"Tool '{ctx.ToolName.Trim()}' deleted from machine catalog."));
+
             logger.WriteLine($"Machine tool '{ctx.ToolName.Trim()}' deleted.");
             return 0;
         }
