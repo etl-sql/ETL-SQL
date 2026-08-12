@@ -28,7 +28,8 @@ const focusableIn = dialog => [...dialog.querySelectorAll(FOCUSABLE)]
 /** True when the element is currently presented to the user, by either convention Portal uses. */
 function isOpen(dialog) {
   const style = getComputedStyle(dialog);
-  return style.display !== 'none' && style.visibility !== 'hidden';
+  return dialog.getAttribute('aria-hidden') !== 'true'
+    && style.display !== 'none' && style.visibility !== 'hidden';
 }
 
 function openDialog(dialog, state) {

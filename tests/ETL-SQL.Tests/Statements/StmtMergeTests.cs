@@ -73,6 +73,31 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task Merge_HashOptimization_UsesSqlEqualityAcrossCompatibleKeyTypes()
+        {
+            await _evaluator.Evaluate(new Lexer(@"
+                CREATE TABLE #TargetSoftKey (ID INT, Name STRING);
+                INSERT INTO #TargetSoftKey VALUES (1, 'one'), (2, 'old');
+                CREATE TABLE #SourceSoftKey (ID STRING, Name STRING);
+                INSERT INTO #SourceSoftKey VALUES ('2', 'updated'), ('3', 'inserted');
+
+                MERGE INTO #TargetSoftKey AS T
+                USING #SourceSoftKey AS S
+                ON T.ID = S.ID
+                WHEN MATCHED THEN UPDATE SET Name = S.Name
+                WHEN NOT MATCHED BY TARGET THEN INSERT (ID, Name) VALUES (S.ID, S.Name);
+
+                SELECT ID, Name FROM #TargetSoftKey ORDER BY ID;
+            ").TokenizeToScript());
+
+            Assert.Collection(
+                _evaluator.LastResult!.Rows,
+                row => { Assert.Equal(1, Convert.ToInt32(row["ID"])); Assert.Equal("one", row["Name"]); },
+                row => { Assert.Equal(2, Convert.ToInt32(row["ID"])); Assert.Equal("updated", row["Name"]); },
+                row => { Assert.Equal(3, Convert.ToInt32(row["ID"])); Assert.Equal("inserted", row["Name"]); });
+        }
+
+        [Fact]
         public async Task Merge_Delete_Works()
         {
             // Setup

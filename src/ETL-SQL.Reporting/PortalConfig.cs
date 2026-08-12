@@ -511,6 +511,12 @@ public class PortalDesignerLimitsConfig
     public int MaxSchemaColumnsPerTable { get; set; } = 200;
     public int MaxSchemaColumnConcurrency { get; set; } = 1;
     public int MaxSchemaDiscoverySeconds { get; set; } = 10;
+    /// <summary>Maximum rows returned by an interactive Studio run or table preview.</summary>
+    public int MaxDataPreviewRows { get; set; } = 100;
+    /// <summary>Maximum serialized row payload returned by an interactive Studio run or table preview.</summary>
+    public int MaxDataPreviewBytes { get; set; } = 256 * 1024;
+    /// <summary>Wall-clock limit for an interactive Studio run or table preview.</summary>
+    public int MaxDataPreviewSeconds { get; set; } = 15;
 }
 
 public class PortalSecurityConfig

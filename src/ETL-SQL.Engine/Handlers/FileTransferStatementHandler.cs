@@ -93,7 +93,7 @@ public class FileTransferStatementHandler : IStatementHandler
                     }
 
                     _logger.WriteLine($"Sending: {localFile} -> {stmt.ConnectionName}:{remoteFile}", ConsoleColor.Cyan);
-                    await remoteFs.UploadFileAsync(authorizedLocalFile, remoteFile, overwrite);
+                    await remoteFs.UploadFileAsync(authorizedLocalFile, remoteFile, overwrite, context.CancellationToken);
                 }
                 _logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
@@ -112,7 +112,7 @@ public class FileTransferStatementHandler : IStatementHandler
                 }
 
                 if (!File.Exists(localPath)) throw new ExecutionException($"Local file not found: {localPath}");
-                await remoteFs.UploadFileAsync(localPath, remotePath, overwrite);
+                await remoteFs.UploadFileAsync(localPath, remotePath, overwrite, context.CancellationToken);
                 _logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
         }

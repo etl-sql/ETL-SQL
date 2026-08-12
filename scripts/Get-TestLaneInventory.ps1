@@ -127,7 +127,7 @@ function Get-EngineExclusionReasons {
         return @()
     }
 
-    foreach ($category in @("Integration", "Performance", "ScaleCertification", "ScaleAssessment", "BillionRowCertification", "DeploymentProfile")) {
+    foreach ($category in @("Integration", "Performance", "ScaleCertification", "ScaleAssessment", "BillionRowCertification", "DeploymentProfile", "EbnfConformance")) {
         if (Test-HasCategory $Categories $category) {
             $reasons.Add("Category=$category")
         }
@@ -149,6 +149,7 @@ function Get-LanesForTest {
     $isHosted = Test-HasCategory $Categories "HostedServices"
     $isBrowser = Test-HasCategory $Categories "Browser"
     $isFuzz = Test-HasCategory $Categories "Fuzz"
+    $isEbnf = Test-HasCategory $Categories "EbnfConformance"
     $isSmoke = @($Categories | Where-Object { $_ -like "Smoke.*" }).Count -gt 0
     $engineExclusionReasons = @(Get-EngineExclusionReasons -Project $Project -Categories $Categories)
 
@@ -161,6 +162,7 @@ function Get-LanesForTest {
     if ($isHosted) { $lanes.Add("portal-hosted") }
     if ($isBrowser) { $lanes.Add("browser") }
     if ($isFuzz) { $lanes.Add("fuzz") }
+    if ($isEbnf) { $lanes.Add("ebnf") }
     if (Test-HasCategory $Categories "ScaleAssessment") { $lanes.Add("scale-assessment") }
     if (Test-HasCategory $Categories "ScaleCertification") { $lanes.Add("scale-certification") }
     if (Test-HasCategory $Categories "BillionRowCertification") { $lanes.Add("billion-row-certification") }
@@ -260,6 +262,7 @@ foreach ($record in $records) {
         ($record.lanes -contains "portal-hosted") -or
         ($record.lanes -contains "browser") -or
         ($record.lanes -contains "fuzz") -or
+        ($record.lanes -contains "ebnf") -or
         ($record.lanes -contains "scale-assessment") -or
         ($record.lanes -contains "scale-certification") -or
         ($record.lanes -contains "deployment-certification") -or
@@ -305,7 +308,7 @@ else {
     $lines.Add("")
     $lines.Add("| Lane | Tests |")
     $lines.Add("| :--- | ---: |")
-    foreach ($lane in @("smoke", "fast", "engine", "portal", "portal-hosted", "browser", "integration", "perf", "slt", "fuzz", "scale-assessment", "scale-certification", "deployment-certification", "billion-row-certification", "full")) {
+    foreach ($lane in @("smoke", "fast", "engine", "portal", "portal-hosted", "browser", "integration", "perf", "slt", "fuzz", "ebnf", "scale-assessment", "scale-certification", "deployment-certification", "billion-row-certification", "full")) {
         $count = if ($byLane.Contains($lane)) { $byLane[$lane] } else { 0 }
         $lines.Add(("| `{0}` | {1} |" -f $lane, $count))
     }

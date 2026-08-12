@@ -1,4 +1,5 @@
 ﻿/* 
+  -- @requires: docker
   Sample: Docker-based SQL Server Integration
   Demonstrates:
   - USE DOCKER for containerized SQL Server

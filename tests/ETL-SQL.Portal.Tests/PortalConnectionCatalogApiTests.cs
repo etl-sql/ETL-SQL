@@ -326,6 +326,19 @@ public class PortalConnectionCatalogApiTests
         var adminBody = await adminSchema.Content.ReadFromJsonAsync<JsonObject>(Json);
         Assert.Contains(adminBody!["tables"]!.AsArray(), t => t!["name"]!.GetValue<string>() == "Users");
 
+        var adminPreview = await SendAsync(client, HttpMethod.Post, token, "/api/designer/data-preview", new
+        {
+            sourceKind = "connection",
+            connection = "designer_mock",
+            table = "Users",
+            documentUri = "portal://designer/session-1"
+        });
+        Assert.Equal(HttpStatusCode.OK, adminPreview.StatusCode);
+        var previewBody = await adminPreview.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("connection", previewBody!["sourceKind"]!.GetValue<string>());
+        Assert.Equal("designer_mock.Users", previewBody["source"]!.GetValue<string>());
+        Assert.InRange(previewBody["rows"]!.AsArray().Count, 1, 100);
+
         var adminComplete = await SendAsync(client, HttpMethod.Post, token, "/api/designer/complete", new
         {
             script = "SELECT * FROM designer_mock.",
@@ -345,6 +358,17 @@ public class PortalConnectionCatalogApiTests
         Assert.Equal(HttpStatusCode.Forbidden, deniedSchema.StatusCode);
         Assert.DoesNotContain("Users", deniedBody);
         Assert.DoesNotContain("Orders", deniedBody);
+
+        var deniedPreview = await SendAsync(client, HttpMethod.Post, outsider.AccessToken, "/api/designer/data-preview", new
+        {
+            sourceKind = "connection",
+            connection = "designer_mock",
+            table = "Users"
+        });
+        var deniedPreviewBody = await deniedPreview.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.Forbidden, deniedPreview.StatusCode);
+        Assert.DoesNotContain("Users", deniedPreviewBody);
+        Assert.DoesNotContain("Orders", deniedPreviewBody);
 
         var deniedComplete = await SendAsync(client, HttpMethod.Post, outsider.AccessToken, "/api/designer/complete", new
         {

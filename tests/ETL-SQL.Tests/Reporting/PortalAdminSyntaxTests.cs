@@ -218,6 +218,27 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
+        public void AlterFolder_RenameReservedKeyword_ReachesPortalParser()
+        {
+            var script = TestHelpers.Parse("ALTER FOLDER '/Finance' RENAME TO 'Finance Archive';");
+            var alter = Assert.IsType<AlterPortalFolderStatement>(Assert.Single(script.Statements));
+
+            Assert.Empty(script.Diagnostics);
+            Assert.Equal("/Finance", alter.Path);
+            Assert.Equal("Finance Archive", alter.NewName);
+        }
+
+        [Fact]
+        public void RebuildSnapshot_Keyword_ReachesPortalParser()
+        {
+            var script = TestHelpers.Parse("REBUILD SNAPSHOT FOR REPORT 'Monthly Sales';");
+            var rebuild = Assert.IsType<RebuildPortalSnapshotStatement>(Assert.Single(script.Statements));
+
+            Assert.Empty(script.Diagnostics);
+            Assert.Equal("Monthly Sales", rebuild.ReportName);
+        }
+
+        [Fact]
         public void PortalFavorites_ParseScriptCommands()
         {
             var favoriteScript = TestHelpers.Parse("FAVORITE REPORT 'Monthly Sales';");

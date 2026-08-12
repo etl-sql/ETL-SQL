@@ -81,22 +81,7 @@
 <div class="app-shell">
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
-  <header class="topbar">
-    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation menu" type="button">☰</button>
-    <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
-    <nav class="topbar-nav">
-      <a href="/index.html">Reports</a>
-      <a href="/index.html#governance">Governance</a>
-      <a href="/studio.html" id="studioNav" style="display:none">Studio</a>
-      <a href="/docs.html" id="docsNav">Docs</a>
-      <a href="/orchestrator.html" class="active">Orchestrator</a>
-      <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
-    </nav>
-    <span class="topbar-spacer"></span>
-    <span class="topbar-user" id="topbarUser"></span>
-    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
-    <button class="topbar-btn" id="logoutBtn">Sign Out</button>
-  </header>
+  <header data-portal-header data-active="orchestrator"></header>
 
   <!-- ── App body ────────────────────────────────────────────────────────── -->
   <div class="app-body admin-body">
@@ -252,7 +237,7 @@
         <h3 class="modal-title" id="createJobTitle">Create Scheduled Job</h3>
         <p class="modal-subtitle">Define a script, schedule, and retry policy for this job.</p>
       </div>
-      <button class="btn-icon" id="closeCreateBtn" title="Close">✕</button>
+      <button class="btn-icon" id="closeCreateBtn" data-dialog-close title="Close">✕</button>
     </div>
     <div class="modal-body">
       <div class="form-row">
@@ -319,7 +304,7 @@
     <div id="cj-error" class="error-msg" style="margin:0 24px;"></div>
     <div class="modal-actions">
       <button class="btn btn-primary" id="cj-saveBtn">Create Job</button>
-      <button class="btn btn-outline" id="cj-cancelBtn">Cancel</button>
+      <button class="btn btn-outline" id="cj-cancelBtn" data-dialog-close>Cancel</button>
     </div>
   </div>
 </div>
@@ -333,7 +318,7 @@
         <h3 class="modal-title" id="runJobTitle">Run job</h3>
         <p class="modal-subtitle">Optionally override input variables for this run only. The saved job is not edited.</p>
       </div>
-      <button class="btn-icon" id="runJobCloseBtn" title="Close" type="button">✕</button>
+      <button class="btn-icon" id="runJobCloseBtn" data-dialog-close title="Close" type="button">✕</button>
     </div>
     <div class="modal-body">
       <div class="run-override-head">
@@ -349,7 +334,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" id="runJobSubmitBtn" type="button">Run now</button>
-      <button class="btn btn-outline" id="runJobCancelBtn" type="button">Cancel</button>
+      <button class="btn btn-outline" id="runJobCancelBtn" data-dialog-close type="button">Cancel</button>
     </div>
   </div>
 </div>
@@ -363,7 +348,11 @@ import { renderDag, createScriptEditor } from '/designer/designer.js?v=0.18.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.18.0';
 import { applyNavigationSafely } from '/js/portal-nav.js?v=0.18.0';
 import { renderTriageBoard, selectedJobNames } from '/js/triage-ui.js?v=0.18.0';
+import { renderPortalHeader } from '/js/portal-header.js?v=0.18.0';
+import { installDialogAccessibility } from '/js/dialog-a11y.js?v=0.18.0';
 
+renderPortalHeader();
+installDialogAccessibility();
 // ── Auth guard ─────────────────────────────────────────────────────────────────
 if (!auth.isLoggedIn()) window.location.href = '/login.html';
 applyPortalBranding();
@@ -1399,84 +1388,7 @@ function jobBool(job, key) {
 }
 
 // ── Init & polling loop ────────────────────────────────────────────────────────
-function initModalA11y() {
-  let previouslyFocusedElement = null;
-
-  const observer = new MutationObserver(mutations => {
-    mutations.forEach(mutation => {
-      if (mutation.attributeName === 'style') {
-        const modal = mutation.target;
-        const isOpen = modal.style.display === 'flex' || modal.style.display === 'block';
-        
-        if (isOpen) {
-          previouslyFocusedElement = document.activeElement;
-          const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-          if (focusableElements.length > 0) {
-            // Find first visible focusable element
-            const focusables = Array.from(focusableElements).filter(el => !el.disabled && el.offsetParent !== null);
-            if (focusables.length > 0) {
-              focusables[0].focus();
-            }
-            
-            modal._trapFocus = function(e) {
-              if (e.key === 'Tab') {
-                const visibleFocusables = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled && el.offsetParent !== null);
-                if (visibleFocusables.length === 0) return;
-                const first = visibleFocusables[0];
-                const last = visibleFocusables[visibleFocusables.length - 1];
-                
-                if (e.shiftKey) {
-                  if (document.activeElement === first) {
-                    last.focus();
-                    e.preventDefault();
-                  }
-                } else {
-                  if (document.activeElement === last) {
-                    first.focus();
-                    e.preventDefault();
-                  }
-                }
-              }
-            };
-            modal.addEventListener('keydown', modal._trapFocus);
-          }
-          
-          modal._escapeClose = function(e) {
-            if (e.key === 'Escape') {
-              const closeBtn = modal.querySelector('#closeCreateBtn, #cj-cancelBtn, .btn-outline, button');
-              if (closeBtn) {
-                closeBtn.click();
-              } else {
-                modal.style.display = 'none';
-              }
-            }
-          };
-          document.addEventListener('keydown', modal._escapeClose);
-        } else {
-          if (modal._trapFocus) {
-            modal.removeEventListener('keydown', modal._trapFocus);
-            delete modal._trapFocus;
-          }
-          if (modal._escapeClose) {
-            document.removeEventListener('keydown', modal._escapeClose);
-            delete modal._escapeClose;
-          }
-          if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
-            previouslyFocusedElement.focus();
-            previouslyFocusedElement = null;
-          }
-        }
-      }
-    });
-  });
-
-  document.querySelectorAll('.modal-overlay').forEach(modal => {
-    observer.observe(modal, { attributes: true, attributeFilter: ['style'] });
-  });
-}
-
 async function init() {
-  initModalA11y();
   await poll();
   await loadTriage();
   await loadJobs();

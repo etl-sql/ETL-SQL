@@ -126,6 +126,7 @@ show_pre_release_plan() {
     fi
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Bounded quick-feedback lane: smoke coverage plus language-server tests."; i=$((i + 1))
+    print_plan_phase "$i" "EBNF conformance lane" "./scripts/test-lane.sh --lane ebnf" "Deterministic grammar generation strictly agrees with execution-parser acceptance and rejection."; i=$((i + 1))
     print_plan_phase "$i" "Engine lane and coverage gate" "./scripts/Test-CoverageGate.ps1 -RunEngineLane -MinimumLineCoverage 70 (via pwsh)" "Broad engine/parser/evaluator coverage is collected once and must meet the fail-closed 70% release threshold."; i=$((i + 1))
     print_plan_phase "$i" "Portal lane" "./scripts/test-lane.sh --lane portal" "Portal API and browser-side smoke coverage remain explicit without slowing the default fast lane."; i=$((i + 1))
     print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
@@ -704,6 +705,10 @@ run_phase "Smoke lane" \
 run_phase "Fast lane" \
     "./scripts/test-lane.sh --lane fast --configuration $CONFIGURATION --no-restore --no-build" \
     bash "./scripts/test-lane.sh" "--lane" "fast" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
+
+run_phase "EBNF conformance lane" \
+    "./scripts/test-lane.sh --lane ebnf --configuration $CONFIGURATION --no-restore --no-build" \
+    bash "./scripts/test-lane.sh" "--lane" "ebnf" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 
 run_phase "Engine lane and coverage gate" \
     "./scripts/Test-CoverageGate.ps1 -RunEngineLane -CoverageDirectory $OUT_DIR/$RUN_ID/coverage -MinimumLineCoverage 70 -Configuration $CONFIGURATION -NoRestore -NoBuild" \

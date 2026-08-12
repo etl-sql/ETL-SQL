@@ -288,6 +288,14 @@ Three conditions must all be true:
 
 SQL Server, Postgres, and Oracle connectors return `true`. FlatFile, JSON, XML, ODBC, and REST return `false`.
 
+### Dialects and SQL translation
+
+Target-specific translation is centralized under `ETL-SQL.Core/Dialects`. `SqlDialectRegistry`
+resolves an `ISqlDialect` for MSSQL, Postgres, Oracle, or the conservative default, and
+`QueryCompiler` delegates identifier quoting, parameter markers, function names, pagination, and
+other provider differences to that dialect. A connector's `Dialect` selects the registration;
+engine-local and cross-source work never passes through this remote-SQL compiler.
+
 ### Pushdown Aggregation & Streaming Pushdown for `INTO` Targets
 
 When executing a `SELECT ... INTO #temp` statement, the engine optimizes the query by pushing down operations to the source SQL database whenever possible, rather than pulling raw tables and performing filters or aggregates in engine memory.

@@ -177,14 +177,8 @@ namespace ETL_SQL.Connectors.Parquet
                 else fields.Add(new DataField<string>(col, nullable: true));
             }
 
-            string targetPath = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_filePath, _transactional);
-            string? tempFile = null;
-
-            if (_encryption.Enabled)
-            {
-                effectiveCancellationToken.ThrowIfCancellationRequested();
-                tempFile = targetPath;
-            }
+            string targetPath = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
+            string? publicationFile = null;
 
             var dir = System.IO.Path.GetDirectoryName(_filePath);
             if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
@@ -219,32 +213,22 @@ namespace ETL_SQL.Connectors.Parquet
                     }
                 }
 
-                if (_encryption.Enabled && tempFile != null)
+                string fileToPublish = targetPath;
+                if (_encryption.Enabled)
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
-                    _encryption.EncryptFile(tempFile, _filePath);
-                    System.IO.File.Delete(tempFile);
+                    publicationFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
+                    _encryption.EncryptFile(targetPath, publicationFile);
+                    fileToPublish = publicationFile;
                 }
-                else
-                {
-                    // Atomic rename if staging file was used (i.e. transactional, or always if staging path differs from final)
-                    if (targetPath != _filePath)
-                    {
-                        if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
-                        System.IO.File.Move(targetPath, _filePath);
-                    }
-                }
+
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                ETL_SQL.Core.Common.FileConnectorPathHelper.PublishStagedFile(fileToPublish, _filePath, _transactional);
             }
             finally
             {
-                if (tempFile != null && System.IO.File.Exists(tempFile))
-                {
-                    try { System.IO.File.Delete(tempFile); } catch { /* best effort */ }
-                }
-                if (targetPath != _filePath && System.IO.File.Exists(targetPath))
-                {
-                    try { System.IO.File.Delete(targetPath); } catch { /* best effort */ }
-                }
+                TempFileHelper.SafeDelete(publicationFile, _logger);
+                TempFileHelper.SafeDelete(targetPath, _logger);
             }
         }
 

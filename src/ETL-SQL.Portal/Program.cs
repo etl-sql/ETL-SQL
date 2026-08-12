@@ -256,6 +256,7 @@ var signingKey = new SymmetricSecurityKey(rawSecret);
 var validationKeys = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
     ? [signingKey]
     : JwtSigningKeyRing.ValidationKeys(portalConfig.Jwt);
+const string TenantCredentialFailureItem = "ETL_SQL.TenantCredentialFailure";
 
 builder.Services.AddAuthentication(opt =>
 {
@@ -288,6 +289,8 @@ builder.Services.AddAuthentication(opt =>
             if (context.Principal is null || !ETL_SQL.Portal.Services.TenantCredentialBinding.TryResolve(
                     context.Principal, credentialConfig, out tenantContext, out tenantError))
             {
+                context.HttpContext.Items[TenantCredentialFailureItem] =
+                    tenantError ?? "Invalid tenant credential.";
                 context.Fail(tenantError ?? "Invalid tenant credential.");
                 return;
             }
@@ -338,6 +341,20 @@ builder.Services.AddAuthentication(opt =>
             if (string.IsNullOrEmpty(issuedStamp)
                 || !string.Equals(issuedStamp, user.SecurityStamp, StringComparison.Ordinal))
                 context.Fail("Security context has changed.");
+        },
+        OnChallenge = async context =>
+        {
+            if (context.HttpContext.Items.TryGetValue(TenantCredentialFailureItem, out var value)
+                && value is string detail)
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    error = "invalid_tenant_credential",
+                    detail
+                });
+            }
         }
     };
 });
@@ -506,6 +523,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerAnalysisService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerScriptGenerationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalDesignerSchemaService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalDesignerRunService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalDesignerDataPreviewService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalDesignerPreviewService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalScriptSourceControlService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportScriptSaveService>();
@@ -1072,6 +1090,7 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
     {
         var admin = new PortalUser
         {
+            TenantId = string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId,
             UserName = adminUsername,
             Email = $"{adminUsername}@localhost",
             IsActive = true,

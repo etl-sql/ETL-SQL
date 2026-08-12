@@ -40,6 +40,24 @@ export function makeMockApi(seedState) {
       data = await fetch('/tools/ui-sandbox/fixtures/sandbox-report.manifest.json')
         .then(r => r.json())
         .catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
+    } else if (path.endsWith('/api/designer/data-preview')) {
+      const source = body.sourceKind === 'temp' ? body.tempTable : `${body.connection}.${body.table}`;
+      const tableName = body.sourceKind === 'temp' ? body.tempTable : body.table;
+      const table = mockSchemaTables().find((t) => t.name.toLowerCase() === String(tableName || '').replace(/^#/, '').toLowerCase())
+        || mockSchemaTables()[0];
+      const columns = table.columns.map((c) => c.name);
+      const rows = mockRowsForColumns(columns, table);
+      data = {
+        sourceKind: body.sourceKind,
+        source,
+        columns,
+        rows,
+        rowCount: rows.length,
+        capped: false,
+        byteCapped: false,
+        elapsedMs: body.sourceKind === 'temp' ? 12 : 31,
+        message: `Previewed ${rows.length} rows from ${source}.`,
+      };
     } else if (path.endsWith('/api/designer/run')) {
       data = runMockScript(body.selection || body.script || '');
     } else if (path.endsWith('/api/designer/schema')) {
@@ -49,6 +67,10 @@ export function makeMockApi(seedState) {
       data = { path: 'sandbox/' + (body.fileName || 'report.rptsql') };
     } else if (path.endsWith('/api/designer/save')) {
       data = { version: 2, sourceRevision: 'sandbox-rev-2' };
+    } else if (path.endsWith('/api/designer/lease') && init?.method === 'POST') {
+      data = { acquired: true, owner: 'sandbox-author', expiresAt: new Date(Date.now() + 300_000).toISOString() };
+    } else if (path.includes('/api/designer/lease/') && init?.method === 'DELETE') {
+      data = {};
     } else if (path.endsWith('/api/reports') || path.includes('/script-content')) {
       data = { id: 1, ok: true, version: 1, sourceRevision: 'sandbox-rev-1' };
     } else if (path.endsWith('/api/workspace')) {

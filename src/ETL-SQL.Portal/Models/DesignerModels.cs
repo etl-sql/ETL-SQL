@@ -50,7 +50,29 @@ public record RunDesignerResponse(
     long ElapsedMs,
     string Message,
     /// <summary>Hierarchical execution-tree snapshot that drives the editor's Pipeline (DAG) tab.</summary>
-    object? Pipeline = null);
+    object? Pipeline = null,
+    bool ByteCapped = false,
+    long BytesReturned = 0);
+
+public record DesignerDataPreviewRequest(
+    string SourceKind,
+    string? Connection = null,
+    string? Table = null,
+    string? TempTable = null,
+    string? Script = null,
+    string? DocumentUri = null);
+
+public record DesignerDataPreviewResponse(
+    string SourceKind,
+    string Source,
+    IReadOnlyList<string> Columns,
+    IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows,
+    int RowCount,
+    bool Capped,
+    bool ByteCapped,
+    long BytesReturned,
+    long ElapsedMs,
+    string Message);
 
 public record SaveDesignerRequest(
     int ReportId,

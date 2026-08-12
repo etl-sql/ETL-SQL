@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace ETL_SQL.Portal.Tests;
@@ -210,5 +211,12 @@ public sealed class SharedDelegatedIdentityAdminTests
 
         protected override void CustomizePortalConfig(PortalConfig config) =>
             config.SharedTenancy.Enabled = true;
+
+        protected override void CustomizeServices(IServiceCollection services)
+        {
+            services.RemoveAll<TenantContext>();
+            services.AddScoped<TenantContext>(sp =>
+                sp.GetRequiredService<RequestTenantContextAccessor>().RequireCurrent());
+        }
     }
 }

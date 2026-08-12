@@ -121,6 +121,7 @@ export default {
       runUrl: '/api/designer/run',
       previewApiUrl: '/api/designer/preview',
       previewUrl: '/tools/ui-sandbox/designer-preview.html',
+      dataPreviewUrl: '/api/designer/data-preview',
       connectionRef: 'demo',
       authFetch: api,
 

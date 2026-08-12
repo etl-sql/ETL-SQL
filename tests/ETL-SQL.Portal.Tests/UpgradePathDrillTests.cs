@@ -56,44 +56,42 @@ public sealed class UpgradePathDrillTests : IDisposable
             // The ledger table does not exist yet at release N.
             Assert.False(await TableExistsAsync(db, "SubscriptionDeliveries"));
 
-            var group = new Group { Name = "finance" };
-            db.Groups.Add(group);
-            var folder = new Folder { Name = "reports", Path = "/reports", OwnerId = 0 };
-            db.Folders.Add(folder);
-            await db.SaveChangesAsync();
-
-            db.FolderAcls.Add(new FolderAcl
-            {
-                FolderId = folder.Id,
-                GroupId = group.Id,
-                Permission = FolderPermission.Manage
-            });
+            // Seed through the schema that actually existed at release N. Using current EF
+            // entities here makes EF include columns introduced after N (for example TenantId),
+            // which turns the migration drill into a current-model/old-schema mismatch test.
+            groupId = 7001;
+            folderId = 7002;
+            datasetId = 7003;
+            var now = DateTime.UtcNow.ToString("o");
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO Groups (Id, Name, Description) VALUES ({0}, 'finance', NULL)",
+                groupId);
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO Folders (Id, ParentId, Name, Path, OwnerId) " +
+                "VALUES ({0}, NULL, 'reports', '/reports', 0)",
+                folderId);
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO FolderAcls (FolderId, GroupId, Permission) VALUES ({0}, {1}, {2})",
+                folderId, groupId, (int)FolderPermission.Manage);
             await db.Database.ExecuteSqlRawAsync(
                 "INSERT INTO PortalExecutionJobs (Id, ReportId, UserId, Kind, Status, CreatedAt) " +
                 "VALUES ('job-upgrade-1', 1, 1, 'Execution', 'Pending', {0})",
-                DateTime.UtcNow.ToString("o"));
-
-            var dataset = new Dataset
-            {
-                Name = "#sales",
-                FolderPath = folder.Path,
-                ParquetFilePath = Path.Combine(_scratch, "sales_1.parquet"),
-                AccessLevel = DatasetAccessLevel.Public,
-                AtRestKeyVersion = "v1",
-                LastRefresh = DateTime.UtcNow
-            };
-            db.Datasets.Add(dataset);
-            await db.SaveChangesAsync();
+                now);
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO Datasets " +
+                "(Id, Name, FolderPath, ParquetFilePath, OwningReportId, SourceQuery, AccessLevel, " +
+                "LastRefresh, Ttl, RefreshInterval, RowCount, ColumnSchema, CreatedAt, UpdatedAt, " +
+                "AtRestKeyVersion, CreatedBy, EncryptionMode, FolderId, Version) " +
+                "VALUES ({0}, '#sales', '/reports', {1}, NULL, '', {2}, {3}, NULL, NULL, 0, NULL, " +
+                "{3}, {3}, 'v1', NULL, 0, {4}, 1)",
+                datasetId, Path.Combine(_scratch, "sales_1.parquet"),
+                (int)DatasetAccessLevel.Public, now, folderId);
 
             // A pre-upgrade audit row, written without the not-yet-existing CorrelationId column.
             await db.Database.ExecuteSqlRawAsync(
                 "INSERT INTO AuditLogs (UserId, Action, ResourceType, ResourceId, Timestamp, Detail) " +
                 "VALUES (NULL, 'GRANT_PERMISSION', 'Folder', {0}, {1}, 'pre-upgrade')",
-                folder.Id.ToString(), DateTime.UtcNow.ToString("o"));
-
-            groupId = group.Id;
-            folderId = folder.Id;
-            datasetId = dataset.Id;
+                folderId.ToString(), now);
         }
 
         // ── Upgrade in place to HEAD over the populated catalog ─────────────────────────

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Data;
@@ -17,6 +18,11 @@ public interface IRemoteFileSystem : IAsyncDisposable
 {
     IAsyncEnumerable<FileMetaData> ListFilesAsync(string path);
     Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true);
+    Task UploadFileAsync(string localPath, string remotePath, bool overwrite, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return UploadFileAsync(localPath, remotePath, overwrite);
+    }
     Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true);
     Task DeleteFileAsync(string remotePath);
     Task<bool> FileExistsAsync(string remotePath);

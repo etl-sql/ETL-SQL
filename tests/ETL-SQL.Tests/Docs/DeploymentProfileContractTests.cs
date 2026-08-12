@@ -24,7 +24,7 @@ public sealed class DeploymentProfileContractTests
                 RegexOptions.Multiline | RegexOptions.IgnoreCase);
             Assert.True(row.Success, $"Deployment profile matrix is missing '{concern}'.");
             var cells = row.Groups["cells"].Value.Split('|', StringSplitOptions.TrimEntries);
-            Assert.Equal(4, cells.Length);
+            Assert.Equal(5, cells.Length);
             foreach (var cell in cells)
             {
                 Assert.Matches(@"\*\*(Green|Yellow|Red|N/A)\*\*", cell);
@@ -34,6 +34,21 @@ public sealed class DeploymentProfileContractTests
                     Assert.Contains("](", cell); // non-N/A status must link current evidence
             }
         }
+    }
+
+    [Fact]
+    public void CapabilityMatrix_SeparatesManagedDedicatedFromSharedSaasClaims()
+    {
+        var text = Standard();
+        Assert.Contains("| Managed Dedicated SaaS | Shared SaaS |", text, StringComparison.Ordinal);
+
+        var tenantIsolation = Regex.Match(text, @"^\| Tenant isolation \|(?<cells>.+)\|$",
+            RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        Assert.True(tenantIsolation.Success);
+        var cells = tenantIsolation.Groups["cells"].Value.Split('|', StringSplitOptions.TrimEntries);
+        Assert.Contains("**Green**", cells[3], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("**Red**", cells[4], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Dedicated evidence cannot satisfy this cell", cells[4], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -79,4 +94,3 @@ public sealed class DeploymentProfileContractTests
         throw new DirectoryNotFoundException("Could not locate repository root.");
     }
 }
-

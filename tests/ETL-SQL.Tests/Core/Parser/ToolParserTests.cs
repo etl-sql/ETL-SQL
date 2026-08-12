@@ -38,7 +38,7 @@ CREATE TOOL myPythonScript AS EXECUTABLE (
             Assert.Equal("python", commandExpr.Value);
 
             var timeoutExpr = Assert.IsType<LiteralExpression>(stmt.Options["TIMEOUT"]);
-            Assert.Equal(60L, timeoutExpr.Value);
+            Assert.Equal(60m, timeoutExpr.Value);
         }
 
         [Fact]

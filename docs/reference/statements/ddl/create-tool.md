@@ -1,4 +1,5 @@
 # CREATE TOOL
+
 Registers a custom executable tool within the session for subsequent execution via `EXECUTE TOOL`. This allows arbitrary scripts (Python, PowerShell, etc.) or binaries to participate in the data pipeline by processing JSON Lines data over standard input and output streams.
 
 ## Syntax
@@ -35,16 +36,17 @@ CREATE TOOL PiiMasker AS CONTAINER (
 -- Register a transformation script
 CREATE TOOL PiiMasker AS EXECUTABLE (
     COMMAND = 'python',
-    ARGS = 'mask.py',
-    TIMEOUT = 300
+    ARGS = 'mask.py --batch-size {batch_size}'
 );
 
 -- Execute the tool on a data stream
-EXECUTE TOOL PiiMasker 
+EXECUTE TOOL 'PiiMasker'
 FROM #raw_data
 INTO #masked_data
+WITH (batch_size = 500)
 EXPECT SCHEMA (id INT, email STRING);
 ```
 
 ## References
 - [Script Composition Standards](../../../architecture/standards/Script_Composition_Standards.md)
+- [Statement Reference](../README.md)

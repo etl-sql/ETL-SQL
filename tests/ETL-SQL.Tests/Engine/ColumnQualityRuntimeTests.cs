@@ -1846,6 +1846,69 @@ namespace ETL_SQL.Tests.Engine
                 $"Synchronous data-quality validation allocated {allocated:N0} bytes for {measuredRows:N0} passing rows.");
         }
 
+        [Theory]
+        [InlineData("DATEADD", true)]
+        [InlineData("GETDATE", true)]
+        [InlineData("RAND", false)]
+        [InlineData("NEWID", false)]
+        [InlineData("unknown_extension", false)]
+        public void BetweenBoundFunctionClassification_IsConservative(string function, bool deterministic)
+        {
+            Assert.Equal(deterministic, ColumnQualityValidator.IsDeterministicFunction(function));
+        }
+
+        [Fact]
+        public void BetweenBoundWalker_AcceptsRelativeDatesButRejectsColumnsAndVolatileCalls()
+        {
+            var relative = Assert.IsType<BetweenRule>(ColumnRuleParser.Parse(
+                "'BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate'").Single());
+            var volatileRule = Assert.IsType<BetweenRule>(ColumnRuleParser.Parse(
+                "'BETWEEN RAND() AND 10'").Single());
+            var rowDependent = Assert.IsType<BetweenRule>(ColumnRuleParser.Parse(
+                "'BETWEEN Id - 1 AND Id + 1'").Single());
+
+            Assert.True(ColumnQualityValidator.IsRowInvariant(relative.Lower));
+            Assert.True(ColumnQualityValidator.IsRowInvariant(relative.Upper));
+            Assert.False(ColumnQualityValidator.IsRowInvariant(volatileRule.Lower));
+            Assert.False(ColumnQualityValidator.IsRowInvariant(rowDependent.Lower));
+        }
+
+        [Fact]
+        public async Task RowInvariantBetweenRule_DoesNotAllocatePerValidatedRow()
+        {
+            var eval = NewEvaluator();
+            eval.Telemetry.IsProfiling = false;
+            var script = new Lexer(@"
+                SELECT Id /* @expect: 'BETWEEN 0 AND 10'; @fail: 'WARN'; */
+                FROM #src ON FAILURE WARN;").TokenizeToScript();
+            var statement = Assert.IsType<SelectStatement>(Assert.Single(script.Statements));
+            var validator = Assert.IsType<ColumnQualityValidator>(
+                ColumnQualityValidator.TryCreate(eval, eval.Logger, statement, ["Id"]));
+            await validator.InitializeAsync();
+
+            var row = new Row();
+            row[0] = 5m;
+            for (var i = 0; i < 1_000; i++)
+                Assert.True(await validator.TryAcceptRowAsync(row, row));
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            var allAcceptedSynchronously = true;
+            const int measuredRows = 100_000;
+            for (var i = 0; i < measuredRows; i++)
+            {
+                var result = validator.TryAcceptRowAsync(row, row);
+                allAcceptedSynchronously &= ReadCompleted(result);
+            }
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+            Assert.True(allAcceptedSynchronously);
+            Assert.True(allocated <= 4_096,
+                $"Hoisted BETWEEN validation allocated {allocated:N0} bytes for {measuredRows:N0} passing rows.");
+        }
+
         private static bool ReadCompleted(ValueTask<bool> result) =>
             result.IsCompletedSuccessfully && result.Result;
 

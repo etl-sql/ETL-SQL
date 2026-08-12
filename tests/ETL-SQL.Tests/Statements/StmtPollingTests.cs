@@ -100,14 +100,14 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
-        public void WaitForCondition_IsRejectedWithReplacement()
+        public void WaitForCondition_ParsesAsUntilAlias()
         {
             var script = Parse("WAITFOR (@ready = 1);");
 
-            Assert.Contains(script.Diagnostics, diagnostic =>
-                diagnostic.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error &&
-                diagnostic.Message.Contains("WAIT UNTIL <condition>", StringComparison.Ordinal));
-            Assert.Empty(script.Statements);
+            Assert.DoesNotContain(script.Diagnostics, diagnostic =>
+                diagnostic.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+            var statement = Assert.IsType<WaitForStatement>(Assert.Single(script.Statements));
+            Assert.Equal(WaitType.Until, statement.Type);
         }
     }
 }

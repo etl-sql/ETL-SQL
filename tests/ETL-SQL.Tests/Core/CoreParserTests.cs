@@ -445,6 +445,30 @@ TRIGGER JOB JobC AT remote_conn;
             Assert.Equal(50, Convert.ToInt32(((LiteralExpression)prevLimit.Value).Value));
         }
 
+        [Theory]
+        [InlineData("SELECT * FROM source INDEXED BY ix_source;")]
+        [InlineData("SELECT * FROM (SELECT 1) INDEXED BY ix_source;")]
+        [InlineData("SELECT * FROM source PIVOT (COUNT(*) FOR category IN ('a')) INDEXED BY ix_source;")]
+        [InlineData("SELECT * FROM source UNPIVOT (amount FOR category IN (a)) INDEXED BY ix_source;")]
+        [InlineData("SELECT * FROM source MATCH_RECOGNIZE () INDEXED BY ix_source;")]
+        [InlineData("SELECT * FROM (SELECT 1) MATCH_RECOGNIZE ();")]
+        public void TableOperatorsAndIndexedBy_AreNotConsumedAsImplicitAliases(string source)
+        {
+            var script = Parse(source);
+
+            Assert.Empty(script.Diagnostics);
+            Assert.Single(script.Statements);
+        }
+
+        [Fact]
+        public void GenerateJwtSecret_ContextualKeyword_IsConsumed()
+        {
+            var script = Parse("GENERATE JWT_SECRET;");
+
+            Assert.Empty(script.Diagnostics);
+            Assert.IsType<GenerateJwtSecretStatement>(Assert.Single(script.Statements));
+        }
+
         private static Script Parse(string source)
         {
             var lexer = new Lexer(source);

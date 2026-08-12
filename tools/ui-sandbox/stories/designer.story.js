@@ -48,6 +48,7 @@ export default {
       opts.reportVersion = 1;
       opts.sourceRevision = 'sandbox0';
       opts.sourceControlEnabled = true;
+      opts.host = 'portal';
       opts.onSave = () => ctx.stat('onSave (mock) — not called while source control is on');
     } else {
       opts.onSaveScript = async (script) => ctx.stat(`saved (mock) · ${script.length} chars`);

@@ -12,10 +12,16 @@ public class DataParser : ParserComponent
 
     public Statement ParseGenerate(Token startToken)
     {
-        if (Match(TokenType.SECRET) || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("JWT_SECRET", StringComparison.OrdinalIgnoreCase)))
+        if (Match(TokenType.SECRET))
         {
-            if (_parser.Previous.Type == TokenType.IDENTIFIER) Advance(); // Consume JWT_SECRET if it was an identifier
             if (Match(TokenType.SEMICOLON)) { }
+            return new GenerateJwtSecretStatement { Line = startToken.Line, Column = startToken.Column };
+        }
+        if (_parser.Current.Type == TokenType.IDENTIFIER &&
+            _parser.Current.Value.Equals("JWT_SECRET", StringComparison.OrdinalIgnoreCase))
+        {
+            Advance();
+            Match(TokenType.SEMICOLON);
             return new GenerateJwtSecretStatement { Line = startToken.Line, Column = startToken.Column };
         }
 
@@ -516,7 +522,7 @@ public class DataParser : ParserComponent
                 options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
                 while (true)
                 {
-                    var optName = ConsumeIdentifier("Expected option name").Value;
+                    var optName = ConsumeObjectOptionName();
                     Consume(TokenType.EQUALS, "Expected '=' after option name");
                     options[optName] = ParseExpression();
                     if (!Match(TokenType.COMMA)) break;
@@ -1398,7 +1404,7 @@ public class DataParser : ParserComponent
                 options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
                 while (true)
                 {
-                    var optName = ConsumeIdentifier("Expected option name").Value;
+                    var optName = ConsumeObjectOptionName();
                     Consume(TokenType.EQUALS, "Expected '=' after option name");
                     options[optName] = ParseExpression();
                     if (!Match(TokenType.COMMA)) break;
@@ -1408,6 +1414,15 @@ public class DataParser : ParserComponent
         }
 
         return new CreateToolStatement(name, toolType, options, mode) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    private string ConsumeObjectOptionName()
+    {
+        if (_parser.IsIdentifier(_parser.Current)
+            || ETL_SQL.Common.LanguageMetadata.IsKeyword(_parser.Current.Value))
+            return Advance().Value;
+
+        throw new SyntaxException("Expected option name", _parser.Current.Line, _parser.Current.Column);
     }
 
     private Statement ParseCreateConnection(Token startToken, ObjectCreationMode mode)

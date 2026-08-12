@@ -214,7 +214,7 @@ public class PortalParser : ParserComponent
         string? newName = null, newParentPath = null;
         do
         {
-            if (MatchIdentifier("RENAME"))
+            if (Match(TokenType.RENAME) || MatchIdentifier("RENAME"))
             {
                 Consume(TokenType.TO, "Expected TO after RENAME");
                 newName = ConsumeStringLiteral("Expected new folder name string literal");

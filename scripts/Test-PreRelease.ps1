@@ -112,6 +112,7 @@ function Get-PlannedPreReleasePhases {
     }
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Bounded quick-feedback lane: smoke coverage plus language-server tests." })
+    $phases.Add([ordered]@{ Phase = "EBNF conformance lane"; Command = ".\scripts\test-lane.ps1 -Lane ebnf"; Reason = "Deterministic grammar generation strictly agrees with execution-parser acceptance and rejection." })
     $phases.Add([ordered]@{ Phase = "Engine lane and coverage gate"; Command = ".\scripts\Test-CoverageGate.ps1 -RunEngineLane -MinimumLineCoverage 70"; Reason = "Broad engine/parser/evaluator regression coverage is collected once and must meet the fail-closed 70% line-coverage release threshold." })
     $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API coverage, including the release-acceptance journeys: the role/permission authorization matrix (every grant against every operation, both directions), departmental environment isolation across two deployments, policy authority and distribution, module gating, Studio capabilities, and the browser API contract checked against the same file the browser validates with." })
     $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "Everything only a real browser can prove: the critical journey (first-run sign-in, user, folder, publish, run); Viewer/Publisher/Steward/Operator role journeys, asserting that surfaces a role cannot use are absent rather than merely guarded; accessibility and responsive checks at 1440px and 390px (computed accessible names, no page overflow at phone width or 200% text, closed dialogs unreachable, both colour schemes, reduced motion, forced colours); accessibility-tree snapshots of critical surfaces; and every UI-sandbox story mounting cleanly." })
@@ -859,6 +860,11 @@ try {
     Invoke-LoggedPhase "Fast lane" `
         ".\scripts\test-lane.ps1 -Lane fast -Configuration $Configuration -NoRestore -NoBuild" `
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "fast" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "EBNF conformance lane" `
+        ".\scripts\test-lane.ps1 -Lane ebnf -Configuration $Configuration -NoRestore -NoBuild" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "ebnf" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Engine lane and coverage gate" `

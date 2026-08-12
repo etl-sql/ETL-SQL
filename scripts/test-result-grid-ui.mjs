@@ -15,9 +15,10 @@ import { pathToFileURL } from 'node:url';
 const sourcePath = path.resolve('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js');
 const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'etlsql-result-grid-'));
 const tempModule = path.join(tempDir, 'designer.mjs');
-await fs.writeFile(tempModule, await fs.readFile(sourcePath, 'utf8'), 'utf8');
+const sourceText = await fs.readFile(sourcePath, 'utf8');
+await fs.writeFile(tempModule, sourceText, 'utf8');
 
-const { filterRows, toCsv, formatResultCell, resultRenderWindow, MAX_RENDERED_ROWS } =
+const { filterRows, toCsv, formatResultCell, resultRenderWindow, buildDataPreviewPayload, editLeaseRetryDelay, MAX_RENDERED_ROWS } =
     await import(pathToFileURL(tempModule).href);
 
 const columns = ['Id', 'Name', 'Notes'];
@@ -135,6 +136,39 @@ assert.equal(resultRenderWindow([rows[0]], 3, true).label, '1 of 3 rows');
 // Degenerate input must not throw — the panel renders whatever a producer sent.
 assert.equal(resultRenderWindow(null, 0, false).visible.length, 0);
 assert.equal(resultRenderWindow(undefined, undefined, false).visible.length, 0);
+
+// ── governed table-preview payloads ────────────────────────────────────────
+
+const sourcePreview = buildDataPreviewPayload(
+    { sourceKind: 'connection', connection: 'sales', table: 'dbo.Orders' },
+    "SELECT 'SECRET:must-not-leave-editor';",
+    'portal-designer://u/7/c/sales/doc');
+assert.equal(sourcePreview.script, null, 'catalog preview must not send the editor buffer');
+assert.equal(sourcePreview.connection, 'sales');
+assert.equal(sourcePreview.table, 'dbo.Orders');
+
+const tempScript = 'SELECT Id INTO #stage FROM sales.Orders;';
+const tempPreview = buildDataPreviewPayload(
+    { sourceKind: 'temp', connection: 'sales', tempTable: '#stage' },
+    tempScript,
+    'portal-designer://u/7/c/sales/doc');
+assert.equal(tempPreview.script, tempScript, 'temp preview needs the materializing read-only prefix');
+assert.equal(tempPreview.tempTable, '#stage');
+
+// Lease recovery retries promptly for an expired lease, avoids hot polling for a live lease, and
+// uses a stable fallback when a server omits malformed expiry metadata.
+assert.equal(editLeaseRetryDelay('2026-08-12T12:00:00Z', Date.parse('2026-08-12T12:00:01Z')), 5_000);
+assert.equal(editLeaseRetryDelay('2026-08-12T12:10:00Z', Date.parse('2026-08-12T12:00:00Z')), 60_000);
+assert.equal(editLeaseRetryDelay('not-a-date', 0), 30_000);
+
+// Pin the browser lifecycle wiring as well as its pure timing rule: mount acquires, the timer
+// renews, contention disables Save, and every browser exit/re-entry path releases or recovers.
+assert.match(sourceText, /apiJson\('\/api\/designer\/lease', 'POST', \{ reportId \}\)/);
+assert.match(sourceText, /scheduleLeaseAttempt\(120_000\)/);
+assert.match(sourceText, /querySelector\('#dsgn-save'\)\.disabled = true/);
+assert.match(sourceText, /addEventListener\('pagehide', pageHideLeaseHandler\)/);
+assert.match(sourceText, /addEventListener\('pageshow', pageShowLeaseHandler\)/);
+assert.match(sourceText, /apiJson\(`\/api\/designer\/lease\/\$\{reportId\}`, 'DELETE'\)/);
 
 // The cap bounds the DOM but never the data: export reads the filtered rows, not what was drawn,
 // so a truncated grid still exports in full.

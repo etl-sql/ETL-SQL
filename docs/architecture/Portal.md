@@ -58,6 +58,7 @@ PortalSecret            (encrypted secret store: SECRET:name for Portal-hosted e
 PortalSharedConnection  (governed connection catalog: SHARED:alias; Target/OptionsJson encrypted at rest)
 AdminServiceRun         (per-run ledger for the native admin background services)
 ServiceAccount          (scoped machine identities, capped by their owner's authority)
+SharedIdentityAuthority (tenant-owned OIDC authority metadata; client secrets remain external)
 PolicyVersionEntity / PolicyMachineEntity   (enterprise policy authority + machine registry)
 SharedConnectionAcl / SharedConnectionUsage (per-connection use grants and consumers)
 GroupStudioCapability   (deny-by-default Studio capabilities granted to a group)
@@ -582,11 +583,13 @@ by the administration guides rather than restated here.
 | `/api/auth/oidc` | Public | OIDC federation — the enterprise identity path |
 | `/api/auth/service-token` | Public (client credentials) | Service-account token issue |
 | `/api/admin/service-accounts` | Admin | Scoped machine identities, capped by their owner's authority |
+| `/api/admin/identity/authorities` | Admin | Tenant-scoped shared-host OIDC authority registration, rotation metadata, enablement, and deletion |
 | `/api/admin/policy-authority` | Admin | Enterprise policy publish, activate, canary, roll back, impact |
 | `/api/policy-authority` | Machine | Policy distribution to enrolled machines |
 | `/api/admin/configuration` | Admin | Configuration export and promotion between environments |
 | `/api/studio` | Studio capabilities | Authoring surface; `GET /api/studio/session` is a **probe** reachable by any authenticated user |
-| `/api/designer` | Designer module | Report designer parse/generate/schema |
+| `/api/designer` | Designer module + Studio capabilities | Report designer parse/generate/schema and governed row preview. `POST /data-preview` requires `ScriptPreview`; connection sources pass through tenant-scoped catalog ACL/schema resolution, while `#temp` sources replay only their read-only materialization prefix. Both use bounded, redacted interactive execution. |
+| `/api/designer/lease` | `ScriptSave` + report Author | Atomic five-minute edit-session acquire/renew and owner-only release. Lease metadata does not advance the report content version; shared-tenancy requests additionally match the report creator's stored tenant to the signed tenant claim. |
 | `/api/docs` | Any | Embedded documentation, served from the `docs/` copied into the image |
 | `/api/fleet` | FleetReader | Read-only cross-environment status; visibility, never authority |
 

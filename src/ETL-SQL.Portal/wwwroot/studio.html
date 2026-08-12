@@ -8,22 +8,7 @@
 </head>
 <body>
 <div class="app-shell">
-  <header class="topbar">
-    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation menu" type="button">☰</button>
-    <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
-    <nav class="topbar-nav">
-      <a href="/index.html">Reports</a>
-      <a href="/index.html#governance">Governance</a>
-      <a href="/studio.html" class="active">Studio</a>
-      <a href="/docs.html" id="docsNav">Docs</a>
-      <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
-      <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
-    </nav>
-    <span class="topbar-spacer"></span>
-    <span class="topbar-user" id="topbarUser"></span>
-    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
-    <button class="topbar-btn" id="logoutBtn">Sign Out</button>
-  </header>
+  <header data-portal-header data-active="studio"></header>
 
   <main class="studio-home" id="studioHome">
     <section class="studio-intro" aria-labelledby="studioTitle">
@@ -77,7 +62,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" type="submit">Create report</button>
-      <button class="btn btn-outline" id="newReportCancel" type="button">Cancel</button>
+      <button class="btn btn-outline" id="newReportCancel" data-dialog-close type="button">Cancel</button>
     </div>
   </form>
 </div>
@@ -88,7 +73,9 @@ import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.18.0';
 import { getSessionIdentity, renderSessionIdentity } from '/js/session-identity.js?v=0.18.0';
 import { applyNavigationSafely } from '/js/portal-nav.js?v=0.18.0';
 import { installDialogAccessibility } from '/js/dialog-a11y.js?v=0.18.0';
+import { renderPortalHeader } from '/js/portal-header.js?v=0.18.0';
 
+renderPortalHeader();
 // Studio's dialogs had no focus management at all: opening one left the keyboard user behind it,
 // and Tab walked straight out into the page the dialog was supposedly blocking.
 installDialogAccessibility();

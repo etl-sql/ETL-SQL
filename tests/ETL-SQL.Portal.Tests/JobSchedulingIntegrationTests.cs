@@ -404,6 +404,8 @@ INTO mail_conn.Email;
             using var factory = new OrchestratorWebFactory();
             using var client = factory.CreateClient();
             var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+            await store.SaveJobAsync(new JobDefinition(
+                "resume_history", "SELECT 1;", 1, "HOUR", null, null, DateTime.Now.AddHours(1)));
             var runId = await store.LogJobStartAsync("resume_history");
             await store.LogJobEndAsync(runId, "FAILURE", "boom");
             await store.UpdateJobResumeMetadataAsync(runId, "private-session-handle", "load_complete");
@@ -425,6 +427,8 @@ INTO mail_conn.Email;
             using var factory = new OrchestratorWebFactory();
             using var client = factory.CreateClient();
             var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+            await store.SaveJobAsync(new JobDefinition(
+                "ordinary_failure", "SELECT 1;", 1, "HOUR", null, null, DateTime.Now.AddHours(1)));
             var runId = await store.LogJobStartAsync("ordinary_failure");
             await store.LogJobEndAsync(runId, "FAILURE", "boom");
 
@@ -551,7 +555,7 @@ INTO mail_conn.Email;
             disableReq.Headers.TryAddWithoutValidation(
                 "If-Match", $"\"{(await store.GetJobAsync(jobName))!.Version}\"");
             var controlResponses = await Task.WhenAll(client.SendAsync(triggerReq), client.SendAsync(disableReq));
-            Assert.Contains(controlResponses, r => r.StatusCode == HttpStatusCode.Accepted);
+            Assert.Contains(controlResponses, r => r.StatusCode == HttpStatusCode.Conflict);
             Assert.Contains(controlResponses, r => r.StatusCode == HttpStatusCode.OK);
 
             using var killReq = Authorized(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/kill");

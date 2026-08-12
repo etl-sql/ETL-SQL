@@ -295,7 +295,7 @@ Syntax notes:
 - `CREATE PAGE <name> AS PAGINATED (...)` defines a page that stages prompt changes until an `APPLY_PARAMETERS` button is clicked.
 - Page layout may be written directly with `STRUCTURE`/`MAP` or inside `LAYOUT (...)`. Prefer `LAYOUT (...)` in new scripts for consistency with containers.
 - `CREATE DATASET` uses `&dataset` names only. Use `#temp` for intermediate engine tables created by `SELECT ... INTO #temp`; use `&dataset` for reusable report-owned datasets.
-- `STYLE = StyleName` applies a named style. `STYLE (key = value, ...)` applies inline overrides. A standalone `STYLE (...)` statement is not valid.
+- `STYLE = StyleName` applies a named style. `STYLE (key = value, ...)` applies inline overrides. A standalone `STYLE (...)` statement defines global report defaults and is valid at top level.
 - `SOURCE = #temp`, `SOURCE = &dataset`, `SOURCE = ViewName`, and `SOURCE = (SELECT ...)` are the canonical source forms. `#temp` is engine memory; `&dataset` is a report dataset definition or portal-registered dataset; `ViewName` is a session-scoped ETL-SQL query view created with `CREATE VIEW`.
 
 ### Report object buckets

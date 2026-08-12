@@ -1,3 +1,5 @@
+import { installDialogAccessibility } from './dialog-a11y.js';
+
 export async function applyPortalBranding() {
   try {
     const res = await fetch('/api/branding');
@@ -44,6 +46,7 @@ function firstValue(obj, key) {
 }
 
 export function initTheme() {
+  installDialogAccessibility();
   const currentTheme = localStorage.getItem('portal-theme') || 'light';
   if (currentTheme === 'dark') {
     document.body.classList.add('theme-dark');
@@ -91,7 +94,7 @@ function initResponsiveNavigation() {
   mobilePanel.innerHTML = `
     <div class="shell-nav-header">
       <strong>Navigation</strong>
-      <button type="button" class="shell-nav-close" aria-label="Close navigation">×</button>
+      <button type="button" class="shell-nav-close" data-dialog-close aria-label="Close navigation">×</button>
     </div>
     <div class="shell-nav-identity" aria-live="polite"></div>
     <nav class="shell-nav-links" aria-label="Portal destinations"></nav>
@@ -112,7 +115,6 @@ function initResponsiveNavigation() {
   const links = mobilePanel.querySelector('.shell-nav-links');
   const identity = mobilePanel.querySelector('.shell-nav-identity');
   const media = window.matchMedia('(max-width: 768px)');
-  let restoreFocus = null;
   const inerted = [];
 
   function refreshDrawer() {
@@ -144,11 +146,11 @@ function initResponsiveNavigation() {
   function openDrawer() {
     if (!media.matches) return;
     refreshDrawer();
-    restoreFocus = document.activeElement;
     drawer.classList.add('open');
     drawer.setAttribute('role', 'dialog');
     drawer.setAttribute('aria-modal', 'true');
     drawer.setAttribute('aria-label', 'Portal navigation');
+    drawer.removeAttribute('aria-hidden');
     overlay.hidden = false;
     overlay.classList.add('open');
     document.body.classList.add('shell-drawer-open');
@@ -160,12 +162,12 @@ function initResponsiveNavigation() {
   function closeDrawer() {
     if (!drawer.classList.contains('open')) return;
     drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
     overlay.classList.remove('open');
     overlay.hidden = true;
     document.body.classList.remove('shell-drawer-open');
     menuBtn.setAttribute('aria-expanded', 'false');
     setBackgroundInert(false);
-    restoreFocus?.focus?.();
   }
 
   function syncViewport() {
@@ -187,26 +189,6 @@ function initResponsiveNavigation() {
   });
   mobilePanel.querySelector('.shell-nav-signout').addEventListener('click', () => {
     document.getElementById('logoutBtn')?.click();
-  });
-  drawer.addEventListener('keydown', event => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeDrawer();
-      return;
-    }
-    if (event.key !== 'Tab') return;
-    const focusable = [...drawer.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
-      .filter(element => !element.hidden && element.getClientRects().length > 0);
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
   });
   media.addEventListener('change', syncViewport);
   syncViewport();

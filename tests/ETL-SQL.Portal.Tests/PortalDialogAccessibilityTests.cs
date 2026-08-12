@@ -148,6 +148,25 @@ public sealed class PortalDialogAccessibilityTests
             + string.Join("\n  ", untrapped));
     }
 
+    [Fact]
+    public void ShellDialogsAndResponsiveDrawer_UseOnlyTheSharedFocusLifecycle()
+    {
+        var root = Path.Combine(RepoRoot(), "src", "ETL-SQL.Portal", "wwwroot");
+        foreach (var page in new[] { "index.html", "admin.html", "orchestrator.html", "studio.html" })
+        {
+            var source = File.ReadAllText(Path.Combine(root, page));
+            Assert.Contains("installDialogAccessibility()", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("initModalA11y", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("_trapFocus", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("_escapeClose", source, StringComparison.Ordinal);
+        }
+
+        var branding = File.ReadAllText(Path.Combine(root, "js", "branding.js"));
+        Assert.Contains("installDialogAccessibility()", branding, StringComparison.Ordinal);
+        Assert.Contains("data-dialog-close", branding, StringComparison.Ordinal);
+        Assert.DoesNotContain("drawer.addEventListener('keydown'", branding, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Returns each opening tag that carries a modal overlay class, whether it is written as HTML
     /// or built inside a JavaScript template literal.

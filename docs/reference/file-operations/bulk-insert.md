@@ -1,37 +1,55 @@
-BULK INSERT loads a flat file directly into a connection table in high-throughput batches, bypassing the #temp table staging step.
+# BULK INSERT
 
-Syntax:
-  BULK INSERT <target_table> FROM <file_path>
-    AT <connection>
-    WITH (
-      BATCH_SIZE     = n,
-      MAX_ERRORS     = n,
-      ERROR_LOG_PATH = 'path',
-      FIRST_ROW      = n,
-      LAST_ROW       = n
-    );
+BULK INSERT streams a flat file into a table in bounded batches. It validates values at the target
+boundary and reports rejected rows, mapping warnings, and successful rows separately.
 
-Options:
-- **BATCH_SIZE** — rows per commit batch (default 1000)
-- **MAX_ERRORS** — tolerated parse errors before aborting (default 0)
-- **ERROR_LOG_PATH** — path to write rejected rows; omit to abort on first error
-- **FIRST_ROW** — skip header or preamble rows (1-based)
-- **LAST_ROW** — stop loading after this row number
+## Syntax
+
+```sql
+BULK INSERT <target_table> [(target_column, ...)]
+FROM '<file_path>'
+WITH (
+  FIELDTERMINATOR = ',',
+  ROWTERMINATOR = '\n',
+  FIRSTROW = 2,
+  HEADER = TRUE,
+  MAPPING = 'NAME',
+  BATCHSIZE = 1000,
+  MAXERRORS = 0
+);
+```
+
+## Options
+
+- **FIELDTERMINATOR** — Source field delimiter.
+- **ROWTERMINATOR** — Source row delimiter.
+- **FIRSTROW** — First data row, using 1-based file rows. `FIRSTROW = 2` treats row 1 as a header.
+- **HEADER** — `TRUE`/`FALSE`; explicitly identifies whether row 1 contains column names.
+- **MAPPING** — `NAME` (default when a header is present) or `POSITION`. Name mapping is
+  case-insensitive and all-or-nothing; use `POSITION` for T-SQL ordinal compatibility.
+- **BATCHSIZE** — Rows per write batch (default: the engine batch size).
+- **MAXERRORS** — Rejected target rows tolerated before aborting (default: `0`).
+
+With a header, ETL-SQL maps requested target columns by name when every name is present. Otherwise
+it falls back to ordinal mapping with a warning. A source/target width mismatch also warns: surplus
+source columns are ignored and unmatched target columns remain `NULL`. If `FIRSTROW`/`HEADER` is
+omitted but the first row exactly matches the requested target names, the load fails rather than
+silently inserting the header as data.
 
 ```sql
 BULK INSERT SalesDB.dbo.StagedOrders FROM 'C:\data\orders_2024.csv'
   WITH (
-    BATCH_SIZE     = 5000,
-    MAX_ERRORS     = 10,
-    ERROR_LOG_PATH = 'C:\logs\bulk_errors.txt',
-    FIRST_ROW      = 2
+    BATCHSIZE = 5000,
+    MAXERRORS = 10,
+    FIRSTROW = 2
   );
 
 PRINT 'Loaded: ' + @@ROWCOUNT;
 ```
 
-For files with column headers, set FIRST_ROW = 2.
-Use FLATFILE connections (via CREATE CONNECTION) for full parsing control including delimiter, encoding, and fixed-width formats.
+Use a FLATFILE connection for additional parsing controls such as encoding and fixed-width layouts.
 
-References:
+## References
+
 - [File Operations](README.md)
+- [FLATFILE Connector](../connectors/files/flatfile.md)

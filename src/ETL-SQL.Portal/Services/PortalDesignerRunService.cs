@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
@@ -27,11 +28,12 @@ public sealed class PortalDesignerRunService(
     PortalConfig portalConfig,
     AuditService audit)
 {
-    private const int RowCap = 100;
-    private const int TimeoutSeconds = 15;
     private const int OperatorGrantMb = 64;
     private const long SessionCeilingBytes = 128L * 1024 * 1024;
     private const int MaxStatements = 25;
+    private int RowCap => Math.Clamp(portalConfig.DesignerLimits.MaxDataPreviewRows, 1, 1_000);
+    private int ResultByteCap => Math.Clamp(portalConfig.DesignerLimits.MaxDataPreviewBytes, 1_024, 16 * 1024 * 1024);
+    private int TimeoutSeconds => Math.Clamp(portalConfig.DesignerLimits.MaxDataPreviewSeconds, 1, 300);
 
     public async Task<RunDesignerResponse> RunAsync(
         RunDesignerRequest request,
@@ -85,7 +87,7 @@ public sealed class PortalDesignerRunService(
         }
 
         table ??= new DataTable();
-        return ToResponse(table, elapsedMs, result.ExecutionTree?.ToSnapshot());
+        return ToResponse(table, elapsedMs, result.ExecutionTree?.ToSnapshot(), RowCap, ResultByteCap);
     }
 
     /// <summary>
@@ -180,24 +182,44 @@ public sealed class PortalDesignerRunService(
         };
     }
 
-    private static RunDesignerResponse ToResponse(DataTable table, long elapsedMs, object? pipeline)
+    internal static RunDesignerResponse ToResponse(
+        DataTable table,
+        long elapsedMs,
+        object? pipeline,
+        int rowCap,
+        int resultByteCap)
     {
+        rowCap = Math.Clamp(rowCap, 1, 1_000);
+        resultByteCap = Math.Clamp(resultByteCap, 1_024, 16 * 1024 * 1024);
         var columns = table.ColumnNames;
-        var rows = table.Rows
-            .Take(RowCap)
-            .Select(row => columns.ToDictionary<string, string, object?>(
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        long bytesReturned = 0;
+        var byteCapped = false;
+        foreach (var row in table.Rows.Take(rowCap))
+        {
+            var projected = columns.ToDictionary<string, string, object?>(
                 column => column,
-                column => row[column],
-                StringComparer.OrdinalIgnoreCase))
-            .Cast<IReadOnlyDictionary<string, object?>>()
-            .ToList();
+                column => SecretRedactor.RedactValue(column, row[column]),
+                StringComparer.OrdinalIgnoreCase);
+            var rowBytes = JsonSerializer.SerializeToUtf8Bytes(projected).LongLength;
+            if (bytesReturned + rowBytes > resultByteCap)
+            {
+                byteCapped = true;
+                break;
+            }
 
-        var capped = table.IsCapped || table.Rows.Count >= RowCap || table.TotalRowsMatched > RowCap;
+            rows.Add(projected);
+            bytesReturned += rowBytes;
+        }
+
+        var capped = table.IsCapped || table.Rows.Count >= rowCap || table.TotalRowsMatched > rowCap || byteCapped;
         var rowCount = table.TotalRowsMatched > 0 ? table.TotalRowsMatched : table.Rows.Count;
-        var message = capped
-            ? $"Showing first {RowCap} rows; result was capped."
+        var message = byteCapped
+            ? $"Showing {rows.Count} rows; the {resultByteCap:N0}-byte preview limit was reached."
+            : capped
+            ? $"Showing first {rowCap} rows; result was capped."
             : $"Returned {rows.Count} row{(rows.Count == 1 ? string.Empty : "s")}.";
-        return new RunDesignerResponse(columns, rows, rowCount, capped, elapsedMs, message, pipeline);
+        return new RunDesignerResponse(columns, rows, rowCount, capped, elapsedMs, message, pipeline, byteCapped, bytesReturned);
     }
 
     private static string? NormalizeResourceId(string? connectionRef)

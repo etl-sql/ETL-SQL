@@ -1,0 +1,61 @@
+# Portal-mode dataset lifecycle and stewardship enforcement.
+portal
+
+statement ok
+CREATE TABLE #dataset_seed (id INT, region VARCHAR(20), amount DECIMAL(10,2));
+
+statement ok
+INSERT INTO #dataset_seed VALUES (1, 'North', 10.50), (2, 'South', 20.75);
+
+# A private dataset materializes into the engine and the portal registry/cache.
+statement ok
+CREATE DATASET &sales_private ACCESS PRIVATE TTL='1h' AS (
+  SELECT id, region, amount FROM #dataset_seed
+);
+
+query
+SELECT id, region, amount FROM &sales_private ORDER BY id;
+----
+1|North|10.50
+2|South|20.75
+
+# PUBLIC publication fails closed without the complete stewardship contract.
+statement error missing required stewardship metadata
+CREATE DATASET &sales_untagged ACCESS PUBLIC AS (
+  SELECT id, region, amount FROM #dataset_seed
+);
+
+# Complete global stewardship metadata permits PUBLIC publication.
+statement ok
+/* @owner: 'Data Engineering'; @steward: 'Data Steward';
+   @contact: 'data@example.test'; @classification: 'public'; @quality: 'gold'; */
+CREATE DATASET &sales_public ACCESS PUBLIC TTL='1h' AS (
+  SELECT id, region, amount FROM #dataset_seed
+);
+
+query
+SELECT COUNT(*) FROM &sales_public;
+----
+2
+
+# EXPORT creates an encrypted transport artifact, and PUBLISH imports it under a
+# distinct global name using the portal at-rest key.
+statement ok
+EXPORT DATASET &sales_private TO '${dir}\sales-private.etlds'
+ENCRYPT = PASSWORD PASSWORD = 'transport-secret';
+
+assert file exists sales-private.etlds
+
+statement ok
+PUBLISH DATASET &sales_imported FROM '${dir}\sales-private.etlds'
+INTO '/Imports' ACCESS PRIVATE
+ENCRYPT = PASSWORD PASSWORD = 'transport-secret';
+
+statement ok
+USE DATASET &sales_imported;
+
+query
+SELECT id, region, amount FROM &sales_imported ORDER BY id;
+----
+1|North|10.5
+2|South|20.75

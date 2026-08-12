@@ -158,19 +158,42 @@ public class MergeStatementHandler : IStatementHandler
             foreach (var sRow in sourceRows)
             {
                 var sKey = new CompositeKey(sourceCols!.Select(c => sRow[c]).ToArray());
+                var examined = new HashSet<Row>();
+                var rowMatched = false;
                 if (targetIndex.TryGetValue(sKey, out var tMatches))
                 {
                     foreach (var tRow in tMatches)
                     {
+                        examined.Add(tRow);
                         var combinedRow = CreateEvalRow(sRow, sAlias, tRow, tAlias);
                         if (await context.EvaluateCondition(stmt.OnCondition, combinedRow))
                         {
+                            rowMatched = true;
                             matchedTargetRows.Add(tRow);
                             await HandleMatched(stmt, combinedRow, tRow, rowsToDelete, outputRows, context, () => processedCount++);
                         }
                     }
                 }
-                else
+
+                // CompositeKey is intentionally type-strict, while SQL equality is soft across
+                // compatible connector representations (for example CSV "2" and engine decimal
+                // 2). A strict hash miss must not become NOT MATCHED and silently insert a duplicate.
+                // Probe the remaining target rows with the authoritative expression evaluator.
+                if (!rowMatched)
+                {
+                    foreach (var tRow in targetRows)
+                    {
+                        if (examined.Contains(tRow)) continue;
+                        var combinedRow = CreateEvalRow(sRow, sAlias, tRow, tAlias);
+                        if (!await context.EvaluateCondition(stmt.OnCondition, combinedRow)) continue;
+
+                        rowMatched = true;
+                        matchedTargetRows.Add(tRow);
+                        await HandleMatched(stmt, combinedRow, tRow, rowsToDelete, outputRows, context, () => processedCount++);
+                    }
+                }
+
+                if (!rowMatched)
                 {
                     await HandleNotMatched(stmt, sRow, sAlias, target, rowsToAdd, outputRows, context, () => processedCount++);
                 }

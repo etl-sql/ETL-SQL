@@ -1,7 +1,14 @@
 /* ETL-SQL EBNF Grammar */
-/* This is a subset of the full grammar focusing on the core ETL-SQL statements for conformance testing. */
+/* Canonical machine-readable grammar for syntax accepted by the ETL-SQL execution parser. */
+/* Synchronization protocol:
+   1. Change the execution parser and this grammar in the same commit.
+   2. Add the new form to statement/expression example generation and to its help/documentation example.
+   3. Run scripts/test-lane.ps1 -Lane ebnf (or scripts/test-lane.sh --lane ebnf), followed by the docs lane.
+   4. Parser entry keywords, every top-level statement production, every direct *_statement alternative,
+      unresolved references, malformed EBNF, deterministic valid/invalid generation, and reverse recognition
+      of every parser-accepted working documentation example must remain green. */
 
-script = { statement ";" } EOF ;
+script = { statement [ ";" ] } EOF ;
 
 statement = select_statement
           | set_variable_statement
@@ -9,15 +16,24 @@ statement = select_statement
           | if_statement
           | while_statement
           | block_statement
+          | try_catch_statement
           | declare_statement
           | insert_statement
+          | insert_tag_statement
+          | insert_lineage_statement
           | update_statement
+          | update_tag_statement
           | delete_statement
+          | delete_tag_statement
+          | delete_lineage_statement
           | create_connection_statement
           | create_job_statement
           | waitfor_statement
           | run_script_statement
           | execute_statement
+          | execute_tool_statement
+          | execute_expression_statement
+          | execute_procedure_statement
           | create_visual_statement
           | create_page_statement
           | create_dataset_statement
@@ -27,85 +43,642 @@ statement = select_statement
           | create_style_statement
           | set_report_metadata_statement
           | merge_statement
-          | with_statement ;
+          | merge_files_statement
+          | with_statement
+          | clear_statement
+          | truncate_statement
+          | transaction_statement
+          | for_statement
+          | foreach_statement
+          | raiseerror_statement
+          | assert_statement
+          | assert_job_statement
+          | parallel_statement
+          | throw_statement
+          | return_statement
+          | break_statement
+          | continue_statement
+          | help_statement
+          | use_statement
+          | require_statement
+          | lint_statement
+          | test_connection_statement
+          | file_transfer_statement
+          | email_statement
+          | file_operation_statement
+          | convert_encoding_statement
+          | split_file_statement
+          | sync_directory_statement
+          | verify_file_statement
+          | generate_statement
+          | compare_statement
+          | transform_statement
+          | drop_statement
+          | create_directory_statement
+          | directory_operation_statement
+          | refresh_dataset_statement
+          | kill_job_statement
+          | set_option_statement
+          | alter_statement
+          | explain_statement
+          | replace_statement
+          | replay_quarantine_statement
+          | expect_schema_statement
+          | goto_statement
+          | go_statement
+          | section_label_statement
+          | bulk_insert_statement
+          | lineage_statement
+          | docker_statement
+          | pivot_statement
+          | unpivot_statement
+          | crypt_file_statement
+          | reindex_statement
+          | export_statement
+          | job_control_statement
+          | grant_statement
+          | revoke_statement
+          | publish_statement
+          | favorite_statement
+          | validate_statement
+          | portal_session_statement
+          | portal_admin_statement
+          | add_user_statement
+          | refresh_report_statement
+          | style_statement
+          | import_lineage_statement
+          | legacy_docker_statement
+          | create_table_statement
+          | create_view_statement
+          | create_procedure_statement
+          | create_function_statement
+          | create_schedule_statement
+          | create_notification_statement
+          | create_index_statement
+          | create_ssh_key_pair_statement
+          | create_pgp_key_pair_statement
+          | create_sets_statement
+          | create_template_statement
+          | create_theme_statement
+          | create_user_statement
+          | create_group_statement
+          | create_folder_statement
+          | create_subscription_statement
+          | create_share_link_statement
+          | create_embed_token_statement
+          | create_saved_view_statement
+          | create_alert_statement
+          | create_tool_statement
+          | create_binding_statement ;
 
 set_variable_statement = "SET" variable_name "=" expression ;
 print_statement = "PRINT" expression ;
 if_statement = "IF" expression block_statement [ "ELSE" block_statement ] ;
 while_statement = "WHILE" expression block_statement ;
-block_statement = "BEGIN" { statement ";" } "END" ;
+block_statement = "BEGIN" { statement [ ";" ] } "END" ;
+try_catch_statement = "BEGIN" "TRY" { statement [ ";" ] } "END" "TRY" [ ";" ]
+                      "BEGIN" "CATCH" { statement [ ";" ] } "END" "CATCH" ;
 
-declare_statement = "DECLARE" variable_name data_type [ "=" expression ] ;
-data_type = "INT" | "VARCHAR" [ "(" number ")" ] | "DECIMAL" | "DATETIME" | "BOOLEAN" ;
+declare_statement = "DECLARE" declare_item { "," declare_item } ;
+declare_item = variable_name [ data_type ] ( [ declare_modifiers ] [ "=" expression ] | "=" expression [ declare_modifiers ] ) ;
+declare_modifiers = [ "PASSWORD" ] [ "INPUT" ] [ "OUTPUT" ] [ "REQUIRED" ] ;
+data_type = identifier [ "(" type_argument [ "," number ] ")" ] ;
+type_argument = number | identifier [ "(" number ")" ] ;
 
-insert_statement = "INSERT" "INTO" table_reference [ "(" column_list ")" ] ( select_statement | values_clause ) ;
+insert_statement = "INSERT" [ "OR" "REPLACE" ] [ "INTO" ] table_reference [ "(" column_list ")" ] [ output_clause ]
+                   ( select_statement | values_clause | execute_procedure_statement | execute_expression_statement ) ;
 values_clause = "VALUES" "(" expression_list ")" { "," "(" expression_list ")" } ;
+insert_tag_statement = "INSERT" "TAG" "FOR" "TABLE" table_reference [ "COLUMN" lineage_name ] tag_assignments ";" ;
+update_tag_statement = "UPDATE" "TAG" "FOR" "TABLE" table_reference [ "COLUMN" lineage_name ] tag_assignments ";" ;
+delete_tag_statement = "DELETE" "TAG" "FOR" "TABLE" table_reference [ "COLUMN" lineage_name ] "(" identifier { "," identifier } ")" ";" ;
+lineage_name = identifier { "." identifier } | variable_name { "." identifier } ;
+tag_assignments = "(" identifier "=" expression { "," identifier "=" expression } ")" ;
+insert_lineage_statement = "INSERT" "LINEAGE" "FOR" "TABLE" table_reference "FROM" expression ";" ;
+delete_lineage_statement = "DELETE" "LINEAGE" "FOR" "TABLE" table_reference ";" ;
 
-update_statement = "UPDATE" table_reference "SET" assignment_list [ "WHERE" expression ] ;
+update_statement = "UPDATE" table_reference "SET" assignment_list [ output_clause ]
+                   [ "FROM" from_reference { join_clause } ] [ "WHERE" expression ] ;
 assignment_list = assignment { "," assignment } ;
-assignment = identifier "=" expression ;
+assignment = assignment_target "=" expression ;
+assignment_target = identifier { "." identifier } ;
 
-delete_statement = "DELETE" "FROM" table_reference [ "WHERE" expression ] ;
+delete_statement = "DELETE" [ "FROM" ] table_reference [ output_clause ] [ "WHERE" expression ] ;
+output_clause = "OUTPUT" select_item { "," select_item } [ "INTO" table_reference ] ;
 
-create_connection_statement = "CREATE" "CONNECTION" identifier "AS" identifier [ "(" connection_options ")" ] ;
+create_connection_statement = "CREATE" [ "OR" "ALTER" ] "CONNECTION" identifier "AS" connector_type "(" [ expression [ "," connection_options ] | connection_options ] ")" ";" ;
+connector_type = "MSSQL" | "POSTGRES" | "ORACLE" | "ODBC" | "SNOWFLAKE" | "BIGQUERY" | "FLATFILE" | "CSV" | "EXCEL" | "JSON" | "XML" | "PARQUET" | "AVRO" | "API" | "REST" | "SFTP" | "FTP" | "AZURE_BLOB" | "SMTP" | "WEBHOOK" | "SLACK" | "TEAMS" | "DIRECTORY" | "PORTAL" | "ORCHESTRATOR" | "MYSQL" | "SQLITE" | "MONGODB" | "KAFKA" | "NEO4J" | "S3" | "SHAREPOINT" | "ACTIVE_DIRECTORY" | "MOCKDB" ;
 connection_options = identifier "=" expression { "," identifier "=" expression } ;
 
-create_job_statement = "CREATE" "JOB" identifier "FOR" "SCRIPT" string_literal ;
+create_job_statement = "CREATE" [ "OR" "REPLACE" ] "JOB" identifier "FOR" ( "SCRIPT" | "REPORT" ) string_literal
+                       [ "WITH" "(" job_option { "," job_option } ")" ] ;
+job_option = ( "MAX_RETRIES" | "RETRY_DELAY" ) "=" number
+           | ( "DISPLAY_NAME" | "DESCRIPTION" | identifier ) "=" ( string_literal | identifier ) ;
 
-waitfor_statement = "WAITFOR" ( "DELAY" string_literal | "TIME" string_literal | "(" expression ")" ) | "WAIT" "UNTIL" expression ;
+waitfor_statement = "WAITFOR" ( "DELAY" string_literal | "TIME" string_literal | "(" expression ")" )
+                  | "WAIT" "UNTIL" expression
+                  | "WAITFOR" "FILE" "UNLOCKED" expression [ wait_file_options ]
+                  | "WAIT" "UNTIL" "FILE" "UNLOCKED" expression [ wait_file_options ] ;
+wait_file_options = "WITH" "(" ( "TIMEOUT" | "POLL_INTERVAL_MS" ) "=" expression { "," ( "TIMEOUT" | "POLL_INTERVAL_MS" ) "=" expression } ")"
+                  | "TIMEOUT" expression [ "POLL_INTERVAL_MS" expression ]
+                  | "POLL_INTERVAL_MS" expression [ "TIMEOUT" expression ] ;
 
-run_script_statement = "RUN" "SCRIPT" string_literal [ "WITH" "(" parameter_assignments ")" ] ;
-parameter_assignments = variable_name "=" expression { "," variable_name "=" expression } ;
+clear_statement = "CLEAR" ( "SESSION" | "SESSIONS" [ "ALL" | "STALE" | expression ] ) ;
+truncate_statement = "TRUNCATE" "TABLE" table_reference ;
+transaction_statement = "BEGIN" ( "TRANSACTION" | "TRAN" ) | "COMMIT" [ "TRANSACTION" | "TRAN" ] | "ROLLBACK" [ "TRANSACTION" | "TRAN" ] ;
+for_statement = "FOR" variable_name ( "TO" expression [ "STEP" expression ] | "=" expression "TO" expression [ "STEP" expression ] | "IN" expression ) block_statement ;
+foreach_statement = "FOREACH" variable_name "IN" expression block_statement ;
+raiseerror_statement = "RAISEERROR" "(" expression "," expression [ "," expression { "," expression } ] ")" ;
+assert_statement = "ASSERT" expression [ "," expression ] ;
+assert_job_statement = "ASSERT" "JOB" ( identifier | string_literal ) "(" job_metric_predicate { "," job_metric_predicate } ")"
+                       [ "WITH" "(" "FAIL_ON_WARN" "=" ( "TRUE" | "FALSE" ) ")" ]
+                       [ "ON" "FAILURE" "NOTIFY" identifier ] [ "ON" "CRITICAL_FAILURE" "THROW" ] ;
+job_metric_predicate = "ROW_COUNT" ( job_comparison_operator number | "WITHIN" number [ "SIGMA" ] "OF" "HISTORICAL" )
+                     | ( "QUARANTINE_PERCENT" | "WARN_PERCENT" ) ( job_comparison_operator number | "WITHIN" number [ "SIGMA" ] "OF" "HISTORICAL" )
+                     | "NULL_PERCENT" "(" table_column_reference ")" ( job_comparison_operator number | "WITHIN" number [ "SIGMA" ] "OF" "HISTORICAL" )
+                     | "FRESHNESS" "(" table_column_reference ")" job_comparison_operator retention_literal ;
+job_comparison_operator = "=" | ">" | "<" | ">=" | "<=" ;
+table_column_reference = identifier [ "." identifier ] ;
+parallel_statement = "PARALLEL" [ "(" number ")" ] [ "FOR" variable_name ( "=" expression "TO" expression | "TO" expression ) [ "STEP" expression ] ] block_statement ;
+throw_statement = "THROW" [ expression [ "," expression "," expression ] ] ;
+return_statement = "RETURN" [ expression ] ;
+break_statement = "BREAK" ;
+continue_statement = "CONTINUE" ;
+help_statement = "HELP" [ identifier [ identifier ] ] ;
+use_statement = "USE" ( "DOCKER" "(" expression ")" [ "AS" identifier ] | "PASSWORD" ( "=" string_literal | "PROMPT" )
+              | "DATASET" dataset_name | "SETS" "!" identifier ) ;
+require_statement = "REQUIRE" ">=" string_literal ;
+lint_statement = "LINT" [ string_literal ] ;
+test_connection_statement = "TEST" "CONNECTION" identifier [ "INTO" temp_table_name ] ;
+temp_table_name = "#" identifier ;
+file_transfer_statement = "SEND" "FILE" expression "TO" expression "AT" identifier [ "WITH" "(" "OVERWRITE" "=" expression ")" ]
+                        | "RECEIVE" "FILE" "FROM" expression "TO" expression "AT" identifier [ "WITH" "(" "OVERWRITE" "=" expression ")" ] ;
+email_statement = "SEND" "EMAIL" "TO" expression "FROM" expression "SUBJECT" expression "BODY" expression
+                  [ "CC" email_value_list ] [ "BCC" email_value_list ] [ "ATTACH" email_value_list ] [ "AT" expression ] ;
+email_value_list = expression | "[" [ expression_list ] "]" ;
+file_operation_statement = ( "COPY" | "MOVE" | "RENAME" | "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ]
+                           [ file_security_options ] [ file_operation_options ] [ "AT" identifier ]
+                         | "DELETE" "FILE" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
+                         | ( "ENCRYPT" | "DECRYPT" ) "FILE" expression [ "TO" expression ] [ file_security_options ] [ file_operation_options ] [ "AT" identifier ] ;
+file_security_options = file_security_option { file_security_option } ;
+file_security_option = "PASSWORD" ( "(" expression ")" | expression ) | "KEYFILE" expression | "PGP_KEY" expression ;
+file_operation_options = "WITH" "(" identifier "=" expression { "," identifier "=" expression } ")" ;
+convert_encoding_statement = "CONVERT" "FILE" "ENCODING" string_literal "TO" string_literal "WITH" "(" "FROM_ENCODING" "=" string_literal "," "TO_ENCODING" "=" string_literal ")" ;
+split_file_statement = "SPLIT" "FILE" expression "TO" expression "WITH" "(" "LIMIT_TYPE" "=" expression "," "LIMIT_VALUE" "=" expression { "," identifier "=" expression } ")" ;
+sync_directory_statement = "SYNC" "DIRECTORY" expression "TO" expression [ "WITH" object_options ] ;
+verify_file_statement = "VERIFY" "FILE" "INTEGRITY" expression "WITH" "("
+                        ( "EXPECTED_HASH" | "HASH_FILE" ) "=" expression { "," identifier "=" expression } ")" ;
+generate_statement = "GENERATE" expression "ROWS" "INTO" table_reference [ "WITH" object_options ]
+                     "AS" "(" identifier "=" string_literal { "," identifier "=" string_literal } ")"
+                   | "GENERATE" "CALENDAR" "FROM" expression "TO" expression "INTO" table_reference
+                   | "GENERATE" ( "SECRET" | "JWT_SECRET" ) ;
+compare_statement = "COMPARE" [ "DATASETS" ] table_reference "WITH" table_reference "KEY" "(" column_list ")"
+                    [ "EXCLUDE" "(" column_list ")" ] "INTO" table_reference ;
+transform_statement = "TRANSFORM" table_reference [ "FROM" table_reference ] "USING" identifier object_options ;
+object_options = "(" [ identifier "=" expression { "," identifier "=" expression } ] ")" ;
+drop_statement = "DROP" local_drop_kind [ "IF" "EXISTS" ] identifier
+               | "DROP" "TABLE" [ "IF" "EXISTS" ] table_reference
+               | "DROP" "INDEX" [ "IF" "EXISTS" ] identifier [ "ON" table_reference ]
+               | "DROP" "SETS" [ "IF" "EXISTS" ] "!" identifier
+               | "DROP" "DATASET" [ "IF" "EXISTS" ] dataset_name
+               | "DROP" "DATASET" string_literal "IN" "FOLDER" string_literal
+               | "DROP" ( "USER" | "GROUP" | "FOLDER" | "REPORT" ) string_literal [ "CASCADE" ]
+               | "DROP" ( "SCHEDULE" | "NOTIFICATION" | "ALERT" ) [ "IF" "EXISTS" ] identifier
+               | "DROP" "SUBSCRIPTION" number
+               | "DROP" "SAVED" "VIEW" string_literal "FOR" "REPORT" string_literal
+               | "DROP" "SNAPSHOT" "FOR" "REPORT" string_literal ;
+local_drop_kind = "CONNECTION" | "PROCEDURE" | "FUNCTION" | "VIEW" | "VISUAL" | "PAGE" | "CONTAINER" | "STYLE" | "BUTTON" | "NAVIGATION" | "TEMPLATE" | "THEME" | "JOB" ;
+create_directory_statement = "CREATE" "DIRECTORY" expression [ "WITH" "(" "OVERWRITE" "=" expression ")" ] [ "AT" identifier ] ;
+directory_operation_statement = ( "COPY" | "MOVE" | "RENAME" | "COMPRESS" | "DECOMPRESS" ) "DIRECTORY" expression [ "TO" expression ]
+                                [ directory_operation_options ] [ "AT" identifier ]
+                              | "DELETE" "DIRECTORY" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
+                              | "DELETE" "DIRECTORY_CONTENTS" expression [ "WITH" "(" "RECURSIVE" "=" expression ")" ]
+                              | ( "ENCRYPT" | "DECRYPT" ) "DIRECTORY" expression [ "TO" expression ] [ file_security_options ]
+                                [ directory_operation_options ] [ "AT" identifier ] ;
+directory_operation_options = "WITH" "(" identifier "=" expression { "," identifier "=" expression } ")"
+                            | "RECURSIVE" expression ;
+refresh_dataset_statement = "REFRESH" "DATASET" ( dataset_name | string_literal "IN" "FOLDER" string_literal ) ;
+kill_job_statement = "KILL" "JOB" expression ;
+set_option_statement = "SET" set_boolean_option [ "=" ] ( "ON" | "OFF" )
+                     | "SET" set_threshold_option ( "ON" | "OFF" | "=" expression )
+                     | "SET" ( "ALLOW_FILE_TYPE_ACCESS" | "ALLOW_FILE_OPERATIONS" | "ALLOW_RECURSIVE_LAYERS" ) "=" expression
+                     | "SET" "ALLOW_LARGE_STRING_RESULTS" ( "ON" | "OFF" )
+                     | "SET" "WEEK_START_DAY" "=" string_literal
+                     | "SET" "SCRIPT_HASH_POLICY" "=" string_literal
+                     | "SET" "TEMPLATE_PATH" "=" string_literal ;
+set_boolean_option = "PROFILE" | "PROFILING" | "WHAT_IF" | "WITH_PROMPT" | "SHOW_SECRETS" | "ALLOW_PLAINTEXT_SECRETS" | "NO_SAVE_SENSITIVE" | "NO_SAVE_CONNECTION" | "CONNECTION_ENCRYPTION" | "PERSIST" | "SPILL_ENCRYPTION" | "SPILL_COMPRESSION" ;
+set_threshold_option = "JOIN_SPILL_THRESHOLD" | "TEMP_TABLE_SPILL_THRESHOLD" | "WINDOW_SPILL_THRESHOLD" | "EXTERNAL_HASH_PARTITIONS" | "EXTERNAL_SORT_CHUNK_SIZE" | "BATCHSIZE" | "MAX_RECURSIVE_DEPTH" | "MAX_IN_MEMORY_BATCHES" | "FOREACH_PAGE_SIZE" | "MAX_MESSAGES" | "MAX_FILE_OPERATIONS" | "MAX_PARALLEL_DEGREE" | "MAX_STRING_RESULT_SIZE" | "REGEX_MATCH_TIMEOUT" | "MAX_GROUPING_SETS" | "MAX_SESSION_SIZE" | "MAX_LAST_RESULT_ROWS" | "MAX_GENERATE_ROWS" | "MAX_SMTP_EMAILS_PER_SCRIPT" | "MAX_INTERNAL_OPERATIONS" | "TELEMETRY" | "INTERACTIVE_MODE" | "CASE_SENSITIVE" | "DATA_QUALITY_DRY_RUN" | "LINEAGE" | "LINEAGE_NAMESPACE" | "LINEAGE_IMPORT_CATALOG" | "TRUNCATE_STRING" | "SKIP_ERROR" | "OPERATOR_MEMORY_GRANT" | "CONNECTION_PREVIEW_LIMIT" ;
 
-execute_statement = ( "EXECUTE" | "EXEC" ) identifier "BEGIN" { statement ";" } "END" ;
+alter_statement = "ALTER" "TABLE" table_reference "ADD" identifier data_type [ "DEFAULT" expression ]
+                | "ALTER" "CONNECTION" identifier "AS" identifier "(" [ connection_options ] ")"
+                | "ALTER" "PROCEDURE" identifier "AS" block_statement
+                | "ALTER" "FUNCTION" identifier "(" ")" "RETURNS" data_type "AS" block_statement
+                | "ALTER" "VIEW" identifier "AS" select_statement
+                | "ALTER" report_patch_kind identifier "(" report_patch_clause ")"
+                | "ALTER" "JOB" identifier "SET" "TARGET" "=" string_literal
+                | "ALTER" "JOB" identifier "SET" "(" job_option { "," job_option } ")"
+                | "ALTER" "JOB" identifier ( "ADD" | "REMOVE" ) "SCHEDULE" identifier
+                | "ALTER" "JOB" identifier ( "ADD" | "REMOVE" ) "NOTIFICATION" identifier "ON" job_outcome
+                | "ALTER" "SCHEDULE" identifier "SET" "CRON" "=" string_literal
+                | "ALTER" "NOTIFICATION" identifier "SET" "TO" string_literal
+                | "ALTER" "USER" string_literal "SET" "ROLE" "=" identifier
+                | "ALTER" "FOLDER" string_literal "RENAME" "TO" string_literal
+                | "ALTER" "DATASET" string_literal "IN" "FOLDER" string_literal "SET"
+                  ( dataset_patch_option { "," dataset_patch_option } | "(" dataset_patch_option { "," dataset_patch_option } ")" )
+                | "ALTER" "REPORT" string_literal "SET" "DESCRIPTION" "=" string_literal
+                | "ALTER" "SUBSCRIPTION" number "SET" ( "ENABLE" | "DISABLE" | "PARAMETERS" "(" subscription_parameter_assignments ")"
+                  | identifier [ "=" ] ( string_literal | identifier | number ) )
+                | "ALTER" "SCHEDULE" identifier "SET" "TIME" "ZONE" [ "=" ] string_literal
+                | "ALTER" "TABLE" table_reference "DROP" identifier
+                | "ALTER" "ALERT" identifier ( ( "ADD" | "REMOVE" ) "NOTIFICATION" identifier "." identifier | "SET" metadata_options ) ;
+report_patch_kind = "VISUAL" | "PAGE" | "CONTAINER" | "BUTTON" ;
+report_patch_clause = "TITLE" "=" string_literal ;
+dataset_patch_option = "ACCESS" "=" ( "PUBLIC" | "PRIVATE" ) | "TTL" "=" string_literal | identifier "=" expression ;
+job_outcome = "SUCCESS" | "FAILURE" | "COMPLETION" ;
+explain_statement = "EXPLAIN" [ "ANALYZE" ] statement [ "INTO" temp_table_name ] ;
+replace_statement = "REPLACE" "INTO" table_reference [ "(" column_list ")" ] values_clause ;
+replay_quarantine_statement = "REPLAY" "QUARANTINE" table_reference ;
+expect_schema_statement = "EXPECT" "SCHEMA" schema_target ( "(" schema_column { "," schema_column } ")" | "FROM" string_literal )
+                          [ "ON" "DRIFT" "WARN" ] ;
+schema_target = identifier | temp_table_name | dataset_name ;
+schema_column = identifier data_type [ "NOT" "NULL" ] ;
+goto_statement = "GOTO" identifier ;
+go_statement = "GO" [ number ] ;
+section_label_statement = identifier ":" ;
+bulk_insert_statement = "BULK" ( "INSERT" | "LOAD" ) [ "INTO" ] table_reference [ "(" column_list ")" ] "FROM" expression [ "WITH" object_options ] ;
+lineage_statement = "LINEAGE" [ "(" ] table_reference [ "," identifier ] [ ")" ] [ "TO" expression ] ;
+docker_statement = ( "START" | "STOP" | "PAUSE" | "CLOSE" ) ( "ALL" "DOCKER" | "DOCKER" [ identifier ] ) ;
+pivot_statement = "PIVOT" table_reference "ON" pivot_columns "USING" identifier "(" ( "*" | identifier ) ")" [ "GROUP" "BY" column_list ] ;
+pivot_columns = identifier [ "IN" "(" expression_list ")" ] | identifier "," column_list ;
+unpivot_statement = "UNPIVOT" table_reference "ON" column_list "INTO" "NAME" identifier "VALUE" identifier ;
+crypt_file_statement = ( "ENCRYPT" | "DECRYPT" ) "FILE" string_literal "TO" string_literal ;
+reindex_statement = "REINDEX" [ identifier ] ;
+export_statement = "EXPORT" "SCRIPT" string_literal "TO" string_literal
+                 | "EXPORT" "PORTAL" "CONFIGURATION" "TO" string_literal
+                 | "EXPORT" "DATASET" dataset_name "TO" string_literal [ dataset_transport_options ]
+                 | "EXPORT" "REPORT" expression "FORMAT" "PDF" "TO" expression
+                   [ "WITH" "(" export_report_option { "," export_report_option } ")" ]
+                 | "EXPORT" "REPORT" expression "FORMAT" ( "CSV" | "MARKDOWN" ) "TO" expression
+                 | "EXPORT" "LINEAGE" [ "FOR" ( "REPORT" identifier | "DATASET" dataset_name | [ "TABLE" ] table_reference [ "COLUMN" identifier ] ) ]
+                   "AS" ( "OPENLINEAGE" | "MARKDOWN" | "MERMAID" ) "TO" string_literal ;
+export_report_option = ( "PDF_MODE" | "HOST" | "BROWSER_PATH" ) "=" expression ;
+dataset_transport_options = "ENCRYPT" [ "=" ] ( "PASSWORD" | "KEYFILE" )
+                            [ "PASSWORD" [ "=" ] string_literal ] [ "KEYFILE" [ "=" ] string_literal ] ;
+job_control_statement = ( "ENABLE" | "DISABLE" | "TRIGGER" ) "JOB" identifier [ "AT" identifier ]
+                      | ( "ENABLE" | "DISABLE" ) ( "SCHEDULE" | "NOTIFICATION" | "ALERT" ) identifier ;
+grant_statement = "GRANT" identifier "ON" "BINDING" identifier "TO" ( "USER" | "GROUP" ) string_literal
+                | "GRANT" ( "READ" | "EXECUTE" | "MANAGE" ) "ON" "FOLDER" string_literal "TO" "GROUP" string_literal
+                | "GRANT" ( "VIEWER" | "REFRESH" | "EDITOR" | "OWNER" ) "ON" "DATASET" string_literal "IN" "FOLDER" string_literal "TO" "GROUP" string_literal ;
+revoke_statement = "REVOKE" identifier "ON" "BINDING" identifier "FROM" ( "USER" | "GROUP" ) string_literal
+                 | "REVOKE" ( "READ" | "EXECUTE" | "MANAGE" ) "ON" "FOLDER" string_literal "FROM" "GROUP" string_literal
+                 | "REVOKE" ( "VIEWER" | "REFRESH" | "EDITOR" | "OWNER" | "READ" ) "ON" "DATASET" string_literal "IN" "FOLDER" string_literal "FROM" "GROUP" string_literal
+                 | "REVOKE" "TOKENS" "FOR" "USER" string_literal
+                 | "REVOKE" ( "SHARE" "LINK" | "EMBED" "TOKEN" ) string_literal "FOR" "REPORT" string_literal ;
+publish_statement = "PUBLISH" "REPORT" string_literal "FROM" string_literal "IN" "FOLDER" string_literal [ "WITH" metadata_options ]
+                  | "PUBLISH" "BUNDLE" string_literal "FROM" expression "ENTRY" string_literal
+                    [ "WITH" "(" identifier "=" expression { "," identifier "=" expression } ")" ]
+                  | "PUBLISH" "DATASET" dataset_name "FROM" string_literal [ "INTO" string_literal ]
+                    [ "ACCESS" ( "PUBLIC" | "PRIVATE" ) ] [ dataset_transport_options ] ;
+favorite_statement = ( "FAVORITE" | "UNFAVORITE" ) "REPORT" string_literal [ "FOR" "USER" string_literal ] ;
+validate_statement = "VALIDATE" "REPORT" "SCRIPT" string_literal [ "INTO" temp_table_name ]
+                   | "VALIDATE" "BUNDLE" string_literal "FROM" string_literal "ENTRY" string_literal ;
+portal_session_statement = "DISCONNECT" "USER" string_literal ;
+portal_admin_statement = "RESTART" "PORTAL" | "SHUTDOWN" "PORTAL" | "REBUILD" "SNAPSHOT" "FOR" "REPORT" string_literal ;
+add_user_statement = "ADD" "USER" string_literal "TO" "GROUP" string_literal ;
+refresh_report_statement = "REFRESH" "REPORT" string_literal ;
+style_statement = "STYLE" ( "=" identifier | style_body ) ;
+import_lineage_statement = "IMPORT" "LINEAGE" "FOR" [ "TABLE" ] table_reference [ "AS" "OPENLINEAGE" ] "FROM" expression ;
+legacy_docker_statement = "DOCKER" ( "START" | "STOP" | "PAUSE" | "CLOSE" ) [ identifier ] ;
+create_table_statement = "CREATE" [ "OR" "REPLACE" ] "TABLE" [ "IF" "NOT" "EXISTS" ] table_reference "(" table_column { "," table_column } ")" ;
+table_column = identifier table_data_type { column_constraint } ;
+table_data_type = identifier [ "(" ( number | "MAX" ) [ "," ( number | "+" | "-" ) ] ")" ] ;
+column_constraint = "IDENTITY" [ "(" expression [ "," expression ] ")" ] | "PRIMARY" "KEY" | "UNIQUE"
+                  | [ "NOT" ] "NULL" | "DEFAULT" expression | "CHECK" "(" expression ")"
+                  | "REFERENCES" table_reference "(" identifier ")" ;
+create_view_statement = "CREATE" [ "OR" ( "REPLACE" | "ALTER" ) ] "VIEW" identifier "AS" select_statement ;
+create_procedure_statement = "CREATE" [ "OR" "ALTER" ] "PROCEDURE" identifier [ "(" [ variable_name data_type { "," variable_name data_type } ] ")" ] "AS" block_statement ;
+create_function_statement = "CREATE" [ "OR" "ALTER" ] "FUNCTION" identifier "(" [ variable_name data_type { "," variable_name data_type } ] ")" "RETURNS" data_type "AS" block_statement ;
+create_schedule_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "SCHEDULE" identifier "ON" string_literal [ "AT" "TIME" "ZONE" string_literal ] [ "WITH" metadata_options ] ;
+create_notification_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "NOTIFICATION" identifier "USING" identifier [ "TO" string_literal ] [ "WITH" metadata_options ] ;
+create_index_statement = "CREATE" [ "UNIQUE" ] "INDEX" identifier "ON" table_reference "(" column_list ")" ;
+create_ssh_key_pair_statement = "CREATE" "SSH_KEY_PAIR" ( "(" expression [ "," expression [ "," expression [ "," expression [ "," expression ] ] ] ] ")"
+                              | expression [ "WITH" "(" ssh_key_option { "," ssh_key_option } ")" ] ) ;
+ssh_key_option = ( "BITS" | "ALGORITHM" | "PASSPHRASE" | "COMMENT" ) "=" expression ;
+create_pgp_key_pair_statement = "CREATE" "PGP_KEY_PAIR" string_literal ;
+create_sets_statement = "CREATE" "SETS" "!" identifier "BEGIN"
+                        { ( variable_name "=" expression | set_option_statement ) [ "," | ";" ] } "END" ;
+create_template_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "TEMPLATE" identifier "AS" "(" identifier "=" report_option_value { "," identifier "=" report_option_value } ")" ;
+create_theme_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "THEME" identifier "AS" "(" identifier "=" report_option_value { "," identifier "=" report_option_value } ")" ;
+report_option_value = identifier | string_literal | number | "ON" | "OFF" | "TRUE" | "FALSE" ;
+create_user_statement = "CREATE" "USER" string_literal "WITH" "("
+                        ( "EMAIL" "=" string_literal "," ( "PASSWORD" "=" expression { "," portal_user_option }
+                          | [ "ROLE" "=" ( identifier | string_literal ) "," ] "PROVIDER" "=" ldap_literal { "," portal_user_option } )
+                        | "PASSWORD" "=" expression "," "EMAIL" "=" string_literal { "," portal_user_option } ) ")" ;
+portal_user_option = "PASSWORD" "=" expression | "ROLE" "=" ( identifier | string_literal )
+                   | ( "FIRST_NAME" | "LAST_NAME" | "PROVIDER" ) "=" string_literal ;
+ldap_literal = string_literal ;
+create_group_statement = "CREATE" "GROUP" string_literal
+                         [ "WITH" "(" portal_group_option { "," portal_group_option } ")" ] ;
+portal_group_option = ( "DESCRIPTION" | "PROVIDER" | "AD_GROUP" ) "=" string_literal ;
+create_folder_statement = "CREATE" "FOLDER" string_literal [ "WITH" "(" "CATALOG_OWNER" "=" string_literal ")" ] ;
+create_subscription_statement = "CREATE" "SUBSCRIPTION" [ string_literal ] "FOR" "REPORT" string_literal "DELIVER" "TO" [ "GROUP" ] string_literal
+                                [ "SCHEDULE" string_literal | "ON" "REFRESH" ] "FORMAT" subscription_format "AT" identifier
+                                [ "PARAMETERS" "(" subscription_parameter_assignments ")" ] [ "ENABLE" | "DISABLE" ] ;
+subscription_format = "PDF" | "CSV" | "BOTH" ;
+subscription_parameter_assignments = variable_name "=" string_literal { "," variable_name "=" string_literal } ;
+create_share_link_statement = "CREATE" "SHARE" "LINK" string_literal "FOR" "REPORT" string_literal [ "EXPIRES" string_literal ] [ "INTO" temp_table_name ] ;
+create_embed_token_statement = "CREATE" "EMBED" "TOKEN" string_literal "FOR" "REPORT" string_literal [ "EXPIRES" string_literal ] [ "INTO" temp_table_name ] ;
+create_saved_view_statement = "CREATE" "SAVED" "VIEW" string_literal "FOR" "REPORT" string_literal [ "DEFAULT" ]
+                              [ "PARAMETERS" "(" subscription_parameter_assignments ")"
+                              | "WITH" "(" "PARAMETERS" "=" string_literal ")" ] [ "INTO" temp_table_name ] ;
+create_alert_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "ALERT" identifier "FOR" "REPORT" string_literal
+                         "WHEN" "VISUAL" identifier alert_comparison_operator number [ "WITH" metadata_options ] ;
+alert_comparison_operator = ">" | ">=" | "<" | "<=" | "=" | "!=" | "<>" ;
+metadata_options = "(" identifier "=" string_literal { "," identifier "=" string_literal } ")" ;
+create_tool_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "TOOL" identifier "AS" identifier "(" identifier "=" expression { "," identifier "=" expression } ")" ;
+create_binding_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "BINDING" identifier "AS" identifier "(" identifier "=" expression { "," identifier "=" expression } ")" ;
+
+run_script_statement = "RUN" "SCRIPT" expression [ "WITH" "(" parameter_assignments ")" ] ;
+parameter_assignments = variable_name "=" expression [ "OUTPUT" ] { "," variable_name "=" expression [ "OUTPUT" ] } ;
+
+execute_statement = ( "EXECUTE" | "EXEC" ) identifier [ "INTO" table_reference ] "BEGIN" { execute_inner_command [ ";" ] } "END" ;
+execute_inner_command = statement | portal_show_command | portal_legacy_grant_command | portal_legacy_revoke_command
+                      | portal_legacy_dataset_revoke | portal_legacy_create_folder | portal_legacy_alter_folder | portal_legacy_alter_report
+                      | portal_legacy_create_user | portal_legacy_alter_user ;
+portal_legacy_grant_command = "GRANT" string_literal "TO" ( "USER" | "GROUP" ) string_literal "WITH" "(" "ACCESS" "=" identifier ")" ;
+portal_legacy_revoke_command = "REVOKE" string_literal "FROM" ( "USER" | "GROUP" ) string_literal ;
+portal_legacy_dataset_revoke = "REVOKE" ( "VIEWER" | "REFRESH" | "EDITOR" | "OWNER" | "READ" ) "ON" "DATASET" string_literal "FROM" "GROUP" string_literal ;
+portal_legacy_create_folder = "CREATE" "FOLDER" string_literal [ "UNDER" string_literal ] ;
+portal_legacy_alter_folder = "ALTER" "FOLDER" string_literal "MOVE" "TO" string_literal ;
+portal_legacy_alter_report = "ALTER" "REPORT" string_literal "SET" portal_report_patch { "," portal_report_patch } ;
+portal_report_patch = ( "FOLDER" | "DESCRIPTION" ) "=" string_literal ;
+portal_legacy_create_user = "CREATE" "USER" string_literal "WITH" "(" "EMAIL" "=" string_literal "," "ROLE" "=" ( identifier | string_literal ) ")" ;
+portal_legacy_alter_user = "ALTER" "USER" string_literal "SET" "(" portal_user_patch { "," portal_user_patch } ")" ;
+portal_user_patch = "PASSWORD" "=" expression | "ACTIVE" "=" ( "ON" | "OFF" ) ;
+execute_tool_statement = ( "EXECUTE" | "EXEC" ) "TOOL" string_literal
+                         [ "FROM" table_reference ] [ "INTO" table_reference ]
+                         [ "WITH" "(" identifier "=" expression { "," identifier "=" expression } ")" ]
+                         [ "EXPECT" "SCHEMA" "(" identifier data_type [ "NOT" "NULL" ] { "," identifier data_type [ "NOT" "NULL" ] } ")" ] ;
+execute_expression_statement = ( "EXECUTE" | "EXEC" ) "(" expression ")" [ "AT" expression ] [ "INTO" table_reference ]
+                               [ "WITH" "(" expression_list ")" ] ;
+execute_procedure_statement = ( "EXECUTE" | "EXEC" ) qualified_identifier [ expression [ "OUTPUT" | "INPUT" ] { "," expression [ "OUTPUT" | "INPUT" ] } ] ;
 
 column_list = identifier { "," identifier } ;
 expression_list = expression { "," expression } ;
 
-merge_statement = "MERGE" "INTO" table_reference [ "AS" identifier ] "USING" table_reference [ "AS" identifier ] "ON" expression merge_when_clause { merge_when_clause } ;
-merge_when_clause = "WHEN" "MATCHED" [ "AND" expression ] "THEN" "UPDATE" "SET" assignment_list
-                  | "WHEN" "NOT" "MATCHED" [ "AND" expression ] "THEN" "INSERT" [ "(" column_list ")" ] "VALUES" "(" expression_list ")" ;
+merge_statement = "MERGE" [ "INTO" ] table_reference [ "AS" identifier ] "USING" table_reference [ "AS" identifier ] "ON" expression merge_when_clause { merge_when_clause } [ output_clause ] ;
+merge_files_statement = "MERGE" "FILES" expression "TO" expression
+                        [ "WITH" "(" ( "HEADER" | "OVERWRITE" ) "=" expression { "," ( "HEADER" | "OVERWRITE" ) "=" expression } ")" ] ;
+merge_when_clause = "WHEN" "MATCHED" [ "AND" expression ] "THEN" ( "UPDATE" "SET" assignment_list | "DELETE" )
+                  | "WHEN" "NOT" "MATCHED" [ "BY" ( "SOURCE" | "TARGET" ) ] [ "AND" expression ] "THEN"
+                    ( "INSERT" [ "(" column_list ")" ] "VALUES" "(" expression_list ")" | "UPDATE" "SET" assignment_list | "DELETE" ) ;
 
-with_statement = "WITH" [ "RECURSIVE" ] cte_definition { "," cte_definition } select_statement ;
-cte_definition = identifier "AS" "(" select_statement ")" ;
+with_statement = "WITH" [ "RECURSIVE" ] cte_definition { "," cte_definition } statement ;
+cte_definition = identifier [ "(" column_list ")" ] "AS" "(" select_statement ")" ;
 
-select_statement = "SELECT" [ "TOP" number ] select_list "FROM" table_reference [ "WHERE" expression ] ;
+select_statement = select_body { set_operator select_body } { on_failure_clause } ;
+select_body = "SELECT" [ "DISTINCT" | "ALL" ] [ top_clause ] select_list
+              [ "INTO" table_reference ]
+              [ "FROM" from_reference { "," [ "LATERAL" ] from_reference } { join_clause } ]
+              [ "WHERE" expression ]
+              [ "GROUP" "BY" ( "ALL" | "ROLLUP" "(" expression_list ")" | "CUBE" "(" expression_list ")"
+                               | "GROUPING" "SETS" "(" grouping_set { "," grouping_set } ")"
+                               | grouping_expression { "," grouping_expression } [ "," ] ) ]
+              [ "HAVING" expression ]
+              [ "WINDOW" named_window { "," additional_named_window } ]
+              [ "QUALIFY" expression ]
+              [ "ORDER" "BY" ( "ALL" [ "ASC" | "DESC" ] | order_list [ "," ] ) ]
+              [ row_limit_clause ]
+              [ "USING" "SAMPLE" number ( "PERCENT" | "ROWS" ) [ "REPEATABLE" "(" number ")" ] ] ;
+on_failure_clause = "ON" "FAILURE" ( "THROW"
+                  | "WARN" [ "TO" table_reference [ "WITH" "(" "RETENTION" "=" retention_literal ")" ] ]
+                  | "QUARANTINE" "TO" table_reference [ "WITH" failure_options ] ) ;
+failure_options = "(" ( "RETENTION" "=" retention_literal [ "," "HANDLING" "=" ( "SCRIPT" | "STEWARD" ) ]
+                | "HANDLING" "=" ( "SCRIPT" | "STEWARD" ) [ "," "RETENTION" "=" retention_literal ] ) ")" ;
+retention_literal = string_literal ;
+top_clause = "TOP" ( number | variable_name | "(" ( number | variable_name ) ")" ) [ "PERCENT" ] [ "WITH" "TIES" ] ;
+row_limit_clause = "LIMIT" ( number | variable_name ) [ "OFFSET" expression [ "ROW" | "ROWS" ] ]
+                 | [ "OFFSET" expression [ "ROW" | "ROWS" ] ] "FETCH" ( "FIRST" | "NEXT" ) expression ( "ROW" | "ROWS" ) "ONLY"
+                 | "OFFSET" expression [ "ROW" | "ROWS" ] ;
+set_operator = "UNION" [ "ALL" | "BY" "NAME" ] | "EXCEPT" | "INTERSECT" | "MINUS" ;
+grouping_set = "(" [ expression_list ] ")" ;
+named_window = identifier "AS" "(" window_clause ")" ;
+additional_named_window = additional_identifier "AS" "(" window_clause ")" ;
 
-select_list = "*" | select_item { "," select_item } ;
-select_item = expression [ [ "AS" ] identifier ] ;
+join_clause = [ "INNER" [ join_hint ] ] "JOIN" [ "LATERAL" ] from_reference "ON" expression
+            | "LEFT" [ "OUTER" ] [ join_hint ] "JOIN" [ "LATERAL" ] from_reference "ON" expression
+            | "LEFT" ( "SEMI" | "ANTI" | "FUZZY" ) "JOIN" from_reference "ON" expression
+            | ( "RIGHT" [ "OUTER" ] [ join_hint ] | "FULL" [ "OUTER" ] [ join_hint ] | join_hint | "SEMI" | "ANTI" | "FUZZY"
+              | "ASOF" [ "LEFT" [ "OUTER" ] | "INNER" ] ) "JOIN" from_reference "ON" expression
+            | ( "CROSS" ( "JOIN" [ "LATERAL" ] | "APPLY" ) | "OUTER" "APPLY" | "APPLY" ) from_reference [ "ON" expression ] ;
+join_hint = "HASH" | "LOOP" | "MERGE" ;
 
-table_reference = identifier ;
+select_list = select_item { "," select_item } [ "," ] ;
+select_item = "*" { "EXCLUDE" "(" column_list ")" | "REPLACE" "(" expression "AS" identifier { "," expression "AS" identifier } ")"
+                  | "RENAME" "(" identifier "AS" identifier { "," identifier "AS" identifier } ")" }
+            | expression [ [ "AS" ] identifier ] ;
 
-expression = literal
-           | identifier
-           | variable_name
-           | function_call
-           | expression binary_operator expression
-           | "(" expression ")" ;
+table_reference = table_name ;
+from_reference = from_primary { table_operator }
+                 [ "WITH" object_options ] [ "NOT" "INDEXED" | "INDEXED" "BY" ( identifier | string_literal ) ] ;
+from_primary = ( json_table_reference | table_name [ "(" [ expression_list ] ")" ] | "(" select_statement ")" ) [ [ "AS" ] identifier ]
+             | "(" "VALUES" "(" expression_list ")" { "," "(" expression_list ")" } ")" [ "AS" ] identifier [ "(" column_list ")" ] ;
+json_table_reference = "JSON_TABLE" "(" expression "," expression "COLUMNS" "(" json_table_column { "," json_table_column } ")" ")" ;
+table_operator = "PIVOT" "(" pivot_aggregate "FOR" identifier "IN" "(" expression_list ")" ")" [ [ "AS" ] identifier ]
+               | "UNPIVOT" "(" identifier "FOR" identifier "IN" "(" column_list ")" ")" [ [ "AS" ] identifier ]
+               | "MATCH_RECOGNIZE" "(" [ match_recognize_clause { match_recognize_clause } ] ")" [ [ "AS" ] identifier ] ;
+pivot_aggregate = identifier "(" ( "*" | identifier ) ")" ;
+match_recognize_clause = "PARTITION" "BY" expression_list
+                       | "ORDER" "BY" order_list
+                       | "MEASURES" select_item { "," select_item }
+                       | "ONE" "ROW" "PER" "MATCH"
+                       | "ALL" "ROWS" "PER" "MATCH"
+                       | "PATTERN" "(" identifier { identifier } ")"
+                       | "DEFINE" identifier "AS" expression { "," identifier "AS" expression } ;
+table_name = identifier { "." identifier } | variable_name { "." identifier } | temp_table_name | dataset_name ;
 
-literal = string_literal | number_literal | "NULL" | "TRUE" | "FALSE" ;
+expression = arrow_expression ;
+expression_example = identifier "=>" identifier ":" identifier
+                   | identifier "OR" identifier
+                   | identifier "AND" identifier
+                   | "NOT" identifier
+                   | identifier "=" number
+                   | identifier "NOT" "IN" "(" number "," number ")"
+                   | identifier "LIKE" string_literal "ESCAPE" string_literal
+                   | identifier "ILIKE" string_literal
+                   | identifier "BETWEEN" number "AND" number
+                   | identifier "IS" "NOT" "NULL"
+                   | identifier "IS" "DISTINCT" "FROM" identifier
+                   | identifier "??" string_literal
+                   | identifier "<<" number
+                   | identifier ">>" number
+                   | identifier "+" number "*" number
+                   | identifier "->" string_literal
+                   | identifier "->>" string_literal
+                   | identifier "AT" "TIME" "ZONE" string_literal
+                   | "CAST" "(" identifier "AS" "VARCHAR" "(" number ")" ")"
+                   | "TRY_CAST" "(" identifier "AS" "INT" ")"
+                   | "CASE" "WHEN" identifier "=" number "THEN" string_literal "ELSE" string_literal "END"
+                   | "[" number "," number "]"
+                   | "EXISTS" "(" "SELECT" number ")"
+                   | "COUNT" "(" "*" ")" "FILTER" "(" "WHERE" identifier "=" number ")"
+                   | "ROW_NUMBER" "(" ")" "OVER" "(" "ORDER" "BY" identifier ")"
+                   | "PERCENTILE_CONT" "(" number ")" "WITHIN" "GROUP" "(" "ORDER" "BY" identifier ")"
+                   | "SUBSTRING" "(" string_literal "FROM" number "FOR" number ")"
+                   | "POSITION" "(" string_literal "IN" string_literal ")"
+                   | "EXTRACT" "(" "YEAR" "FROM" identifier ")"
+                   | "OVERLAY" "(" string_literal "PLACING" string_literal "FROM" number ")"
+                   | "TRIM" "(" "BOTH" string_literal "FROM" identifier ")"
+                   | identifier "LIKE" "ANY" "(" string_literal "," string_literal ")"
+                   | "ROW_NUMBER" "(" ")" "OVER" "(" "ORDER" "BY" identifier "GROUPS" "BETWEEN" "UNBOUNDED" "PRECEDING" "AND" "CURRENT" "ROW" "EXCLUDE" "TIES" ")" ;
+arrow_expression = or_expression [ "=>" or_expression ":" arrow_expression ] ;
+or_expression = and_expression { "OR" and_expression } ;
+and_expression = not_expression { "AND" not_expression } ;
+not_expression = [ "NOT" ] comparison_expression ;
+comparison_expression = coalesce_expression { comparison_suffix } ;
+comparison_suffix = comparison_operator coalesce_expression
+                  | [ "NOT" ] "IN" ( "(" [ expression_list | select_statement ] ")" | coalesce_expression )
+                  | [ "NOT" ] ( "LIKE" | "ILIKE" )
+                    ( ( "ANY" | "ALL" ) "(" expression_list ")" | coalesce_expression [ "ESCAPE" coalesce_expression ] )
+                  | [ "NOT" ] "BETWEEN" coalesce_expression "AND" coalesce_expression
+                  | "IS" [ "NOT" ] ( "NULL" | "DISTINCT" "FROM" coalesce_expression ) ;
+coalesce_expression = shift_expression { "??" shift_expression } ;
+shift_expression = additive_expression { ( "<<" | ">>" ) additive_expression } ;
+additive_expression = multiplicative_expression { ( "+" | "-" ) multiplicative_expression } ;
+multiplicative_expression = json_expression { ( "*" | "/" | "%" ) json_expression } ;
+json_expression = postfix_expression { ( "->" | "->>" ) postfix_expression } ;
+postfix_expression = primary_expression [ "AT" "TIME" "ZONE" primary_expression ] ;
+primary_expression = literal
+                   | qualified_identifier
+                   | variable_name { "." identifier }
+                   | "?"
+                   | function_call
+                   | cast_expression
+                   | case_expression
+                   | special_sql_expression
+                   | list_expression
+                   | exists_expression
+                   | temp_table_name
+                   | "(" ( select_statement | expression { "," expression } ) ")"
+                   | ( "+" | "-" ) primary_expression ;
 
-binary_operator = "+" | "-" | "*" | "/" | "=" | "<>" | ">" | "<" | ">=" | "<=" | "AND" | "OR" ;
+literal = string_literal | number_literal | "NULL" | "TRUE" | "FALSE" | "ON" | "OFF" | "CURRENT_TIMESTAMP" | "CURRENT_DATE" | "CURRENT_TIME" | "SYSDATE" ;
+comparison_operator = "=" | "<>" | "!=" | ">" | "<" | ">=" | "<=" | "~" | "~*" ;
+cast_expression = ( "CAST" | "TRY_CAST" ) "(" expression "AS" data_type ")" ;
+case_expression = "CASE" [ expression ] "WHEN" expression "THEN" expression { "WHEN" expression "THEN" expression } [ "ELSE" expression ] "END" ;
+list_expression = "[" [ expression_list ] "]" ;
+exists_expression = [ "NOT" ] "EXISTS" "(" select_statement ")" ;
+qualified_identifier = identifier { "." ( identifier | "*" ) } ;
+special_sql_expression = "SUBSTRING" "(" expression ( "FROM" expression [ "FOR" expression ] | "," expression [ "," expression ] ) ")"
+                       | "POSITION" "(" expression "IN" expression ")"
+                       | "EXTRACT" "(" identifier "FROM" expression ")"
+                       | "OVERLAY" "(" expression "PLACING" expression "FROM" expression [ "FOR" expression ] ")"
+                       | "TRIM" "(" expression ")"
+                       | "TRIM" "(" [ "LEADING" | "TRAILING" | "BOTH" ] [ expression ] "FROM" expression ")"
+                       | "JSON_TABLE" "(" expression "," expression "COLUMNS" "(" json_table_column { "," json_table_column } ")" ")" ;
+json_table_column = identifier ( "FOR" identifier | data_type [ "EXISTS" ] "PATH" expression ) ;
 
-function_call = identifier "(" [ expression { "," expression } ] ")" [ "OVER" "(" window_clause ")" ] ;
-window_clause = [ "PARTITION" "BY" expression_list ] [ "ORDER" "BY" order_list ] [ window_frame_clause ] ;
-order_list = expression [ "ASC" | "DESC" ] { "," expression [ "ASC" | "DESC" ] } ;
-window_frame_clause = ( "ROWS" | "RANGE" ) "BETWEEN" window_frame_bound "AND" window_frame_bound ;
+function_call = identifier "(" [ [ "DISTINCT" | "ALL" ] ( "*" | expression_list ) ] ")"
+                [ "FILTER" "(" "WHERE" expression ")" ]
+                [ "OVER" ( identifier | "(" window_clause ")" ) ]
+                [ "WITHIN" "GROUP" "(" "ORDER" "BY" order_list ")" ] ;
+window_clause = [ base_window_name ] [ "PARTITION" "BY" expression_list ] [ "ORDER" "BY" order_list ] [ window_frame_clause ] ;
+base_window_name = identifier ;
+grouping_expression = expression ;
+ordering_expression = expression ;
+order_list = ordering_expression [ "ASC" | "DESC" ] { "," ordering_expression [ "ASC" | "DESC" ] } ;
+window_frame_clause = ( "ROWS" | "RANGE" | "GROUPS" )
+                      ( "BETWEEN" window_frame_bound "AND" window_frame_bound | window_frame_bound )
+                      [ "EXCLUDE" ( "CURRENT" "ROW" | "GROUP" | "TIES" | "NO" "OTHERS" ) ] ;
 window_frame_bound = "UNBOUNDED" "PRECEDING" | "CURRENT" "ROW" | "UNBOUNDED" "FOLLOWING" | number "PRECEDING" | number "FOLLOWING" ;
 
 identifier = letter { letter | digit | "_" } ;
+additional_identifier = letter { letter | digit | "_" } ;
 variable_name = "@" identifier ;
-create_visual_statement = "CREATE" "VISUAL" identifier "AS" visual_type [ "(" report_options ")" ] ;
-visual_type = "BAR" | "HBAR" | "LINE" | "SCATTER" | "PIE" | "DONUT" | "COMBO" | "BOXPLOT" | "TREEMAP" | "HEATMAP" | "FUNNEL" | "GAUGE" | "WATERFALL" | "BUBBLE" | "RADAR" | "CANDLESTICK" | "MAP" | "SANKEY" | "SUNBURST" | "NETWORK" | "TRELLIS" | "MATRIX" | "GANTT" | "TABLE" | "CARD" | "TEXT" | "IMAGE" | "SLICER" | "DATEPICKER" | "RELDATEPICKER" | "SLIDER" | "MULTISELECT" | "SEARCH" | "TEXTBOX" | "NUMBERBOX" | "CHECKBOX" ;
+create_visual_statement = "CREATE" [ "OR" "REPLACE" ] "VISUAL" identifier "AS"
+                          ( sourced_visual_type "(" { visual_clause [ "," ] } "SOURCE" [ "=" ] visual_source [ "," ] { visual_clause [ "," ] } ")"
+                          | sourceless_visual_type "(" { ( visual_clause | "SOURCE" [ "=" ] visual_source ) [ "," ] } ")" ) ;
+sourced_visual_type = "BAR" | "HBAR" | "LINE" | "SCATTER" | "PIE" | "DONUT" | "COMBO" | "BOXPLOT" | "TREEMAP" | "HEATMAP" | "FUNNEL" | "GAUGE" | "WATERFALL" | "BUBBLE" | "RADAR" | "CANDLESTICK" | "MAP" | "SANKEY" | "SUNBURST" | "NETWORK" | "TRELLIS" | "MATRIX" | "GANTT" | "TABLE" | "CARD" ;
+sourceless_visual_type = "TEXT" | "IMAGE" | "SLICER" | "DATEPICKER" | "RELDATEPICKER" | "SLIDER" | "MULTISELECT" | "SEARCH" | "TEXTBOX" | "NUMBERBOX" | "CHECKBOX" ;
+visual_type = sourced_visual_type | sourceless_visual_type ;
+visual_source = "(" select_statement ")" | temp_table_name | dataset_name | string_literal ;
+visual_clause = ( "TITLE" | "SUBTITLE" | "CONTENT" | "DEFAULT" | "VALUE" | "PLACEHOLDER" ) [ "=" ] expression
+              | "TOOLTIP" [ "=" ] ( string_literal | identifier )
+              | "VISIBLE" [ "=" ] ( "ON" | "OFF" )
+              | "FETCH" [ "=" ] ( "AUTO" | "ON_LOAD" | "ON_RUN" )
+              | "MAPPINGS" "(" visual_mapping { "," visual_mapping } ")"
+              | "OPTIONS" "(" [ report_option { "," report_option } ] ")"
+              | "ACTIONS" "(" report_action_binding { "," report_action_binding } ")"
+              | "INTERACTIONS" "(" identifier "=" identifier { "," identifier "=" identifier } ")"
+              | "SERIES" "(" report_series { "," report_series } ")"
+              | "SUMMARY" "(" summary_item { "," summary_item } ")"
+              | "STYLE" ( "=" identifier | style_body )
+              | "LABEL_POSITION" [ "=" ] ( identifier | string_literal )
+              | ( "MIN" | "MAX" | "DECIMALS" ) [ "=" ] number ;
+visual_mapping = [ "COLUMN" ] identifier [ "=" identifier | "AS" ( identifier | string_literal ) ] ;
+report_option = ( identifier | string_literal ) [ "=" expression | "(" report_option { "," report_option } ")" ] ;
+report_series = ( "BAR" | "LINE" | identifier ) identifier ;
+summary_item = identifier [ "=" expression | "(" identifier ")" [ "AS" ( identifier | string_literal ) ] ] ;
+report_action_binding = ( "ON_CLICK" | "ON_CHANGE" ) "=" report_action ;
+report_action = "SET_PARAMETER" "(" variable_name "," ( identifier | "VALUE" ) ")"
+              | "RUN_SCRIPT" "(" ( identifier | string_literal ) [ "," variable_name "=" identifier { "," variable_name "=" identifier } ] ")"
+              | "CLEAR_FILTERS" | "APPLY_PARAMETERS"
+              | "DRILL_DOWN" "(" identifier "=" identifier "," identifier "=" ( identifier | "(" column_list ")" ) ")"
+              | "DRILL_REPORT" "(" identifier "=" ( identifier | string_literal ) [ "," identifier "(" parameter_assignments ")" ] ")"
+              | "DRILL_IN" "(" "HIERARCHY" "=" "(" column_list ")" ")"
+              | "REFRESH_VISUALS" "(" column_list ")"
+              | identifier ;
 
-create_page_statement = "CREATE" "PAGE" identifier "AS" "(" report_options ")" ;
-create_dataset_statement = "CREATE" "DATASET" identifier [ "ENCRYPT" "=" expression ] "AS" select_statement ;
-create_container_statement = "CREATE" "CONTAINER" identifier "AS" "(" report_options ")" ;
-create_navigation_statement = "CREATE" "NAVIGATION" identifier "AS" "(" report_options ")" ;
-create_button_statement = "CREATE" "BUTTON" identifier "AS" "(" report_options ")" ;
-create_style_statement = "CREATE" "STYLE" identifier "AS" "(" report_options ")" ;
+create_page_statement = "CREATE" "PAGE" identifier "AS" page_type "("
+                        { page_clause [ "," ] }
+                        ( "STRUCTURE" "=" string_literal | "LAYOUT" "(" { page_layout_clause [ "," ] } "STRUCTURE" "=" string_literal [ "," ] { page_layout_clause [ "," ] } ")" )
+                        [ "," ] { page_clause [ "," ] } ")" ;
+page_type = "DASHBOARD" | "PAGINATED" ;
+page_clause = "MAP" "(" string_literal "=" identifier { "," string_literal "=" identifier } ")"
+            | "STYLE" ( "=" identifier | style_body )
+            | ( "TITLE" | "SUBTITLE" ) [ "=" ] expression
+            | "TOOLTIP" [ "=" ] ( string_literal | identifier )
+            | "VISIBLE" [ "=" ] ( "ON" | "OFF" )
+            | "REFRESH" [ "=" ] number
+            | "GAP" "=" ( identifier | string_literal | number )
+            | ( "PAGE_LAYOUT" | "PRINT_LAYOUT" ) "(" report_option { "," report_option } ")" ;
+page_layout_clause = "MAP" "(" string_literal "=" identifier { "," string_literal "=" identifier } ")"
+                   | "PINNABLE" "=" ( "ON" | "OFF" )
+                   | identifier [ "=" ] ( identifier | string_literal | number ) ;
+create_dataset_statement = "CREATE" "DATASET" dataset_name { dataset_option } "AS" ( "(" select_statement ")" | select_statement ) ;
+dataset_option = "TTL" [ "=" ] string_literal | "COMPRESS" [ "=" ] ( "ON" | "OFF" )
+               | "ENCRYPT" [ "=" ] ( "ON" | "MACHINE" | "PASSWORD" | "KEYFILE" )
+               | "PASSWORD" [ "=" ] string_literal | "KEYFILE" [ "=" ] string_literal
+               | "ACCESS" ( "PUBLIC" | "PRIVATE" ) ;
+dataset_name = "&" identifier ;
+create_container_statement = "CREATE" "CONTAINER" identifier "AS" container_type "(" { container_clause [ "," ] } ")" ;
+container_type = "BOX" | "SCROLL" | "DRAWER" | "SIDEBAR" | "TABS" | "ACCORDION" | "MODAL" | "POPOVER" | "LAYER" ;
+container_clause = "STYLE" ( "=" identifier | style_body )
+                 | ( "TITLE" | "SUBTITLE" ) [ "=" ] expression
+                 | "TOOLTIP" [ "=" ] ( string_literal | identifier )
+                 | "VISIBLE" [ "=" ] ( "ON" | "OFF" )
+                 | "ICON" "=" string_literal
+                 | "LAYOUT" "(" [ container_layout_item { "," container_layout_item } ] ")"
+                 | "OPTIONS" "(" ")" ;
+container_layout_item = "STRUCTURE" "=" string_literal
+                      | "MAP" "(" string_literal "=" identifier { "," string_literal "=" identifier } ")"
+                      | "PINNABLE" "=" ( "ON" | "OFF" )
+                      | identifier [ "=" ] ( identifier | string_literal | number ) ;
+create_navigation_statement = "CREATE" "NAVIGATION" identifier "AS" navigation_type "(" { navigation_clause [ "," ] } ")" ;
+navigation_type = "TAB" | "BUTTON" | "LINK" ;
+navigation_clause = "ORIENTATION" "=" ( "HORIZONTAL" | "VERTICAL" ) | "DEFAULT" "=" identifier
+                  | "PAGES" "(" [ identifier { "," identifier } ] ")" ;
+create_button_statement = "CREATE" "BUTTON" identifier "AS" "(" { button_clause [ "," ] } ")" ;
+button_clause = "TITLE" [ "=" ] expression | "TOOLTIP" [ "=" ] ( string_literal | identifier )
+              | "OPTIONS" "(" [ report_option { "," report_option } ] ")"
+              | "ACTIONS" "(" report_action_binding { "," report_action_binding } ")"
+              | "STYLE" ( "=" identifier | style_body ) ;
+create_style_statement = "CREATE" "STYLE" identifier "AS" style_body ;
+style_body = "(" [ style_key "=" style_value { "," style_key "=" style_value } ] ")" ;
+style_key = identifier { "-" identifier } ;
+style_value = identifier | variable_name | string_literal | number | "ON" | "OFF" | "TRUE" | "FALSE" ;
 
-set_report_metadata_statement = "SET" "REPORT" ( "TITLE" | "DESCRIPTION" ) "=" string_literal ;
+set_report_metadata_statement = "SET" "REPORT" identifier "=" string_literal ;
+portal_show_command = "SHOW" "PORTAL" ( "USAGE" | "OPERATIONAL" ) "METRICS" ;
 
 report_options = report_clause { "," report_clause } ;
 report_clause = identifier [ "=" expression | "(" report_options ")" ] ;

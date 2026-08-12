@@ -1,4 +1,5 @@
 ﻿-- ======================================================================
+-- @requires: docker
 -- MEGA SAMPLE: Cross-Database Data Flow & Performance Analysis
 -- ======================================================================
 -- This script demonstrates:

@@ -12,7 +12,9 @@ using System.Threading.Tasks;
 using Apache.Arrow;
 using Apache.Arrow.Ipc;
 using Apache.Arrow.Types;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
@@ -641,6 +643,7 @@ public partial class SpillStore : ISpillStore
         private Schema? _schema;
         private ArrowStreamWriter? _arrowWriter;
         private readonly List<Row> _buffer = new();
+        private long _acceptedRowCount;
 
         public string ChunkName => _chunkName;
         public long BytesWritten { get; private set; }
@@ -697,6 +700,7 @@ public partial class SpillStore : ISpillStore
             }
 
             _buffer.Add(snapshot);
+            _acceptedRowCount++;
 
             if (_context.Telemetry?.TelemetryEnabled ?? false)
             {
@@ -813,6 +817,7 @@ public partial class SpillStore : ISpillStore
                 }
 
                 _buffer.Add(snapshot);
+                _acceptedRowCount++;
                 telemetryBytes += row.ColumnCount * 16L; // allocation-free; see WriteRowAsync
                 if (_buffer.Count >= _flushBatchSize)
                     await FlushBatchAsync();
@@ -953,8 +958,9 @@ public partial class SpillStore : ISpillStore
 
         private RecordBatch BuildBatch(List<Row> rows)
         {
+            var firstRowNumber = _acceptedRowCount - rows.Count + 1;
             var arrays = _schema!.FieldsList
-                .Select(f => BuildArray(f, rows))
+                .Select(f => BuildArray(f, rows, firstRowNumber))
                 .ToList();
             return new RecordBatch(_schema, arrays, rows.Count);
         }
@@ -1055,7 +1061,7 @@ public partial class SpillStore : ISpillStore
             return builder.Build();
         }
 
-        private static IArrowArray BuildArray(Field field, List<Row> rows)
+        private IArrowArray BuildArray(Field field, List<Row> rows, long firstRowNumber)
         {
             switch (field.DataType)
             {
@@ -1063,11 +1069,12 @@ public partial class SpillStore : ISpillStore
                     {
                         var b = new Int64Array.Builder();
                         b.Reserve(rows.Count);
-                        foreach (var row in rows)
+                        for (var i = 0; i < rows.Count; i++)
                         {
+                            var row = rows[i];
                             var v = row.TryGetValue(field.Name, out var val) ? val : null;
                             if (v == null) b.AppendNull();
-                            else b.Append(Convert.ToInt64(v));
+                            else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToInt64));
                         }
                         return b.Build();
                     }
@@ -1075,11 +1082,13 @@ public partial class SpillStore : ISpillStore
                     {
                         var b = new Decimal128Array.Builder(dt);
                         b.Reserve(rows.Count);
-                        foreach (var row in rows)
+                        for (var i = 0; i < rows.Count; i++)
                         {
+                            var row = rows[i];
                             var v = row.TryGetValue(field.Name, out var val) ? val : null;
                             if (v == null) b.AppendNull();
-                            else b.Append(Math.Round(Convert.ToDecimal(v), dt.Scale));
+                            else b.Append(Math.Round(
+                                ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDecimal), dt.Scale));
                         }
                         return b.Build();
                     }
@@ -1087,11 +1096,12 @@ public partial class SpillStore : ISpillStore
                     {
                         var b = new DoubleArray.Builder();
                         b.Reserve(rows.Count);
-                        foreach (var row in rows)
+                        for (var i = 0; i < rows.Count; i++)
                         {
+                            var row = rows[i];
                             var v = row.TryGetValue(field.Name, out var val) ? val : null;
                             if (v == null) b.AppendNull();
-                            else b.Append(Convert.ToDouble(v));
+                            else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDouble));
                         }
                         return b.Build();
                     }
@@ -1099,11 +1109,12 @@ public partial class SpillStore : ISpillStore
                     {
                         var b = new BooleanArray.Builder();
                         b.Reserve(rows.Count);
-                        foreach (var row in rows)
+                        for (var i = 0; i < rows.Count; i++)
                         {
+                            var row = rows[i];
                             var v = row.TryGetValue(field.Name, out var val) ? val : null;
                             if (v == null) b.AppendNull();
-                            else b.Append(Convert.ToBoolean(v));
+                            else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToBoolean));
                         }
                         return b.Build();
                     }
@@ -1111,13 +1122,14 @@ public partial class SpillStore : ISpillStore
                     {
                         var b = new TimestampArray.Builder(tt.Unit, tt.Timezone);
                         b.Reserve(rows.Count);
-                        foreach (var row in rows)
+                        for (var i = 0; i < rows.Count; i++)
                         {
+                            var row = rows[i];
                             var v = row.TryGetValue(field.Name, out var val) ? val : null;
                             if (v == null) b.AppendNull();
                             else
                             {
-                                var dt = Convert.ToDateTime(v);
+                                var dt = ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDateTime);
                                 var dto = dt.Kind == DateTimeKind.Unspecified
                                     ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc))
                                     : new DateTimeOffset(dt);
@@ -1142,17 +1154,37 @@ public partial class SpillStore : ISpillStore
             }
         }
 
+        private T ConvertSpillValue<T>(Field field, object value, long rowNumber, Func<object, T> converter)
+        {
+            try
+            {
+                return converter(value);
+            }
+            catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException or ArgumentException)
+            {
+                throw new ExecutionException(
+                    $"Spill persistence failed for chunk '{_chunkName}', column '{field.Name}', row {rowNumber}: " +
+                    $"the inferred schema expects {field.DataType.Name}, but the value has runtime type " +
+                    $"{value.GetType().Name}. The column contains incompatible heterogeneous values; " +
+                    "correct or explicitly widen it in the statement that produced the table before persistence.");
+            }
+        }
+
         public async ValueTask DisposeAsync()
         {
-            await FlushBatchAsync();
-            if (_arrowWriter != null)
+            try
             {
-                await _arrowWriter.WriteEndAsync(CancellationToken.None);
-                _arrowWriter.Dispose();
+                await FlushBatchAsync();
+                if (_arrowWriter != null)
+                    await _arrowWriter.WriteEndAsync(CancellationToken.None);
             }
-            if (_gzipStream != null) await _gzipStream.DisposeAsync();
-            if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
-            await _fileStream.DisposeAsync();
+            finally
+            {
+                _arrowWriter?.Dispose();
+                if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
+                await _fileStream.DisposeAsync();
+            }
 
             // Empty partition: delete the file so the reader sees "not found" → null
             if (_arrowWriter == null)

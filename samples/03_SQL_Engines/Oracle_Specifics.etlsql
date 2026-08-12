@@ -1,4 +1,5 @@
 ﻿-- Demonstrates database connectivity and metadata discovery via Docker
+-- @requires: docker
 -- Note: Requires Docker Desktop running
 
 USE DOCKER('postgres:15-alpine') AS dpg;

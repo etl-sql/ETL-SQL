@@ -40,6 +40,7 @@ $total = $etlScripts.Count * $Passes
 $validatorStateRoot = Join-Path $solutionRoot "release-validation\sample-validator-$PID"
 $securityEventOutboxPath = Join-Path $validatorStateRoot "security-events.db"
 $sessionRoot = Join-Path $validatorStateRoot "sessions"
+$orchestratorDatabasePath = Join-Path $validatorStateRoot "orchestrator.db"
 New-Item -ItemType Directory -Path $validatorStateRoot -Force | Out-Null
 
 Write-Host "=======================================================" -ForegroundColor Cyan
@@ -85,6 +86,16 @@ foreach ($script in $etlScripts) {
         elseif ($service -eq 'orchestrator') {
             $available = $false  # orchestrator scripts require a running Orchestrator service
         }
+        elseif ($service -eq 'docker') {
+            $dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
+            if ($null -eq $dockerCommand) {
+                $available = $false
+            }
+            else {
+                & $dockerCommand.Source info --format '{{.ServerVersion}}' *> $null
+                $available = $LASTEXITCODE -eq 0
+            }
+        }
         if (-not $available) {
             Write-Host "SKIPPED ($service unavailable)" -ForegroundColor Yellow
             $skipped++
@@ -120,6 +131,7 @@ foreach ($script in $etlScripts) {
         $procInfo.CreateNoWindow = $true
         $procInfo.Environment["ETLSQL_SECURITY_EVENT_OUTBOX_PATH"] = $securityEventOutboxPath
         $procInfo.Environment["Session__Root"] = $sessionRoot
+        $procInfo.Environment["Orchestrator__DatabasePath"] = $orchestratorDatabasePath
 
         $proc = New-Object System.Diagnostics.Process
         $proc.StartInfo = $procInfo

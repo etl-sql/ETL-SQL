@@ -1,4 +1,5 @@
 -- Testing Docker Capability
+-- @requires: docker
 USE DOCKER('postgres:15-alpine') AS pg_test;
-PRINT 'Postgres container spawned at: ' + pg_test.CONNECTION_STRING;
+PRINT 'Postgres container spawned successfully.';
 CLOSE DOCKER pg_test;

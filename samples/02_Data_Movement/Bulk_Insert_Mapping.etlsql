@@ -8,7 +8,7 @@ CREATE TABLE #Target (
 -- CSV: Bob,New York,30
 -- We want to map it to Name, Location, Age (reordered)
 BULK INSERT #Target (Name, Location, Age) 
-FROM 'testdata/test_bulk_mapped.csv'
+FROM 'TestData/test_bulk_mapped.csv'
 WITH (FORMAT = 'CSV');
 
 SELECT * FROM #Target;

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("smoke", "fast", "engine", "portal", "portal-hosted", "browser", "integration", "perf", "release", "full", "benchmarks", "slt", "spill", "fuzz-smoke", "fuzz")]
+    [ValidateSet("smoke", "fast", "engine", "portal", "portal-hosted", "browser", "integration", "perf", "release", "full", "benchmarks", "slt", "spill", "ebnf", "fuzz-smoke", "fuzz")]
     [string]$Lane = "fast",
 
     [string]$Configuration = "Debug",
@@ -26,7 +26,13 @@ param(
     # raises OutOfMemoryException inside the run and names the test, instead of the OS thrashing.
     #
     # Set to 0 to disable (for a deliberate scale run that legitimately needs more).
-    [int]$MemoryLimitGB = 8
+    [int]$MemoryLimitGB = 8,
+
+    # The low-threshold spill lane runs the large engine project in fresh deterministic shards.
+    # This bounds retained process state and leaves one TRX per shard, while a value of 1 remains
+    # available for reproducing behavior in the former all-in-one host.
+    [ValidateRange(1, 32)]
+    [int]$EngineShardCount = 8
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,7 +50,7 @@ $script:LaneFailures = @()
 $script:LaneExitCode = 0
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$engineFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)"
+$engineFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)&(Category!=EbnfConformance)"
 # Portal lanes run the whole Portal project (its WebApplicationFactory tests have
 # "Integration" in their names but need no Docker). Exclude only Docker-backed and
 # hosted-service tests by category instead of inferring ownership from names.
@@ -82,6 +88,163 @@ function Invoke-DotNetTest {
             return
         }
         exit $LASTEXITCODE
+    }
+}
+
+function Invoke-ShardedEngineTests {
+    param(
+        [string]$Project,
+        [string]$Filter,
+        [int]$ShardCount,
+        [string]$EvidenceDirectory
+    )
+
+    $projectPath = Join-Path $repoRoot $Project
+    $listArgs = @(
+        "test", $projectPath,
+        "--configuration", $Configuration,
+        "--list-tests",
+        "--filter", $Filter,
+        "--logger", "console;verbosity=quiet"
+    )
+    if ($NoRestore) { $listArgs += "--no-restore" }
+    if ($NoBuild) { $listArgs += "--no-build" }
+
+    Write-Host "Discovering engine tests for deterministic sharding..." -ForegroundColor Cyan
+    $listing = @(& dotnet @listArgs 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        $listing | ForEach-Object { Write-Host $_ }
+        throw "Engine test discovery failed with exit code $LASTEXITCODE."
+    }
+
+    $marker = [Array]::FindIndex($listing, [Predicate[object]] { param($line) "$line" -match '^The following Tests are available:' })
+    if ($marker -lt 0) { throw "Engine test discovery did not emit its test-list marker." }
+    $testNames = @($listing[($marker + 1)..($listing.Count - 1)] |
+        ForEach-Object { "$($_)".Trim() } |
+        Where-Object { $_ -match '^ETL_SQL\.' })
+    if ($testNames.Count -eq 0) { throw "Engine test discovery returned no runnable tests." }
+
+    # Keep all cases of one test class in the same host. Greedy placement by discovered case count
+    # is deterministic and avoids one theory-heavy class making a shard much larger than the rest.
+    $classes = $testNames | ForEach-Object {
+        $withoutArguments = ($_ -split '\(', 2)[0]
+        $lastDot = $withoutArguments.LastIndexOf('.')
+        if ($lastDot -le 0) { throw "Cannot derive a test class from discovered name '$_'." }
+        $withoutArguments.Substring(0, $lastDot)
+    } | Group-Object | Sort-Object @{ Expression = 'Count'; Descending = $true }, Name
+
+    $buckets = @()
+    $loads = @(0) * $ShardCount
+    for ($i = 0; $i -lt $ShardCount; $i++) {
+        $buckets += ,([System.Collections.Generic.List[string]]::new())
+    }
+    foreach ($class in $classes) {
+        $target = 0
+        for ($i = 1; $i -lt $ShardCount; $i++) {
+            if ($loads[$i] -lt $loads[$target]) { $target = $i }
+        }
+        $buckets[$target].Add($class.Name)
+        $loads[$target] += $class.Count
+    }
+
+    New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
+    $manifest = [ordered]@{
+        generatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
+        project = $Project
+        filter = $Filter
+        discoveredTests = $testNames.Count
+        discoveredClasses = $classes.Count
+        shards = @()
+    }
+
+    for ($shard = 0; $shard -lt $ShardCount; $shard++) {
+        if ($buckets[$shard].Count -eq 0) { continue }
+        $number = $shard + 1
+        # Use exact method identities rather than substring class filters. VSTest's `~` operator
+        # can still over-select despite punctuation at a nominal class boundary (observed as five
+        # duplicate cases in the second shard). Theory rows share one method identity and remain
+        # together because classes are assigned atomically.
+        $classSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        $buckets[$shard] | ForEach-Object { [void]$classSet.Add($_) }
+        $methods = $testNames | ForEach-Object {
+            $method = ($_ -split '\(', 2)[0]
+            $lastDot = $method.LastIndexOf('.')
+            if ($lastDot -gt 0 -and $classSet.Contains($method.Substring(0, $lastDot))) { $method }
+        } | Sort-Object -Unique
+        $methodExpression = ($methods | ForEach-Object { "FullyQualifiedName=$_" }) -join '|'
+        $combinedFilter = "($Filter)&($methodExpression)"
+        $escapedFilter = [System.Security.SecurityElement]::Escape($combinedFilter)
+        $settingsPath = Join-Path $EvidenceDirectory ("shard-{0:D2}.runsettings" -f $number)
+        $settings = "<RunSettings><RunConfiguration><TestCaseFilter>$escapedFilter</TestCaseFilter></RunConfiguration></RunSettings>"
+        Set-Content -LiteralPath $settingsPath -Value $settings -Encoding utf8NoBOM
+        $manifest.shards += [ordered]@{
+            number = $number
+            expectedTests = $loads[$shard]
+            classes = @($buckets[$shard])
+            methods = @($methods)
+            results = ("shard-{0:D2}.trx" -f $number)
+        }
+    }
+    $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'manifest.json') -Encoding utf8NoBOM
+
+    Write-Host "Engine inventory: $($testNames.Count) tests in $($classes.Count) classes across $ShardCount shards." -ForegroundColor Cyan
+    $executedTotal = 0
+    $testIdShards = @{}
+    for ($shard = 0; $shard -lt $ShardCount; $shard++) {
+        if ($buckets[$shard].Count -eq 0) { continue }
+        $number = $shard + 1
+        Write-Host ("Engine shard {0}/{1}: {2} expected tests in {3} classes" -f $number, $ShardCount, $loads[$shard], $buckets[$shard].Count) -ForegroundColor Yellow
+        $args = @(
+            "test", $projectPath,
+            "--configuration", $Configuration,
+            "--settings", (Join-Path $EvidenceDirectory ("shard-{0:D2}.runsettings" -f $number)),
+            "--results-directory", $EvidenceDirectory,
+            "--logger", "console;verbosity=minimal",
+            "--logger", ("trx;LogFileName=shard-{0:D2}.trx" -f $number)
+        )
+        if ($NoRestore) { $args += "--no-restore" }
+        if ($NoBuild) { $args += "--no-build" }
+        if ($CollectCoverage) { $args += "--collect:XPlat Code Coverage" }
+        & dotnet @args
+        if ($LASTEXITCODE -ne 0) {
+            $script:LaneFailures += "engine spill shard $number/$ShardCount"
+            $script:LaneExitCode = $LASTEXITCODE
+        }
+
+        $trxPath = Join-Path $EvidenceDirectory ("shard-{0:D2}.trx" -f $number)
+        if (-not (Test-Path -LiteralPath $trxPath)) {
+            $script:LaneFailures += "engine spill shard $number/$ShardCount missing TRX"
+            $script:LaneExitCode = 1
+            continue
+        }
+
+        [xml]$trx = Get-Content -LiteralPath $trxPath -Raw
+        $namespace = [System.Xml.XmlNamespaceManager]::new($trx.NameTable)
+        $namespace.AddNamespace("trx", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
+        $results = @($trx.SelectNodes("//trx:UnitTestResult", $namespace))
+        $manifest.shards[$shard]["actualResults"] = $results.Count
+        $executedTotal += $results.Count
+
+        foreach ($testId in @($results | ForEach-Object { $_.testId } | Sort-Object -Unique)) {
+            if (-not $testIdShards.ContainsKey($testId)) {
+                $testIdShards[$testId] = [System.Collections.Generic.HashSet[int]]::new()
+            }
+            [void]$testIdShards[$testId].Add($number)
+        }
+    }
+
+    $crossShardTestIds = @($testIdShards.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 })
+    $manifest["executionSummary"] = [ordered]@{
+        actualResults = $executedTotal
+        discoveryDelta = $executedTotal - $testNames.Count
+        crossShardTestIdCount = $crossShardTestIds.Count
+    }
+    $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'manifest.json') -Encoding utf8NoBOM
+
+    Write-Host "Engine execution: $executedTotal results ($($executedTotal - $testNames.Count) runtime-expanded theory rows); cross-shard test identities: $($crossShardTestIds.Count)." -ForegroundColor Cyan
+    if ($crossShardTestIds.Count -gt 0) {
+        $script:LaneFailures += "engine spill shard overlap ($($crossShardTestIds.Count) test identities)"
+        $script:LaneExitCode = 1
     }
 }
 
@@ -211,6 +374,9 @@ switch ($Lane) {
         & $PSCommandPath -Lane "fuzz-smoke" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+        & $PSCommandPath -Lane "ebnf" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
         & $PSCommandPath -Lane "slt" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
@@ -225,6 +391,9 @@ switch ($Lane) {
         # thresholds turns every query the corpus already contains into spill coverage, which is
         # far more surface than any spill tests we would sit down and write.
         $previous = @{}
+        $previousSessionRoot = $env:Session__Root
+        $spillSessionRoot = Join-Path ([IO.Path]::GetTempPath()) ("etl-sql-spill-lane-" + [Guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Path $spillSessionRoot | Out-Null
         $overrides = @{
             "Engine__BatchSize"                   = "7"
             "Engine__JoinSpillThreshold"          = "10"
@@ -237,12 +406,17 @@ switch ($Lane) {
         # corpus: batch boundaries that always land between logical groups hide exactly the
         # cross-batch defects this lane is for.
         try {
+            # Keep checkpoint/spill metadata isolated from the developer profile and from prior
+            # runs. Besides preventing cross-run contamination, this makes the lane usable in
+            # restricted CI/sandbox accounts that cannot write LocalAppData.
+            $env:Session__Root = $spillSessionRoot
             foreach ($key in $overrides.Keys) {
                 $previous[$key] = [Environment]::GetEnvironmentVariable($key)
                 [Environment]::SetEnvironmentVariable($key, $overrides[$key])
             }
 
-            Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
+            $spillEvidence = Join-Path $repoRoot ("release-validation\spill-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+            Invoke-ShardedEngineTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $spillEvidence
 
             $previousRunSlt = $env:ETL_SQL_RUN_SLT
             try {
@@ -257,6 +431,10 @@ switch ($Lane) {
             foreach ($key in $previous.Keys) {
                 [Environment]::SetEnvironmentVariable($key, $previous[$key])
             }
+            $env:Session__Root = $previousSessionRoot
+            if (Test-Path -LiteralPath $spillSessionRoot) {
+                Remove-Item -LiteralPath $spillSessionRoot -Recurse -Force
+            }
         }
     }
     "slt" {
@@ -268,6 +446,12 @@ switch ($Lane) {
         finally {
             $env:ETL_SQL_RUN_SLT = $previousRunSlt
         }
+    }
+    "ebnf" {
+        # Fixed seeds in EbnfConformanceTests make failures exactly reproducible and report the
+        # generated SQL/counterexample. Keep this separate from fast/smoke despite its small size:
+        # it is a grammar-release contract, not a quick-feedback parser sample.
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=EbnfConformance"
     }
     "fuzz-smoke" {
         # Same deterministic smoke the fast lane runs, available on its own for quick local checks.
@@ -297,7 +481,7 @@ switch ($Lane) {
 }
 
 
-if ($ContinueOnFailure -and $script:LaneExitCode -ne 0) {
+if ($script:LaneExitCode -ne 0) {
     Write-Host ""
     Write-Host "Lane completed with failures in:" -ForegroundColor Red
     foreach ($failure in $script:LaneFailures) { Write-Host "  - $failure" -ForegroundColor Red }

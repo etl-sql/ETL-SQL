@@ -175,6 +175,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
 
             int count = 0;
             int errorCount = 0;
+            int mappingWarningCount = 0;
             int batchIndex = 0;
 
             await foreach (var batch in batches.WithCancellation(context.CancellationToken))
@@ -196,15 +197,35 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
 
                 if (batchIndex == 1)
                 {
+                    if (!headerPresent && LooksLikeTargetHeader(batch, mapping))
+                    {
+                        throw new ExecutionException(
+                            $"Bulk insert source appears to begin with a header row matching target "
+                            + $"columns [{string.Join(", ", mapping)}]. Specify FIRSTROW = 2 or "
+                            + "HEADER = TRUE; the header was not loaded as data.");
+                    }
+
                     if (pairedByName)
                         _logger.Debug("Bulk insert into '{Target}' paired {Count} columns by header name.",
                             stmt.TargetTable.TableName, pairing.Count);
                     else if (headerPresent && !forcePositional)
+                    {
+                        mappingWarningCount++;
                         _logger.Warning(
                             "Bulk insert into '{Target}': the file's header does not name every target column, "
                             + "so columns were paired by position instead. Header: [{Header}]; target: [{Target2}]. "
                             + "Positional pairing loads a reordered file transposed without error.",
                             stmt.TargetTable.TableName, string.Join(", ", batch.ColumnNames), string.Join(", ", mapping));
+                    }
+
+                    if (batch.ColumnNames.Count != mapping.Count)
+                    {
+                        mappingWarningCount++;
+                        _logger.Warning(
+                            "Bulk insert into '{Target}' maps {SourceCount} source columns to {TargetCount} target "
+                            + "columns. Surplus source columns are ignored; unmatched target columns remain NULL.",
+                            stmt.TargetTable.TableName, batch.ColumnNames.Count, mapping.Count);
+                    }
                 }
 
                 foreach (var sourceRow in batch.Rows)
@@ -268,7 +289,9 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
             }
 
 
-            _logger.WriteLine($"Bulk insert completed. {count} rows loaded. {errorCount} errors skipped.");
+            _logger.WriteLine(
+                $"Bulk insert completed. {count} rows loaded. {errorCount} errors skipped. "
+                + $"{mappingWarningCount} mapping warnings.");
         }
         finally
         {
@@ -320,6 +343,20 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
     /// </summary>
     private static object? NullIfBlank(object? value) =>
         value is string s && string.IsNullOrWhiteSpace(s) ? null : value;
+
+    private static bool LooksLikeTargetHeader(DataTable batch, IReadOnlyList<string> targets)
+    {
+        if (batch.Rows.Count == 0 || batch.ColumnNames.Count != targets.Count) return false;
+
+        var first = batch.Rows[0];
+        var values = batch.ColumnNames
+            .Select(column => first[column]?.ToString()?.Trim())
+            .ToList();
+        if (values.Any(string.IsNullOrWhiteSpace)) return false;
+
+        return new HashSet<string>(values.Select(value => value!), StringComparer.OrdinalIgnoreCase)
+            .SetEquals(targets);
+    }
 
     private async Task<(int written, int errors)> WriteBisect(
         IReadOnlyList<Row> rows, IReadOnlyList<string> destColumns, IDataSource destination,

@@ -42,6 +42,12 @@ public class PortalModuleRouteFencingTests
         var analyze = await SendAsync(client, HttpMethod.Post, token, "/api/designer/analyze", new { script = "SELECT * FROM #stage;" });
         var complete = await SendAsync(client, HttpMethod.Post, token, "/api/designer/complete", new { script = "SEL", line = 0, column = 3 });
         var run = await SendAsync(client, HttpMethod.Post, token, "/api/designer/run", new { script = "SELECT 1 AS One;" });
+        var dataPreview = await SendAsync(client, HttpMethod.Post, token, "/api/designer/data-preview", new
+        {
+            sourceKind = "temp",
+            tempTable = "#stage",
+            script = "SELECT 1 AS One INTO #stage;"
+        });
         var save = await SendAsync(client, HttpMethod.Post, token, "/api/designer/save", new { reportId = 1, scriptText = "SELECT 1;" });
         var schema = await SendAsync(client, HttpMethod.Get, token, "/api/designer/schema?connection=x", null);
 
@@ -49,6 +55,7 @@ public class PortalModuleRouteFencingTests
         Assert.Equal(HttpStatusCode.NotFound, analyze.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, complete.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, run.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, dataPreview.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, save.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, schema.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/designer.html")).StatusCode);
@@ -86,6 +93,13 @@ public class PortalModuleRouteFencingTests
 
         Assert.Equal(HttpStatusCode.OK,
             (await SendAsync(client, HttpMethod.Post, token, "/api/designer/parse", new { script = "" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/designer/data-preview", new
+            {
+                sourceKind = "temp",
+                tempTable = "#missing",
+                script = "SELECT 1;"
+            })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await SendAsync(client, HttpMethod.Post, token, "/api/designer/run", new { script = "SELECT 1;" })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
@@ -223,6 +237,99 @@ public class PortalModuleRouteFencingTests
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Designer_DataPreview_RecreatesIntermediateTempTableWithinBoundedRun()
+    {
+        using var factory = new ModuleFenceFactory(_ => { });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        var response = await SendAsync(client, HttpMethod.Post, token, "/api/designer/data-preview", new
+        {
+            sourceKind = "temp",
+            tempTable = "#stage",
+            script = "SELECT 1 AS Id, 'SECRET:preview-token' AS Token INTO #stage;"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("temp", body!["sourceKind"]!.GetValue<string>());
+        Assert.Equal("#stage", body["source"]!.GetValue<string>());
+        Assert.Single(body["rows"]!.AsArray());
+        Assert.Equal(1, body["rows"]![0]!["Id"]!.GetValue<int>());
+        Assert.DoesNotContain("preview-token", await response.Content.ReadAsStringAsync());
+        Assert.InRange(body["bytesReturned"]!.GetValue<long>(), 1, 256 * 1024);
+    }
+
+    [Fact]
+    public async Task Designer_EditLease_ConflictsRecoversRenewsAndDoesNotAdvanceContentVersion()
+    {
+        using var factory = new ModuleFenceFactory(_ => { });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        int reportId;
+        long contentVersion;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var adminId = await db.Users.Where(user => user.UserName == "admin").Select(user => user.Id).SingleAsync();
+            var folder = new Folder { Name = "Lease tests", Path = "/lease-tests", OwnerId = adminId };
+            var report = new Report
+            {
+                Folder = folder,
+                Name = "Shared report",
+                ScriptPath = "lease-tests/shared.rptsql",
+                CreatedBy = adminId,
+                EditSessionUserId = 999_999,
+                EditSessionUserName = "other-author",
+                EditSessionExpiresAtUtc = DateTime.UtcNow.AddMinutes(3)
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+            contentVersion = report.Version;
+        }
+
+        var blocked = await SendAsync(client, HttpMethod.Post, token, "/api/designer/lease", new { reportId });
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        var blockedBody = await blocked.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("other-author", blockedBody!["owner"]!.GetValue<string>());
+        Assert.NotNull(blockedBody["expiresAt"]);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            await db.Reports.Where(report => report.Id == reportId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(
+                    report => report.EditSessionExpiresAtUtc, DateTime.UtcNow.AddSeconds(-1)));
+        }
+
+        var acquired = await SendAsync(client, HttpMethod.Post, token, "/api/designer/lease", new { reportId });
+        Assert.Equal(HttpStatusCode.OK, acquired.StatusCode);
+        var renewed = await SendAsync(client, HttpMethod.Post, token, "/api/designer/lease", new { reportId });
+        Assert.Equal(HttpStatusCode.OK, renewed.StatusCode);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var report = await db.Reports.AsNoTracking().SingleAsync(value => value.Id == reportId);
+            Assert.Equal(contentVersion, report.Version);
+            Assert.Equal("admin", report.EditSessionUserName);
+        }
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, token, $"/api/designer/lease/{reportId}", null)).StatusCode);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var report = await db.Reports.AsNoTracking().SingleAsync(value => value.Id == reportId);
+            Assert.Null(report.EditSessionUserId);
+            Assert.Null(report.EditSessionExpiresAtUtc);
+            Assert.Equal(contentVersion, report.Version);
+        }
     }
 
     [Theory]

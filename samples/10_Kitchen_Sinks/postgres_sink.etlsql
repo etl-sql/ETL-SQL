@@ -1,4 +1,5 @@
 ﻿-- POSTGRES Kitchen Sink
+-- @requires: docker
 SET WHAT_IF OFF;
 PRINT 'Starting Postgres container...';
 USE DOCKER('postgres:15-alpine') AS pg;

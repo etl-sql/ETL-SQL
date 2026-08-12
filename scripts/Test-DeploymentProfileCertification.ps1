@@ -80,6 +80,8 @@ function Get-ProfilePhases {
                 New-Phase "Team durable quality and catalog" $CoreTests "FullyQualifiedName~DataQualityMetricsPersistenceTests|FullyQualifiedName~OrchestratorPromotionPackageTests" "SQLite retains quality history, jobs, schedules, ownership, lineage, and tags."
                 New-Phase "Team notification dispatch" $CoreTests "FullyQualifiedName~TeamSqliteBaselines_TriggerWebhookAndSmtpNotificationsWithoutPortal|FullyQualifiedName~SchedulerRetryTests|FullyQualifiedName~WebhookConnectorTests|FullyQualifiedName~JobFailureDigestTemplateTests" "SQLite quality baselines drive SMTP/Webhook notification paths and retries without Portal."
                 New-Phase "Team Portal configuration" $PortalTests "FullyQualifiedName~ConfigurationRoundTripTests|FullyQualifiedName~ConfigurationPromotionValidationTests" "Optional single-node Portal configuration converges and collisions fail safely."
+                New-Phase "Team scheduling and flight recorder" $PortalTests "FullyQualifiedName~JobSchedulingIntegrationTests|FullyQualifiedName~OperationsTriageTests" "The single-node Team providers schedule jobs and expose bounded operator triage without a profile-specific runtime."
+                New-Phase "Team common implementation boundary" $CoreTests "FullyQualifiedName~TeamProfileImplementationBoundaryTests|FullyQualifiedName~StatementMetricsPayloadTests" "Team uses the common parser, evaluator, connectors, catalog, UI, checkpoint, promotion, and statement-metrics implementations through single-node provider configuration."
             )
         }
         "Enterprise" {

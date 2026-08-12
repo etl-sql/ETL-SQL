@@ -5,5 +5,6 @@ description: JSON file connection with optional root path for nested arrays
 ---
 CREATE CONNECTION «ConnName» AS JSON(
   PATH      = '«path/to/file.json»',
-  ROOT_PATH = '«$»'
+  ROOT_PATH = '«$»',
+  TRANSACTIONAL = «ON»
 );

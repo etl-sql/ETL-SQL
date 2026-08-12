@@ -54,22 +54,7 @@
 <div class="app-shell">
 
   <!-- ── Top bar ────────────────────────────────────────────────────────── -->
-  <header class="topbar">
-    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation menu" type="button">☰</button>
-    <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
-    <nav class="topbar-nav">
-      <a href="/index.html">Reports</a>
-      <a href="/index.html#governance">Governance</a>
-      <a href="/studio.html" id="studioNav" style="display:none">Studio</a>
-      <a href="/docs.html" class="active">Docs</a>
-      <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
-      <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
-    </nav>
-    <span class="topbar-spacer"></span>
-    <span class="topbar-user" id="topbarUser"></span>
-    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
-    <button class="topbar-btn" id="logoutBtn" style="display:none">Sign Out</button>
-  </header>
+  <header data-portal-header data-active="docs" data-logout-hidden="true"></header>
 
   <!-- ── App body ────────────────────────────────────────────────────────── -->
   <div class="app-body">
@@ -117,7 +102,9 @@
   import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.18.0';
   import { getSessionIdentity, renderSessionIdentity } from '/js/session-identity.js?v=0.18.0';
   import { applyNavigationSafely } from '/js/portal-nav.js?v=0.18.0';
+  import { renderPortalHeader } from '/js/portal-header.js?v=0.18.0';
 
+  renderPortalHeader();
   initTheme();
   applyPortalBranding();
 

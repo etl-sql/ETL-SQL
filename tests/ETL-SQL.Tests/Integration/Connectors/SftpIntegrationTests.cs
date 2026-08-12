@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors;
@@ -65,6 +66,20 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 passphrase: null,
                 timeoutSeconds: 30,
                 clientFactory: (h, u, p, _, _) => new SftpClient(h, _sftp.Port, u, p!),
+                allowUnpinnedHostKey: AllowUnpinnedForEphemeralContainer);
+
+        private SftpConnector AtomicPasswordConnector() =>
+            new SftpConnector(
+                context: null!,
+                host: _sftp.Host,
+                port: _sftp.Port,
+                username: SftpFixture.TestUser,
+                password: SftpFixture.TestPassword,
+                keyFilePath: null,
+                passphrase: null,
+                timeoutSeconds: 30,
+                clientFactory: (h, u, p, _, _) => new SftpClient(h, _sftp.Port, u, p!),
+                atomicUpload: true,
                 allowUnpinnedHostKey: AllowUnpinnedForEphemeralContainer);
 
         /// <summary>Creates a connector that uses the fixture's generated RSA private key.</summary>
@@ -248,6 +263,60 @@ namespace ETL_SQL.Tests.Integration.Connectors
             var localDst = LocalPath("overwrite_dst.txt");
             await connector.DownloadFileAsync(remote, localDst);
             Assert.Equal("updated", File.ReadAllText(localDst));
+        }
+
+        [Fact]
+        [Trait("Category", "TransactionalFileCertification")]
+        public async Task AtomicUpload_PosixRenameReplacesTargetAndLeavesNoStage()
+        {
+            var localSrc = LocalPath("atomic_src.txt");
+            var remoteName = $"atomic_{Guid.NewGuid():N}.txt";
+            var remote = RemotePath(remoteName);
+            await File.WriteAllTextAsync(localSrc, "original");
+
+            await using var connector = AtomicPasswordConnector();
+            await connector.UploadFileAsync(localSrc, remote, overwrite: true);
+            await File.WriteAllTextAsync(localSrc, "replacement");
+            await connector.UploadFileAsync(localSrc, remote, overwrite: true);
+
+            var downloaded = LocalPath("atomic_download.txt");
+            await connector.DownloadFileAsync(remote, downloaded);
+            Assert.Equal("replacement", await File.ReadAllTextAsync(downloaded));
+
+            var entries = new System.Collections.Generic.List<FileMetaData>();
+            await foreach (var entry in connector.ListFilesAsync($"/{SftpFixture.RemoteUploadDir}"))
+                entries.Add(entry);
+            Assert.DoesNotContain(entries, entry =>
+                entry.Name.StartsWith(remoteName + ".etl-stage-", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        [Trait("Category", "TransactionalFileCertification")]
+        public async Task AtomicUpload_CancellationPreservesTargetAndLeavesNoStage()
+        {
+            var localSrc = LocalPath("atomic_cancel_src.txt");
+            var remoteName = $"atomic_cancel_{Guid.NewGuid():N}.txt";
+            var remote = RemotePath(remoteName);
+            await File.WriteAllTextAsync(localSrc, "published");
+
+            await using var connector = AtomicPasswordConnector();
+            await connector.UploadFileAsync(localSrc, remote, overwrite: true);
+            await File.WriteAllTextAsync(localSrc, "must-not-publish");
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                connector.UploadFileAsync(localSrc, remote, overwrite: true, cancellation.Token));
+
+            var downloaded = LocalPath("atomic_cancel_download.txt");
+            await connector.DownloadFileAsync(remote, downloaded);
+            Assert.Equal("published", await File.ReadAllTextAsync(downloaded));
+
+            var entries = new System.Collections.Generic.List<FileMetaData>();
+            await foreach (var entry in connector.ListFilesAsync($"/{SftpFixture.RemoteUploadDir}"))
+                entries.Add(entry);
+            Assert.DoesNotContain(entries, entry =>
+                entry.Name.StartsWith(remoteName + ".etl-stage-", StringComparison.Ordinal));
         }
 
         [Fact]

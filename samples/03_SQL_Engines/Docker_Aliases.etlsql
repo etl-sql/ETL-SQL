@@ -1,16 +1,17 @@
 ﻿-- Sample: Multiple Docker Containers with Aliasing
+-- @requires: docker
 -- This script demonstrates starting two different database containers
 -- and managing them using aliases.
 
 -- 1. Spin up SQL Server
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS dms;
 DECLARE @ms_conn varchar(500) = dms.CONNECTION_STRING;
-PRINT('MSSQL Connection: ' + @ms_conn);
+PRINT 'MSSQL container is ready.';
 
 -- 2. Spin up Postgres
 USE DOCKER('postgres:15-alpine') AS dpost;
 DECLARE @pg_conn varchar(500) = dpost.CONNECTION_STRING;
-PRINT('Postgres Connection: ' + @pg_conn);
+PRINT 'Postgres container is ready.';
 
 -- 3. Use them (e.g., create connections)
 CREATE CONNECTION ms AS MSSQL(@ms_conn);

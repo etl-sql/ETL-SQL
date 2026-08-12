@@ -16,6 +16,7 @@ Document extraction with JSONPath addressing for nested data. When querying a `J
 | `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
+| `TRANSACTIONAL` | `ON`/`OFF` — stage the complete output beside the target and publish with one replacement rename (default: `OFF`) | No |
 
 ## Examples
 
@@ -32,3 +33,4 @@ CREATE CONNECTION json_gz AS JSON(PATH='C:\Data\events.json.gz', COMPRESS=ON);
 - [File Connectors](README.md)
 - [Connectors](../README.md)
 - [XML](xml.md)
+- [Transactional File Writes](transactional-writes.md)

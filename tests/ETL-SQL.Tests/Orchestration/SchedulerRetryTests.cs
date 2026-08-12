@@ -78,7 +78,14 @@ namespace ETL_SQL.Tests.Orchestration
                     return new ScriptExecutionResult(true, 10, null, SessionId: "sess_123");
                 });
 
-            var service = new SchedulerService(serviceProvider, mockStore.Object, mockLogger.Object, throttle, mockConfig.Object, mockSessionManager.Object);
+            var service = new SchedulerService(
+                serviceProvider,
+                mockStore.Object,
+                mockLogger.Object,
+                throttle,
+                mockConfig.Object,
+                mockSessionManager.Object,
+                new HealthyCapacityMonitor());
 
             // Use reflection to test the private ExecuteJobAsync method
             var method = typeof(SchedulerService).GetMethod("ExecuteJobAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
@@ -178,7 +185,8 @@ namespace ETL_SQL.Tests.Orchestration
                     new Mock<ILogger<SchedulerService>>().Object,
                     throttle,
                     new ConfigurationBuilder().Build(),
-                    new Mock<ISessionStateManager>().Object);
+                    new Mock<ISessionStateManager>().Object,
+                    new HealthyCapacityMonitor());
 
                 var method = typeof(SchedulerService).GetMethod(
                     "ExecuteJobAsync",
@@ -205,6 +213,19 @@ namespace ETL_SQL.Tests.Orchestration
                 try { if (File.Exists(throttleDbPath)) File.Delete(throttleDbPath); } catch { }
                 try { if (Directory.Exists(catalogRoot)) Directory.Delete(catalogRoot, recursive: true); } catch { }
             }
+        }
+
+        private sealed class HealthyCapacityMonitor : INodeCapacityMonitor
+        {
+            public NodeCapacitySnapshot Capture() => new(
+                WorkingSetBytes: 128L * 1024 * 1024,
+                GcHeapBytes: 64L * 1024 * 1024,
+                TotalAvailableMemoryBytes: 8L * 1024 * 1024 * 1024,
+                MemoryLoadPercent: 1,
+                ProcessCpuPercent: 1,
+                ProcessorCount: Environment.ProcessorCount,
+                IsOverloaded: false,
+                CapturedAtUtc: DateTime.UtcNow);
         }
 
         [Theory]

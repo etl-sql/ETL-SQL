@@ -128,7 +128,7 @@ namespace ETL_SQL.Tests.Connectors
             {
                 ["USER"] = "u",
                 ["HOST_KEY_FINGERPRINT"] = "SHA256:abc123",
-                ["ATOMIC_UPLOAD"] = "true"
+                ["ATOMIC_UPLOAD"] = "ON"
             };
 
             var ds = connector.CreateDataSource(SystemExecutionContext.Instance, "sftp.example.com", options) as SftpConnector;

@@ -2240,6 +2240,46 @@ body.vscode-dark .cm-editor .cm-line::selection {
     font-weight: 600;
 }
 
+.etlsql-tree-preview-action {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 1px 5px;
+    border: 1px solid var(--portal-border, #cbd5e1);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--portal-muted, #5a6778);
+    font: inherit;
+    line-height: 1.45;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .12s ease, color .12s ease, border-color .12s ease;
+}
+
+.etlsql-tree-header:hover .etlsql-tree-preview-action,
+.etlsql-tree-preview-action:focus-visible,
+.etlsql-tree-preview-action.is-loading {
+    opacity: 1;
+}
+
+.etlsql-tree-preview-action:hover,
+.etlsql-tree-preview-action:focus-visible {
+    color: var(--portal-accent, #2563eb);
+    border-color: currentColor;
+}
+
+.etlsql-tree-preview-action:focus-visible {
+    outline: 2px solid var(--portal-focus, #60a5fa);
+    outline-offset: 1px;
+}
+
+.etlsql-tree-preview-action.is-loading {
+    color: var(--portal-danger, #b83535);
+}
+
+@media (hover: none) {
+    .etlsql-tree-preview-action { opacity: 1; }
+}
+
 .etlsql-tree-connection {
     color: var(--portal-accent, #2563eb);
 }
@@ -2309,6 +2349,71 @@ body.vscode-dark .cm-editor .cm-line::selection {
 
 .etlsql-tree-error {
     color: var(--portal-danger, #b83535);
+}
+
+.etlsql-result-context {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    color: var(--portal-muted, #5a6778);
+    font-size: 0.72rem;
+}
+
+.etlsql-result-context strong {
+    color: var(--portal-text, #172033);
+    font-family: var(--portal-font-mono, ui-monospace, Consolas, monospace);
+    font-weight: 600;
+}
+
+.etlsql-result-context-badge,
+.etlsql-result-context-limit {
+    padding: 2px 6px;
+    border: 1px solid var(--portal-border, #cbd5e1);
+    border-radius: 999px;
+    background: var(--portal-surface-subtle, #f1f5f9);
+    color: var(--portal-text-soft, #46556c);
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+
+.etlsql-lease-status {
+    max-width: 230px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 3px 8px;
+    border: 1px solid var(--portal-border, #cbd5e1);
+    border-radius: 999px;
+    color: var(--portal-muted, #5a6778);
+    font-size: 0.72rem;
+    font-weight: 650;
+}
+
+.etlsql-lease-status:empty { display: none; }
+.etlsql-lease-status[data-kind="success"] { color: var(--portal-success, #238636); }
+.etlsql-lease-status[data-kind="pending"] { color: var(--portal-warning-text, #8a4b08); }
+.etlsql-lease-status[data-kind="warning"],
+.etlsql-lease-status[data-kind="error"] {
+    border-color: currentColor;
+    color: var(--portal-danger, #b83535);
+}
+
+.etlsql-result-context-badge[data-kind="connection"] {
+    border-color: color-mix(in srgb, var(--portal-accent, #2563eb) 45%, transparent);
+    color: var(--portal-accent, #2563eb);
+}
+
+.etlsql-result-context-badge[data-kind="temp"] {
+    border-color: color-mix(in srgb, var(--portal-success, #238636) 45%, transparent);
+    color: var(--portal-success, #238636);
+}
+
+.etlsql-result-context-limit {
+    margin-left: auto;
+    color: var(--portal-warning-text, #8a4b08);
 }
 
 /* ── Workbench sidebar ────────────────────────────────────────────────────── */

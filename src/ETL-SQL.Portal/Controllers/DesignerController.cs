@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Services;
+using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Filters;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
@@ -25,6 +26,7 @@ public class DesignerController : ControllerBase
     private readonly PortalDesignerSchemaService? _schemaService;
     private readonly PortalDesignerRunService? _runService;
     private readonly PortalDesignerPreviewService? _previewService;
+    private readonly PortalDesignerDataPreviewService? _dataPreviewService;
     private readonly ReportScriptSaveService? _scriptSave;
     private readonly ILanguageService? _languageService;
     private readonly DesignerAnalysisService _analysisService;
@@ -47,11 +49,13 @@ public class DesignerController : ControllerBase
         PortalConnectionCatalogService? connectionCatalog = null,
         IMetadataManager? metadata = null,
         DesignerSnapshotService? snapshots = null,
-        ScriptDagProjectionService? scriptDag = null)
+        ScriptDagProjectionService? scriptDag = null,
+        PortalDesignerDataPreviewService? dataPreviewService = null)
     {
         _schemaService = schemaService;
         _runService = runService;
         _previewService = previewService;
+        _dataPreviewService = dataPreviewService;
         _scriptSave = scriptSave;
         _languageService = languageService;
         _analysisService = analysisService ?? new DesignerAnalysisService();
@@ -392,6 +396,58 @@ public class DesignerController : ControllerBase
         }
     }
 
+    // ── POST /api/designer/data-preview ──────────────────────────────────────
+
+    [HttpPost("data-preview")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public async Task<IActionResult> DataPreview(
+        [FromBody] DesignerDataPreviewRequest req,
+        CancellationToken cancellationToken)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } scriptLimit)
+            return scriptLimit;
+        if (_dataPreviewService is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer data-preview service is not configured." });
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            return Ok(await _dataPreviewService.PreviewAsync(req, User, cancellationToken));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Connection access denied." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = SecretRedactor.Redact(ex.Message) });
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status408RequestTimeout,
+                new { error = $"Data preview exceeded the {Math.Max(1, DesignerLimits.MaxDataPreviewSeconds)} second timeout." });
+        }
+        catch (OperationCanceledException)
+        {
+            return new StatusCodeResult(499);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
     // ── POST /api/designer/preview/pdf ────────────────────────────────────────
 
     [HttpPost("preview/pdf")]
@@ -503,45 +559,56 @@ public class DesignerController : ControllerBase
     public async Task<IActionResult> AcquireLease([FromBody] LeaseDesignerRequest req, CancellationToken cancellationToken)
     {
         var db = HttpContext.RequestServices.GetRequiredService<ETL_SQL.Portal.Data.PortalDbContext>();
-        
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == req.ReportId, cancellationToken);
+        var folderPermissions = HttpContext.RequestServices.GetRequiredService<FolderPermissionService>();
+
+        var report = await db.Reports.Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == req.ReportId && !r.IsDeleted, cancellationToken);
         if (report is null) return NotFound(new { error = "Report not found." });
-        
+        if (!await ReportBelongsToCurrentTenantAsync(db, report, cancellationToken))
+            return NotFound(new { error = "Report not found." });
+        if (!(await folderPermissions.GetEffectiveReportPermissionAsync(report, User))
+            .AtLeast(ETL_SQL.Portal.Data.FolderPermission.Author))
+            return Forbid();
+
         var now = DateTime.UtcNow;
         var expiresAt = now.AddMinutes(5); // Hard expiry in 5 mins
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var userName = User.Identity?.Name;
-        
-        // Check if there is an existing valid lease by someone else
-        if (report.EditSessionExpiresAtUtc > now && report.EditSessionUserId != userId)
+        var userName = User.Identity?.Name ?? $"user-{userId}";
+        var mayForce = req.Force && User.IsInRole("Admin");
+
+        // Lease columns are deliberately updated outside the Report concurrency token. A renewal is
+        // collaboration metadata, not report content, and must not make this editor's next If-Match
+        // save conflict with itself. The predicate makes acquisition/renewal atomic across nodes.
+        var updated = await db.Reports
+            .Where(r => r.Id == req.ReportId && !r.IsDeleted &&
+                (mayForce || r.EditSessionUserId == userId || r.EditSessionExpiresAtUtc == null || r.EditSessionExpiresAtUtc <= now))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(r => r.EditSessionUserId, userId)
+                .SetProperty(r => r.EditSessionUserName, userName)
+                .SetProperty(r => r.EditSessionExpiresAtUtc, expiresAt), cancellationToken);
+        if (updated == 0)
         {
-            if (!req.Force) 
+            var holder = await db.Reports.AsNoTracking()
+                .Where(r => r.Id == req.ReportId)
+                .Select(r => new { r.EditSessionUserName, r.EditSessionExpiresAtUtc })
+                .SingleAsync(cancellationToken);
+            return Conflict(new
             {
-                return Conflict(new { error = "Another user is currently editing this report.", owner = report.EditSessionUserName, expires = report.EditSessionExpiresAtUtc });
-            }
+                error = "Another user is currently editing this report.",
+                owner = holder.EditSessionUserName,
+                expiresAt = holder.EditSessionExpiresAtUtc
+            });
         }
-        
-        report.EditSessionUserId = userId;
-        report.EditSessionUserName = userName;
-        report.EditSessionExpiresAtUtc = expiresAt;
-        
-        var draft = await db.ReportScriptDrafts.FirstOrDefaultAsync(d => d.ReportId == req.ReportId && (d.Status == "draft" || d.Status == "pending" || d.Status == "rejected"), cancellationToken);
-        if (draft != null)
-        {
-            draft.EditSessionUserId = userId;
-            draft.EditSessionUserName = userName;
-            draft.EditSessionExpiresAtUtc = expiresAt;
-        }
-        
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-            return Ok(new { acquired = true, expiresAt });
-        }
-        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
-        {
-            return Conflict(new { error = "The report was modified while acquiring the lease." });
-        }
+
+        await db.ReportScriptDrafts
+            .Where(d => d.ReportId == req.ReportId &&
+                (d.Status == "draft" || d.Status == "pending" || d.Status == "rejected"))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(d => d.EditSessionUserId, userId)
+                .SetProperty(d => d.EditSessionUserName, userName)
+                .SetProperty(d => d.EditSessionExpiresAtUtc, expiresAt), cancellationToken);
+
+        return Ok(new { acquired = true, owner = userName, expiresAt });
     }
 
     [HttpDelete("lease/{reportId:int}")]
@@ -551,24 +618,38 @@ public class DesignerController : ControllerBase
     {
         var db = HttpContext.RequestServices.GetRequiredService<ETL_SQL.Portal.Data.PortalDbContext>();
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
-        if (report != null && report.EditSessionUserId == userId)
-        {
-            report.EditSessionUserId = null;
-            report.EditSessionUserName = null;
-            report.EditSessionExpiresAtUtc = null;
-            
-            var draft = await db.ReportScriptDrafts.FirstOrDefaultAsync(d => d.ReportId == reportId && (d.Status == "draft" || d.Status == "pending" || d.Status == "rejected"), cancellationToken);
-            if (draft != null && draft.EditSessionUserId == userId)
-            {
-                draft.EditSessionUserId = null;
-                draft.EditSessionUserName = null;
-                draft.EditSessionExpiresAtUtc = null;
-            }
-            await db.SaveChangesAsync(cancellationToken);
-        }
+        var report = await db.Reports.AsNoTracking().FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
+        if (report is null || !await ReportBelongsToCurrentTenantAsync(db, report, cancellationToken))
+            return NoContent();
+
+        await db.Reports.Where(r => r.Id == reportId && r.EditSessionUserId == userId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(r => r.EditSessionUserId, (int?)null)
+                .SetProperty(r => r.EditSessionUserName, (string?)null)
+                .SetProperty(r => r.EditSessionExpiresAtUtc, (DateTime?)null), cancellationToken);
+        await db.ReportScriptDrafts.Where(d => d.ReportId == reportId && d.EditSessionUserId == userId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(d => d.EditSessionUserId, (int?)null)
+                .SetProperty(d => d.EditSessionUserName, (string?)null)
+                .SetProperty(d => d.EditSessionExpiresAtUtc, (DateTime?)null), cancellationToken);
         return NoContent();
+    }
+
+    private async Task<bool> ReportBelongsToCurrentTenantAsync(
+        PortalDbContext db,
+        Report report,
+        CancellationToken cancellationToken)
+    {
+        if (!_portalConfig.SharedTenancy.Enabled)
+            return true;
+        var tenantId = User.FindFirstValue(TokenService.TenantClaim);
+        if (string.IsNullOrWhiteSpace(tenantId))
+            return false;
+        var ownerTenant = await db.Users.AsNoTracking()
+            .Where(user => user.Id == report.CreatedBy)
+            .Select(user => user.TenantId)
+            .SingleOrDefaultAsync(cancellationToken);
+        return string.Equals(ownerTenant, tenantId, StringComparison.Ordinal);
     }
 
     public record LeaseDesignerRequest(int ReportId, bool Force = false);

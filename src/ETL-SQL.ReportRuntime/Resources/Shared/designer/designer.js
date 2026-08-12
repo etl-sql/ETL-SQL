@@ -1777,7 +1777,14 @@ export function createScriptResultsPanel(container) {
         const { visible, label: count } = resultRenderWindow(filteredRows, rows.length, !!resultFilter);
         const head = columns.map(c => `<th data-column="${escape(c)}" style="cursor:pointer;" title="Click for column lineage">${escape(c)}</th>`).join('');
         const dataRows = visible.map(row => `<tr>${columns.map(c => `<td data-column="${escape(c)}" style="cursor:pointer;" title="Click for cell lineage">${escape(formatResultCell(row?.[c]))}</td>`).join('')}</tr>`).join('');
-        return `${renderLineageBar()}<div class="etlsql-script-results-count">${escape(count)}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
+        const context = latest.context;
+        const contextBar = context ? `<div class="etlsql-result-context">
+            <span class="etlsql-result-context-badge" data-kind="${escape(context.kind || 'run')}">${escape(context.label || 'Run result')}</span>
+            <strong>${escape(context.source || '')}</strong>
+            <span>${Number(context.elapsedMs || 0).toLocaleString()} ms</span>
+            ${(context.capped || context.byteCapped) ? '<span class="etlsql-result-context-limit">bounded preview</span>' : ''}
+        </div>` : '';
+        return `${renderLineageBar()}${contextBar}<div class="etlsql-script-results-count">${escape(count)}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
     }
 
     function diagnosticLevel(d) {
@@ -1950,7 +1957,7 @@ export function createScriptResultsPanel(container) {
                 lineageData = Array.isArray(message.data) ? message.data : [];
                 break;
             case 'results':
-                resultSets.push({ columns: message.columns || [], rows: message.rows || [] });
+                resultSets.push({ columns: message.columns || [], rows: message.rows || [], context: message.context || null });
                 // Focus results tab on success
                 activeTab = 'results';
                 break;
@@ -2098,6 +2105,24 @@ export function formatResultCell(value) {
     return String(value);
 }
 
+export function buildDataPreviewPayload(source, script, documentUri) {
+    const kind = source?.sourceKind;
+    return {
+        ...source,
+        // A governed source preview never sends the editor buffer: the server builds the SELECT
+        // after ACL-scoped schema validation. Temp preview needs the buffer only to recreate the
+        // read-only prefix that materializes the chosen #table.
+        script: kind === 'temp' ? String(script || '') : null,
+        documentUri: documentUri || 'portal-designer',
+    };
+}
+
+export function editLeaseRetryDelay(expiresAt, now = Date.now()) {
+    const expiry = new Date(expiresAt).valueOf();
+    if (!Number.isFinite(expiry)) return 30_000;
+    return Math.min(60_000, Math.max(5_000, expiry - now + 1_000));
+}
+
 // Toolbar iconography. Inline stroke SVGs (currentColor, 16px) keep the workbench
 // self-contained — no icon font or sprite sheet to ship to VS Code / Player / Portal.
 const _TOOLBAR_ICONS = {
@@ -2135,6 +2160,9 @@ function toolbarButton({ attr, icon, title, label, primary, key }) {
         ${attr} title="${escapeHtml(hint)}" aria-label="${escapeHtml(title)}">${toolbarIcon(icon)}${label ? `<span>${escapeHtml(label)}</span>` : ''}</button>`;
 }
 
+/**
+ * @param {string} [opts.dataPreviewUrl] Governed source/temp-table row-preview endpoint.
+ */
 export async function createScriptEditorWorkbench(container, opts = {}) {
     const savedTheme = localStorage.getItem('portal-theme') || 'light';
     if (savedTheme === 'dark') {
@@ -2472,13 +2500,28 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     }
 
     // Builds a collapsible node. `loadChildren` runs once, on first expand.
-    function makeTreeNode({ label, icon, className, snippet, loadChildren }) {
+    function makeTreeNode({ label, icon, className, snippet, loadChildren, preview }) {
         const node = document.createElement('div');
         node.className = 'etlsql-tree-node';
 
         const header = document.createElement('div');
         header.className = `etlsql-tree-row etlsql-tree-header ${className || ''}`;
         header.innerHTML = `<span class="etlsql-tree-caret">▶</span><span class="etlsql-tree-icon">${icon}</span><span class="etlsql-tree-label">${escapeHtml(label)}</span>`;
+
+        if (preview && opts.dataPreviewUrl) {
+            const action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'etlsql-tree-preview-action';
+            action.textContent = 'Preview rows';
+            action.title = `Preview bounded rows from ${label}`;
+            action.setAttribute('aria-label', `Preview rows from ${label}`);
+            action.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                await previewRows(preview, action);
+            });
+            header.appendChild(action);
+        }
 
         const children = document.createElement('div');
         children.className = 'etlsql-tree-children';
@@ -2509,6 +2552,75 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     let schemaSignature = null;
     let sessionSignature = null;
     let sidebarRefreshTimer = null;
+    let dataPreviewAbort = null;
+
+    async function previewRows(source, action) {
+        if (dataPreviewAbort) {
+            dataPreviewAbort.abort();
+            return;
+        }
+
+        const abort = new AbortController();
+        dataPreviewAbort = abort;
+        const originalText = action.textContent;
+        action.textContent = 'Cancel';
+        action.classList.add('is-loading');
+        resultsPanel.clear();
+        resultsPanel.startElapsed();
+        resultsPanel.replay([
+            { type: 'status', status: 'Previewing' },
+            { type: 'message', level: 'sys', text: `Reading bounded rows from ${source.tempTable || `${source.connection}.${source.table}`}…` },
+        ]);
+
+        try {
+            const fetcher = opts.authFetch ?? fetch;
+            const response = await fetcher(opts.dataPreviewUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: abort.signal,
+                body: JSON.stringify(buildDataPreviewPayload(source, editor.getValue(), getDocumentUri())),
+            });
+            if (!response?.ok) {
+                let detail = `HTTP ${response?.status ?? 0}`;
+                try {
+                    const problem = await response.json();
+                    detail = problem?.error || detail;
+                } catch { /* keep the status */ }
+                throw new Error(detail);
+            }
+
+            const result = await response.json();
+            const label = result.sourceKind === 'temp' ? 'Session temp' : 'Governed source';
+            resultsPanel.replay([
+                {
+                    type: 'results',
+                    columns: result.columns || [],
+                    rows: result.rows || [],
+                    context: {
+                        kind: result.sourceKind,
+                        label,
+                        source: result.source,
+                        elapsedMs: result.elapsedMs,
+                        capped: result.capped,
+                        byteCapped: result.byteCapped,
+                    },
+                },
+                { type: 'message', level: 'info', text: result.message || 'Preview complete.' },
+                { type: 'done', exitCode: 0, status: result.message || 'Preview complete' },
+            ]);
+        } catch (error) {
+            const cancelled = abort.signal.aborted || error?.name === 'AbortError';
+            resultsPanel.replay([
+                { type: 'message', level: cancelled ? 'sys' : 'error', text: cancelled ? 'Preview cancelled.' : `Preview failed: ${error.message}` },
+                { type: 'done', exitCode: cancelled ? 0 : 1, status: cancelled ? 'Preview cancelled' : 'Preview failed' },
+            ]);
+        } finally {
+            resultsPanel.stopElapsed();
+            if (dataPreviewAbort === abort) dataPreviewAbort = null;
+            action.textContent = originalText;
+            action.classList.remove('is-loading');
+        }
+    }
 
     function scheduleSidebarRefresh() {
         if (!showSchema && !showSession) return;
@@ -2556,6 +2668,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                                     icon: '▤',
                                     className: 'etlsql-tree-table',
                                     snippet: `${conn}.${table.name}`,
+                                    preview: { sourceKind: 'connection', connection: conn, table: table.name },
                                     loadChildren: (columnHost) => {
                                         const columns = table.columns ?? [];
                                         if (!columns.length) {
@@ -2616,6 +2729,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     icon: '▦',
                     className: 'etlsql-tree-temp',
                     snippet: table.name,
+                    preview: { sourceKind: 'temp', connection: opts.connectionRef || null, tempTable: table.name },
                     loadChildren: (columnHost) => {
                         const columns = (table.columns ?? []).map(c => (typeof c === 'string' ? { name: c, type: '' } : c));
                         if (!columns.length) {
@@ -3297,6 +3411,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         run,
         dispose() {
             runAbort?.abort();
+            dataPreviewAbort?.abort();
             if (_previewMessageHandler) window.removeEventListener('message', _previewMessageHandler);
             flowDagInstance?.dispose?.();
             editor.dispose();
@@ -3365,6 +3480,10 @@ export function createDesigner(container, opts = {}) {
     const expandedDsIds = new Set();
     let clipboardVisuals = [];
     let isDirty = false;
+    let leaseState = reportId && opts.host === 'portal' ? 'acquiring' : 'not-applicable';
+    let leaseTimer = null;
+    let leaseRequestInFlight = false;
+    let leaseDisposed = false;
 
     function pushUndoState() {
         if (undoStack.length >= 20) undoStack.shift();
@@ -3491,7 +3610,13 @@ export function createDesigner(container, opts = {}) {
         }
         const res = await _fetch(apiBase + url, init);
         if (!res) return null;
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.statusText); }
+        if (!res.ok) {
+            const payload = await res.json().catch(() => ({}));
+            const error = new Error(payload.error || res.statusText);
+            error.status = res.status;
+            error.payload = payload;
+            throw error;
+        }
         if (res.status === 204) return null;
         return res.json();
     }
@@ -3538,6 +3663,7 @@ export function createDesigner(container, opts = {}) {
         ${toolbarButton({ attr: 'id="dsgn-save"', icon: 'save', title: 'Save report', label: 'Save', primary: true })}
         ${toolbarButton({ attr: 'id="dsgn-commit" style="display:none"', icon: 'commit', title: 'Commit saved script to source control', label: 'Commit' })}
         <span id="dsgn-scm-status" role="status" aria-live="polite"></span>
+        <span id="dsgn-lease-status" class="etlsql-lease-status" role="status" aria-live="polite"></span>
         ${toolbarButton({ attr: 'id="dsgn-cancel"', icon: 'close', title: 'Cancel editing', label: 'Cancel' })}
     `;
     root.appendChild(topbar);
@@ -3555,6 +3681,81 @@ export function createDesigner(container, opts = {}) {
         el.style.fontSize = '12px';
     }
     const shortRev = r => (r ? String(r).slice(0, 8) : '');
+
+    function setLeaseStatus(text, kind, title = '') {
+        const status = topbar.querySelector('#dsgn-lease-status');
+        if (!status) return;
+        status.textContent = text || '';
+        status.dataset.kind = kind || 'neutral';
+        status.title = title || text || '';
+    }
+
+    function scheduleLeaseAttempt(delayMs) {
+        clearTimeout(leaseTimer);
+        if (!leaseDisposed) leaseTimer = setTimeout(acquireEditLease, Math.max(1_000, delayMs));
+    }
+
+    async function acquireEditLease() {
+        if (!reportId || opts.host !== 'portal' || leaseDisposed || leaseRequestInFlight) return;
+        leaseRequestInFlight = true;
+        if (leaseState !== 'held') setLeaseStatus('Claiming edit session…', 'pending');
+        try {
+            const lease = await apiJson('/api/designer/lease', 'POST', { reportId });
+            if (leaseDisposed) return;
+            leaseState = 'held';
+            const expires = new Date(lease.expiresAt);
+            setLeaseStatus('Editing session active', 'success',
+                `This edit session is held by ${lease.owner || 'you'} until ${expires.toLocaleTimeString()}. It renews automatically.`);
+            topbar.querySelector('#dsgn-save').disabled = false;
+            // Renew with a wide safety margin. A successful renewal does not advance the report's
+            // optimistic content version, so it cannot create a false save conflict.
+            scheduleLeaseAttempt(120_000);
+        } catch (error) {
+            if (leaseDisposed) return;
+            leaseState = error.status === 409 ? 'held-by-other' : 'disconnected';
+            topbar.querySelector('#dsgn-save').disabled = true;
+            if (error.status === 409) {
+                const owner = error.payload?.owner || 'Another author';
+                const expires = error.payload?.expiresAt ? new Date(error.payload.expiresAt) : null;
+                const expiryText = expires && !Number.isNaN(expires.valueOf())
+                    ? ` until ${expires.toLocaleTimeString()}` : '';
+                setLeaseStatus(`${owner} is editing${expiryText}`, 'warning',
+                    'Saving is paused. Studio will claim the session after the current lease expires.');
+                scheduleLeaseAttempt(editLeaseRetryDelay(error.payload?.expiresAt));
+            } else {
+                setLeaseStatus('Edit session disconnected', 'error',
+                    'Saving is paused while Studio reconnects to the lease service.');
+                scheduleLeaseAttempt(15_000);
+            }
+        } finally {
+            leaseRequestInFlight = false;
+        }
+    }
+
+    function releaseEditLease({ keepalive = false } = {}) {
+        clearTimeout(leaseTimer);
+        if (!reportId || opts.host !== 'portal' || leaseState !== 'held') return Promise.resolve();
+        leaseState = 'released';
+        const url = apiBase + `/api/designer/lease/${reportId}`;
+        if (keepalive) {
+            // Best effort on navigation. authFetch retains the caller's normal authorization headers.
+            try { return Promise.resolve(_fetch(url, { method: 'DELETE', keepalive: true })).catch(() => {}); }
+            catch { return Promise.resolve(); }
+        }
+        return apiJson(`/api/designer/lease/${reportId}`, 'DELETE').catch(() => {});
+    }
+
+    const pageHideLeaseHandler = () => { void releaseEditLease({ keepalive: true }); };
+    const visibilityLeaseHandler = () => {
+        if (document.visibilityState === 'visible' && leaseState !== 'held') void acquireEditLease();
+    };
+    const pageShowLeaseHandler = () => {
+        if (leaseState !== 'held') void acquireEditLease();
+    };
+    window.addEventListener('pagehide', pageHideLeaseHandler);
+    window.addEventListener('pageshow', pageShowLeaseHandler);
+    document.addEventListener('visibilitychange', visibilityLeaseHandler);
+    if (reportId && opts.host === 'portal') queueMicrotask(acquireEditLease);
 
     // Sidebar
     const sidebar = document.createElement('div');
@@ -4888,6 +5089,7 @@ export function createDesigner(container, opts = {}) {
             // write-back is a separate roadmap item, so only schema + session are enabled.
             sidebar: { schema: true, session: true },
             runUrl: apiBase + '/api/designer/run',
+            dataPreviewUrl: apiBase + '/api/designer/data-preview',
             dagUrl: apiBase + '/api/designer/dag',
             connectionRef: opts.connectionRef || null,
             documentUri: opts.documentUri || 'portal-designer',
@@ -5000,6 +5202,11 @@ export function createDesigner(container, opts = {}) {
     // ── Save ──────────────────────────────────────────────────────────────────
 
     async function saveReport() {
+        if (reportId && opts.host === 'portal' && leaseState !== 'held') {
+            _feedback.notify('Saving is paused until this browser holds the report edit session.',
+                { title: 'Edit session unavailable', tone: 'warning' });
+            return;
+        }
         reportName = topbar.querySelector('#dsgn-name').value.trim() || reportName;
         try {
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state });
@@ -5190,8 +5397,8 @@ export function createDesigner(container, opts = {}) {
         }
     });
 
-    topbar.querySelector('#dsgn-back').addEventListener('click',    () => opts.onCancel?.());
-    topbar.querySelector('#dsgn-cancel').addEventListener('click',  () => opts.onCancel?.());
+    topbar.querySelector('#dsgn-back').addEventListener('click', async () => { await releaseEditLease(); opts.onCancel?.(); });
+    topbar.querySelector('#dsgn-cancel').addEventListener('click', async () => { await releaseEditLease(); opts.onCancel?.(); });
     topbar.querySelector('#dsgn-save').addEventListener('click',    saveReport);
     topbar.querySelector('#dsgn-commit')?.addEventListener('click', commitScript);
     topbar.querySelector('#dsgn-add-page').addEventListener('click', addPage);
@@ -5657,6 +5864,11 @@ export function createDesigner(container, opts = {}) {
 
     return {
         dispose: () => {
+            leaseDisposed = true;
+            void releaseEditLease({ keepalive: true });
+            window.removeEventListener('pagehide', pageHideLeaseHandler);
+            window.removeEventListener('pageshow', pageShowLeaseHandler);
+            document.removeEventListener('visibilitychange', visibilityLeaseHandler);
             window.removeEventListener('beforeunload', beforeUnloadHandler);
             window.removeEventListener('message', previewMessageHandler);
             disconnectSnapshotResizeObservers();

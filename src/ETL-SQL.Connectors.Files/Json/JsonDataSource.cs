@@ -121,7 +121,9 @@ namespace ETL_SQL.Connectors.Json
                 }
             }
 
-            string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_filePath, _transactional);
+            string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
+            string? publicationFile = null;
+            string? zippedTemp = null;
             try
             {
                 if (alreadyJson && singleJson != null)
@@ -135,12 +137,10 @@ namespace ETL_SQL.Connectors.Json
                 }
 
                 string fileToEncrypt = tempFile;
-                string? zippedTemp = null;
-
                 if (_compress)
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
-                    zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
+                    zippedTemp = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
                     using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
                     {
                         string entryName = System.IO.Path.GetFileName(_filePath);
@@ -157,22 +157,13 @@ namespace ETL_SQL.Connectors.Json
                 if (_encryption.Enabled)
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
-                    _encryption.EncryptFile(fileToEncrypt, _filePath);
+                    publicationFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
+                    _encryption.EncryptFile(fileToEncrypt, publicationFile);
+                    fileToEncrypt = publicationFile;
                 }
-                else if (_compress)
-                {
-                    var dir = System.IO.Path.GetDirectoryName(_filePath);
-                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
-                    if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
-                    System.IO.File.Move(fileToEncrypt, _filePath, true);
-                }
-                else
-                {
-                    var dir = System.IO.Path.GetDirectoryName(_filePath);
-                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
-                    if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
-                    System.IO.File.Move(tempFile, _filePath);
-                }
+
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                ETL_SQL.Core.Common.FileConnectorPathHelper.PublishStagedFile(fileToEncrypt, _filePath, _transactional);
 
                 if (zippedTemp != null && System.IO.File.Exists(zippedTemp))
                 {
@@ -181,6 +172,8 @@ namespace ETL_SQL.Connectors.Json
             }
             finally
             {
+                TempFileHelper.SafeDelete(publicationFile, _logger);
+                TempFileHelper.SafeDelete(zippedTemp, _logger);
                 TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }

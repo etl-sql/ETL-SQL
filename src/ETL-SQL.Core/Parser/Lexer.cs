@@ -233,6 +233,7 @@ public class Lexer
         dict["TOKENS"] = TokenType.TOKENS;
         dict["RESTART"] = TokenType.RESTART;
         dict["SHUTDOWN"] = TokenType.SHUTDOWN;
+        dict["REBUILD"] = TokenType.REBUILD;
         dict["PORTAL"] = TokenType.PORTAL;
         dict["FAVORITE"] = TokenType.FAVORITE;
         dict["UNFAVORITE"] = TokenType.UNFAVORITE;
@@ -497,7 +498,12 @@ public class Lexer
                     }
                     break;
                 case '<':
-                    if (Peek() == '=')
+                    if (Peek() == '<')
+                    {
+                        Advance();
+                        tokens.Add(new Token(TokenType.LSHIFT, "<<", startLine, startColumn, _line, _column, startOffset, _position));
+                    }
+                    else if (Peek() == '=')
                     {
                         Advance();
                         tokens.Add(new Token(TokenType.LESS_EQUALS, "<=", startLine, startColumn, _line, _column, startOffset, _position));
@@ -514,7 +520,12 @@ public class Lexer
                     Advance();
                     break;
                 case '>':
-                    if (Peek() == '=')
+                    if (Peek() == '>')
+                    {
+                        Advance();
+                        tokens.Add(new Token(TokenType.RSHIFT, ">>", startLine, startColumn, _line, _column, startOffset, _position));
+                    }
+                    else if (Peek() == '=')
                     {
                         Advance();
                         tokens.Add(new Token(TokenType.GREATER_EQUALS, ">=", startLine, startColumn, _line, _column, startOffset, _position));

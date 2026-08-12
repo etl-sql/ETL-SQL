@@ -42,6 +42,16 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        public void DirectoryRecursiveClause_ReservedKeyword_ReachesDirectoryParser()
+        {
+            const string sql = "COPY DIRECTORY 'source' TO 'target' RECURSIVE ON;";
+            var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+
+            Assert.Empty(script.Diagnostics);
+            Assert.IsType<DirectoryOperationStatement>(Assert.Single(script.Statements));
+        }
+
+        [Fact]
         public async Task TestCopyFileWithOverwriteOn()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();

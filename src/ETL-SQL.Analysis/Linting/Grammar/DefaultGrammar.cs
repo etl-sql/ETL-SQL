@@ -1590,19 +1590,19 @@ public static class DefaultGrammar
             "NAVIGATION", "JOB", "SCHEDULE", "NOTIFICATION", "DIRECTORY", "PROCEDURE", "FUNCTION",
             "INDEX", "TAG", "LINEAGE", "FOLDER", "USER", "GROUP", "REFRESH", "SUBSCRIPTION",
             "SHARE", "EMBED", "SAVED", "ALERT", "BUTTON", "TEMPLATE", "THEME", "SSH_KEYPAIR",
-            "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "UNIQUE", "TOOL"
+            "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "UNIQUE", "TOOL", "BINDING"
         };
 
         var createOrAlterKeywords = new[] {
             "CONNECTION", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
             "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE", "NAVIGATION", "TEMPLATE",
-            "THEME", "ALERT", "TOOL"
+            "THEME", "ALERT", "TOOL", "BINDING"
         };
 
         var createOrReplaceKeywords = new[] {
             "CONNECTION", "TABLE", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
             "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE", "NAVIGATION", "TEMPLATE",
-            "THEME", "ALERT", "TOOL"
+            "THEME", "ALERT", "TOOL", "BINDING"
         };
 
         var alterKeywords = new[] {
@@ -1711,6 +1711,7 @@ public static class DefaultGrammar
         var execInto = new StateNode("EXEC_INTO");
         var execIntoTable = new StateNode("EXEC_INTO_TABLE");
         execAfterTarget.AddTransitionTo("INTO", execInto, SuggestionType.Keyword);
+        execParamsNode.AddTransitionTo("INTO", execInto, SuggestionType.Keyword);
         execInto.AddTransition(new StateTransition(
             t => t.Type == TokenType.IDENTIFIER || t.Type == TokenType.VARIABLE || t.Value.StartsWith("#") || IsWord(t.Value),
             execIntoTable,
@@ -1843,6 +1844,26 @@ public static class DefaultGrammar
         execWithEnd.AddTransitionTo("INTO", execInto, SuggestionType.Keyword);
         execWithParams.AddTransitionTo("INTO", execInto, SuggestionType.Keyword);
         execAtConn.AddTransitionTo("WITH", execWith, SuggestionType.Keyword);
+
+        // EXECUTE TOOL can continue after WITH (...) with clauses such as EXPECT SCHEMA (...).
+        // Keep this tail permissive: the grammar tree supplies completion/state guidance while
+        // requireParserAcceptance still makes the production parser the final syntax authority.
+        var execExtensionTail = new StateNode("EXEC_EXTENSION_TAIL");
+        execWithEnd.AddTransition(new StateTransition(
+            t => t.Type != TokenType.SEMICOLON && tree.GetStartNode(t.Value) == null,
+            execExtensionTail,
+            "<execute_extension_token>"
+        ));
+        execExtensionTail.AddTransition(new StateTransition(
+            t => tree.GetStartNode(t.Value) != null,
+            tree.Root,
+            "<next_statement>"
+        ));
+        execExtensionTail.AddTransition(new StateTransition(
+            t => t.Type != TokenType.SEMICOLON,
+            execExtensionTail,
+            "<execute_extension_token>"
+        ));
     }
 
     private static void ConfigureParallel(GrammarStateTree tree)

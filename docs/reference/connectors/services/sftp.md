@@ -18,7 +18,7 @@ Aliases: `SSH`
 | `TIMEOUT_SECONDS` | Connection timeout in seconds (default: `30`) | No |
 | `HOST_KEY_FINGERPRINT` | Pinned server host-key fingerprint (`SHA256:base64` or MD5 hex). Required unless `ALLOW_UNPINNED_HOST_KEY` is set: an unpinned **or** mismatched host key **rejects** the connection (MITM protection). | Yes (unless opted out) |
 | `ALLOW_UNPINNED_HOST_KEY` | `true`/`false` (default: `false`). Connect without a pinned host key, trusting whatever server answers. Logs a warning on every connection. **Not recommended** — see below. | No |
-| `ATOMIC_UPLOAD` | `true`/`false` (default: `false`). Upload to a temp name then rename into place so consumers never read a partial file. Requires rename permission on the target directory. | No |
+| `ATOMIC_UPLOAD` | `ON`/`OFF` (default: `OFF`). Upload to a unique sibling stage and publish through the server POSIX rename extension. Existing targets are never deleted first; unsupported servers fail without changing the target. | No |
 
 > [!CAUTION]
 > `PASSWORD` and `KEYFILE` are mutually exclusive. Providing both causes an authentication error.
@@ -34,6 +34,12 @@ Aliases: `SSH`
 > `ALLOW_UNPINNED_HOST_KEY = 'TRUE'` restores the permissive behaviour for trusted networks or
 > migration, but it accepts any host key and leaves the transfer open to man-in-the-middle
 > interception. Prefer pinning; treat the opt-out as temporary.
+
+> [!NOTE]
+> `ATOMIC_UPLOAD=ON` requires directory list/write/delete/rename permission for full stale-stage
+> reconciliation and the SFTP server's POSIX rename extension for atomic replacement. A write-only
+> account may still publish but cannot reconcile crash residue. The connector fails publication when
+> POSIX rename is unsupported; it does not downgrade to delete-then-rename.
 
 > [!NOTE]
 > **Changed in v0.17.0.** Previously an unpinned connection proceeded with only a warning. It is now
@@ -74,3 +80,4 @@ CREATE CONNECTION legacy_box AS SFTP(
 - [Service Connectors](README.md)
 - [Connectors](../README.md)
 - [FTP](ftp.md) · [TRANSFER](../../file-operations/transfer.md)
+- [Transactional File Writes](../files/transactional-writes.md)

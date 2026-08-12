@@ -126,6 +126,9 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `DatasetRootPath` | `./data/datasets` | Root for Portal-managed cached dataset files. |
 | `MaxPreviewRows` | `50000` | Maximum dataset preview rows loaded for an interactive table view. |
 | `Dataset.PreviewCacheMaxRows` | `250000` | Global row-weight budget for in-memory dataset preview cache entries. Each cached preview is weighted by its loaded preview row count. |
+| `DesignerLimits.MaxDataPreviewRows` | `100` | Maximum rows returned by a Studio script run or governed source/temp-table preview. Values are clamped to `1`–`1000`. |
+| `DesignerLimits.MaxDataPreviewBytes` | `262144` | Maximum serialized row payload returned by a Studio script run or preview. Values are clamped to 1 KiB–16 MiB. |
+| `DesignerLimits.MaxDataPreviewSeconds` | `15` | Wall-clock timeout for a Studio script run or preview. Values are clamped to 1–300 seconds. |
 | `MapRootPath` | `./data/maps` | Root for map assets used by reports. |
 | `Storage.Provider` | `Local` | Artifact provider. Use `Smb`/`Unc` with UNC roots for shared HA storage. |
 | `Storage.KeyRingPath` | `.portal-keys` beside the database | Data Protection key-ring path. In HA, every Portal node must share the same path. |
@@ -180,6 +183,36 @@ The Studio navigation is hidden until `GET /api/studio/session` succeeds. The sa
 returns 404 for `/studio.html`, `/designer.html`, and every authoring API in `Disabled` mode, so the
 navigation state is not the security boundary. Code and Design are equal entry modes over the same
 catalog report and optimistic-concurrency version.
+
+### Governed Studio row preview
+
+The schema tree exposes **Preview rows** for shared-connection tables and intermediate `#temp`
+tables. Both paths require `ScriptPreview`, share the designer concurrency gate, honor client
+cancellation, and return redacted results under the `DesignerLimits.MaxDataPreview*` bounds.
+
+- A shared-connection preview sends only the alias and selected table. The server resolves the alias
+  through the caller's tenant-scoped catalog and connection ACL, verifies that the table appears in
+  that authorized schema, and constructs the `SELECT`; the browser does not send its script buffer.
+- A `#temp` preview parses the current buffer and replays only the read-only statement prefix through
+  the statement that materializes the selected temp table. Later statements and any mutation in the
+  required prefix are rejected before execution.
+- Both paths execute through the normal interactive-run identity and audit boundary. The results pane
+  labels their provenance as **Governed source** or **Session temp** and indicates when a row or byte
+  limit bounded the result.
+
+### Collaborative edit sessions
+
+Opening an existing report in Portal Studio acquires a five-minute edit lease and renews it every two
+minutes. The top bar names an active session or the competing owner and expiry. A browser that does
+not hold the lease remains readable but cannot save; it retries after expiry and after reconnect or
+back-forward-cache recovery. Cancel, navigation, and disposal release a held lease on a best-effort
+basis, while hard expiry handles a lost browser or network partition.
+
+Lease acquisition is an atomic database update and does not advance the report's optimistic content
+version. This keeps renewal from making the holder conflict with itself; `If-Match` remains the final
+silent-overwrite boundary if ownership changes between renewal and save. The lease endpoints require
+`ScriptSave`, Author permission on the report, and—when shared tenancy is enabled—a report creator
+whose stored tenant matches the signed `tenant_id` claim. Cross-tenant lookups return not found.
 
 | `Resources.MaxConcurrentReportExecutions` | `4` | How many report execution jobs can run simultaneously. |
 | `Resources.MaxConcurrentExecutionsPerUser` | `2` | Workload fairness: the most of the shared execution slots a single non-administrator may hold at once, so one user flooding the queue cannot starve everyone else. Keep it below `MaxConcurrentReportExecutions`; administrators are exempt. |

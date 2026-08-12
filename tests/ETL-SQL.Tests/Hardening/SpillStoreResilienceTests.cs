@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
@@ -336,6 +337,30 @@ namespace ETL_SQL.Tests.Hardening
             {
                 foreach (var readBatch in readBatches) readBatch.Dispose();
             }
+        }
+
+        [Fact]
+        public async Task ArrowWriter_HeterogeneousColumnReportsTypedPersistenceBoundaryWithoutValue()
+        {
+            var e = NewEvaluator();
+            e.SpillEncryptionEnabled = false;
+            e.SpillCompressionEnabled = false;
+            using var store = new SpillStore(e);
+            var writer = await store.CreateWriterAsync("heterogeneous_prices");
+
+            await writer.WriteRowAsync(new Row { ["Price"] = 12.5m });
+            await writer.WriteRowAsync(new Row { ["Price"] = "sensitive-HR-value" });
+
+            var error = await Assert.ThrowsAsync<ExecutionException>(
+                () => writer.DisposeAsync().AsTask());
+
+            Assert.Contains("heterogeneous_prices", error.Message);
+            Assert.Contains("column 'Price'", error.Message);
+            Assert.Contains("row 2", error.Message);
+            Assert.Contains("decimal", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("String", error.Message);
+            Assert.Contains("heterogeneous", error.Message);
+            Assert.DoesNotContain("sensitive-HR-value", error.ToString());
         }
     }
 }

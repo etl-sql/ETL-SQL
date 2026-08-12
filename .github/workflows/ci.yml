@@ -126,6 +126,43 @@ jobs:
         working-directory: src/etl-sql-vscode
         run: npm run test:unit
 
+  sample-scripts:
+    name: Sample Scripts (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: ubuntu-latest
+            platform: linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore application
+        run: dotnet restore src/ETL-SQL.App/ETL-SQL.App.csproj
+
+      - name: Build application
+        run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug --no-restore
+
+      - name: Validate samples twice (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\Test-AllSamples.ps1 -Passes 2
+
+      - name: Validate samples twice (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash ./scripts/test-all-samples.sh 2
+
   portal-browser-journey:
     name: Portal Browser Journey
     # windows-latest matches the platform the lane is developed and validated on, and the Portal's

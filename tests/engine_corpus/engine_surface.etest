@@ -1,0 +1,119 @@
+# Engine-only surfaces that a database conformance corpus cannot express.
+
+# MERGE reads a real flat-file connector as its source. This pins heterogeneous source
+# resolution and update/insert behavior rather than another temp-to-temp merge.
+file merge_source.csv
+id,name,score
+2,Beta updated,25
+3,Gamma,30
+----
+
+statement ok
+CREATE CONNECTION merge_csv AS FLATFILE(PATH='${dir}\merge_source.csv', HEADER=ON, DELIMITER=',');
+
+statement ok
+CREATE TABLE #merge_target (id INT, name VARCHAR(50), score INT);
+
+statement ok
+INSERT INTO #merge_target VALUES (1, 'Alpha', 10), (2, 'Beta', 20);
+
+statement ok
+MERGE INTO #merge_target AS T
+USING merge_csv.FILE AS S
+ON T.id = S.id
+WHEN MATCHED THEN UPDATE SET T.name = S.name, T.score = S.score
+WHEN NOT MATCHED BY TARGET THEN INSERT (id, name, score) VALUES (S.id, S.name, S.score);
+
+query
+SELECT id, name, score FROM #merge_target ORDER BY id;
+----
+1|Alpha|10
+2|Beta updated|25
+3|Gamma|30
+
+# TRANSFORM is an engine table operator. DEDUPLICATE proves input staging, ordering,
+# key grouping, and materialization of the transformed target.
+statement ok
+CREATE TABLE #transform_source (id INT, version INT, value VARCHAR(20));
+
+statement ok
+INSERT INTO #transform_source VALUES
+  (1, 1, 'old'), (1, 2, 'new'), (2, 1, 'only');
+
+statement ok
+TRANSFORM #transform_result
+FROM #transform_source
+USING DEDUPLICATE (KEY_COLS='id', ORDER_BY='version DESC', KEEP='FIRST');
+
+query
+SELECT id, version, value FROM #transform_result ORDER BY id;
+----
+1|2|new
+2|1|only
+
+# Lineage export must create machine-readable content, not merely return success.
+statement ok
+SELECT id, value INTO #lineage_result FROM #transform_result;
+
+statement ok
+EXPORT LINEAGE FOR #lineage_result AS OPENLINEAGE TO '${dir}\lineage.jsonl';
+
+assert file exists lineage.jsonl
+assert file contains lineage.jsonl eventType
+
+# File compression and transcoding variants round-trip through real file operations.
+file encoded_source.csv
+id,name
+1,café
+2,naïve
+----
+
+statement ok
+COMPRESS FILE '${dir}\encoded_source.csv' TO '${dir}\encoded_source.zip';
+
+assert file exists encoded_source.zip
+
+statement ok
+DECOMPRESS FILE '${dir}\encoded_source.zip' TO '${dir}\decoded';
+
+statement ok
+CONVERT FILE ENCODING '${dir}\decoded\encoded_source.csv' TO '${dir}\utf16.csv'
+WITH (FROM_ENCODING='UTF8', TO_ENCODING='UNICODE', OVERWRITE=ON);
+
+statement ok
+CONVERT FILE ENCODING '${dir}\utf16.csv' TO '${dir}\utf8_again.csv'
+WITH (FROM_ENCODING='UNICODE', TO_ENCODING='UTF8', OVERWRITE=ON);
+
+statement ok
+CREATE CONNECTION encoded_csv AS FLATFILE(PATH='${dir}\utf8_again.csv', HEADER=ON, DELIMITER=',', ENCODING='UTF8');
+
+query
+SELECT id, name FROM encoded_csv.FILE ORDER BY id;
+----
+1|café
+2|naïve
+
+# A real SQLite target closes the gap where temp-table validation could pass while a
+# connector write silently dropped or transposed rows.
+file connector_load.csv
+id,name,amount
+1,North,10.50
+2,South,20.75
+----
+
+statement ok
+CREATE CONNECTION sink_db AS SQLITE(DATABASE='${dir}\sink.db');
+
+statement ok
+CREATE TABLE sink_db.loaded (id INT, name VARCHAR(50), amount DECIMAL(10,2));
+
+statement ok
+BULK INSERT sink_db.loaded (id, name, amount)
+FROM '${dir}\connector_load.csv'
+WITH (FIELDTERMINATOR=',', FIRSTROW=2, MAXERRORS=0);
+
+query
+SELECT id, name, amount FROM sink_db.loaded ORDER BY id;
+----
+1|North|10.5
+2|South|20.75

@@ -258,6 +258,9 @@ Configuration settings for the Portal UI server, shared storage, and active inte
 | `Portal:Modules:Documentation` | boolean | `true` | — | Enables Portal-hosted documentation surfaces module flag. Route fencing lands in a later modularization slice. |
 | `Portal:MaxPreviewRows` | integer | `50000` | — | Maximum preview lines displayed in GUI tables. |
 | `Portal:Dataset:PreviewCacheMaxRows` | integer | `250000` | — | Global row-weight budget for in-memory dataset preview cache entries. |
+| `Portal:DesignerLimits:MaxDataPreviewRows` | integer | `100` | `1`–`1000` | Maximum rows returned by an interactive Studio run or governed source/temp-table preview. |
+| `Portal:DesignerLimits:MaxDataPreviewBytes` | integer | `262144` | `1024`–`16777216` | Maximum serialized row payload returned by an interactive Studio run or preview. |
+| `Portal:DesignerLimits:MaxDataPreviewSeconds` | integer | `15` | `1`–`300` | Wall-clock timeout for an interactive Studio run or preview. |
 
 ### Portal Modules (`Portal:Modules`)
 - `Reporting` (default: `true`): Report catalog, report player, datasets, and subscriptions.
@@ -288,6 +291,11 @@ protect the host itself.
 - `SourcePush` is checked separately whenever `SourceControl.PushOnSave=true`.
 - `/studio.html`, `/designer.html`, and their APIs return 404 when Studio is disabled. Other Portal
   workspaces show the Studio navigation only after the capability-aware session endpoint succeeds.
+- `POST /api/designer/data-preview` requires `ScriptPreview`. Shared-source previews resolve the
+  caller's tenant-scoped catalog entry and ACL before the server constructs a query; `#temp`
+  previews replay only the read-only prefix that materializes the selected table. Results are
+  redacted, cancellable, audited through the interactive-run boundary, and bounded by
+  `Portal:DesignerLimits:MaxDataPreviewRows`, `MaxDataPreviewBytes`, and `MaxDataPreviewSeconds`.
 
 Certified topology profiles include:
 - **Gateway node**: `Reporting=false`, `Designer=false`, `Scheduling=false`, `Operations=false`,

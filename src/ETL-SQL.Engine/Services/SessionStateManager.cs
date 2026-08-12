@@ -95,7 +95,9 @@ public class SessionStateManager : ISessionStateManager
     public async Task SaveSession(string sessionId, object evaluatorObj, string? scriptSource = null)
     {
         if (evaluatorObj is not Evaluator evaluator)
-            return;
+            throw new ArgumentException(
+                "Session persistence requires an ETL-SQL evaluator instance.",
+                nameof(evaluatorObj));
 
         // Enforce MaxSessionSize (Zero-Trust Guardrail)
         var currentSize = MeasureSessionSize(evaluator);

@@ -17,6 +17,7 @@ PROJECT_PATH="$ROOT/src/ETL-SQL.App"
 VALIDATOR_STATE_ROOT="$ROOT/release-validation/sample-validator-$$"
 SECURITY_EVENT_OUTBOX_PATH="$VALIDATOR_STATE_ROOT/security-events.db"
 SESSION_ROOT="$VALIDATOR_STATE_ROOT/sessions"
+ORCHESTRATOR_DATABASE_PATH="$VALIDATOR_STATE_ROOT/orchestrator.db"
 mkdir -p "$VALIDATOR_STATE_ROOT"
 trap 'rm -rf -- "$VALIDATOR_STATE_ROOT"' EXIT
 
@@ -36,6 +37,7 @@ service_available() {
     case "$service" in
         postgres|postgresql) port_open localhost 5432 ;;
         mssql|sqlserver)     port_open localhost 1433 ;;
+        docker)              command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 ;;
         performance|portal|orchestrator) return 1 ;;
         *) return 0 ;;
     esac
@@ -92,7 +94,7 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
 
     printf "Starting: %s ... " "$SCRIPT_NAME"
 
-    OUTPUT=$(ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" timeout 180 dotnet run --no-build --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
+    OUTPUT=$(ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
 
     HAS_INTERNAL_ERROR=false
     if [[ "$OUTPUT" =~ "CRITICAL FAILURE" || "$OUTPUT" =~ "Unhandled exception" ]]; then

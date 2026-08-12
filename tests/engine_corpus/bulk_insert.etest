@@ -36,31 +36,18 @@ SELECT id, name, dept FROM #staff ORDER BY id;
 statement ok
 CREATE TABLE #staff_noskip (id INT, name VARCHAR(50), dept VARCHAR(50));
 
-statement error cannot be converted to target type INT
+statement error appears to begin with a header row
 BULK INSERT #staff_noskip FROM '${dir}\staff.csv' WITH (FIELDTERMINATOR = ',');
 
-# Against text columns nothing is out of range, so the same mistake is silent: three
-# rows become four and the extra one is the header. Type checking is the only thing
-# standing between a forgotten FIRSTROW and a quietly wrong table.
+# Against text columns type conversion cannot expose the mistake. The loader therefore recognizes
+# a first row whose values are exactly the requested target-column names and fails with an
+# actionable header diagnostic instead of quietly adding it as data.
 
 statement ok
 CREATE TABLE #staff_text (id VARCHAR(10), name VARCHAR(50), dept VARCHAR(50));
 
-statement ok
+statement error appears to begin with a header row
 BULK INSERT #staff_text FROM '${dir}\staff.csv' WITH (FIELDTERMINATOR = ',');
-
-query
-SELECT COUNT(*) FROM #staff_text;
-----
-4
-
-query
-SELECT id FROM #staff_text ORDER BY id;
-----
-1
-2
-3
-ID
 
 # When the file has a header, columns pair by NAME. A file whose columns are in a
 # different order than the target therefore lands correctly, where positional pairing

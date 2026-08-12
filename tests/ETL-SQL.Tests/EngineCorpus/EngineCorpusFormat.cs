@@ -9,6 +9,12 @@ namespace ETL_SQL.Tests.EngineCorpus
     {
         /// <summary>Writes an embedded fixture file into the run directory.</summary>
         File,
+        /// <summary>Runs the file with a minimal portal dataset registry and at-rest key.</summary>
+        Portal,
+        /// <summary>Asserts that a path beneath the run directory exists.</summary>
+        FileExists,
+        /// <summary>Asserts that a file beneath the run directory contains the expected text.</summary>
+        FileContains,
         /// <summary>Runs SQL that must succeed.</summary>
         StatementOk,
         /// <summary>Runs SQL that must fail, with a message containing the expected substring.</summary>
@@ -66,6 +72,40 @@ namespace ETL_SQL.Tests.EngineCorpus
                 int startLine = i + 1;
                 var directive = line.Trim();
 
+                if (directive.Equals("portal", StringComparison.OrdinalIgnoreCase))
+                {
+                    records.Add(new EngineRecord(EngineRecordKind.Portal, "", startLine));
+                    i++;
+                    continue;
+                }
+
+                if (directive.StartsWith("assert file exists ", StringComparison.OrdinalIgnoreCase))
+                {
+                    records.Add(new EngineRecord(
+                        EngineRecordKind.FileExists,
+                        "",
+                        startLine,
+                        Name: directive["assert file exists ".Length..].Trim()));
+                    i++;
+                    continue;
+                }
+
+                if (directive.StartsWith("assert file contains ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var argument = directive["assert file contains ".Length..].Trim();
+                    var separator = argument.IndexOf(' ');
+                    if (separator <= 0 || separator == argument.Length - 1)
+                        throw new FormatException(
+                            $"Line {startLine}: assert file contains requires '<path> <expected text>'.");
+                    records.Add(new EngineRecord(
+                        EngineRecordKind.FileContains,
+                        argument[(separator + 1)..],
+                        startLine,
+                        Name: argument[..separator]));
+                    i++;
+                    continue;
+                }
+
                 if (directive.StartsWith("file ", StringComparison.OrdinalIgnoreCase))
                 {
                     var name = directive[5..].Trim();
@@ -109,7 +149,8 @@ namespace ETL_SQL.Tests.EngineCorpus
 
                 throw new FormatException(
                     $"Line {startLine}: unrecognized directive '{directive}'. "
-                    + "Expected one of: file <name>, statement ok, statement error [substring], query.");
+                    + "Expected one of: portal, file <name>, assert file exists <path>, "
+                    + "assert file contains <path> <text>, statement ok, statement error [substring], query.");
             }
 
             return records;

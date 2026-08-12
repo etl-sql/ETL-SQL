@@ -24,6 +24,7 @@ Aliases: `XLSX`, `XLS`
 | `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
+| `TRANSACTIONAL` | `ON`/`OFF` — stage the complete output beside the target and publish with one replacement rename (default: `OFF`) | No |
 
 Excel uses the same schema-resilience contract as [FLATFILE](flatfile.md): `STRICT_SCHEMA=ON` fails on
 unaccepted drift, `IGNORE_EXTRA_COLUMNS=ON` accepts surplus columns, `NULL_MISSING_COLUMNS=ON` fills
@@ -45,3 +46,4 @@ CREATE CONNECTION xl_out AS EXCEL(PATH='C:\Secure\payroll.xlsx', ENCRYPT=ON, PAS
 - [File Connectors](README.md)
 - [Connectors](../README.md)
 - [FLATFILE](flatfile.md)
+- [Transactional File Writes](transactional-writes.md)

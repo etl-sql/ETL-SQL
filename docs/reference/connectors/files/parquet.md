@@ -14,6 +14,7 @@ Hive, and data-lake systems — it compresses well and supports efficient column
 | `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
+| `TRANSACTIONAL` | `ON`/`OFF` — stage the complete output beside the target and publish with one replacement rename (default: `OFF`) | No |
 
 ## Examples
 
@@ -30,3 +31,4 @@ CREATE CONNECTION pq_archive AS PARQUET('C:\Archive\data.parquet', COMPRESSION=Z
 - [File Connectors](README.md)
 - [Connectors](../README.md)
 - [Avro](avro.md)
+- [Transactional File Writes](transactional-writes.md)

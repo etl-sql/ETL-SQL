@@ -1,4 +1,5 @@
 ﻿-- MSSQL Kitchen Sink
+-- @requires: docker
 SET WHAT_IF OFF;
 PRINT 'Starting MSSQL container...';
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS ms;

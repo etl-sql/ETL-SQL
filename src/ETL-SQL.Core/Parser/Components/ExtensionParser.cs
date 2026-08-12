@@ -380,7 +380,7 @@ public class ExtensionParser : ParserComponent
                 }
                 else if (Match(TokenType.KEYFILE)) { keyFile = ParseExpression(); }
                 else if (Match(TokenType.PGP_KEY)) { pgpKey = ParseExpression(); }
-                else if (MatchIdentifier("RECURSIVE")) { recursive = ParseExpression(); }
+                else if (Match(TokenType.RECURSIVE) || MatchIdentifier("RECURSIVE")) { recursive = ParseExpression(); }
                 else if (Match(TokenType.WITH))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after WITH");
@@ -604,7 +604,10 @@ public class ExtensionParser : ParserComponent
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new WaitForStatement(e, WaitType.Time) { Line = startToken.Line, Column = startToken.Column };
             }
-            throw new SyntaxException("WAITFOR (<condition>) has been retired. Use WAIT UNTIL <condition>.", startToken.Line, startToken.Column);
+            var condition = ParseExpression();
+            Consume(TokenType.RPAREN, "Expected ')' after WAITFOR condition");
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new WaitForStatement(condition, WaitType.Until) { Line = startToken.Line, Column = startToken.Column };
         }
 
         WaitType type = WaitType.Delay;
@@ -679,10 +682,10 @@ public class ExtensionParser : ParserComponent
         {
             var toolAlias = Consume(TokenType.STRING_LITERAL, "Expected string literal for tool alias").Value;
             TableReference? sourceTable = null;
-            if (Match(TokenType.FROM)) sourceTable = ParseTableReference(allowFunction: false, allowWithClause: false);
+            if (Match(TokenType.FROM)) sourceTable = ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
             
             TableReference? targetTable = null;
-            if (Match(TokenType.INTO)) targetTable = ParseTableReference(allowFunction: false, allowWithClause: false);
+            if (Match(TokenType.INTO)) targetTable = ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
 
             Dictionary<string, Expression>? parameters = null;
             if (Match(TokenType.WITH))

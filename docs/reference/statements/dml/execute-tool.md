@@ -1,12 +1,13 @@
 # EXECUTE TOOL
+
 Executes a previously registered custom executable tool. Data is streamed into the process's standard input in JSON Lines format and read from its standard output in JSON Lines format, ensuring safe processing of large datasets without exhausting memory.
 
 ## Syntax
 ```sql
-EXECUTE TOOL <ToolAlias> 
-[WITH (Param1 = Value1, Param2 = Value2)]
+EXECUTE TOOL '<ToolAlias>'
 [FROM SourceTable]
 [INTO TargetTable]
+[WITH (Param1 = Value1, Param2 = Value2)]
 [EXPECT SCHEMA (Col1 Type, Col2 Type)];
 ```
 
@@ -20,15 +21,16 @@ EXECUTE TOOL <ToolAlias>
 ## Examples
 ```sql
 -- Execute a tool with parameters and data streaming
-EXECUTE TOOL DataSummarizer 
-WITH (batch_size = 500)
+EXECUTE TOOL 'DataSummarizer'
 FROM #raw_logs
 INTO #summaries
+WITH (batch_size = 500)
 EXPECT SCHEMA (category STRING, total_count INT, last_seen DATETIME);
 
 -- Execute a tool that requires no input/output, just runs a process
-EXECUTE TOOL EnvironmentCleanup;
+EXECUTE TOOL 'EnvironmentCleanup';
 ```
 
 ## References
 - [Script Composition Standards](../../../architecture/standards/Script_Composition_Standards.md)
+- [Statement Reference](../README.md)

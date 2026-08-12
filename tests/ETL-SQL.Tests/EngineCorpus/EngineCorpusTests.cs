@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,6 +42,13 @@ namespace ETL_SQL.Tests.EngineCorpus
             var provider = (ServiceProvider)DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = provider.GetRequiredService<Evaluator>();
 
+            if (records.Any(record => record.Kind == EngineRecordKind.Portal))
+            {
+                evaluator.DatasetRegistry = new CorpusDatasetRegistry(directory);
+                evaluator.DatasetCallerContext = "IsAdmin=true";
+                evaluator.DatasetAtRestKey = "engine-corpus-at-rest-key";
+            }
+
             try
             {
                 foreach (var record in records)
@@ -61,9 +69,28 @@ namespace ETL_SQL.Tests.EngineCorpus
 
             switch (record.Kind)
             {
-                case EngineRecordKind.File:
-                    File.WriteAllText(Path.Combine(directory, record.Name!), record.Body);
+                case EngineRecordKind.Portal:
                     return;
+
+                case EngineRecordKind.File:
+                    File.WriteAllText(ResolveCorpusPath(directory, record.Name!, where), record.Body);
+                    return;
+
+                case EngineRecordKind.FileExists:
+                {
+                    var path = ResolveCorpusPath(directory, record.Name!, where);
+                    Assert.True(File.Exists(path), $"{where}: expected file to exist: {path}");
+                    return;
+                }
+
+                case EngineRecordKind.FileContains:
+                {
+                    var path = ResolveCorpusPath(directory, record.Name!, where);
+                    Assert.True(File.Exists(path), $"{where}: expected file to exist: {path}");
+                    var contents = await File.ReadAllTextAsync(path);
+                    Assert.Contains(record.Body, contents, StringComparison.Ordinal);
+                    return;
+                }
 
                 case EngineRecordKind.StatementOk:
                 {
@@ -118,6 +145,15 @@ namespace ETL_SQL.Tests.EngineCorpus
             }
         }
 
+        private static string ResolveCorpusPath(string directory, string relativePath, string where)
+        {
+            var candidate = Path.Combine(directory, relativePath);
+            Assert.True(
+                SafePath.TryResolveWithinRoot(directory, candidate, out var resolved),
+                $"{where}: corpus path must remain beneath its run directory: {relativePath}");
+            return resolved;
+        }
+
         /// <summary>
         /// Rows as pipe-joined values. Numbers are normalized because every integral type is a
         /// decimal at runtime, so an expected <c>2</c> would otherwise have to be written
@@ -163,6 +199,42 @@ namespace ETL_SQL.Tests.EngineCorpus
             if (Directory.Exists(candidate)) return candidate;
 
             return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "engine_corpus"));
+        }
+
+        private sealed class CorpusDatasetRegistry(string root) : IDatasetRegistry
+        {
+            private readonly Dictionary<string, DatasetMetadata> _items = new(StringComparer.OrdinalIgnoreCase);
+            private int _nextId = 1;
+
+            public Task<int> RegisterOrUpdate(DatasetMetadata metadata)
+            {
+                if (metadata.Id == 0) metadata.Id = _nextId++;
+                _items[metadata.Name] = metadata;
+                return Task.FromResult(metadata.Id);
+            }
+
+            public Task<DatasetMetadata?> Lookup(string name, string callerPermissions = "") =>
+                Task.FromResult(_items.TryGetValue(name, out var value) ? value : null);
+
+            public Task<bool> Exists(string name) => Task.FromResult(_items.ContainsKey(name));
+            public Task<bool> CanEditAsync(string name, string callerPermissions) => Task.FromResult(_items.ContainsKey(name));
+            public Task<bool> CanRefreshAsync(string name, string callerPermissions) => Task.FromResult(_items.ContainsKey(name));
+            public Task SetStale(string name) => Task.CompletedTask;
+            public Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions) =>
+                Task.FromResult<IEnumerable<DatasetMetadata>>(_items.Values.ToList());
+            public Task Delete(string name)
+            {
+                _items.Remove(name);
+                return Task.CompletedTask;
+            }
+            public Task RegisterRefreshJobAsync(int reportId, string orchestratorJobName, string refreshInterval) =>
+                Task.CompletedTask;
+            public Task<DatasetPublishTarget?> AuthorizePublishAsync(string targetFolderPath, string callerPermissions) =>
+                Task.FromResult<DatasetPublishTarget?>(new DatasetPublishTarget(1, targetFolderPath, 1));
+            public Task AuditPublishAsync(int? userId, string datasetName, string targetFolderPath, bool succeeded, string? failureReason = null) =>
+                Task.CompletedTask;
+            public string BuildDatasetFilePath(int datasetId, string name) =>
+                Path.Combine(root, $"{name.TrimStart('&', '#')}_{datasetId}.parquet");
         }
     }
 }

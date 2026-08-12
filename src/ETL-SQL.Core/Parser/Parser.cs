@@ -1212,7 +1212,9 @@ public class Parser : IParser
                 {
                     alias = ConsumeIdentifier("Expected alias after AS for subquery").Value;
                 }
-                else if (Current.Type == TokenType.IDENTIFIER)
+                else if (Current.Type == TokenType.IDENTIFIER &&
+                         !Current.Value.Equals("MATCH_RECOGNIZE", StringComparison.OrdinalIgnoreCase) &&
+                         !Current.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase))
                 {
                     alias = Advance().Value;
                 }
@@ -1247,7 +1249,9 @@ public class Parser : IParser
                 {
                     alias = ConsumeIdentifier("Expected alias after AS for VALUES table constructor").Value;
                 }
-                else if (IsIdentifier(Current) && !Current.Value.Equals("MATCH_RECOGNIZE", StringComparison.OrdinalIgnoreCase))
+                else if (IsIdentifier(Current) &&
+                         !Current.Value.Equals("MATCH_RECOGNIZE", StringComparison.OrdinalIgnoreCase) &&
+                         !Current.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase))
                 {
                     alias = Advance().Value;
                 }
@@ -1344,7 +1348,9 @@ public class Parser : IParser
                     var aliasMetadata = _expressionParser.ParseMetadataTags();
                     foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
                 }
-                else if (IsIdentifier(Current) && !Current.Value.Equals("MATCH_RECOGNIZE", StringComparison.OrdinalIgnoreCase))
+                else if (IsIdentifier(Current) &&
+                         !Current.Value.Equals("MATCH_RECOGNIZE", StringComparison.OrdinalIgnoreCase) &&
+                         !Current.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase))
                 {
                     // Implicit alias
                     tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, Advance().Value, tableRef.Subquery, tableRef.FunctionCall, tableRef.ValuesRows, tableRef.ColumnAliases);
@@ -1580,7 +1586,9 @@ public class Parser : IParser
 
         string? alias = null;
         if (Match(TokenType.AS)) alias = ConsumeIdentifier("Expected alias after PIVOT").Value;
-        else if (Current.Type == TokenType.IDENTIFIER && !IsKeyword(Current.Value)) alias = Advance().Value;
+        else if (Current.Type == TokenType.IDENTIFIER &&
+                 !IsKeyword(Current.Value) &&
+                 !Current.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase)) alias = Advance().Value;
 
         return new PivotClause(aggFunc, aggCol, pivotCol, values) { Alias = alias };
     }
@@ -1604,7 +1612,9 @@ public class Parser : IParser
 
         string? alias = null;
         if (Match(TokenType.AS)) alias = ConsumeIdentifier("Expected alias after UNPIVOT").Value;
-        else if (Current.Type == TokenType.IDENTIFIER && !IsKeyword(Current.Value)) alias = Advance().Value;
+        else if (Current.Type == TokenType.IDENTIFIER &&
+                 !IsKeyword(Current.Value) &&
+                 !Current.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase)) alias = Advance().Value;
 
         return new UnpivotClause(valCol, nameCol, cols) { Alias = alias };
     }
@@ -1778,7 +1788,8 @@ public class Parser : IParser
 
         Consume(TokenType.RPAREN, "Expected ')' after MATCH_RECOGNIZE");
         if (Match(TokenType.AS)) clause.Alias = ConsumeIdentifier("Expected alias after MATCH_RECOGNIZE AS").Value;
-        else if (IsIdentifier(Current)) clause.Alias = Advance().Value;
+        else if (IsIdentifier(Current) &&
+                 !Current.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase)) clause.Alias = Advance().Value;
         return clause;
     }
 

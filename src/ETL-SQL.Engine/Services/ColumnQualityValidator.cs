@@ -39,7 +39,7 @@ public sealed class ColumnQualityValidator
     private readonly bool _hasExpressionRules;
     private readonly Dictionary<string, HashSet<string>> _existsInKeys = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<BetweenRule> _rowInvariantBetweenRules = new();
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<BetweenRule, (object? Lower, object? Upper)> _hoistedBetweenBounds = new();
+    private readonly Dictionary<BetweenRule, (object? Lower, object? Upper)> _hoistedBetweenBounds = new();
 
     /// <summary>Delimits parts of a composite key; a unit separator cannot appear in a rendered value.</summary>
     private const char KeyPartSeparator = '\u001F';
@@ -61,9 +61,6 @@ public sealed class ColumnQualityValidator
         _routing = routing;
         // The rules that need the evaluator, and so force the async validation path. Everything
         // else is a pure per-row predicate that costs no state machine.
-        _hasExpressionRules = ruleSets.Any(rs =>
-            rs.Bindings.Any(binding => binding.Rules.Any(rule => rule is ExprRule or BetweenRule)));
-
         foreach (var rule in ruleSets.SelectMany(rs => rs.Bindings).SelectMany(b => b.Rules))
         {
             if (rule is BetweenRule between && IsRowInvariant(between.Lower) && IsRowInvariant(between.Upper))
@@ -71,6 +68,9 @@ public sealed class ColumnQualityValidator
                 _rowInvariantBetweenRules.Add(between);
             }
         }
+
+        _hasExpressionRules = ruleSets.Any(rs => rs.Bindings.Any(binding => binding.Rules.Any(rule =>
+            rule is ExprRule || rule is BetweenRule between && !_rowInvariantBetweenRules.Contains(between))));
     }
 
     /// <summary>True when at least one rule needs the whole-input UNIQUE pre-pass.</summary>
@@ -170,8 +170,21 @@ public sealed class ColumnQualityValidator
     /// <summary>
     /// Prepares per-statement state (EXISTS IN key sets). Call once before the first row.
     /// </summary>
-    public Task InitializeAsync(CancellationToken cancellationToken = default) =>
-        BuildExistsInKeySetsAsync(cancellationToken);
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        await BuildExistsInKeySetsAsync(cancellationToken);
+
+        // Statement-invariant bounds are prepared before the first row so their rules can stay on
+        // the synchronous, allocation-free validation path. Unknown nodes and volatile functions
+        // never enter this set and continue to evaluate against every projected row.
+        foreach (var rule in _rowInvariantBetweenRules)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var lower = await _context.EvaluateValue(rule.Lower, new Row());
+            var upper = await _context.EvaluateValue(rule.Upper, new Row());
+            _hoistedBetweenBounds[rule] = (lower, upper);
+        }
+    }
 
     // ── UNIQUE pre-pass ────────────────────────────────────────────────────
 
@@ -717,6 +730,9 @@ public sealed class ColumnQualityValidator
             case ExistsInRule existsIn:
                 return ExistsInPasses(existsIn, value, projected);
 
+            case BetweenRule between when _hoistedBetweenBounds.TryGetValue(between, out var bounds):
+                return BetweenPasses(value, bounds.Lower, bounds.Upper);
+
             // A rule form the runtime does not implement must not report the data as clean. This
             // is unreachable through the parser; it exists so that adding a ColumnRule record and
             // forgetting this switch fails loudly instead of passing every row.
@@ -752,33 +768,28 @@ public sealed class ColumnQualityValidator
         object? lower;
         object? upper;
 
-        if (_rowInvariantBetweenRules.Contains(rule))
-        {
-            if (_hoistedBetweenBounds.TryGetValue(rule, out var bounds))
-            {
-                lower = bounds.Lower;
-                upper = bounds.Upper;
-            }
-            else
-            {
-                lower = await _context.EvaluateValue(rule.Lower, projected);
-                upper = await _context.EvaluateValue(rule.Upper, projected);
-                _hoistedBetweenBounds.TryAdd(rule, (lower, upper));
-            }
-        }
-        else
+        if (!_hoistedBetweenBounds.TryGetValue(rule, out var bounds))
         {
             lower = await _context.EvaluateValue(rule.Lower, projected);
             upper = await _context.EvaluateValue(rule.Upper, projected);
         }
+        else
+        {
+            lower = bounds.Lower;
+            upper = bounds.Upper;
+        }
 
+        return BetweenPasses(value, lower, upper);
+    }
+
+    private bool BetweenPasses(object? value, object? lower, object? upper)
+    {
         if (lower is null or DBNull || upper is null or DBNull) return true;
-
         return _context.CompareConstants(value, lower) >= 0
             && _context.CompareConstants(value, upper) <= 0;
     }
 
-    private static bool IsRowInvariant(Expression expr) => expr switch
+    internal static bool IsRowInvariant(Expression expr) => expr switch
     {
         LiteralExpression => true,
         ParameterExpression => true,
@@ -786,13 +797,28 @@ public sealed class ColumnQualityValidator
         UnaryExpression u => IsRowInvariant(u.Expression),
         BinaryExpression b => IsRowInvariant(b.Left) && IsRowInvariant(b.Right),
         ListExpression l => l.Items.All(IsRowInvariant),
-        FunctionCallExpression f => IsDeterministicFunction(f.FunctionName) && f.Arguments.All(IsRowInvariant),
+        FunctionCallExpression f => IsDeterministicFunction(f.FunctionName)
+            && f.Arguments.Select((argument, index) => IsRowInvariantFunctionArgument(f, argument, index)).All(x => x),
         IsNullExpression n => IsRowInvariant(n.Expression),
         IsDistinctFromExpression d => IsRowInvariant(d.Left) && IsRowInvariant(d.Right),
         _ => false // IdentifierExpression, SubqueryExpression, and any unrecognized nodes are not hoistable
     };
 
-    private static bool IsDeterministicFunction(string functionName) => functionName.ToUpperInvariant() switch
+    private static bool IsRowInvariantFunctionArgument(
+        FunctionCallExpression function,
+        Expression argument,
+        int index)
+    {
+        if (IsRowInvariant(argument)) return true;
+        if (index != 0 || argument is not IdentifierExpression) return false;
+
+        // DATEADD(DAY, ...), DATEDIFF(DAY, ...), etc. parse the date-part keyword as an
+        // identifier-shaped expression. It names no row column, but only in this exact slot.
+        return function.FunctionName.ToUpperInvariant() is
+            "DATEADD" or "DATEDIFF" or "DATE_TRUNC" or "DATE_PART" or "DATENAME";
+    }
+
+    internal static bool IsDeterministicFunction(string functionName) => functionName.ToUpperInvariant() switch
     {
         // Safe to hoist once per statement per the row-invariant design decision
         "GETDATE" or "SYSDATETIME" or "SYSUTCDATETIME" => true,

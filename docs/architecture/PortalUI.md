@@ -65,7 +65,22 @@ This is the most important architectural decision in this initiative. It determi
 
 Published report viewing executes queries on the portal server, but results are cached by dataset TTL and shared across all viewers. One execution serves many concurrent readers. This is sustainable.
 
-Design-time preview is per-user, per-edit, uncacheable. If preview ran on the portal, 10 designers clicking preview simultaneously would 10× the query load. Keeping preview local eliminates this class of problem entirely. The portal server never executes queries on behalf of a designer session.
+Design-time preview is per-user, per-edit, and uncacheable. Workstation and VS Code authoring keep
+that execution local. Portal Studio also offers an explicit governed preview path for shared-source
+tables and intermediate `#temp` tables: it requires `ScriptPreview`, uses the caller's execution
+identity and connection ACL, and enforces row, byte, time, cancellation, redaction, rate, and
+concurrency bounds. It is an interactive inspection operation, not a polled report surface.
+
+### Shared Portal shell and dialog vocabulary
+
+The six authenticated shell pages declare only `<header data-portal-header data-active="…">`.
+`js/portal-header.js` owns the stable navigation, branding, identity, theme, responsive-menu, and
+sign-out attachment points; `js/portal-nav.js` applies the server-computed module/capability answer.
+No page carries its own header copy or guesses a gated destination's visibility.
+
+`js/dialog-a11y.js` owns focus entry, Tab containment, Escape dismissal, and focus restoration for
+static modals, dynamically rendered dialogs, and the responsive navigation drawer. Dialog-specific
+close buttons use `data-dialog-close`, so Escape invokes the same close callback as a pointer click.
 
 ### Single-workstation consequence
 

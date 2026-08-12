@@ -106,18 +106,18 @@ namespace ETL_SQL.Tests.Statements
                 d.Message.Contains("identifier", StringComparison.OrdinalIgnoreCase));
         }
 
-        // Scenario 4: SaveSession called with a non-Evaluator object must return gracefully.
-        // Regression guard for the ArgumentException thrown when a test mock or future
-        // sub-evaluator triggered a checkpoint label in SectionLabelStatementHandler.
+        // Scenario 4: SaveSession called with a non-Evaluator object must fail explicitly.
+        // A successful-looking no-op loses the checkpoint and moves the failure to resume time.
         [Fact]
-        public async Task SaveSession_WithNonEvaluatorObject_ReturnsWithoutThrowing()
+        public async Task SaveSession_WithNonEvaluatorObject_RejectsCaller()
         {
             var (_, _, manager) = MakeEvalWithSession(_sessionId, _sessionDir);
 
-            var ex = await Record.ExceptionAsync(
+            var ex = await Assert.ThrowsAsync<ArgumentException>(
                 () => manager.SaveSession(_sessionId, new object()));
 
-            Assert.Null(ex);
+            Assert.Equal("evaluatorObj", ex.ParamName);
+            Assert.Contains("evaluator", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         // Scenario 5: Resume from a mid-script checkpoint must use the loaded variable state,

@@ -197,7 +197,10 @@ Runs groups of tests mapped to standard pipeline stages:
   ./scripts/test-lane.sh --lane fast
   ```
 
-*Supported lanes are: `smoke`, `fast`, `engine`, `portal`, `integration`, `perf`, `release`, `full`, `benchmarks`, `slt`.*
+*Supported lanes are: `smoke`, `fast`, `engine`, `portal`, `portal-hosted`, `browser`, `integration`,
+`perf`, `release`, `full`, `benchmarks`, `slt`, `spill`, `ebnf`, `fuzz-smoke`, and `fuzz`.* The
+`ebnf` lane uses fixed seeds and strict parser acceptance/rejection checks, and is included in the
+release and pre-release paths without slowing the default smoke/fast feedback loops.
 
 To see what each lane currently contains without running tests:
 

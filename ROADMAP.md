@@ -80,8 +80,9 @@ claim from configuration or a weaker/different topology.
 
 ### Portal — Accessibility and visual-system completion
 
-- Consolidate the remaining duplicated page headers and per-page focus-management code into the
-  shared Portal shell and component vocabulary, with browser coverage for each migrated dialog.
+- [x] **Delivered 2026-08-12.** Consolidated the remaining duplicated page headers and per-page
+  focus-management code into the shared Portal shell and component vocabulary, with a six-page
+  responsive browser contract and focused navigation/dialog coverage for each migrated surface.
 
 ### Orchestrator — Per-Object Authorization
 
@@ -127,71 +128,16 @@ The work, when triggered:
 Orchestrator's audit records name a person rather than a service, and the permission vocabulary is
 the Portal's rather than a second one.
 
-### Portal — Quarantine Row Access
-
-**Problem.** `DataQualityController.GetQuarantineRows` runs `SELECT * FROM {target}` inside a fresh
-in-process `ExecutionSession`. That session is constructed with an empty connection dictionary and
-never calls `Evaluator.LoadSessionState`, so it restores nothing from the producing run: no
-connections, no temp tables, no session variables. Every real capture target therefore fails —
-a connection-qualified target (`warehouse.dbo.quarantine_users`) raises `Unknown source: warehouse`,
-and a `#temp` target is silently auto-created as an empty in-memory table, which is worse: the
-steward reads "no rows" as "nothing was quarantined". Pre-projection capture plus in-Portal editing
-is the strongest part of the remediation workflow, and it is unavailable exactly where quarantine
-data actually lives.
-
-The current queue marks these targets **View only**, explains why, and provides review SQL to run
-where the connection exists. The remaining product gap is governed, in-Portal access to durable
-catalog-backed targets.
-
-**Chosen direction: catalog-backed preview.** Resolve the target through the shared connection
-catalog rather than widening the Portal's reach generally.
-
-| Option | Verdict |
-| :--- | :--- |
-| Rehydrate the producing job's `SessionState` into the preview session | Rejected — restores *every* connection an arbitrary job held, with no bound tied to the manifest, and the state may no longer exist. |
-| Resolve the target's connection from the catalog as `SHARED:alias` | **Chosen** — governed path; flows through `SharedConnectionExpander` → `ConnectionSecretResolver` → `ConnectorPolicyAuthorizer`, so policy, secret resolution, and redaction all apply unchanged. |
-| Round-trip the read through the orchestrator as a job and return its result set | Deferred fallback — covers ad-hoc script connections the catalog does not know, but needs a result-returning job path and turns an interactive read into an async one. |
-
-Slices:
-
-1. **Manifest provenance.** Add nullable `TargetConnectionAlias`, `TargetConnectorType`, and
-   `TargetIsCatalogBacked` to `QuarantineReplayManifest`, written at capture time. Backward
-   compatible in the same way the replay-mode fields were: absent means "unknown", which classifies
-   as view-only.
-2. **Readability consults the catalog.** `QuarantineTargetReadability` gains an
-   `IConnectionCatalogProvider` and the caller's `ExecutionIdentity`, and reports readable only when
-   the alias resolves, is enabled, and the caller is authorized for it. Every other case keeps its
-   existing reason string, so the interim UI needs no change.
-3. **Preview session bootstrap.** Prepend
-   `CREATE CONNECTION {alias} AS {type}('SHARED:{alias}');` to the preview script. The alias comes
-   from the manifest, never from the request, and the statement is still only
-   `SELECT * FROM {manifest target}` — not arbitrary SQL. Keep the 15s timeout,
-   `MAX_LAST_RESULT_ROWS`, the RLS execution identity, and `SecretRedactor` on the error path.
-4. **Kill switch and audit.** Gate the whole path behind `Portal:DataQuality:AllowConnectionPreview`
-   (default **off**, so an upgrade does not silently start opening production connections from the
-   web tier), and audit each preview read the way dispositions are audited today — reading raw
-   quarantined source rows is an access event, not a page view.
-5. **Tests.** A **happy-path** read is the first requirement, not the last: every existing
-   `quarantine/rows` test asserts a rejection, so the catalog-backed path needs positive coverage
-   before it can be considered functional. Then: catalog miss, disabled entry, feature switch off,
-   unauthorized identity, and a redaction assertion on the failure path.
-6. **Docs + sandbox.** Administration guide: which connections become previewable, what the switch
-   does, and what is audited. Flip the sandbox's view-only fixture to a readable catalog-backed
-   target so both states stay developable
-   (`tools/ui-sandbox/stories/data-quality-queue.story.js`).
-
-Open decision for the sprint: whether a steward reviewing rows through a catalog connection should
-be limited to connections their own role can already reach, or whether `DataQualityStewardAccess`
-plus a manifest-bound target is authority enough. This changes slice 2's authorization check.
-
 ### Portal — Data Quality Follow-through
 
 These lower-level data-quality findings support the comprehensive update above. Ordered by how much
 each affects day-to-day use.
 
 1. **Every preview spins a full engine.** Each request lexes, parses, lints, and evaluates through a
-   new `ExecutionSession`. Acceptable at current volume; revisit before this becomes a polled or
-   dashboard-refreshed surface.
+   new `ExecutionSession`. **Measured 2026-08-12:** 0.8 ms median, 1.1 ms p95, and 1.3 ms maximum
+   after warmup across 25 complete session cycles. Reuse is not warranted; retain single-shot
+   identity/policy isolation and rerun the explicit performance measurement before making this a
+   polled or dashboard-refreshed surface.
 
 
 ### SaaS Multi-Tenancy — Secure Outbound Data Gateway
@@ -320,34 +266,39 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
 
 To secure the portability guarantee across diverse runtime environments and prevent divergence between the runtime execution, editor, and documentation tooling, the ETL-SQL language dialect is formalized into a tool-verified standard.
 
-#### Pillars of Standardization & Verification:
-1. **Canonical Grammar Specification (EBNF)**:
-   - Define and publish a machine-readable EBNF (Extended Backus-Naur Form) grammar file in the repository.
-   - This file serves as the logical reference for lexicographical parsing, preventing documentation drift and providing a design blueprint for parser-related IDE and validation services.
-2. **Conformance & Regression Test Suite (SqlLogicTests)**:
-   - Expand and maintain the shared suite of SqlLogicTests (SLT) in `tests/slt_data/` asserting exact execution correctness, mathematical offsets, standard library function returns, and query boundaries.
-   - This serves as the ultimate regression net to ensure engine modifications do not break existing scripts or introduce silent dialect drift.
-3. **Syntax Addition Checklist**:
-   - Rather than establishing a high-ceremony RFC process, new language extensions (keywords, functions, or connector options) must validate against a strict checklist in `CONTRIBUTING.md`.
-   - Additions must explicitly address cross-dialect compatibility, translation mappings for remote SQL pushdown, and updates to autocomplete / linting state.
-4. **EBNF-to-Parser Validation Fuzzing**:
-   - Instead of verifying EBNF against the autocomplete-focused `GrammarStateEngine`, implement a validation runner that parses and generates queries from the EBNF specification.
-   - Assert that the actual execution parser (`Parser.cs`) accepts valid sequences and rejects invalid ones, creating a tool-enforced guard against compiler-to-spec drift.
-5. **Centralized Dialect Translation Engine**:
-   - Refactor dialect-specific SQL rewrite logic out of the main compiler (`QueryCompiler.cs`) and separate connector classes.
-   - Introduce a structured `ISqlDialectTranslator` or `SqlDialect` registration system, allowing each database provider to modularly define its function overrides (e.g. `LEN` vs `LENGTH`, `GETDATE` vs `SYSDATE`) in a central, testable abstraction.
+#### Delivered pillars of standardization and verification
+
+1. **Canonical Grammar Specification (EBNF) — completed 2026-08-12**:
+   - `docs/grammar.ebnf` is the machine-readable description of syntax accepted by the execution parser.
+   - Verification rejects unresolved grammar references and requires complete recognition of every
+     parser-accepted working documentation example.
+2. **Conformance & Regression Test Suite (SqlLogicTests) — completed 2026-08-12**:
+   - The shared corpus in `tests/slt_data/` asserts exact execution results, boundary behavior,
+     mathematical/date offsets, standard-library functions, and cross-dialect compatibility.
+   - Normal and forced-spill executions protect against silent dialect and execution drift.
+3. **EBNF-to-Parser Validation Fuzzing — completed 2026-08-12**:
+   - A deterministic execution-parser runner generates valid and invalid EBNF sequences, covers every
+     statement production and expression family, and reports minimized counterexamples.
+   - The dedicated EBNF release lane enforces parser/spec synchronization independently of autocomplete.
 
 ### Connectors — Transactional File Staging
 
-To prevent downstream systems from consuming half-written or dirty data on execution failure, file-based and network transfer connectors (e.g. `FLATFILE`, `SFTP`) will support native transactional staging boundaries.
+**Delivered 2026-08-12.** To prevent downstream systems from consuming half-written or dirty data on
+execution failure, supported file-based connectors and SFTP now provide truthful transactional staging
+boundaries. The detailed runtime and operational contract is in
+[Transactional File Writes](docs/reference/connectors/files/transactional-writes.md).
 
 #### Core Design & Parameters:
 1. **`TRANSACTIONAL=TRUE` Configuration Option**:
-   - Enable transactional staging on connection creation.
-   - The engine writes target data blocks to temporary `.tmp` files (or in a hidden `.staging/` directory at the destination) during the active execution stream.
+   - `FLATFILE`, `JSON`, `XML`, `EXCEL`, and `PARQUET` accept `TRANSACTIONAL=ON` on connection creation.
+   - The engine writes to a unique sibling `.etl-stage-*` artifact resolved through the execution context.
 2. **Atomic Commits & Automatic Cleanups**:
-   - If the script execution completes successfully, the engine issues a fast atomic rename (e.g. `file.csv.tmp` -> `file.csv`) to expose the complete file.
-   - If the script fails during any phase (e.g., in a `load:` block), the engine automatically cleans up and deletes the staged files, leaving the production directory in its original clean state.
+   - Successful local writes use one same-directory replacement rename. Serialization, compression,
+     and encryption all finish before that commit point.
+   - Failure and cancellation remove the private stage and retain the previous target. Stages older
+     than 24 hours are reconciled on the next write for the exact target.
+   - SFTP uses `ATOMIC_UPLOAD=ON` and the server POSIX rename extension. Unsupported servers fail
+     without delete-first fallback. FTP remains explicitly non-transactional.
 
 ### Extensions — Governed Custom Tool Runner
 

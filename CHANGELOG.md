@@ -101,6 +101,44 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+**Transactional file publication**
+
+- `TRANSACTIONAL=ON` for `FLATFILE`, `JSON`, `XML`, `EXCEL`, and `PARQUET` now stages every output
+  phase beside the target and commits with one replacement rename. Unique stages, cancellation and
+  failure cleanup, 24-hour crash-residue reconciliation, and prior-target preservation are covered by
+  focused certification and documented in the connector reference/snippets.
+- SFTP `ATOMIC_UPLOAD=ON` now uses the server POSIX rename extension, supports execution
+  cancellation, and never deletes the prior target before replacement. Servers without the required
+  protocol support fail safely instead of silently weakening the guarantee.
+
+- Added governed Studio row preview for authorized shared-connection tables and intermediate `#temp`
+  tables. Source previews pass through tenant-scoped catalog ACL and schema validation before the
+  server constructs the query; temp previews replay only their read-only materialization prefix.
+  Preview results are cancellable, audited, redacted, and bounded by configurable row, byte, and
+  wall-clock limits, with provenance shown in the shared results pane.
+- Wired Portal Studio to its durable collaborative edit leases. Existing reports acquire and renew a
+  five-minute session, show the owner/expiry state, pause saves on contention or disconnect, recover
+  after expiry/reconnect, and release on navigation. Atomic lease updates no longer advance the
+  report content version, and report authorization plus signed-tenant matching fence lease keys.
+- Consolidated all six authenticated Portal headers into `portal-header.js` and migrated the Reports,
+  Admin, Orchestrator, Studio, and responsive-drawer focus lifecycles to `dialog-a11y.js`. Server-owned
+  navigation gating, branding, identity, themes, status/state vocabulary, keyboard containment,
+  Escape dismissal, and focus restoration now attach to one shared shell contract.
+- Added an explicit quarantine-preview session startup measurement. Warmed complete session cycles
+  measured 0.8 ms median and 1.1 ms p95, so the Portal retains safer single-shot execution rather
+  than pooling identity- and policy-bearing preview state; the measurement is the future polling gate.
+- Expanded the engine-surface corpus across dataset export/publication/stewardship, OpenLineage
+  export, file-sourced `MERGE`, `TRANSFORM`, a real SQLite target, ZIP compression, and Unicode
+  flat-file round trips. Corpus files can opt into a minimal Portal registry and assert bounded
+  output-file existence/content; all five files also pass under the deterministic spill settings.
+- Expanded the shared SQL logic corpus with deterministic math, leap/month/quarter date boundaries,
+  Unicode/string, null/type, regex/JSON, and cross-dialect alias/row-limit results. All 45 eligible
+  files pass both normally and with the deterministic low-threshold spill configuration.
+- Replaced the EBNF conformance smoke check with strict fixed-seed acceptance/rejection assertions,
+  unresolved-reference validation, and minimized counterexample reporting. A dedicated cross-platform
+  `ebnf` lane is now part of release and pre-release validation without joining smoke/fast; enforcing
+  it corrected stale report-object, dataset, visual-source, and connection grammar forms.
+
 - Added the platform/tenant identity separation contract. The product had one `Admin` role, which in
   a host-fixed deployment is the tenant's own administrator, so there was no platform principal to
   separate or audit. `PlatformAccessGrant` introduces one that holds authority over no tenant by
@@ -483,6 +521,36 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Optimized `MERGE` now falls back to authoritative SQL equality when its type-strict hash key does
+  not find a candidate, preventing compatible cross-representation keys such as integer `2` and CSV
+  string `"2"` from being treated as unmatched and inserted as duplicates.
+- CI now validates the complete sample library on both Windows and Linux, using each platform's
+  native validator for two passes so persistent sample side effects and cross-platform drift are
+  caught on ordinary pushes and pull requests rather than only during the Windows pre-release gate.
+- **Typed spill persistence now identifies heterogeneous-column failures at the boundary that
+  rejects them.** Arrow conversion errors report the chunk, column, one-based row, inferred sink
+  type, and actual CLR type without echoing the value; failed buffered flushes still close all
+  writer streams.
+- **The low-threshold spill lane now completes under bounded memory in deterministic fresh-host
+  shards.** It records exact method manifests and per-shard TRX evidence, detects cross-shard test
+  identity overlap, and distinguishes execution-time theory expansion from discovery counts. The
+  certified run passed all 6,058 engine results plus all 7 SQL logic wrappers without a host crash.
+- **`BULK INSERT` no longer silently transposes recognizable header-bearing input.** Complete
+  headers map requested targets by name, `MAPPING = 'POSITION'` explicitly selects ordinal mapping,
+  forgotten headers fail before writing, and fallback/width ambiguity is counted in the completion
+  diagnostic. The file-operations reference now documents the actual parser/runtime contract.
+- **Row-invariant data-quality `BETWEEN` bounds are evaluated once per statement.** A conservative
+  deterministic-expression classifier keeps row-dependent, volatile, subquery, and unknown-call
+  bounds on the per-row path; allocation coverage pins invariant validation near the rule-free
+  baseline.
+- Portal tenant-boundary startup and tests now agree on server-derived tenant identity: invalid
+  tenant credentials receive the structured JWT challenge, first-run administrators inherit the
+  configured host tenant, and dataset-root diagnostics name the current configuration key. The
+  N-to-N+1 upgrade drill seeds historical schemas directly so it tests migration rather than the
+  current model's write requirements.
+- Invalid session-save callers now fail explicitly instead of silently discarding state, and the
+  low-threshold spill lane uses an isolated session root so checkpoint attempts cannot leak into a
+  developer profile or sandbox-denied LocalAppData path.
 - **Release coverage and test-lane ownership are now enforceable locally.** CI and both pre-release
   drivers use one fail-closed 70% line-coverage gate instead of duplicating YAML logic or allowing an
   unparseable report to skip enforcement. Engine routing now depends only on explicit categories;

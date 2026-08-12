@@ -141,16 +141,93 @@ namespace ETL_SQL.Core.Common
         /// so that the final publication via File.Move is an instantaneous, atomic file-system metadata swap.
         /// If transactional is false, falls back to the OS %TEMP% directory.
         /// </summary>
-        public static string GetStagingFilePath(string targetFilePath, bool transactional)
+        public static string GetStagingFilePath(
+            ETL_SQL.Core.IExecutionContext? context,
+            string targetFilePath,
+            bool transactional)
         {
             if (transactional)
             {
                 var dir = System.IO.Path.GetDirectoryName(targetFilePath);
                 if (string.IsNullOrEmpty(dir)) dir = Environment.CurrentDirectory;
                 else System.IO.Directory.CreateDirectory(dir);
-                return System.IO.Path.Combine(dir, System.IO.Path.GetFileName(targetFilePath) + ".etl-stage-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+
+                ReconcileStaleStagingFiles(targetFilePath, TimeSpan.FromHours(24));
+
+                var candidate = System.IO.Path.Combine(
+                    dir,
+                    System.IO.Path.GetFileName(targetFilePath) + ".etl-stage-" + Guid.NewGuid().ToString("N"));
+                var resolved = context?.ResolvePath(candidate) ?? System.IO.Path.GetFullPath(candidate);
+                EnsureSameDirectory(targetFilePath, resolved);
+                return resolved;
             }
-            return System.IO.Path.GetTempFileName();
+            return System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "etlsql-stage-" + Guid.NewGuid().ToString("N"));
+        }
+
+        public static string GetStagingFilePath(string targetFilePath, bool transactional) =>
+            GetStagingFilePath(null, targetFilePath, transactional);
+
+        /// <summary>
+        /// Publishes a completely written staging file. Transactional publication is restricted to
+        /// a same-directory rename, and never deletes the prior target before the replacement call.
+        /// </summary>
+        public static void PublishStagedFile(string stagingFilePath, string targetFilePath, bool transactional)
+        {
+            if (string.Equals(stagingFilePath, targetFilePath, StringComparison.OrdinalIgnoreCase)) return;
+            if (transactional) EnsureSameDirectory(targetFilePath, stagingFilePath);
+
+            var dir = System.IO.Path.GetDirectoryName(targetFilePath);
+            if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.Move(stagingFilePath, targetFilePath, overwrite: true);
+        }
+
+        /// <summary>
+        /// Removes only engine-owned staging files for this exact target after they have exceeded
+        /// the supplied age. Fresh stages are left alone so concurrent writers cannot be disrupted.
+        /// </summary>
+        public static int ReconcileStaleStagingFiles(string targetFilePath, TimeSpan minimumAge)
+        {
+            var fullTarget = System.IO.Path.GetFullPath(targetFilePath);
+            var dir = System.IO.Path.GetDirectoryName(fullTarget);
+            if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) return 0;
+
+            var prefix = System.IO.Path.GetFileName(fullTarget) + ".etl-stage-";
+            var cutoff = DateTime.UtcNow - minimumAge;
+            var removed = 0;
+            foreach (var candidate in System.IO.Directory.EnumerateFiles(dir, prefix + "*", SearchOption.TopDirectoryOnly))
+            {
+                if (System.IO.File.GetLastWriteTimeUtc(candidate) > cutoff) continue;
+                try
+                {
+                    System.IO.File.Delete(candidate);
+                    removed++;
+                }
+                catch (IOException)
+                {
+                    // A locked stage may still belong to an active writer. Leave it for the next pass.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Cleanup is best effort; publication remains available when cleanup is denied.
+                }
+            }
+            return removed;
+        }
+
+        private static void EnsureSameDirectory(string targetFilePath, string stagingFilePath)
+        {
+            var targetDirectory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(targetFilePath));
+            var stagingDirectory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(stagingFilePath));
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            if (!string.Equals(targetDirectory, stagingDirectory, comparison))
+            {
+                throw new InvalidOperationException(
+                    "Transactional file publication requires the staging file and target to be in the same directory.");
+            }
         }
     }
 }

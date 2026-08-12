@@ -380,7 +380,7 @@ namespace ETL_SQL.Portal.Services
 
             if (!_tenantScope.TryResolveDatasetPath(_config, path, out var resolved))
                 throw new InvalidOperationException(
-                    "Dataset file path must be within the server-derived tenant dataset root.");
+                    "Dataset file path must be within the server-derived tenant DatasetRootPath.");
 
             return resolved;
         }

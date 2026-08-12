@@ -6,5 +6,7 @@ description: SFTP connection for remote file transfer via SSH key or password
 CREATE CONNECTION «ConnName» AS SFTP(
   HOST     = '«sftp.example.com»',
   USER     = '«username»',
-  KEYFILE  = '«path/to/id_rsa»'
+  KEYFILE  = '«path/to/id_rsa»',
+  HOST_KEY_FINGERPRINT = '«SHA256:server-fingerprint»',
+  ATOMIC_UPLOAD = «ON»
 );

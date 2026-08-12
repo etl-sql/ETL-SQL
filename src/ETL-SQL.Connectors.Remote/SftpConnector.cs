@@ -161,7 +161,7 @@ namespace ETL_SQL.Connectors
             ["TIMEOUT_SECONDS"] = new[] { "Connection timeout in seconds (default 30)" },
             ["HOST_KEY_FINGERPRINT"] = new[] { "Pinned server host-key fingerprint (SHA256:base64 or MD5 hex). Required unless ALLOW_UNPINNED_HOST_KEY is set: a mismatched or unpinned host key rejects the connection (MITM protection)." },
             ["ALLOW_UNPINNED_HOST_KEY"] = new[] { "true", "false" },
-            ["ATOMIC_UPLOAD"] = new[] { "true/false (default false): upload to a temp name then rename into place so consumers never read a partial file. Requires rename permission on the target directory." }
+            ["ATOMIC_UPLOAD"] = new[] { "ON/OFF (default OFF): upload to a collision-safe sibling stage and publish with the server POSIX rename extension. Existing targets are never deleted first; unsupported servers fail without changing the target." }
         };
         public Dictionary<string, string[]> GetOptionValues() => new();
         public string GetHelp() => "SFTP Connector for remote file operations over SSH.";
@@ -191,7 +191,8 @@ namespace ETL_SQL.Connectors
             string? hostKeyFingerprint = options?.GetValueOrDefault("HOST_KEY_FINGERPRINT");
             bool atomicUpload = options != null
                 && options.TryGetValue("ATOMIC_UPLOAD", out var atomicStr)
-                && bool.TryParse(atomicStr, out var parsedAtomic) && parsedAtomic;
+                && (atomicStr.Equals("ON", StringComparison.OrdinalIgnoreCase)
+                    || atomicStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase));
             bool allowUnpinnedHostKey = options != null
                 && options.TryGetValue("ALLOW_UNPINNED_HOST_KEY", out var allowUnpinnedStr)
                 && bool.TryParse(allowUnpinnedStr, out var parsedAllowUnpinned) && parsedAllowUnpinned;
@@ -362,6 +363,26 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        private async Task RunClientOperationAsync(
+            Func<SftpClient, Task> operation,
+            CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            if (_context != null)
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, _host);
+            await _clientLock.WaitAsync(cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var client = await EnsureConnectedAsync();
+                await operation(client);
+            }
+            finally
+            {
+                _clientLock.Release();
+            }
+        }
+
         private async Task<T> RunClientOperationAsync<T>(Func<SftpClient, T> operation)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -407,13 +428,21 @@ namespace ETL_SQL.Connectors
         private bool RemoteDirectoryExistsNormalized(SftpClient client, string remotePath) =>
             client.Exists(remotePath) && client.Get(remotePath).IsDirectory;
 
-        public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
+        public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true) =>
+            UploadFileAsync(localPath, remotePath, overwrite, CancellationToken.None);
+
+        public async Task UploadFileAsync(
+            string localPath,
+            string remotePath,
+            bool overwrite,
+            CancellationToken cancellationToken)
         {
             try
             {
                 remotePath = NormalizeRemotePath(remotePath);
-                await RunClientOperationAsync(client =>
+                await RunClientOperationAsync(async client =>
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (!overwrite && client.Exists(remotePath))
                     {
                         throw new ExecutionException($"Remote file already exists: {remotePath}");
@@ -421,19 +450,17 @@ namespace ETL_SQL.Connectors
 
                     if (_atomicUpload)
                     {
-                        // Upload to a temp name and rename into place so a polling consumer never sees a
-                        // partially written file. Requires rename permission on the target directory
-                        // (off by default for write-only vendors). Rename cannot overwrite on SFTP, so an
-                        // existing destination is removed first — a small non-atomic window that only
-                        // applies when replacing an existing file, not to first-time deliveries.
-                        var tempPath = remotePath + ".tmp-" + Guid.NewGuid().ToString("N");
+                        // POSIX rename is the provider protocol required for truthful replacement:
+                        // it replaces an existing target without first creating a missing-file window.
+                        // Servers without the extension fail the publish and retain the previous target.
+                        ReconcileStaleAtomicUploads(client, remotePath, TimeSpan.FromHours(24));
+                        var tempPath = remotePath + ".etl-stage-" + Guid.NewGuid().ToString("N");
                         try
                         {
-                            using (var fileStream = File.OpenRead(localPath))
-                                client.UploadFile(fileStream, tempPath);
-                            if (client.Exists(remotePath))
-                                client.DeleteFile(remotePath);
-                            client.RenameFile(tempPath, remotePath);
+                            await using (var fileStream = File.OpenRead(localPath))
+                                await client.UploadFileAsync(fileStream, tempPath, cancellationToken);
+                            cancellationToken.ThrowIfCancellationRequested();
+                            client.RenameFile(tempPath, remotePath, isPosix: true);
                         }
                         catch
                         {
@@ -443,13 +470,42 @@ namespace ETL_SQL.Connectors
                         return;
                     }
 
-                    using var stream = File.OpenRead(localPath);
-                    client.UploadFile(stream, remotePath);
-                });
+                    await using var stream = File.OpenRead(localPath);
+                    await client.UploadFileAsync(stream, remotePath, cancellationToken);
+                }, cancellationToken);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
                 throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
+        private static void ReconcileStaleAtomicUploads(SftpClient client, string remotePath, TimeSpan minimumAge)
+        {
+            var slash = remotePath.LastIndexOf('/');
+            var directory = slash <= 0 ? "/" : remotePath[..slash];
+            var fileName = slash < 0 ? remotePath : remotePath[(slash + 1)..];
+            var prefix = fileName + ".etl-stage-";
+            var cutoff = DateTime.UtcNow - minimumAge;
+
+            try
+            {
+                foreach (var entry in client.ListDirectory(directory))
+                {
+                    if (entry.IsDirectory
+                        || !entry.Name.StartsWith(prefix, StringComparison.Ordinal)
+                        || entry.LastWriteTimeUtc > cutoff)
+                    {
+                        continue;
+                    }
+
+                    try { client.DeleteFile(entry.FullName); }
+                    catch { /* best effort: it may belong to a still-active or restricted writer */ }
+                }
+            }
+            catch
+            {
+                // Write-only SFTP accounts commonly lack list permission. Publication can still proceed.
             }
         }
 

@@ -43,7 +43,7 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-ENGINE_FILTER="(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)"
+ENGINE_FILTER="(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)&(Category!=EbnfConformance)"
 PORTAL_FILTER="(Category!=Integration)&(Category!=HostedServices)"
 
 invoke_dotnet_test() {
@@ -171,6 +171,11 @@ case "$LANE" in
         if [ "$NO_BUILD" = true ]; then fuzz_args+=(--no-build); fi
         bash "$SCRIPT_DIR/test-lane.sh" "${fuzz_args[@]}"
 
+        ebnf_args=(--lane ebnf --configuration "$CONFIGURATION")
+        if [ "$NO_RESTORE" = true ]; then ebnf_args+=(--no-restore); fi
+        if [ "$NO_BUILD" = true ]; then ebnf_args+=(--no-build); fi
+        bash "$SCRIPT_DIR/test-lane.sh" "${ebnf_args[@]}"
+
         slt_args=(--lane slt --configuration "$CONFIGURATION")
         if [ "$NO_RESTORE" = true ]; then slt_args+=(--no-restore); fi
         if [ "$NO_BUILD" = true ]; then slt_args+=(--no-build); fi
@@ -181,6 +186,11 @@ case "$LANE" in
         export ETL_SQL_RUN_SLT="1"
         invoke_dotnet_test "tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
         export ETL_SQL_RUN_SLT="$PREVIOUS_RUN_SLT"
+        ;;
+    ebnf)
+        # Deterministic grammar generation/rejection contract; deliberately separate from the
+        # quick-feedback lanes so release ownership remains visible.
+        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "Category=EbnfConformance"
         ;;
     fuzz-smoke)
         invoke_fuzz_lane "12345" "2000" "1"
