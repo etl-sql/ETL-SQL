@@ -11,6 +11,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Handlers;
 
@@ -19,9 +20,10 @@ namespace ETL_SQL.Engine.Handlers;
 /// Runs a registered tool process, streams data to it via stdin (JSON Lines),
 /// and collects results from stdout (JSON Lines).
 /// </summary>
-public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null) : IStatementHandler
+public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null, IConfiguration? config = null) : IStatementHandler
 {
     private readonly ILogger _logger = logger;
+    private readonly IConfiguration? _config = config;
     public Type SupportedStatementType => typeof(ExecuteToolStatement);
 
     public async Task Execute(Statement statement, IExecutionContext context)
@@ -424,8 +426,8 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
 
         long totalBytes = 0;
         int rowCount = 0;
-        const long MaxBytes = 100 * 1024 * 1024; // 100 MB limit
-        const int MaxRows = 1_000_000;
+        long MaxBytes = _config?.GetValue<long>("Tools:Limits:MaxBytes") ?? 100 * 1024 * 1024;
+        int MaxRows = _config?.GetValue<int>("Tools:Limits:MaxRows") ?? 1_000_000;
 
         string? line;
         while ((line = await stdout.ReadLineAsync(token)) != null)
