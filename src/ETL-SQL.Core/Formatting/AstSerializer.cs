@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Quality;
@@ -45,6 +46,9 @@ public static class AstSerializer
         ExecuteStatement s => FormatExecuteProcedure(s),
 
         // ── DDL ──
+        CreateBindingStatement s => FormatCreateBinding(s),
+        GrantBindingStatement s => FormatGrantBinding(s),
+        RevokeBindingStatement s => FormatRevokeBinding(s),
         CreateConnectionStatement s => FormatCreateConnection(s),
         CreateToolStatement s => FormatCreateTool(s),
         AlterConnectionStatement s => FormatAlterConnection(s),
@@ -960,6 +964,31 @@ public static class AstSerializer
                 return "";
         }
     }
+
+    private static string FormatCreateBinding(CreateBindingStatement s)
+    {
+        var sb = new StringBuilder();
+        sb.Append(s.Mode == ObjectCreationMode.CreateOrAlter ? "CREATE OR ALTER BINDING " :
+                 s.Mode == ObjectCreationMode.CreateOrReplace ? "CREATE OR REPLACE BINDING " :
+                 s.Mode == ObjectCreationMode.Alter ? "ALTER BINDING " : "CREATE BINDING ");
+        sb.Append(s.Name);
+        sb.Append(" AS ").Append(s.Type.ToUpperInvariant());
+        if (s.Options != null && s.Options.Count > 0)
+        {
+            sb.Append(" (\n    ");
+            var opts = s.Options.Select(kv => $"{kv.Key.ToUpperInvariant()} = {Format(kv.Value)}");
+            sb.Append(string.Join(",\n    ", opts));
+            sb.Append("\n)");
+        }
+        sb.Append(';');
+        return sb.ToString();
+    }
+
+    private static string FormatGrantBinding(GrantBindingStatement s) =>
+        $"GRANT {s.Permission.ToUpperInvariant()} ON BINDING {s.BindingName} TO {s.PrincipalKind.ToUpperInvariant()} '{s.PrincipalName.Replace("'", "''")}';";
+
+    private static string FormatRevokeBinding(RevokeBindingStatement s) =>
+        $"REVOKE {s.Permission.ToUpperInvariant()} ON BINDING {s.BindingName} FROM {s.PrincipalKind.ToUpperInvariant()} '{s.PrincipalName.Replace("'", "''")}';";
 
     private static string FormatMergeInsert(MergeInsertClause n)
     {

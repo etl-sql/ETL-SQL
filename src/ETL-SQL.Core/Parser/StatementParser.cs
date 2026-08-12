@@ -134,9 +134,9 @@ public class StatementParser
         _dispatchMap[TokenType.DISABLE] = () => ParseDisableJob();
         _dispatchMap[TokenType.TRIGGER] = () => ParseTriggerJob();
 
-        // Portal admin statements (valid inside EXECUTE portal BEGIN…END)
-        _dispatchMap[TokenType.GRANT] = () => { var t = _parser.Previous; return PortalParser.ParseGrant(t); };
-        _dispatchMap[TokenType.REVOKE] = () => { var t = _parser.Previous; return PortalParser.ParseRevoke(t); };
+        // Portal admin statements (valid inside EXECUTE portal BEGIN…END) and Top-Level Grants
+        _dispatchMap[TokenType.GRANT] = () => { var t = _parser.Previous; return ParseTopLevelGrant(t); };
+        _dispatchMap[TokenType.REVOKE] = () => { var t = _parser.Previous; return ParseTopLevelRevoke(t); };
         _dispatchMap[TokenType.PUBLISH] = () =>
         {
             var t = _parser.Previous;
@@ -783,6 +783,62 @@ public class StatementParser
             EndLine = labelToken.EndLine,
             EndColumn = labelToken.EndColumn
         };
+    }
+
+    private Statement ParseTopLevelGrant(Token t)
+    {
+        if (_parser.Peek.Type == TokenType.ON && _parser.Peek2.Type == TokenType.BINDING)
+        {
+            string perm = _parser.Advance().Value;
+            _parser.Consume(TokenType.ON, "Expected ON");
+            _parser.Consume(TokenType.BINDING, "Expected BINDING");
+            
+            Token bindingToken = _parser.Advance();
+            if (bindingToken.Type != TokenType.IDENTIFIER && bindingToken.Type != TokenType.VALUE)
+                throw new SyntaxException("Expected binding name", bindingToken.Line, bindingToken.Column);
+            string bindingName = bindingToken.Value;
+            
+            _parser.Consume(TokenType.TO, "Expected TO");
+            
+            Token principalKindToken = _parser.Advance(); // USER or GROUP
+            string principalKind = principalKindToken.Value;
+            
+            Token principalNameToken = _parser.Advance();
+            string principalName = principalNameToken.Value;
+            
+            return new GrantBindingStatement(perm, bindingName, principalKind, principalName)
+            { Line = t.Line, Column = t.Column };
+        }
+        
+        return PortalParser.ParseGrant(t);
+    }
+
+    private Statement ParseTopLevelRevoke(Token t)
+    {
+        if (_parser.Peek.Type == TokenType.ON && _parser.Peek2.Type == TokenType.BINDING)
+        {
+            string perm = _parser.Advance().Value;
+            _parser.Consume(TokenType.ON, "Expected ON");
+            _parser.Consume(TokenType.BINDING, "Expected BINDING");
+            
+            Token bindingToken = _parser.Advance();
+            if (bindingToken.Type != TokenType.IDENTIFIER && bindingToken.Type != TokenType.VALUE)
+                throw new SyntaxException("Expected binding name", bindingToken.Line, bindingToken.Column);
+            string bindingName = bindingToken.Value;
+            
+            _parser.Consume(TokenType.FROM, "Expected FROM");
+            
+            Token principalKindToken = _parser.Advance(); // USER or GROUP
+            string principalKind = principalKindToken.Value;
+            
+            Token principalNameToken = _parser.Advance();
+            string principalName = principalNameToken.Value;
+            
+            return new RevokeBindingStatement(perm, bindingName, principalKind, principalName)
+            { Line = t.Line, Column = t.Column };
+        }
+        
+        return PortalParser.ParseRevoke(t);
     }
 
     private static bool IsContextualKeyword(TokenType type)

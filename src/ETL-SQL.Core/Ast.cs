@@ -66,6 +66,12 @@ public sealed record CreateToolStatement(string ToolName, string ToolType, Dicti
     public Dictionary<string, Expression>? Options { get; } = Options;
     public ObjectCreationMode Mode { get; } = Mode;
 }
+
+public sealed record CreateBindingStatement(string Name, string Type, Dictionary<string, Expression>? Options = null, ObjectCreationMode Mode = ObjectCreationMode.Create) : Statement;
+
+public sealed record GrantBindingStatement(string Permission, string BindingName, string PrincipalKind, string PrincipalName) : Statement;
+
+public sealed record RevokeBindingStatement(string Permission, string BindingName, string PrincipalKind, string PrincipalName) : Statement;
 public sealed record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
 {
     public Expression Path { get; } = path;

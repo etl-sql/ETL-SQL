@@ -202,6 +202,11 @@ public class DataParser : ParserComponent
             RejectUnsupportedCreateIfNotExists("CONNECTION");
             return ParseCreateConnection(startToken, mode);
         }
+        if (Match(TokenType.BINDING))
+        {
+            RejectUnsupportedCreateIfNotExists("BINDING");
+            return ParseCreateBinding(startToken, mode);
+        }
         if (Match(TokenType.TOOL))
         {
             RejectUnsupportedCreateIfNotExists("TOOL");
@@ -493,6 +498,35 @@ public class DataParser : ParserComponent
         if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseAlterAlert(startToken);
 
         throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, VIEW, TABLE, JOB, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
+    }
+
+
+    private Statement ParseCreateBinding(Token startToken, ObjectCreationMode mode)
+    {
+        var nameToken = ConsumeIdentifier("Expected binding name");
+        string name = nameToken.Value;
+        Consume(TokenType.AS, "Expected AS after binding name");
+        string type = Advance().Value;
+
+        Dictionary<string, Expression>? options = null;
+        if (Match(TokenType.LPAREN))
+        {
+            if (_parser.Current.Type != TokenType.RPAREN)
+            {
+                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                while (true)
+                {
+                    var optName = ConsumeIdentifier("Expected option name").Value;
+                    Consume(TokenType.EQUALS, "Expected '=' after option name");
+                    options[optName] = ParseExpression();
+                    if (!Match(TokenType.COMMA)) break;
+                }
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close tool options");
+        }
+
+        return new CreateBindingStatement(name, type, options, mode)
+        { Line = startToken.Line, Column = startToken.Column };
     }
 
     /// <summary>ALTER JOB &lt;name&gt; SET TARGET = '…' | SET (job options).</summary>

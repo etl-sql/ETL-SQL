@@ -224,6 +224,9 @@ public class Lexer
         dict["FOLDER"] = TokenType.FOLDER;
         dict["GRANT"] = TokenType.GRANT;
         dict["REVOKE"] = TokenType.REVOKE;
+        dict["BINDING"] = TokenType.BINDING;
+        dict["DIRECT"] = TokenType.DIRECT;
+        dict["GATEWAY"] = TokenType.GATEWAY;
         dict["PUBLISH"] = TokenType.PUBLISH;
         dict["SUBSCRIPTION"] = TokenType.SUBSCRIPTION;
         dict["DISCONNECT"] = TokenType.DISCONNECT;
