@@ -394,6 +394,48 @@ public class PortalParser : ParserComponent
         { Line = start.Line, Column = start.Column };
     }
 
+    // ── Tools ─────────────────────────────────────────────────────────────
+
+    // CREATE TOOL name AS EXECUTABLE (COMMAND='...', ARGS='...', WORKING_DIR='...')
+    public Statement ParseCreateTool(Token start, ObjectCreationMode mode)
+    {
+        var name = ConsumeIdentifier("Expected tool name after CREATE TOOL").Value;
+        Consume(TokenType.AS, "Expected AS after tool name in CREATE TOOL");
+        var toolType = Advance().Value;
+
+        Dictionary<string, Expression>? options = null;
+        if (Match(TokenType.LPAREN))
+        {
+            if (_parser.Current.Type != TokenType.RPAREN)
+            {
+                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                while (true)
+                {
+                    var optName = _parser.Current.Type == TokenType.IDENTIFIER ? Advance().Value : ConsumeStringLiteral("Expected option name");
+                    Consume(TokenType.EQUALS, "Expected '=' after option name");
+                    options[optName] = ParseExpression();
+                    if (!Match(TokenType.COMMA)) break;
+                }
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close tool options");
+        }
+
+        return new CreatePortalToolStatement(name, toolType, options, mode) { Line = start.Line, Column = start.Column };
+    }
+
+    // DROP TOOL [IF EXISTS] name
+    public Statement ParseDropTool(Token start)
+    {
+        bool ifExists = false;
+        if (Match(TokenType.IF))
+        {
+            Consume(TokenType.EXISTS, "Expected EXISTS after IF");
+            ifExists = true;
+        }
+        var name = ConsumeIdentifier("Expected tool name after DROP TOOL").Value;
+        return new DropPortalToolStatement(name, ifExists) { Line = start.Line, Column = start.Column };
+    }
+
     // ── Reports ───────────────────────────────────────────────────────────
 
     // PUBLISH REPORT 'name' FROM '/scripts/x.rptsql' IN FOLDER '/Finance' [WITH (DESCRIPTION=...)]

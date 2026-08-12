@@ -70,6 +70,12 @@ namespace ETL_SQL.Orchestrator
             LocalRoot = configuration["Governance:ConnectionCatalog:LocalRoot"]
         };
 
+        public static ToolCatalogOptions BuildToolCatalogOptions(IConfiguration configuration) => new()
+        {
+            Provider = configuration["Governance:Tools:Provider"],
+            LocalRoot = configuration["Governance:Tools:LocalRoot"] ?? configuration["Governance:Tools:OsStoreRoot"]
+        };
+
         public static IServiceCollection AddEtlSqlEngine(this IServiceCollection services, IConfiguration configuration)
         {
             // 1. Core Services
@@ -93,6 +99,10 @@ namespace ETL_SQL.Orchestrator
             var connectionCatalog = ConnectionCatalogProviderFactory.Create(BuildConnectionCatalogOptions(configuration));
             if (connectionCatalog != null)
                 services.AddSingleton(connectionCatalog);
+
+            var toolCatalog = ToolCatalogProviderFactory.Create(BuildToolCatalogOptions(configuration));
+            if (toolCatalog != null)
+                services.AddSingleton(toolCatalog);
 
             var fnRegistry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.FileFunctions.Register(fnRegistry);

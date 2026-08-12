@@ -16,30 +16,7 @@ namespace ETL_SQL.Tests.Core.Parsing
             return new ETL_SQL.Core.Parser.Parser(tokens, sql).Parse();
         }
 
-        [Fact]
-        public void ParseCreateTool_ValidSyntax_ReturnsCreateToolStatement()
-        {
-            var sql = @"
-CREATE TOOL myPythonScript AS EXECUTABLE (
-    COMMAND = 'python',
-    ARGS = 'script.py --date {DATE} --region {REGION}',
-    WORKING_DIR = 'scripts/',
-    TIMEOUT = 60
-);";
-            var script = Parse(sql);
-            var stmt = script.Statements.OfType<CreateToolStatement>().First();
 
-            Assert.Equal("myPythonScript", stmt.ToolName);
-            Assert.Equal("EXECUTABLE", stmt.ToolType);
-            Assert.NotNull(stmt.Options);
-            Assert.Equal(4, stmt.Options.Count);
-            
-            var commandExpr = Assert.IsType<LiteralExpression>(stmt.Options["COMMAND"]);
-            Assert.Equal("python", commandExpr.Value);
-
-            var timeoutExpr = Assert.IsType<LiteralExpression>(stmt.Options["TIMEOUT"]);
-            Assert.Equal(60m, timeoutExpr.Value);
-        }
 
         [Fact]
         public void ParseExecuteTool_ValidSyntax_ReturnsExecuteToolStatement()
@@ -97,15 +74,6 @@ EXPECT SCHEMA (
             Assert.Equal("EXECUTE TOOL 'myPythonScript' FROM #sourceData INTO #targetData WITH (DATE = '2024-01-01', REGION = 'US-EAST') EXPECT SCHEMA (id VARCHAR(50) NOT NULL, score INT)", serialized);
         }
 
-        [Fact]
-        public void ToSql_CreateTool_SerializesCorrectly()
-        {
-            var sql = @"CREATE TOOL myPythonScript AS EXECUTABLE (COMMAND = 'python', TIMEOUT = 60);";
-            var script = Parse(sql);
-            var stmt = script.Statements.OfType<CreateToolStatement>().First();
-            var serialized = stmt.ToSql();
-            
-            Assert.Equal("CREATE TOOL myPythonScript AS EXECUTABLE (COMMAND = 'python', TIMEOUT = 60)", serialized);
-        }
+
     }
 }

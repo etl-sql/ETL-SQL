@@ -50,7 +50,7 @@ public static class AstSerializer
         GrantBindingStatement s => FormatGrantBinding(s),
         RevokeBindingStatement s => FormatRevokeBinding(s),
         CreateConnectionStatement s => FormatCreateConnection(s),
-        CreateToolStatement s => FormatCreateTool(s),
+
         AlterConnectionStatement s => FormatAlterConnection(s),
         CreateSshKeyPairStatement s => FormatCreateSshKeyPair(s),
         CreatePgpKeyPairStatement s => FormatCreatePgpKeyPair(s),
@@ -997,22 +997,7 @@ public static class AstSerializer
         return $"THEN INSERT {cols}VALUES ({vals})";
     }
 
-    private static string FormatCreateTool(CreateToolStatement s)
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.Append("CREATE");
-        if (s.Mode == ObjectCreationMode.CreateOrAlter) sb.Append(" OR ALTER");
-        else if (s.Mode == ObjectCreationMode.CreateOrReplace) sb.Append(" OR REPLACE");
-        sb.Append($" TOOL {s.ToolName} AS {s.ToolType}");
 
-        if (s.Options?.Count > 0)
-        {
-            sb.Append(" (");
-            sb.Append(string.Join(", ", s.Options.Select(kv => $"{kv.Key} = {Format(kv.Value)}")));
-            sb.Append(")");
-        }
-        return sb.ToString();
-    }
 
     private static string FormatExecuteTool(ExecuteToolStatement s)
     {

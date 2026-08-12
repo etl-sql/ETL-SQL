@@ -59,13 +59,7 @@ public sealed record CreateConnectionStatement(string name, string? type = null,
     public ObjectCreationMode Mode { get; } = mode;
 }
 
-public sealed record CreateToolStatement(string ToolName, string ToolType, Dictionary<string, Expression>? Options = null, ObjectCreationMode Mode = ObjectCreationMode.Create) : Statement
-{
-    public string ToolName { get; } = ToolName;
-    public string ToolType { get; } = ToolType;
-    public Dictionary<string, Expression>? Options { get; } = Options;
-    public ObjectCreationMode Mode { get; } = Mode;
-}
+
 
 public sealed record CreateBindingStatement(string Name, string Type, Dictionary<string, Expression>? Options = null, ObjectCreationMode Mode = ObjectCreationMode.Create) : Statement;
 
@@ -2789,6 +2783,8 @@ public sealed record SetSecurityOverrideStatement(SecurityOverride Override, boo
 
 // ── Portal admin statements (Phase 10) ────────────────────────────────────
 // These are only valid inside an EXECUTE portal BEGIN…END block targeting a
+public sealed record CreatePortalToolStatement(string ToolName, string ToolType, Dictionary<string, Expression>? Options = null, ObjectCreationMode Mode = ObjectCreationMode.Create) : Statement;
+public sealed record DropPortalToolStatement(string ToolName, bool IfExists = false) : Statement;
 // PORTAL connection. The PortalConnector translates them into REST calls.
 
 public sealed record CreatePortalUserStatement(

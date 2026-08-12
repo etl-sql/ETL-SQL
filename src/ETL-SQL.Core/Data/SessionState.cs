@@ -18,7 +18,7 @@ public class SessionState
     public List<ConnectionInfo> Connections { get; set; } = new();
 
     // Tool Definitions
-    public List<ETL_SQL.Core.CreateToolStatement> ToolDefinitions { get; set; } = new();
+
 
     // Docker State
     public string? LastDockerConnectionString { get; set; }

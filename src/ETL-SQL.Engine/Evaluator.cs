@@ -1450,10 +1450,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             _connections[conn.Name] = connector.CreateDataSource(this, conn.ConnectionString, conn.Options);
         }
 
-        foreach (var toolDef in state.ToolDefinitions)
-        {
-            ReportContext.ToolDefinitions[toolDef.ToolName] = toolDef;
-        }
+
 
         LineageTracker.Clear();
         LineageTracker.LoadState(state.LineageEntries);

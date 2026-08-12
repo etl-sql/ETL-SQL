@@ -18,7 +18,7 @@ public class ReportRegistry : IReportContext
     public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; private set; }
     public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; private set; }
     public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; private set; }
-    public IDictionary<string, CreateToolStatement> ToolDefinitions { get; private set; }
+
     public IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; private set; }
 
     public string TemplatePath { get; set; } = "./Templates";
@@ -47,7 +47,7 @@ public class ReportRegistry : IReportContext
         StyleDefinitions = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
         ButtonDefinitions = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
         TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
-        ToolDefinitions = new Dictionary<string, CreateToolStatement>(StringComparer.OrdinalIgnoreCase);
+
         ThemeDefinitions = new Dictionary<string, CreateThemeStatement>(StringComparer.OrdinalIgnoreCase);
         BaselineParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
@@ -65,7 +65,7 @@ public class ReportRegistry : IReportContext
             StyleDefinitions = new Dictionary<string, CreateStyleStatement>(StyleDefinitions, StringComparer.OrdinalIgnoreCase),
             ButtonDefinitions = new Dictionary<string, CreateButtonStatement>(ButtonDefinitions, StringComparer.OrdinalIgnoreCase),
             TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(TemplateDefinitions, StringComparer.OrdinalIgnoreCase),
-            ToolDefinitions = new Dictionary<string, CreateToolStatement>(ToolDefinitions, StringComparer.OrdinalIgnoreCase),
+
             ThemeDefinitions = new Dictionary<string, CreateThemeStatement>(ThemeDefinitions, StringComparer.OrdinalIgnoreCase),
             BaselineParameters = new Dictionary<string, string>(BaselineParameters, StringComparer.OrdinalIgnoreCase),
             TemplatePath = this.TemplatePath,
@@ -94,7 +94,7 @@ public class ReportRegistry : IReportContext
         StyleDefinitions.Clear();
         ButtonDefinitions.Clear();
         TemplateDefinitions.Clear();
-        ToolDefinitions.Clear();
+
         ThemeDefinitions.Clear();
         ReportTitle = null;
         ReportDescription = null;

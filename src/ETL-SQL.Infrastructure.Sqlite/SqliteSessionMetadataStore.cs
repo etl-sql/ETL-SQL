@@ -301,56 +301,7 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         return result;
     }
 
-    public async Task SaveToolDefinitionsAsync(IEnumerable<ETL_SQL.Core.CreateToolStatement> toolDefinitions)
-    {
-        var rows = new List<object?[]>();
-        foreach (var def in toolDefinitions)
-        {
-            var json = JsonSerializer.Serialize(def);
-            var protectedJson = _keyProvider is null
-                ? ETL_SQL.Common.CryptoUtils.Protect(json, _entropy)
-                : await ProtectCheckpointAsync(json);
-            rows.Add(new object?[]
-            {
-                def.ToolName,
-                protectedJson
-            });
-        }
 
-        using var transaction = _connection!.BeginTransaction();
-
-        using var clearCmd = _connection.CreateCommand();
-        clearCmd.Transaction = transaction;
-        clearCmd.CommandText = "DELETE FROM tools";
-        await clearCmd.ExecuteNonQueryAsync();
-
-        await ExecuteBatchedInsertAsync(
-            transaction,
-            "INSERT INTO tools (alias, definition_json) VALUES ",
-            rows);
-        await transaction.CommitAsync();
-    }
-
-    public async Task<IEnumerable<ETL_SQL.Core.CreateToolStatement>> LoadToolDefinitionsAsync()
-    {
-        var result = new List<ETL_SQL.Core.CreateToolStatement>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT definition_json FROM tools";
-        using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            var protectedJson = reader.GetString(0);
-            var json = protectedJson.StartsWith(KeyMaterialEnvelope.Prefix, StringComparison.Ordinal)
-                ? await UnprotectCheckpointAsync(protectedJson)
-                : ETL_SQL.Common.CryptoUtils.Unprotect(protectedJson, _entropy);
-            var def = JsonSerializer.Deserialize<ETL_SQL.Core.CreateToolStatement>(json);
-            if (def != null)
-            {
-                result.Add(def);
-            }
-        }
-        return result;
-    }
 
     public async Task SaveDockerStateAsync(string? lastConn, IDictionary<string, string> connStrings)
     {

@@ -428,6 +428,21 @@ namespace ETL_SQL.App
             Description = "Field name this entry classifies as sensitive (repeatable): masked in displays and SECRET:-resolvable.",
             AllowMultipleArgumentsPerToken = true
         };
+        private static readonly Option<string?> ToolNameOption = new("--name", new[] { "-n" })
+        {
+            Description = "Name of the tool.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> ToolTypeOption = new("--type", new[] { "-t" })
+        {
+            Description = "Type of the tool (e.g. EXECUTABLE).",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string[]> ToolOptionOption = new("--option", Array.Empty<string>())
+        {
+            Description = "Tool option as KEY=VALUE (repeatable).",
+            AllowMultipleArgumentsPerToken = true
+        };
         private static readonly Option<string?> MigrateFromOption = new("--from", Array.Empty<string>())
         {
             Description = "Source database provider (only 'sqlite' is supported).",
@@ -1493,6 +1508,29 @@ namespace ETL_SQL.App
             deleteConnectionCommand.SetAction(context => Dispatch(context, "admin-machine-connection-delete", handler));
             machineConnectionCommand.Add(deleteConnectionCommand);
             machineCommand.Add(machineConnectionCommand);
+
+            var machineToolCommand = new Command("tool", "Manage the machine-local tool catalog");
+            var setToolCommand = new Command("set", "Store a machine-local tool")
+            {
+                ToolNameOption,
+                ToolTypeOption,
+                ToolOptionOption,
+            };
+            setToolCommand.SetAction(context => Dispatch(context, "admin-machine-tool-set", handler));
+            machineToolCommand.Add(setToolCommand);
+
+            var listToolsCommand = new Command("list", "List machine-local tools");
+            listToolsCommand.SetAction(context => Dispatch(context, "admin-machine-tool-list", handler));
+            machineToolCommand.Add(listToolsCommand);
+
+            var deleteToolCommand = new Command("delete", "Permanently remove a machine-local tool")
+            {
+                ToolNameOption,
+            };
+            deleteToolCommand.SetAction(context => Dispatch(context, "admin-machine-tool-delete", handler));
+            machineToolCommand.Add(deleteToolCommand);
+            machineCommand.Add(machineToolCommand);
+
             adminCommand.Add(machineCommand);
 
             var enterpriseCommand = new Command("enterprise", "Manage machine-level enterprise policy enrollment");
@@ -1846,6 +1884,16 @@ namespace ETL_SQL.App
                      or "admin-machine-connection-enable" or "admin-machine-connection-delete")
             {
                 cliContext.ConnectionAlias = res.GetValue(ConnectionAliasOption);
+            }
+            else if (commandName == "admin-machine-tool-set")
+            {
+                cliContext.ToolName = res.GetValue(ToolNameOption);
+                cliContext.ToolType = res.GetValue(ToolTypeOption);
+                cliContext.ToolOptions = res.GetValue(ToolOptionOption);
+            }
+            else if (commandName == "admin-machine-tool-delete")
+            {
+                cliContext.ToolName = res.GetValue(ToolNameOption);
             }
             else if (commandName == "enterprise-enroll")
             {

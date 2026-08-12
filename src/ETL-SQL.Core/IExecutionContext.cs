@@ -363,7 +363,7 @@ public interface IReportContext
     IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; }
     /// <summary>Named template definitions registered by CREATE TEMPLATE.</summary>
     IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; }
-    IDictionary<string, CreateToolStatement> ToolDefinitions { get; }
+
     /// <summary>Named theme definitions registered by CREATE THEME.</summary>
     IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; }
     /// <summary>The directory where .json style templates are discovered.</summary>

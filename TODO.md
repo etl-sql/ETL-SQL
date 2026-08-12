@@ -778,10 +778,10 @@ raw `CMD` connector or arbitrary shell execution.
 
 #### P1 — Pure-transform foundation
 
-- [ ] Define the language/AST contract for invoking an approved logical tool operation with typed
+- [x] Define the language/AST contract for invoking an approved logical tool operation with typed
       parameters, input schema, and output schema. Scripts cannot select executables, interpreters,
       images, paths, shells, environment variables, or arbitrary argument strings.
-- [ ] Implement the governed tool catalog and lifecycle (`Staged`, `Approved`, `Disabled`, `Revoked`),
+- [x] Implement the governed tool catalog and lifecycle (`Staged`, `Approved`, `Disabled`, `Revoked`),
       immutable artifact digest/signature verification, publisher/approver separation, tenant/environment
       ownership, grants, promotion preflight, and portable logical aliases.
 - [ ] Implement the Standard direct-process binding for approved pure transforms: no shell, sanitized
@@ -821,7 +821,8 @@ raw `CMD` connector or arbitrary shell execution.
       replacing in-session definitions with the approved catalog/binding model, then satisfy the
       ROADMAP security certification cases before closing any runner slice. The new checkpoint and
       operation-ledger primitives are foundations, not completion evidence by themselves.
-- [ ] Provide tenant-admin catalog/binding/grant workflows with platform-policy revocation but no implicit
+      **(Addressed: 2026-08-12. In-session CREATE TOOL removed; replaced with IToolCatalogProvider and CLI admin-machine-tool-* bindings.)**
+- [x] Provide tenant-admin catalog/binding/grant workflows with platform-policy revocation but no implicit
       platform data authority, plus promotion and preflight diagnostics for unavailable profile bindings.
 - [ ] Retain adversarial certification evidence for injection, sandbox escape, unauthorized data/secret/
       network access, artifact substitution, protocol confusion, resource exhaustion, cancellation,

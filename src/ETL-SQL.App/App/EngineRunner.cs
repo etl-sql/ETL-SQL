@@ -189,6 +189,11 @@ namespace ETL_SQL.App
                 return await ConnectionAdminService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command.StartsWith("admin-machine-tool-", StringComparison.Ordinal))
+            {
+                return await ToolAdminService.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command.StartsWith("enterprise-", StringComparison.Ordinal))
             {
                 return await EnterpriseEnrollmentManager.RunAsync(ctx, logger);

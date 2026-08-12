@@ -213,11 +213,7 @@ public class DataParser : ParserComponent
             RejectUnsupportedCreateIfNotExists("BINDING");
             return ParseCreateBinding(startToken, mode);
         }
-        if (Match(TokenType.TOOL))
-        {
-            RejectUnsupportedCreateIfNotExists("TOOL");
-            return ParseCreateTool(startToken, mode);
-        }
+
         if (Match(TokenType.TABLE))
         {
             RejectUnsupportedCreateMode(mode, "TABLE", ObjectCreationMode.CreateOrReplace);
@@ -379,6 +375,11 @@ public class DataParser : ParserComponent
             RejectUnsupportedCreateMode(mode, "FOLDER");
             RejectUnsupportedCreateIfNotExists("FOLDER");
             return _parent.PortalParser.ParseCreateFolder(startToken);
+        }
+        if (Match(TokenType.TOOL))
+        {
+            RejectUnsupportedCreateIfNotExists("TOOL");
+            return _parent.PortalParser.ParseCreateTool(startToken, mode);
         }
         if (Match(TokenType.REFRESH))
         {
@@ -836,6 +837,8 @@ public class DataParser : ParserComponent
             return _parent.PortalParser.ParseDropGroup(startToken);
         if (Match(TokenType.FOLDER))
             return _parent.PortalParser.ParseDropFolder(startToken);
+        if (Match(TokenType.TOOL))
+            return _parent.PortalParser.ParseDropTool(startToken);
         if (Match(TokenType.REPORT))
             return _parent.PortalParser.ParseDropReport(startToken);
         if (Match(TokenType.REFRESH))
@@ -1390,31 +1393,7 @@ public class DataParser : ParserComponent
         return parameters;
     }
 
-    private Statement ParseCreateTool(Token startToken, ObjectCreationMode mode)
-    {
-        var name = ConsumeIdentifier("Expected tool name after CREATE TOOL").Value;
-        Consume(TokenType.AS, "Expected AS after tool name in CREATE TOOL");
-        var toolType = Advance().Value;
 
-        Dictionary<string, Expression>? options = null;
-        if (Match(TokenType.LPAREN))
-        {
-            if (_parser.Current.Type != TokenType.RPAREN)
-            {
-                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
-                while (true)
-                {
-                    var optName = ConsumeObjectOptionName();
-                    Consume(TokenType.EQUALS, "Expected '=' after option name");
-                    options[optName] = ParseExpression();
-                    if (!Match(TokenType.COMMA)) break;
-                }
-            }
-            Consume(TokenType.RPAREN, "Expected ')' to close tool options");
-        }
-
-        return new CreateToolStatement(name, toolType, options, mode) { Line = startToken.Line, Column = startToken.Column };
-    }
 
     private string ConsumeObjectOptionName()
     {

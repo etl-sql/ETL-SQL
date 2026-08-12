@@ -240,6 +240,11 @@ public class CliContext
     public string[]? ConnectionOptions { get; set; }
     public string[]? ConnectionSensitiveFields { get; set; }
 
+    // admin tool catalog commands
+    public string? ToolName { get; set; }
+    public string? ToolType { get; set; }
+    public string[]? ToolOptions { get; set; }
+
     // enterprise enrollment commands
     public string? EnterpriseTenant { get; set; }
     public string? EnterprisePolicyEndpoint { get; set; }

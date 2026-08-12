@@ -26,8 +26,8 @@ public interface ISessionMetadataStore : IDisposable
     Task SaveConnectionsAsync(IEnumerable<ETL_SQL.Core.Data.ConnectionInfo> connections);
     Task<IEnumerable<ETL_SQL.Core.Data.ConnectionInfo>> LoadConnectionsAsync();
 
-    Task SaveToolDefinitionsAsync(IEnumerable<ETL_SQL.Core.CreateToolStatement> toolDefinitions);
-    Task<IEnumerable<ETL_SQL.Core.CreateToolStatement>> LoadToolDefinitionsAsync();
+
+
 
     Task SaveDockerStateAsync(string? lastConn, IDictionary<string, string> connStrings);
     Task<(string? LastConn, Dictionary<string, string> ConnStrings)> LoadDockerStateAsync();

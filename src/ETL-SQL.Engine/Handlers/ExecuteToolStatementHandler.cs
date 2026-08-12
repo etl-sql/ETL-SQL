@@ -19,7 +19,7 @@ namespace ETL_SQL.Engine.Handlers;
 /// Runs a registered tool process, streams data to it via stdin (JSON Lines),
 /// and collects results from stdout (JSON Lines).
 /// </summary>
-public class ExecuteToolStatementHandler(ILogger logger) : IStatementHandler
+public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null) : IStatementHandler
 {
     private readonly ILogger _logger = logger;
     public Type SupportedStatementType => typeof(ExecuteToolStatement);
@@ -28,9 +28,21 @@ public class ExecuteToolStatementHandler(ILogger logger) : IStatementHandler
     {
         var stmt = (ExecuteToolStatement)statement;
         
-        if (!context.ReportContext.ToolDefinitions.TryGetValue(stmt.ToolAlias, out var toolDef))
+        ToolDefinition toolDef;
+        if (catalog != null)
         {
-            throw new ExecutionException($"Tool '{stmt.ToolAlias}' is not defined or registered.", null, stmt.Line, stmt.Column);
+            try
+            {
+                toolDef = await catalog.ResolveAsync(stmt.ToolAlias, context.ExecutionIdentity, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                throw new ExecutionException($"Tool '{stmt.ToolAlias}' could not be resolved from the catalog: {ex.Message}", null, stmt.Line, stmt.Column);
+            }
+        }
+        else
+        {
+            throw new ExecutionException($"Tool '{stmt.ToolAlias}' cannot be resolved because no ToolCatalogProvider is configured.", null, stmt.Line, stmt.Column);
         }
 
         var toolType = toolDef.ToolType.ToUpperInvariant();
@@ -296,26 +308,23 @@ public class ExecuteToolStatementHandler(ILogger logger) : IStatementHandler
         context.Log($"Tool '{stmt.ToolAlias}' execution completed successfully.");
     }
 
-    private string? GetOptionString(Dictionary<string, Expression>? options, string key)
+    private string? GetOptionString(IReadOnlyDictionary<string, string>? options, string key)
     {
-        if (options == null || !options.TryGetValue(key, out var expr)) return null;
-        if (expr is LiteralExpression lit) return lit.Value?.ToString();
-        return null; // Ignore dynamic options for now
+        if (options == null || !options.TryGetValue(key, out var val)) return null;
+        return val;
     }
 
-    private long? GetOptionLong(Dictionary<string, Expression>? options, string key)
+    private long? GetOptionLong(IReadOnlyDictionary<string, string>? options, string key)
     {
-        if (options == null || !options.TryGetValue(key, out var expr)) return null;
-        if (expr is LiteralExpression lit && lit.Value is long l) return l;
-        if (expr is LiteralExpression litInt && litInt.Value is int i) return i;
+        if (options == null || !options.TryGetValue(key, out var val)) return null;
+        if (long.TryParse(val, out var l)) return l;
         return null;
     }
 
-    private bool? GetOptionBoolean(Dictionary<string, Expression>? options, string key)
+    private bool? GetOptionBoolean(IReadOnlyDictionary<string, string>? options, string key)
     {
-        if (options == null || !options.TryGetValue(key, out var expr)) return null;
-        if (expr is LiteralExpression lit && lit.Value is bool b) return b;
-        if (expr is LiteralExpression litStr && bool.TryParse(litStr.Value?.ToString(), out var parsed)) return parsed;
+        if (options == null || !options.TryGetValue(key, out var val)) return null;
+        if (bool.TryParse(val, out var b)) return b;
         return null;
     }
 
