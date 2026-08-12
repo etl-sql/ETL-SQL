@@ -50,14 +50,14 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<SharedConnectionAcl> SharedConnectionAcls => Set<SharedConnectionAcl>();
     public DbSet<SharedConnectionUsage> SharedConnectionUsages => Set<SharedConnectionUsage>();
     public DbSet<AdminServiceRun> AdminServiceRuns => Set<AdminServiceRun>();
-    public DbSet<GovernanceSettings> GovernanceSettings => Set<GovernanceSettings>();
-    public DbSet<GovernanceResolutionCategory> GovernanceResolutionCategories => Set<GovernanceResolutionCategory>();
-    public DbSet<GovernanceGlossaryTerm> GovernanceGlossaryTerms => Set<GovernanceGlossaryTerm>();
-    public DbSet<GovernanceAssetBadge> GovernanceAssetBadges => Set<GovernanceAssetBadge>();
-    public DbSet<GovernanceAssetReview> GovernanceAssetReviews => Set<GovernanceAssetReview>();
-    public DbSet<GovernanceFinding> GovernanceFindings => Set<GovernanceFinding>();
-    public DbSet<GovernanceFindingDecision> GovernanceFindingDecisions => Set<GovernanceFindingDecision>();
-    public DbSet<GovernanceScan> GovernanceScans => Set<GovernanceScan>();
+    public DbSet<StewardshipSettings> StewardshipSettings => Set<StewardshipSettings>();
+    public DbSet<StewardshipResolutionCategory> StewardshipResolutionCategories => Set<StewardshipResolutionCategory>();
+    public DbSet<StewardshipGlossaryTerm> StewardshipGlossaryTerms => Set<StewardshipGlossaryTerm>();
+    public DbSet<StewardshipAssetBadge> StewardshipAssetBadges => Set<StewardshipAssetBadge>();
+    public DbSet<StewardshipAssetReview> StewardshipAssetReviews => Set<StewardshipAssetReview>();
+    public DbSet<StewardshipFinding> StewardshipFindings => Set<StewardshipFinding>();
+    public DbSet<StewardshipFindingDecision> StewardshipFindingDecisions => Set<StewardshipFindingDecision>();
+    public DbSet<StewardshipScan> StewardshipScans => Set<StewardshipScan>();
     public DbSet<ReportScriptDraft> ReportScriptDrafts => Set<ReportScriptDraft>();
     public DbSet<ReportScriptDraftDecision> ReportScriptDraftDecisions => Set<ReportScriptDraftDecision>();
 
@@ -299,7 +299,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         });
 
         // ── Governance workflow state ────────────────────────────────────────────────────────
-        builder.Entity<GovernanceSettings>(e =>
+        builder.Entity<StewardshipSettings>(e =>
         {
             // Single logical row. The unique index is the constraint, not a convention someone has
             // to remember: two settings rows would mean two answers to "is this asset governed?".
@@ -308,7 +308,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.PolicyLevel).HasMaxLength(32);
         });
 
-        builder.Entity<GovernanceResolutionCategory>(e =>
+        builder.Entity<StewardshipResolutionCategory>(e =>
         {
             e.HasIndex(x => x.Value).IsUnique();
             e.Property(x => x.Value).HasMaxLength(64);
@@ -316,7 +316,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Color).HasMaxLength(32);
         });
 
-        builder.Entity<GovernanceGlossaryTerm>(e =>
+        builder.Entity<StewardshipGlossaryTerm>(e =>
         {
             e.HasIndex(x => x.Term).IsUnique();
             e.Property(x => x.Term).HasMaxLength(200);
@@ -324,7 +324,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Steward).HasMaxLength(256);
         });
 
-        builder.Entity<GovernanceAssetBadge>(e =>
+        builder.Entity<StewardshipAssetBadge>(e =>
         {
             e.HasIndex(x => new { x.AssetKey, x.Badge }).IsUnique();
             e.Property(x => x.AssetKey).HasMaxLength(512);
@@ -332,14 +332,14 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.AssetVersion).HasMaxLength(128);
         });
 
-        builder.Entity<GovernanceAssetReview>(e =>
+        builder.Entity<StewardshipAssetReview>(e =>
         {
             e.HasIndex(x => x.AssetKey).IsUnique();
             e.Property(x => x.AssetKey).HasMaxLength(512);
             e.Property(x => x.ReviewedVersion).HasMaxLength(128);
         });
 
-        builder.Entity<GovernanceFinding>(e =>
+        builder.Entity<StewardshipFinding>(e =>
         {
             // One live finding per asset+rule. Re-scanning updates it rather than accumulating
             // duplicates, so the queue length means "problems", not "scans".
@@ -351,7 +351,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Status).HasMaxLength(32);
         });
 
-        builder.Entity<GovernanceFindingDecision>(e =>
+        builder.Entity<StewardshipFindingDecision>(e =>
         {
             e.HasIndex(x => new { x.FindingId, x.DecidedAtUtc });
             e.HasOne(x => x.Finding).WithMany(f => f.Decisions).HasForeignKey(x => x.FindingId);
@@ -361,7 +361,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.DecidedByUserName).HasMaxLength(256);
         });
 
-        builder.Entity<GovernanceScan>(e =>
+        builder.Entity<StewardshipScan>(e =>
         {
             e.HasIndex(x => x.StartedAtUtc);
             e.Property(x => x.Trigger).HasMaxLength(32);

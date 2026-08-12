@@ -372,11 +372,11 @@ builder.Services.AddAuthorization(opt =>
     // whole estate. Deciding is steward judgement. Configuring changes what "governed" means for
     // everyone, so whoever can lower the bar is not whoever works against it.
     opt.AddPolicy("GovernanceRead", p =>
-        p.RequireRole("Admin", "GovernanceManager", "DataSteward", "GovernanceViewer"));
+        p.RequireRole("Admin", "StewardshipManager", "DataSteward", "StewardshipViewer"));
     opt.AddPolicy("GovernanceDecide", p =>
-        p.RequireRole("Admin", "GovernanceManager", "DataSteward"));
+        p.RequireRole("Admin", "StewardshipManager", "DataSteward"));
     opt.AddPolicy("GovernanceConfigure", p =>
-        p.RequireRole("Admin", "GovernanceManager"));
+        p.RequireRole("Admin", "StewardshipManager"));
 });
 builder.Services.AddRateLimiter(options =>
 {
@@ -1079,7 +1079,7 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
 
     // FleetReader: a scoped, read-only role for the fleet aggregator — authorizes only
     // GET /api/fleet/status and nothing else (see Departmental_Isolation.md fleet trust boundary).
-    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager", "FleetReader", "GovernanceViewer", "DataSteward", "GovernanceManager" })
+    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager", "FleetReader", "StewardshipViewer", "DataSteward", "StewardshipManager" })
     {
         if (!await roleMgr.RoleExistsAsync(role))
             await roleMgr.CreateAsync(new PortalRole(role));

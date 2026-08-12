@@ -8,7 +8,7 @@ namespace ETL_SQL.Portal.Models;
 public sealed record GovernanceDashboardDto(
     GovernanceSummaryDto Summary,
     IReadOnlyList<GovernanceAssetDto> Assets,
-    GovernanceScanDto? LastScan);
+    StewardshipScanDto? LastScan);
 
 public sealed record GovernanceSummaryDto(
     int TotalAssets,
@@ -39,12 +39,12 @@ public sealed record GovernanceAssetDto(
     IReadOnlyList<string> AssignedBadges,
     DateTime? ReviewedAtUtc,
     string? ReviewedVersion,
-    IReadOnlyList<GovernanceFindingDto> Findings);
+    IReadOnlyList<StewardshipFindingDto> Findings);
 
 /// <summary>One lost point mapped to the rule that took it. Scores are explainable or they are noise.</summary>
 public sealed record GovernanceDeductionDto(string RuleKey, int Points, string Reason);
 
-public sealed record GovernanceFindingDto(
+public sealed record StewardshipFindingDto(
     int Id,
     string AssetKey,
     string RuleKey,
@@ -66,7 +66,7 @@ public sealed record GovernanceDecisionDto(
     DateTime DecidedAtUtc,
     string? DecidedBy);
 
-public sealed record GovernanceScanDto(
+public sealed record StewardshipScanDto(
     int Id,
     string Trigger,
     DateTime StartedAtUtc,
@@ -78,7 +78,7 @@ public sealed record GovernanceScanDto(
     int FindingsResolved,
     int FindingsReopened);
 
-public sealed record GovernanceSettingsDto(
+public sealed record StewardshipSettingsDto(
     int TargetScore,
     bool EnableMetadataCheck,
     bool EnableProtectedDataCheck,
@@ -93,7 +93,7 @@ public sealed record GovernanceSettingsDto(
     DateTime UpdatedAtUtc,
     long Version);
 
-public sealed record UpdateGovernanceSettingsRequest(
+public sealed record UpdateStewardshipSettingsRequest(
     int TargetScore,
     bool EnableMetadataCheck,
     bool EnableProtectedDataCheck,
@@ -112,7 +112,7 @@ public sealed record GovernanceCategoryDto(
 public sealed record SaveGovernanceCategoryRequest(
     string Value, string Label, string? Color, int? ExpiryDays, bool Disabled);
 
-public sealed record GovernanceGlossaryTermDto(
+public sealed record StewardshipGlossaryTermDto(
     int Id,
     string Term,
     string DataType,

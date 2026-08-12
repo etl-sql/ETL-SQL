@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,7 +13,7 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "GovernanceAssetBadges",
+                name: "StewardshipAssetBadges",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -28,11 +28,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_GovernanceAssetBadges", x => x.Id);
+                    table.PrimaryKey("PK_StewardshipAssetBadges", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
-                name: "GovernanceAssetReviews",
+                name: "StewardshipAssetReviews",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -46,11 +46,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_GovernanceAssetReviews", x => x.Id);
+                    table.PrimaryKey("PK_StewardshipAssetReviews", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
-                name: "GovernanceFindings",
+                name: "StewardshipFindings",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -68,11 +68,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_GovernanceFindings", x => x.Id);
+                    table.PrimaryKey("PK_StewardshipFindings", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
-                name: "GovernanceGlossaryTerms",
+                name: "StewardshipGlossaryTerms",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -92,11 +92,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_GovernanceGlossaryTerms", x => x.Id);
+                    table.PrimaryKey("PK_StewardshipGlossaryTerms", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
-                name: "GovernanceResolutionCategories",
+                name: "StewardshipResolutionCategories",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -112,11 +112,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_GovernanceResolutionCategories", x => x.Id);
+                    table.PrimaryKey("PK_StewardshipResolutionCategories", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
-                name: "GovernanceScans",
+                name: "StewardshipScans",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -134,11 +134,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_GovernanceScans", x => x.Id);
+                    table.PrimaryKey("PK_StewardshipScans", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
-                name: "GovernanceSettings",
+                name: "StewardshipSettings",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -161,11 +161,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_GovernanceSettings", x => x.Id);
+                    table.PrimaryKey("PK_StewardshipSettings", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
-                name: "GovernanceFindingDecisions",
+                name: "StewardshipFindingDecisions",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -181,63 +181,63 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_GovernanceFindingDecisions", x => x.Id);
+                    table.PrimaryKey("PK_StewardshipFindingDecisions", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_GovernanceFindingDecisions_GovernanceFindings_FindingId",
+                        name: "FK_StewardshipFindingDecisions_StewardshipFindings_FindingId",
                         column: x => x.FindingId,
-                        principalTable: "GovernanceFindings",
+                        principalTable: "StewardshipFindings",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceAssetBadges_AssetKey_Badge",
-                table: "GovernanceAssetBadges",
+                name: "IX_StewardshipAssetBadges_AssetKey_Badge",
+                table: "StewardshipAssetBadges",
                 columns: new[] { "AssetKey", "Badge" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceAssetReviews_AssetKey",
-                table: "GovernanceAssetReviews",
+                name: "IX_StewardshipAssetReviews_AssetKey",
+                table: "StewardshipAssetReviews",
                 column: "AssetKey",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceFindingDecisions_FindingId_DecidedAtUtc",
-                table: "GovernanceFindingDecisions",
+                name: "IX_StewardshipFindingDecisions_FindingId_DecidedAtUtc",
+                table: "StewardshipFindingDecisions",
                 columns: new[] { "FindingId", "DecidedAtUtc" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceFindings_AssetKey_RuleKey",
-                table: "GovernanceFindings",
+                name: "IX_StewardshipFindings_AssetKey_RuleKey",
+                table: "StewardshipFindings",
                 columns: new[] { "AssetKey", "RuleKey" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceFindings_Status",
-                table: "GovernanceFindings",
+                name: "IX_StewardshipFindings_Status",
+                table: "StewardshipFindings",
                 column: "Status");
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceGlossaryTerms_Term",
-                table: "GovernanceGlossaryTerms",
+                name: "IX_StewardshipGlossaryTerms_Term",
+                table: "StewardshipGlossaryTerms",
                 column: "Term",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceResolutionCategories_Value",
-                table: "GovernanceResolutionCategories",
+                name: "IX_StewardshipResolutionCategories_Value",
+                table: "StewardshipResolutionCategories",
                 column: "Value",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceScans_StartedAtUtc",
-                table: "GovernanceScans",
+                name: "IX_StewardshipScans_StartedAtUtc",
+                table: "StewardshipScans",
                 column: "StartedAtUtc");
 
             migrationBuilder.CreateIndex(
-                name: "IX_GovernanceSettings_Scope",
-                table: "GovernanceSettings",
+                name: "IX_StewardshipSettings_Scope",
+                table: "StewardshipSettings",
                 column: "Scope",
                 unique: true);
         }
@@ -246,28 +246,28 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "GovernanceAssetBadges");
+                name: "StewardshipAssetBadges");
 
             migrationBuilder.DropTable(
-                name: "GovernanceAssetReviews");
+                name: "StewardshipAssetReviews");
 
             migrationBuilder.DropTable(
-                name: "GovernanceFindingDecisions");
+                name: "StewardshipFindingDecisions");
 
             migrationBuilder.DropTable(
-                name: "GovernanceGlossaryTerms");
+                name: "StewardshipGlossaryTerms");
 
             migrationBuilder.DropTable(
-                name: "GovernanceResolutionCategories");
+                name: "StewardshipResolutionCategories");
 
             migrationBuilder.DropTable(
-                name: "GovernanceScans");
+                name: "StewardshipScans");
 
             migrationBuilder.DropTable(
-                name: "GovernanceSettings");
+                name: "StewardshipSettings");
 
             migrationBuilder.DropTable(
-                name: "GovernanceFindings");
+                name: "StewardshipFindings");
         }
     }
 }

@@ -186,9 +186,9 @@ public sealed class GovernanceDashboardTests
 
     [Theory]
     // Read is deliberately wide: a steward blind to other stewards' work cannot cover for them.
-    [InlineData("GovernanceViewer", HttpStatusCode.OK)]
+    [InlineData("StewardshipViewer", HttpStatusCode.OK)]
     [InlineData("DataSteward", HttpStatusCode.OK)]
-    [InlineData("GovernanceManager", HttpStatusCode.OK)]
+    [InlineData("StewardshipManager", HttpStatusCode.OK)]
     // A report reader is not a governance reader. Findings name assets and their weaknesses.
     [InlineData("Viewer", HttpStatusCode.Forbidden)]
     [InlineData("Publisher", HttpStatusCode.Forbidden)]
@@ -204,9 +204,9 @@ public sealed class GovernanceDashboardTests
 
     [Theory]
     // Deciding is steward judgement; viewing is not deciding.
-    [InlineData("GovernanceViewer", false)]
+    [InlineData("StewardshipViewer", false)]
     [InlineData("DataSteward", true)]
-    [InlineData("GovernanceManager", true)]
+    [InlineData("StewardshipManager", true)]
     public async Task DecidingAFinding_RequiresTheDecideTier(string role, bool allowed)
     {
         using var factory = new PortalWebFactory();
@@ -233,7 +233,7 @@ public sealed class GovernanceDashboardTests
     // Changing the threshold changes whether the whole estate is compliant. A steward working the
     // queue must not be able to clear it by moving the bar.
     [InlineData("DataSteward", false)]
-    [InlineData("GovernanceManager", true)]
+    [InlineData("StewardshipManager", true)]
     public async Task ChangingSettings_RequiresTheConfigureTier(string role, bool allowed)
     {
         using var factory = new PortalWebFactory();
@@ -252,7 +252,7 @@ public sealed class GovernanceDashboardTests
 
     [Theory]
     [InlineData("DataSteward", false)]
-    [InlineData("GovernanceManager", true)]
+    [InlineData("StewardshipManager", true)]
     public async Task RunningAScan_RequiresTheConfigureTier(string role, bool allowed)
     {
         using var factory = new PortalWebFactory();
@@ -267,7 +267,7 @@ public sealed class GovernanceDashboardTests
 
     [Theory]
     [InlineData("DataSteward", false)]
-    [InlineData("GovernanceManager", true)]
+    [InlineData("StewardshipManager", true)]
     public async Task ManagingGlossaryTerms_RequiresTheConfigureTier(string role, bool allowed)
     {
         using var factory = new PortalWebFactory();
@@ -408,7 +408,7 @@ public sealed class GovernanceDashboardTests
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            var stored = await db.GovernanceFindings.FirstAsync(f => f.Id == id);
+            var stored = await db.StewardshipFindings.FirstAsync(f => f.Id == id);
             Assert.NotNull(stored.SuppressedUntilUtc);
             stored.SuppressedUntilUtc = DateTime.UtcNow.AddDays(-1);
             await db.SaveChangesAsync();

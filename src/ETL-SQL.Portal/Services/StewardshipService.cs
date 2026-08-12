@@ -40,14 +40,14 @@ public sealed class GovernanceService(
     /// conservative end of the rollout ladder: glossary checks start off, because activating them
     /// against an estate that has never seen them would fail assets nobody has been asked about.
     /// </summary>
-    public async Task<GovernanceSettings> GetSettingsAsync(CancellationToken ct = default)
+    public async Task<StewardshipSettings> GetSettingsAsync(CancellationToken ct = default)
     {
-        var settings = await db.GovernanceSettings
-            .FirstOrDefaultAsync(s => s.Scope == Data.GovernanceSettings.DefaultScope, ct);
+        var settings = await db.StewardshipSettings
+            .FirstOrDefaultAsync(s => s.Scope == Data.StewardshipSettings.DefaultScope, ct);
         if (settings is not null) return settings;
 
-        settings = new GovernanceSettings { Scope = Data.GovernanceSettings.DefaultScope };
-        db.GovernanceSettings.Add(settings);
+        settings = new StewardshipSettings { Scope = Data.StewardshipSettings.DefaultScope };
+        db.StewardshipSettings.Add(settings);
         try
         {
             await db.SaveChangesAsync(ct);
@@ -61,8 +61,8 @@ public sealed class GovernanceService(
             // Serialising through a process-local lock would be wrong instead of merely slower —
             // Portal runs multi-node, and the other node is not holding your lock.
             db.Entry(settings).State = EntityState.Detached;
-            return await db.GovernanceSettings
-                .FirstAsync(s => s.Scope == Data.GovernanceSettings.DefaultScope, ct);
+            return await db.StewardshipSettings
+                .FirstAsync(s => s.Scope == Data.StewardshipSettings.DefaultScope, ct);
         }
     }
 
@@ -77,7 +77,7 @@ public sealed class GovernanceService(
         IReadOnlyList<GovernanceDeductionDto> Deductions,
         IReadOnlyList<string> AutomaticBadges);
 
-    public static ScoreResult Score(StewardshipAssetDto asset, GovernanceSettings settings, bool reviewedCurrent)
+    public static ScoreResult Score(StewardshipAssetDto asset, StewardshipSettings settings, bool reviewedCurrent)
     {
         var deductions = new List<GovernanceDeductionDto>();
         var badges = new List<string>();
@@ -138,23 +138,23 @@ public sealed class GovernanceService(
     /// reopens. Deleting and re-creating would silently discard every steward decision on each
     /// scan — the dashboard would look clean and be empty of history.</para>
     /// </summary>
-    public async Task<GovernanceScan> ScanAsync(string trigger, int? userId, CancellationToken ct = default)
+    public async Task<StewardshipScan> ScanAsync(string trigger, int? userId, CancellationToken ct = default)
     {
         var settings = await GetSettingsAsync(ct);
-        var scan = new GovernanceScan
+        var scan = new StewardshipScan
         {
             Trigger = trigger,
             StartedByUserId = userId,
             Status = "running"
         };
-        db.GovernanceScans.Add(scan);
+        db.StewardshipScans.Add(scan);
         await db.SaveChangesAsync(ct);
 
         try
         {
             var assets = await LoadAssetsAsync(settings, ct);
-            var reviews = await db.GovernanceAssetReviews.ToDictionaryAsync(r => r.AssetKey, ct);
-            var existing = await db.GovernanceFindings.Include(f => f.Decisions).ToListAsync(ct);
+            var reviews = await db.StewardshipAssetReviews.ToDictionaryAsync(r => r.AssetKey, ct);
+            var existing = await db.StewardshipFindings.Include(f => f.Decisions).ToListAsync(ct);
             var byKey = existing.ToDictionary(f => (f.AssetKey, f.RuleKey));
             var now = DateTime.UtcNow;
             var seen = new HashSet<(string, string)>();
@@ -195,8 +195,8 @@ public sealed class GovernanceService(
             foreach (var finding in existing)
             {
                 if (seen.Contains((finding.AssetKey, finding.RuleKey))) continue;
-                if (finding.Status == GovernanceFinding.ResolvedStatus) continue;
-                finding.Status = GovernanceFinding.ResolvedStatus;
+                if (finding.Status == StewardshipFinding.ResolvedStatus) continue;
+                finding.Status = StewardshipFinding.ResolvedStatus;
                 finding.ResolvedAtUtc = now;
                 scan.FindingsResolved++;
             }
@@ -221,15 +221,15 @@ public sealed class GovernanceService(
     }
 
     private void OpenNew(
-        string assetKey, string ruleKey, string version, string detail, DateTime now, GovernanceScan scan)
+        string assetKey, string ruleKey, string version, string detail, DateTime now, StewardshipScan scan)
     {
-        db.GovernanceFindings.Add(new GovernanceFinding
+        db.StewardshipFindings.Add(new StewardshipFinding
         {
             AssetKey = assetKey,
             RuleKey = ruleKey,
             AssetVersion = version,
             Detail = detail,
-            Status = GovernanceFinding.OpenStatus,
+            Status = StewardshipFinding.OpenStatus,
             FirstSeenUtc = now,
             LastSeenUtc = now
         });
@@ -237,17 +237,17 @@ public sealed class GovernanceService(
     }
 
     private static void UpdateExisting(
-        GovernanceFinding finding, string version, string detail, DateTime now, GovernanceScan scan)
+        StewardshipFinding finding, string version, string detail, DateTime now, StewardshipScan scan)
     {
         finding.LastSeenUtc = now;
         finding.Detail = detail;
 
-        var suppressed = finding.Status is GovernanceFinding.IgnoredStatus or GovernanceFinding.AcceptedRiskStatus;
+        var suppressed = finding.Status is StewardshipFinding.IgnoredStatus or StewardshipFinding.AcceptedRiskStatus;
         if (!suppressed)
         {
-            if (finding.Status == GovernanceFinding.ResolvedStatus)
+            if (finding.Status == StewardshipFinding.ResolvedStatus)
             {
-                finding.Status = GovernanceFinding.ReopenedStatus;
+                finding.Status = StewardshipFinding.ReopenedStatus;
                 finding.ResolvedAtUtc = null;
                 scan.FindingsReopened++;
             }
@@ -262,7 +262,7 @@ public sealed class GovernanceService(
         var expired = finding.SuppressedUntilUtc is { } until && until <= now;
         if (versionMoved || expired)
         {
-            finding.Status = GovernanceFinding.ReopenedStatus;
+            finding.Status = StewardshipFinding.ReopenedStatus;
             finding.AssetVersion = version;
             finding.SuppressedUntilUtc = null;
             scan.FindingsReopened++;
@@ -270,7 +270,7 @@ public sealed class GovernanceService(
     }
 
     private async Task<List<StewardshipAssetDto>> LoadAssetsAsync(
-        GovernanceSettings settings, CancellationToken ct)
+        StewardshipSettings settings, CancellationToken ct)
     {
         _ = ct;
         var entries = await lineageCatalog.GetRecentLineageAsync(5000);
@@ -296,12 +296,12 @@ public sealed class GovernanceService(
     {
         var settings = await GetSettingsAsync(ct);
         var assets = await LoadAssetsAsync(settings, ct);
-        var reviews = await db.GovernanceAssetReviews.AsNoTracking().ToDictionaryAsync(r => r.AssetKey, ct);
-        var badges = (await db.GovernanceAssetBadges.AsNoTracking().ToListAsync(ct))
+        var reviews = await db.StewardshipAssetReviews.AsNoTracking().ToDictionaryAsync(r => r.AssetKey, ct);
+        var badges = (await db.StewardshipAssetBadges.AsNoTracking().ToListAsync(ct))
             .GroupBy(b => b.AssetKey, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Select(b => b.Badge).ToList(), StringComparer.OrdinalIgnoreCase);
 
-        var findings = await db.GovernanceFindings.AsNoTracking()
+        var findings = await db.StewardshipFindings.AsNoTracking()
             .Include(f => f.Decisions)
             .ToListAsync(ct);
         var findingsByAsset = findings
@@ -340,7 +340,7 @@ public sealed class GovernanceService(
         if (!string.IsNullOrWhiteSpace(steward))
             rows = [.. rows.Where(r => string.Equals(r.Steward, steward, StringComparison.OrdinalIgnoreCase))];
 
-        var lastScan = await db.GovernanceScans.AsNoTracking()
+        var lastScan = await db.StewardshipScans.AsNoTracking()
             .OrderByDescending(s => s.Id)
             .FirstOrDefaultAsync(ct);
 
@@ -349,15 +349,15 @@ public sealed class GovernanceService(
                 rows.Count,
                 rows.Count(r => r.Governed),
                 rows.Count(r => !r.Governed),
-                findings.Count(f => f.Status is GovernanceFinding.OpenStatus or GovernanceFinding.ReopenedStatus),
-                findings.Count(f => f.Status == GovernanceFinding.IgnoredStatus),
-                findings.Count(f => f.Status == GovernanceFinding.AcceptedRiskStatus),
+                findings.Count(f => f.Status is StewardshipFinding.OpenStatus or StewardshipFinding.ReopenedStatus),
+                findings.Count(f => f.Status == StewardshipFinding.IgnoredStatus),
+                findings.Count(f => f.Status == StewardshipFinding.AcceptedRiskStatus),
                 settings.TargetScore),
             rows,
             lastScan is null ? null : ToScanDto(lastScan));
     }
 
-    public static GovernanceFindingDto ToFindingDto(GovernanceFinding f) => new(
+    public static StewardshipFindingDto ToFindingDto(StewardshipFinding f) => new(
         f.Id, f.AssetKey, f.RuleKey, f.AssetVersion, f.Detail, f.Status,
         f.FirstSeenUtc, f.LastSeenUtc, f.ResolvedAtUtc, f.SuppressedUntilUtc,
         [.. f.Decisions
@@ -366,7 +366,7 @@ public sealed class GovernanceService(
                 d.Id, d.Decision, d.CategoryValue, d.Reason, d.AssetVersion,
                 d.DecidedAtUtc, d.DecidedByUserName))]);
 
-    public static GovernanceScanDto ToScanDto(GovernanceScan s) => new(
+    public static StewardshipScanDto ToScanDto(StewardshipScan s) => new(
         s.Id, s.Trigger, s.StartedAtUtc, s.CompletedAtUtc, s.Status, s.Error,
         s.AssetsScanned, s.FindingsOpened, s.FindingsResolved, s.FindingsReopened);
 }

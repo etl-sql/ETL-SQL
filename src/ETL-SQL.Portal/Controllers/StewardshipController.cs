@@ -17,11 +17,11 @@ namespace ETL_SQL.Portal.Controllers;
 /// estate is compliant:</para>
 ///
 /// <list type="bullet">
-/// <item><b>Read</b> — <c>GovernanceViewer</c> and above. Stewards must see other stewards' work;
+/// <item><b>Read</b> — <c>StewardshipViewer</c> and above. Stewards must see other stewards' work;
 /// a queue you cannot see past is a queue you cannot cover for.</item>
 /// <item><b>Decide</b> — <c>DataSteward</c> and above. Ignoring a finding, accepting a risk, marking
 /// an asset reviewed, and assigning a badge are all steward judgements, and all audited.</item>
-/// <item><b>Configure</b> — <c>GovernanceManager</c> or <c>Admin</c>. Thresholds, enabled checks,
+/// <item><b>Configure</b> — <c>StewardshipManager</c> or <c>Admin</c>. Thresholds, enabled checks,
 /// glossary content, and suppression categories change what "governed" means estate-wide. Whoever
 /// can lower the bar is not the same person as whoever works against it.</item>
 /// </list>
@@ -66,7 +66,7 @@ public sealed class GovernanceController(
         CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 1000);
-        var query = db.GovernanceFindings.AsNoTracking().Include(f => f.Decisions).AsQueryable();
+        var query = db.StewardshipFindings.AsNoTracking().Include(f => f.Decisions).AsQueryable();
         if (!string.IsNullOrWhiteSpace(status))
             query = query.Where(f => f.Status == status);
 
@@ -83,7 +83,7 @@ public sealed class GovernanceController(
         [FromQuery] int limit = 20, CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 100);
-        var scans = await db.GovernanceScans.AsNoTracking()
+        var scans = await db.StewardshipScans.AsNoTracking()
             .OrderByDescending(s => s.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -113,7 +113,7 @@ public sealed class GovernanceController(
         if (decision != "reopen" && string.IsNullOrWhiteSpace(req.AssetVersion))
             return BadRequest(new { error = "An asset version is required so the suppression can be revisited when the asset changes." });
 
-        var finding = await db.GovernanceFindings
+        var finding = await db.StewardshipFindings
             .Include(f => f.Decisions)
             .FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
         if (finding is null) return NotFound(new { error = "Finding not found." });
@@ -123,7 +123,7 @@ public sealed class GovernanceController(
         {
             var category = string.IsNullOrWhiteSpace(req.CategoryValue)
                 ? null
-                : await db.GovernanceResolutionCategories
+                : await db.StewardshipResolutionCategories
                     .FirstOrDefaultAsync(c => c.Value == req.CategoryValue && !c.Disabled, cancellationToken);
             if (!string.IsNullOrWhiteSpace(req.CategoryValue) && category is null)
                 return BadRequest(new { error = $"Resolution category '{req.CategoryValue}' is not defined or is disabled." });
@@ -132,18 +132,18 @@ public sealed class GovernanceController(
                 suppressedUntil = DateTime.UtcNow.AddDays(days);
 
             finding.Status = decision == "ignore"
-                ? GovernanceFinding.IgnoredStatus
-                : GovernanceFinding.AcceptedRiskStatus;
+                ? StewardshipFinding.IgnoredStatus
+                : StewardshipFinding.AcceptedRiskStatus;
             finding.AssetVersion = req.AssetVersion;
             finding.SuppressedUntilUtc = suppressedUntil;
         }
         else
         {
-            finding.Status = GovernanceFinding.ReopenedStatus;
+            finding.Status = StewardshipFinding.ReopenedStatus;
             finding.SuppressedUntilUtc = null;
         }
 
-        db.GovernanceFindingDecisions.Add(new GovernanceFindingDecision
+        db.StewardshipFindingDecisions.Add(new StewardshipFindingDecision
         {
             FindingId = finding.Id,
             Decision = decision,
@@ -155,11 +155,11 @@ public sealed class GovernanceController(
         });
 
         await audit.LogAsync(CurrentUserId, $"GOVERNANCE_{decision.ToUpperInvariant().Replace('-', '_')}",
-            "GovernanceFinding", finding.Id.ToString(),
+            "StewardshipFinding", finding.Id.ToString(),
             $"asset={finding.AssetKey}; rule={finding.RuleKey}; version={req.AssetVersion}; reason={req.Reason.Trim()}");
 
         await db.SaveChangesAsync(cancellationToken);
-        var saved = await db.GovernanceFindings.AsNoTracking()
+        var saved = await db.StewardshipFindings.AsNoTracking()
             .Include(f => f.Decisions)
             .FirstAsync(f => f.Id == finding.Id, cancellationToken);
         return Ok(GovernanceService.ToFindingDto(saved));
@@ -173,12 +173,12 @@ public sealed class GovernanceController(
         if (string.IsNullOrWhiteSpace(req.AssetKey) || string.IsNullOrWhiteSpace(req.AssetVersion))
             return BadRequest(new { error = "Asset key and version are required." });
 
-        var review = await db.GovernanceAssetReviews
+        var review = await db.StewardshipAssetReviews
             .FirstOrDefaultAsync(r => r.AssetKey == req.AssetKey, cancellationToken);
         if (review is null)
         {
-            review = new GovernanceAssetReview { AssetKey = req.AssetKey };
-            db.GovernanceAssetReviews.Add(review);
+            review = new StewardshipAssetReview { AssetKey = req.AssetKey };
+            db.StewardshipAssetReviews.Add(review);
         }
 
         review.ReviewedVersion = req.AssetVersion;
@@ -200,12 +200,12 @@ public sealed class GovernanceController(
         if (string.IsNullOrWhiteSpace(req.AssetKey) || string.IsNullOrWhiteSpace(req.Badge))
             return BadRequest(new { error = "Asset key and badge are required." });
 
-        var existing = await db.GovernanceAssetBadges
+        var existing = await db.StewardshipAssetBadges
             .FirstOrDefaultAsync(b => b.AssetKey == req.AssetKey && b.Badge == req.Badge, cancellationToken);
         if (existing is not null)
             return Ok(new { req.AssetKey, req.Badge, existing.AssignedAtUtc });
 
-        db.GovernanceAssetBadges.Add(new GovernanceAssetBadge
+        db.StewardshipAssetBadges.Add(new StewardshipAssetBadge
         {
             AssetKey = req.AssetKey,
             Badge = req.Badge,
@@ -225,11 +225,11 @@ public sealed class GovernanceController(
     public async Task<IActionResult> RemoveBadge(
         [FromQuery] string assetKey, [FromQuery] string badge, CancellationToken cancellationToken = default)
     {
-        var existing = await db.GovernanceAssetBadges
+        var existing = await db.StewardshipAssetBadges
             .FirstOrDefaultAsync(b => b.AssetKey == assetKey && b.Badge == badge, cancellationToken);
         if (existing is null) return NotFound(new { error = "Badge assignment not found." });
 
-        db.GovernanceAssetBadges.Remove(existing);
+        db.StewardshipAssetBadges.Remove(existing);
         await audit.LogAsync(CurrentUserId, "GOVERNANCE_REMOVE_BADGE", "GovernanceAsset", assetKey,
             $"badge={badge}");
         await db.SaveChangesAsync(cancellationToken);
@@ -247,7 +247,7 @@ public sealed class GovernanceController(
     public async Task<IActionResult> RunScan(CancellationToken cancellationToken = default)
     {
         var scan = await governance.ScanAsync("manual", CurrentUserId, cancellationToken);
-        await audit.LogAsync(CurrentUserId, "GOVERNANCE_SCAN", "GovernanceScan", scan.Id.ToString(),
+        await audit.LogAsync(CurrentUserId, "GOVERNANCE_SCAN", "StewardshipScan", scan.Id.ToString(),
             $"assets={scan.AssetsScanned}; opened={scan.FindingsOpened}; resolved={scan.FindingsResolved}; reopened={scan.FindingsReopened}");
         return Ok(GovernanceService.ToScanDto(scan));
     }
@@ -259,7 +259,7 @@ public sealed class GovernanceController(
     [HttpPut("settings")]
     [Authorize(Policy = "GovernanceConfigure")]
     public async Task<IActionResult> UpdateSettings(
-        [FromBody] UpdateGovernanceSettingsRequest req, CancellationToken cancellationToken = default)
+        [FromBody] UpdateStewardshipSettingsRequest req, CancellationToken cancellationToken = default)
     {
         if (req.TargetScore is < 0 or > 100)
             return BadRequest(new { error = "Target score must be between 0 and 100." });
@@ -290,7 +290,7 @@ public sealed class GovernanceController(
 
         // Before and after both, because "who lowered the threshold" is the question this row exists
         // to answer, and the new value alone does not answer it.
-        await audit.LogAsync(CurrentUserId, "GOVERNANCE_UPDATE_SETTINGS", "GovernanceSettings",
+        await audit.LogAsync(CurrentUserId, "GOVERNANCE_UPDATE_SETTINGS", "StewardshipSettings",
             settings.Id.ToString(),
             $"before[{before}] after[target={settings.TargetScore}; level={settings.PolicyLevel}; glossary={settings.EnableGlossaryCheck}]");
         await db.SaveChangesAsync(cancellationToken);
@@ -300,7 +300,7 @@ public sealed class GovernanceController(
     [HttpGet("categories")]
     public async Task<IActionResult> GetCategories(CancellationToken cancellationToken = default)
     {
-        var categories = await db.GovernanceResolutionCategories.AsNoTracking()
+        var categories = await db.StewardshipResolutionCategories.AsNoTracking()
             .OrderBy(c => c.Label)
             .ToListAsync(cancellationToken);
         return Ok(categories.Select(c =>
@@ -316,13 +316,13 @@ public sealed class GovernanceController(
             return BadRequest(new { error = "Category value and label are required." });
 
         var value = req.Value.Trim();
-        var category = await db.GovernanceResolutionCategories
+        var category = await db.StewardshipResolutionCategories
             .FirstOrDefaultAsync(c => c.Value == value, cancellationToken);
         var isNew = category is null;
         if (category is null)
         {
-            category = new GovernanceResolutionCategory { Value = value, CreatedByUserId = CurrentUserId };
-            db.GovernanceResolutionCategories.Add(category);
+            category = new StewardshipResolutionCategory { Value = value, CreatedByUserId = CurrentUserId };
+            db.StewardshipResolutionCategories.Add(category);
         }
 
         category.Label = req.Label.Trim();
@@ -346,7 +346,7 @@ public sealed class GovernanceController(
     [Authorize(Policy = "GovernanceConfigure")]
     public async Task<IActionResult> DisableCategory(string value, CancellationToken cancellationToken = default)
     {
-        var category = await db.GovernanceResolutionCategories
+        var category = await db.StewardshipResolutionCategories
             .FirstOrDefaultAsync(c => c.Value == value, cancellationToken);
         if (category is null) return NotFound(new { error = "Category not found." });
 
@@ -360,7 +360,7 @@ public sealed class GovernanceController(
     [HttpGet("glossary")]
     public async Task<IActionResult> GetGlossary(CancellationToken cancellationToken = default)
     {
-        var terms = await db.GovernanceGlossaryTerms.AsNoTracking()
+        var terms = await db.StewardshipGlossaryTerms.AsNoTracking()
             .OrderBy(t => t.Term)
             .ToListAsync(cancellationToken);
         return Ok(terms.Select(ToDto));
@@ -376,12 +376,12 @@ public sealed class GovernanceController(
             return BadRequest(new { error = "Term, data type, aliases, and description are required." });
 
         var name = req.Term.Trim();
-        var term = await db.GovernanceGlossaryTerms.FirstOrDefaultAsync(t => t.Term == name, cancellationToken);
+        var term = await db.StewardshipGlossaryTerms.FirstOrDefaultAsync(t => t.Term == name, cancellationToken);
         var isNew = term is null;
         if (term is null)
         {
-            term = new GovernanceGlossaryTerm { Term = name, CreatedByUserId = CurrentUserId };
-            db.GovernanceGlossaryTerms.Add(term);
+            term = new StewardshipGlossaryTerm { Term = name, CreatedByUserId = CurrentUserId };
+            db.StewardshipGlossaryTerms.Add(term);
         }
 
         term.DataType = req.DataType.Trim();
@@ -395,7 +395,7 @@ public sealed class GovernanceController(
         term.Version++;
 
         await audit.LogAsync(CurrentUserId, isNew ? "GOVERNANCE_CREATE_TERM" : "GOVERNANCE_UPDATE_TERM",
-            "GovernanceGlossaryTerm", name, $"aliases={term.Aliases}");
+            "StewardshipGlossaryTerm", name, $"aliases={term.Aliases}");
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToDto(term));
     }
@@ -404,20 +404,20 @@ public sealed class GovernanceController(
     [Authorize(Policy = "GovernanceConfigure")]
     public async Task<IActionResult> DeleteGlossaryTerm(string term, CancellationToken cancellationToken = default)
     {
-        var existing = await db.GovernanceGlossaryTerms.FirstOrDefaultAsync(t => t.Term == term, cancellationToken);
+        var existing = await db.StewardshipGlossaryTerms.FirstOrDefaultAsync(t => t.Term == term, cancellationToken);
         if (existing is null) return NotFound(new { error = "Glossary term not found." });
 
-        db.GovernanceGlossaryTerms.Remove(existing);
-        await audit.LogAsync(CurrentUserId, "GOVERNANCE_DELETE_TERM", "GovernanceGlossaryTerm", term, null);
+        db.StewardshipGlossaryTerms.Remove(existing);
+        await audit.LogAsync(CurrentUserId, "GOVERNANCE_DELETE_TERM", "StewardshipGlossaryTerm", term, null);
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
-    private static GovernanceSettingsDto ToDto(GovernanceSettings s) => new(
+    private static StewardshipSettingsDto ToDto(StewardshipSettings s) => new(
         s.TargetScore, s.EnableMetadataCheck, s.EnableProtectedDataCheck, s.EnableGlossaryCheck,
         s.EnableStalenessCheck, s.DeductMetadata, s.DeductProtectedData, s.DeductGlossary,
         s.DeductStaleness, s.StaleAfterDays, s.PolicyLevel, s.UpdatedAtUtc, s.Version);
 
-    private static GovernanceGlossaryTermDto ToDto(GovernanceGlossaryTerm t) => new(
+    private static StewardshipGlossaryTermDto ToDto(StewardshipGlossaryTerm t) => new(
         t.Id, t.Term, t.DataType, t.Aliases, t.Description, t.Formula, t.Steward, t.Disabled, t.UpdatedAtUtc);
 }

@@ -13,14 +13,14 @@ namespace ETL_SQL.Portal.Data;
 /// asset version it was made against, so a later version does not silently inherit it. A decision
 /// that outlived the thing it was made about is indistinguishable from no governance at all.</para>
 /// </summary>
-internal static class GovernanceEntityNotes;
+internal static class StewardshipEntityNotes;
 
 /// <summary>
 /// Scoring and enablement configuration. A single logical row: thresholds and enabled checks are
 /// deployment-wide, and a per-user copy would mean two stewards disagreeing about whether an asset
 /// is governed.
 /// </summary>
-public class GovernanceSettings : IVersionedEntity
+public class StewardshipSettings : IVersionedEntity
 {
     public int Id { get; set; }
 
@@ -62,7 +62,7 @@ public class GovernanceSettings : IVersionedEntity
 /// why something is not going to be fixed. Durable because an exception whose category no longer
 /// exists cannot be reviewed.
 /// </summary>
-public class GovernanceResolutionCategory : IVersionedEntity
+public class StewardshipResolutionCategory : IVersionedEntity
 {
     public int Id { get; set; }
     /// <summary>Stable key stored on decisions; the label may be reworded, this may not.</summary>
@@ -83,10 +83,10 @@ public class GovernanceResolutionCategory : IVersionedEntity
 
 /// <summary>
 /// An organization-owned business term. Manual and opt-in: glossary checks do not affect scores or
-/// create findings until <see cref="GovernanceSettings.EnableGlossaryCheck"/> is on, so importing a
+/// create findings until <see cref="StewardshipSettings.EnableGlossaryCheck"/> is on, so importing a
 /// starter glossary cannot silently fail an estate.
 /// </summary>
-public class GovernanceGlossaryTerm : IVersionedEntity
+public class StewardshipGlossaryTerm : IVersionedEntity
 {
     public int Id { get; set; }
     public string Term { get; set; } = "";
@@ -110,7 +110,7 @@ public class GovernanceGlossaryTerm : IVersionedEntity
 /// automatic badges, which are computed from current evidence and never stored: storing a computed
 /// badge would let it outlive the evidence that justified it.
 /// </summary>
-public class GovernanceAssetBadge : IVersionedEntity
+public class StewardshipAssetBadge : IVersionedEntity
 {
     public int Id { get; set; }
     /// <summary>Normalized asset path, e.g. <c>sales.dbo.orders.customer_id</c>.</summary>
@@ -129,7 +129,7 @@ public class GovernanceAssetBadge : IVersionedEntity
 /// derived by comparing this to the asset's current version — which only works because the version
 /// is recorded here rather than a bare timestamp.
 /// </summary>
-public class GovernanceAssetReview : IVersionedEntity
+public class StewardshipAssetReview : IVersionedEntity
 {
     public int Id { get; set; }
     public string AssetKey { get; set; } = "";
@@ -148,7 +148,7 @@ public class GovernanceAssetReview : IVersionedEntity
 /// anyway because a decision needs something durable to attach to, and because "this was open, then
 /// resolved" is history a recomputation cannot reconstruct.
 /// </remarks>
-public class GovernanceFinding : IVersionedEntity
+public class StewardshipFinding : IVersionedEntity
 {
     public int Id { get; set; }
     public string AssetKey { get; set; } = "";
@@ -176,7 +176,7 @@ public class GovernanceFinding : IVersionedEntity
     public DateTime? SuppressedUntilUtc { get; set; }
     public long Version { get; set; } = 1;
 
-    public ICollection<GovernanceFindingDecision> Decisions { get; set; } = [];
+    public ICollection<StewardshipFindingDecision> Decisions { get; set; } = [];
 }
 
 /// <summary>
@@ -184,16 +184,16 @@ public class GovernanceFinding : IVersionedEntity
 /// row rather than editing one: the question a reviewer asks is "who accepted this, when, and on
 /// what grounds", and an overwritten record cannot answer it.
 /// </summary>
-public class GovernanceFindingDecision
+public class StewardshipFindingDecision
 {
     public int Id { get; set; }
     public int FindingId { get; set; }
-    public GovernanceFinding? Finding { get; set; }
+    public StewardshipFinding? Finding { get; set; }
 
     /// <summary><c>ignore</c>, <c>accept-risk</c>, <c>reopen</c>, or <c>review</c>.</summary>
     public string Decision { get; set; } = "";
 
-    /// <summary>References <see cref="GovernanceResolutionCategory.Value"/> for suppressions.</summary>
+    /// <summary>References <see cref="StewardshipResolutionCategory.Value"/> for suppressions.</summary>
     public string? CategoryValue { get; set; }
     public string Reason { get; set; } = "";
 
@@ -212,7 +212,7 @@ public class GovernanceFindingDecision
 /// One governance scan: what recomputed the findings, when, and what it produced. Without it the
 /// dashboard cannot distinguish "no findings" from "never scanned", which are opposite conclusions.
 /// </summary>
-public class GovernanceScan
+public class StewardshipScan
 {
     public int Id { get; set; }
     /// <summary><c>manual</c>, <c>publish</c>, or <c>scheduled</c>.</summary>
