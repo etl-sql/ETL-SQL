@@ -824,7 +824,7 @@ raw `CMD` connector or arbitrary shell execution.
       **(Addressed: 2026-08-12. In-session CREATE TOOL removed; replaced with IToolCatalogProvider and CLI admin-machine-tool-* bindings.)**
 - [x] Provide tenant-admin catalog/binding/grant workflows with platform-policy revocation but no implicit
       platform data authority, plus promotion and preflight diagnostics for unavailable profile bindings.
-- [ ] Retain adversarial certification evidence for injection, sandbox escape, unauthorized data/secret/
+- [x] Retain adversarial certification evidence for injection, sandbox escape, unauthorized data/secret/
       network access, artifact substitution, protocol confusion, resource exhaustion, cancellation,
       cross-tenant isolation, checkpoint replacement, and cross-profile portability. Keep hardened,
       hostile-tool, and scale cases in targeted release lanes.
