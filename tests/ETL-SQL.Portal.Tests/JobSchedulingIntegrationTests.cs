@@ -272,10 +272,7 @@ namespace ETL_SQL.Portal.Tests
             });
 
             var store = factory.Services.GetRequiredService<IJobHistoryStore>();
-            var jobDef = await store.GetJobAsync(jobName);
-            Assert.NotNull(jobDef);
-            Assert.NotNull(jobDef.LastRun);
-            Assert.NotNull(jobDef.NextRun);
+            var jobDef = await PollJobDefinitionUpdatedAsync(store, jobName);
             Assert.True(jobDef.NextRun > jobDef.LastRun);
         }
 
