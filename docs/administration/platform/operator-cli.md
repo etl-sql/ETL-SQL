@@ -69,6 +69,9 @@ artifact can neither read nor decrypt the data:
 ```bash
 # Stop the portal/orchestrator first so no writes are in flight, then:
 etl-sql admin backup --output-dir D:\backups
+
+# Managed Dedicated: derive scope from the provisioned host-fixed boundary
+etl-sql admin backup --tenant-root D:\saas\tenant-alpha --output-dir D:\backups\tenant-alpha
 ```
 
 - **`etl-sql-backup-<timestamp>.zip`** (data) — for single-node SQLite deployments, the Portal and
@@ -100,6 +103,9 @@ etl-sql admin restore --from data.zip --keys keys.zip --validate --report recove
 
 # Restore into a clean directory once validation passes
 etl-sql admin restore --from data.zip --keys keys.zip --to D:\restore-target --report recovery-report.json
+
+# Managed Dedicated: the recovery environment must assert the same tenant as both archives
+etl-sql admin restore --from data.zip --keys keys.zip --expected-tenant tenant-alpha --to D:\restore-target --report recovery-report.json
 ```
 
 Validation checks that the two archives are a matching pair (same backup id), that the data archive's
@@ -111,6 +117,14 @@ path in the catalog must be restored to their original `DatasetRootPath` (or re-
 [versioned upgrades and rollback](../portal/publishing.md#versioned-upgrades-and-rollback).
 The optional `--report` path writes a machine-readable recovery report containing the backup id,
 validation status, achieved RPO/data-loss window, missing dependencies, and required operator actions.
+
+For Managed Dedicated, `--tenant-root` reads the provisioned `tenant-manifest.json` and
+`config/appsettings.tenant.json`; those two server-owned identities must agree. Both custody archives
+carry that canonical tenant identity, and restore requires a matching `--expected-tenant`. Backup
+refuses explicitly foreign tenant rows in the Dedicated stores. Restore writes only to an empty
+target, disables restored jobs, advances their lease fences, cancels queued sandbox admissions, and
+retains formerly active admissions for runtime reconciliation. This prevents a recovered database
+from resuming pre-backup work before the replacement environment is reviewed and activated.
 
 This is the auditable, supported alternative to the manual file-copy backup in [Backup & Maintenance](backup-and-monitoring.md#backup--maintenance) for single-node
 deployments. In HA deployments, back up PostgreSQL with your database backup tooling and snapshot the

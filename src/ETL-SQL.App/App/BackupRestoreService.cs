@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Multitenancy;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,8 +38,23 @@ namespace ETL_SQL.App
 
         internal static async Task<int> BackupAsync(CliContext ctx, ILogger logger)
         {
-            var config = Program.ServiceProvider.GetService<IConfiguration>()
-                ?? new ConfigurationBuilder().Build();
+            var baseDirectory = AppContext.BaseDirectory;
+            string? appSettingsPath = null;
+            string? tenantId = null;
+            IConfiguration config;
+            if (!string.IsNullOrWhiteSpace(ctx.BackupTenantRoot))
+            {
+                var dedicated = await ResolveDedicatedBoundaryAsync(ctx.BackupTenantRoot);
+                baseDirectory = dedicated.ConfigDirectory;
+                appSettingsPath = dedicated.ConfigPath;
+                tenantId = dedicated.TenantId;
+                config = new ConfigurationBuilder().AddJsonFile(appSettingsPath).Build();
+            }
+            else
+            {
+                config = Program.ServiceProvider.GetService<IConfiguration>()
+                    ?? new ConfigurationBuilder().Build();
+            }
             var outputDir = string.IsNullOrWhiteSpace(ctx.BackupOutputDir)
                 ? Directory.GetCurrentDirectory()
                 : Path.GetFullPath(ctx.BackupOutputDir.Trim('"', '\'', ' '));
@@ -46,7 +62,8 @@ namespace ETL_SQL.App
             int exitCode;
             try
             {
-                exitCode = await BackupCoreAsync(config, AppContext.BaseDirectory, outputDir, logger);
+                exitCode = await BackupCoreAsync(
+                    config, baseDirectory, outputDir, logger, appSettingsPath, tenantId);
             }
             catch
             {
@@ -68,7 +85,7 @@ namespace ETL_SQL.App
         {
             try
             {
-                var store = Program.ServiceProvider.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
+                var store = Program.ServiceProvider?.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
                 if (store == null) return;
                 await store.InitializeAsync();
                 await store.SetJobStateAsync("admin-backup", "last_backup_status", exitCode == 0 ? "success" : "failed");
@@ -95,7 +112,7 @@ namespace ETL_SQL.App
         {
             try
             {
-                var store = Program.ServiceProvider.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
+                var store = Program.ServiceProvider?.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
                 if (store == null) return;
                 await store.InitializeAsync();
                 await store.SetJobStateAsync("admin-restore", "last_restore_mode", validateOnly ? "validate" : "restore");
@@ -111,7 +128,13 @@ namespace ETL_SQL.App
         }
 
         /// <summary>Testable backup core: explicit config, install/base directory, and output directory.</summary>
-        internal static async Task<int> BackupCoreAsync(IConfiguration config, string baseDir, string outputDir, ILogger logger)
+        internal static async Task<int> BackupCoreAsync(
+            IConfiguration config,
+            string baseDir,
+            string outputDir,
+            ILogger logger,
+            string? appSettingsPath = null,
+            string? tenantId = null)
         {
             await CreateDirectoryAsync(outputDir);
 
@@ -136,8 +159,12 @@ namespace ETL_SQL.App
                 var portalDb = Resolve(config["Portal:DatabasePath"] ?? "./portal.db", baseDir);
                 var orchDb = Resolve(
                     config["Portal:Orchestrator:DatabasePath"]
+                    ?? config["Orchestrator:DatabasePath"]
                     ?? config["Orchestrator:HistoryDbPath"]
                     ?? "./etlsql.db", baseDir);
+
+                if (!string.IsNullOrWhiteSpace(tenantId))
+                    await ValidateDedicatedDatabaseTenantAsync(portalDb, orchDb, tenantId);
 
                 var files = new List<BackupFile>();
 
@@ -152,12 +179,16 @@ namespace ETL_SQL.App
                 files.AddRange(await CopyTreeAsync(Resolve(config["Portal:MapRootPath"] ?? "./data/maps", baseDir), Path.Combine(dataStage, "content", "maps"), dataStage));
 
                 // Config, with secrets split out into the keys archive.
-                var (strippedConfig, secrets) = await SplitConfigSecretsAsync(Path.Combine(baseDir, "appsettings.json"));
+                var (strippedConfig, secrets) = await SplitConfigSecretsAsync(
+                    appSettingsPath ?? Path.Combine(baseDir, "appsettings.json"));
                 await File.WriteAllTextAsync(Path.Combine(dataStage, "appsettings.json"), strippedConfig);
                 files.Add(await DescribeAsync(Path.Combine(dataStage, "appsettings.json"), dataStage));
 
                 // ── Keys archive: Data Protection key ring + the stripped secrets ──────
-                var dpRing = Path.Combine(Path.GetDirectoryName(portalDb) ?? baseDir, DpKeyRingDirName);
+                var dpRing = Resolve(
+                    config["Portal:Storage:KeyRingPath"]
+                    ?? Path.Combine(Path.GetDirectoryName(portalDb) ?? baseDir, DpKeyRingDirName),
+                    baseDir);
                 int dpKeyFiles = (await CopyTreeAsync(dpRing, Path.Combine(keysStage, DpKeyRingDirName), keysStage)).Count;
                 var secretsPath = Path.Combine(keysStage, SecretsName);
                 await File.WriteAllTextAsync(secretsPath,
@@ -168,6 +199,7 @@ namespace ETL_SQL.App
                 var keysManifest = new JsonObject
                 {
                     ["backupId"] = backupId,
+                    ["tenantId"] = tenantId,
                     ["createdUtc"] = DateTime.UtcNow.ToString("o"),
                     ["atRestKeyVersion"] = atRestVersion,
                     ["secretCount"] = secrets.Count,
@@ -179,6 +211,7 @@ namespace ETL_SQL.App
                 var manifest = new JsonObject
                 {
                     ["backupId"] = backupId,
+                    ["tenantId"] = tenantId,
                     ["createdUtc"] = DateTime.UtcNow.ToString("o"),
                     ["appVersion"] = AppVersion(),
                     ["atRestKeyVersion"] = atRestVersion,
@@ -220,6 +253,80 @@ namespace ETL_SQL.App
             }
         }
 
+        private sealed record DedicatedBoundary(
+            string TenantId,
+            string ConfigPath,
+            string ConfigDirectory);
+
+        private static async Task<DedicatedBoundary> ResolveDedicatedBoundaryAsync(string tenantRoot)
+        {
+            var root = Path.GetFullPath(tenantRoot.Trim('"', '\'', ' '))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (Path.GetPathRoot(root)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                == root)
+            {
+                throw new ArgumentException("A filesystem root cannot be used as a tenant boundary.");
+            }
+
+            var manifestPath = Path.Combine(root, "tenant-manifest.json");
+            var configPath = Path.Combine(root, "config", "appsettings.tenant.json");
+            if (!File.Exists(manifestPath) || !File.Exists(configPath))
+                throw new InvalidDataException(
+                    "--tenant-root must contain tenant-manifest.json and config/appsettings.tenant.json.");
+
+            var manifest = JsonNode.Parse(await File.ReadAllTextAsync(manifestPath))?.AsObject()
+                ?? throw new InvalidDataException("The tenant boundary manifest is unreadable.");
+            var config = JsonNode.Parse(await File.ReadAllTextAsync(configPath))?.AsObject()
+                ?? throw new InvalidDataException("The tenant boundary configuration is unreadable.");
+            var manifestTenant = TenantId.FromTrustedSource((string?)manifest["tenantId"]).Value;
+            var configuredTenant = TenantId.FromTrustedSource(
+                (string?)config["saasTenant"]?["tenantId"]
+                ?? (string?)config["SaasTenant"]?["TenantId"]).Value;
+            if (!string.Equals(manifestTenant, configuredTenant, StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    "Tenant boundary manifest and host-fixed configuration identify different tenants.");
+
+            return new DedicatedBoundary(manifestTenant, configPath, Path.GetDirectoryName(configPath)!);
+        }
+
+        private static async Task ValidateDedicatedDatabaseTenantAsync(
+            string portalDb,
+            string orchestratorDb,
+            string expectedTenant)
+        {
+            await RejectForeignTenantRowsAsync(orchestratorDb, "Jobs", expectedTenant);
+            await RejectForeignTenantRowsAsync(portalDb, "SharedTenantResources", expectedTenant);
+        }
+
+        private static async Task RejectForeignTenantRowsAsync(
+            string databasePath,
+            string table,
+            string expectedTenant)
+        {
+            if (!File.Exists(databasePath))
+                return;
+
+            await using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly");
+            await connection.OpenAsync();
+            await using var tableExists = connection.CreateCommand();
+            tableExists.CommandText =
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @table;";
+            tableExists.Parameters.AddWithValue("@table", table);
+            if (Convert.ToInt64(await tableExists.ExecuteScalarAsync()) == 0)
+                return;
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT DISTINCT TenantId FROM [{table}] WHERE TenantId IS NOT NULL AND TRIM(TenantId) <> '';";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var actual = TenantId.FromTrustedSource(reader.GetString(0)).Value;
+                if (!string.Equals(actual, expectedTenant, StringComparison.Ordinal))
+                    throw new InvalidDataException(
+                        $"Dedicated backup refused: {table} contains state for tenant '{actual}', not host tenant '{expectedTenant}'.");
+            }
+        }
+
         // ── Restore / validate ──────────────────────────────────────────────────────
 
         internal static async Task<int> RestoreAsync(CliContext ctx, ILogger logger)
@@ -258,7 +365,8 @@ namespace ETL_SQL.App
                 await ExtractZipToDirectoryAsync(dataZip, dataExtract);
                 await ExtractZipToDirectoryAsync(keysZip, keysExtract);
 
-                problems = await ValidateAsync(dataExtract, keysExtract, logger);
+                problems = await ValidateAsync(
+                    dataExtract, keysExtract, logger, ctx.RestoreExpectedTenant);
                 await WriteRecoveryReportIfRequestedAsync(
                     ctx,
                     dataExtract,
@@ -289,6 +397,13 @@ namespace ETL_SQL.App
                 }
 
                 var target = Path.GetFullPath(ctx.RestoreTo.Trim('"', '\'', ' '));
+                if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
+                {
+                    logger.WriteLine(
+                        "Restore target must be empty; recovery never merges an archive with existing state.",
+                        ConsoleColor.Red);
+                    return (1, 0);
+                }
                 await CreateDirectoryAsync(target);
 
                 // Materialize the restored layout: databases at the root, content under their dirs,
@@ -310,6 +425,8 @@ namespace ETL_SQL.App
                 RestrictToOwner(restoredConfig, isDirectory: false);
                 // Likewise the restored Data Protection key ring.
                 RestrictToOwner(Path.Combine(target, DpKeyRingDirName), isDirectory: true);
+                if (!string.IsNullOrWhiteSpace(ctx.RestoreExpectedTenant))
+                    await FenceRestoredTenantWorkAsync(target);
                 await WriteRecoveryReportIfRequestedAsync(
                     ctx,
                     dataExtract,
@@ -397,6 +514,7 @@ namespace ETL_SQL.App
                 ["status"] = problems.Count == 0 ? "Pass" : "Fail",
                 ["backupId"] = (string?)manifest?["backupId"],
                 ["keysBackupId"] = (string?)keysManifest?["backupId"],
+                ["tenantId"] = (string?)manifest?["tenantId"],
                 ["backupCreatedUtc"] = createdUtcText,
                 ["appVersion"] = (string?)manifest?["appVersion"],
                 ["catalogMigration"] = (string?)manifest?["catalogMigration"],
@@ -428,7 +546,11 @@ namespace ETL_SQL.App
         }
 
         /// <summary>Returns a list of validation problems; empty means the backup is restorable.</summary>
-        private static async Task<List<string>> ValidateAsync(string dataExtract, string keysExtract, ILogger logger)
+        private static async Task<List<string>> ValidateAsync(
+            string dataExtract,
+            string keysExtract,
+            ILogger logger,
+            string? expectedTenant = null)
         {
             var problems = new List<string>();
 
@@ -448,6 +570,40 @@ namespace ETL_SQL.App
             var keysId = (string?)keysManifest["backupId"];
             if (string.IsNullOrEmpty(dataId) || dataId != keysId)
                 problems.Add($"backup id mismatch: data='{dataId}' keys='{keysId}' (archives are not a matching pair).");
+
+            var dataTenant = (string?)manifest["tenantId"];
+            var keysTenant = (string?)keysManifest["tenantId"];
+            if (!string.Equals(dataTenant, keysTenant, StringComparison.Ordinal))
+                problems.Add(
+                    $"tenant mismatch: data='{dataTenant}' keys='{keysTenant}' (archives are not a matching tenant pair).");
+            if (!string.IsNullOrWhiteSpace(dataTenant))
+            {
+                if (string.IsNullOrWhiteSpace(expectedTenant))
+                {
+                    problems.Add(
+                        "Managed Dedicated archive requires --expected-tenant from the recovery environment.");
+                }
+                else
+                {
+                    try
+                    {
+                        var archiveTenant = TenantId.FromTrustedSource(dataTenant).Value;
+                        var targetTenant = TenantId.FromTrustedSource(expectedTenant).Value;
+                        if (!string.Equals(archiveTenant, targetTenant, StringComparison.Ordinal))
+                            problems.Add(
+                                $"tenant authority mismatch: archive='{archiveTenant}' expected='{targetTenant}'.");
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        problems.Add($"invalid tenant identity: {ex.Message}");
+                    }
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(expectedTenant))
+            {
+                problems.Add(
+                    "An unscoped backup cannot be restored as a Managed Dedicated tenant archive.");
+            }
 
             // App-version compatibility: never restore a backup made by a newer release.
             var backupVersion = (string?)manifest["appVersion"];
@@ -488,6 +644,64 @@ namespace ETL_SQL.App
                 $"Backup id {dataId}; created {(string?)manifest["createdUtc"]}; app version {backupVersion}; " +
                 $"catalog migration {(string?)manifest["catalogMigration"] ?? "(unknown)"}.", ConsoleColor.Gray);
             return problems;
+        }
+
+        private static async Task FenceRestoredTenantWorkAsync(string target)
+        {
+            var databasePath = Path.Combine(target, "etlsql.db");
+            if (!File.Exists(databasePath))
+                return;
+
+            SqliteConnection.ClearAllPools();
+            await using var connection = new SqliteConnection($"Data Source={databasePath}");
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            if (await SqliteTableExistsAsync(connection, transaction, "Jobs"))
+            {
+                await using var jobs = connection.CreateCommand();
+                jobs.Transaction = (SqliteTransaction)transaction;
+                jobs.CommandText = """
+                    UPDATE Jobs
+                       SET IsEnabled = 0,
+                           LeaseOwner = NULL,
+                           LeaseExpiresAt = NULL,
+                           LeaseFenceToken = LeaseFenceToken + 1;
+                    """;
+                await jobs.ExecuteNonQueryAsync();
+            }
+
+            if (await SqliteTableExistsAsync(connection, transaction, "SandboxAdmissions"))
+            {
+                await using var admissions = connection.CreateCommand();
+                admissions.Transaction = (SqliteTransaction)transaction;
+                admissions.CommandText = """
+                    UPDATE SandboxAdmissions
+                       SET State = CASE WHEN State = 'Active' THEN 'Retained' ELSE 'Cancelled' END,
+                           LeaseOwner = NULL,
+                           LeaseExpiresUtc = NULL,
+                           FenceToken = FenceToken + 1,
+                           UpdatedUtc = @now,
+                           ReconciliationReason = 'Restored archive requires environment reconciliation'
+                     WHERE State IN ('Queued', 'Active');
+                    """;
+                admissions.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
+                await admissions.ExecuteNonQueryAsync();
+            }
+            await transaction.CommitAsync();
+            SqliteConnection.ClearAllPools();
+        }
+
+        private static async Task<bool> SqliteTableExistsAsync(
+            SqliteConnection connection,
+            System.Data.Common.DbTransaction transaction,
+            string table)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = (SqliteTransaction)transaction;
+            command.CommandText =
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @table;";
+            command.Parameters.AddWithValue("@table", table);
+            return Convert.ToInt64(await command.ExecuteScalarAsync()) > 0;
         }
 
         // ── Config secret split / merge ──────────────────────────────────────────────

@@ -330,9 +330,21 @@ checked off meaningfully. Split:
       database edits.
 - [ ] **Dedicated — upgrades and capacity.** Automate upgrades, drain/fence, and capacity assignment
       for one tenant.
-- [ ] **Dedicated — backup and recovery.** Tenant-scoped backup, export, restore, and key/artifact
+- [x] **Dedicated — backup and recovery.** Tenant-scoped backup, export, restore, and key/artifact
       recovery, including proof that a restore cannot introduce another tenant's rows or resume its
       work.
+
+      **Closed with split-custody tenant recovery (2026-08-13).** `admin backup --tenant-root`
+      validates the provisioned boundary manifest against its host-fixed configuration, resolves the
+      actual Dedicated Orchestrator database and Portal key-ring paths, rejects explicit foreign
+      tenant rows, and stamps the canonical tenant into both custody archives. `admin restore`
+      requires the recovery environment's `--expected-tenant`, refuses unscoped, mismatched, or
+      cross-tenant pairs and non-empty targets, restores database/artifact/key material, disables all
+      restored jobs, advances lease fences, cancels queued admissions, and retains formerly active
+      admissions for environment reconciliation. `DedicatedTenantBackupRestoreTests` proves wrong or
+      absent tenant authority cannot validate, foreign rows cannot be backed up, scripts/datasets/keys
+      round-trip, and leased work cannot resume after recovery. Shared-store point-in-time recovery
+      remains a separate open cell.
 - [x] **Dedicated — support approval.** Add the approval workflow behind the shipped audited platform
       support-access model.
 - [x] **Dedicated — metering.** Tenant-specific usage records for dedicated operations.

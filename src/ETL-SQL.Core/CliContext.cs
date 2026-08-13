@@ -153,12 +153,14 @@ public class CliContext
 
     // admin backup command
     public string? BackupOutputDir { get; set; }
+    public string? BackupTenantRoot { get; set; }
 
     // admin restore command
     public string? RestoreFrom { get; set; }
     public string? RestoreKeys { get; set; }
     public string? RestoreTo { get; set; }
     public string? RestoreReport { get; set; }
+    public string? RestoreExpectedTenant { get; set; }
     public bool RestoreValidateOnly { get; set; }
 
     // admin migrate-database command

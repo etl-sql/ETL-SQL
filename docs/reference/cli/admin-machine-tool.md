@@ -1,20 +1,20 @@
-# etl-sql admin machine
+# etl-sql admin machine tool
 
-Manage machine-local governance stores
+Manage the machine-local tool catalog
 
 ## Synopsis
 
 ```text
-etl-sql admin machine <subcommand>
+etl-sql admin machine tool <subcommand>
 ```
 
 ## Subcommands
 
 | Subcommand | Description |
 | :--- | :--- |
-| [`connection`](admin-machine-connection.md) | Manage the machine-local shared connection catalog |
-| [`secret`](admin-machine-secret.md) | Manage the machine-local Governance:Secrets provider |
-| [`tool`](admin-machine-tool.md) | Manage the machine-local tool catalog |
+| [`delete`](admin-machine-tool-delete.md) | Permanently remove a machine-local tool |
+| [`list`](admin-machine-tool-list.md) | List machine-local tools |
+| [`set`](admin-machine-tool-set.md) | Store a machine-local tool |
 
 ## References
 

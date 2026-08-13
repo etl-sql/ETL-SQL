@@ -12,6 +12,7 @@ etl-sql admin restore [options]
 
 | Option | Description |
 | :--- | :--- |
+| `--expected-tenant` | Required host-fixed tenant identity for a Managed Dedicated archive. |
 | `--from` | Path to the data backup archive (etl-sql-backup-*.zip). |
 | `--keys` | Path to the matching keys archive (etl-sql-keys-*.zip). |
 | `--report` | Write a machine-readable JSON recovery report to this path. |

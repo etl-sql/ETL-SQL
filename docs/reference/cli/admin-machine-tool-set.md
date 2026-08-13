@@ -1,19 +1,20 @@
-# etl-sql admin backup
+# etl-sql admin machine tool set
 
-Back up portal/orchestrator state into split-custody data and keys archives
+Store a machine-local tool
 
 ## Synopsis
 
 ```text
-etl-sql admin backup [options]
+etl-sql admin machine tool set [options]
 ```
 
 ## Options
 
 | Option | Description |
 | :--- | :--- |
-| `--output-dir, -o` | Directory to write the backup archives into (default: current directory). |
-| `--tenant-root` | Host-fixed Managed Dedicated tenant boundary to back up. |
+| `--name, -n` | Name of the tool. |
+| `--option` | Tool option as KEY=VALUE (repeatable). |
+| `--type, -t` | Type of the tool (e.g. EXECUTABLE). |
 
 ## References
 

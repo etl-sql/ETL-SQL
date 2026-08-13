@@ -806,6 +806,17 @@ metering support.
   portability export, deletion, and recovery without manual platform database edits.
 - Shared SaaS rollout is tenant-aware and cannot violate Dedicated reservations or isolation tiers.
 
+Managed Dedicated recovery composes the existing split-custody backup format with the provisioned
+tenant boundary. The boundary manifest and host-fixed configuration must name the same canonical
+tenant; both archive halves repeat that identity, and the recovery environment must supply the same
+expected tenant before validation succeeds. Backup rejects explicit foreign tenant bindings and
+captures the configured databases, artifacts, data-protection key ring, and stripped secrets rather
+than assuming single-node default paths. Restore never merges into a non-empty target. Before the
+recovered deployment can be activated, jobs are disabled and lease fences are advanced; queued
+sandbox admissions are cancelled, while formerly active attempts are retained for environment-owned
+runtime reconciliation. This physical-boundary recovery contract does not certify recovery from
+Shared stores.
+
 ## 16. Failure and Outcome Semantics
 
 The system distinguishes script failure, policy denial, quota exhaustion, connector failure,

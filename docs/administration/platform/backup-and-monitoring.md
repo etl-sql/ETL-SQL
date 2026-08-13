@@ -9,7 +9,8 @@ Backing up ETL-SQL state, proving the backup restores, and wiring health and fai
 | **Solo / Workstation** | Schedule `etl-sql admin backup` with the OS scheduler and **test the restore**. There is no service to monitor and nothing to page you, so a restore drill is the whole of your recovery assurance. |
 | **Team / SME** | As Solo, plus external liveness monitoring of `GET /healthz` from *another* host, and job-failure alerting. A check running inside the Orchestrator cannot report that its own host is down. |
 | **Enterprise / Corporate** | Back up PostgreSQL **and** the shared artifact roots as one coordinated recovery set — HA state is no longer two SQLite files. Add the Portal operational digest and the remote audit outbox. |
-| **SaaS / Departmental** | As Enterprise, **per environment**, and prove the restore of one environment cannot read or write another's data. A shared backup target reintroduces the coupling isolation exists to prevent. |
+| **Managed Dedicated SaaS** | Run `admin backup --tenant-root` per provisioned tenant boundary and restore with the matching `--expected-tenant`. Keep each tenant's split-custody archives separate. |
+| **Shared SaaS** | Not certified. Tenant-scoped point-in-time recovery from shared stores remains an explicit roadmap cell; Dedicated archives do not satisfy it. |
 
 Custody never moves into the Portal at any size: the Portal *reports* backup freshness and
 restore-drill evidence; the backup and the restore happen on the host.
@@ -43,6 +44,10 @@ roots as one coordinated recovery set. ETL-SQL does not back up PostgreSQL for y
   objectives.
 - Restored clones must not silently reuse machine identity or credentials in another environment —
   re-enroll and rotate as covered in [backup and restore](operator-cli.md#backup-and-restore--etl-sql-admin-backup--restore).
+- For Managed Dedicated, use `--tenant-root <boundary>` on backup and
+  `--expected-tenant <tenant>` on validation/restore. The archive pair is tenant-bound, a restore
+  target must be empty, and restored jobs/admissions are fenced until the replacement environment is
+  explicitly reviewed.
 
 For supported RPO/RTO targets, restore-drill evidence, cross-environment clone safety, and regional
 failure procedures, see [`docs/architecture/decisions/Disaster_Recovery_Objectives.md`](../../architecture/decisions/Disaster_Recovery_Objectives.md).

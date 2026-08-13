@@ -365,6 +365,12 @@ namespace ETL_SQL.App
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => null
         };
+        private static readonly Option<string?> BackupTenantRootOption = new("--tenant-root", Array.Empty<string>())
+        {
+            Description = "Host-fixed Managed Dedicated tenant boundary to back up.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<string?> RestoreFromOption = new("--from", Array.Empty<string>())
         {
             Description = "Path to the data backup archive (etl-sql-backup-*.zip).",
@@ -388,6 +394,12 @@ namespace ETL_SQL.App
         private static readonly Option<string?> RestoreReportOption = new("--report", Array.Empty<string>())
         {
             Description = "Write a machine-readable JSON recovery report to this path.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> RestoreExpectedTenantOption = new("--expected-tenant", Array.Empty<string>())
+        {
+            Description = "Required host-fixed tenant identity for a Managed Dedicated archive.",
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => null
         };
@@ -926,6 +938,7 @@ namespace ETL_SQL.App
             var backupCommand = new Command("backup", "Back up portal/orchestrator state into split-custody data and keys archives")
             {
                 BackupOutputDirOption,
+                BackupTenantRootOption,
             };
             backupCommand.SetAction(context => Dispatch(context, "admin-backup", handler));
             adminCommand.Add(backupCommand);
@@ -937,6 +950,7 @@ namespace ETL_SQL.App
                 RestoreToOption,
                 RestoreValidateOption,
                 RestoreReportOption,
+                RestoreExpectedTenantOption,
             };
             restoreCommand.SetAction(context => Dispatch(context, "admin-restore", handler));
             adminCommand.Add(restoreCommand);
@@ -1783,6 +1797,7 @@ namespace ETL_SQL.App
             else if (commandName == "admin-backup")
             {
                 cliContext.BackupOutputDir = res.GetValue(BackupOutputDirOption);
+                cliContext.BackupTenantRoot = res.GetValue(BackupTenantRootOption);
             }
             else if (commandName == "admin-restore")
             {
@@ -1791,6 +1806,7 @@ namespace ETL_SQL.App
                 cliContext.RestoreTo = res.GetValue(RestoreToOption);
                 cliContext.RestoreValidateOnly = res.GetValue(RestoreValidateOption);
                 cliContext.RestoreReport = res.GetValue(RestoreReportOption);
+                cliContext.RestoreExpectedTenant = res.GetValue(RestoreExpectedTenantOption);
             }
             else if (commandName == "admin-migrate-database")
             {

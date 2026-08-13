@@ -49,6 +49,10 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin machine secret rotate`](admin-machine-secret-rotate.md) | Replace an existing machine-local secret |
 | [`etl-sql admin machine secret set`](admin-machine-secret-set.md) | Encrypt and store a named machine-local secret |
 | [`etl-sql admin machine secret verify`](admin-machine-secret-verify.md) | Resolve a machine-local secret without printing the value |
+| [`etl-sql admin machine tool`](admin-machine-tool.md) | Manage the machine-local tool catalog |
+| [`etl-sql admin machine tool delete`](admin-machine-tool-delete.md) | Permanently remove a machine-local tool |
+| [`etl-sql admin machine tool list`](admin-machine-tool-list.md) | List machine-local tools |
+| [`etl-sql admin machine tool set`](admin-machine-tool-set.md) | Store a machine-local tool |
 | [`etl-sql admin migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
 | [`etl-sql admin portal-whoami`](admin-portal-whoami.md) | Resolve Portal credentials and print the identity, roles, and scopes (never a secret) |
 | [`etl-sql admin promotion`](admin-promotion.md) | Inspect and prepare deployment-profile promotions |

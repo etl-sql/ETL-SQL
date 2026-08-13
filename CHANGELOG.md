@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added Managed Dedicated split-custody recovery with tenant-bound archive pairs, foreign-tenant row
+  refusal, explicit recovery-environment tenant matching, actual provisioned key/artifact paths, and
+  post-restore job/admission fencing so recovered work cannot silently resume.
 - Added a counts-only tenant usage ledger at the Orchestrator scheduler boundary. Tenant-bound job
   attempts persist idempotent row, memory, CPU, and duration measures from the immutable job tenant
   binding without payload content, and metering failure cannot authorize, retry, or alter execution.

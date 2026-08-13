@@ -461,11 +461,16 @@ namespace ETL_SQL.Tests.Orchestration
                 return Task.FromResult(0);
             });
 
-            await root.Parse(new[] { "admin", "backup", "--output-dir", "D:/backups" }, null).InvokeAsync(new InvocationConfiguration(), default);
+            await root.Parse(new[]
+            {
+                "admin", "backup", "--output-dir", "D:/backups",
+                "--tenant-root", "D:/saas/tenant-alpha"
+            }, null).InvokeAsync(new InvocationConfiguration(), default);
 
             Assert.NotNull(capturedContext);
             Assert.Equal("admin-backup", capturedContext!.Command);
             Assert.Equal("D:/backups", capturedContext.BackupOutputDir);
+            Assert.Equal("D:/saas/tenant-alpha", capturedContext.BackupTenantRoot);
         }
 
         [Fact]
@@ -479,7 +484,11 @@ namespace ETL_SQL.Tests.Orchestration
             });
 
             await root.Parse(
-                new[] { "admin", "restore", "--from", "data.zip", "--keys", "keys.zip", "--to", "out", "--validate" },
+                new[]
+                {
+                    "admin", "restore", "--from", "data.zip", "--keys", "keys.zip",
+                    "--to", "out", "--validate", "--expected-tenant", "tenant-alpha"
+                },
                 null).InvokeAsync(new InvocationConfiguration(), default);
 
             Assert.NotNull(capturedContext);
@@ -487,6 +496,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("data.zip", capturedContext.RestoreFrom);
             Assert.Equal("keys.zip", capturedContext.RestoreKeys);
             Assert.Equal("out", capturedContext.RestoreTo);
+            Assert.Equal("tenant-alpha", capturedContext.RestoreExpectedTenant);
             Assert.True(capturedContext.RestoreValidateOnly);
         }
 
