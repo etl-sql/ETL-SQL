@@ -23,7 +23,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public partial class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore
+    public partial class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -214,6 +214,47 @@ namespace ETL_SQL.Orchestrator.Storage
                 CREATE INDEX IF NOT EXISTS idx_tur_tenant_time
                     ON TenantUsageRecords(TenantId, RecordedAtUtc DESC);";
 
+                    var createSharedTenantLifecycleTables = @"
+                CREATE TABLE IF NOT EXISTS SharedTenantControlPlanes (
+                    TenantId TEXT PRIMARY KEY,
+                    State TEXT NOT NULL,
+                    ActiveRelease TEXT NOT NULL,
+                    MaxConcurrentJobs INTEGER NOT NULL,
+                    MaxStorageMb INTEGER NOT NULL,
+                    MaxReportSessions INTEGER NOT NULL,
+                    FenceEpoch INTEGER NOT NULL DEFAULT 1,
+                    CreatedAtUtc TEXT NOT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    DeletedAtUtc TEXT,
+                    Version INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE INDEX IF NOT EXISTS idx_stcp_state
+                    ON SharedTenantControlPlanes(State);
+                CREATE TABLE IF NOT EXISTS SharedTenantLifecycleOperations (
+                    OperationId TEXT PRIMARY KEY,
+                    TenantId TEXT NOT NULL,
+                    Kind TEXT NOT NULL,
+                    Status TEXT NOT NULL,
+                    PlatformOperator TEXT NOT NULL,
+                    AuthorizationReference TEXT NOT NULL,
+                    TargetRelease TEXT,
+                    TargetMaxConcurrentJobs INTEGER,
+                    TargetMaxStorageMb INTEGER,
+                    TargetMaxReportSessions INTEGER,
+                    StartedAtUtc TEXT NOT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    CompletedAtUtc TEXT,
+                    UNIQUE (Kind, AuthorizationReference)
+                );
+                CREATE INDEX IF NOT EXISTS idx_stlo_tenant_status
+                    ON SharedTenantLifecycleOperations(TenantId, Status);
+                CREATE TABLE IF NOT EXISTS SharedTenantLifecycleFencedJobs (
+                    OperationId TEXT NOT NULL,
+                    TenantId TEXT NOT NULL,
+                    JobName TEXT COLLATE NOCASE NOT NULL,
+                    PRIMARY KEY (OperationId, JobName)
+                );";
+
                     var createBundleTables = @"
                 CREATE TABLE IF NOT EXISTS BundleVersions (
                     BundleName TEXT NOT NULL,
@@ -359,7 +400,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     var schema = createJobsTable + createCatalogTables + createObjectAclTable + createHistoryTable + createColumnMetricsTable
                         + createDataQualityFailuresTable + createStatementMetricsTable + createBundleTables
                         + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
-                        + createHostMetricsTable + createRollupTables + createTenantUsageTable;
+                        + createHostMetricsTable + createRollupTables + createTenantUsageTable
+                        + createSharedTenantLifecycleTables;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
                     // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                     // COLLATE NOCASE indexes/queries resolve.
@@ -691,7 +733,12 @@ namespace ETL_SQL.Orchestrator.Storage
             claim.CommandText = @"
                 UPDATE Jobs SET LeaseOwner = @owner, LeaseExpiresAt = @expires, LeaseFenceToken = LeaseFenceToken + 1
                 WHERE Name = @name
-                  AND (LeaseOwner IS NULL OR LeaseExpiresAt IS NULL OR LeaseExpiresAt <= @now);";
+                  AND IsEnabled = 1
+                  AND (LeaseOwner IS NULL OR LeaseExpiresAt IS NULL OR LeaseExpiresAt <= @now)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM SharedTenantControlPlanes lifecycle
+                       WHERE lifecycle.TenantId = Jobs.TenantId
+                         AND lifecycle.State <> 'Active');";
             claim.AddParam("@owner", owner);
             claim.AddParam("@expires", now.Add(duration).ToString("O"));
             claim.AddParam("@name", jobName);

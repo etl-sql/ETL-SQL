@@ -186,6 +186,31 @@ public sealed class RelationalSandboxAdmissionLedgerTests : IDisposable
             "waiting-capacity", "node-b", 1, TimeSpan.FromMinutes(5)));
     }
 
+    [Fact]
+    public async Task TenantLifecycleCancelsAndPurgesOnlyItsPartitionButRetainsAmbiguousWork()
+    {
+        var store = Store();
+        await store.EnqueueAsync("alpha-queued", Tenant("tenant-a"), Policy());
+        await store.EnqueueAsync("alpha-active", Tenant("tenant-a"), Policy());
+        await store.EnqueueAsync("beta-queued", Tenant("tenant-b"), Policy());
+        var token = (await store.TryActivateAsync(
+            "alpha-active", "node-a", 3, TimeSpan.FromMinutes(5)))!.Value;
+
+        Assert.Equal(1, await store.CancelTenantQueuedAsync(Tenant("tenant-a")));
+        var alphaOpen = await store.ListTenantOpenAsync(Tenant("tenant-a"));
+        Assert.Equal("alpha-active", Assert.Single(alphaOpen).AdmissionId);
+        Assert.Equal(SandboxAdmissionState.Queued,
+            (await store.ReadAsync("beta-queued"))!.State);
+        Assert.Equal(1, await store.PurgeTenantTerminalAsync(Tenant("tenant-a")));
+        Assert.Null(await store.ReadAsync("alpha-queued"));
+        Assert.NotNull(await store.ReadAsync("alpha-active"));
+
+        Assert.True(await store.TryRetainAsync(
+            "alpha-active", "node-a", token, "runtime detach uncertain"));
+        Assert.Equal(SandboxAdmissionState.Retained,
+            Assert.Single(await store.ListTenantOpenAsync(Tenant("tenant-a"))).State);
+    }
+
     private RelationalSandboxAdmissionLedger Store() => new(
         new SqliteOrchestratorDialect($"Data Source={_databasePath};Pooling=False"));
 

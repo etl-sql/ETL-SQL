@@ -245,6 +245,38 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task SharedTenantLifecycle_IsPartitionedAndDurableOnPostgres()
+        {
+            var store = NewStore();
+            await store.InitializeAsync();
+            var now = DateTimeOffset.UtcNow;
+            var alpha = TenantContext.FromVerifiedCredential("tenant-alpha");
+            var beta = TenantContext.FromVerifiedCredential("tenant-beta");
+            static SharedTenantLifecycleCommand Provision(
+                string operation, string reference, DateTimeOffset timestamp) => new(
+                    operation, SharedTenantLifecycleKind.Provision, "platform-operator", reference,
+                    "release-1", 3, 2048, 4, timestamp);
+
+            await store.ApplySharedTenantLifecycleAsync(alpha, Provision("pg-alpha", "change-a", now));
+            await store.ApplySharedTenantLifecycleAsync(beta, Provision("pg-beta", "change-b", now));
+            await store.SaveJobAsync(new JobDefinition(
+                "pg-alpha-job", "RUN SCRIPT 'x.etlsql';", 1, "DAY", null, null, null,
+                TenantId: "tenant-alpha"));
+            await store.SaveJobAsync(new JobDefinition(
+                "pg-beta-job", "RUN SCRIPT 'x.etlsql';", 1, "DAY", null, null, null,
+                TenantId: "tenant-beta"));
+
+            var deleted = await NewStore().ApplySharedTenantLifecycleAsync(alpha, new(
+                "pg-delete-alpha", SharedTenantLifecycleKind.Delete, "platform-operator", "change-d",
+                "release-1", 3, 2048, 4, now.AddSeconds(1)));
+
+            Assert.Equal("Deleted", deleted.State.State);
+            Assert.Null(await store.GetJobAsync("pg-alpha-job"));
+            Assert.NotNull(await store.GetJobAsync("pg-beta-job"));
+            Assert.Equal("Active", (await NewStore().GetSharedTenantStateAsync(beta))!.State);
+        }
+
+        [Fact]
         public async Task TenantMeteringLedger_IsPartitionedIdempotentAndUsesInt64_OnPostgres()
         {
             var ledger = NewMeteringLedger();

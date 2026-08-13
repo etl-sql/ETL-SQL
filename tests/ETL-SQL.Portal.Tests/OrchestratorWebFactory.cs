@@ -67,6 +67,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.RemoveAll<IJobCatalogStore>();
             services.RemoveAll<IOrchestratorAuthorizationStore>();
             services.RemoveAll<IHostMetricsStore>();
+            services.RemoveAll<ISharedTenantLifecycleStore>();
             services.RemoveAll<IBundleStore>();
             services.RemoveAll<ILineageCatalogStore>();
             services.RemoveAll<IConnectionCatalogProvider>();
@@ -77,6 +78,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.AddSingleton<IJobCatalogStore>(testStore);
             services.AddSingleton<IOrchestratorAuthorizationStore>(testStore);
             services.AddSingleton<IHostMetricsStore>(testStore);
+            services.AddSingleton<ISharedTenantLifecycleStore>(testStore);
             services.AddSingleton<IBundleStore>(testStore);
             services.AddSingleton<ILineageCatalogStore>(testStore);
             services.AddSingleton<IConnectionCatalogProvider>(

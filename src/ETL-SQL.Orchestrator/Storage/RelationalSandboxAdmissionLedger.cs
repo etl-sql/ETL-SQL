@@ -85,6 +85,19 @@ public interface ISandboxAdmissionLedger
     Task<IReadOnlyList<SandboxAdmissionLedgerEntry>> ListOpenAsync(
         string poolId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SandboxAdmissionLedgerEntry>> ListTenantOpenAsync(
+        TenantContext tenant,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SandboxAdmissionLedgerEntry>>([]);
+
+    Task<int> CancelTenantQueuedAsync(
+        TenantContext tenant,
+        CancellationToken cancellationToken = default) => Task.FromResult(0);
+
+    Task<int> PurgeTenantTerminalAsync(
+        TenantContext tenant,
+        CancellationToken cancellationToken = default) => Task.FromResult(0);
 }
 
 /// <summary>
@@ -333,6 +346,88 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         while (await reader.ReadAsync(cancellationToken))
             entries.Add(ReadEntry(reader));
         return entries;
+    }
+
+    public async Task<IReadOnlyList<SandboxAdmissionLedgerEntry>> ListTenantOpenAsync(
+        TenantContext tenant,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = RequireSharedTenant(tenant);
+        await EnsureInitializedAsync(cancellationToken);
+        await using var connection = dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT Sequence, AdmissionId, TenantId, PoolId, TenantWeight,
+                   MaxConcurrentAttempts, MaxQueuedAttempts, State, LeaseOwner,
+                   LeaseExpiresUtc, FenceToken, EnqueuedUtc, UpdatedUtc, ReconciliationReason
+              FROM SandboxAdmissions
+             WHERE TenantId = @tenant AND State IN ('Queued', 'Active', 'Retained')
+             ORDER BY Sequence;
+            """;
+        command.AddParam("@tenant", tenantId);
+        var values = new List<SandboxAdmissionLedgerEntry>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) values.Add(ReadEntry(reader));
+        return values;
+    }
+
+    public async Task<int> CancelTenantQueuedAsync(
+        TenantContext tenant,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = RequireSharedTenant(tenant);
+        await EnsureInitializedAsync(cancellationToken);
+        await using var connection = dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE SandboxAdmissions
+               SET State = 'Cancelled', UpdatedUtc = @now,
+                   ReconciliationReason = 'TenantLifecycleFence'
+             WHERE TenantId = @tenant AND State = 'Queued';
+            """;
+        command.AddParam("@tenant", tenantId);
+        command.AddParam("@now", DateTimeOffset.UtcNow.ToString("O"));
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<int> PurgeTenantTerminalAsync(
+        TenantContext tenant,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = RequireSharedTenant(tenant);
+        await EnsureInitializedAsync(cancellationToken);
+        await using var connection = dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var deleteAdmissions = connection.CreateCommand();
+        deleteAdmissions.Transaction = transaction;
+        deleteAdmissions.CommandText = """
+            DELETE FROM SandboxAdmissions
+             WHERE TenantId = @tenant AND State IN ('Completed', 'Cancelled');
+            """;
+        deleteAdmissions.AddParam("@tenant", tenantId);
+        var deleted = await deleteAdmissions.ExecuteNonQueryAsync(cancellationToken);
+        await using var deleteCapacity = connection.CreateCommand();
+        deleteCapacity.Transaction = transaction;
+        deleteCapacity.CommandText = """
+            DELETE FROM SandboxAdmissionTenantCapacity
+             WHERE TenantId = @tenant AND ActiveCount = 0;
+            """;
+        deleteCapacity.AddParam("@tenant", tenantId);
+        await deleteCapacity.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return deleted;
+    }
+
+    private static string RequireSharedTenant(TenantContext tenant)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        if (tenant.Origin != TenantContextOrigin.VerifiedCredential)
+            throw new UnauthorizedAccessException(
+                "Shared admission lifecycle requires a verified tenant assertion.");
+        return tenant.Tenant.Value;
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

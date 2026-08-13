@@ -19,6 +19,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<SharedIdentityAuthority> SharedIdentityAuthorities => Set<SharedIdentityAuthority>();
     public DbSet<SharedTenantResource> SharedTenantResources => Set<SharedTenantResource>();
+    public DbSet<SharedTenantLifecycle> SharedTenantLifecycles => Set<SharedTenantLifecycle>();
+    public DbSet<SharedTenantLifecycleOperation> SharedTenantLifecycleOperations => Set<SharedTenantLifecycleOperation>();
     public DbSet<UserGroup> UserGroups => Set<UserGroup>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<FolderAcl> FolderAcls => Set<FolderAcl>();
@@ -99,6 +101,39 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Kind).HasMaxLength(32);
             e.Property(x => x.LogicalId).HasMaxLength(128);
             e.Property(x => x.ScopedId).HasMaxLength(300);
+        });
+
+        builder.Entity<SharedTenantLifecycle>(e =>
+        {
+            e.HasKey(x => x.TenantId);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.State).HasMaxLength(32);
+            e.Property(x => x.ActiveRelease).HasMaxLength(256);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => x.State);
+        });
+
+        builder.Entity<SharedTenantLifecycleOperation>(e =>
+        {
+            e.HasKey(x => x.OperationId);
+            e.Property(x => x.OperationId).HasMaxLength(64);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.Phase).HasMaxLength(64);
+            e.Property(x => x.PlatformOperator).HasMaxLength(256);
+            e.Property(x => x.AuthorizationReference).HasMaxLength(256);
+            e.Property(x => x.Reason).HasMaxLength(1000);
+            e.Property(x => x.TargetRelease).HasMaxLength(256);
+            e.Property(x => x.TargetPortalHost).HasMaxLength(253);
+            e.Property(x => x.TargetLoginDomain).HasMaxLength(253);
+            e.Property(x => x.TargetIssuer).HasMaxLength(2048);
+            e.Property(x => x.TargetClientId).HasMaxLength(512);
+            e.Property(x => x.TargetClientSecretReference).HasMaxLength(256);
+            e.Property(x => x.FailureCode).HasMaxLength(128);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.Kind, x.AuthorizationReference }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Status });
         });
 
         builder.Entity<UserGroup>(e =>

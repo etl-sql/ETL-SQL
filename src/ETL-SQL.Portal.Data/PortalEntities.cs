@@ -83,6 +83,57 @@ public class SharedTenantResource : IVersionedEntity
     public long Version { get; set; } = 1;
 }
 
+/// <summary>
+/// Server-owned admission state for one tenant in a Shared control plane. A credential is usable
+/// only while this row is Active. Deleted rows are durable tombstones outside the erased tenant
+/// partition and cannot be reactivated by ordinary tenant APIs.
+/// </summary>
+public class SharedTenantLifecycle : IVersionedEntity
+{
+    public string TenantId { get; set; } = "";
+    public string State { get; set; } = "Provisioning";
+    public string ActiveRelease { get; set; } = "";
+    public int MaxConcurrentJobs { get; set; }
+    public int MaxStorageMb { get; set; }
+    public int MaxReportSessions { get; set; }
+    public long FenceEpoch { get; set; } = 1;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? DeletedAtUtc { get; set; }
+    public long Version { get; set; } = 1;
+}
+
+/// <summary>
+/// Idempotent platform-operation receipt. It intentionally contains no tenant payload, secret,
+/// credential, or resolved target. The authorization reference is unique per operation kind.
+/// </summary>
+public class SharedTenantLifecycleOperation : IVersionedEntity
+{
+    public string OperationId { get; set; } = "";
+    public string TenantId { get; set; } = "";
+    public string Kind { get; set; } = "";
+    public string Status { get; set; } = "Started";
+    public string Phase { get; set; } = "PortalPreflight";
+    public string PlatformOperator { get; set; } = "";
+    public string AuthorizationReference { get; set; } = "";
+    public string Reason { get; set; } = "";
+    public DateTime AuthorizationExpiresUtc { get; set; }
+    public string? TargetRelease { get; set; }
+    public int? TargetMaxConcurrentJobs { get; set; }
+    public int? TargetMaxStorageMb { get; set; }
+    public int? TargetMaxReportSessions { get; set; }
+    public string? TargetPortalHost { get; set; }
+    public string? TargetLoginDomain { get; set; }
+    public string? TargetIssuer { get; set; }
+    public string? TargetClientId { get; set; }
+    public string? TargetClientSecretReference { get; set; }
+    public DateTime StartedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAtUtc { get; set; }
+    public string? FailureCode { get; set; }
+    public long Version { get; set; } = 1;
+}
+
 // ── Groups ────────────────────────────────────────────────────────────────────
 
 public class Group : IVersionedEntity

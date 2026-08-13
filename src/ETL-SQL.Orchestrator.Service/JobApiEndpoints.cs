@@ -21,6 +21,7 @@ using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Reporting;
 using ETL_SQL.Services;
 using Microsoft.AspNetCore.Builder;
@@ -99,6 +100,68 @@ namespace ETL_SQL.Orchestrator.Service
                         services.GetService<IHostMetricsStore>()),
                     "text/plain; version=0.0.4; charset=utf-8");
             }).WithName("getPrometheusMetrics");
+
+            // Platform lifecycle is deliberately not a tenant-admin API. The ordinary API key is
+            // necessary but insufficient: the Portal must also issue a short-lived signed identity
+            // assertion whose subject type and role identify attributed platform automation and
+            // whose tenant is fixed by the signed organization-policy grant.
+            app.MapPost("/api/platform/shared-tenants/lifecycle", async (
+                HttpContext ctx,
+                IConfiguration cfg,
+                ISharedTenantLifecycleStore store,
+                ISandboxAdmissionLedger admissions,
+                SharedTenantLifecycleRequest request,
+                CancellationToken cancellationToken) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var caller = RequestCaller(ctx);
+                if (!string.Equals(caller.SubjectType, "platform", StringComparison.Ordinal)
+                    || !caller.IsInRole("PlatformLifecycle")
+                    || string.IsNullOrWhiteSpace(caller.TenantId))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                try
+                {
+                    if (!Enum.TryParse<SharedTenantLifecycleKind>(request.Kind, true, out var kind))
+                        return Results.BadRequest(new { Error = "Lifecycle kind must be Provision, Upgrade, or Delete." });
+                    var tenantContext = TenantContext.FromVerifiedCredential(caller.TenantId);
+                    var activeAdmissions = 0;
+                    if (kind != SharedTenantLifecycleKind.Provision)
+                    {
+                        await admissions.CancelTenantQueuedAsync(tenantContext, cancellationToken);
+                        activeAdmissions = (await admissions.ListTenantOpenAsync(
+                                tenantContext, cancellationToken))
+                            .Count(value => value.State is SandboxAdmissionState.Active
+                                or SandboxAdmissionState.Retained);
+                    }
+                    var result = await store.ApplySharedTenantLifecycleAsync(
+                        tenantContext,
+                        new SharedTenantLifecycleCommand(
+                            request.OperationId, kind, caller.SubjectId,
+                            request.AuthorizationReference, request.TargetRelease,
+                            request.MaxConcurrentJobs, request.MaxStorageMb,
+                            request.MaxReportSessions, DateTimeOffset.UtcNow,
+                            activeAdmissions),
+                        cancellationToken);
+                    if (kind == SharedTenantLifecycleKind.Delete && result.Status == "Completed")
+                        await admissions.PurgeTenantTerminalAsync(tenantContext, cancellationToken);
+                    return result.Status == "Draining"
+                        ? Results.Accepted(value: result)
+                        : Results.Ok(result);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.BadRequest(new { Error = ex.Message });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.Conflict(new { Error = ex.Message });
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                }
+            }).WithName("applySharedTenantLifecycle");
 
             // ── Ad-hoc job execution (authenticated — see ApiKeyDenied) ──────────
             app.MapPost("/jobs", (HttpContext ctx, IConfiguration cfg, JobSubmitRequest request, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
@@ -2034,6 +2097,15 @@ namespace ETL_SQL.Orchestrator.Service
             BundlePublishRequest Bundle,
             string? Password = null
         );
+
+        private sealed record SharedTenantLifecycleRequest(
+            string OperationId,
+            string Kind,
+            string AuthorizationReference,
+            string TargetRelease,
+            int MaxConcurrentJobs,
+            int MaxStorageMb,
+            int MaxReportSessions);
 
         private sealed class JobEntry(
             string jobId,

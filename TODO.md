@@ -444,8 +444,26 @@ checked off meaningfully. Split:
       round trip prove durable partitioning. This cell remains open until the Shared Gateway and
       tenant storage providers feed their actual byte/storage/connector-class measures and hostile
       fleet evidence proves those producers cannot misattribute a tenant.
-- [ ] **Shared — provisioning, upgrade, and deletion** against shared control planes.
-      **Gap — Phase C carried no managed-operations bullet at all.**
+- [x] **Shared — provisioning, upgrade, and deletion** against shared control planes.
+
+      **Closed with a signed, replay-safe two-control-plane saga (2026-08-13).** A separate
+      `LifecycleManagementKey` authenticates platform automation without granting tenant API access;
+      the active signed policy independently fixes tenant, operator, approval, reason, expiry, and
+      operation-specific values. Provisioning atomically creates the Portal lifecycle fence,
+      tenant storage/queue/index namespaces, and the signed host/domain/OIDC authority using only a
+      `SECRET:name` credential reference, then provisions the matching Orchestrator assignment.
+      Upgrade moves Portal and Orchestrator out of `Active`, blocks new authenticated requests and
+      stale scheduler leases, drains Portal executions, cancels queued admissions, retains active or
+      ambiguous sandbox work, and restores only jobs it fenced after applying the signed release and
+      capacities. Deletion reuses the drain, enforces signed retention/legal-hold clearance, purges
+      tenant-qualified Portal catalog/identity/policy rows plus Orchestrator jobs/history/usage and
+      terminal admissions, and retains attributed lifecycle/audit tombstones outside the erased
+      partition. Durable authorization-reference receipts make an unavailable or ambiguous remote
+      outcome retryable without reactivating partial state. SQLite restart/equal-ID tests, real
+      PostgreSQL lifecycle evidence, HTTP role/subject negative tests, cross-tenant deletion tests,
+      admission-drain tests, and Portal partial-failure replay tests cover both control planes.
+      Shared artifact-provider erasure, backup/PITR, and tenant data-service partitions remain their
+      separate open cells rather than being implied by this control-plane closure.
 - [x] **Portability bundle (both).** Unify the existing Portal configuration export, Orchestrator
       promotion package, source artifacts, and optional evidence/content into the one open,
       versioned, signed, tenant-encrypted format defined in

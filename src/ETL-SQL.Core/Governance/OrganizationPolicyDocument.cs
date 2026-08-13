@@ -94,6 +94,14 @@ public sealed record OrganizationPolicyDocument
             values["SaaS:Onboarding:AuthorizationReference"] = SaasOnboarding.AuthorizationReference ?? string.Empty;
             values["SaaS:Onboarding:Reason"] = SaasOnboarding.Reason ?? string.Empty;
             values["SaaS:Onboarding:ExpiresUtc"] = SaasOnboarding.ExpiresUtc?.ToString("O") ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(SaasOnboarding.PortalHost))
+            {
+                values["SaaS:Onboarding:PortalHost"] = SaasOnboarding.PortalHost;
+                values["SaaS:Onboarding:LoginDomain"] = SaasOnboarding.LoginDomain ?? string.Empty;
+                values["SaaS:Onboarding:Issuer"] = SaasOnboarding.Issuer ?? string.Empty;
+                values["SaaS:Onboarding:ClientId"] = SaasOnboarding.ClientId ?? string.Empty;
+                values["SaaS:Onboarding:ClientSecretReference"] = SaasOnboarding.ClientSecretReference ?? string.Empty;
+            }
         }
         if (SaasDeletion.Enabled)
         {
@@ -134,6 +142,12 @@ public sealed record SaasOnboardingAuthorizationPolicySection
     public string? AuthorizationReference { get; init; }
     public string? Reason { get; init; }
     public DateTimeOffset? ExpiresUtc { get; init; }
+    /// <summary>Optional Shared-Portal bootstrap authority. Dedicated onboarding leaves these null.</summary>
+    public string? PortalHost { get; init; }
+    public string? LoginDomain { get; init; }
+    public string? Issuer { get; init; }
+    public string? ClientId { get; init; }
+    public string? ClientSecretReference { get; init; }
 }
 
 /// <summary>
@@ -355,7 +369,12 @@ public static class OrganizationPolicySchema
                          || !string.IsNullOrWhiteSpace(authorization.OperatorPrincipal)
                          || !string.IsNullOrWhiteSpace(authorization.AuthorizationReference)
                          || !string.IsNullOrWhiteSpace(authorization.Reason)
-                         || authorization.ExpiresUtc.HasValue;
+                         || authorization.ExpiresUtc.HasValue
+                         || !string.IsNullOrWhiteSpace(authorization.PortalHost)
+                         || !string.IsNullOrWhiteSpace(authorization.LoginDomain)
+                         || !string.IsNullOrWhiteSpace(authorization.Issuer)
+                         || !string.IsNullOrWhiteSpace(authorization.ClientId)
+                         || !string.IsNullOrWhiteSpace(authorization.ClientSecretReference);
         if (!authorization.Enabled)
         {
             if (hasDetails)
@@ -373,6 +392,25 @@ public static class OrganizationPolicySchema
             errors.Add("SaaS onboarding authorization must state its reason.");
         if (!authorization.ExpiresUtc.HasValue || authorization.ExpiresUtc <= DateTimeOffset.UnixEpoch)
             errors.Add("SaaS onboarding authorization must carry a valid expiry.");
+
+        var identityValues = new[]
+        {
+            authorization.PortalHost, authorization.LoginDomain, authorization.Issuer,
+            authorization.ClientId, authorization.ClientSecretReference
+        };
+        if (identityValues.Any(value => !string.IsNullOrWhiteSpace(value)))
+        {
+            if (identityValues.Any(string.IsNullOrWhiteSpace))
+                errors.Add("Shared SaaS onboarding identity authority fields must be supplied together.");
+            if (!Uri.TryCreate(authorization.Issuer, UriKind.Absolute, out var issuer)
+                || !string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrEmpty(issuer.UserInfo)
+                || !string.IsNullOrEmpty(issuer.Query)
+                || !string.IsNullOrEmpty(issuer.Fragment))
+                errors.Add("Shared SaaS onboarding issuer must be an absolute HTTPS URI without credentials, query, or fragment.");
+            if (authorization.ClientSecretReference?.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase) != true)
+                errors.Add("Shared SaaS onboarding client credential must be a SECRET:name reference.");
+        }
     }
 
     private static void ValidateSaasDeletion(

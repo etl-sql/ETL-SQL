@@ -259,6 +259,12 @@ Configuration settings for the Portal UI server, shared storage, and active inte
 | :--- | :--- | :--- | :--- | :--- |
 | `Portal:DatabasePath` | string | `./portal.db` | — | Local file path for portal SQLite database. Used when provider is `Sqlite`. |
 | `Portal:TenantId` | string | unset | — | Server-owned tenant identity for a host-fixed Managed Dedicated Portal. Required for SaaS portability export identity and included in reviewed support/export evidence. |
+| `Portal:SharedTenancy:Enabled` | boolean | `false` | — | Enables fail-closed Shared tenant context enforcement. |
+| `Portal:SharedTenancy:LifecycleManagementKey` | string | unset | — | Separate 32+ character platform credential enabling Shared lifecycle APIs and request fencing. Supply from protected configuration; it is not a tenant credential. |
+| `Portal:SharedTenancy:DefaultRelease` | string | `unversioned` | — | Server-owned initial Shared release assignment used by signed provisioning. |
+| `Portal:SharedTenancy:DefaultMaxConcurrentJobs` | integer | `1` | — | Initial per-tenant scheduled-job concurrency assigned by provisioning. |
+| `Portal:SharedTenancy:DefaultMaxStorageMb` | integer | `1024` | — | Initial per-tenant storage assignment; minimum `128`. |
+| `Portal:SharedTenancy:DefaultMaxReportSessions` | integer | `1` | — | Initial per-tenant interactive report-session assignment. |
 | `Portal:Database:Provider` | string | `Sqlite` | — | Database backing portal configuration state (`Sqlite` or `Postgres`). |
 | `Portal:Database:ConnectionString` | string | `""` | — | Database connection details when `Postgres` provider is used (required for HA). |
 | `Portal:Orchestrator:ApiUrl` | string | `http://localhost:5001` | — | Base URL of the Orchestrator Service. |

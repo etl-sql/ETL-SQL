@@ -870,6 +870,25 @@ the boundary out of service before erasing it. A Started record is durable outsi
 before mutation and becomes Completed only after erasure; interruption leaves that record plus a
 uniquely named tombstone for reconciliation and never puts partially deleted state back into service.
 
+Shared tenant lifecycle uses a durable two-control-plane saga. A separate platform-management key
+authenticates the Portal host caller but grants no tenant API access; every provision, upgrade, or
+delete still requires a short-lived signed organization-policy grant naming the canonical tenant,
+platform operator, approval reference, and reason. Shared provisioning also requires the signed
+Portal host, login domain, OIDC issuer/client, and `SECRET:name` client-credential reference, avoiding
+an unauthenticated tenant or a manual bootstrap database edit. Initial release and capacity come from
+server-owned configuration. Upgrade release and capacity come from the signed upgrade grant.
+
+Portal persists an idempotent operation receipt and moves the tenant out of `Active` before calling
+Orchestrator. Authenticated requests then fail with a lifecycle fence. Portal waits for persisted
+interactive/report work; Orchestrator disables only that tenant's schedules, atomically refuses stale
+lease acquisition, cancels its queued admissions, and waits for active or retained sandbox authority.
+Unavailability or an ambiguous response leaves the tenant fenced and the exact authorization
+reference replayable. Completion restores only jobs fenced by that upgrade. Deletion applies the same
+drain, then removes the tenant's Portal catalog/identity/policy partitions and Orchestrator jobs,
+history, usage, and terminal admissions while retaining lifecycle/audit tombstones outside the erased
+partition. Retention and legal-hold checks occur before the first mutation. SQLite and PostgreSQL use
+the same state machine and composite tenant predicates.
+
 ## 16. Failure and Outcome Semantics
 
 The system distinguishes script failure, policy denial, quota exhaustion, connector failure,

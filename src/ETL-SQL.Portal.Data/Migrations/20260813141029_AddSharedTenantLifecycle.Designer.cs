@@ -3,16 +3,19 @@ using System;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace ETL_SQL.Portal.Data.Migrations
+namespace ETLSQL.Portal.Data.Migrations
 {
     [DbContext(typeof(PortalDbContext))]
-    partial class PortalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260813141029_AddSharedTenantLifecycle")]
+    partial class AddSharedTenantLifecycle
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -1889,22 +1892,6 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TargetClientId")
-                        .HasMaxLength(512)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TargetClientSecretReference")
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TargetIssuer")
-                        .HasMaxLength(2048)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TargetLoginDomain")
-                        .HasMaxLength(253)
-                        .HasColumnType("TEXT");
-
                     b.Property<int?>("TargetMaxConcurrentJobs")
                         .HasColumnType("INTEGER");
 
@@ -1913,10 +1900,6 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.Property<int?>("TargetMaxStorageMb")
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("TargetPortalHost")
-                        .HasMaxLength(253)
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("TargetRelease")
                         .HasMaxLength(256)

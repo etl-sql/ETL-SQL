@@ -49,6 +49,19 @@ public class SharedTenancyConfig
     /// derived from a verified credential; missing context is an authorization failure.
     /// </summary>
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Separate platform-management credential for Shared tenant lifecycle calls. This is not a
+    /// tenant credential and never grants access to tenant APIs; a matching short-lived signed
+    /// organization-policy authorization is still required for every mutation.
+    /// </summary>
+    public string? LifecycleManagementKey { get; set; }
+
+    /// <summary>Server-owned initial assignment used only by signed Shared provisioning.</summary>
+    public string DefaultRelease { get; set; } = "unversioned";
+    public int DefaultMaxConcurrentJobs { get; set; } = 1;
+    public int DefaultMaxStorageMb { get; set; } = 1024;
+    public int DefaultMaxReportSessions { get; set; } = 1;
 }
 
 public class KeyManagementConfig

@@ -47,6 +47,7 @@ builder.Configuration.AddEnterprisePolicy();
 // ── Configuration ─────────────────────────────────────────────────────────────
 var portalConfig = builder.Configuration.GetSection("Portal").Get<PortalConfig>()
     ?? new PortalConfig();
+SharedTenantLifecycleConfiguration.Validate(portalConfig);
 
 // Expose the dataset at-rest key as a process secret so the engine can resolve ENCRYPT = PORTAL (used by
 // scheduled refresh jobs, which must not embed the key in persisted SQL). A SEPARATE orchestrator service
@@ -114,6 +115,7 @@ builder.Services.AddScoped<CredentialPostureService>();
 builder.Services.AddScoped<PortalSupportBundleService>();
 builder.Services.AddSingleton<SupportAccessApprovalService>();
 builder.Services.AddScoped<SharedTenantResourceRegistry>();
+builder.Services.AddScoped<SharedTenantLifecycleService>();
 builder.Services.AddScoped<PolicyImpactService>();
 builder.Services.AddScoped<EnvironmentPlanService>();
 builder.Services.AddSingleton<ETL_SQL.Core.IMetadataManager, ETL_SQL.Core.Services.MetadataManager>();
@@ -710,6 +712,8 @@ builder.WebHost.ConfigureKestrel(options =>
         options.Configure(kestrelSection);
     }
 });
+builder.Services.AddScoped<ETL_SQL.Portal.Services.ISharedTenantLifecycleOrchestratorClient>(sp =>
+    sp.GetRequiredService<ETL_SQL.Portal.Services.OrchestratorProxyService>());
 
 // ── App pipeline ──────────────────────────────────────────────────────────────
 var app = builder.Build();
@@ -966,6 +970,7 @@ app.UseRouting();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<ETL_SQL.Portal.Middleware.TenantContextMiddleware>();
+app.UseMiddleware<ETL_SQL.Portal.Middleware.SharedTenantLifecycleMiddleware>();
 app.UseMiddleware<ETL_SQL.Portal.Middleware.ServiceAccountScopeMiddleware>();
 app.Use(async (context, next) =>
 {

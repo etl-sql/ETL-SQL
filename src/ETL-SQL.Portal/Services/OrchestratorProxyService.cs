@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Security.Claims;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +15,14 @@ namespace ETL_SQL.Portal.Services;
 /// can be changed in the admin UI without restarting the portal.
 /// All methods return null / empty collections when the Orchestrator is offline.
 /// </summary>
+public interface ISharedTenantLifecycleOrchestratorClient
+{
+    Task<HttpResponseMessage?> ApplySharedTenantLifecycleAsync(
+        TenantContext platformTenant,
+        SharedTenantLifecycleCommand command,
+        CancellationToken cancellationToken = default);
+}
+
 public class OrchestratorProxyService(
     HttpClient http,
     OrchestratorSettingsService settings,
@@ -21,7 +31,7 @@ public class OrchestratorProxyService(
     // therefore no human to attribute, which is a legitimate state rather than a missing dependency.
     IHttpContextAccessor? httpContext = null,
     PortalConfig? portalConfig = null,
-    PortalDbContext? portalDb = null)
+    PortalDbContext? portalDb = null) : ISharedTenantLifecycleOrchestratorClient
 {
     /// <summary>
     /// Retired caller-controlled attribution header. Signed identity assertions now carry both
@@ -262,6 +272,53 @@ public class OrchestratorProxyService(
                 groupIds,
                 tenantId),
             secret);
+    }
+
+    /// <summary>
+    /// Applies one Shared control-plane lifecycle step as attributed platform automation. This path
+    /// never reuses the current tenant user's identity; the target tenant and operator come from a
+    /// live signed-policy <see cref="PlatformAccessGrant"/>.
+    /// </summary>
+    public async Task<HttpResponseMessage?> ApplySharedTenantLifecycleAsync(
+        TenantContext platformTenant,
+        SharedTenantLifecycleCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(platformTenant);
+        ArgumentNullException.ThrowIfNull(command);
+        platformTenant.RequireActivePlatformGrant(command.NowUtc);
+        var grant = platformTenant.Grant!;
+        if (!string.Equals(grant.OperatorPrincipal, command.PlatformOperator, StringComparison.Ordinal)
+            || !string.Equals(grant.AuthorizationReference, command.AuthorizationReference, StringComparison.Ordinal))
+            throw new UnauthorizedAccessException("Lifecycle command does not match its platform grant.");
+
+        var url = settings.BuildUrl("api/platform/shared-tenants/lifecycle");
+        if (url is null) return null;
+        var secret = portalConfig?.Orchestrator.IdentitySigningSecret;
+        if (string.IsNullOrWhiteSpace(secret))
+            throw new InvalidOperationException(
+                "Shared lifecycle requires Portal-to-Orchestrator identity assertion signing.");
+
+        var assertion = OrchestratorIdentityAssertion.Create(
+            new OrchestratorCaller(
+                "platform", grant.OperatorPrincipal, grant.OperatorPrincipal,
+                ["PlatformLifecycle"], [], platformTenant.Tenant.Value),
+            secret, command.NowUtc);
+        var request = new HttpRequestMessage(HttpMethod.Post, url);
+        if (!string.IsNullOrEmpty(settings.ApiKey))
+            request.Headers.TryAddWithoutValidation("X-Orchestrator-Key", settings.ApiKey);
+        request.Headers.TryAddWithoutValidation(OrchestratorIdentityAssertion.HeaderName, assertion);
+        request.Content = JsonContent.Create(new
+        {
+            command.OperationId,
+            Kind = command.Kind.ToString(),
+            command.AuthorizationReference,
+            command.TargetRelease,
+            command.MaxConcurrentJobs,
+            command.MaxStorageMb,
+            command.MaxReportSessions
+        });
+        return await http.SendAsync(request, cancellationToken);
     }
 
     // ── Private raw-deserialization types ─────────────────────────────────────

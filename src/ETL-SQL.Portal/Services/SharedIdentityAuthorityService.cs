@@ -139,7 +139,7 @@ public sealed class SharedIdentityAuthorityService(
             .TrimEnd('/');
     }
 
-    private static string? NormalizeSecretReference(string? value)
+    internal static string? NormalizeSecretReference(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var reference = value.Trim();

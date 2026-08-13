@@ -331,6 +331,46 @@ public class OrganizationPolicySchemaTests
     }
 
     [Fact]
+    public void SharedOnboardingIdentityAuthorityIsAllOrNothingSignedAndReferenceOnly()
+    {
+        var document = new OrganizationPolicyDocument
+        {
+            SaasOnboarding = new SaasOnboardingAuthorizationPolicySection
+            {
+                Enabled = true,
+                TenantId = "tenant-alpha",
+                OperatorPrincipal = "operator",
+                AuthorizationReference = "change-shared-1",
+                Reason = "provision shared tenant",
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1),
+                PortalHost = "alpha.example.test",
+                LoginDomain = "example.test",
+                Issuer = "https://id.example.test/alpha",
+                ClientId = "alpha-client",
+                ClientSecretReference = "SECRET:alpha-oidc"
+            }
+        };
+
+        Assert.True(OrganizationPolicySchema.Validate(document).IsValid);
+        var flat = document.ToPolicyValues();
+        Assert.Equal("alpha.example.test", flat["SaaS:Onboarding:PortalHost"]);
+        Assert.Equal("SECRET:alpha-oidc", flat["SaaS:Onboarding:ClientSecretReference"]);
+
+        Assert.False(OrganizationPolicySchema.Validate(document with
+        {
+            SaasOnboarding = document.SaasOnboarding with { ClientId = null }
+        }).IsValid);
+        Assert.False(OrganizationPolicySchema.Validate(document with
+        {
+            SaasOnboarding = document.SaasOnboarding with { ClientSecretReference = "raw-secret" }
+        }).IsValid);
+        Assert.False(OrganizationPolicySchema.Validate(document with
+        {
+            SaasOnboarding = document.SaasOnboarding with { Issuer = "http://id.example.test" }
+        }).IsValid);
+    }
+
+    [Fact]
     public void SaasDeletionAuthorizationIsTypedValidatedAndFlattened()
     {
         var expires = DateTimeOffset.UtcNow.AddMinutes(15);

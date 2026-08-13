@@ -232,6 +232,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IWriteEpochStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IClusterLockStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IHostMetricsStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<ISharedTenantLifecycleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ISandboxAdmissionLedger>(sp => sp
                 .GetRequiredService<IOrchestratorStoreFactory>()
                 .CreateSandboxAdmissionLedger(string.IsNullOrWhiteSpace(configuration["Orchestrator:DatabasePath"])
