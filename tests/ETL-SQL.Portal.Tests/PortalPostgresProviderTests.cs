@@ -59,6 +59,7 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
 
         var owner = new PortalUser
         {
+            TenantId = "tenant-alpha",
             UserName = "service-owner",
             NormalizedUserName = "SERVICE-OWNER",
             IsActive = true
@@ -80,6 +81,27 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         var account = await db.ServiceAccounts.SingleAsync();
         Assert.Equal(owner.Id, account.OwnerUserId);
         Assert.Equal("portal.read", account.Scopes);
+
+        var betaOwner = new PortalUser
+        {
+            TenantId = "tenant-beta",
+            UserName = "service-owner",
+            NormalizedUserName = "SERVICE-OWNER",
+            IsActive = true
+        };
+        db.Users.Add(betaOwner);
+        await db.SaveChangesAsync();
+        db.Folders.AddRange(
+            new Folder
+            {
+                TenantId = "tenant-alpha", Name = "Shared", Path = "/shared", OwnerId = owner.Id
+            },
+            new Folder
+            {
+                TenantId = "tenant-beta", Name = "Shared", Path = "/shared", OwnerId = betaOwner.Id
+            });
+        await db.SaveChangesAsync();
+        Assert.Equal(2, await db.Folders.CountAsync(folder => folder.Path == "/shared"));
 
         db.StewardshipSettings.AddRange(
             new StewardshipSettings { TenantId = "tenant-alpha" },

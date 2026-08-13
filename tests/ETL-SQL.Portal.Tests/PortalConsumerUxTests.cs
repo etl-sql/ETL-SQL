@@ -410,7 +410,8 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
         var controller = new CatalogController(
             db,
             new PortalTenantLineageCatalog(new EmptyLineageCatalogStore(), tenantScope, config),
-            tenantScope);
+            tenantScope,
+            new PortalTenantCatalogScope(db, tenantScope));
         controller.ControllerContext = new ControllerContext { HttpContext = context };
         return controller;
     }

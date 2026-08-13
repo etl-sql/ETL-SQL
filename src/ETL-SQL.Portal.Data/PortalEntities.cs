@@ -188,6 +188,7 @@ public class UserGroup
 public class Folder : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public int? ParentId { get; set; }
     public Folder? Parent { get; set; }
     public string Name { get; set; } = "";

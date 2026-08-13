@@ -19,7 +19,8 @@ namespace ETL_SQL.Portal.Controllers;
 public class CatalogController(
     PortalDbContext db,
     PortalTenantLineageCatalog lineageCatalog,
-    DatasetTenantScope tenantScope) : ControllerBase
+    DatasetTenantScope tenantScope,
+    PortalTenantCatalogScope catalogScope) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -507,10 +508,10 @@ public class CatalogController(
     private IQueryable<Folder> VisibleFoldersQuery()
     {
         if (IsAdmin)
-            return db.Folders;
+            return catalogScope.Folders;
 
         var userId = CurrentUserId;
-        return db.Folders.Where(f => db.FolderAcls.Any(a =>
+        return catalogScope.Folders.Where(f => catalogScope.FolderAcls.Any(a =>
             a.FolderId == f.Id
             && a.Permission >= FolderPermission.Read
             && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));
@@ -519,7 +520,7 @@ public class CatalogController(
     private IQueryable<Report> VisibleReportsQuery()
     {
         if (IsAdmin)
-            return db.Reports.Where(r => !r.IsDeleted);
+            return catalogScope.Reports.Where(r => !r.IsDeleted);
 
         var userId = CurrentUserId;
         // Mirrors FolderPermissionService.GetEffectiveReportPermissionAsync: authorship is not a
@@ -527,13 +528,13 @@ public class CatalogController(
         // the reports they authored in search, favourites, and recents while being unable to open
         // them. A creator who still holds folder ownership or any ACL is covered by the clauses
         // below.
-        return db.Reports.Where(r => !r.IsDeleted && (
-            db.Folders.Any(f => f.Id == r.FolderId && f.OwnerId == userId)
-            || db.FolderAcls.Any(a =>
+        return catalogScope.Reports.Where(r => !r.IsDeleted && (
+            catalogScope.Folders.Any(f => f.Id == r.FolderId && f.OwnerId == userId)
+            || catalogScope.FolderAcls.Any(a =>
                 a.FolderId == r.FolderId
                 && a.Permission >= FolderPermission.Read
                 && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId))
-            || db.ReportAcls.Any(a =>
+            || catalogScope.ReportAcls.Any(a =>
                 a.ReportId == r.Id
                 && a.Permission >= FolderPermission.Read
                 && ((a.UserId.HasValue && a.UserId == userId)

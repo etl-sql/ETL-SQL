@@ -110,7 +110,13 @@ public sealed class SharedTenantHttpBoundaryTests
                 IsActive = true
             };
             Assert.True((await users.CreateAsync(beta, "Beta@Test99!")).Succeeded);
-            var folder = new Folder { Name = "Beta", Path = "/beta", OwnerId = beta.Id };
+            var folder = new Folder
+            {
+                TenantId = "tenant-beta",
+                Name = "Beta",
+                Path = "/beta",
+                OwnerId = beta.Id
+            };
             var report = new Report
             {
                 Folder = folder,
@@ -266,6 +272,65 @@ public sealed class SharedTenantHttpBoundaryTests
             HttpMethod.Get, "/api/data-quality/quarantine?jobName=tenant-beta--daily");
         foreignJobRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
         Assert.Equal("[]", await (await client.SendAsync(foreignJobRequest)).Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task SignedTenantScopesFolderIdsPathsAndCatalogSearchForAdministrators()
+    {
+        using var factory = new SharedPortalFactory();
+        using var client = factory.CreateClient();
+        string alphaToken;
+        int betaFolderId;
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
+            var admin = await users.FindByNameAsync("admin")
+                ?? throw new InvalidOperationException("Seeded admin was not found.");
+            admin.TenantId = "tenant-alpha";
+            admin.MustChangePassword = false;
+            var beta = new PortalUser
+            {
+                UserName = $"beta-folder-{Guid.NewGuid():N}",
+                Email = $"beta-folder-{Guid.NewGuid():N}@test.local",
+                TenantId = "tenant-beta",
+                MustChangePassword = false,
+                IsActive = true
+            };
+            Assert.True((await users.CreateAsync(beta, "Beta@Test99!")).Succeeded);
+            var alphaFolder = new Folder
+            {
+                TenantId = "tenant-alpha", Name = "Alpha marker", Path = "/shared", OwnerId = admin.Id
+            };
+            var betaFolder = new Folder
+            {
+                TenantId = "tenant-beta", Name = "Beta secret", Path = "/shared", OwnerId = beta.Id
+            };
+            db.Folders.AddRange(alphaFolder, betaFolder);
+            await db.SaveChangesAsync();
+            betaFolderId = betaFolder.Id;
+            alphaToken = scope.ServiceProvider.GetRequiredService<TokenService>().GenerateJwt(
+                admin, await users.GetRolesAsync(admin),
+                tenantContext: TenantContext.FromVerifiedCredential("tenant-alpha"));
+        }
+
+        using var foreign = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/folders/{betaFolderId}?tenant=tenant-beta");
+        foreign.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        foreign.Headers.Add("X-Tenant-Id", "tenant-beta");
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreign)).StatusCode);
+
+        using var tree = new HttpRequestMessage(HttpMethod.Get, "/api/folders");
+        tree.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        var treeBody = await (await client.SendAsync(tree)).Content.ReadAsStringAsync();
+        Assert.Contains("Alpha marker", treeBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("Beta secret", treeBody, StringComparison.Ordinal);
+
+        using var search = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/search?q=secret");
+        search.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        var searchBody = await (await client.SendAsync(search)).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("Beta secret", searchBody, StringComparison.Ordinal);
     }
 
     private static JobDefinition Job(string name, string tenant) => new(

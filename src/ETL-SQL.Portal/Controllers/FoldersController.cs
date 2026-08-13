@@ -15,7 +15,8 @@ public class FoldersController(
     PortalDbContext db,
     AuditService audit,
     FolderPermissionService folderPermissions,
-    SecuritySessionService securitySessions) : ControllerBase
+    SecuritySessionService securitySessions,
+    PortalTenantCatalogScope catalogScope) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -58,7 +59,7 @@ public class FoldersController(
         string path;
         if (req.ParentId.HasValue)
         {
-            var parent = await db.Folders.FindAsync(req.ParentId.Value);
+            var parent = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == req.ParentId.Value);
             if (parent is null) return NotFound("Parent folder not found");
             if (!await folderPermissions.HasPermissionAsync(parent.Id, FolderPermission.Manage, User))
                 return Forbid();
@@ -70,20 +71,22 @@ public class FoldersController(
             path = $"/{req.Name}";
         }
 
-        if (await db.Folders.AnyAsync(f => f.Path == path))
+        if (await catalogScope.Folders.AnyAsync(f => f.Path == path))
             return Conflict(new { error = $"Folder '{path}' already exists" });
 
         var ownerId = CurrentUserId;
         if (!string.IsNullOrWhiteSpace(req.OwnerUsername))
         {
             if (!IsAdmin) return Forbid();
-            var requestedOwner = await db.Users.SingleOrDefaultAsync(u => u.UserName == req.OwnerUsername);
+            var requestedOwner = await db.Users.SingleOrDefaultAsync(u =>
+                u.TenantId == catalogScope.TenantId && u.UserName == req.OwnerUsername);
             if (requestedOwner is null) return BadRequest($"Catalog owner '{req.OwnerUsername}' was not found.");
             ownerId = requestedOwner.Id;
         }
 
         var folder = new Folder
         {
+            TenantId = catalogScope.TenantId,
             ParentId = req.ParentId,
             Name = req.Name,
             Path = path,
@@ -96,7 +99,7 @@ public class FoldersController(
         }
         catch (DbUpdateException)
         {
-            if (await db.Folders.AsNoTracking().AnyAsync(f => f.Path == path))
+            if (await catalogScope.Folders.AsNoTracking().AnyAsync(f => f.Path == path))
                 return Conflict(new { error = $"Folder '{path}' already exists" });
             throw;
         }
@@ -109,7 +112,7 @@ public class FoldersController(
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var folder = await db.Folders.FindAsync(id);
+        var folder = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
         if (folder is null) return NotFound();
         if (!IsAdmin && !await folderPermissions.HasPermissionAsync(id, FolderPermission.Read, User))
             return Forbid();
@@ -122,7 +125,7 @@ public class FoldersController(
     [Authorize(Roles = "Admin,Publisher")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateFolderRequest req)
     {
-        var folder = await db.Folders.FindAsync(id);
+        var folder = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
         if (folder is null) return NotFound();
 
         if (!await folderPermissions.HasPermissionAsync(folder.Id, FolderPermission.Manage, User))
@@ -147,14 +150,16 @@ public class FoldersController(
             if (req.ParentId == id) return BadRequest("Folder cannot be its own parent.");
 
             // Check for circular reference
-            var p = await db.Folders.FindAsync(req.ParentId.Value);
+            var p = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == req.ParentId.Value);
             if (p is null) return NotFound("Target parent folder not found");
 
             var curr = p;
             while (curr != null)
             {
                 if (curr.Id == id) return BadRequest("Folder cannot be moved into its own descendant.");
-                curr = curr.ParentId.HasValue ? await db.Folders.FindAsync(curr.ParentId.Value) : null;
+                curr = curr.ParentId.HasValue
+                    ? await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == curr.ParentId.Value)
+                    : null;
             }
 
             if (!await folderPermissions.HasPermissionAsync(p.Id, FolderPermission.Manage, User))
@@ -175,7 +180,7 @@ public class FoldersController(
             string parentPath = "";
             if (folder.ParentId.HasValue)
             {
-                var parent = await db.Folders.FindAsync(folder.ParentId.Value);
+                var parent = await catalogScope.Folders.SingleAsync(f => f.Id == folder.ParentId.Value);
                 parentPath = parent!.Path;
             }
             folder.Path = parentPath == "" ? $"/{folder.Name}" : $"{parentPath}/{folder.Name}";
@@ -201,7 +206,7 @@ public class FoldersController(
 
     private async Task UpdatePathsRecursiveAsync(Folder folder)
     {
-        var children = await db.Folders.Where(f => f.ParentId == folder.Id).ToListAsync();
+        var children = await catalogScope.Folders.Where(f => f.ParentId == folder.Id).ToListAsync();
         foreach (var child in children)
         {
             child.Version = checked(child.Version + 1);
@@ -214,7 +219,7 @@ public class FoldersController(
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id, [FromQuery] bool cascade = false)
     {
-        var folder = await db.Folders
+        var folder = await catalogScope.Folders
             .Include(f => f.Children)
             .Include(f => f.Reports)
             .Include(f => f.Acls)
@@ -240,7 +245,7 @@ public class FoldersController(
         catch (DbUpdateConcurrencyException)
         {
             db.ChangeTracker.Clear();
-            var current = await db.Folders.FindAsync(id);
+            var current = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
             return current is null
                 ? NotFound()
                 : OptimisticConcurrency.Conflict(
@@ -252,7 +257,7 @@ public class FoldersController(
 
     private async Task DeleteFolderRecursiveAsync(Folder folder)
     {
-        var children = await db.Folders
+        var children = await catalogScope.Folders
             .Include(f => f.Children)
             .Include(f => f.Reports)
             .Include(f => f.Acls)
@@ -275,7 +280,8 @@ public class FoldersController(
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetAcl(int id)
     {
-        var acls = await db.FolderAcls
+        if (!await catalogScope.Folders.AnyAsync(folder => folder.Id == id)) return NotFound();
+        var acls = await catalogScope.FolderAcls
             .Include(a => a.Group)
             .Where(a => a.FolderId == id)
             .Select(a => new FolderAclDto(a.GroupId, a.Group.Name, a.Permission))
@@ -287,9 +293,11 @@ public class FoldersController(
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Grant(int id, [FromBody] GrantPermissionRequest req)
     {
-        var folder = await db.Folders.FindAsync(id);
+        var folder = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
         if (folder is null) return NotFound("Folder not found");
-        if (!await db.Groups.AnyAsync(g => g.Id == req.GroupId)) return NotFound("Group not found");
+        if (!await db.Groups.AnyAsync(g =>
+                g.TenantId == catalogScope.TenantId && g.Id == req.GroupId))
+            return NotFound("Group not found");
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
@@ -297,7 +305,7 @@ public class FoldersController(
             return OptimisticConcurrency.Conflict(
                 this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
 
-        var existing = await db.FolderAcls.FirstOrDefaultAsync(
+        var existing = await catalogScope.FolderAcls.FirstOrDefaultAsync(
             a => a.FolderId == id && a.GroupId == req.GroupId);
 
         if (existing is not null)
@@ -315,7 +323,7 @@ public class FoldersController(
         catch (DbUpdateConcurrencyException)
         {
             db.ChangeTracker.Clear();
-            var current = await db.Folders.FindAsync(id);
+            var current = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
             return current is null
                 ? NotFound()
                 : OptimisticConcurrency.Conflict(
@@ -330,7 +338,7 @@ public class FoldersController(
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Revoke(int id, int groupId)
     {
-        var folder = await db.Folders.FindAsync(id);
+        var folder = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
         if (folder is null) return NotFound();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -339,7 +347,7 @@ public class FoldersController(
             return OptimisticConcurrency.Conflict(
                 this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
 
-        var acl = await db.FolderAcls.FirstOrDefaultAsync(
+        var acl = await catalogScope.FolderAcls.FirstOrDefaultAsync(
             a => a.FolderId == id && a.GroupId == groupId);
         if (acl is null) return NotFound();
 
@@ -364,10 +372,10 @@ public class FoldersController(
     private IQueryable<Folder> VisibleFoldersQuery()
     {
         if (IsAdmin)
-            return db.Folders;
+            return catalogScope.Folders;
 
         var userId = CurrentUserId;
-        return db.Folders.Where(f => db.FolderAcls.Any(a =>
+        return catalogScope.Folders.Where(f => catalogScope.FolderAcls.Any(a =>
             a.FolderId == f.Id
             && a.Permission >= FolderPermission.Read
             && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));

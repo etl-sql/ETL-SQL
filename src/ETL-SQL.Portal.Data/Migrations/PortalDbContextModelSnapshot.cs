@@ -393,6 +393,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
@@ -401,7 +406,7 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasIndex("ParentId");
 
-                    b.HasIndex("Path")
+                    b.HasIndex("TenantId", "Path")
                         .IsUnique();
 
                     b.ToTable("Folders");

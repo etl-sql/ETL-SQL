@@ -154,6 +154,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<Folder>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.HasOne(x => x.Parent).WithMany(f => f.Children).HasForeignKey(x => x.ParentId);
             e.HasMany(x => x.Reports).WithOne(r => r.Folder).HasForeignKey(r => r.FolderId);
         });
@@ -532,7 +533,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<Folder>(e =>
         {
-            e.HasIndex(x => x.Path).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Path }).IsUnique();
         });
 
         builder.Entity<Dataset>(e =>

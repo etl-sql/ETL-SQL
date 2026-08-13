@@ -520,6 +520,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetTenantScope>(sp =>
     new ETL_SQL.Portal.Services.DatasetTenantScope(
         sp.GetRequiredService<PortalConfig>(),
         sp.GetService<ETL_SQL.Core.Multitenancy.TenantContext>()));
+builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantCatalogScope>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantLineageCatalog>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantJobEvidenceStore>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetAtRestKeyRotationService>();

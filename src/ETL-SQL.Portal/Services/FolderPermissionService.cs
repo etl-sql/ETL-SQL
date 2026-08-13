@@ -4,9 +4,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Services;
 
-public class FolderPermissionService(PortalDbContext db)
+public class FolderPermissionService(
+    PortalDbContext db,
+    PortalTenantCatalogScope? catalogScope = null)
 {
     private readonly Dictionary<int, ISet<int>> _cachedUserGroupIdsByUser = [];
+    private IQueryable<Folder> Folders => catalogScope?.Folders ?? db.Folders;
+    private IQueryable<FolderAcl> FolderAcls => catalogScope?.FolderAcls ?? db.FolderAcls;
+    private IQueryable<ReportAcl> ReportAcls => catalogScope?.ReportAcls ?? db.ReportAcls;
 
     public int GetUserId(ClaimsPrincipal user) =>
         int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -20,7 +25,8 @@ public class FolderPermissionService(PortalDbContext db)
             return cached;
 
         var ids = await db.UserGroups
-            .Where(ug => ug.UserId == userId)
+            .Where(ug => ug.UserId == userId
+                && (catalogScope == null || ug.TenantId == catalogScope.TenantId))
             .Select(ug => ug.GroupId)
             .ToListAsync();
 
@@ -68,7 +74,7 @@ public class FolderPermissionService(PortalDbContext db)
 
         var folderPerm = await GetEffectivePermissionAsync(report.FolderId, groupIds, userId);
 
-        var reportPerms = await db.ReportAcls
+        var reportPerms = await ReportAcls
             .Where(a => a.ReportId == report.Id && ((a.UserId.HasValue && a.UserId == userId) || (a.GroupId.HasValue && groupIds.Contains(a.GroupId.Value))))
             .Select(a => a.Permission)
             .ToListAsync();
@@ -105,7 +111,7 @@ public class FolderPermissionService(PortalDbContext db)
         var folderPerm = await GetEffectivePermissionAsync(report.FolderId, groupIds, userId);
         if (folderPerm is not null) sources.Add($"Folder ACL ({folderPerm})");
 
-        var reportPerms = await db.ReportAcls
+        var reportPerms = await ReportAcls
             .Where(a => a.ReportId == report.Id && ((a.UserId.HasValue && a.UserId == userId) || (a.GroupId.HasValue && groupIds.Contains(a.GroupId.Value))))
             .Select(a => a.Permission)
             .ToListAsync();
@@ -129,10 +135,10 @@ public class FolderPermissionService(PortalDbContext db)
         // folder without an explicit ACL grant, matching OwnerId's role as the ownership
         // fallback for system-published datasets.
         if (userId is not null
-            && await db.Folders.AnyAsync(f => f.Id == folderId && f.OwnerId == userId))
+            && await Folders.AnyAsync(f => f.Id == folderId && f.OwnerId == userId))
             return FolderPermission.Manage;
 
-        var perms = await db.FolderAcls
+        var perms = await FolderAcls
             .Where(a => a.FolderId == folderId && groupIds.Contains(a.GroupId))
             .Select(a => a.Permission)
             .ToListAsync();
@@ -156,7 +162,7 @@ public class FolderPermissionService(PortalDbContext db)
             // Still one round-trip. The max is taken in memory because the authority ladder is
             // not the enum's integer order, and expressing it as a SQL CASE would put a second copy
             // of that ladder somewhere it can drift from FolderPermissions.Rank.
-            var rows = await db.FolderAcls
+            var rows = await FolderAcls
                 .Where(a => ids.Contains(a.FolderId) && groupIds.Contains(a.GroupId))
                 .Select(a => new { a.FolderId, a.Permission })
                 .ToListAsync();
@@ -167,7 +173,7 @@ public class FolderPermissionService(PortalDbContext db)
 
         if (userId is not null)
         {
-            var owned = await db.Folders
+            var owned = await Folders
                 .Where(f => ids.Contains(f.Id) && f.OwnerId == userId)
                 .Select(f => f.Id)
                 .ToListAsync();
