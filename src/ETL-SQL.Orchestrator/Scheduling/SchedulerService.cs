@@ -12,6 +12,7 @@ using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Scheduling;
 using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -53,6 +54,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly JobThrottle _throttle;
         private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
         private readonly INodeCapacityMonitor _capacityMonitor;
+        private readonly ITenantMeteringLedger? _meteringLedger;
         private CancellationTokenSource? _cts;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _scheduledJobStarts = new(StringComparer.OrdinalIgnoreCase);
@@ -65,7 +67,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store,
             ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration,
             ETL_SQL.Core.Execution.ISessionStateManager sessionManager,
-            INodeCapacityMonitor? capacityMonitor = null)
+            INodeCapacityMonitor? capacityMonitor = null,
+            ITenantMeteringLedger? meteringLedger = null)
         {
             _serviceProvider = serviceProvider;
             _store = store;
@@ -74,6 +77,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _configuration = configuration;
             _sessionManager = sessionManager;
             _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
+            _meteringLedger = meteringLedger;
         }
 
         /// <summary>Process-unique owner id for the maintenance lease, matching the heartbeat's form.</summary>
@@ -635,6 +639,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     long attemptPeakMemory = 0;
                     double attemptCpuSeconds = 0;
                     long attemptQueueWaitMs = 0;
+                    var usedSandbox = false;
                     try
                     {
                         var throttleSw = System.Diagnostics.Stopwatch.StartNew();
@@ -647,6 +652,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         var sandboxExecutor = scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>();
                         if (sandboxExecutor is not null)
                         {
+                            usedSandbox = true;
                             lastResult = await sandboxExecutor.ExecuteAsync(
                                 job, historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
                                 variableOverrides, cycleCts.Token);
@@ -764,6 +770,54 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                     "Failed to persist tenant usage for job {JobName}, history {HistoryId}.",
                                     job.Name, historyId);
                             }
+
+                            if (_meteringLedger is not null)
+                            {
+                                try
+                                {
+                                    var configuredTenant = _configuration["Orchestrator:TenantId"];
+                                    var tenant = string.IsNullOrWhiteSpace(configuredTenant)
+                                        ? ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential(job.TenantId)
+                                        : ETL_SQL.Core.Multitenancy.TenantContext.FromHostConfiguration(configuredTenant);
+                                    tenant.RequireTenant(job.TenantId);
+                                    var statements = lastResult?.StatementMetrics ?? [];
+                                    await _meteringLedger.AppendAsync(tenant, new TenantMeteringEvent
+                                    {
+                                        SourceEventId = $"history-{historyId}",
+                                        Source = TenantMeteringSource.Scheduler,
+                                        WorkloadClass = job.JobType == JobTargetKind.Report
+                                            ? TenantWorkloadClass.Report
+                                            : TenantWorkloadClass.Script,
+                                        ConnectorClass = TenantConnectorClass.None,
+                                        Status = attemptStatus switch
+                                        {
+                                            "SUCCESS" => TenantMeteringStatus.Succeeded,
+                                            "CANCELLED" => TenantMeteringStatus.Cancelled,
+                                            _ => TenantMeteringStatus.Failed
+                                        },
+                                        Rows = attemptRows,
+                                        SandboxCpuMilliseconds = usedSandbox
+                                            ? ToMilliseconds(attemptCpuSeconds)
+                                            : 0,
+                                        SandboxPeakMemoryBytes = usedSandbox ? attemptPeakMemory : 0,
+                                        SandboxIoReadBytes = usedSandbox
+                                            ? statements.Sum(metric => Math.Max(0, metric.SpillReadBytes))
+                                            : 0,
+                                        SandboxIoWriteBytes = usedSandbox
+                                            ? statements.Sum(metric => Math.Max(0, metric.SpilledBytes))
+                                            : 0,
+                                        ConcurrencyUnits = 1,
+                                        DurationMilliseconds = attemptSw.ElapsedMilliseconds,
+                                        RecordedAtUtc = DateTimeOffset.UtcNow
+                                    }, CancellationToken.None);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex,
+                                        "Failed to append counts-only tenant metering for job {JobName}, history {HistoryId}.",
+                                        job.Name, historyId);
+                                }
+                            }
                         }
                     }
 
@@ -819,6 +873,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
 
             await QuarantineIfRepeatedlyFailingAsync(job);
+        }
+
+        private static long ToMilliseconds(double seconds)
+        {
+            if (!double.IsFinite(seconds) || seconds <= 0) return 0;
+            var value = seconds * 1000d;
+            return value >= long.MaxValue ? long.MaxValue : checked((long)Math.Round(value));
         }
 
         private async Task PersistResumeMetadataAsync(long historyId, string? sessionId)

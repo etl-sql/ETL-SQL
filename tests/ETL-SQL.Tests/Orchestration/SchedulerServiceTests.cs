@@ -12,6 +12,7 @@ using ETL_SQL.Core.Execution;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Services;
 using ETL_SQL.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -38,7 +39,8 @@ namespace ETL_SQL.Tests.Orchestration
                 ScriptExecutionResult result,
                 INodeCapacityMonitor? capacityMonitor = null,
                 Dictionary<string, string?>? config = null,
-                Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null)
+                Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null,
+                Mock<ITenantMeteringLedger>? meteringLedger = null)
         {
             capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             var mockStore = new Mock<IJobHistoryStore>();
@@ -63,7 +65,7 @@ namespace ETL_SQL.Tests.Orchestration
                         .ReturnsAsync(result);
 
             return (BuildService(mockStore, mockExecutor, capacityMonitor, config,
-                sandboxExecutor: sandboxExecutor), mockStore, mockExecutor);
+                sandboxExecutor: sandboxExecutor, meteringLedger: meteringLedger), mockStore, mockExecutor);
         }
 
         private SchedulerService BuildService(
@@ -72,7 +74,8 @@ namespace ETL_SQL.Tests.Orchestration
             INodeCapacityMonitor? capacityMonitor = null,
             Dictionary<string, string?>? config = null,
             Mock<ISessionStateManager>? sessionManager = null,
-            Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null)
+            Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null,
+            Mock<ITenantMeteringLedger>? meteringLedger = null)
         {
             capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             // IServiceProvider.CreateScope() is an extension that calls
@@ -118,7 +121,8 @@ namespace ETL_SQL.Tests.Orchestration
                 throttle,
                 configuration,
                 sessionManager.Object,
-                capacityMonitor);
+                capacityMonitor,
+                meteringLedger?.Object);
         }
 
         public void Dispose()
@@ -496,6 +500,80 @@ namespace ETL_SQL.Tests.Orchestration
                 usage.PeakMemoryBytes == 8192 &&
                 usage.CpuTimeSeconds == 1.5 &&
                 usage.DurationMs >= 0)), Times.AtLeastOnce());
+        }
+
+        [Fact]
+        public async Task SandboxedTenantJob_AppendsTypedSharedFleetMetering()
+        {
+            var job = new JobDefinition(
+                "SharedMeteredJob", "SELECT 1;", 1, "HOUR", null, null, null,
+                TenantId: "tenant-alpha");
+            var metrics = new[]
+            {
+                new ETL_SQL.Core.Profiling.StatementMetricsPayload
+                {
+                    Statement = "SELECT ?;", SpilledBytes = 70, SpillReadBytes = 40
+                }
+            };
+            var result = new ScriptExecutionResult(
+                true, 42, PeakMemoryBytes: 8192, CpuTimeSeconds: 1.5,
+                StatementMetrics: metrics);
+            var sandbox = new Mock<ISandboxScheduledJobExecutor>();
+            sandbox.Setup(executor => executor.ExecuteAsync(
+                    job, It.IsAny<long>(), It.IsAny<int>(), It.IsAny<string>(), false,
+                    It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(result);
+            var metering = new Mock<ITenantMeteringLedger>();
+            metering.Setup(ledger => ledger.AppendAsync(
+                    It.IsAny<ETL_SQL.Core.Multitenancy.TenantContext>(),
+                    It.IsAny<TenantMeteringEvent>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+            var (service, _, _) = Build(
+                [job], result, sandboxExecutor: sandbox, meteringLedger: metering);
+
+            service.Start();
+            await WaitUntilAsync(() => Invoked(metering, nameof(ITenantMeteringLedger.AppendAsync)));
+            service.Stop();
+
+            metering.Verify(ledger => ledger.AppendAsync(
+                It.Is<ETL_SQL.Core.Multitenancy.TenantContext>(tenant =>
+                    tenant.Tenant.Value == "tenant-alpha"),
+                It.Is<TenantMeteringEvent>(usage =>
+                    usage.SourceEventId == "history-1" &&
+                    usage.Source == TenantMeteringSource.Scheduler &&
+                    usage.Rows == 42 &&
+                    usage.SandboxCpuMilliseconds == 1500 &&
+                    usage.SandboxPeakMemoryBytes == 8192 &&
+                    usage.SandboxIoReadBytes == 40 &&
+                    usage.SandboxIoWriteBytes == 70 &&
+                    usage.ConcurrencyUnits == 1),
+                CancellationToken.None), Times.AtLeastOnce());
+        }
+
+        [Fact]
+        public async Task SharedMeteringLedgerFailureCannotChangeSuccessfulOutcome()
+        {
+            var job = new JobDefinition(
+                "SharedMeterFailure", "SELECT 1;", 1, "HOUR", null, null, null,
+                TenantId: "tenant-alpha");
+            var metering = new Mock<ITenantMeteringLedger>();
+            metering.Setup(ledger => ledger.AppendAsync(
+                    It.IsAny<ETL_SQL.Core.Multitenancy.TenantContext>(),
+                    It.IsAny<TenantMeteringEvent>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new IOException("metering unavailable"));
+            var (service, store, executor) = Build(
+                [job], new ScriptExecutionResult(true, 5), meteringLedger: metering);
+
+            service.Start();
+            await WaitUntilAsync(() => Invoked(metering, nameof(ITenantMeteringLedger.AppendAsync)));
+            service.Stop();
+
+            executor.Verify(e => e.ExecuteTextAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(),
+                It.IsAny<string>(), It.IsAny<long>()), Times.AtLeastOnce());
+            store.Verify(s => s.LogJobEndAsync(
+                1L, "SUCCESS", null, 5, It.IsAny<long>(), It.IsAny<double>(),
+                It.IsAny<string?>(), It.IsAny<bool?>()), Times.AtLeastOnce());
         }
 
         [Fact]

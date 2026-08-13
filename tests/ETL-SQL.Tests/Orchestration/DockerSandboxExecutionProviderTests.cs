@@ -16,7 +16,8 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
     {
         var commands = new RecordingCommands(
             ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"),
-            Ok("{\"success\":true,\"rowsProcessed\":7,\"sessionId\":\"session-1\"}"),
+            Ok("{\"success\":true,\"rowsProcessed\":7,\"peakMemoryBytes\":4096," +
+               "\"cpuTimeSeconds\":1.25,\"sessionId\":\"session-1\"}"),
             Ok("container-id"), Fail("No such object: container"));
         var artifacts = ArtifactStore();
         var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
@@ -30,6 +31,8 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
 
         Assert.Equal(SandboxTerminalStatus.Succeeded, outcome.Status);
         Assert.Equal(7, outcome.Result!.RowsProcessed);
+        Assert.Equal(4096, outcome.Result.PeakMemoryBytes);
+        Assert.Equal(1.25, outcome.Result.CpuTimeSeconds);
         var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
         AssertContainsPair(create, "--runtime", "runsc");
         AssertContainsPair(create, "--network", "none");

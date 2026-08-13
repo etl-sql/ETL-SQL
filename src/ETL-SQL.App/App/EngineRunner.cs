@@ -299,7 +299,12 @@ namespace ETL_SQL.App
                         {
                             Console.Error.WriteLine($"Syntax Error at line {err.Line}, col {err.Column}: {err.Message}");
                         }
-                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName,
+                            peakMemoryBytes = Process.GetCurrentProcess().PeakWorkingSet64,
+                            cpuTimeSeconds = Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds
+                        }));
                     }
                     else
                     {
@@ -354,7 +359,12 @@ namespace ETL_SQL.App
                         {
                             Console.Error.WriteLine($"Linter Error at line {err.LineNumber}, col {err.ColumnNumber}: {err.Message}");
                         }
-                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName,
+                            peakMemoryBytes = Process.GetCurrentProcess().PeakWorkingSet64,
+                            cpuTimeSeconds = Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds
+                        }));
                     }
                     else
                     {
@@ -732,6 +742,8 @@ namespace ETL_SQL.App
                             exitCode = 0,
                             uri = ctx.ScriptFile.FullName,
                             rowsProcessed = evaluator.Telemetry.RowsProcessed,
+                            peakMemoryBytes = Process.GetCurrentProcess().PeakWorkingSet64,
+                            cpuTimeSeconds = Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds,
                             rowsQuarantined = evaluator.DataQuality.RowsQuarantined,
                             rowsWarned = evaluator.DataQuality.RowsWarned,
                             dataQualityFailures = evaluator.DataQuality.TotalFailures > 0
@@ -809,6 +821,8 @@ namespace ETL_SQL.App
                             exitCode = 1,
                             uri = ctx.ScriptFile.FullName,
                             rowsProcessed = evaluator?.Telemetry.RowsProcessed ?? 0,
+                            peakMemoryBytes = Process.GetCurrentProcess().PeakWorkingSet64,
+                            cpuTimeSeconds = Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds,
                             rowsQuarantined = evaluator?.DataQuality.RowsQuarantined ?? 0,
                             rowsWarned = evaluator?.DataQuality.RowsWarned ?? 0,
                             dataQualityFailures = evaluator?.DataQuality.TotalFailures > 0
@@ -869,6 +883,8 @@ namespace ETL_SQL.App
                             exitCode = 1,
                             uri = ctx.ScriptFile.FullName,
                             rowsProcessed = evaluator?.Telemetry.RowsProcessed ?? 0,
+                            peakMemoryBytes = Process.GetCurrentProcess().PeakWorkingSet64,
+                            cpuTimeSeconds = Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds,
                             rowsQuarantined = evaluator?.DataQuality.RowsQuarantined ?? 0,
                             rowsWarned = evaluator?.DataQuality.RowsWarned ?? 0,
                             dataQualityFailures = evaluator?.DataQuality.TotalFailures > 0

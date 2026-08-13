@@ -428,6 +428,22 @@ checked off meaningfully. Split:
 - [ ] **Shared — metering.** Shared-fleet attribution for rows/bytes, connector class, sandbox
       CPU/memory/I/O, Gateway traffic, storage, and concurrency. Metering keeps its own durable,
       tenant-partitioned ledger; it cannot read payload content or become execution authorization.
+
+      **Counts-only ledger and scheduler adoption completed (2026-08-13).**
+      `RelationalTenantMeteringLedger` is a separate SQLite/PostgreSQL event ledger whose append and
+      query APIs require a host-fixed or verified-credential `TenantContext`; events contain no
+      tenant selector. Composite tenant/source/event idempotency lets equal event IDs coexist across
+      tenants, and reads cannot omit the tenant predicate. Its fixed enum/count schema covers rows,
+      read/write bytes, connector class, sandbox CPU/peak-memory/I/O, Gateway ingress/egress, storage,
+      concurrency, duration, and status, with no script, parameter, target, resource/object name, row
+      sample, secret, or authorization result. It exposes evidence append/query only and execution
+      policy has no dependency on it. The scheduler now emits one idempotent event per tenant-bound
+      attempt, including sandbox CPU/memory/spill I/O when the sandbox path ran; engine JSON completion
+      envelopes carry process peak-memory and CPU measurements across the OCI boundary. Ledger failure
+      cannot change a completed workload. SQLite restart/collision tests and a real PostgreSQL 64-bit
+      round trip prove durable partitioning. This cell remains open until the Shared Gateway and
+      tenant storage providers feed their actual byte/storage/connector-class measures and hostile
+      fleet evidence proves those producers cannot misattribute a tenant.
 - [ ] **Shared — provisioning, upgrade, and deletion** against shared control planes.
       **Gap — Phase C carried no managed-operations bullet at all.**
 - [x] **Portability bundle (both).** Unify the existing Portal configuration export, Orchestrator

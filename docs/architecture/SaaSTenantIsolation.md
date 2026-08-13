@@ -812,9 +812,19 @@ attempt in the Orchestrator's provider-neutral state store. Attribution comes fr
 terminal status, row count, peak memory, CPU seconds, duration, and recording time; it deliberately
 contains no script, parameters, connector destination, filenames, row values, or secrets. A ledger
 write failure is operationally visible but cannot fail, retry, or otherwise change the completed
-workload. This is the Dedicated topology contract only. Shared SaaS still requires attribution for
-sandbox I/O, Gateway traffic, storage, connector class, and fleet concurrency before it can claim
-metering support.
+workload.
+
+Shared-fleet adoption starts with the separate `RelationalTenantMeteringLedger`. Its append and query
+operations require a host-fixed or verified-credential `TenantContext`; the fixed event payload has
+no tenant selector and the table keys idempotency by tenant, source, and opaque source event. Typed
+enums classify source, workload, connector class, and status. Numeric fields cover rows, read/write
+bytes, sandbox CPU/peak-memory/I/O, Gateway traffic, storage, concurrency, and duration. There is no
+field for scripts, parameters, connector targets, resource/object names, row samples, secrets, or an
+authorization decision, and no execution policy consumes the ledger. Scheduled sandbox attempts now
+append rows/CPU/memory/spill-I/O evidence; the CLI completion envelope carries process peak-memory and
+CPU across the OCI boundary. A metering outage is logged after execution and cannot alter its result.
+Gateway traffic, storage sampling, and connector-class producers remain required before Shared SaaS
+can claim complete metering support.
 
 ## 15. Availability, Upgrade, and Recovery
 

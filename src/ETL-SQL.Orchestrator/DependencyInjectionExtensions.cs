@@ -237,6 +237,11 @@ namespace ETL_SQL.Orchestrator
                 .CreateSandboxAdmissionLedger(string.IsNullOrWhiteSpace(configuration["Orchestrator:DatabasePath"])
                     ? null
                     : configuration["Orchestrator:DatabasePath"]));
+            services.AddSingleton<ITenantMeteringLedger>(sp => sp
+                .GetRequiredService<IOrchestratorStoreFactory>()
+                .CreateTenantMeteringLedger(string.IsNullOrWhiteSpace(configuration["Orchestrator:DatabasePath"])
+                    ? null
+                    : configuration["Orchestrator:DatabasePath"]));
             // Engine→Orchestrator seam for ASSERT JOB ... WITHIN ... OF HISTORICAL. Absent in
             // pure-engine/CLI hosts, where HISTORICAL predicates fail cleanly instead.
             services.AddSingleton<IJobMetricsProvider>(sp =>

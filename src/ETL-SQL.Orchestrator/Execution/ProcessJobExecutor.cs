@@ -360,6 +360,12 @@ namespace ETL_SQL.Orchestrator.Execution
                     }
 
                     long rows = root.TryGetProperty("rowsProcessed", out var r) ? r.GetInt64() : 0;
+                    if (root.TryGetProperty("peakMemoryBytes", out var envelopeMemory) &&
+                        envelopeMemory.ValueKind == JsonValueKind.Number)
+                        peakMemory = Math.Max(peakMemory, envelopeMemory.GetInt64());
+                    if (root.TryGetProperty("cpuTimeSeconds", out var envelopeCpu) &&
+                        envelopeCpu.ValueKind == JsonValueKind.Number)
+                        cpuSeconds = Math.Max(cpuSeconds, envelopeCpu.GetDouble());
                     string? error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
                     string? session = root.TryGetProperty("sessionId", out var sid) ? sid.GetString() : null;
 

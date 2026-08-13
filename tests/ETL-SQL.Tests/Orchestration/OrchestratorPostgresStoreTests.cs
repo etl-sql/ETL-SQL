@@ -34,6 +34,9 @@ namespace ETL_SQL.Tests.Orchestration
         private RelationalSandboxAdmissionLedger NewAdmissionLedger() =>
             new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
 
+        private RelationalTenantMeteringLedger NewMeteringLedger() =>
+            new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
+
         private JobThrottle NewThrottle()
         {
             var configuration = new ConfigurationBuilder()
@@ -239,6 +242,39 @@ namespace ETL_SQL.Tests.Orchestration
             var active = (await store.GetActiveJobsAsync()).Select(j => j.Name).ToList();
             Assert.Contains("cc-job", active);
             Assert.DoesNotContain("disabled-job", active);
+        }
+
+        [Fact]
+        public async Task TenantMeteringLedger_IsPartitionedIdempotentAndUsesInt64_OnPostgres()
+        {
+            var ledger = NewMeteringLedger();
+            var alpha = TenantContext.FromVerifiedCredential("tenant-alpha");
+            var beta = TenantContext.FromVerifiedCredential("tenant-beta");
+            var large = (long)int.MaxValue + 100;
+            TenantMeteringEvent Usage(long rows) => new()
+            {
+                SourceEventId = "attempt-1",
+                Source = TenantMeteringSource.Sandbox,
+                WorkloadClass = TenantWorkloadClass.Script,
+                ConnectorClass = TenantConnectorClass.Database,
+                Status = TenantMeteringStatus.Succeeded,
+                Rows = rows,
+                BytesRead = large,
+                SandboxPeakMemoryBytes = large,
+                ConcurrencyUnits = 1,
+                RecordedAtUtc = DateTimeOffset.UtcNow
+            };
+
+            await ledger.AppendAsync(alpha, Usage(large));
+            await ledger.AppendAsync(alpha, Usage(1));
+            await ledger.AppendAsync(beta, Usage(7));
+
+            var alphaRow = Assert.Single(await ledger.ListAsync(alpha));
+            var betaRow = Assert.Single(await ledger.ListAsync(beta));
+            Assert.Equal(large, alphaRow.Event.Rows);
+            Assert.Equal(large, alphaRow.Event.BytesRead);
+            Assert.Equal(7, betaRow.Event.Rows);
+            Assert.DoesNotContain((await ledger.ListAsync(alpha)), row => row.TenantId == "tenant-beta");
         }
 
         [Fact]

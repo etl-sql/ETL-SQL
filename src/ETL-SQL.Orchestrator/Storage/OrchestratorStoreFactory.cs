@@ -26,6 +26,10 @@ namespace ETL_SQL.Orchestrator.Storage
         /// <summary>Creates the sandbox admission ledger on the same configured authority.</summary>
         ISandboxAdmissionLedger CreateSandboxAdmissionLedger(string? dbPath = null) =>
             throw new NotSupportedException("This store factory does not provide a sandbox admission authority.");
+
+        /// <summary>Creates the counts-only tenant metering ledger on the configured authority.</summary>
+        ITenantMeteringLedger CreateTenantMeteringLedger(string? dbPath = null) =>
+            throw new NotSupportedException("This store factory does not provide a tenant metering authority.");
     }
 
     /// <inheritdoc />
@@ -51,6 +55,9 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public ISandboxAdmissionLedger CreateSandboxAdmissionLedger(string? dbPath = null) =>
             new RelationalSandboxAdmissionLedger(CreateDialect(dbPath));
+
+        public ITenantMeteringLedger CreateTenantMeteringLedger(string? dbPath = null) =>
+            new RelationalTenantMeteringLedger(CreateDialect(dbPath));
 
         private IOrchestratorStoreDialect CreateDialect(string? dbPath)
         {
