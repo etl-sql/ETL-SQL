@@ -731,6 +731,31 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             attemptCpuSeconds,
                             attemptQueueWaitMs,
                             attempt);
+                        if (historyId > 0 && !string.IsNullOrWhiteSpace(job.TenantId))
+                        {
+                            try
+                            {
+                                await _store.SaveTenantUsageAsync(new TenantUsageRecord(
+                                    0,
+                                    job.TenantId,
+                                    historyId,
+                                    job.JobType.ToString(),
+                                    attemptStatus,
+                                    attemptRows,
+                                    attemptPeakMemory,
+                                    attemptCpuSeconds,
+                                    attemptSw.ElapsedMilliseconds,
+                                    DateTime.UtcNow));
+                            }
+                            catch (Exception ex)
+                            {
+                                // Metering is evidence, never execution authority. A ledger outage
+                                // cannot turn a completed tenant workload into a retry or duplicate write.
+                                _logger.LogError(ex,
+                                    "Failed to persist tenant usage for job {JobName}, history {HistoryId}.",
+                                    job.Name, historyId);
+                            }
+                        }
                     }
 
                     if (attempt < maxAttempts)

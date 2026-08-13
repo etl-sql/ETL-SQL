@@ -197,6 +197,23 @@ namespace ETL_SQL.Orchestrator.Storage
                 );
                 CREATE INDEX IF NOT EXISTS idx_jsm_history ON JobStatementMetrics(JobHistoryId);";
 
+                    var createTenantUsageTable = @"
+                CREATE TABLE IF NOT EXISTS TenantUsageRecords (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    TenantId TEXT NOT NULL,
+                    JobHistoryId INTEGER NOT NULL,
+                    WorkloadKind TEXT NOT NULL,
+                    Status TEXT NOT NULL,
+                    RowsProcessed INTEGER NOT NULL,
+                    PeakMemoryBytes INTEGER NOT NULL,
+                    CpuTimeSeconds REAL NOT NULL,
+                    DurationMs INTEGER NOT NULL,
+                    RecordedAtUtc TEXT NOT NULL,
+                    UNIQUE (TenantId, JobHistoryId)
+                );
+                CREATE INDEX IF NOT EXISTS idx_tur_tenant_time
+                    ON TenantUsageRecords(TenantId, RecordedAtUtc DESC);";
+
                     var createBundleTables = @"
                 CREATE TABLE IF NOT EXISTS BundleVersions (
                     BundleName TEXT NOT NULL,
@@ -342,7 +359,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     var schema = createJobsTable + createCatalogTables + createObjectAclTable + createHistoryTable + createColumnMetricsTable
                         + createDataQualityFailuresTable + createStatementMetricsTable + createBundleTables
                         + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
-                        + createHostMetricsTable + createRollupTables;
+                        + createHostMetricsTable + createRollupTables + createTenantUsageTable;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
                     // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                     // COLLATE NOCASE indexes/queries resolve.
@@ -368,7 +385,8 @@ namespace ETL_SQL.Orchestrator.Storage
                         .Replace("DqRowsValidated INTEGER", $"DqRowsValidated {_dialect.Int64Type}")
                         .Replace("DqRowsQuarantined INTEGER", $"DqRowsQuarantined {_dialect.Int64Type}")
                         .Replace("DqRowsWarned INTEGER", $"DqRowsWarned {_dialect.Int64Type}")
-                        .Replace("DqValidationMs INTEGER", $"DqValidationMs {_dialect.Int64Type}");
+                        .Replace("DqValidationMs INTEGER", $"DqValidationMs {_dialect.Int64Type}")
+                        .Replace("PeakMemoryBytes INTEGER", $"PeakMemoryBytes {_dialect.Int64Type}");
 
                     await EnsureCollationExistsAsync(connection);
 
@@ -1424,6 +1442,72 @@ namespace ETL_SQL.Orchestrator.Storage
                 command.AddParam("@failed", statement.Failed ? 1 : 0);
                 await command.ExecuteNonQueryAsync();
             }
+        }
+
+        public async Task SaveTenantUsageAsync(TenantUsageRecord usage)
+        {
+            ArgumentNullException.ThrowIfNull(usage);
+            var tenant = TenantId.FromTrustedSource(usage.TenantId).Value;
+            if (usage.JobHistoryId <= 0 || usage.RowsProcessed < 0 || usage.PeakMemoryBytes < 0
+                || usage.CpuTimeSeconds < 0 || usage.DurationMs < 0)
+                throw new ArgumentException("Tenant usage measures and history identity must be non-negative.", nameof(usage));
+
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO TenantUsageRecords (
+                    TenantId, JobHistoryId, WorkloadKind, Status, RowsProcessed,
+                    PeakMemoryBytes, CpuTimeSeconds, DurationMs, RecordedAtUtc)
+                VALUES (@tenant, @historyId, @kind, @status, @rows, @memory, @cpu, @duration, @recorded)
+                ON CONFLICT (TenantId, JobHistoryId) DO NOTHING;";
+            command.AddParam("@tenant", tenant);
+            command.AddParam("@historyId", usage.JobHistoryId);
+            command.AddParam("@kind", usage.WorkloadKind);
+            command.AddParam("@status", usage.Status);
+            command.AddParam("@rows", usage.RowsProcessed);
+            command.AddParam("@memory", usage.PeakMemoryBytes);
+            command.AddParam("@cpu", usage.CpuTimeSeconds);
+            command.AddParam("@duration", usage.DurationMs);
+            command.AddParam("@recorded", usage.RecordedAtUtc.ToUniversalTime().ToString("O"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task<IReadOnlyList<TenantUsageRecord>> GetTenantUsageAsync(
+            string tenantId, DateTime? fromUtc = null, int limit = 1000)
+        {
+            var tenant = TenantId.FromTrustedSource(tenantId).Value;
+            limit = Math.Clamp(limit, 1, 10_000);
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT Id, TenantId, JobHistoryId, WorkloadKind, Status, RowsProcessed,
+                       PeakMemoryBytes, CpuTimeSeconds, DurationMs, RecordedAtUtc
+                FROM TenantUsageRecords
+                WHERE TenantId = @tenant
+                  AND (@fromUtc IS NULL OR RecordedAtUtc >= @fromUtc)
+                ORDER BY RecordedAtUtc DESC, Id DESC
+                LIMIT @limit;";
+            command.AddParam("@tenant", tenant);
+            command.AddParam("@fromUtc", fromUtc.HasValue
+                ? fromUtc.Value.ToUniversalTime().ToString("O")
+                : DBNull.Value);
+            command.AddParam("@limit", limit);
+            var rows = new List<TenantUsageRecord>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                rows.Add(new TenantUsageRecord(
+                    reader.GetInt64(0), reader.GetString(1), reader.GetInt64(2),
+                    reader.GetString(3), reader.GetString(4), reader.GetInt64(5),
+                    reader.GetInt64(6), reader.GetDouble(7), reader.GetInt64(8),
+                    DateTime.Parse(reader.GetString(9), CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind)));
+            }
+            return rows;
         }
 
         public async Task<int> PruneStatementMetricsAsync(TimeSpan successMaxAge, TimeSpan failedMaxAge)

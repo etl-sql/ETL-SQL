@@ -167,6 +167,23 @@ public sealed record JobDataQualityFailure(
     long FailureCount,
     string? Owner = null);
 
+/// <summary>
+/// Counts-only tenant usage attributed at the trusted scheduler boundary. This is billing/operations
+/// evidence, never admission authority, and contains no script, parameter, connector target, or row
+/// content.
+/// </summary>
+public sealed record TenantUsageRecord(
+    long Id,
+    string TenantId,
+    long JobHistoryId,
+    string WorkloadKind,
+    string Status,
+    long RowsProcessed,
+    long PeakMemoryBytes,
+    double CpuTimeSeconds,
+    long DurationMs,
+    DateTime RecordedAtUtc);
+
 /// <summary>Canonical quality-status projection for one current or persisted run.</summary>
 public sealed record JobDataQualityStatus(
     string RunId,
@@ -249,6 +266,14 @@ public interface IJobHistoryStore
     /// </summary>
     Task SaveJobStatementMetricsAsync(
         long entryId, IEnumerable<ETL_SQL.Core.Profiling.StatementMetricsPayload> statements) => Task.CompletedTask;
+
+    /// <summary>Persists one idempotent counts-only usage row for a tenant-bound run attempt.</summary>
+    Task SaveTenantUsageAsync(TenantUsageRecord usage) => Task.CompletedTask;
+
+    /// <summary>Returns usage for exactly one server-owned tenant partition.</summary>
+    Task<IReadOnlyList<TenantUsageRecord>> GetTenantUsageAsync(
+        string tenantId, DateTime? fromUtc = null, int limit = 1000) =>
+        Task.FromResult<IReadOnlyList<TenantUsageRecord>>([]);
 
     /// <summary>
     /// Drops statement detail earlier than the run record it belongs to.
