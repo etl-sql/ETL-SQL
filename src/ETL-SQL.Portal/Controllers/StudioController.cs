@@ -28,9 +28,11 @@ public sealed partial class StudioController(
     PortalConfig portalConfig,
     PortalScriptSourceControlService sourceControl,
     AuditService audit,
-    DatasetTenantScope? tenantScope = null) : ControllerBase
+    DatasetTenantScope? tenantScope = null,
+    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
 {
     private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(portalConfig);
+    private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _tenantScope);
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     /// <summary>
@@ -65,7 +67,7 @@ public sealed partial class StudioController(
         StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<ActionResult<IReadOnlyList<StudioReportDto>>> GetReports(CancellationToken ct)
     {
-        var reports = await db.Reports
+        var reports = await CatalogScope.Reports
             .AsNoTracking()
             .Include(report => report.Folder)
             .Where(report => !report.IsDeleted)
@@ -90,7 +92,7 @@ public sealed partial class StudioController(
         StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<ActionResult<IReadOnlyList<StudioFolderDto>>> GetFolders(CancellationToken ct)
     {
-        var folders = await db.Folders.AsNoTracking().OrderBy(folder => folder.Path).ToListAsync(ct);
+        var folders = await CatalogScope.Folders.AsNoTracking().OrderBy(folder => folder.Path).ToListAsync(ct);
         var writable = new List<StudioFolderDto>();
         foreach (var folder in folders)
         {
@@ -115,12 +117,12 @@ public sealed partial class StudioController(
         if (request.ScriptText is null || request.ScriptText.Length > Math.Max(1, portalConfig.DesignerLimits.MaxScriptCharacters))
             return BadRequest(new { error = $"Script text exceeds the {portalConfig.DesignerLimits.MaxScriptCharacters} character limit." });
 
-        var folder = await db.Folders.FirstOrDefaultAsync(value => value.Id == request.FolderId, ct);
+        var folder = await CatalogScope.Folders.FirstOrDefaultAsync(value => value.Id == request.FolderId, ct);
         if (folder is null)
             return NotFound(new { error = "Folder not found." });
         if (!await folderPermissions.HasPermissionAsync(folder.Id, FolderPermission.Manage, User))
             return Forbid();
-        if (await db.Reports.AnyAsync(report =>
+        if (await CatalogScope.Reports.AnyAsync(report =>
                 report.FolderId == folder.Id && !report.IsDeleted && report.Name == name, ct))
             return Conflict(new { error = $"A report named '{name}' already exists in {folder.Path}." });
 
@@ -134,6 +136,7 @@ public sealed partial class StudioController(
         var now = DateTime.UtcNow;
         var report = new Report
         {
+            TenantId = _tenantScope.TenantId,
             FolderId = folder.Id,
             Folder = folder,
             Name = name,

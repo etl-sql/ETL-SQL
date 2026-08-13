@@ -40,8 +40,9 @@ public class ReportsController : ControllerBase
     private readonly LineageImpactService lineageImpact;
     private readonly ReportPublishingPolicyService publishingPolicy;
     private readonly DatasetTenantScope datasetScope;
+    private readonly PortalTenantCatalogScope catalogScope;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, PortalTenantLineageCatalog lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, PortalTenantLineageCatalog lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null, PortalTenantCatalogScope? catalogScope = null)
     {
         this.db = db;
         this.audit = audit;
@@ -58,6 +59,7 @@ public class ReportsController : ControllerBase
         this.lineageImpact = lineageImpact;
         this.publishingPolicy = publishingPolicy;
         this.datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
+        this.catalogScope = catalogScope ?? new PortalTenantCatalogScope(db, this.datasetScope);
     }
 
     private int CurrentUserId =>
@@ -97,7 +99,8 @@ public class ReportsController : ControllerBase
         Report report,
         CancellationToken ct = default)
     {
-        var creator = await db.Users.FirstOrDefaultAsync(user => user.Id == creatorId, ct);
+        var creator = await db.Users.FirstOrDefaultAsync(
+            user => user.Id == creatorId && user.TenantId == report.TenantId, ct);
         if (creator is null || !creator.IsActive)
             return false;
 
@@ -116,7 +119,8 @@ public class ReportsController : ControllerBase
         // inventory would keep reporting those links as Active. Creator ownership still applies to
         // interactive access via FolderPermissionService.GetEffectiveReportPermissionAsync.
         var groupIds = await db.UserGroups
-            .Where(membership => membership.UserId == creatorId)
+            .Where(membership => membership.TenantId == report.TenantId
+                && membership.UserId == creatorId)
             .Select(membership => membership.GroupId)
             .ToListAsync(ct);
 
@@ -262,7 +266,7 @@ public class ReportsController : ControllerBase
 
     private async Task ClearDefaultSavedViewsAsync(int reportId)
     {
-        var defaults = await db.SavedReportViews
+        var defaults = await catalogScope.SavedReportViews
             .Where(v => v.ReportId == reportId && v.UserId == CurrentUserId && v.IsDefault)
             .ToListAsync();
         foreach (var view in defaults)
@@ -299,13 +303,13 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(folderId);
         if (perm is null) return Forbid();
 
-        var reports = await db.Reports
+        var reports = await catalogScope.Reports
             .Include(r => r.Folder)
             .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
             .Where(r => r.FolderId == folderId && !r.IsDeleted)
             .ToListAsync();
         var reportIds = reports.Select(r => r.Id).ToList();
-        var favoriteIds = await db.ReportFavorites
+        var favoriteIds = await catalogScope.ReportFavorites
             .Where(f => f.UserId == CurrentUserId && reportIds.Contains(f.ReportId))
             .Select(f => f.ReportId)
             .ToHashSetAsync();
@@ -324,7 +328,7 @@ public class ReportsController : ControllerBase
         if (!perm.AtLeast(FolderPermission.Manage))
             return Forbid();
 
-        if (!await db.Folders.AnyAsync(f => f.Id == req.FolderId))
+        if (!await catalogScope.Folders.AnyAsync(f => f.Id == req.FolderId))
             return NotFound("Folder not found");
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, datasetScope.TenantId, req.ScriptPath, out var resolved))
@@ -349,13 +353,15 @@ public class ReportsController : ControllerBase
         if (!string.IsNullOrWhiteSpace(req.CreatedByUsername))
         {
             if (!IsAdmin) return Forbid();
-            var requestedOwner = await db.Users.SingleOrDefaultAsync(u => u.UserName == req.CreatedByUsername);
+            var requestedOwner = await db.Users.SingleOrDefaultAsync(
+                u => u.TenantId == datasetScope.TenantId && u.UserName == req.CreatedByUsername);
             if (requestedOwner is null) return BadRequest($"Catalog owner '{req.CreatedByUsername}' was not found.");
             createdBy = requestedOwner.Id;
         }
 
         var report = new Report
         {
+            TenantId = datasetScope.TenantId,
             FolderId = req.FolderId,
             Name = req.Name,
             Description = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d")),
@@ -413,7 +419,7 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
@@ -433,7 +439,7 @@ public class ReportsController : ControllerBase
                 Status: "Restricted"));
         }
 
-        var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
+        var isFavorite = await catalogScope.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
         OptimisticConcurrency.SetETag(Response, report.Version);
         return Ok(ToDto(report, report.Snapshots.FirstOrDefault(), isFavorite));
     }
@@ -441,14 +447,14 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/access-info")]
     public async Task<IActionResult> GetAccessInfo(int id)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
 
         if (report is null) return NotFound();
 
         var perm = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
-        var pending = await db.ReportAccessRequests
+        var pending = await catalogScope.ReportAccessRequests
             .AsNoTracking()
             .Where(r => r.ReportId == id
                 && r.RequesterUserId == CurrentUserId
@@ -487,7 +493,7 @@ public class ReportsController : ControllerBase
     [HttpPost("reports/{id:int}/request-access")]
     public async Task<IActionResult> RequestAccess(int id, [FromBody] RequestReportAccessDto? req)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
 
@@ -507,7 +513,7 @@ public class ReportsController : ControllerBase
             });
         }
 
-        var existing = await db.ReportAccessRequests
+        var existing = await catalogScope.ReportAccessRequests
             .Where(r => r.ReportId == id
                 && r.RequesterUserId == CurrentUserId
                 && r.Status == "Pending")
@@ -566,7 +572,7 @@ public class ReportsController : ControllerBase
             {
                 await tx.RollbackAsync();
                 db.ChangeTracker.Clear();
-                var raceExisting = await db.ReportAccessRequests
+                var raceExisting = await catalogScope.ReportAccessRequests
                     .AsNoTracking()
                     .Where(r => r.ReportId == id
                         && r.RequesterUserId == CurrentUserId
@@ -610,7 +616,7 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/dependencies")]
     public async Task<IActionResult> GetDependencies(int id)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
@@ -626,7 +632,7 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/structure")]
     public async Task<IActionResult> GetStructure(int id)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
@@ -658,7 +664,7 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/history")]
     public async Task<IActionResult> GetHistory(int id)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
@@ -666,7 +672,7 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
-        var snapshots = await db.ReportSnapshots
+        var snapshots = await catalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
             .Select(s => new ReportHistorySnapshotDto(
@@ -711,7 +717,7 @@ public class ReportsController : ControllerBase
     [HttpPut("reports/{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateReportRequest req)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
@@ -805,7 +811,7 @@ public class ReportsController : ControllerBase
             return OptimisticConcurrency.Conflict(this, ToDto(report, null));
         }
 
-        var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
+        var isFavorite = await catalogScope.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
         OptimisticConcurrency.SetETag(Response, report.Version);
         return Ok(ToDto(report, null, isFavorite));
     }
@@ -815,13 +821,13 @@ public class ReportsController : ControllerBase
     [HttpPost("reports/{id:int}/favorite")]
     public async Task<IActionResult> AddFavorite(int id)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
-        var exists = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == id);
+        var exists = await catalogScope.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == id);
         if (!exists)
         {
             db.ReportFavorites.Add(new ReportFavorite { UserId = CurrentUserId, ReportId = id });
@@ -837,7 +843,7 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}/favorite")]
     public async Task<IActionResult> RemoveFavorite(int id)
     {
-        var favorite = await db.ReportFavorites
+        var favorite = await catalogScope.ReportFavorites
             .FirstOrDefaultAsync(f => f.UserId == CurrentUserId && f.ReportId == id);
         if (favorite is null) return NoContent();
 
@@ -852,7 +858,7 @@ public class ReportsController : ControllerBase
     [HttpPost("reports/{id:int}/share-links")]
     public async Task<IActionResult> CreateShareLink(int id, [FromBody] CreateReportShareLinkRequest? req)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
@@ -865,7 +871,7 @@ public class ReportsController : ControllerBase
             return BadRequest(new { error = "Share link expiration must be in the future." });
 
         var name = string.IsNullOrWhiteSpace(req?.Name) ? "Share link" : req!.Name!.Trim();
-        if (await db.ReportShareLinks.AnyAsync(l => l.ReportId == id && l.Name == name))
+        if (await catalogScope.ReportShareLinks.AnyAsync(l => l.ReportId == id && l.Name == name))
             return Conflict(new { error = $"A share link named '{name}' already exists for this report." });
 
         var link = new ReportShareLink
@@ -889,7 +895,7 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/share-links")]
     public async Task<IActionResult> GetShareLinks(int id)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
@@ -897,7 +903,7 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.AtLeast(FolderPermission.Manage) && !IsAdmin) return Forbid();
 
-        var links = await db.ReportShareLinks
+        var links = await catalogScope.ReportShareLinks
             .Include(l => l.Report).ThenInclude(r => r.Folder)
             .Where(l => l.ReportId == id)
             .OrderByDescending(l => l.CreatedAt)
@@ -911,7 +917,7 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}/share-links/{token}")]
     public async Task<IActionResult> RevokeShareLink(int id, string token)
     {
-        var link = await db.ReportShareLinks
+        var link = await catalogScope.ReportShareLinks
             .Include(l => l.Report)
             .FirstOrDefaultAsync(l => l.ReportId == id && l.Token == token);
         if (link is null) return NoContent();
@@ -963,7 +969,7 @@ public class ReportsController : ControllerBase
     [HttpPost("reports/{id:int}/embed-tokens")]
     public async Task<IActionResult> CreateEmbedToken(int id, [FromBody] CreateReportEmbedTokenRequest? req)
     {
-        var report = await db.Reports.Include(r => r.Folder).FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.Include(r => r.Folder).FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
@@ -972,7 +978,7 @@ public class ReportsController : ControllerBase
             return BadRequest(new { error = "Embed token expiration must be in the future." });
 
         var name = string.IsNullOrWhiteSpace(req?.Name) ? "Embed token" : req!.Name!.Trim();
-        if (await db.ReportEmbedTokens.AnyAsync(t => t.ReportId == id && t.Name == name))
+        if (await catalogScope.ReportEmbedTokens.AnyAsync(t => t.ReportId == id && t.Name == name))
             return Conflict(new { error = $"An embed token named '{name}' already exists for this report." });
 
         var token = new ReportEmbedToken
@@ -993,12 +999,12 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/embed-tokens")]
     public async Task<IActionResult> GetEmbedTokens(int id)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
 
-        var tokens = await db.ReportEmbedTokens
+        var tokens = await catalogScope.ReportEmbedTokens
             .Include(t => t.Report).ThenInclude(r => r.Folder)
             .Where(t => t.ReportId == id)
             .OrderByDescending(t => t.CreatedAt)
@@ -1009,7 +1015,7 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}/embed-tokens/{token}")]
     public async Task<IActionResult> RevokeEmbedToken(int id, string token)
     {
-        var embed = await db.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == token);
+        var embed = await catalogScope.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == token);
         if (embed is null) return NoContent();
         var perm = await GetEffectiveReportPermissionAsync(embed.Report);
         if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
@@ -1043,11 +1049,11 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetAnonymousReportAccessInventory()
     {
         var now = DateTime.UtcNow;
-        var shares = await db.ReportShareLinks
+        var shares = await catalogScope.ReportShareLinks
             .Include(link => link.Report).ThenInclude(report => report.Folder)
             .Include(link => link.Creator)
             .ToListAsync();
-        var embeds = await db.ReportEmbedTokens
+        var embeds = await catalogScope.ReportEmbedTokens
             .Include(token => token.Report).ThenInclude(report => report.Folder)
             .Include(token => token.Creator)
             .ToListAsync();
@@ -1097,7 +1103,7 @@ public class ReportsController : ControllerBase
     {
         if (type.Equals("ShareLink", StringComparison.OrdinalIgnoreCase))
         {
-            var link = await db.ReportShareLinks.FirstOrDefaultAsync(value => value.Id == id);
+            var link = await catalogScope.ReportShareLinks.FirstOrDefaultAsync(value => value.Id == id);
             if (link is null || link.RevokedAt is not null) return NoContent();
             link.RevokedAt = DateTime.UtcNow;
             audit.Stage(CurrentUserId, "ADMIN_REVOKE_REPORT_SHARE_LINK", "Report", link.ReportId.ToString(),
@@ -1105,7 +1111,7 @@ public class ReportsController : ControllerBase
         }
         else if (type.Equals("EmbedToken", StringComparison.OrdinalIgnoreCase))
         {
-            var token = await db.ReportEmbedTokens.FirstOrDefaultAsync(value => value.Id == id);
+            var token = await catalogScope.ReportEmbedTokens.FirstOrDefaultAsync(value => value.Id == id);
             if (token is null || token.RevokedAt is not null) return NoContent();
             token.RevokedAt = DateTime.UtcNow;
             audit.Stage(CurrentUserId, "ADMIN_REVOKE_REPORT_EMBED_TOKEN", "Report", token.ReportId.ToString(),
@@ -1125,18 +1131,18 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/saved-views")]
     public async Task<IActionResult> GetSavedViews(int id)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
-        var views = await db.SavedReportViews.Where(v => v.ReportId == id && v.UserId == CurrentUserId).OrderBy(v => v.Name).ToListAsync();
+        var views = await catalogScope.SavedReportViews.Where(v => v.ReportId == id && v.UserId == CurrentUserId).OrderBy(v => v.Name).ToListAsync();
         return Ok(views.Select(ToSavedViewDto));
     }
 
     [HttpPost("reports/{id:int}/saved-views")]
     public async Task<IActionResult> CreateSavedView(int id, [FromBody] CreateSavedReportViewRequest req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
@@ -1161,12 +1167,12 @@ public class ReportsController : ControllerBase
     [HttpPut("reports/{id:int}/saved-views/{viewId:int}")]
     public async Task<IActionResult> UpdateSavedView(int id, int viewId, [FromBody] UpdateSavedReportViewRequest req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
-        var view = await db.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
+        var view = await catalogScope.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
         if (view is null) return NotFound();
         if (req.Name is not null) view.Name = req.Name;
         if (req.Parameters is not null) view.ParametersJson = SerializeDictionary(req.Parameters);
@@ -1185,12 +1191,12 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}/saved-views/{viewId:int}")]
     public async Task<IActionResult> DeleteSavedView(int id, int viewId)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
-        var view = await db.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
+        var view = await catalogScope.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
         if (view is null) return NoContent();
         db.SavedReportViews.Remove(view);
         audit.Stage(CurrentUserId, "DELETE_SAVED_REPORT_VIEW", "Report", id.ToString(), view.Name);
@@ -1203,11 +1209,11 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/alerts")]
     public async Task<IActionResult> GetAlerts(int id)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
-        var alerts = await db.ReportAlerts
+        var alerts = await catalogScope.ReportAlerts
             .Include(a => a.Notifications)
             .Where(a => a.ReportId == id && (IsAdmin || a.OwnerId == CurrentUserId))
             .OrderBy(a => a.Name)
@@ -1223,14 +1229,14 @@ public class ReportsController : ControllerBase
     [HttpPost("reports/{id:int}/alerts")]
     public async Task<IActionResult> CreateAlert(int id, [FromBody] CreateReportAlertRequest req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.AtLeast(FolderPermission.Execute)) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.VisualName))
             return BadRequest(new { error = "Alert name and visualName are required." });
         if (!IsSupportedAlertOperator(req.Operator)) return BadRequest(new { error = "Unsupported alert operator." });
-        if (await db.ReportAlerts.AnyAsync(a => a.Name == req.Name))
+        if (await catalogScope.ReportAlerts.AnyAsync(a => a.Name == req.Name))
             return Conflict(new { error = $"Alert '{req.Name}' already exists." });
 
         var alert = new ReportAlert
@@ -1256,7 +1262,7 @@ public class ReportsController : ControllerBase
     [HttpPut("reports/{id:int}/alerts/{alertId:int}")]
     public async Task<IActionResult> UpdateAlert(int id, int alertId, [FromBody] UpdateReportAlertRequest req)
     {
-        var alert = await db.ReportAlerts
+        var alert = await catalogScope.ReportAlerts
             .Include(a => a.Notifications)
             .FirstOrDefaultAsync(a => a.Id == alertId && a.ReportId == id);
         if (alert is null) return NotFound();
@@ -1284,7 +1290,7 @@ public class ReportsController : ControllerBase
     [HttpGet("alerts/by-name/{name}")]
     public async Task<IActionResult> GetAlertByName(string name)
     {
-        var alert = await db.ReportAlerts
+        var alert = await catalogScope.ReportAlerts
             .Include(a => a.Notifications)
             .Include(a => a.Report)
             .FirstOrDefaultAsync(a => a.Name == name && !a.Report.IsDeleted);
@@ -1296,7 +1302,7 @@ public class ReportsController : ControllerBase
     [HttpPut("alerts/{alertId:int}")]
     public async Task<IActionResult> UpdateAlertById(int alertId, [FromBody] UpdateReportAlertRequest req)
     {
-        var alert = await db.ReportAlerts
+        var alert = await catalogScope.ReportAlerts
             .Include(a => a.Notifications)
             .FirstOrDefaultAsync(a => a.Id == alertId);
         if (alert is null) return NotFound();
@@ -1307,7 +1313,7 @@ public class ReportsController : ControllerBase
     [HttpDelete("alerts/{alertId:int}")]
     public async Task<IActionResult> DeleteAlertById(int alertId)
     {
-        var alert = await db.ReportAlerts.FirstOrDefaultAsync(a => a.Id == alertId);
+        var alert = await catalogScope.ReportAlerts.FirstOrDefaultAsync(a => a.Id == alertId);
         if (alert is null) return NoContent();
         if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
         db.ReportAlerts.Remove(alert);
@@ -1322,7 +1328,7 @@ public class ReportsController : ControllerBase
         if (string.IsNullOrWhiteSpace(req.OrchestratorAlias) || string.IsNullOrWhiteSpace(req.NotificationName))
             return BadRequest(new { error = "orchestratorAlias and notificationName are required." });
 
-        var alert = await db.ReportAlerts
+        var alert = await catalogScope.ReportAlerts
             .Include(a => a.Notifications)
             .FirstOrDefaultAsync(a => a.Id == alertId);
         if (alert is null) return NotFound();
@@ -1357,7 +1363,7 @@ public class ReportsController : ControllerBase
         string orchestratorAlias,
         string notificationName)
     {
-        var alert = await db.ReportAlerts
+        var alert = await catalogScope.ReportAlerts
             .Include(a => a.Notifications)
             .FirstOrDefaultAsync(a => a.Id == alertId);
         if (alert is null) return NotFound();
@@ -1383,7 +1389,7 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}/alerts/{alertId:int}")]
     public async Task<IActionResult> DeleteAlert(int id, int alertId)
     {
-        var alert = await db.ReportAlerts.FirstOrDefaultAsync(a => a.Id == alertId && a.ReportId == id);
+        var alert = await catalogScope.ReportAlerts.FirstOrDefaultAsync(a => a.Id == alertId && a.ReportId == id);
         if (alert is null) return NoContent();
         if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
         db.ReportAlerts.Remove(alert);
@@ -1396,7 +1402,7 @@ public class ReportsController : ControllerBase
     {
         if (req.Name is not null && !req.Name.Equals(alert.Name, StringComparison.OrdinalIgnoreCase))
         {
-            if (await db.ReportAlerts.AnyAsync(a => a.Id != alert.Id && a.Name == req.Name))
+            if (await catalogScope.ReportAlerts.AnyAsync(a => a.Id != alert.Id && a.Name == req.Name))
                 return Conflict(new { error = $"Alert '{req.Name}' already exists." });
             alert.Name = req.Name;
         }
@@ -1428,7 +1434,7 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/parameters")]
     public async Task<IActionResult> GetParameters(int id)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -1520,7 +1526,7 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}")]
     public async Task<IActionResult> Delete(int id, [FromQuery] bool cascade = false)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Subscriptions.Where(s => s.IsActive))
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
@@ -1585,7 +1591,7 @@ public class ReportsController : ControllerBase
     [RequireStudioCapability(StudioCapabilities.ScriptRead, StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> GetScriptContent(int id)
     {
-        var report = await db.Reports.Include(r => r.Folder)
+        var report = await catalogScope.Reports.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
@@ -1635,7 +1641,7 @@ public class ReportsController : ControllerBase
                 .HasCapability(User, StudioCapabilities.SourcePush))
             return Forbid();
 
-        var report = await db.Reports.Include(r => r.Folder)
+        var report = await catalogScope.Reports.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted, cancellationToken);
         if (report is null) return NotFound();
 
@@ -1776,7 +1782,7 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/access-requests/pending")]
     public async Task<IActionResult> GetPendingAccessRequests()
     {
-        var pending = await db.ReportAccessRequests
+        var pending = await catalogScope.ReportAccessRequests
             .AsNoTracking()
             .Include(r => r.Report)
             .Include(r => r.Requester)
@@ -1822,7 +1828,7 @@ public class ReportsController : ControllerBase
     [HttpPost("reports/access-requests/{id:int}/approve")]
     public async Task<IActionResult> ApproveAccessRequest(int id, [FromBody] ApproveReportAccessRequestDto? body)
     {
-        var request = await db.ReportAccessRequests
+        var request = await catalogScope.ReportAccessRequests
             .Include(r => r.Report)
             .FirstOrDefaultAsync(r => r.Id == id);
 
@@ -1840,7 +1846,7 @@ public class ReportsController : ControllerBase
             return Conflict(new { message = "Access request is no longer pending.", requestId = request.Id, status = request.Status });
 
         var permission = body?.Permission ?? FolderPermission.Read;
-        var existingAcl = await db.ReportAcls
+        var existingAcl = await catalogScope.ReportAcls
             .FirstOrDefaultAsync(a => a.ReportId == request.ReportId && a.UserId == request.RequesterUserId);
 
         await using var tx = await db.Database.BeginTransactionAsync();
@@ -1877,7 +1883,7 @@ public class ReportsController : ControllerBase
     [HttpPost("reports/access-requests/{id:int}/deny")]
     public async Task<IActionResult> DenyAccessRequest(int id, [FromBody] DenyReportAccessRequestDto? body)
     {
-        var request = await db.ReportAccessRequests
+        var request = await catalogScope.ReportAccessRequests
             .Include(r => r.Report)
             .FirstOrDefaultAsync(r => r.Id == id);
 
@@ -1911,7 +1917,7 @@ public class ReportsController : ControllerBase
     [HttpPost("reports/{id:int}/saved-views/default")]
     public async Task<IActionResult> SaveDefaultView(int id, [FromBody] Dictionary<string, string>? parameters)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
 
@@ -1922,7 +1928,7 @@ public class ReportsController : ControllerBase
 
         var paramsJson = System.Text.Json.JsonSerializer.Serialize(parameters ?? []);
         const string defaultName = "My Default View";
-        var savedViews = await db.SavedReportViews
+        var savedViews = await catalogScope.SavedReportViews
             .Where(v => v.ReportId == id && v.UserId == CurrentUserId
                 && (v.IsDefault || v.Name == defaultName))
             .ToListAsync();
@@ -1962,7 +1968,7 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/{id:int}/saved-views/default")]
     public async Task<IActionResult> GetDefaultView(int id)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
 
@@ -1971,7 +1977,7 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.HasValue) return Forbid();
 
-        var defaultView = await db.SavedReportViews
+        var defaultView = await catalogScope.SavedReportViews
             .AsNoTracking()
             .FirstOrDefaultAsync(v => v.ReportId == id && v.UserId == CurrentUserId && v.IsDefault);
 

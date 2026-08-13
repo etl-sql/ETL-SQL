@@ -229,7 +229,7 @@ public sealed class SharedTenantLifecycleService(
         if (authority.Kind != SharedTenantLifecycleKind.Provision)
         {
             var tenantUsers = db.Users.Where(value => value.TenantId == tenant).Select(value => value.Id);
-            var tenantReports = db.Reports.Where(value => tenantUsers.Contains(value.CreatedBy))
+            var tenantReports = db.Reports.Where(value => value.TenantId == tenant)
                 .Select(value => value.Id);
             var activePortalWork = await db.PortalExecutionJobs.CountAsync(
                 value => tenantReports.Contains(value.ReportId)
@@ -357,7 +357,7 @@ public sealed class SharedTenantLifecycleService(
         // or is rooted in ids selected from that tenant partition.
         var userIds = db.Users.Where(x => x.TenantId == tenant).Select(x => x.Id);
         var groupIds = db.Groups.Where(x => x.TenantId == tenant).Select(x => x.Id);
-        var reportIds = db.Reports.Where(x => userIds.Contains(x.CreatedBy)).Select(x => x.Id);
+        var reportIds = db.Reports.Where(x => x.TenantId == tenant).Select(x => x.Id);
         var folderIds = db.Folders.Where(x => userIds.Contains(x.OwnerId)).Select(x => x.Id);
         var datasetIds = db.Datasets.Where(x => x.TenantId == tenant).Select(x => x.Id);
 

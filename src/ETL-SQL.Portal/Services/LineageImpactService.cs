@@ -10,7 +10,8 @@ public sealed class LineageImpactService(
     PortalTenantLineageCatalog lineageCatalog,
     PortalTenantJobEvidenceStore jobs,
     DatasetPermissionService datasetPermissions,
-    DatasetTenantScope datasetScope)
+    DatasetTenantScope datasetScope,
+    PortalTenantCatalogScope catalogScope)
 {
     public async Task<LineageImpactDto> AnalyzeAsync(
         string kind,
@@ -71,13 +72,13 @@ public sealed class LineageImpactService(
             .Where(d => DatasetPermissionService.CanView(datasetPermissionMap[d.Id]))
             .ToList();
 
-        var subscriptions = await db.Subscriptions
+        var subscriptions = await catalogScope.Subscriptions
             .AsNoTracking()
             .Include(s => s.Report)
             .Where(s => reportIdSet.Contains(s.ReportId))
             .ToListAsync(cancellationToken);
 
-        var alerts = await db.ReportAlerts
+        var alerts = await catalogScope.ReportAlerts
             .AsNoTracking()
             .Include(a => a.Report)
             .Include(a => a.Notifications)
@@ -154,8 +155,8 @@ public sealed class LineageImpactService(
 
     private IQueryable<Report> VisibleReports(bool isAdmin, int userId)
     {
-        if (isAdmin) return db.Reports.Where(r => !r.IsDeleted);
-        return db.Reports.Where(r => !r.IsDeleted && db.FolderAcls.Any(a =>
+        if (isAdmin) return catalogScope.Reports.Where(r => !r.IsDeleted);
+        return catalogScope.Reports.Where(r => !r.IsDeleted && catalogScope.FolderAcls.Any(a =>
             a.FolderId == r.FolderId
             && a.Permission >= FolderPermission.Read
             && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));
@@ -195,7 +196,7 @@ public sealed class LineageImpactService(
 
         if (kind == "subscription" && TryParseSubscriptionId(name) is int subscriptionId)
         {
-            return (await db.Subscriptions
+            return (await catalogScope.Subscriptions
                     .AsNoTracking()
                     .Where(s => s.Id == subscriptionId)
                     .Join(VisibleReports(isAdmin, currentUserId).AsNoTracking(),

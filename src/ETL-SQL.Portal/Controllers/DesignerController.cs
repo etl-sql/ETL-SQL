@@ -560,12 +560,11 @@ public class DesignerController : ControllerBase
     {
         var db = HttpContext.RequestServices.GetRequiredService<ETL_SQL.Portal.Data.PortalDbContext>();
         var folderPermissions = HttpContext.RequestServices.GetRequiredService<FolderPermissionService>();
+        var catalogScope = HttpContext.RequestServices.GetRequiredService<PortalTenantCatalogScope>();
 
-        var report = await db.Reports.Include(r => r.Folder)
+        var report = await catalogScope.Reports.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == req.ReportId && !r.IsDeleted, cancellationToken);
         if (report is null) return NotFound(new { error = "Report not found." });
-        if (!await ReportBelongsToCurrentTenantAsync(db, report, cancellationToken))
-            return NotFound(new { error = "Report not found." });
         if (!(await folderPermissions.GetEffectiveReportPermissionAsync(report, User))
             .AtLeast(ETL_SQL.Portal.Data.FolderPermission.Author))
             return Forbid();
@@ -579,7 +578,7 @@ public class DesignerController : ControllerBase
         // Lease columns are deliberately updated outside the Report concurrency token. A renewal is
         // collaboration metadata, not report content, and must not make this editor's next If-Match
         // save conflict with itself. The predicate makes acquisition/renewal atomic across nodes.
-        var updated = await db.Reports
+        var updated = await catalogScope.Reports
             .Where(r => r.Id == req.ReportId && !r.IsDeleted &&
                 (mayForce || r.EditSessionUserId == userId || r.EditSessionExpiresAtUtc == null || r.EditSessionExpiresAtUtc <= now))
             .ExecuteUpdateAsync(setters => setters
@@ -588,7 +587,7 @@ public class DesignerController : ControllerBase
                 .SetProperty(r => r.EditSessionExpiresAtUtc, expiresAt), cancellationToken);
         if (updated == 0)
         {
-            var holder = await db.Reports.AsNoTracking()
+            var holder = await catalogScope.Reports.AsNoTracking()
                 .Where(r => r.Id == req.ReportId)
                 .Select(r => new { r.EditSessionUserName, r.EditSessionExpiresAtUtc })
                 .SingleAsync(cancellationToken);
@@ -617,12 +616,13 @@ public class DesignerController : ControllerBase
     public async Task<IActionResult> ReleaseLease(int reportId, CancellationToken cancellationToken)
     {
         var db = HttpContext.RequestServices.GetRequiredService<ETL_SQL.Portal.Data.PortalDbContext>();
+        var catalogScope = HttpContext.RequestServices.GetRequiredService<PortalTenantCatalogScope>();
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var report = await db.Reports.AsNoTracking().FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
-        if (report is null || !await ReportBelongsToCurrentTenantAsync(db, report, cancellationToken))
+        var report = await catalogScope.Reports.AsNoTracking().FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
+        if (report is null)
             return NoContent();
 
-        await db.Reports.Where(r => r.Id == reportId && r.EditSessionUserId == userId)
+        await catalogScope.Reports.Where(r => r.Id == reportId && r.EditSessionUserId == userId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(r => r.EditSessionUserId, (int?)null)
                 .SetProperty(r => r.EditSessionUserName, (string?)null)
@@ -633,23 +633,6 @@ public class DesignerController : ControllerBase
                 .SetProperty(d => d.EditSessionUserName, (string?)null)
                 .SetProperty(d => d.EditSessionExpiresAtUtc, (DateTime?)null), cancellationToken);
         return NoContent();
-    }
-
-    private async Task<bool> ReportBelongsToCurrentTenantAsync(
-        PortalDbContext db,
-        Report report,
-        CancellationToken cancellationToken)
-    {
-        if (!_portalConfig.SharedTenancy.Enabled)
-            return true;
-        var tenantId = User.FindFirstValue(TokenService.TenantClaim);
-        if (string.IsNullOrWhiteSpace(tenantId))
-            return false;
-        var ownerTenant = await db.Users.AsNoTracking()
-            .Where(user => user.Id == report.CreatedBy)
-            .Select(user => user.TenantId)
-            .SingleOrDefaultAsync(cancellationToken);
-        return string.Equals(ownerTenant, tenantId, StringComparison.Ordinal);
     }
 
     public record LeaseDesignerRequest(int ReportId, bool Force = false);

@@ -27,9 +27,11 @@ public class ExecutionController(
     ETL_SQL.Core.Storage.IArtifactStorage artifacts,
     SnapshotPackageService snapshotPackages,
     LineageStewardNotificationService stewardNotifications,
-    DatasetTenantScope? datasetScope = null) : ControllerBase
+    DatasetTenantScope? datasetScope = null,
+    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
 {
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
+    private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -52,7 +54,7 @@ public class ExecutionController(
     [HttpPost("reports/{id:int}/execute")]
     public async Task<IActionResult> Execute(int id, [FromBody] ExecuteRequest? req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -93,7 +95,7 @@ public class ExecutionController(
     [HttpPost("reports/{id:int}/execute-as/{targetUserId:int}")]
     public async Task<IActionResult> ExecuteAs(int id, int targetUserId, [FromBody] ExecuteRequest? req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         // Editors (Manage) can preview-as their own reports; admins can run-as on any report.
@@ -169,7 +171,7 @@ public class ExecutionController(
     [HttpGet("reports/{id:int}/snapshot")]
     public async Task<IActionResult> GetSnapshot(int id, [FromQuery] bool includeManifest = false)
     {
-        var report = await db.Reports
+        var report = await CatalogScope.Reports
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
@@ -179,7 +181,7 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
-        var snapshot = await db.ReportSnapshots
+        var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync();
@@ -270,7 +272,7 @@ public class ExecutionController(
 
     private async Task<(string? Key, Report? Report, ReportSnapshot? Snapshot, IActionResult? Error)> ResolveReadableSnapshotKeyAsync(int id)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return (null, null, null, NotFound());
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -279,7 +281,7 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out _))
             return (null, null, null, Forbid());
 
-        var snapshot = await db.ReportSnapshots
+        var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync();
@@ -319,7 +321,7 @@ public class ExecutionController(
     [HttpPost("reports/{id:int}/refresh")]
     public async Task<IActionResult> Refresh(int id)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -352,7 +354,7 @@ public class ExecutionController(
     [HttpPost("reports/{id:int}/request-refresh")]
     public async Task<IActionResult> RequestDataRefresh(int id)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -405,7 +407,7 @@ public class ExecutionController(
     [HttpPost("reports/{id:int}/parameter")]
     public async Task<IActionResult> SetParameter(int id, [FromBody] ParameterUpdateRequest req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -428,7 +430,7 @@ public class ExecutionController(
     [HttpPost("reports/{id:int}/parameters")]
     public async Task<IActionResult> SetParameters(int id, [FromBody] BatchParameterRequest req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -455,7 +457,7 @@ public class ExecutionController(
     [HttpPost("reports/{id:int}/drill")]
     public async Task<IActionResult> Drill(int id, [FromBody] DrillRequest req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -480,7 +482,7 @@ public class ExecutionController(
     [HttpPost("reports/{id:int}/refresh-visuals")]
     public async Task<IActionResult> RefreshVisuals(int id, [FromBody] RefreshVisualsRequest req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
@@ -551,7 +553,7 @@ public class ExecutionController(
         // so the user doesn't wait for a full re-execution on parameter change.
         if (svc.IsStale())
         {
-            var snapshot = await db.ReportSnapshots
+            var snapshot = await CatalogScope.ReportSnapshots
                 .Where(s => s.ReportId == reportId)
                 .OrderByDescending(s => s.BuiltAt)
                 .FirstOrDefaultAsync();

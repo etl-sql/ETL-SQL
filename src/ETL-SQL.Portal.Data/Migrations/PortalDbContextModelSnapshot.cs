@@ -1061,6 +1061,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<string>("Tags")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -1071,6 +1076,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("FolderId");
+
+                    b.HasIndex("TenantId", "FolderId");
 
                     b.ToTable("Reports");
                 });

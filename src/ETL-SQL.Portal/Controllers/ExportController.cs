@@ -23,9 +23,11 @@ public class ExportController(
     AuditService audit,
     IArtifactStorage artifacts,
     SnapshotPackageService snapshotPackages,
-    DatasetTenantScope? datasetScope = null) : ControllerBase
+    DatasetTenantScope? datasetScope = null,
+    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
 {
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
+    private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
     private const int PdfRateLimit = 5;
@@ -44,7 +46,7 @@ public class ExportController(
             .Where(ug => ug.UserId == userId)
             .Select(ug => ug.GroupId)
             .ToListAsync();
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
         if (report is null) return false;
         return await db.FolderAcls
             .AnyAsync(a => a.FolderId == report.FolderId && groupIds.Contains(a.GroupId));
@@ -53,10 +55,10 @@ public class ExportController(
     // ── Load manifest from latest snapshot ────────────────────────────────────
     private async Task<(ReportManifest? manifest, string? error, bool forbidden)> LoadManifestAsync(int reportId)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
         if (report is null) return (null, "Report not found", false);
 
-        var snapshot = await db.ReportSnapshots
+        var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == reportId)
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync();

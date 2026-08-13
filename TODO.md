@@ -388,6 +388,19 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
       This parent cell remains open for report/catalog relational roots, cache/search rebuilds,
       exports/subscriptions/tokens, interactive-session fleets, and remaining support diagnostics.
 
+      **Report/catalog relational slice completed (2026-08-13).** Folders and reports now carry
+      explicit `TenantId` roots with provider-side scoped queries; SQLite and PostgreSQL permit the
+      same folder path and report name in different tenants. Catalog, Studio, report authoring,
+      snapshots, exports, subscriptions, share/embed administration, saved views, alerts, access
+      requests, edit leases, configuration export, lineage/reference impact, access simulation,
+      lifecycle purge, and support/fleet diagnostics derive dependent rows from those roots. Signed
+      administrator requests cannot use a foreign numeric id, query/header tenant selector, export
+      route, or subscription id to reach another tenant. Migration convergence, hostile HTTP, and
+      the real PostgreSQL provider pin this slice. Anonymous share/embed capabilities remain
+      intentionally resolvable by their globally unguessable token and re-check their creator's
+      continuing authority within the report's own tenant. This parent cell remains open for
+      cache/search rebuilds and full queued/interactive worker-fleet certification.
+
 *Absorbs the retained discovery item **Tenant-Isolated Lineage Graphs**.*
 
 ##### 9. Lifecycle — provisioning, backup, portability, deletion, metering

@@ -91,17 +91,30 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         };
         db.Users.Add(betaOwner);
         await db.SaveChangesAsync();
-        db.Folders.AddRange(
-            new Folder
-            {
-                TenantId = "tenant-alpha", Name = "Shared", Path = "/shared", OwnerId = owner.Id
-            },
-            new Folder
-            {
-                TenantId = "tenant-beta", Name = "Shared", Path = "/shared", OwnerId = betaOwner.Id
-            });
+        var alphaFolder = new Folder
+        {
+            TenantId = "tenant-alpha", Name = "Shared", Path = "/shared", OwnerId = owner.Id
+        };
+        var betaFolder = new Folder
+        {
+            TenantId = "tenant-beta", Name = "Shared", Path = "/shared", OwnerId = betaOwner.Id
+        };
+        db.Folders.AddRange(alphaFolder, betaFolder);
         await db.SaveChangesAsync();
         Assert.Equal(2, await db.Folders.CountAsync(folder => folder.Path == "/shared"));
+        db.Reports.AddRange(
+            new Report
+            {
+                TenantId = "tenant-alpha", FolderId = alphaFolder.Id, Name = "Equal report",
+                ScriptPath = "alpha/equal.rptsql", CreatedBy = owner.Id
+            },
+            new Report
+            {
+                TenantId = "tenant-beta", FolderId = betaFolder.Id, Name = "Equal report",
+                ScriptPath = "beta/equal.rptsql", CreatedBy = betaOwner.Id
+            });
+        await db.SaveChangesAsync();
+        Assert.Equal(2, await db.Reports.CountAsync(report => report.Name == "Equal report"));
 
         db.StewardshipSettings.AddRange(
             new StewardshipSettings { TenantId = "tenant-alpha" },

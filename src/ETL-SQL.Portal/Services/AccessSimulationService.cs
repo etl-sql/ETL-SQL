@@ -31,7 +31,8 @@ public sealed class AccessSimulationService(
     StudioAuthorizationService studio,
     StudioCapabilityStore studioCapabilities,
     PortalConfig config,
-    DatasetTenantScope datasetScope)
+    DatasetTenantScope datasetScope,
+    PortalTenantCatalogScope catalogScope)
 {
     public async Task<AccessSimulationDto?> SimulateAsync(
         int userId, int? reportId, int? datasetId, CancellationToken ct = default)
@@ -108,7 +109,7 @@ public sealed class AccessSimulationService(
     private async Task<AccessSimulationReportDto?> BuildReportAsync(
         int reportId, PortalUser user, ISet<int> groupIds, bool isAdmin, CancellationToken ct)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted, ct);
         if (report is null) return null;

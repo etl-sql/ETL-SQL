@@ -119,6 +119,7 @@ public sealed class SharedTenantHttpBoundaryTests
             };
             var report = new Report
             {
+                TenantId = "tenant-beta",
                 Folder = folder,
                 Name = "Beta only",
                 ScriptPath = "beta/only.rptsql",
@@ -281,6 +282,9 @@ public sealed class SharedTenantHttpBoundaryTests
         using var client = factory.CreateClient();
         string alphaToken;
         int betaFolderId;
+        int alphaReportId;
+        int betaReportId;
+        int betaSubscriptionId;
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -309,7 +313,37 @@ public sealed class SharedTenantHttpBoundaryTests
             };
             db.Folders.AddRange(alphaFolder, betaFolder);
             await db.SaveChangesAsync();
+            var alphaReport = new Report
+            {
+                TenantId = "tenant-alpha", FolderId = alphaFolder.Id, Name = "Alpha report",
+                ScriptPath = "alpha/report.rptsql", CreatedBy = admin.Id
+            };
+            var betaReport = new Report
+            {
+                TenantId = "tenant-beta", FolderId = betaFolder.Id, Name = "Beta report secret",
+                ScriptPath = "beta/report.rptsql", CreatedBy = beta.Id
+            };
+            db.Reports.AddRange(alphaReport, betaReport);
+            await db.SaveChangesAsync();
+            db.ReportSnapshots.Add(new ReportSnapshot
+            {
+                ReportId = betaReport.Id,
+                ManifestPath = "tenant-beta/snapshots/secret.json",
+                BuiltBy = beta.Id
+            });
+            var betaSubscription = new Subscription
+            {
+                ReportId = betaReport.Id,
+                UserId = beta.Id,
+                Name = "Beta subscription secret",
+                Recipients = "beta-secret@test.local"
+            };
+            db.Subscriptions.Add(betaSubscription);
+            await db.SaveChangesAsync();
             betaFolderId = betaFolder.Id;
+            alphaReportId = alphaReport.Id;
+            betaReportId = betaReport.Id;
+            betaSubscriptionId = betaSubscription.Id;
             alphaToken = scope.ServiceProvider.GetRequiredService<TokenService>().GenerateJwt(
                 admin, await users.GetRolesAsync(admin),
                 tenantContext: TenantContext.FromVerifiedCredential("tenant-alpha"));
@@ -331,6 +365,26 @@ public sealed class SharedTenantHttpBoundaryTests
         search.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
         var searchBody = await (await client.SendAsync(search)).Content.ReadAsStringAsync();
         Assert.DoesNotContain("Beta secret", searchBody, StringComparison.Ordinal);
+
+        using var alphaReportRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/reports/{alphaReportId}");
+        alphaReportRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(alphaReportRequest)).StatusCode);
+
+        using var foreignReport = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/reports/{betaReportId}?tenant=tenant-beta");
+        foreignReport.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        foreignReport.Headers.Add("X-Tenant-Id", "tenant-beta");
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignReport)).StatusCode);
+
+        using var foreignSnapshot = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/reports/{betaReportId}/export/csv?tenant=tenant-beta");
+        foreignSnapshot.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignSnapshot)).StatusCode);
+
+        using var foreignSubscription = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/subscriptions/{betaSubscriptionId}?tenant=tenant-beta");
+        foreignSubscription.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignSubscription)).StatusCode);
     }
 
     private static JobDefinition Job(string name, string tenant) => new(

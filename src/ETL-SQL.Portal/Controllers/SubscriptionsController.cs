@@ -26,10 +26,12 @@ public class SubscriptionsController(
     IDatasetRegistry datasetRegistry,
     SubscriptionScriptService subscriptionScripts,
     SubscriptionQueryService subscriptionQueries,
-    DatasetTenantScope? tenantScope = null) : ControllerBase
+    DatasetTenantScope? tenantScope = null,
+    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
 {
     private readonly DatasetTenantScope _tenantScope = tenantScope
         ?? throw new InvalidOperationException("Subscription routes require tenant scope.");
+    private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _tenantScope);
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
 
@@ -47,7 +49,7 @@ public class SubscriptionsController(
         }
 
         var target = req.ReportName.Trim().ToLower();
-        var reports = await db.Reports
+        var reports = await CatalogScope.Reports
             .AsNoTracking()
             .Include(r => r.Folder)
             .Where(r => !r.IsDeleted && (
@@ -80,7 +82,7 @@ public class SubscriptionsController(
             return BadRequest(new { error = "ReportName is required." });
 
         var target = reportName.Trim().ToLower();
-        var reports = await db.Reports
+        var reports = await CatalogScope.Reports
             .AsNoTracking()
             .Include(r => r.Folder)
             .Where(r => !r.IsDeleted && (
@@ -146,7 +148,7 @@ public class SubscriptionsController(
     [HttpPost("api/subscriptions")]
     public async Task<IActionResult> Create([FromBody] CreateSubscriptionRequest req)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == req.ReportId && !r.IsDeleted);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == req.ReportId && !r.IsDeleted);
         if (report is null) return NotFound(new { error = "Report not found" });
         // COMPAT_BREAK: 0.10
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
@@ -233,7 +235,7 @@ public class SubscriptionsController(
     [HttpPut("api/subscriptions/{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSubscriptionRequest req)
     {
-        var sub = await db.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
+        var sub = await CatalogScope.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
@@ -365,7 +367,7 @@ public class SubscriptionsController(
         var updated = 0;
         foreach (var item in items)
         {
-            var sub = await db.Subscriptions
+            var sub = await CatalogScope.Subscriptions
                 .Include(value => value.Report)
                 .FirstOrDefaultAsync(value => value.Id == item.Id);
             if (sub is null)
@@ -417,7 +419,7 @@ public class SubscriptionsController(
     [HttpDelete("api/subscriptions/{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var sub = await db.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
+        var sub = await CatalogScope.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
@@ -466,7 +468,7 @@ public class SubscriptionsController(
     [HttpGet("api/subscriptions/{id:int}/history")]
     public async Task<IActionResult> GetHistory(int id, [FromQuery] int limit = 50)
     {
-        var sub = await db.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
+        var sub = await CatalogScope.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
 

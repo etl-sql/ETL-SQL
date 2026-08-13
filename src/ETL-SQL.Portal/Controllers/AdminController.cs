@@ -28,7 +28,8 @@ public class AdminController(
     OrchestratorDbLocator orchestratorDb,
     IOrchestratorStoreFactory orchestratorStoreFactory,
     IHostApplicationLifetime lifetime,
-    RequestTenantContextAccessor tenantAccessor) : ControllerBase
+    RequestTenantContextAccessor tenantAccessor,
+    PortalTenantCatalogScope catalogScope) : ControllerBase
 {
     private string TenantId => config.SharedTenancy.Enabled
         ? tenantAccessor.RequireCurrent().Tenant.Value
@@ -462,7 +463,7 @@ public class AdminController(
         // before their owner disappears — otherwise ownership dangles and PRIVATE datasets
         // become reachable only by administrators.
         var ownedFolders = await db.Folders.CountAsync(f => f.OwnerId == id);
-        var ownedReports = await db.Reports.CountAsync(r => r.CreatedBy == id);
+        var ownedReports = await catalogScope.Reports.CountAsync(r => r.CreatedBy == id);
         var ownedDatasets = await db.Datasets.CountAsync(
             d => d.TenantId == TenantId && d.CreatedBy == id);
         if (ownedFolders + ownedReports + ownedDatasets > 0)
@@ -484,7 +485,7 @@ public class AdminController(
             await db.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s
                 .SetProperty(f => f.OwnerId, target.Id)
                 .SetProperty(f => f.Version, f => f.Version + 1));
-            await db.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s
+            await catalogScope.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s
                 .SetProperty(r => r.CreatedBy, target.Id)
                 .SetProperty(r => r.Version, r => r.Version + 1));
             // Capture before the update, because afterwards these rows no longer match `id`.
@@ -529,7 +530,7 @@ public class AdminController(
         // capabilities, refresh tokens) die with the user. Their Orchestrator jobs and generated
         // trigger scripts are cleaned up after the commit (below); startup reconciliation
         // remains the recovery path if that cleanup is interrupted.
-        var subscriptions = await db.Subscriptions
+        var subscriptions = await catalogScope.Subscriptions
             .Include(s => s.Report)
             .Where(s => s.UserId == id)
             .Select(s => new { s.Id, ReportName = (string?)s.Report!.Name, s.ScriptPath })
@@ -711,7 +712,7 @@ public class AdminController(
         if (!await TenantUsers.AnyAsync(u => u.Id == userId)) return NotFound();
         limit = Math.Clamp(limit, 1, 100);
 
-        var reports = await db.ReportFavorites
+        var reports = await catalogScope.ReportFavorites
             .Include(f => f.Report).ThenInclude(r => r.Folder)
             .Where(f => f.UserId == userId && !f.Report.IsDeleted)
             .OrderByDescending(f => f.CreatedAt)
@@ -743,8 +744,8 @@ public class AdminController(
     public async Task<IActionResult> FavoriteReportForUser(int userId, int reportId)
     {
         if (!await TenantUsers.AnyAsync(u => u.Id == userId)) return NotFound(new { error = "User not found" });
-        if (!await db.Reports.AnyAsync(r => r.Id == reportId && !r.IsDeleted)) return NotFound(new { error = "Report not found" });
-        if (!await db.ReportFavorites.AnyAsync(f => f.UserId == userId && f.ReportId == reportId))
+        if (!await catalogScope.Reports.AnyAsync(r => r.Id == reportId && !r.IsDeleted)) return NotFound(new { error = "Report not found" });
+        if (!await catalogScope.ReportFavorites.AnyAsync(f => f.UserId == userId && f.ReportId == reportId))
         {
             db.ReportFavorites.Add(new ReportFavorite { UserId = userId, ReportId = reportId });
             await db.SaveChangesAsync();
@@ -756,7 +757,7 @@ public class AdminController(
     [HttpDelete("users/{userId:int}/favorites/{reportId:int}")]
     public async Task<IActionResult> UnfavoriteReportForUser(int userId, int reportId)
     {
-        var favorite = await db.ReportFavorites.FirstOrDefaultAsync(f => f.UserId == userId && f.ReportId == reportId);
+        var favorite = await catalogScope.ReportFavorites.FirstOrDefaultAsync(f => f.UserId == userId && f.ReportId == reportId);
         if (favorite is not null)
         {
             db.ReportFavorites.Remove(favorite);
@@ -1550,7 +1551,7 @@ public class AdminController(
     [HttpGet("reports")]
     public async Task<IActionResult> GetReports()
     {
-        var reports = await db.Reports
+        var reports = await catalogScope.Reports
             .Include(r => r.Folder)
             .Where(r => !r.IsDeleted)
             .OrderBy(r => r.Folder!.Path).ThenBy(r => r.Name)
@@ -1596,7 +1597,7 @@ public class AdminController(
             .Select(e => e!)
             .ToList();
 
-        var reportRows = await db.Reports
+        var reportRows = await catalogScope.Reports
             .Include(r => r.Folder).ThenInclude(f => f.Acls).ThenInclude(a => a.Group)
             .Where(r => !r.IsDeleted)
             .OrderBy(r => r.Folder.Path)
@@ -1661,7 +1662,7 @@ public class AdminController(
     [HttpGet("permissions/effective/report/{reportId:int}")]
     public async Task<IActionResult> GetEffectivePermissionsForReport(int reportId)
     {
-        var report = await db.Reports
+        var report = await catalogScope.Reports
             .Include(r => r.Folder).ThenInclude(f => f.Acls).ThenInclude(a => a.Group)
             .FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
         if (report is null) return NotFound();
@@ -1722,13 +1723,13 @@ public class AdminController(
                     LastViewedAt = g.Max(x => x.Log.Timestamp)
                 });
 
-        var subscriptionFailures = await db.Subscriptions
+        var subscriptionFailures = await catalogScope.Subscriptions
             .Where(s => s.FailCount > 0)
             .GroupBy(s => s.ReportId)
             .Select(g => new { ReportId = g.Key, Failures = g.Sum(s => s.FailCount) })
             .ToDictionaryAsync(x => x.ReportId, x => x.Failures);
 
-        var reports = await db.Reports
+        var reports = await catalogScope.Reports
             .AsNoTracking()
             .Include(r => r.Folder)
             .Where(r => !r.IsDeleted)

@@ -43,8 +43,11 @@ public sealed class ReportDraftWorkflowService(
     PortalDbContext db,
     FolderPermissionService folderPermissions,
     StudioAuthorizationService studioAuthorization,
-    AuditService audit)
+    AuditService audit,
+    PortalTenantCatalogScope? catalogScope = null)
 {
+    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports;
+
     public static string HashScript(string scriptText) =>
         "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scriptText)))
             .ToLowerInvariant();
@@ -62,7 +65,7 @@ public sealed class ReportDraftWorkflowService(
         string? baseScriptHash,
         CancellationToken ct = default)
     {
-        var report = await db.Reports.Include(r => r.Folder)
+        var report = await Reports.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted, ct);
         if (report is null) return new(DraftWorkflowStatus.NotFound);
 
@@ -119,7 +122,7 @@ public sealed class ReportDraftWorkflowService(
         var draft = await OpenDraftAsync(reportId, ct);
         if (draft is null) return new(DraftWorkflowStatus.NotFound);
 
-        var report = await db.Reports.Include(r => r.Folder)
+        var report = await Reports.Include(r => r.Folder)
             .FirstAsync(r => r.Id == reportId, ct);
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, user);
         if (!permission.AtLeast(FolderPermission.Author))
@@ -158,7 +161,7 @@ public sealed class ReportDraftWorkflowService(
         var draft = await OpenDraftAsync(reportId, ct);
         if (draft is null) return new(DraftWorkflowStatus.NotFound);
 
-        var report = await db.Reports.Include(r => r.Folder)
+        var report = await Reports.Include(r => r.Folder)
             .FirstAsync(r => r.Id == reportId, ct);
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, user);
         if (!permission.AtLeast(FolderPermission.Author))
@@ -214,7 +217,7 @@ public sealed class ReportDraftWorkflowService(
         var draft = await OpenDraftAsync(reportId, ct);
         if (draft is null) return new(DraftWorkflowStatus.NotFound);
 
-        var report = await db.Reports.Include(r => r.Folder)
+        var report = await Reports.Include(r => r.Folder)
             .FirstAsync(r => r.Id == reportId, ct);
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, user);
         if (!permission.AtLeast(FolderPermission.Manage))

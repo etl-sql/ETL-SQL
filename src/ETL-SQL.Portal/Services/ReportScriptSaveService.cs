@@ -29,8 +29,11 @@ public sealed class ReportScriptSaveService(
     IArtifactStorage artifacts,
     PortalConfig portalConfig,
     PortalScriptSourceControlService sourceControl,
-    AuditService audit)
+    AuditService audit,
+    PortalTenantCatalogScope? catalogScope = null)
 {
+    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports;
+
     public async Task<ReportScriptSaveResult> SaveAsync(
         int id,
         string scriptText,
@@ -40,7 +43,7 @@ public sealed class ReportScriptSaveService(
         string? baseRevision = null,
         CancellationToken ct = default)
     {
-        var report = await db.Reports.Include(r => r.Folder)
+        var report = await Reports.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted, ct);
         if (report is null)
             return new ReportScriptSaveResult(ReportScriptSaveStatus.NotFound);

@@ -116,7 +116,7 @@ public class CatalogController(
         var favoriteIds = await GetFavoriteReportIdsAsync();
 
         var favReports = await (
-                from favorite in db.ReportFavorites.AsNoTracking()
+                from favorite in catalogScope.ReportFavorites.AsNoTracking()
                 join report in VisibleReportsQuery() on favorite.ReportId equals report.Id
                 where favorite.UserId == CurrentUserId
                 orderby favorite.CreatedAt descending
@@ -263,7 +263,7 @@ public class CatalogController(
         var userId = CurrentUserId;
 
         var reports = await (
-                from favorite in db.ReportFavorites.AsNoTracking()
+                from favorite in catalogScope.ReportFavorites.AsNoTracking()
                 join report in VisibleReportsQuery() on favorite.ReportId equals report.Id
                 where favorite.UserId == userId
                 orderby favorite.CreatedAt descending
@@ -548,7 +548,7 @@ public class CatalogController(
         folderPath.EndsWith('/') ? folderPath + reportName : $"{folderPath}/{reportName}";
 
     private async Task<HashSet<int>> GetFavoriteReportIdsAsync() =>
-        await db.ReportFavorites
+        await catalogScope.ReportFavorites
             .Where(f => f.UserId == CurrentUserId)
             .Select(f => f.ReportId)
             .ToHashSetAsync();

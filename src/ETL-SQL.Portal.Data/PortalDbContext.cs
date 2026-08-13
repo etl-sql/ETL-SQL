@@ -162,6 +162,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<Report>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.HasIndex(x => new { x.TenantId, x.FolderId });
             e.HasMany(x => x.Snapshots).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.Subscriptions).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.ReportJobLinks).WithOne(l => l.Report).HasForeignKey(l => l.ReportId);

@@ -14,8 +14,15 @@ namespace ETL_SQL.Portal.Services;
 /// omitted. Runtime/security artifacts (hashes, tokens, sessions, history, audit rows, snapshots,
 /// dataset caches) are configuration non-goals and are listed as runtime-only.
 /// </summary>
-public sealed class ConfigurationExportService(PortalDbContext db, DatasetTenantScope datasetScope)
+public sealed class ConfigurationExportService(
+    PortalDbContext db,
+    DatasetTenantScope datasetScope,
+    PortalTenantCatalogScope? catalogScope = null)
 {
+    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports;
+    private IQueryable<Subscription> Subscriptions => catalogScope?.Subscriptions ?? db.Subscriptions;
+    private IQueryable<ReportAlert> ReportAlerts => catalogScope?.ReportAlerts ?? db.ReportAlerts;
+
     public sealed record ExportResult(string Script, IReadOnlyList<string> RequiredSecrets,
         IReadOnlyList<string> Skipped, IReadOnlyList<string> Emitted,
         IReadOnlyList<ContentManifestItem> ContentManifest);
@@ -186,7 +193,7 @@ public sealed class ConfigurationExportService(PortalDbContext db, DatasetTenant
         // ── Reports (publication references — script files travel separately, P1.10) ─
         var reportCount = 0;
         var reports = (
-            from r in db.Reports.AsNoTracking()
+            from r in Reports.AsNoTracking()
             join u in db.Users.AsNoTracking() on r.CreatedBy equals u.Id
             where !r.IsDeleted
             orderby r.Folder!.Path, r.Name
@@ -265,7 +272,7 @@ public sealed class ConfigurationExportService(PortalDbContext db, DatasetTenant
 
         // ── Subscriptions ─────────────────────────────────────────────────────
         var subscriptionCount = 0;
-        var subscriptions = db.Subscriptions.AsNoTracking()
+        var subscriptions = Subscriptions.AsNoTracking()
             .OrderBy(s => s.Id)
             .Select(s => new
             {
@@ -332,7 +339,7 @@ public sealed class ConfigurationExportService(PortalDbContext db, DatasetTenant
 
         // ── Alerts ───────────────────────────────────────────────────────────
         var alertCount = 0;
-        var alerts = await db.ReportAlerts.AsNoTracking()
+        var alerts = await ReportAlerts.AsNoTracking()
             .Include(a => a.Notifications)
             .Include(a => a.Report).ThenInclude(r => r.Folder)
             .OrderBy(a => a.Report.Name)

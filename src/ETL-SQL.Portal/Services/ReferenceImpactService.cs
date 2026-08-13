@@ -20,9 +20,12 @@ public sealed class ReferenceImpactService(
     PortalConfig portalConfig,
     PortalTenantJobEvidenceStore jobHistory,
     ILogger<ReferenceImpactService> logger,
-    DatasetTenantScope? tenantScope = null)
+    DatasetTenantScope? tenantScope = null,
+    PortalTenantCatalogScope? catalogScope = null)
 {
     private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(portalConfig);
+    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports;
+    private IQueryable<Subscription> Subscriptions => catalogScope?.Subscriptions ?? db.Subscriptions;
     private const int MaxScriptBytes = 1024 * 1024;
 
     public async Task<ImpactReport> ForSharedConnectionAsync(string alias, CancellationToken ct = default)
@@ -104,7 +107,7 @@ public sealed class ReferenceImpactService(
     {
         var consumers = new List<ImpactConsumer>();
 
-        var reports = await db.Reports
+        var reports = await Reports
             .AsNoTracking()
             .Where(r => !r.IsDeleted)
             .Join(
@@ -124,7 +127,7 @@ public sealed class ReferenceImpactService(
             }
         }
 
-        var subscriptions = await db.Subscriptions
+        var subscriptions = await Subscriptions
             .AsNoTracking()
             .Where(s => s.ScriptPath != null && s.User.TenantId == _tenantScope.TenantId)
             .Select(s => new { s.Id, s.ReportId, s.ScriptPath })

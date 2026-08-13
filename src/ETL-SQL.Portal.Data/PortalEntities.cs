@@ -273,6 +273,7 @@ public class FolderAcl
 public class Report : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public int FolderId { get; set; }
     public Folder Folder { get; set; } = null!;
     public string Name { get; set; } = "";

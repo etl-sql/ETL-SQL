@@ -30,7 +30,8 @@ public sealed class FleetStatusController(
     IArtifactStorage artifacts,
     PortalConfig config,
     PortalNodeIdentity nodeIdentity,
-    DatasetTenantScope tenantScope) : ControllerBase
+    DatasetTenantScope tenantScope,
+    PortalTenantCatalogScope catalogScope) : ControllerBase
 {
     /// <summary>
     /// The read-only Fleet/Operations workspace: every configured environment polled at once, with
@@ -101,7 +102,7 @@ public sealed class FleetStatusController(
         var report = await health.CheckHealthAsync(ct);
         var (queued, running) = executions.GetWorkloadCounts();
 
-        var failedRefreshes = await db.Reports.CountAsync(r => r.LastRefreshStatus == "Failed", ct);
+        var failedRefreshes = await catalogScope.Reports.CountAsync(r => r.LastRefreshStatus == "Failed", ct);
         var outboxPending = await db.AuditOutboxMessages.CountAsync(
             x => x.TenantId == tenantScope.TenantId && x.Status == "Pending", ct);
         var outboxFailed = await db.AuditOutboxMessages.CountAsync(

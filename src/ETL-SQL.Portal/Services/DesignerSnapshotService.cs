@@ -38,9 +38,11 @@ public sealed class DesignerSnapshotService(
     FolderPermissionService folderPermissions,
     IArtifactStorage artifacts,
     SnapshotPackageService snapshotPackages,
-    DatasetTenantScope? datasetScope = null)
+    DatasetTenantScope? datasetScope = null,
+    PortalTenantCatalogScope? catalogScope = null)
 {
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
+    private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
     /// <summary>
     /// Rows kept per visual. The canvas draws thumbnails a few hundred pixels tall, so more than this
     /// changes nothing visible while making the payload and the browser's job worse.
@@ -53,7 +55,7 @@ public sealed class DesignerSnapshotService(
 
     public async Task<Result> LoadForDesignerAsync(int reportId, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted, ct);
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted, ct);
         if (report is null) return new Result(SnapshotOutcome.ReportNotFound, null);
 
         // Same gate the snapshot view path uses: folder permission, then path containment on both the
@@ -65,7 +67,7 @@ public sealed class DesignerSnapshotService(
                 portalConfig, _datasetScope.TenantId, report.ScriptPath, out _))
             return new Result(SnapshotOutcome.Forbidden, null);
 
-        var snapshot = await db.ReportSnapshots
+        var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == reportId)
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync(ct);

@@ -28,7 +28,8 @@ public sealed class PortalSupportBundleService(
     HealthCheckService health,
     PortalNodeIdentity nodeIdentity,
     TimeProvider clock,
-    DatasetTenantScope tenantScope)
+    DatasetTenantScope tenantScope,
+    PortalTenantCatalogScope catalogScope)
 {
     public async Task<SupportBundleContentDto> BuildAsync(CancellationToken ct = default)
     {
@@ -80,10 +81,10 @@ public sealed class PortalSupportBundleService(
                 user => user.TenantId == tenantScope.TenantId && user.IsActive, ct),
             ["groups"] = await db.Groups.CountAsync(group => group.TenantId == tenantScope.TenantId, ct),
             ["folders"] = await db.Folders.CountAsync(ct),
-            ["reports"] = await db.Reports.CountAsync(report => !report.IsDeleted, ct),
+            ["reports"] = await catalogScope.Reports.CountAsync(report => !report.IsDeleted, ct),
             ["datasets"] = await db.Datasets.CountAsync(
                 dataset => dataset.TenantId == tenantScope.TenantId, ct),
-            ["subscriptions"] = await db.Subscriptions.CountAsync(ct),
+            ["subscriptions"] = await catalogScope.Subscriptions.CountAsync(ct),
             ["sharedConnections"] = await db.PortalSharedConnections.CountAsync(
                 connection => connection.TenantId == tenantScope.TenantId, ct),
             ["secrets"] = await db.PortalSecrets.CountAsync(

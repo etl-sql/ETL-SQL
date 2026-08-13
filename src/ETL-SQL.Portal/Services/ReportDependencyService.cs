@@ -15,8 +15,12 @@ namespace ETL_SQL.Portal.Services;
 public sealed class ReportDependencyService(
     PortalDbContext db,
     ReportScriptInspectionService scriptInspection,
-    DatasetTenantScope datasetScope)
+    DatasetTenantScope datasetScope,
+    PortalTenantCatalogScope? catalogScope = null)
 {
+    private IQueryable<ReportSnapshot> ReportSnapshots => catalogScope?.ReportSnapshots ?? db.ReportSnapshots;
+    private IQueryable<ReportAlert> ReportAlerts => catalogScope?.ReportAlerts ?? db.ReportAlerts;
+
     /// <summary>
     /// Build the dependency DTO for an already-loaded <paramref name="report"/> (its <c>Folder</c>
     /// should be included for the report-summary path). <paramref name="isAdmin"/> and
@@ -27,7 +31,7 @@ public sealed class ReportDependencyService(
     {
         var id = report.Id;
 
-        var snapshot = await db.ReportSnapshots
+        var snapshot = await ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync();
@@ -78,7 +82,7 @@ public sealed class ReportDependencyService(
 
         var jobs = reportJobLinks;
 
-        var alerts = await db.ReportAlerts
+        var alerts = await ReportAlerts
             .AsNoTracking()
             .Include(a => a.Notifications)
             .Where(a => a.ReportId == id)

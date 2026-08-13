@@ -6,11 +6,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Services;
 
-public sealed class SubscriptionQueryService(PortalDbContext db)
+public sealed class SubscriptionQueryService(
+    PortalDbContext db,
+    PortalTenantCatalogScope? catalogScope = null)
 {
+    private IQueryable<Subscription> Subscriptions => catalogScope?.Subscriptions ?? db.Subscriptions;
+
     public async Task<IReadOnlyList<SubscriptionDto>> ListAsync(int currentUserId, bool isAdmin)
     {
-        var subscriptions = await db.Subscriptions
+        var subscriptions = await Subscriptions
             .AsNoTracking()
             .Include(s => s.Report)
             .Where(s => isAdmin || s.UserId == currentUserId)
@@ -27,7 +31,7 @@ public sealed class SubscriptionQueryService(PortalDbContext db)
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = db.Subscriptions
+        var query = Subscriptions
             .AsNoTracking()
             .Include(s => s.Report)
             .AsQueryable();
@@ -61,7 +65,7 @@ public sealed class SubscriptionQueryService(PortalDbContext db)
 
     public async Task<Subscription?> LoadAsync(int id, bool track = false)
     {
-        var query = db.Subscriptions.Include(s => s.Report).AsQueryable();
+        var query = Subscriptions.Include(s => s.Report).AsQueryable();
         if (!track)
             query = query.AsNoTracking();
         return await query.FirstOrDefaultAsync(s => s.Id == id);
