@@ -27,14 +27,13 @@ public sealed class PortalSupportBundleService(
     PortalConfig config,
     HealthCheckService health,
     PortalNodeIdentity nodeIdentity,
-    TimeProvider clock)
+    TimeProvider clock,
+    DatasetTenantScope tenantScope)
 {
     public async Task<SupportBundleContentDto> BuildAsync(CancellationToken ct = default)
     {
         var sections = new List<SupportBundleSectionDto>();
-        var tenantContext = string.IsNullOrWhiteSpace(config.TenantId)
-            ? null
-            : ETL_SQL.Core.Multitenancy.TenantContext.FromHostConfiguration(config.TenantId);
+        var tenantContext = tenantScope.Context;
 
         // Health: statuses and durations, never the description of a failing check verbatim —
         // those can quote a connection string.
@@ -76,22 +75,29 @@ public sealed class PortalSupportBundleService(
         // reveals nothing about what is in it.
         sections.Add(Section("catalog", "Catalog size (counts only)", new JsonObject
         {
-            ["users"] = await db.Users.CountAsync(ct),
-            ["activeUsers"] = await db.Users.CountAsync(user => user.IsActive, ct),
-            ["groups"] = await db.Groups.CountAsync(ct),
+            ["users"] = await db.Users.CountAsync(user => user.TenantId == tenantScope.TenantId, ct),
+            ["activeUsers"] = await db.Users.CountAsync(
+                user => user.TenantId == tenantScope.TenantId && user.IsActive, ct),
+            ["groups"] = await db.Groups.CountAsync(group => group.TenantId == tenantScope.TenantId, ct),
             ["folders"] = await db.Folders.CountAsync(ct),
             ["reports"] = await db.Reports.CountAsync(report => !report.IsDeleted, ct),
-            ["datasets"] = await db.Datasets.CountAsync(ct),
+            ["datasets"] = await db.Datasets.CountAsync(
+                dataset => dataset.TenantId == tenantScope.TenantId, ct),
             ["subscriptions"] = await db.Subscriptions.CountAsync(ct),
-            ["sharedConnections"] = await db.PortalSharedConnections.CountAsync(ct),
-            ["secrets"] = await db.PortalSecrets.CountAsync(ct)
+            ["sharedConnections"] = await db.PortalSharedConnections.CountAsync(
+                connection => connection.TenantId == tenantScope.TenantId, ct),
+            ["secrets"] = await db.PortalSecrets.CountAsync(
+                secret => secret.TenantId == tenantScope.TenantId, ct)
         }, volatileCounts: true));
 
         sections.Add(Section("auditDelivery", "Audit outbox state", new JsonObject
         {
-            ["pending"] = await db.AuditOutboxMessages.CountAsync(message => message.Status == "Pending", ct),
-            ["failed"] = await db.AuditOutboxMessages.CountAsync(message => message.Status == "Failed", ct),
-            ["delivered"] = await db.AuditOutboxMessages.CountAsync(message => message.Status == "Delivered", ct),
+            ["pending"] = await db.AuditOutboxMessages.CountAsync(
+                message => message.TenantId == tenantScope.TenantId && message.Status == "Pending", ct),
+            ["failed"] = await db.AuditOutboxMessages.CountAsync(
+                message => message.TenantId == tenantScope.TenantId && message.Status == "Failed", ct),
+            ["delivered"] = await db.AuditOutboxMessages.CountAsync(
+                message => message.TenantId == tenantScope.TenantId && message.Status == "Delivered", ct),
             ["collectorConfigured"] = !string.IsNullOrWhiteSpace(config.Audit.TransportEndpoint)
         }, volatileCounts: true));
 

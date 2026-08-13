@@ -668,6 +668,7 @@ public class AdminServiceRun
 public class AuditLog
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public int? UserId { get; set; }
     public string ActorType { get; set; } = "User";
     public string? ActorId { get; set; }
@@ -696,6 +697,7 @@ public class AuditLog
 public class AuditOutboxMessage
 {
     public long Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public string EventId { get; set; } = Guid.NewGuid().ToString("N");
     public int? AuditLogId { get; set; }
     public AuditLog? AuditLog { get; set; }

@@ -350,6 +350,7 @@ namespace ETL_SQL.Portal.Services
         {
             _db.AuditLogs.Add(new AuditLog
             {
+                TenantId = _tenantScope.TenantId,
                 UserId = userId,
                 Action = succeeded ? "PUBLISH_DATASET" : "PUBLISH_DATASET_FAILED",
                 ResourceType = "Dataset",

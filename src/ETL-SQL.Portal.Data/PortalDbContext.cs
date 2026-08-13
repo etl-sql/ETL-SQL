@@ -457,9 +457,10 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<AuditOutboxMessage>(e =>
         {
             e.Property(x => x.ActorType).HasDefaultValue("User");
-            e.HasIndex(x => x.EventId).IsUnique();
-            e.HasIndex(x => new { x.Status, x.NextAttemptAt });
-            e.HasIndex(x => x.AuditLogId);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.HasIndex(x => new { x.TenantId, x.EventId }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Status, x.NextAttemptAt });
+            e.HasIndex(x => new { x.TenantId, x.AuditLogId });
             e.HasOne(x => x.AuditLog)
                 .WithMany(x => x.OutboxMessages)
                 .HasForeignKey(x => x.AuditLogId)
@@ -483,13 +484,14 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<AuditLog>(e =>
         {
             e.Property(x => x.ActorType).HasDefaultValue("User");
+            e.Property(x => x.TenantId).HasMaxLength(128);
             // Read paths that previously full-scanned this (append-heavy) table: the admin audit
             // viewer (optional action filter, newest-first, paged), usage metrics (action + time
             // window), per-report change history (resource lookup), and retention purge (time range).
             // Narrow, non-unique secondary indexes keep insert cost bounded.
-            e.HasIndex(x => x.Timestamp);
-            e.HasIndex(x => new { x.Action, x.Timestamp });
-            e.HasIndex(x => new { x.ResourceType, x.ResourceId });
+            e.HasIndex(x => new { x.TenantId, x.Timestamp });
+            e.HasIndex(x => new { x.TenantId, x.Action, x.Timestamp });
+            e.HasIndex(x => new { x.TenantId, x.ResourceType, x.ResourceId });
         });
 
         builder.Entity<Group>(e =>

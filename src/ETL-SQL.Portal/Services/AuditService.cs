@@ -5,7 +5,10 @@ using ETL_SQL.Portal.Data;
 
 namespace ETL_SQL.Portal.Services;
 
-public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
+public class AuditService(
+    PortalDbContext db,
+    IHttpContextAccessor httpContext,
+    DatasetTenantScope? tenantScope = null)
 {
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -22,6 +25,7 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
         string? effectiveScopes = null)
     {
         var occurredAt = DateTime.UtcNow;
+        var tenantId = tenantScope?.TenantId ?? "portal-host";
         var safeResourceId = SecretRedactor.Redact(resourceId);
         var safeDetail = SecretRedactor.Redact(detail);
         var effectiveCorrelationId = correlationId ?? httpContext.HttpContext?.TraceIdentifier;
@@ -47,6 +51,7 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
 
         var auditLog = new AuditLog
         {
+            TenantId = tenantId,
             UserId = userId,
             ActorType = effectiveActorType,
             ActorId = effectiveActorId,
@@ -63,6 +68,7 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
         db.AuditLogs.Add(auditLog);
         db.AuditOutboxMessages.Add(new AuditOutboxMessage
         {
+            TenantId = tenantId,
             AuditLog = auditLog,
             UserId = userId,
             ActorType = effectiveActorType,
@@ -76,6 +82,7 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
             OccurredAt = occurredAt,
             PayloadJson = JsonSerializer.Serialize(new
             {
+                tenantId,
                 userId,
                 actorType = effectiveActorType,
                 actorId = effectiveActorId,

@@ -681,7 +681,8 @@ public class ReportsController : ControllerBase
 
         var resourceId = id.ToString();
         var changes = await db.AuditLogs
-            .Where(a => a.ResourceType == "Report" && a.ResourceId == resourceId)
+            .Where(a => a.TenantId == datasetScope.TenantId
+                && a.ResourceType == "Report" && a.ResourceId == resourceId)
             .OrderByDescending(a => a.Timestamp)
             .Select(a => new ReportHistoryChangeDto(
                 a.Id,

@@ -384,7 +384,8 @@ public class ExecutionController(
         var cutoff = DateTime.UtcNow.AddMinutes(-15);
         var recentRequest = await db.AuditLogs
             .AsNoTracking()
-            .AnyAsync(a => a.Action == "REQUEST_REPORT_DATA_REFRESH"
+            .AnyAsync(a => a.TenantId == _datasetScope.TenantId
+                && a.Action == "REQUEST_REPORT_DATA_REFRESH"
                 && a.UserId == CurrentUserId
                 && a.ResourceId == report.Id.ToString()
                 && a.Timestamp >= cutoff);

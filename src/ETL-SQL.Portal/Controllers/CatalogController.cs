@@ -16,7 +16,10 @@ namespace ETL_SQL.Portal.Controllers;
 [Route("api/catalog")]
 [Authorize]
 [RequirePortalModule("Reporting")]
-public class CatalogController(PortalDbContext db, PortalTenantLineageCatalog lineageCatalog) : ControllerBase
+public class CatalogController(
+    PortalDbContext db,
+    PortalTenantLineageCatalog lineageCatalog,
+    DatasetTenantScope tenantScope) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -124,7 +127,8 @@ public class CatalogController(PortalDbContext db, PortalTenantLineageCatalog li
             .ToListAsync();
 
         var recentReportIds = await db.AuditLogs.AsNoTracking()
-            .Where(log => log.UserId == CurrentUserId
+            .Where(log => log.TenantId == tenantScope.TenantId
+                && log.UserId == CurrentUserId
                 && log.Action == "VIEW_SNAPSHOT"
                 && log.ResourceType == "Report"
                 && log.ResourceId != null)
@@ -163,7 +167,8 @@ public class CatalogController(PortalDbContext db, PortalTenantLineageCatalog li
             .ToListAsync();
 
         var popularReportIds = await db.AuditLogs.AsNoTracking()
-            .Where(log => log.Action == "VIEW_SNAPSHOT"
+            .Where(log => log.TenantId == tenantScope.TenantId
+                && log.Action == "VIEW_SNAPSHOT"
                 && log.ResourceType == "Report"
                 && log.ResourceId != null)
             .GroupBy(log => log.ResourceId!)
@@ -215,7 +220,8 @@ public class CatalogController(PortalDbContext db, PortalTenantLineageCatalog li
         limit = Math.Clamp(limit, 1, 100);
 
         var recentReportIds = await db.AuditLogs.AsNoTracking()
-            .Where(log => log.UserId == CurrentUserId
+            .Where(log => log.TenantId == tenantScope.TenantId
+                && log.UserId == CurrentUserId
                 && log.Action == "VIEW_SNAPSHOT"
                 && log.ResourceType == "Report"
                 && log.ResourceId != null)

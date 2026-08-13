@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Core.Multitenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -66,14 +67,29 @@ public sealed class AuditFailClosedInterceptor(
                 .ToArray();
             if (mutatedTypes.Length == 0)
                 return false;
-            StageFallbackAudit(context, mutatedTypes);
+            var tenantIds = context.ChangeTracker.Entries()
+                .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                .Select(e => e.Entity.GetType().GetProperty("TenantId")?.GetValue(e.Entity) as string)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (tenantIds.Length > 1)
+                throw new InvalidOperationException(
+                    "A single audited persistence operation cannot mutate multiple tenant partitions.");
+            var requestTenant = httpContext?.HttpContext?.RequestServices
+                .GetService<TenantContext>()?.Tenant.Value;
+            var tenantId = tenantIds.SingleOrDefault()
+                ?? requestTenant
+                ?? (string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId);
+            StageFallbackAudit(context, mutatedTypes, tenantId);
         }
 
         db = context;
         return true;
     }
 
-    private void StageFallbackAudit(PortalDbContext db, IReadOnlyList<string> mutatedTypes)
+    private void StageFallbackAudit(
+        PortalDbContext db, IReadOnlyList<string> mutatedTypes, string tenantId)
     {
         var occurredAt = clock.GetUtcNow().UtcDateTime;
         var request = httpContext?.HttpContext;
@@ -92,6 +108,7 @@ public sealed class AuditFailClosedInterceptor(
 
         var auditLog = new AuditLog
         {
+            TenantId = tenantId,
             UserId = userId,
             ActorType = actorType,
             ActorId = actorId,
@@ -104,6 +121,7 @@ public sealed class AuditFailClosedInterceptor(
         db.AuditLogs.Add(auditLog);
         db.AuditOutboxMessages.Add(new AuditOutboxMessage
         {
+            TenantId = tenantId,
             AuditLog = auditLog,
             UserId = userId,
             ActorType = actorType,
@@ -114,6 +132,7 @@ public sealed class AuditFailClosedInterceptor(
             OccurredAt = occurredAt,
             PayloadJson = JsonSerializer.Serialize(new
             {
+                tenantId,
                 userId,
                 actorType,
                 actorId,

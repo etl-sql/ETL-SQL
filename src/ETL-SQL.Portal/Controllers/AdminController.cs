@@ -1698,7 +1698,8 @@ public class AdminController(
 
         var viewLogs = await db.AuditLogs
             .AsNoTracking()
-            .Where(a => a.Action == "VIEW_SNAPSHOT"
+            .Where(a => a.TenantId == TenantId
+                && a.Action == "VIEW_SNAPSHOT"
                 && a.ResourceType == "Report"
                 && a.ResourceId != null
                 && a.Timestamp >= since)
@@ -1779,7 +1780,7 @@ public class AdminController(
         [FromQuery] string? resourceId = null)
     {
         pageSize = Math.Clamp(pageSize, 1, 200);
-        var query = db.AuditLogs.AsQueryable();
+        var query = db.AuditLogs.Where(a => a.TenantId == TenantId);
         if (action is not null) query = query.Where(a => a.Action == action);
         if (userId.HasValue) query = query.Where(a => a.UserId == userId);
         if (!string.IsNullOrWhiteSpace(resourceType)) query = query.Where(a => a.ResourceType == resourceType);
@@ -1791,7 +1792,7 @@ public class AdminController(
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
 #pragma warning disable CS8602
-            .Join(db.Users.DefaultIfEmpty(),
+            .Join(TenantUsers.DefaultIfEmpty(),
                   a => a.UserId,
                   u => (int?)u.Id,
                   (a, u) => new AuditLogDto(a.Id, a.UserId, u != null ? u.UserName! : null,
@@ -1812,7 +1813,7 @@ public class AdminController(
         await audit.LogAsync(CurrentUserId, "EXPORT_AUDIT_LOG", "AuditLog", null,
             $"action={action ?? "*"};userId={userId?.ToString() ?? "*"}");
 
-        var query = db.AuditLogs.AsQueryable();
+        var query = db.AuditLogs.Where(a => a.TenantId == TenantId);
         if (action is not null) query = query.Where(a => a.Action == action);
         if (userId.HasValue) query = query.Where(a => a.UserId == userId);
 
@@ -1820,7 +1821,7 @@ public class AdminController(
             .OrderByDescending(a => a.Timestamp)
             .Take(10_000)
 #pragma warning disable CS8602
-            .Join(db.Users.DefaultIfEmpty(),
+            .Join(TenantUsers.DefaultIfEmpty(),
                   a => a.UserId,
                   u => (int?)u.Id,
                   (a, u) => new { a, Username = u != null ? u.UserName : null })
