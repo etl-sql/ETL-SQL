@@ -466,7 +466,12 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IArtifactStorage>();
-                services.AddSingleton<IArtifactStorage, FailingEnumerateStorage>();
+                services.RemoveAll<PortalArtifactStorageBackend>();
+                services.AddSingleton<FailingEnumerateStorage>();
+                services.AddSingleton<IArtifactStorage>(sp =>
+                    sp.GetRequiredService<FailingEnumerateStorage>());
+                services.AddSingleton(sp => new PortalArtifactStorageBackend(
+                    sp.GetRequiredService<FailingEnumerateStorage>()));
             });
         }
     }

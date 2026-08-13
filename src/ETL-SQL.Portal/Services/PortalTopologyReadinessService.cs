@@ -20,7 +20,7 @@ public sealed record PortalTopologyReadiness(
 /// </summary>
 public sealed class PortalTopologyReadinessService(
     IServiceScopeFactory scopes,
-    IArtifactStorage artifacts,
+    PortalArtifactStorageBackend artifactBackend,
     INodeRegistryStore nodes,
     IOrchestratorStoreFactory orchestratorStoreFactory,
     PortalConfig config)
@@ -42,7 +42,9 @@ public sealed class PortalTopologyReadinessService(
 
         checks["storage"] = await RunCheckAsync(async checkCt =>
         {
-            await foreach (var _ in artifacts.EnumerateAsync(
+            // Readiness is a host-level probe without a tenant credential. Probe the configured
+            // backend itself; the request-facing facade must remain fail-closed in Shared mode.
+            await foreach (var _ in artifactBackend.Storage.EnumerateAsync(
                 ArtifactArea.Snapshots,
                 prefix: null,
                 recursive: false,

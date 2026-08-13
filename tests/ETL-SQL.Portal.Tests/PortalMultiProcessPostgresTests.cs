@@ -4,9 +4,12 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text.Json;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Portal.Services;
 using ETL_SQL.TestSupport;
+using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 
 namespace ETL_SQL.Portal.Tests;
@@ -19,6 +22,7 @@ namespace ETL_SQL.Portal.Tests;
 [Trait("Category", "Integration")]
 public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
 {
+    private const string JwtSecret = "multiprocess-test-secret-key-1234567890";
     private readonly PostgreSqlContainer _pg = new PostgreSqlBuilder("postgres:16-alpine")
         .Build();
     private readonly string _root =
@@ -462,6 +466,75 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         Assert.Contains("cancelled", reportState.LastRefreshError ?? "", StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task SharedTenants_RemainIsolatedAcrossProcessesAndWorkerQueue()
+    {
+        var shared = CreateSharedRoots();
+        var first = StartPortal(shared, port: FreePort(), nodeName: "node-a", sharedTenancy: true);
+        var second = StartPortal(shared, port: FreePort(), nodeName: "node-b", sharedTenancy: true);
+        _processes.Add(first);
+        _processes.Add(second);
+
+        await first.WaitForHealthzAsync();
+        await second.WaitForHealthzAsync();
+
+        var scriptDirectory = Path.Combine(shared.Scripts, "tenant-alpha");
+        Directory.CreateDirectory(scriptDirectory);
+        const string ScriptName = "cross-node-shared.rptsql";
+        await File.WriteAllTextAsync(Path.Combine(scriptDirectory, ScriptName), """
+            CREATE VISUAL SharedWorker AS TABLE (
+                SOURCE = (SELECT 42 AS Value),
+                MAPPINGS (Value = Value)
+            );
+            """);
+
+        var seeded = await SeedSharedTenantsAsync(ScriptName);
+        using var client = new HttpClient();
+
+        foreach (var process in new[] { first, second })
+        {
+            using var folders = new HttpRequestMessage(
+                HttpMethod.Get, $"{process.BaseUrl}/api/folders?tenant=tenant-beta");
+            folders.Headers.Authorization = new AuthenticationHeaderValue("Bearer", seeded.AlphaToken);
+            folders.Headers.Add("X-Tenant-Id", "tenant-beta");
+            using var folderResponse = await client.SendAsync(folders);
+            Assert.Equal(HttpStatusCode.OK, folderResponse.StatusCode);
+            var body = await folderResponse.Content.ReadAsStringAsync();
+            Assert.Contains("Alpha cross-node", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("Beta cross-node secret", body, StringComparison.Ordinal);
+
+            Assert.Equal(HttpStatusCode.NotFound, await SendForStatusAsync(
+                client, HttpMethod.Get,
+                $"{process.BaseUrl}/api/reports/{seeded.BetaReportId}?tenant=tenant-beta",
+                seeded.AlphaToken));
+            Assert.Equal(HttpStatusCode.NotFound, await SendForStatusAsync(
+                client, HttpMethod.Get,
+                $"{process.BaseUrl}/api/jobs/{seeded.BetaJobId}?tenant=tenant-beta",
+                seeded.AlphaToken));
+            Assert.Equal(HttpStatusCode.NotFound, await SendForStatusAsync(
+                client, HttpMethod.Delete,
+                $"{process.BaseUrl}/api/jobs/{seeded.BetaJobId}?tenant=tenant-beta",
+                seeded.AlphaToken));
+        }
+
+        var refresh = await SendJsonAsync<RefreshDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/reports/{seeded.AlphaReportId}/refresh",
+            seeded.AlphaToken,
+            new { },
+            HttpStatusCode.Accepted);
+        var completed = await WaitForJobStatusAsync(
+            client, second, seeded.AlphaToken, refresh.JobId, "Completed", TimeSpan.FromSeconds(60));
+        Assert.Equal(refresh.JobId, completed.JobId);
+
+        await using var verify = CreatePostgresContext();
+        var foreignJob = await verify.PortalExecutionJobs.AsNoTracking()
+            .SingleAsync(job => job.Id == seeded.BetaJobId);
+        Assert.Equal("Running", foreignJob.Status);
+        Assert.Equal("tenant-beta", foreignJob.TenantId);
+    }
+
     private SharedRoots CreateSharedRoots()
     {
         var shared = new SharedRoots(
@@ -478,7 +551,11 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         return shared;
     }
 
-    private PortalProcess StartPortal(SharedRoots shared, int port, string nodeName)
+    private PortalProcess StartPortal(
+        SharedRoots shared,
+        int port,
+        string nodeName,
+        bool sharedTenancy = false)
     {
         var portalDll = Path.Combine(AppContext.BaseDirectory, $"{typeof(PortalMarker).Assembly.GetName().Name}.dll");
         Assert.True(File.Exists(portalDll), $"Expected Portal assembly at {portalDll}");
@@ -503,8 +580,29 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         env["Portal__MapRootPath"] = shared.Maps;
         env["Portal__DatasetRootPath"] = shared.Datasets;
         env["Portal__Storage__KeyRingPath"] = shared.Keys;
-        env["Portal__Jwt__Secret"] = "multiprocess-test-secret-key-1234567890";
+        env["Portal__Jwt__Secret"] = JwtSecret;
         env["Portal__FirstRun__AdminPassword"] = "Admin@12345!";
+        env["Portal__SharedTenancy__Enabled"] = sharedTenancy.ToString();
+        if (sharedTenancy)
+        {
+            env["Portal__KeyManagement__Enabled"] = "true";
+            var bindingIndex = 0;
+            foreach (var tenant in new[] { "tenant-alpha", "tenant-beta" })
+            foreach (var purpose in Enum.GetValues<ETL_SQL.Core.Security.KeyPurpose>())
+            {
+                var prefix = $"Portal__KeyManagement__Bindings__{bindingIndex}";
+                var variable = $"ETLSQL_MULTIPROC_KEY_{bindingIndex}";
+                env[$"{prefix}__Scope"] = tenant;
+                env[$"{prefix}__Purpose"] = purpose.ToString();
+                env[$"{prefix}__Version"] = "v1";
+                env[$"{prefix}__KeyId"] = $"{tenant}-{purpose.ToString().ToLowerInvariant()}";
+                env[$"{prefix}__EnvironmentVariable"] = variable;
+                env[$"{prefix}__IsCurrent"] = "true";
+                env[variable] = Convert.ToBase64String(
+                    Enumerable.Repeat((byte)(bindingIndex + 1), 32).ToArray());
+                bindingIndex++;
+            }
+        }
         env["Portal__Dataset__AtRestKey"] = HostedPortalFactory.DefaultAtRestKey;
         env["Cluster__NodeHeartbeatSeconds"] = "2";
         env["Cluster__NodeHeartbeatMinimumSeconds"] = "1";
@@ -513,6 +611,103 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         var process = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start Portal process.");
         return new PortalProcess(process, $"http://127.0.0.1:{port}");
+    }
+
+    private async Task<SharedTenantSeed> SeedSharedTenantsAsync(string alphaScriptPath)
+    {
+        await using var db = CreatePostgresContext();
+        var admin = await db.Users.SingleAsync(user => user.NormalizedUserName == "ADMIN");
+        admin.TenantId = "tenant-alpha";
+        admin.MustChangePassword = false;
+
+        var beta = new PortalUser
+        {
+            UserName = $"beta-{Guid.NewGuid():N}",
+            NormalizedUserName = $"BETA-{Guid.NewGuid():N}",
+            Email = $"beta-{Guid.NewGuid():N}@test.local",
+            NormalizedEmail = $"BETA-{Guid.NewGuid():N}@TEST.LOCAL",
+            TenantId = "tenant-beta",
+            SecurityStamp = Guid.NewGuid().ToString("N"),
+            ConcurrencyStamp = Guid.NewGuid().ToString("N"),
+            MustChangePassword = false,
+            IsActive = true
+        };
+        db.Users.Add(beta);
+        await db.SaveChangesAsync();
+
+        var alphaFolder = new Folder
+        {
+            TenantId = "tenant-alpha",
+            Name = "Alpha cross-node",
+            Path = "/cross-node",
+            OwnerId = admin.Id
+        };
+        var betaFolder = new Folder
+        {
+            TenantId = "tenant-beta",
+            Name = "Beta cross-node secret",
+            Path = "/cross-node",
+            OwnerId = beta.Id
+        };
+        db.Folders.AddRange(alphaFolder, betaFolder);
+        await db.SaveChangesAsync();
+
+        var alphaReport = new Report
+        {
+            TenantId = "tenant-alpha",
+            FolderId = alphaFolder.Id,
+            Name = "Alpha shared worker",
+            ScriptPath = alphaScriptPath,
+            CreatedBy = admin.Id
+        };
+        var betaReport = new Report
+        {
+            TenantId = "tenant-beta",
+            FolderId = betaFolder.Id,
+            Name = "Beta shared worker secret",
+            ScriptPath = "beta-secret.rptsql",
+            CreatedBy = beta.Id
+        };
+        db.Reports.AddRange(alphaReport, betaReport);
+        await db.SaveChangesAsync();
+
+        var betaJobId = $"shared-beta-{Guid.NewGuid():N}";
+        db.PortalExecutionJobs.Add(new PortalExecutionJob
+        {
+            Id = betaJobId,
+            TenantId = "tenant-beta",
+            ReportId = betaReport.Id,
+            UserId = beta.Id,
+            Status = "Running"
+        });
+        await db.SaveChangesAsync();
+
+        var roles = await (
+            from userRole in db.UserRoles
+            join role in db.Roles on userRole.RoleId equals role.Id
+            where userRole.UserId == admin.Id
+            select role.Name!).ToListAsync();
+        var token = new TokenService(new PortalConfig
+        {
+            Jwt = new JwtConfig { Secret = JwtSecret },
+            SharedTenancy = new SharedTenancyConfig { Enabled = true }
+        }).GenerateJwt(
+            admin,
+            roles,
+            tenantContext: TenantContext.FromVerifiedCredential("tenant-alpha"));
+
+        return new SharedTenantSeed(
+            token, alphaReport.Id, betaReport.Id, betaJobId);
+    }
+
+    private PortalDbContext CreatePostgresContext()
+    {
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseNpgsql(
+                _pg.GetConnectionString(),
+                npg => npg.MigrationsAssembly(PortalDatabase.PostgresMigrationsAssembly))
+            .Options;
+        return new PortalDbContext(options);
     }
 
     private static string WithFastFailureTimeouts(string connectionString) =>
@@ -654,15 +849,22 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         PortalProcess process,
         string token,
         string jobId,
-        string expectedStatus)
+        string expectedStatus,
+        TimeSpan? timeout = null)
     {
-        return await LoadAwareWait.UntilAsync(
+        var observed = await LoadAwareWait.UntilAsync(
             $"multi-process job '{jobId}' to reach {expectedStatus}",
             _ => GetJsonAsync<JobDto>(client, $"{process.BaseUrl}/api/jobs/{jobId}", token),
-            job => string.Equals(job.Status, expectedStatus, StringComparison.OrdinalIgnoreCase),
-            TimeSpan.FromSeconds(15),
+            job => string.Equals(job.Status, expectedStatus, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(job.Status, "Failed", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(job.Status, "Cancelled", StringComparison.OrdinalIgnoreCase),
+            timeout ?? TimeSpan.FromSeconds(15),
             TimeSpan.FromMilliseconds(250),
-            job => $"status={job.Status}");
+            job => $"status={job.Status}; error={job.Error ?? "<none>"}");
+        Assert.True(
+            string.Equals(observed.Status, expectedStatus, StringComparison.OrdinalIgnoreCase),
+            $"Expected job '{jobId}' to reach {expectedStatus}, but reached {observed.Status}: {observed.Error}");
+        return observed;
     }
 
     private sealed record SharedRoots(
@@ -683,6 +885,11 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         string? LastRefreshError = null);
     private sealed record RefreshDto(string JobId, bool AlreadyRunning);
     private sealed record JobDto(string JobId, string Status, string? Error);
+    private sealed record SharedTenantSeed(
+        string AlphaToken,
+        int AlphaReportId,
+        int BetaReportId,
+        string BetaJobId);
     private sealed record GroupDto(
         int Id,
         string Name,
@@ -696,6 +903,8 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
     private sealed class PortalProcess(Process process, string baseUrl) : IAsyncDisposable
     {
         private bool _disposed;
+        private readonly Task<string> _standardOutput = process.StandardOutput.ReadToEndAsync();
+        private readonly Task<string> _standardError = process.StandardError.ReadToEndAsync();
 
         public string BaseUrl { get; } = baseUrl;
 
@@ -708,11 +917,12 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
                 {
                     if (process.HasExited)
                         throw new InvalidOperationException(
-                            $"Portal process exited with code {process.ExitCode}: {await process.StandardError.ReadToEndAsync(ct)}");
+                            $"Portal process exited with code {process.ExitCode}: {await _standardError.WaitAsync(ct)}");
                     try
                     {
                         using var response = await client.GetAsync($"{BaseUrl}/healthz", ct);
-                        return $"HTTP {(int)response.StatusCode} {response.StatusCode}";
+                        var body = await response.Content.ReadAsStringAsync(ct);
+                        return $"HTTP {(int)response.StatusCode} {response.StatusCode}: {body}";
                     }
                     catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
                     {
@@ -735,6 +945,7 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
                 process.Kill(entireProcessTree: true);
                 await process.WaitForExitAsync();
             }
+            await Task.WhenAll(_standardOutput, _standardError);
             process.Dispose();
         }
     }

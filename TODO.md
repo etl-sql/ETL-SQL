@@ -344,7 +344,7 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
       paths, and configuration exports remain disjoint. `AdminIdentityScopeIntegrationTests` and
       the onboarding policy tests retain the tenant-admin/author and controlled-ingress boundary.
       Shared-store partitioning remains the separate open cell below.
-- [ ] **Shared.** Prove tenant-isolated lineage/graph indexes, scans, quality evidence, quarantine,
+- [x] **Shared.** Prove tenant-isolated lineage/graph indexes, scans, quality evidence, quarantine,
       caches, searches, and outboxes in shared services — partitioning metadata search, graph
       traversal, exports, and support diagnostics so table names, schemas, tags, edges, and evidence
       cannot leak across tenants. Re-certify tenant ingress, catalogs, datasets, embeds, snapshots,
@@ -412,8 +412,19 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
       also refuse foreign catalog roots; identifier-bearing background admin digests fail closed in
       Shared mode until invoked by a tenant-authorized scheduler. SQLite/PostgreSQL migrations,
       hostile HTTP, cache-key tests, migration convergence, and the real PostgreSQL provider pin
-      this slice. The parent cell remains open only for clean multi-node/shared-worker fleet
-      certification across these combined surfaces.
+      this slice.
+
+      **Multi-node/shared-worker certification completed (2026-08-13).** Two real Portal OS
+      processes now run in Shared mode against one PostgreSQL catalog, shared artifact roots, and
+      tenant-specific key bindings. Hostile alpha credentials sent through either node cannot use
+      query/header tenant selectors or exact foreign report/job ids to enumerate, read, or cancel
+      beta resources; the beta running job remains unchanged. An alpha refresh admitted by node A
+      retains its durable server-owned tenant across fresh evaluator and lineage-notification
+      scopes, writes through the alpha artifact/key partition, and is observed completed through
+      node B. Host-level readiness probes the configured storage backend without weakening the
+      request-facing tenant facade. The complete 10-test multiprocess PostgreSQL suite and 51
+      affected execution, recovery, snapshot, storage-failure, cache, and hostile Shared-boundary
+      tests pass.
 
 *Absorbs the retained discovery item **Tenant-Isolated Lineage Graphs**.*
 

@@ -473,9 +473,12 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 // Only the orchestrator poller explicitly creates trusted scheduled refreshes.
                 var dashboardTimeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
                 var executionIdentity = await BuildExecutionIdentityAsync(job, cts.Token);
+                var dashboardScopes = _config.SharedTenancy.Enabled
+                    ? new TenantBoundScopeFactory(_scopeFactory, job.KeyScope)
+                    : _scopeFactory;
                 await using var svc = new ETL_SQL.ReportHosting.DashboardService(
                     scriptPath,
-                    _scopeFactory,
+                    dashboardScopes,
                     dashboardTimeout,
                     job.DatasetCallerContext,
                     job.ReportId,
@@ -926,13 +929,20 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         if (entries is not { Count: > 0 }) return;
 
         using var scope = _scopeFactory.CreateScope();
-        var catalog = scope.ServiceProvider.GetService<ITenantLineageCatalogStore>();
-        if (catalog is null) return;
-
         var tenantId = await ResolveKeyScopeAsync(job.ReportId, job.UserId);
         var tenant = _config.SharedTenancy.Enabled
             ? ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential(tenantId)
             : ETL_SQL.Core.Multitenancy.TenantContext.FromHostConfiguration(tenantId);
+        if (_config.SharedTenancy.Enabled)
+        {
+            // This scope has no HTTP request. Rehydrate its tenant boundary only from the
+            // server-owned job/report binding before resolving request-or-background services.
+            scope.ServiceProvider.GetRequiredService<RequestTenantContextAccessor>()
+                .SetVerifiedCredential(tenant);
+        }
+
+        var catalog = scope.ServiceProvider.GetService<ITenantLineageCatalogStore>();
+        if (catalog is null) return;
         await catalog.SaveLineageAsync(tenant,
             entries,
             $"report:{job.ReportId}:{job.Id}",
@@ -1166,6 +1176,35 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 ETL_SQL.Core.Multitenancy.TenantContext.FromHostConfiguration(config.TenantId));
         }
         return storage;
+    }
+
+    /// <summary>
+    /// Rehydrates a Shared background execution scope from the tenant ID persisted on the durable
+    /// job. DashboardService owns its evaluator scopes, so binding only the caller's scope would
+    /// leave engine services without the server-verified partition.
+    /// </summary>
+    private sealed class TenantBoundScopeFactory(
+        IServiceScopeFactory inner,
+        string tenantId) : IServiceScopeFactory
+    {
+        private readonly ETL_SQL.Core.Multitenancy.TenantContext _tenant =
+            ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential(tenantId);
+
+        public IServiceScope CreateScope()
+        {
+            var scope = inner.CreateScope();
+            try
+            {
+                scope.ServiceProvider.GetRequiredService<RequestTenantContextAccessor>()
+                    .SetVerifiedCredential(_tenant);
+                return scope;
+            }
+            catch
+            {
+                scope.Dispose();
+                throw;
+            }
+        }
     }
 }
 
