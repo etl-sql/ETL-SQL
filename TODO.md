@@ -320,7 +320,7 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
 The former `Managed operations` bullet was one checkbox covering nine deliverables and could not be
 checked off meaningfully. Split:
 
-- [ ] **Dedicated — provisioning.** Automate tenant provisioning with no manual SaaS-platform
+- [x] **Dedicated — provisioning.** Automate tenant provisioning with no manual SaaS-platform
       database edits.
 - [ ] **Dedicated — upgrades and capacity.** Automate upgrades, drain/fence, and capacity assignment
       for one tenant.
