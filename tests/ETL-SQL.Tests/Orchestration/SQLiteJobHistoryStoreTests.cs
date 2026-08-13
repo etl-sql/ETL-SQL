@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Data.Common;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
@@ -687,6 +690,104 @@ namespace ETL_SQL.Tests.Orchestration
             await legacyStore.SaveJobAsync(MakeJob("Migrated"));
             var jobs = (await legacyStore.GetAllJobsAsync()).ToList();
             Assert.Single(jobs);
+        }
+
+        [Fact]
+        public async Task InitializeAsync_ConcurrentLegacyMigration_TreatsDuplicateColumnAsSuccess()
+        {
+            using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_dbPath}"))
+            {
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    CREATE TABLE Jobs (
+                        Name TEXT PRIMARY KEY,
+                        Script TEXT NOT NULL,
+                        Interval INTEGER NOT NULL,
+                        Unit TEXT NOT NULL,
+                        AtTime TEXT,
+                        LastRun TEXT,
+                        NextRun TEXT,
+                        IsEnabled INTEGER NOT NULL DEFAULT 1
+                    );
+                    CREATE TABLE JobHistory (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        JobName TEXT NOT NULL,
+                        StartTime TEXT NOT NULL,
+                        EndTime TEXT,
+                        Status TEXT NOT NULL,
+                        ErrorMessage TEXT,
+                        RowsProcessed INTEGER DEFAULT 0
+                    );";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            var coordinator = new ColumnSnapshotCoordinator(2, "JobHistory");
+            var first = new RelationalJobHistoryStore(
+                new CoordinatedSqliteDialect($"Data Source={_dbPath};Pooling=False", coordinator));
+            var second = new RelationalJobHistoryStore(
+                new CoordinatedSqliteDialect($"Data Source={_dbPath};Pooling=False", coordinator));
+
+            await Task.WhenAll(first.InitializeAsync(), second.InitializeAsync());
+
+            await first.SaveJobAsync(MakeJob("ConcurrentMigration"));
+            Assert.Single(await second.GetAllJobsAsync());
+        }
+
+        private sealed class ColumnSnapshotCoordinator
+        {
+            private readonly int _participants;
+            private int _arrivals;
+            private readonly TaskCompletionSource _allArrived =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public ColumnSnapshotCoordinator(int participants, string table)
+            {
+                _participants = participants;
+                Table = table;
+            }
+
+            public string Table { get; }
+
+            public async Task ArriveAsync()
+            {
+                if (Interlocked.Increment(ref _arrivals) == _participants)
+                    _allArrived.TrySetResult();
+                await _allArrived.Task;
+            }
+        }
+
+        private sealed class CoordinatedSqliteDialect : IOrchestratorStoreDialect
+        {
+            private readonly SqliteOrchestratorDialect _inner;
+            private readonly ColumnSnapshotCoordinator _coordinator;
+
+            public CoordinatedSqliteDialect(string connectionString, ColumnSnapshotCoordinator coordinator)
+            {
+                _inner = new SqliteOrchestratorDialect(connectionString);
+                _coordinator = coordinator;
+            }
+
+            public DbConnection CreateConnection() => _inner.CreateConnection();
+            public string CollationDdl => _inner.CollationDdl;
+            public string SchemaInitializationLockSql => _inner.SchemaInitializationLockSql;
+            public string SchemaInitializationUnlockSql => _inner.SchemaInitializationUnlockSql;
+            public string AutoIncrementPrimaryKey => _inner.AutoIncrementPrimaryKey;
+            public string Int64Type => _inner.Int64Type;
+            public string UtcNowSql => _inner.UtcNowSql;
+            public string InsertReturningId(string insertWithoutSemicolon, string idColumn) =>
+                _inner.InsertReturningId(insertWithoutSemicolon, idColumn);
+
+            public async Task<HashSet<string>> GetColumnNamesAsync(
+                DbConnection connection,
+                string table,
+                CancellationToken ct = default)
+            {
+                var columns = await _inner.GetColumnNamesAsync(connection, table, ct);
+                if (string.Equals(table, _coordinator.Table, StringComparison.OrdinalIgnoreCase))
+                    await _coordinator.ArriveAsync();
+                return columns;
+            }
         }
 
         [Fact]

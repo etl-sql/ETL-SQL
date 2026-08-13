@@ -431,83 +431,66 @@ namespace ETL_SQL.Orchestrator.Storage
             return string.Equals(sqlState, "23505", StringComparison.Ordinal);
         }
 
+        private static bool IsDuplicateColumnRace(DbException ex)
+        {
+            // PostgreSQL reports duplicate_column. SQLite exposes no provider-neutral SQL state,
+            // so constrain its fallback to the provider type and exact diagnostic category.
+            var sqlState = ex.GetType().GetProperty("SqlState")?.GetValue(ex) as string;
+            if (string.Equals(sqlState, "42701", StringComparison.Ordinal))
+                return true;
+
+            return string.Equals(
+                       ex.GetType().FullName,
+                       "Microsoft.Data.Sqlite.SqliteException",
+                       StringComparison.Ordinal)
+                   && ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static async Task AddColumnIfMissingAsync(
+            DbConnection connection,
+            ISet<string> knownColumns,
+            string table,
+            string column,
+            string definition)
+        {
+            if (knownColumns.Contains(column))
+                return;
+
+            try
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = $"ALTER TABLE {table} ADD COLUMN {definition};";
+                await command.ExecuteNonQueryAsync();
+            }
+            catch (DbException ex) when (IsDuplicateColumnRace(ex))
+            {
+                // Another process or store instance won the additive migration after this
+                // instance read its column snapshot. The desired schema is already present.
+            }
+
+            knownColumns.Add(column);
+        }
+
         private async Task EnsureJobColumnsExist(DbConnection connection)
         {
             var columns = await _dialect.GetColumnNamesAsync(connection, "Jobs");
 
-            if (!columns.Contains("MaxRetries"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN MaxRetries INTEGER NOT NULL DEFAULT 0;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("RetryDelaySeconds"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN RetryDelaySeconds INTEGER NOT NULL DEFAULT 30;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("ScriptHash"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN ScriptHash TEXT;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("HashPolicy"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN HashPolicy TEXT NOT NULL DEFAULT 'Warn';";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("LeaseOwner"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN LeaseOwner TEXT;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("LeaseExpiresAt"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN LeaseExpiresAt TEXT;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("LeaseFenceToken"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN LeaseFenceToken INTEGER NOT NULL DEFAULT 0;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("Version"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN Version INTEGER NOT NULL DEFAULT 1;";
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "MaxRetries", "MaxRetries INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "RetryDelaySeconds", "RetryDelaySeconds INTEGER NOT NULL DEFAULT 30");
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "ScriptHash", "ScriptHash TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "HashPolicy", "HashPolicy TEXT NOT NULL DEFAULT 'Warn'");
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "LeaseOwner", "LeaseOwner TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "LeaseExpiresAt", "LeaseExpiresAt TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "LeaseFenceToken", "LeaseFenceToken INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "Version", "Version INTEGER NOT NULL DEFAULT 1");
 
             // Unified job/schedule/notification model. A job now names what it acts on rather than
             // carrying an inline script body, and carries the human-facing label that lets its Name
             // stay a stable machine identity.
-            if (!columns.Contains("JobType"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN JobType TEXT NOT NULL DEFAULT 'Script';";
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await AddColumnIfMissingAsync(connection, columns, "Jobs", "JobType", "JobType TEXT NOT NULL DEFAULT 'Script'");
 
             foreach (var column in new[] { "TargetPath", "DisplayName", "Description", "Options", "CreatedBy", "ModifiedBy", "TenantId" })
-            {
-                if (columns.Contains(column)) continue;
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = $"ALTER TABLE Jobs ADD COLUMN {column} TEXT;";
-                await cmd.ExecuteNonQueryAsync();
-            }
+                await AddColumnIfMissingAsync(connection, columns, "Jobs", column, $"{column} TEXT");
         }
 
         private async Task EnsureHostMetricsDailyColumnsExist(DbConnection connection)
@@ -516,98 +499,33 @@ namespace ETL_SQL.Orchestrator.Storage
             // existing databases in place (nullable REAL — no backfill possible for pruned raw rows).
             var columns = await _dialect.GetColumnNamesAsync(connection, "HostMetricsDaily");
 
-            if (!columns.Contains("AvgHostCpuPercent"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE HostMetricsDaily ADD COLUMN AvgHostCpuPercent REAL;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("MaxHostCpuPercent"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE HostMetricsDaily ADD COLUMN MaxHostCpuPercent REAL;";
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await AddColumnIfMissingAsync(connection, columns, "HostMetricsDaily", "AvgHostCpuPercent", "AvgHostCpuPercent REAL");
+            await AddColumnIfMissingAsync(connection, columns, "HostMetricsDaily", "MaxHostCpuPercent", "MaxHostCpuPercent REAL");
         }
 
         private async Task EnsureHistoryColumnsExist(DbConnection connection)
         {
             var columns = await _dialect.GetColumnNamesAsync(connection, "JobHistory");
 
-            if (!columns.Contains("PeakMemoryBytes"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN PeakMemoryBytes INTEGER DEFAULT 0;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("CpuTimeSeconds"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN CpuTimeSeconds REAL DEFAULT 0;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("ScriptHashAtRunTime"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN ScriptHashAtRunTime TEXT;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("HashMatched"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN HashMatched INTEGER;";
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "PeakMemoryBytes", "PeakMemoryBytes INTEGER DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "CpuTimeSeconds", "CpuTimeSeconds REAL DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "ScriptHashAtRunTime", "ScriptHashAtRunTime TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "HashMatched", "HashMatched INTEGER");
 
             // Data-quality outcomes per run (rolling-expand safe: additive, defaulted).
-            if (!columns.Contains("RowsQuarantined"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN RowsQuarantined INTEGER DEFAULT 0;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("RowsWarned"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN RowsWarned INTEGER DEFAULT 0;";
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "RowsQuarantined", "RowsQuarantined INTEGER DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "RowsWarned", "RowsWarned INTEGER DEFAULT 0");
 
             // Compact "column:rule=count;..." payload — counts only, never sample values.
-            if (!columns.Contains("DataQualityFailures"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN DataQualityFailures TEXT;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("SessionId"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN SessionId TEXT;";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            if (!columns.Contains("CheckpointLabel"))
-            {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN CheckpointLabel TEXT;";
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "DataQualityFailures", "DataQualityFailures TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "SessionId", "SessionId TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "CheckpointLabel", "CheckpointLabel TEXT");
         }
 
         private async Task EnsureColumnMetricColumnsExist(DbConnection connection)
         {
             var columns = await _dialect.GetColumnNamesAsync(connection, "JobColumnMetrics");
-            if (columns.Contains("MaxTimestampUtc")) return;
-            using var command = connection.CreateCommand();
-            command.CommandText = "ALTER TABLE JobColumnMetrics ADD COLUMN MaxTimestampUtc TEXT;";
-            await command.ExecuteNonQueryAsync();
+            await AddColumnIfMissingAsync(connection, columns, "JobColumnMetrics", "MaxTimestampUtc", "MaxTimestampUtc TEXT");
         }
 
         private async Task EnsureLineageHistoryColumnsExist(DbConnection connection)
@@ -616,10 +534,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             async Task AddColumn(string name, string ddl)
             {
-                if (columns.Contains(name)) return;
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = $"ALTER TABLE LineageHistory ADD COLUMN {ddl};";
-                await cmd.ExecuteNonQueryAsync();
+                await AddColumnIfMissingAsync(connection, columns, "LineageHistory", name, ddl);
             }
 
             // SourceColumns predates this migration on new installs but may be

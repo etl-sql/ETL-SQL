@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fixed concurrent Orchestrator startup against an existing SQLite database so additive schema migrations treat a column added by another process as success instead of stopping the scheduler.
+
 ### Breaking
 
 **Machine governance stores are explicit in the admin command path**
