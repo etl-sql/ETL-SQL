@@ -245,6 +245,34 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task SharedLineage_IsTenantPartitioned_OnPostgres()
+        {
+            var catalog = (ITenantLineageCatalogStore)NewStore();
+            var alpha = TenantContext.FromVerifiedCredential("lineage-alpha");
+            var beta = TenantContext.FromVerifiedCredential("lineage-beta");
+            static ETL_SQL.Core.LineageEntry Entry(string owner) => new("same.table", "SELECT")
+            {
+                SourceTables = ["same.source"],
+                Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["owner"] = owner
+                }
+            };
+
+            await catalog.SaveLineageAsync(alpha, [Entry("alpha")], "same-job", null, DateTime.UtcNow);
+            await catalog.SaveLineageAsync(beta, [Entry("beta")], "same-job", null, DateTime.UtcNow);
+
+            var restarted = (ITenantLineageCatalogStore)NewStore();
+            var alphaRows = (await restarted.GetHistoryForSourceAsync(alpha, "same.source")).ToList();
+            var betaRows = (await restarted.GetHistoryForSourceAsync(beta, "same.source")).ToList();
+            Assert.Single(alphaRows);
+            Assert.Single(betaRows);
+            Assert.Equal("alpha", alphaRows[0].Tags["owner"]);
+            Assert.Equal("beta", betaRows[0].Tags["owner"]);
+            Assert.DoesNotContain(alphaRows, row => row.TenantId == "lineage-beta");
+        }
+
+        [Fact]
         public async Task SharedTenantLifecycle_IsPartitionedAndDurableOnPostgres()
         {
             var store = NewStore();

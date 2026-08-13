@@ -361,7 +361,7 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
             db,
             audit,
             new PortalConfig(),
-            new EmptyLineageCatalogStore(),
+            TenantLineage(),
             new FolderPermissionService(db),
             null!,
             null!,
@@ -405,7 +405,7 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
             User = Principal(userId, isAdmin),
             TraceIdentifier = $"test-{Guid.NewGuid():N}"
         };
-        var controller = new CatalogController(db, new EmptyLineageCatalogStore());
+        var controller = new CatalogController(db, TenantLineage());
         controller.ControllerContext = new ControllerContext { HttpContext = context };
         return controller;
     }
@@ -416,6 +416,13 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
         if (isAdmin)
             claims.Add(new Claim(ClaimTypes.Role, "Admin"));
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+    }
+
+    private static PortalTenantLineageCatalog TenantLineage()
+    {
+        var config = new PortalConfig();
+        return new PortalTenantLineageCatalog(
+            new EmptyLineageCatalogStore(), new DatasetTenantScope(config), config);
     }
 
     private sealed class EmptyLineageCatalogStore : ILineageCatalogStore

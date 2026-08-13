@@ -530,19 +530,21 @@ namespace ETL_SQL.Orchestrator.Service
                     rows, row => row.JobName, RequestCaller(ctx), store, authorization, ctx.RequestAborted));
             }).WithName("getDataQualityFailures");
 
-            app.MapGet("/api/stewardship/score", async (HttpContext ctx, ILineageCatalogStore store,
+            app.MapGet("/api/stewardship/score", async (HttpContext ctx, ITenantLineageCatalogStore store,
                 IConfiguration cfg, int limit = 1000) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var evaluation = await EvaluateStewardshipAsync(store, limit);
+                if (!TryResolveLineageTenant(ctx, cfg, out var tenant)) return Results.Forbid();
+                var evaluation = await EvaluateStewardshipAsync(store, tenant!, limit);
                 return Results.Ok(evaluation.Scores);
             }).WithName("getStewardshipScore");
 
-            app.MapGet("/api/stewardship/gaps", async (HttpContext ctx, ILineageCatalogStore store,
+            app.MapGet("/api/stewardship/gaps", async (HttpContext ctx, ITenantLineageCatalogStore store,
                 IConfiguration cfg, int limit = 1000) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var evaluation = await EvaluateStewardshipAsync(store, limit);
+                if (!TryResolveLineageTenant(ctx, cfg, out var tenant)) return Results.Forbid();
+                var evaluation = await EvaluateStewardshipAsync(store, tenant!, limit);
                 return Results.Ok(evaluation.Gaps);
             }).WithName("getStewardshipGaps");
 
@@ -982,46 +984,51 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("deleteAdminConnection");
 
             app.MapGet("/api/lineage/history/table/{name}", async (HttpContext ctx, string name,
-                ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
+                ITenantLineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var entries = await catalog.GetHistoryForTableAsync(Uri.UnescapeDataString(name), limit);
+                if (!TryResolveLineageTenant(ctx, cfg, out var tenant)) return Results.Forbid();
+                var entries = await catalog.GetHistoryForTableAsync(tenant!, Uri.UnescapeDataString(name), limit);
                 return Results.Ok(entries);
             }).WithName("getLineageHistoryForTable");
 
             app.MapGet("/api/lineage/history/tag/{key}", async (HttpContext ctx, string key,
-                ILineageCatalogStore catalog, IConfiguration cfg, string? value = null, int limit = 100) =>
+                ITenantLineageCatalogStore catalog, IConfiguration cfg, string? value = null, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var entries = await catalog.GetHistoryForTagAsync(Uri.UnescapeDataString(key), value, limit);
+                if (!TryResolveLineageTenant(ctx, cfg, out var tenant)) return Results.Forbid();
+                var entries = await catalog.GetHistoryForTagAsync(tenant!, Uri.UnescapeDataString(key), value, limit);
                 return Results.Ok(entries);
             }).WithName("getLineageHistoryForTag");
 
             app.MapGet("/api/lineage/history/missing-tags", async (HttpContext ctx,
-                ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
+                ITenantLineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var entries = await catalog.GetMissingMetadataAsync(
+                if (!TryResolveLineageTenant(ctx, cfg, out var tenant)) return Results.Forbid();
+                var entries = await catalog.GetMissingMetadataAsync(tenant!,
                     ETL_SQL.Common.StewardshipTagCatalog.RequiredStewardshipTags.ToArray(),
                     Math.Clamp(limit, 1, 1000));
                 return Results.Ok(entries);
             }).WithName("getLineageHistoryMissingTags");
 
             app.MapGet("/api/lineage/history/protected-data", async (HttpContext ctx,
-                ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
+                ITenantLineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 limit = Math.Clamp(limit, 1, 1000);
-                var entries = await catalog.GetRecentLineageAsync(Math.Max(limit * 20, 1000));
+                if (!TryResolveLineageTenant(ctx, cfg, out var tenant)) return Results.Forbid();
+                var entries = await catalog.GetRecentLineageAsync(tenant!, Math.Max(limit * 20, 1000));
                 return Results.Ok(LineageProtectedData.FromHistory(entries).Take(limit));
             }).WithName("getLineageHistoryProtectedData");
 
             app.MapGet("/api/lineage/history/protected-data/suggestions", async (HttpContext ctx,
-                ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
+                ITenantLineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 limit = Math.Clamp(limit, 1, 1000);
-                var entries = await catalog.GetRecentLineageAsync(Math.Max(limit * 20, 1000));
+                if (!TryResolveLineageTenant(ctx, cfg, out var tenant)) return Results.Forbid();
+                var entries = await catalog.GetRecentLineageAsync(tenant!, Math.Max(limit * 20, 1000));
                 return Results.Ok(LineageProtectedData.SuggestFromHistory(entries).Take(limit));
             }).WithName("getLineageHistoryProtectedDataSuggestions");
 
@@ -1397,6 +1404,23 @@ namespace ETL_SQL.Orchestrator.Service
             if (tenantId is not null && !string.Equals(tenantId, configured, StringComparison.Ordinal))
                 return false;
             tenantId = configured;
+            return true;
+        }
+
+        private static bool TryResolveLineageTenant(
+            HttpContext context,
+            IConfiguration configuration,
+            out TenantContext? tenant)
+        {
+            tenant = null;
+            if (!TryResolveRequestTenant(context, configuration, out var tenantId))
+                return false;
+
+            var callerTenant = RequestCaller(context).TenantId;
+            tenant = !string.IsNullOrWhiteSpace(callerTenant)
+                ? TenantContext.FromVerifiedCredential(callerTenant)
+                : TenantContext.FromHostConfiguration(
+                    string.IsNullOrWhiteSpace(tenantId) ? "portal-host" : tenantId);
             return true;
         }
 
@@ -2037,9 +2061,9 @@ namespace ETL_SQL.Orchestrator.Service
         }
 
         private static async Task<StewardshipEvaluation> EvaluateStewardshipAsync(
-            ILineageCatalogStore store, int limit)
+            ITenantLineageCatalogStore store, TenantContext tenant, int limit)
         {
-            var history = await store.GetRecentLineageAsync(Math.Clamp(limit, 1, 10000));
+            var history = await store.GetRecentLineageAsync(tenant, Math.Clamp(limit, 1, 10000));
             WorkspacePolicyDocument? policy = null;
             var policyPath = WorkspacePolicyLoader.Find(Environment.CurrentDirectory);
             if (policyPath != null)

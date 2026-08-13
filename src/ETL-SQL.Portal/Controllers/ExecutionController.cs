@@ -506,7 +506,7 @@ public class ExecutionController(
                 var lineage = svc.CurrentLineageTracker?.GetFullLineage().ToList();
                 if (lineage is { Count: > 0 })
                 {
-                    var catalog = HttpContext.RequestServices.GetService<ILineageCatalogStore>();
+                    var catalog = HttpContext.RequestServices.GetService<PortalTenantLineageCatalog>();
                     if (catalog != null)
                     {
                         await catalog.SaveLineageAsync(

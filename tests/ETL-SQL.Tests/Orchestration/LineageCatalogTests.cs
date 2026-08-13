@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Orchestrator.Storage;
 using Xunit;
 
@@ -43,6 +44,45 @@ namespace ETL_SQL.Tests.Orchestration
             };
 
         // ── SaveLineageAsync + GetHistoryForTableAsync ─────────────────────────
+
+        [Fact]
+        public async Task SharedCatalog_PartitionsEveryGraphAndSearchSurfaceAcrossRestart()
+        {
+            var alpha = TenantContext.FromVerifiedCredential("tenant-alpha");
+            var beta = TenantContext.FromVerifiedCredential("tenant-beta");
+            var catalog = (ITenantLineageCatalogStore)_store;
+            var at = DateTime.UtcNow;
+            var alphaEntry = MakeEntry("sales.fact", sources: ["sales.stage"], tags: new()
+            {
+                ["owner"] = "alpha-owner"
+            });
+            alphaEntry.SourceFile = "shared.etlsql";
+            var betaEntry = MakeEntry("sales.fact", sources: ["sales.stage"], tags: new()
+            {
+                ["owner"] = "beta-owner"
+            });
+            betaEntry.SourceFile = "shared.etlsql";
+
+            await catalog.SaveLineageAsync(alpha, [alphaEntry], "same-job", "same.etlsql", at);
+            await catalog.SaveLineageAsync(beta, [betaEntry], "same-job", "same.etlsql", at);
+
+            var restarted = (ITenantLineageCatalogStore)new SQLiteJobHistoryStore(_dbPath);
+            Assert.All(await restarted.GetRecentLineageAsync(alpha), row =>
+            {
+                Assert.Equal("tenant-alpha", row.TenantId);
+                Assert.Equal("alpha-owner", row.Tags["owner"]);
+            });
+            Assert.All(await restarted.GetRecentLineageAsync(beta), row =>
+                Assert.Equal("beta-owner", row.Tags["owner"]));
+            Assert.Single(await restarted.GetHistoryForTableAsync(alpha, "sales.fact"));
+            Assert.Single(await restarted.GetHistoryForTablesAsync(alpha, ["sales.fact"]));
+            Assert.Single(await restarted.GetHistoryForTagAsync(alpha, "owner", "alpha-owner"));
+            Assert.Empty(await restarted.GetHistoryForTagAsync(alpha, "owner", "beta-owner"));
+            Assert.Single(await restarted.GetHistoryForJobAsync(alpha, "same-job"));
+            Assert.Single(await restarted.GetHistoryForSourceAsync(alpha, "sales.stage"));
+            Assert.Single(await restarted.GetHistoryForSourceFileAsync(alpha, "shared.etlsql"));
+            Assert.Single(await restarted.GetMissingMetadataAsync(alpha, ["steward"]));
+        }
 
         [Fact]
         public async Task SaveAndQuery_ReturnsEntriesForTable()

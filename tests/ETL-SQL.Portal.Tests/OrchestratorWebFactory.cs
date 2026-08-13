@@ -70,6 +70,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.RemoveAll<ISharedTenantLifecycleStore>();
             services.RemoveAll<IBundleStore>();
             services.RemoveAll<ILineageCatalogStore>();
+            services.RemoveAll<ITenantLineageCatalogStore>();
             services.RemoveAll<IConnectionCatalogProvider>();
 
             var testStore = new SQLiteJobHistoryStore(orchDbPath);
@@ -81,6 +82,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.AddSingleton<ISharedTenantLifecycleStore>(testStore);
             services.AddSingleton<IBundleStore>(testStore);
             services.AddSingleton<ILineageCatalogStore>(testStore);
+            services.AddSingleton<ITenantLineageCatalogStore>(testStore);
             services.AddSingleton<IConnectionCatalogProvider>(
                 new LocalConnectionCatalogProvider(Path.Combine(TempDir, "connections")));
         });

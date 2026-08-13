@@ -228,6 +228,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IOrchestratorAuthorizationStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<ITenantLineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<INodeRegistryStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IWriteEpochStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IClusterLockStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());

@@ -28,7 +28,7 @@ public class ReportsController : ControllerBase
     private readonly PortalDbContext db;
     private readonly AuditService audit;
     private readonly PortalConfig portalConfig;
-    private readonly ILineageCatalogStore lineageCatalog;
+    private readonly PortalTenantLineageCatalog lineageCatalog;
     private readonly FolderPermissionService folderPermissions;
     private readonly ReportScriptInspectionService scriptInspection;
     private readonly ReportScriptSaveService scriptSave;
@@ -41,7 +41,7 @@ public class ReportsController : ControllerBase
     private readonly ReportPublishingPolicyService publishingPolicy;
     private readonly DatasetTenantScope datasetScope;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, PortalTenantLineageCatalog lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null)
     {
         this.db = db;
         this.audit = audit;

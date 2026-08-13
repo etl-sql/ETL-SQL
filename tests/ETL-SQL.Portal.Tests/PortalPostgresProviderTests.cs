@@ -80,6 +80,22 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         var account = await db.ServiceAccounts.SingleAsync();
         Assert.Equal(owner.Id, account.OwnerUserId);
         Assert.Equal("portal.read", account.Scopes);
+
+        db.StewardshipSettings.AddRange(
+            new StewardshipSettings { TenantId = "tenant-alpha" },
+            new StewardshipSettings { TenantId = "tenant-beta" });
+        db.StewardshipFindings.AddRange(
+            new StewardshipFinding
+            {
+                TenantId = "tenant-alpha", AssetKey = "same.table", RuleKey = "same-rule"
+            },
+            new StewardshipFinding
+            {
+                TenantId = "tenant-beta", AssetKey = "same.table", RuleKey = "same-rule"
+            });
+        await db.SaveChangesAsync();
+        Assert.Equal(2, await db.StewardshipSettings.CountAsync());
+        Assert.Equal(2, await db.StewardshipFindings.CountAsync());
     }
 
     [Fact]

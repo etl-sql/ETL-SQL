@@ -23,6 +23,7 @@ internal static class StewardshipEntityNotes;
 public class StewardshipSettings : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
 
     /// <summary>Constant discriminator; the unique index on it is what keeps this table single-row.</summary>
     public string Scope { get; set; } = DefaultScope;
@@ -65,6 +66,7 @@ public class StewardshipSettings : IVersionedEntity
 public class StewardshipResolutionCategory : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     /// <summary>Stable key stored on decisions; the label may be reworded, this may not.</summary>
     public string Value { get; set; } = "";
     public string Label { get; set; } = "";
@@ -89,6 +91,7 @@ public class StewardshipResolutionCategory : IVersionedEntity
 public class StewardshipGlossaryTerm : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public string Term { get; set; } = "";
     public string DataType { get; set; } = "";
     /// <summary>Comma-separated alternate names matched against lineage columns.</summary>
@@ -113,6 +116,7 @@ public class StewardshipGlossaryTerm : IVersionedEntity
 public class StewardshipAssetBadge : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     /// <summary>Normalized asset path, e.g. <c>sales.dbo.orders.customer_id</c>.</summary>
     public string AssetKey { get; set; } = "";
     public string Badge { get; set; } = "";
@@ -132,6 +136,7 @@ public class StewardshipAssetBadge : IVersionedEntity
 public class StewardshipAssetReview : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public string AssetKey { get; set; } = "";
     public string? ReviewedVersion { get; set; }
     public string? Note { get; set; }
@@ -151,6 +156,7 @@ public class StewardshipAssetReview : IVersionedEntity
 public class StewardshipFinding : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public string AssetKey { get; set; } = "";
     /// <summary>Stable rule identifier, e.g. <c>missing-metadata</c>, <c>untagged-protected-data</c>.</summary>
     public string RuleKey { get; set; } = "";
@@ -187,6 +193,7 @@ public class StewardshipFinding : IVersionedEntity
 public class StewardshipFindingDecision
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public int FindingId { get; set; }
     public StewardshipFinding? Finding { get; set; }
 
@@ -215,6 +222,7 @@ public class StewardshipFindingDecision
 public class StewardshipScan
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     /// <summary><c>manual</c>, <c>publish</c>, or <c>scheduled</c>.</summary>
     public string Trigger { get; set; } = "manual";
     public DateTime StartedAtUtc { get; set; } = DateTime.UtcNow;

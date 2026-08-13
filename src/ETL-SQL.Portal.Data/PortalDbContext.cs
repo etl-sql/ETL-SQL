@@ -351,14 +351,16 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             // Single logical row. The unique index is the constraint, not a convention someone has
             // to remember: two settings rows would mean two answers to "is this asset governed?".
-            e.HasIndex(x => x.Scope).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Scope }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.Scope).HasMaxLength(64);
             e.Property(x => x.PolicyLevel).HasMaxLength(32);
         });
 
         builder.Entity<StewardshipResolutionCategory>(e =>
         {
-            e.HasIndex(x => x.Value).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Value }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.Value).HasMaxLength(64);
             e.Property(x => x.Label).HasMaxLength(200);
             e.Property(x => x.Color).HasMaxLength(32);
@@ -366,7 +368,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<StewardshipGlossaryTerm>(e =>
         {
-            e.HasIndex(x => x.Term).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Term }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.Term).HasMaxLength(200);
             e.Property(x => x.DataType).HasMaxLength(100);
             e.Property(x => x.Steward).HasMaxLength(256);
@@ -374,7 +377,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<StewardshipAssetBadge>(e =>
         {
-            e.HasIndex(x => new { x.AssetKey, x.Badge }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.AssetKey, x.Badge }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.AssetKey).HasMaxLength(512);
             e.Property(x => x.Badge).HasMaxLength(64);
             e.Property(x => x.AssetVersion).HasMaxLength(128);
@@ -382,7 +386,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<StewardshipAssetReview>(e =>
         {
-            e.HasIndex(x => x.AssetKey).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.AssetKey }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.AssetKey).HasMaxLength(512);
             e.Property(x => x.ReviewedVersion).HasMaxLength(128);
         });
@@ -391,8 +396,9 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             // One live finding per asset+rule. Re-scanning updates it rather than accumulating
             // duplicates, so the queue length means "problems", not "scans".
-            e.HasIndex(x => new { x.AssetKey, x.RuleKey }).IsUnique();
-            e.HasIndex(x => x.Status);
+            e.HasIndex(x => new { x.TenantId, x.AssetKey, x.RuleKey }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Status });
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.AssetKey).HasMaxLength(512);
             e.Property(x => x.RuleKey).HasMaxLength(64);
             e.Property(x => x.AssetVersion).HasMaxLength(128);
@@ -401,7 +407,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<StewardshipFindingDecision>(e =>
         {
-            e.HasIndex(x => new { x.FindingId, x.DecidedAtUtc });
+            e.HasIndex(x => new { x.TenantId, x.FindingId, x.DecidedAtUtc });
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.HasOne(x => x.Finding).WithMany(f => f.Decisions).HasForeignKey(x => x.FindingId);
             e.Property(x => x.Decision).HasMaxLength(32);
             e.Property(x => x.CategoryValue).HasMaxLength(64);
@@ -411,7 +418,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<StewardshipScan>(e =>
         {
-            e.HasIndex(x => x.StartedAtUtc);
+            e.HasIndex(x => new { x.TenantId, x.StartedAtUtc });
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.Trigger).HasMaxLength(32);
             e.Property(x => x.Status).HasMaxLength(32);
         });

@@ -903,10 +903,14 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         if (entries is not { Count: > 0 }) return;
 
         using var scope = _scopeFactory.CreateScope();
-        var catalog = scope.ServiceProvider.GetService<ILineageCatalogStore>();
+        var catalog = scope.ServiceProvider.GetService<ITenantLineageCatalogStore>();
         if (catalog is null) return;
 
-        await catalog.SaveLineageAsync(
+        var tenantId = await ResolveKeyScopeAsync(job.ReportId, job.UserId);
+        var tenant = _config.SharedTenancy.Enabled
+            ? ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential(tenantId)
+            : ETL_SQL.Core.Multitenancy.TenantContext.FromHostConfiguration(tenantId);
+        await catalog.SaveLineageAsync(tenant,
             entries,
             $"report:{job.ReportId}:{job.Id}",
             scriptPath,

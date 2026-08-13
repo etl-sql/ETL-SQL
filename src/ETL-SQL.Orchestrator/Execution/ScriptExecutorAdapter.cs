@@ -102,7 +102,22 @@ namespace ETL_SQL.Orchestrator.Execution
                     {
                         var lineage = LastEvaluator.LineageTracker.GetFullLineage().ToList();
                         if (lineage.Count > 0 && jobName != null)
-                            await _catalog.SaveLineageAsync(lineage, jobName, null, runAt);
+                        {
+                            if (!string.IsNullOrWhiteSpace(executionIdentity?.TenantId))
+                            {
+                                if (_catalog is not ITenantLineageCatalogStore tenantCatalog)
+                                    throw new InvalidOperationException(
+                                        "Tenant-bound execution requires a tenant-partitioned lineage catalog.");
+                                await tenantCatalog.SaveLineageAsync(
+                                    ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential(
+                                        executionIdentity.TenantId),
+                                    lineage, jobName, null, runAt);
+                            }
+                            else
+                            {
+                                await _catalog.SaveLineageAsync(lineage, jobName, null, runAt);
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {

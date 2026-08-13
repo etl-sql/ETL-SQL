@@ -368,6 +368,18 @@ certifiable tenant owner. Equal-version cross-tenant failure is pinned by
 [`SnapshotPackageServiceTests`](../../tests/ETL-SQL.Portal.Tests/SnapshotPackageServiceTests.cs) and
 [`SqliteSessionMetadataStoreTests`](../../tests/ETL-SQL.Tests/Core/SqliteSessionMetadataStoreTests.cs).
 
+Shared lineage and stewardship now use a separate tenant-qualified contract rather than the legacy
+deployment-wide catalog API. Every lineage edge carries `TenantId`; writes and all graph, tag,
+missing-metadata, job, source, source-file, and recent-history reads require server-derived
+`TenantContext`. Scheduler attempts bind from their immutable signed job identity, queued Portal
+work binds from its persisted owner, and request paths bind from the verified credential. Signed
+Orchestrator HTTP identity—not a query/header tenant selector—controls the partition. The Portal's
+derived governance state is partitioned by the same tenant across settings, scans, findings,
+decisions, reviews, badges, resolution categories, and glossary terms. Evidence is
+[`LineageCatalogTests`](../../tests/ETL-SQL.Tests/Orchestration/LineageCatalogTests.cs),
+[`SharedLineageEndpointTests`](../../tests/ETL-SQL.Portal.Tests/SharedLineageEndpointTests.cs), and
+[`SharedStewardshipTenantIsolationTests`](../../tests/ETL-SQL.Portal.Tests/SharedStewardshipTenantIsolationTests.cs).
+
 ### 6.4 Short-Lived Capabilities
 
 The control plane issues attempt- or operation-specific capabilities containing only the necessary

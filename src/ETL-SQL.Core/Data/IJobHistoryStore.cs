@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Quality;
+using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Core.Data;
 
@@ -23,7 +24,8 @@ public record LineageHistoryEntry(
     string? TransformationKind = null,
     string? TransformationExpression = null,
     IReadOnlyList<string>? FunctionsApplied = null,
-    string? DerivedFromDescriptions = null
+    string? DerivedFromDescriptions = null,
+    string TenantId = "portal-host"
 );
 
 public record LineageMissingMetadataEntry(
@@ -138,6 +140,37 @@ public record JobHistoryEntry(
 {
     /// <summary>Safe API hint; the opaque session identifier itself is never serialized.</summary>
     public bool HasResumeSession => !string.IsNullOrWhiteSpace(SessionId);
+}
+
+/// <summary>
+/// Tenant-partitioned lineage contract for a shared control plane. The tenant is a server-derived
+/// authority object, never a string accepted from an HTTP request or query parameter.
+/// </summary>
+public interface ITenantLineageCatalogStore
+{
+    Task SaveLineageAsync(
+        TenantContext tenant,
+        IEnumerable<LineageEntry> entries,
+        string? jobName,
+        string? scriptPath,
+        DateTime runAt);
+
+    Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableAsync(
+        TenantContext tenant, string tableName, int limit = 100);
+    Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTablesAsync(
+        TenantContext tenant, IReadOnlyCollection<string> tableNames, int limitPerTable = 100);
+    Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(
+        TenantContext tenant, string tagKey, string? tagValue = null, int limit = 100);
+    Task<IEnumerable<LineageMissingMetadataEntry>> GetMissingMetadataAsync(
+        TenantContext tenant, IReadOnlyCollection<string> requiredTags, int limit = 100);
+    Task<IEnumerable<LineageHistoryEntry>> GetRecentLineageAsync(
+        TenantContext tenant, int limit = 1000);
+    Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(
+        TenantContext tenant, string jobName, int limit = 100);
+    Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceAsync(
+        TenantContext tenant, string sourceName, int limit = 100);
+    Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileAsync(
+        TenantContext tenant, string sourceFile, int limit = 100);
 }
 
 /// <summary>One normalized, counts-only data-quality failure joined to its run identity.</summary>

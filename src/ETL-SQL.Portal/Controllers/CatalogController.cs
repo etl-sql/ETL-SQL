@@ -16,7 +16,7 @@ namespace ETL_SQL.Portal.Controllers;
 [Route("api/catalog")]
 [Authorize]
 [RequirePortalModule("Reporting")]
-public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageCatalog) : ControllerBase
+public class CatalogController(PortalDbContext db, PortalTenantLineageCatalog lineageCatalog) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);

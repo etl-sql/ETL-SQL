@@ -2022,12 +2022,17 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<string>("Reason")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("Version")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssetKey", "Badge")
+                    b.HasIndex("TenantId", "AssetKey", "Badge")
                         .IsUnique();
 
                     b.ToTable("StewardshipAssetBadges");
@@ -2057,12 +2062,17 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("Version")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssetKey")
+                    b.HasIndex("TenantId", "AssetKey")
                         .IsUnique();
 
                     b.ToTable("StewardshipAssetReviews");
@@ -2108,14 +2118,19 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<DateTime?>("SuppressedUntilUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("Version")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Status");
+                    b.HasIndex("TenantId", "Status");
 
-                    b.HasIndex("AssetKey", "RuleKey")
+                    b.HasIndex("TenantId", "AssetKey", "RuleKey")
                         .IsUnique();
 
                     b.ToTable("StewardshipFindings");
@@ -2157,9 +2172,16 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("FindingId", "DecidedAtUtc");
+                    b.HasIndex("FindingId");
+
+                    b.HasIndex("TenantId", "FindingId", "DecidedAtUtc");
 
                     b.ToTable("StewardshipFindingDecisions");
                 });
@@ -2199,6 +2221,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Term")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2215,7 +2242,7 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Term")
+                    b.HasIndex("TenantId", "Term")
                         .IsUnique();
 
                     b.ToTable("StewardshipGlossaryTerms");
@@ -2249,6 +2276,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2259,7 +2291,7 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Value")
+                    b.HasIndex("TenantId", "Value")
                         .IsUnique();
 
                     b.ToTable("StewardshipResolutionCategories");
@@ -2300,6 +2332,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Trigger")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -2307,7 +2344,7 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("StartedAtUtc");
+                    b.HasIndex("TenantId", "StartedAtUtc");
 
                     b.ToTable("StewardshipScans");
                 });
@@ -2358,6 +2395,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<int>("TargetScore")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -2369,7 +2411,7 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Scope")
+                    b.HasIndex("TenantId", "Scope")
                         .IsUnique();
 
                     b.ToTable("StewardshipSettings");

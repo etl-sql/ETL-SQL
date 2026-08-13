@@ -21,8 +21,20 @@ namespace ETL_SQL.Portal.Services;
 /// </summary>
 public sealed class GovernanceService(
     PortalDbContext db,
-    ILineageCatalogStore lineageCatalog)
+    PortalTenantLineageCatalog lineageCatalog,
+    DatasetTenantScope tenantScope)
 {
+    private string TenantId => tenantScope.TenantId;
+    private IQueryable<StewardshipSettings> Settings =>
+        db.StewardshipSettings.Where(value => value.TenantId == TenantId);
+    private IQueryable<StewardshipAssetReview> Reviews =>
+        db.StewardshipAssetReviews.Where(value => value.TenantId == TenantId);
+    private IQueryable<StewardshipAssetBadge> Badges =>
+        db.StewardshipAssetBadges.Where(value => value.TenantId == TenantId);
+    private IQueryable<StewardshipFinding> Findings =>
+        db.StewardshipFindings.Where(value => value.TenantId == TenantId);
+    private IQueryable<StewardshipScan> Scans =>
+        db.StewardshipScans.Where(value => value.TenantId == TenantId);
     /// <summary>Rules the scan evaluates. The key is stable; the label is not.</summary>
     public static class Rules
     {
@@ -42,11 +54,15 @@ public sealed class GovernanceService(
     /// </summary>
     public async Task<StewardshipSettings> GetSettingsAsync(CancellationToken ct = default)
     {
-        var settings = await db.StewardshipSettings
+        var settings = await Settings
             .FirstOrDefaultAsync(s => s.Scope == Data.StewardshipSettings.DefaultScope, ct);
         if (settings is not null) return settings;
 
-        settings = new StewardshipSettings { Scope = Data.StewardshipSettings.DefaultScope };
+        settings = new StewardshipSettings
+        {
+            TenantId = TenantId,
+            Scope = Data.StewardshipSettings.DefaultScope
+        };
         db.StewardshipSettings.Add(settings);
         try
         {
@@ -61,7 +77,7 @@ public sealed class GovernanceService(
             // Serialising through a process-local lock would be wrong instead of merely slower —
             // Portal runs multi-node, and the other node is not holding your lock.
             db.Entry(settings).State = EntityState.Detached;
-            return await db.StewardshipSettings
+            return await Settings
                 .FirstAsync(s => s.Scope == Data.StewardshipSettings.DefaultScope, ct);
         }
     }
@@ -143,6 +159,7 @@ public sealed class GovernanceService(
         var settings = await GetSettingsAsync(ct);
         var scan = new StewardshipScan
         {
+            TenantId = TenantId,
             Trigger = trigger,
             StartedByUserId = userId,
             Status = "running"
@@ -153,8 +170,8 @@ public sealed class GovernanceService(
         try
         {
             var assets = await LoadAssetsAsync(settings, ct);
-            var reviews = await db.StewardshipAssetReviews.ToDictionaryAsync(r => r.AssetKey, ct);
-            var existing = await db.StewardshipFindings.Include(f => f.Decisions).ToListAsync(ct);
+            var reviews = await Reviews.ToDictionaryAsync(r => r.AssetKey, ct);
+            var existing = await Findings.Include(f => f.Decisions).ToListAsync(ct);
             var byKey = existing.ToDictionary(f => (f.AssetKey, f.RuleKey));
             var now = DateTime.UtcNow;
             var seen = new HashSet<(string, string)>();
@@ -225,6 +242,7 @@ public sealed class GovernanceService(
     {
         db.StewardshipFindings.Add(new StewardshipFinding
         {
+            TenantId = TenantId,
             AssetKey = assetKey,
             RuleKey = ruleKey,
             AssetVersion = version,
@@ -296,12 +314,12 @@ public sealed class GovernanceService(
     {
         var settings = await GetSettingsAsync(ct);
         var assets = await LoadAssetsAsync(settings, ct);
-        var reviews = await db.StewardshipAssetReviews.AsNoTracking().ToDictionaryAsync(r => r.AssetKey, ct);
-        var badges = (await db.StewardshipAssetBadges.AsNoTracking().ToListAsync(ct))
+        var reviews = await Reviews.AsNoTracking().ToDictionaryAsync(r => r.AssetKey, ct);
+        var badges = (await Badges.AsNoTracking().ToListAsync(ct))
             .GroupBy(b => b.AssetKey, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Select(b => b.Badge).ToList(), StringComparer.OrdinalIgnoreCase);
 
-        var findings = await db.StewardshipFindings.AsNoTracking()
+        var findings = await Findings.AsNoTracking()
             .Include(f => f.Decisions)
             .ToListAsync(ct);
         var findingsByAsset = findings
@@ -340,7 +358,7 @@ public sealed class GovernanceService(
         if (!string.IsNullOrWhiteSpace(steward))
             rows = [.. rows.Where(r => string.Equals(r.Steward, steward, StringComparison.OrdinalIgnoreCase))];
 
-        var lastScan = await db.StewardshipScans.AsNoTracking()
+        var lastScan = await Scans.AsNoTracking()
             .OrderByDescending(s => s.Id)
             .FirstOrDefaultAsync(ct);
 

@@ -23,7 +23,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public partial class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore
+    public partial class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, ITenantLineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -293,6 +293,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     var createLineageHistoryTable = @"
                 CREATE TABLE IF NOT EXISTS LineageHistory (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    TenantId TEXT NOT NULL DEFAULT 'portal-host',
                     RunAt TEXT NOT NULL,
                     JobName TEXT,
                     ScriptPath TEXT,
@@ -313,8 +314,8 @@ namespace ETL_SQL.Orchestrator.Storage
                 CREATE INDEX IF NOT EXISTS idx_jh_job_start ON JobHistory(JobName, StartTime);
                 CREATE INDEX IF NOT EXISTS idx_jh_start ON JobHistory(StartTime);
                 CREATE INDEX IF NOT EXISTS idx_jh_end ON JobHistory(EndTime);
-                CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
-                CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
+                CREATE INDEX IF NOT EXISTS idx_lh_tenant_target ON LineageHistory(TenantId, TargetTable COLLATE NOCASE);
+                CREATE INDEX IF NOT EXISTS idx_lh_tenant_runAt ON LineageHistory(TenantId, RunAt);";
 
                     // Cluster node registry (P1.7): one row per live Portal/Orchestrator process, kept fresh
                     // by a TTL heartbeat. NodeId is a process-unique generated id, so no NOCASE is needed.
@@ -600,10 +601,19 @@ namespace ETL_SQL.Orchestrator.Storage
             // SourceColumns predates this migration on new installs but may be
             // missing on databases created before it was added to the schema.
             await AddColumn("SourceColumns", "SourceColumns TEXT NOT NULL DEFAULT '[]'");
+            await AddColumn("TenantId", "TenantId TEXT NOT NULL DEFAULT 'portal-host'");
             await AddColumn("TransformationKind", "TransformationKind TEXT");
             await AddColumn("TransformationExpression", "TransformationExpression TEXT");
             await AddColumn("FunctionsApplied", "FunctionsApplied TEXT NOT NULL DEFAULT '[]'");
             await AddColumn("DerivedFromDescriptions", "DerivedFromDescriptions TEXT");
+
+            using var indexes = connection.CreateCommand();
+            indexes.CommandText = @"
+                CREATE INDEX IF NOT EXISTS idx_lh_tenant_target
+                    ON LineageHistory(TenantId, TargetTable COLLATE NOCASE);
+                CREATE INDEX IF NOT EXISTS idx_lh_tenant_runAt
+                    ON LineageHistory(TenantId, RunAt);";
+            await indexes.ExecuteNonQueryAsync();
         }
 
         public async Task SaveJobAsync(JobDefinition job)
@@ -2639,6 +2649,25 @@ namespace ETL_SQL.Orchestrator.Storage
         // ── ILineageCatalogStore ──────────────────────────────────────────────
 
         public async Task SaveLineageAsync(IEnumerable<LineageEntry> entries, string? jobName, string? scriptPath, DateTime runAt)
+            => await SaveLineageCoreAsync("portal-host", entries, jobName, scriptPath, runAt);
+
+        public async Task SaveLineageAsync(
+            TenantContext tenant,
+            IEnumerable<LineageEntry> entries,
+            string? jobName,
+            string? scriptPath,
+            DateTime runAt)
+        {
+            RequireRuntimeTenant(tenant);
+            await SaveLineageCoreAsync(tenant.Tenant.Value, entries, jobName, scriptPath, runAt);
+        }
+
+        private async Task SaveLineageCoreAsync(
+            string tenantId,
+            IEnumerable<LineageEntry> entries,
+            string? jobName,
+            string? scriptPath,
+            DateTime runAt)
         {
             await EnsureInitializedAsync();
             var runAtStr = runAt.ToString("O");
@@ -2656,11 +2685,12 @@ namespace ETL_SQL.Orchestrator.Storage
                     cmd.Transaction = transaction;
                     cmd.CommandText = @"
                         INSERT INTO LineageHistory
-                            (RunAt, JobName, ScriptPath, TargetTable, TargetColumn, SourceTables, SourceColumns, Operation, Tags, SourceFile, Line,
+                            (TenantId, RunAt, JobName, ScriptPath, TargetTable, TargetColumn, SourceTables, SourceColumns, Operation, Tags, SourceFile, Line,
                              TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions)
                         VALUES
-                            (@runAt, @job, @script, @target, @col, @sources, @srcCols, @op, @tags, @file, @line,
+                            (@tenant, @runAt, @job, @script, @target, @col, @sources, @srcCols, @op, @tags, @file, @line,
                              @tkind, @texpr, @fns, @derived);";
+                    cmd.AddParam("@tenant", tenantId);
                     cmd.AddParam("@runAt", runAtStr);
                     cmd.AddParam("@job", (object?)jobName ?? DBNull.Value);
                     cmd.AddParam("@script", (object?)scriptPath ?? DBNull.Value);
@@ -2688,6 +2718,17 @@ namespace ETL_SQL.Orchestrator.Storage
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableAsync(string tableName, int limit = 100)
+            => await GetHistoryForTableCoreAsync(null, tableName, limit);
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableAsync(
+            TenantContext tenant, string tableName, int limit = 100)
+        {
+            RequireRuntimeTenant(tenant);
+            return await GetHistoryForTableCoreAsync(tenant.Tenant.Value, tableName, limit);
+        }
+
+        private async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableCoreAsync(
+            string? tenantId, string tableName, int limit)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2696,18 +2737,30 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
                 FROM LineageHistory
-                WHERE TargetTable = @table COLLATE NOCASE
+                WHERE (@tenant IS NULL OR TenantId = @tenant) AND TargetTable = @table COLLATE NOCASE
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT @limit;";
             cmd.AddParam("@table", tableName);
+            cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
             cmd.AddParam("@limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTablesAsync(
             IReadOnlyCollection<string> tableNames, int limitPerTable = 100)
+            => await GetHistoryForTablesCoreAsync(null, tableNames, limitPerTable);
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTablesAsync(
+            TenantContext tenant, IReadOnlyCollection<string> tableNames, int limitPerTable = 100)
+        {
+            RequireRuntimeTenant(tenant);
+            return await GetHistoryForTablesCoreAsync(tenant.Tenant.Value, tableNames, limitPerTable);
+        }
+
+        private async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTablesCoreAsync(
+            string? tenantId, IReadOnlyCollection<string> tableNames, int limitPerTable)
         {
             if (tableNames.Count == 0) return Array.Empty<LineageHistoryEntry>();
 
@@ -2727,16 +2780,18 @@ namespace ETL_SQL.Orchestrator.Storage
                 cmd.AddParam(p, name);
             }
             cmd.AddParam("@limit", limitPerTable);
+            cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
             cmd.CommandText = $@"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
                 FROM (
                     SELECT *, ROW_NUMBER() OVER (
                         PARTITION BY TargetTable COLLATE NOCASE
                         ORDER BY RunAt DESC, Id DESC) AS _rn
                     FROM LineageHistory
-                    WHERE TargetTable COLLATE NOCASE IN ({string.Join(", ", paramNames)})
+                    WHERE (@tenant IS NULL OR TenantId = @tenant)
+                      AND TargetTable COLLATE NOCASE IN ({string.Join(", ", paramNames)})
                 )
                 WHERE _rn <= @limit
                 ORDER BY RunAt DESC, Id DESC;";
@@ -2744,6 +2799,17 @@ namespace ETL_SQL.Orchestrator.Storage
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(string tagKey, string? tagValue = null, int limit = 100)
+            => await GetHistoryForTagCoreAsync(null, tagKey, tagValue, limit);
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(
+            TenantContext tenant, string tagKey, string? tagValue = null, int limit = 100)
+        {
+            RequireRuntimeTenant(tenant);
+            return await GetHistoryForTagCoreAsync(tenant.Tenant.Value, tagKey, tagValue, limit);
+        }
+
+        private async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagCoreAsync(
+            string? tenantId, string tagKey, string? tagValue, int limit)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2756,12 +2822,13 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
                 FROM LineageHistory
-                WHERE Tags LIKE @pattern
+                WHERE (@tenant IS NULL OR TenantId = @tenant) AND Tags LIKE @pattern
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT @limit;";
             cmd.AddParam("@pattern", pattern);
+            cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
             cmd.AddParam("@limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }
@@ -2769,6 +2836,21 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<LineageMissingMetadataEntry>> GetMissingMetadataAsync(
             IReadOnlyCollection<string> requiredTags,
             int limit = 100)
+            => await GetMissingMetadataCoreAsync(null, requiredTags, limit);
+
+        public async Task<IEnumerable<LineageMissingMetadataEntry>> GetMissingMetadataAsync(
+            TenantContext tenant,
+            IReadOnlyCollection<string> requiredTags,
+            int limit = 100)
+        {
+            RequireRuntimeTenant(tenant);
+            return await GetMissingMetadataCoreAsync(tenant.Tenant.Value, requiredTags, limit);
+        }
+
+        private async Task<IEnumerable<LineageMissingMetadataEntry>> GetMissingMetadataCoreAsync(
+            string? tenantId,
+            IReadOnlyCollection<string> requiredTags,
+            int limit)
         {
             if (requiredTags.Count == 0) return Array.Empty<LineageMissingMetadataEntry>();
 
@@ -2779,11 +2861,13 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
                 FROM LineageHistory
+                WHERE (@tenant IS NULL OR TenantId = @tenant)
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT @scanLimit;";
             cmd.AddParam("@scanLimit", Math.Max(limit * 20, limit));
+            cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
 
             var latestByTarget = (await ReadLineageHistoryAsync(cmd))
                 .GroupBy(
@@ -2819,6 +2903,17 @@ namespace ETL_SQL.Orchestrator.Storage
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetRecentLineageAsync(int limit = 1000)
+            => await GetRecentLineageCoreAsync(null, limit);
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetRecentLineageAsync(
+            TenantContext tenant, int limit = 1000)
+        {
+            RequireRuntimeTenant(tenant);
+            return await GetRecentLineageCoreAsync(tenant.Tenant.Value, limit);
+        }
+
+        private async Task<IEnumerable<LineageHistoryEntry>> GetRecentLineageCoreAsync(
+            string? tenantId, int limit)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2827,15 +2922,28 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
                 FROM LineageHistory
+                WHERE (@tenant IS NULL OR TenantId = @tenant)
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT @limit;";
             cmd.AddParam("@limit", Math.Clamp(limit, 1, 10000));
+            cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
             return await ReadLineageHistoryAsync(cmd);
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(string jobName, int limit = 100)
+            => await GetHistoryForJobCoreAsync(null, jobName, limit);
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(
+            TenantContext tenant, string jobName, int limit = 100)
+        {
+            RequireRuntimeTenant(tenant);
+            return await GetHistoryForJobCoreAsync(tenant.Tenant.Value, jobName, limit);
+        }
+
+        private async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobCoreAsync(
+            string? tenantId, string jobName, int limit)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2844,17 +2952,29 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
                 FROM LineageHistory
-                WHERE JobName = @jobName COLLATE NOCASE
+                WHERE (@tenant IS NULL OR TenantId = @tenant) AND JobName = @jobName COLLATE NOCASE
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT @limit;";
             cmd.AddParam("@jobName", jobName);
+            cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
             cmd.AddParam("@limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceAsync(string sourceName, int limit = 100)
+            => await GetHistoryForSourceCoreAsync(null, sourceName, limit);
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceAsync(
+            TenantContext tenant, string sourceName, int limit = 100)
+        {
+            RequireRuntimeTenant(tenant);
+            return await GetHistoryForSourceCoreAsync(tenant.Tenant.Value, sourceName, limit);
+        }
+
+        private async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceCoreAsync(
+            string? tenantId, string sourceName, int limit)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2863,12 +2983,13 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
                 FROM LineageHistory
-                WHERE SourceTables LIKE @pattern
+                WHERE (@tenant IS NULL OR TenantId = @tenant) AND SourceTables LIKE @pattern
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT @scanLimit;";
             cmd.AddParam("@pattern", $"%\"{sourceName}\"%");
+            cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
             cmd.AddParam("@scanLimit", Math.Max(limit * 5, limit));
 
             return (await ReadLineageHistoryAsync(cmd))
@@ -2878,6 +2999,17 @@ namespace ETL_SQL.Orchestrator.Storage
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileAsync(string sourceFile, int limit = 100)
+            => await GetHistoryForSourceFileCoreAsync(null, sourceFile, limit);
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileAsync(
+            TenantContext tenant, string sourceFile, int limit = 100)
+        {
+            RequireRuntimeTenant(tenant);
+            return await GetHistoryForSourceFileCoreAsync(tenant.Tenant.Value, sourceFile, limit);
+        }
+
+        private async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileCoreAsync(
+            string? tenantId, string sourceFile, int limit)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2886,13 +3018,15 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
                 FROM LineageHistory
-                WHERE SourceFile = @sourceFile COLLATE NOCASE
-                   OR ScriptPath = @sourceFile COLLATE NOCASE
+                WHERE (@tenant IS NULL OR TenantId = @tenant)
+                  AND (SourceFile = @sourceFile COLLATE NOCASE
+                   OR ScriptPath = @sourceFile COLLATE NOCASE)
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT @limit;";
             cmd.AddParam("@sourceFile", sourceFile);
+            cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
             cmd.AddParam("@limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }
@@ -2923,10 +3057,19 @@ namespace ETL_SQL.Orchestrator.Storage
                     reader.IsDBNull(12) ? null : reader.GetString(12),
                     reader.IsDBNull(13) ? null : reader.GetString(13),
                     functions,
-                    reader.IsDBNull(15) ? null : reader.GetString(15)
+                    reader.IsDBNull(15) ? null : reader.GetString(15),
+                    reader.GetString(16)
                 ));
             }
             return results;
+        }
+
+        private static void RequireRuntimeTenant(TenantContext tenant)
+        {
+            ArgumentNullException.ThrowIfNull(tenant);
+            if (tenant.Origin is not (TenantContextOrigin.HostFixed or TenantContextOrigin.VerifiedCredential))
+                throw new UnauthorizedAccessException(
+                    "Lineage access requires host-fixed or verified-credential tenant authority.");
         }
     }
 

@@ -351,6 +351,21 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
       exports, subscriptions, and interactive sessions against shared stores and worker fleets.
       Dedicated-store evidence is explicitly not sufficient here.
 
+      **Lineage graph and stewardship slice completed (2026-08-13).** The provider-neutral
+      SQLite/PostgreSQL lineage history now stores `TenantId` on every edge and requires a
+      host-fixed or verified-credential `TenantContext` for Shared writes, table/batch graph reads,
+      tag and missing-metadata search, job/source/source-file lookup, and recent scans. Equal table,
+      source, job, script, and tag identifiers coexist across tenants; every SQL read carries the
+      tenant predicate. Scheduler execution uses its immutable signed tenant, queued Portal report
+      work uses its persisted owner binding, interactive/report/catalog/stewardship paths use the
+      request's verified tenant, and Orchestrator HTTP lineage endpoints derive scope only from the
+      signed caller (tenant query parameters are inert). Governance settings, scans, findings,
+      decisions, reviews, badges, categories, and glossary terms are likewise keyed and queried by
+      tenant, with equal logical keys supported by both provider migrations. SQLite restart,
+      hostile signed-HTTP, Portal foreign-ID, and real PostgreSQL tests pin the partition. This cell
+      remains open for quality/quarantine job state, report/catalog relational roots, audit/outbox,
+      cache/search rebuilds, exports/subscriptions/tokens, and interactive-session fleet evidence.
+
 *Absorbs the retained discovery item **Tenant-Isolated Lineage Graphs**.*
 
 ##### 9. Lifecycle — provisioning, backup, portability, deletion, metering

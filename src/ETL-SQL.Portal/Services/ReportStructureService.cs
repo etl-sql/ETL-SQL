@@ -25,7 +25,7 @@ public sealed class ReportStructureParseException(string message, Exception inne
 /// </summary>
 public sealed class ReportStructureService(
     PortalDbContext db,
-    ILineageCatalogStore lineageCatalog,
+    PortalTenantLineageCatalog lineageCatalog,
     DatasetTenantScope datasetScope)
 {
     /// <summary>

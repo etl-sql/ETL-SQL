@@ -7,7 +7,7 @@ namespace ETL_SQL.Portal.Services;
 
 public sealed class LineageImpactService(
     PortalDbContext db,
-    ILineageCatalogStore lineageCatalog,
+    PortalTenantLineageCatalog lineageCatalog,
     IJobHistoryStore jobs,
     DatasetPermissionService datasetPermissions,
     DatasetTenantScope datasetScope)
