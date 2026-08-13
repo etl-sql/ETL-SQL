@@ -123,6 +123,39 @@ public sealed class MigrationConvergenceTests : IDisposable
     }
 
     [Fact]
+    public void PostgresMigrations_ContainEveryEditLeaseColumnUsedByThePortalModel()
+    {
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseNpgsql(
+                "Host=localhost;Database=portal_migration_contract;Username=postgres;Password=unused",
+                npg => npg.MigrationsAssembly(PortalDatabase.PostgresMigrationsAssembly))
+            .Options;
+        using var db = new PortalDbContext(options);
+        var migrations = db.GetInfrastructure().GetRequiredService<IMigrationsAssembly>();
+        var provider = db.Database.ProviderName!;
+
+        var editLeaseAdds = migrations.Migrations
+            .Select(entry => migrations.CreateMigration(entry.Value, provider))
+            .SelectMany(migration => migration.UpOperations)
+            .OfType<AddColumnOperation>()
+            .Where(column => column.Name.StartsWith("EditSession", StringComparison.Ordinal))
+            .Select(column => $"{column.Table}.{column.Name}")
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "Reports.EditSessionExpiresAtUtc",
+                "Reports.EditSessionUserId",
+                "Reports.EditSessionUserName",
+                "ReportScriptDrafts.EditSessionExpiresAtUtc",
+                "ReportScriptDrafts.EditSessionUserId",
+                "ReportScriptDrafts.EditSessionUserName"
+            },
+            editLeaseAdds);
+    }
+
+    [Fact]
     public async Task PortalDatabaseMigrationLock_SerializesConcurrentStartupMigrationWork()
     {
         var options = Options("migration-lock.db");

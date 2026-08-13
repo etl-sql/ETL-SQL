@@ -1426,6 +1426,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<string>("Domain")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("EditSessionExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("EditSessionUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EditSessionUserName")
+                        .HasColumnType("text");
+
                     b.Property<int>("FolderId")
                         .HasColumnType("integer");
 
@@ -1807,6 +1816,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.Property<DateTime?>("DecidedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EditSessionExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("EditSessionUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EditSessionUserName")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("PublishedAtUtc")
                         .HasColumnType("timestamp with time zone");

@@ -521,6 +521,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- PostgreSQL Portal migrations now add the report and draft edit-session lease columns used by
+  collaborative Studio sessions. Multi-process PostgreSQL startup no longer fails after the SQLite
+  lease migration advances the shared model, and a provider-specific migration contract prevents
+  future SQLite-only lease changes.
 - Optimized `MERGE` now falls back to authoritative SQL equality when its type-strict hash key does
   not find a candidate, preventing compatible cross-representation keys such as integer `2` and CSV
   string `"2"` from being treated as unmatched and inserted as duplicates.
