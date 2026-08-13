@@ -380,6 +380,18 @@ decisions, reviews, badges, resolution categories, and glossary terms. Evidence 
 [`SharedLineageEndpointTests`](../../tests/ETL-SQL.Portal.Tests/SharedLineageEndpointTests.cs), and
 [`SharedStewardshipTenantIsolationTests`](../../tests/ETL-SQL.Portal.Tests/SharedStewardshipTenantIsolationTests.cs).
 
+Shared audit persistence follows the same collision rule. Audit rows and outbox events carry
+`TenantId`; equal event identifiers can coexist because uniqueness is composite, and every
+tenant-facing audit query, collector-health view, fleet count, and support-bundle outbox count uses
+the verified request partition. Fail-closed delivery evaluates only the committing tenant's
+backlog, preventing another tenant's collector failure from becoming cross-tenant denial of
+service. The host transport may drain all partitions, but it preserves the tenant identifier in
+the remote event envelope. Provider migrations backfill legacy rows into the Dedicated
+`portal-host` partition. Evidence is
+[`SharedAuditTenantIsolationTests`](../../tests/ETL-SQL.Portal.Tests/SharedAuditTenantIsolationTests.cs),
+[`AuditOutboxTransportTests`](../../tests/ETL-SQL.Portal.Tests/AuditOutboxTransportTests.cs), and
+[`PortalPostgresProviderTests`](../../tests/ETL-SQL.Portal.Tests/PortalPostgresProviderTests.cs).
+
 ### 6.4 Short-Lived Capabilities
 
 The control plane issues attempt- or operation-specific capabilities containing only the necessary

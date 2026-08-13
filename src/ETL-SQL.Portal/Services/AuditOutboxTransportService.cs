@@ -353,6 +353,7 @@ public sealed class AuditOutboxTransportService(
         {
             events = rows.Select(row => new
             {
+                row.TenantId,
                 row.EventId,
                 row.AuditLogId,
                 row.UserId,

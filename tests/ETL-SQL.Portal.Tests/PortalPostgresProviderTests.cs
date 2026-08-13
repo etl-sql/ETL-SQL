@@ -96,7 +96,28 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         await db.SaveChangesAsync();
         Assert.Equal(2, await db.StewardshipSettings.CountAsync());
         Assert.Equal(2, await db.StewardshipFindings.CountAsync());
+
+        const string sharedEventId = "same-audit-event";
+        db.AuditOutboxMessages.AddRange(
+            AuditOutbox("tenant-alpha", sharedEventId, "Delivered"),
+            AuditOutbox("tenant-beta", sharedEventId, "Failed"));
+        await db.SaveChangesAsync();
+        Assert.Equal(2, await db.AuditOutboxMessages
+            .CountAsync(row => row.EventId == sharedEventId));
     }
+
+    private static AuditOutboxMessage AuditOutbox(
+        string tenantId, string eventId, string status) => new()
+    {
+        TenantId = tenantId,
+        EventId = eventId,
+        Action = "POSTGRES_TENANT_COLLISION",
+        PayloadJson = "{}",
+        Status = status,
+        OccurredAt = DateTime.UtcNow,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
 
     [Fact]
     public async Task PostgresProvider_MigrationLock_SerializesConcurrentMigrationWork()

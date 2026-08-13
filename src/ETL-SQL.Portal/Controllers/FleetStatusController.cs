@@ -29,7 +29,8 @@ public sealed class FleetStatusController(
     PortalDbContext db,
     IArtifactStorage artifacts,
     PortalConfig config,
-    PortalNodeIdentity nodeIdentity) : ControllerBase
+    PortalNodeIdentity nodeIdentity,
+    DatasetTenantScope tenantScope) : ControllerBase
 {
     /// <summary>
     /// The read-only Fleet/Operations workspace: every configured environment polled at once, with
@@ -101,8 +102,10 @@ public sealed class FleetStatusController(
         var (queued, running) = executions.GetWorkloadCounts();
 
         var failedRefreshes = await db.Reports.CountAsync(r => r.LastRefreshStatus == "Failed", ct);
-        var outboxPending = await db.AuditOutboxMessages.CountAsync(x => x.Status == "Pending", ct);
-        var outboxFailed = await db.AuditOutboxMessages.CountAsync(x => x.Status == "Failed", ct);
+        var outboxPending = await db.AuditOutboxMessages.CountAsync(
+            x => x.TenantId == tenantScope.TenantId && x.Status == "Pending", ct);
+        var outboxFailed = await db.AuditOutboxMessages.CountAsync(
+            x => x.TenantId == tenantScope.TenantId && x.Status == "Failed", ct);
 
         var storage = await ProbeStorageAsync(ct);
         var inventory = await BuildInventoryAsync(report, storage, ct);

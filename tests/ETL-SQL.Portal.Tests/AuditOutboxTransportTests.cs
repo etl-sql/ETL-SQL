@@ -44,6 +44,7 @@ public sealed class AuditOutboxTransportTests : IDisposable
         Assert.Equal("Delivered", outbox.Status);
         Assert.NotNull(outbox.DeliveredAt);
         Assert.Contains(outbox.EventId, handler.LastBody);
+        Assert.Contains("\"tenantId\":\"portal-host\"", handler.LastBody);
         Assert.Contains("CREATE_USER", handler.LastBody);
         Assert.Contains(telemetry.Activities, activity =>
             activity.OperationName == "background_service.run"

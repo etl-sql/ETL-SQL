@@ -35,11 +35,13 @@ public static class AuditDeliveryGate
         PortalDbContext db,
         AuditConfig config,
         TimeProvider clock,
+        string tenantId,
         CancellationToken ct = default)
     {
-        var pending = db.AuditOutboxMessages.Where(x => x.Status == "Pending");
+        var tenantOutbox = db.AuditOutboxMessages.Where(x => x.TenantId == tenantId);
+        var pending = tenantOutbox.Where(x => x.Status == "Pending");
         var backlog = new OutboxBacklog(
-            Failed: await db.AuditOutboxMessages.CountAsync(x => x.Status == "Failed", ct),
+            Failed: await tenantOutbox.CountAsync(x => x.Status == "Failed", ct),
             Pending: config.FailClosedMaxPendingBacklog > 0 ? await pending.CountAsync(ct) : 0,
             OldestPending: config.FailClosedMaxBacklogSeconds > 0
                 ? await pending.OrderBy(x => x.OccurredAt).Select(x => (DateTime?)x.OccurredAt).FirstOrDefaultAsync(ct)
@@ -51,11 +53,16 @@ public static class AuditDeliveryGate
 
     /// <summary>Synchronous counterpart of <see cref="EnsureDeliverableAsync"/> for the rarely used
     /// synchronous SaveChanges path; avoids blocking on async work.</summary>
-    public static void EnsureDeliverable(PortalDbContext db, AuditConfig config, TimeProvider clock)
+    public static void EnsureDeliverable(
+        PortalDbContext db,
+        AuditConfig config,
+        TimeProvider clock,
+        string tenantId)
     {
-        var pending = db.AuditOutboxMessages.Where(x => x.Status == "Pending");
+        var tenantOutbox = db.AuditOutboxMessages.Where(x => x.TenantId == tenantId);
+        var pending = tenantOutbox.Where(x => x.Status == "Pending");
         var backlog = new OutboxBacklog(
-            Failed: db.AuditOutboxMessages.Count(x => x.Status == "Failed"),
+            Failed: tenantOutbox.Count(x => x.Status == "Failed"),
             Pending: config.FailClosedMaxPendingBacklog > 0 ? pending.Count() : 0,
             OldestPending: config.FailClosedMaxBacklogSeconds > 0
                 ? pending.OrderBy(x => x.OccurredAt).Select(x => (DateTime?)x.OccurredAt).FirstOrDefault()

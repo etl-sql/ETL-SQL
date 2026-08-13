@@ -405,7 +405,12 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
             User = Principal(userId, isAdmin),
             TraceIdentifier = $"test-{Guid.NewGuid():N}"
         };
-        var controller = new CatalogController(db, TenantLineage());
+        var config = new PortalConfig();
+        var tenantScope = new DatasetTenantScope(config);
+        var controller = new CatalogController(
+            db,
+            new PortalTenantLineageCatalog(new EmptyLineageCatalogStore(), tenantScope, config),
+            tenantScope);
         controller.ControllerContext = new ControllerContext { HttpContext = context };
         return controller;
     }

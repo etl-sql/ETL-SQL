@@ -18,7 +18,8 @@ public sealed class OperationalMetricsService(
     PortalNodeIdentity? nodeIdentity = null,
     HealthCheckService? healthChecks = null,
     PortalStorageUsageSampler? storageUsage = null,
-    PortalTopologyReadinessService? topologyReadiness = null)
+    PortalTopologyReadinessService? topologyReadiness = null,
+    RequestTenantContextAccessor? tenantContext = null)
 {
     /// <summary>The window over which failure rates are computed.</summary>
     public static readonly TimeSpan FailureWindow = TimeSpan.FromHours(24);
@@ -159,11 +160,18 @@ public sealed class OperationalMetricsService(
         // upgrade (PendingMigrations == 0) without shell access.
         var appliedMigrations = (await db.Database.GetAppliedMigrationsAsync(ct)).ToList();
         var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(ct)).ToList();
-        var auditPending = await db.AuditOutboxMessages
+        var auditOutbox = db.AuditOutboxMessages.AsNoTracking();
+        var tenantId = tenantContext?.Current?.Tenant.Value
+            ?? (!config.SharedTenancy.Enabled
+                ? (string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId)
+                : null);
+        if (tenantId is not null)
+            auditOutbox = auditOutbox.Where(message => message.TenantId == tenantId);
+        var auditPending = await auditOutbox
             .Where(x => x.Status == "Pending")
             .Select(x => new { x.CreatedAt, x.PayloadJson })
             .ToListAsync(ct);
-        var auditFailed = await db.AuditOutboxMessages.CountAsync(x => x.Status == "Failed", ct);
+        var auditFailed = await auditOutbox.CountAsync(x => x.Status == "Failed", ct);
         var securityEvents = SecurityEventRuntime.GetDiagnostics();
         var health = await GetHealthSummaryAsync(ct);
         var clientCertificateExpiresAtUtc = TryGetClientCertificateExpiry(

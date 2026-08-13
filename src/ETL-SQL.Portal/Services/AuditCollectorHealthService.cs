@@ -18,12 +18,15 @@ namespace ETL_SQL.Portal.Services;
 public sealed class AuditCollectorHealthService(
     PortalDbContext db,
     PortalConfig config,
-    TimeProvider clock)
+    TimeProvider clock,
+    DatasetTenantScope tenantScope)
 {
     public async Task<AuditCollectorHealthDto> BuildAsync(CancellationToken ct = default)
     {
         var audit = config.Audit;
-        var pending = db.AuditOutboxMessages.Where(message => message.Status == "Pending");
+        var tenantOutbox = db.AuditOutboxMessages
+            .Where(message => message.TenantId == tenantScope.TenantId);
+        var pending = tenantOutbox.Where(message => message.Status == "Pending");
 
         var pendingCount = await pending.CountAsync(ct);
         var oldestPending = await pending
@@ -31,13 +34,13 @@ public sealed class AuditCollectorHealthService(
             .Select(message => (DateTime?)message.OccurredAt)
             .FirstOrDefaultAsync(ct);
 
-        var lastAttempt = await db.AuditOutboxMessages
+        var lastAttempt = await tenantOutbox
             .Where(message => message.NextAttemptAt != null)
             .MaxAsync(message => (DateTime?)message.UpdatedAt, ct);
-        var lastSuccess = await db.AuditOutboxMessages
+        var lastSuccess = await tenantOutbox
             .Where(message => message.DeliveredAt != null)
             .MaxAsync(message => message.DeliveredAt, ct);
-        var lastError = await db.AuditOutboxMessages
+        var lastError = await tenantOutbox
             .Where(message => message.LastError != null)
             .OrderByDescending(message => message.UpdatedAt)
             .Select(message => message.LastError)
@@ -54,8 +57,8 @@ public sealed class AuditCollectorHealthService(
             BearerTokenConfigured: !string.IsNullOrWhiteSpace(audit.TransportBearerToken),
             RemoteDeliveryRequired: required,
             Pending: pendingCount,
-            Failed: await db.AuditOutboxMessages.CountAsync(message => message.Status == "Failed", ct),
-            Delivered: await db.AuditOutboxMessages.CountAsync(message => message.Status == "Delivered", ct),
+            Failed: await tenantOutbox.CountAsync(message => message.Status == "Failed", ct),
+            Delivered: await tenantOutbox.CountAsync(message => message.Status == "Delivered", ct),
             PendingBytes: await pending.SumAsync(message => (long)message.PayloadJson.Length, ct),
             OldestPendingUtc: oldestPending,
             OldestPendingAgeSeconds: oldestPending is DateTime oldest
@@ -88,7 +91,8 @@ public sealed class AuditCollectorHealthService(
 
         try
         {
-            await AuditDeliveryGate.EnsureDeliverableAsync(db, config.Audit, clock, ct);
+            await AuditDeliveryGate.EnsureDeliverableAsync(
+                db, config.Audit, clock, tenantScope.TenantId, ct);
             return new AuditCollectorFailClosedDto(false, null,
                 "Remote delivery is required and currently healthy; mutations proceed.");
         }

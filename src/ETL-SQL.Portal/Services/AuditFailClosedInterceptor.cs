@@ -28,8 +28,8 @@ public sealed class AuditFailClosedInterceptor(
         DbContextEventData eventData,
         InterceptionResult<int> result)
     {
-        if (TryGetAuditedContext(eventData, out var db))
-            AuditDeliveryGate.EnsureDeliverable(db, config.Audit, clock);
+        if (TryGetAuditedContext(eventData, out var db, out var tenantId))
+            AuditDeliveryGate.EnsureDeliverable(db, config.Audit, clock, tenantId);
         return base.SavingChanges(eventData, result);
     }
 
@@ -38,25 +38,49 @@ public sealed class AuditFailClosedInterceptor(
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default)
     {
-        if (TryGetAuditedContext(eventData, out var db))
-            await AuditDeliveryGate.EnsureDeliverableAsync(db, config.Audit, clock, cancellationToken);
+        if (TryGetAuditedContext(eventData, out var db, out var tenantId))
+            await AuditDeliveryGate.EnsureDeliverableAsync(
+                db, config.Audit, clock, tenantId, cancellationToken);
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
     /// <summary>Returns true only when fail-closed delivery is required and this save is staging a
     /// new audit event — the single signal that a security-sensitive mutation is committing.</summary>
-    private bool TryGetAuditedContext(DbContextEventData eventData, out PortalDbContext db)
+    private bool TryGetAuditedContext(
+        DbContextEventData eventData,
+        out PortalDbContext db,
+        out string tenantId)
     {
         db = null!;
+        tenantId = string.Empty;
         var required = config.Audit.ResolveRequireRemoteDelivery(
             ETL_SQL.Core.Governance.EnterprisePolicyRuntime.Current.IsEnrolled);
         if (!required || eventData.Context is not PortalDbContext context)
             return false;
 
-        var stagingAudit = context.ChangeTracker
+        var stagedOutbox = context.ChangeTracker
             .Entries<AuditOutboxMessage>()
-            .Any(e => e.State == EntityState.Added);
-        if (!stagingAudit)
+            .Where(e => e.State == EntityState.Added)
+            .Select(e => e.Entity)
+            .ToArray();
+        if (stagedOutbox.Length > 0)
+        {
+            var auditTenants = stagedOutbox
+                .Select(e => e.TenantId)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (auditTenants.Length != 1 || string.IsNullOrWhiteSpace(auditTenants[0]))
+                throw new InvalidOperationException(
+                    "A single audited persistence operation must target exactly one tenant partition.");
+            if (stagedOutbox.Any(e => e.AuditLog is not null
+                && !string.Equals(e.AuditLog.TenantId, auditTenants[0], StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException(
+                    "An audit outbox event cannot reference an audit row from another tenant partition.");
+            }
+            tenantId = auditTenants[0];
+        }
+        else
         {
             var mutatedTypes = context.ChangeTracker.Entries()
                 .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
@@ -78,7 +102,7 @@ public sealed class AuditFailClosedInterceptor(
                     "A single audited persistence operation cannot mutate multiple tenant partitions.");
             var requestTenant = httpContext?.HttpContext?.RequestServices
                 .GetService<TenantContext>()?.Tenant.Value;
-            var tenantId = tenantIds.SingleOrDefault()
+            tenantId = tenantIds.SingleOrDefault()
                 ?? requestTenant
                 ?? (string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId);
             StageFallbackAudit(context, mutatedTypes, tenantId);

@@ -363,8 +363,19 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
       decisions, reviews, badges, categories, and glossary terms are likewise keyed and queried by
       tenant, with equal logical keys supported by both provider migrations. SQLite restart,
       hostile signed-HTTP, Portal foreign-ID, and real PostgreSQL tests pin the partition. This cell
-      remains open for quality/quarantine job state, report/catalog relational roots, audit/outbox,
+      remains open for quality/quarantine job state, report/catalog relational roots,
       cache/search rebuilds, exports/subscriptions/tokens, and interactive-session fleet evidence.
+
+      **Audit/outbox slice completed (2026-08-13).** Durable audit rows and delivery events now carry
+      `TenantId`; event-id uniqueness, action/resource indexes, delivery-health diagnostics, fleet
+      counts, support-bundle counts, and fail-closed backlog evaluation are tenant-qualified. A
+      failed collector backlog in one tenant cannot block another tenant's mutations. The transport
+      retains host-wide draining authority but includes the immutable tenant in every remote event.
+      SQLite/PostgreSQL migrations backfill legacy rows into `portal-host`, while hostile equal
+      resource/event identifiers and the real PostgreSQL provider prove composite collision safety.
+      `SharedAuditTenantIsolationTests`, `AuditOutboxTransportTests`,
+      `AuditCollectorHealthTests`, and `PortalPostgresProviderTests` pin this slice. The parent cell
+      remains open for the surfaces listed above and non-audit support diagnostics.
 
 *Absorbs the retained discovery item **Tenant-Isolated Lineage Graphs**.*
 

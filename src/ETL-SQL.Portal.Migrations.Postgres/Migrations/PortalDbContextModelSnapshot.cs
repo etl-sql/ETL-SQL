@@ -133,6 +133,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<string>("StudioCapability")
                         .HasColumnType("text");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("timestamp with time zone");
 
@@ -141,11 +146,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Timestamp");
+                    b.HasIndex("TenantId", "Timestamp");
 
-                    b.HasIndex("Action", "Timestamp");
+                    b.HasIndex("TenantId", "Action", "Timestamp");
 
-                    b.HasIndex("ResourceType", "ResourceId");
+                    b.HasIndex("TenantId", "ResourceType", "ResourceId");
 
                     b.ToTable("AuditLogs");
                 });
@@ -222,6 +227,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<string>("StudioCapability")
                         .HasColumnType("text");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -232,10 +242,12 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.HasIndex("AuditLogId");
 
-                    b.HasIndex("EventId")
+                    b.HasIndex("TenantId", "AuditLogId");
+
+                    b.HasIndex("TenantId", "EventId")
                         .IsUnique();
 
-                    b.HasIndex("Status", "NextAttemptAt");
+                    b.HasIndex("TenantId", "Status", "NextAttemptAt");
 
                     b.ToTable("AuditOutboxMessages");
                 });
