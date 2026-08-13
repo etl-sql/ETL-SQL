@@ -307,11 +307,23 @@ Dedicated support from an Enterprise happy path, or Shared support from Dedicate
 
 Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress.
 
-- [ ] **Dedicated.** Prove disjoint lineage, scans, quality evidence, caches, outboxes, and
+- [x] **Dedicated.** Prove disjoint lineage, scans, quality evidence, caches, outboxes, and
       quarantine data using tenant-specific stores and artifact roots. Deliver controlled tenant
       ingress and a certified tenant-admin/author boundary within the dedicated deployment. Reports
       (currently Yellow): certify tenant catalog, dataset, snapshot, share/embed, export, and
       subscription isolation.
+
+      **Closed with physical-store and equal-ID isolation evidence (2026-08-13).** Managed Dedicated
+      onboarding now provisions an explicit quarantine artifact root alongside disjoint Portal and
+      Orchestrator stores plus tenant-specific cache, security-outbox, key, queue, and report roots;
+      those stores retain tenant-specific lineage, quality, and PII-scan evidence.
+      Negative tests place foreign quarantine content in another tenant boundary and prove it is not
+      addressable from the provisioned tenant. Portal runtime tests seed the same numeric folder,
+      report, dataset, snapshot, subscription, share-link, and embed-token IDs into two independent
+      tenant databases, then prove catalog reads, token material, delivery recipients, artifact
+      paths, and configuration exports remain disjoint. `AdminIdentityScopeIntegrationTests` and
+      the onboarding policy tests retain the tenant-admin/author and controlled-ingress boundary.
+      Shared-store partitioning remains the separate open cell below.
 - [ ] **Shared.** Prove tenant-isolated lineage/graph indexes, scans, quality evidence, quarantine,
       caches, searches, and outboxes in shared services — partitioning metadata search, graph
       traversal, exports, and support diagnostics so table names, schemas, tags, edges, and evidence

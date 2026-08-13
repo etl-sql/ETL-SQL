@@ -208,7 +208,8 @@ internal static partial class SaasTenantOnboardingService
         {
             new BoundaryPath("Databases", "databases"), new("Artifacts", "artifacts"),
             new("ReportScripts", "artifacts/scripts"), new("ReportDatasets", "artifacts/datasets"),
-            new("ReportSnapshots", "artifacts/snapshots"), new("Keys", "keys"),
+            new("ReportSnapshots", "artifacts/snapshots"), new("Quarantine", "artifacts/quarantine"),
+            new("Keys", "keys"),
             new("PortalKeyRing", "keys/portal"), new("DatasetKeys", "keys/datasets"),
             new("Caches", "cache"), new("Queues", "queues"), new("AuditOutbox", "queues/audit"),
             new("SecurityOutbox", "queues/security"), new("Logs", "logs"),

@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Certified Managed Dedicated data-asset isolation across physically disjoint lineage, quality,
+  scan, cache, outbox, quarantine, report, dataset, snapshot, subscription, share/embed, and export
+  stores, including equal numeric-ID collision tests and tenant-admin/author boundary evidence.
 - Added signed, retention/legal-hold-aware Managed Dedicated tenant deletion with explicit execution,
   reparse/root safeguards, non-payload boundary digesting, atomic service removal, and an external
   durable Started/Completed receipt attributed to the platform operator and approval.

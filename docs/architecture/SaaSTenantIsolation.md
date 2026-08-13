@@ -404,6 +404,16 @@ Shared control-plane storage requires:
 Managed Dedicated can use physically separate stores, but application-level tenant context and
 authorization remain present so the same contracts survive progression to Shared SaaS.
 
+Managed Dedicated certification provisions separate Portal and Orchestrator databases for lineage,
+quality, scan, audit, identity, and catalog evidence plus tenant-specific artifact roots for caches,
+security outbox, quarantine, queues, keys, reports, datasets, and snapshots. The negative evidence deliberately
+reuses numeric object IDs in two tenant databases and verifies that catalogs, datasets, snapshots,
+subscriptions, share/embed tokens, artifact paths, and configuration exports remain confined to the
+host-fixed tenant. Tenant onboarding policy and Portal identity tests separately preserve controlled
+ingress and the tenant Admin/Author boundary. These physical-store results do not certify Shared
+SaaS: its row predicates, search/graph indexes, caches, outboxes, exports, and worker-facing paths
+still require hostile cross-tenant testing against shared services.
+
 ## 8. Execution Data Plane
 
 ### 8.1 Provider-Neutral Request

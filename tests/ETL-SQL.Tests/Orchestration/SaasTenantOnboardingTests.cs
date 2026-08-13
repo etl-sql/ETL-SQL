@@ -164,6 +164,13 @@ public sealed class SaasTenantOnboardingTests : IDisposable
         Assert.Throws<InvalidDataException>(() =>
             SaasTenantOnboardingService.ResolveTenantPath(alphaRoot, "../tenant-beta/cache/catalog/entry.json"));
 
+        var alphaQuarantine = SaasTenantOnboardingService.ResolveTenantPath(
+            alphaRoot, "artifacts/quarantine/customers-rejected.parquet");
+        Directory.CreateDirectory(Path.GetDirectoryName(alphaQuarantine)!);
+        await File.WriteAllTextAsync(alphaQuarantine, "tenant-alpha-quarantine");
+        Assert.False(File.Exists(SaasTenantOnboardingService.ResolveTenantPath(
+            betaRoot, "artifacts/quarantine/customers-rejected.parquet")));
+
         await using (var receiptStream = File.OpenRead(Path.Combine(
                          alphaRoot, "queues", "audit", "platform-tenant-onboarding.json")))
         {
