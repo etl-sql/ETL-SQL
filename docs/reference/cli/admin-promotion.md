@@ -17,6 +17,7 @@ etl-sql admin promotion <subcommand>
 | [`preflight`](admin-promotion-preflight.md) | Create a secret-safe, mutation-free promotion inventory |
 | [`saas-delete`](admin-promotion-saas-delete.md) | Delete one Managed Dedicated tenant boundary under signed retention/legal authorization |
 | [`saas-onboard`](admin-promotion-saas-onboard.md) | Create and populate one physically isolated SaaS tenant boundary |
+| [`saas-upgrade`](admin-promotion-saas-upgrade.md) | Drain and upgrade one Managed Dedicated tenant boundary |
 | [`validate`](admin-promotion-validate.md) | Validate mappings and collisions without changing the target |
 
 ## References

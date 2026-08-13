@@ -340,8 +340,23 @@ checked off meaningfully. Split:
 
 - [x] **Dedicated — provisioning.** Automate tenant provisioning with no manual SaaS-platform
       database edits.
-- [ ] **Dedicated — upgrades and capacity.** Automate upgrades, drain/fence, and capacity assignment
+- [x] **Dedicated — upgrades and capacity.** Automate upgrades, drain/fence, and capacity assignment
       for one tenant.
+
+      **Closed with signed two-pass tenant cutover (2026-08-13).** `admin promotion saas-upgrade`
+      accepts only the tenant, release, and three capacity values authorized by the active signed
+      organization policy. The release must also match the running upgrade binary or host-fixed
+      managed release identity. Preflight validates the provisioned manifest/config tenant and
+      canonical Dedicated pool. Execution exclusively locks the boundary, disables enabled jobs,
+      cancels queued admissions, and persists `Draining` until every active attempt completes and
+      every retained attempt is explicitly reconciled. Cutover updates job, storage, report-session,
+      and pool capacity together with the active release, then resumes only the jobs it fenced.
+      Before mutation it preserves exact manifest/config rollback files; injected failure and
+      interrupted-cutover tests prove restoration and scheduler-safe retry. Receipts are idempotent
+      by authorization reference and carry platform attribution without tenant impersonation.
+      `SaasTenantUpgradeTests`, `DeploymentProfileUpgradeLifecycleTests`, policy tests, and CLI tests
+      cover capacity, drain/fence, foreign-tenant refusal, concurrency, continuity, rollback, and
+      command wiring. Multi-tenant fleet rollout remains the separate HA cells in domain 5.
 - [x] **Dedicated — backup and recovery.** Tenant-scoped backup, export, restore, and key/artifact
       recovery, including proof that a restore cannot introduce another tenant's rows or resume its
       work.

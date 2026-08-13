@@ -764,6 +764,36 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task CliOrchestrator_SaasUpgradeParsesSignedAssignmentAssertions()
+        {
+            CliContext? parsed = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                parsed = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exit = await root.Parse(new[]
+            {
+                "admin", "promotion", "saas-upgrade", "--tenant", "tenant-alpha",
+                "--tenant-root", "tenants/tenant-alpha", "--target-release", "release-2",
+                "--max-concurrent-jobs", "6", "--max-storage-mb", "4096",
+                "--max-report-sessions", "12", "--execute"
+            }).InvokeAsync();
+
+            Assert.Equal(0, exit);
+            Assert.NotNull(parsed);
+            Assert.Equal("admin-promotion-saas-upgrade", parsed.Command);
+            Assert.Equal("tenant-alpha", parsed.SaasTenantId);
+            Assert.Equal("tenants/tenant-alpha", parsed.SaasUpgradeTenantRoot);
+            Assert.Equal("release-2", parsed.SaasUpgradeTargetRelease);
+            Assert.Equal(6, parsed.SaasUpgradeMaxConcurrentJobs);
+            Assert.Equal(4096, parsed.SaasUpgradeMaxStorageMb);
+            Assert.Equal(12, parsed.SaasUpgradeMaxReportSessions);
+            Assert.True(parsed.SaasUpgradeExecute);
+        }
+
+        [Fact]
         public async Task CliOrchestrator_TenantExportParsesCompositionAndKeyOptions()
         {
             var ctx = await ParseRunAsync(

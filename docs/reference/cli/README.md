@@ -61,6 +61,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin promotion preflight`](admin-promotion-preflight.md) | Create a secret-safe, mutation-free promotion inventory |
 | [`etl-sql admin promotion saas-delete`](admin-promotion-saas-delete.md) | Delete one Managed Dedicated tenant boundary under signed retention/legal authorization |
 | [`etl-sql admin promotion saas-onboard`](admin-promotion-saas-onboard.md) | Create and populate one physically isolated SaaS tenant boundary |
+| [`etl-sql admin promotion saas-upgrade`](admin-promotion-saas-upgrade.md) | Drain and upgrade one Managed Dedicated tenant boundary |
 | [`etl-sql admin promotion validate`](admin-promotion-validate.md) | Validate mappings and collisions without changing the target |
 | [`etl-sql admin restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |
 | [`etl-sql admin service-account`](admin-service-account.md) | Manage Portal service accounts |

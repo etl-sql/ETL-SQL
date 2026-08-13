@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added signed Managed Dedicated tenant upgrades with running-release verification, exclusive
+  boundary locking, scheduler fencing, durable admission drain/reconciliation, atomic capacity
+  assignment, exact rollback snapshots, interrupted-cutover recovery, and idempotent audit receipts.
 - Certified Managed Dedicated data-asset isolation across physically disjoint lineage, quality,
   scan, cache, outbox, quarantine, report, dataset, snapshot, subscription, share/embed, and export
   stores, including equal numeric-ID collision tests and tenant-admin/author boundary evidence.

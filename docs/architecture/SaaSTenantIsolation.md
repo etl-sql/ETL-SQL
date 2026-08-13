@@ -827,6 +827,18 @@ sandbox admissions are cancelled, while formerly active attempts are retained fo
 runtime reconciliation. This physical-boundary recovery contract does not certify recovery from
 Shared stores.
 
+Managed Dedicated upgrades use a separately signed target-and-capacity authorization. The asserted
+target must equal the running upgrade binary or the host-fixed managed release identity, preventing
+an operator from recording an arbitrary version as active. The tenant boundary is exclusively
+locked; schedules are disabled and queued admissions cancelled before cutover. Active attempts must
+complete, and retained attempts must receive explicit provider reconciliation, before the command
+updates the tenant manifest and runtime configuration. Concurrent-job, storage, report-session, and
+Dedicated-pool capacity move with the release assignment. Exact pre-cutover configuration and
+manifest files are retained for rollback, partial mutation restores them and resumes only previously
+enabled jobs, and an interrupted `Cutover` receipt is recovered before retry. This is a single-tenant
+deployment lifecycle; rollout and drain across a fleet of Dedicated stacks remains the separate HA
+contract.
+
 Managed Dedicated deletion is a separately signed deployment-plane operation. Its policy grant names
 one canonical tenant, platform actor, approval reference, reason, short expiry, retention boundary,
 and affirmative legal-hold clearance. The operator-facing tenant argument is only a mismatch

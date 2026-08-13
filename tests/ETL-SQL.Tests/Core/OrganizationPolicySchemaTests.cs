@@ -359,6 +359,67 @@ public class OrganizationPolicySchemaTests
     }
 
     [Fact]
+    public void SaasUpgradeAuthorizationIsTypedValidatedAndFlattened()
+    {
+        var expires = DateTimeOffset.UtcNow.AddMinutes(15);
+        var document = new OrganizationPolicyDocument
+        {
+            SaasUpgrade = new SaasUpgradeAuthorizationPolicySection
+            {
+                Enabled = true,
+                TenantId = "tenant-alpha",
+                OperatorPrincipal = "release@platform.test",
+                AuthorizationReference = "change-upgrade-42",
+                Reason = "approved tenant release",
+                TargetRelease = "registry.example/etl-sql@sha256:abc",
+                MaxConcurrentJobs = 6,
+                MaxStorageMb = 4096,
+                MaxReportSessions = 12,
+                ExpiresUtc = expires
+            }
+        };
+
+        Assert.True(OrganizationPolicySchema.Validate(document).IsValid);
+        var flat = document.ToPolicyValues();
+        Assert.Equal("tenant-alpha", flat["SaaS:Upgrade:TenantId"]);
+        Assert.Equal("registry.example/etl-sql@sha256:abc", flat["SaaS:Upgrade:TargetRelease"]);
+        Assert.Equal(6, flat["SaaS:Upgrade:MaxConcurrentJobs"]);
+        Assert.Equal(4096, flat["SaaS:Upgrade:MaxStorageMb"]);
+        Assert.Equal(12, flat["SaaS:Upgrade:MaxReportSessions"]);
+        Assert.Equal(expires.ToString("O"), flat["SaaS:Upgrade:ExpiresUtc"]);
+    }
+
+    [Theory]
+    [InlineData("", "release-2", 2, 2048, 8)]
+    [InlineData("Tenant With Spaces", "release-2", 2, 2048, 8)]
+    [InlineData("tenant-alpha", "", 2, 2048, 8)]
+    [InlineData("tenant-alpha", "release-2", 0, 2048, 8)]
+    [InlineData("tenant-alpha", "release-2", 2, 127, 8)]
+    [InlineData("tenant-alpha", "release-2", 2, 2048, 0)]
+    public void SaasUpgradeAuthorizationRejectsIncompleteOrInvalidAssignment(
+        string tenant, string release, int jobs, int storage, int reports)
+    {
+        var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            SaasUpgrade = new SaasUpgradeAuthorizationPolicySection
+            {
+                Enabled = true,
+                TenantId = tenant,
+                OperatorPrincipal = "release@platform.test",
+                AuthorizationReference = "change-upgrade-42",
+                Reason = "approved tenant release",
+                TargetRelease = release,
+                MaxConcurrentJobs = jobs,
+                MaxStorageMb = storage,
+                MaxReportSessions = reports,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(10)
+            }
+        });
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
     public void SaasDeletionAuthorizationRejectsUnclearedOrIncompletePolicy()
     {
         var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument

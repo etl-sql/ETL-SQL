@@ -1350,7 +1350,9 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin promotion export` | Export promotion | [admin promotion export](reference/cli/admin-promotion-export.md) |
 | `etl-sql admin promotion import` | Import promotion | [admin promotion import](reference/cli/admin-promotion-import.md) |
 | `etl-sql admin promotion preflight` | Promotion preflight check | [admin promotion preflight](reference/cli/admin-promotion-preflight.md) |
+| `etl-sql admin promotion saas-delete` | Delete a Managed Dedicated tenant boundary | [admin promotion saas-delete](reference/cli/admin-promotion-saas-delete.md) |
 | `etl-sql admin promotion saas-onboard` | SaaS onboard promotion | [admin promotion saas-onboard](reference/cli/admin-promotion-saas-onboard.md) |
+| `etl-sql admin promotion saas-upgrade` | Drain and upgrade a Managed Dedicated tenant boundary | [admin promotion saas-upgrade](reference/cli/admin-promotion-saas-upgrade.md) |
 | `etl-sql admin promotion validate` | Validate promotion | [admin promotion validate](reference/cli/admin-promotion-validate.md) |
 | `etl-sql admin promotion` | Manage promotions | [admin promotion](reference/cli/admin-promotion.md) |
 | `etl-sql admin service-account create` | Create service account | [admin service-account create](reference/cli/admin-service-account-create.md) |
@@ -1416,7 +1418,10 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `AS` | DML | Canonical language token |
 | `ASC` | DML | Canonical language token |
 | `BY` | DML | Canonical language token |
+| `CALENDAR` | DML | Canonical language token |
+| `COMPARE` | DML | Canonical language token |
 | `CUBE` | DML | Canonical language token |
+| `DATASETS` | DML | Canonical language token |
 | `DELETE` | DML | Canonical language token |
 | `DESC` | DML | Canonical language token |
 | `DISTINCT` | DML | Canonical language token |
@@ -1438,7 +1443,9 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `PERCENT` | DML | Canonical language token |
 | `PIVOT` | DML | Canonical language token |
 | `QUALIFY` | DML | Canonical language token |
+| `QUARANTINE` | DML | Canonical language token |
 | `REPLACE` | DML | Canonical language token |
+| `REPLAY` | DML | Canonical language token |
 | `ROLLUP` | DML | Canonical language token |
 | `ROW` | DML | Canonical language token |
 | `ROWS` | DML | Canonical language token |
@@ -1448,6 +1455,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `TARGET` | DML | Canonical language token |
 | `TIES` | DML | Canonical language token |
 | `TOP` | DML | Canonical language token |
+| `TRANSFORM` | DML | Canonical language token |
 | `TRUNCATE` | DML | Canonical language token |
 | `UNPIVOT` | DML | Canonical language token |
 | `UPDATE` | DML | Canonical language token |
@@ -1499,6 +1507,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `TABLE` | DDL | Canonical language token |
 | `TAG` | DDL | Canonical language token |
 | `TEMPLATE` | DDL | Canonical language token |
+| `TOOL` | DDL | Canonical language token |
 | `TRAN` | DDL | Canonical language token |
 | `TRANSACTION` | DDL | Canonical language token |
 | `UNIQUE` | DDL | Canonical language token |
@@ -1530,6 +1539,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `RETURN` | Control Flow | Canonical language token |
 | `THEN` | Control Flow | Canonical language token |
 | `THROW` | Control Flow | Canonical language token |
+| `TOOL` | Control Flow | Canonical language token |
 | `TRY` | Control Flow | Canonical language token |
 | `WHEN` | Control Flow | Canonical language token |
 | `WHILE` | Control Flow | Canonical language token |
@@ -1820,6 +1830,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `DELAY` | Script & Job Execution | Canonical language token |
 | `EVERY` | Script & Job Execution | Canonical language token |
 | `JOB` | Script & Job Execution | Canonical language token |
+| `JOB` | Script & Job Execution | Canonical language token |
 | `JOBS` | Script & Job Execution | Canonical language token |
 | `KILL` | Script & Job Execution | Canonical language token |
 | `ON_LOAD` | Script & Job Execution | Canonical language token |
@@ -1842,6 +1853,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
+| `ALERT` | Portal Administration | Canonical language token |
 | `ALERT` | Portal Administration | Canonical language token |
 | `ALERTS` | Portal Administration | Canonical language token |
 | `BUNDLE` | Portal Administration | Canonical language token |
@@ -1935,55 +1947,74 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `CONNECTION_PREVIEW_LIMIT` | General | Canonical language token |
 | `CONNECTIONS` | General | Canonical language token |
 | `CONVERT` | General | Canonical language token |
+| `CRITICAL_FAILURE` | General | Canonical language token |
+| `DATA_QUALITY_DRY_RUN` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
 | `DISABLE` | General | Canonical language token |
 | `DISCONNECT` | General | Canonical language token |
 | `ENABLE` | General | Canonical language token |
 | `ENCODING` | General | Canonical language token |
+| `ENG` | General | Canonical language token |
+| `EXCLUDE_FROM_PRINT` | General | Canonical language token |
 | `EXPECTED_HASH` | General | Canonical language token |
 | `EXPORT_CSV` | General | Canonical language token |
 | `EXPORT_EXCEL` | General | Canonical language token |
 | `EXPORT_PDF` | General | Canonical language token |
 | `EXTRACT` | General | Canonical language token |
+| `FAILURE` | General | Canonical language token |
 | `FALSE` | General | Canonical language token |
 | `FILTER` | General | Canonical language token |
 | `FORMAT` | General | Canonical language token |
+| `FRESHNESS` | General | Canonical language token |
 | `FROM_ENCODING` | General | Canonical language token |
 | `HASH_FILE` | General | Canonical language token |
 | `HELP` | General | Canonical language token |
+| `HISTORICAL` | General | Canonical language token |
 | `ICON` | General | Canonical language token |
 | `IGNORE_EXTRA_COLUMNS` | General | Canonical language token |
 | `IN` | General | Canonical language token |
 | `INPUT` | General | Canonical language token |
 | `INTEGRITY` | General | Canonical language token |
+| `KEEP_TOGETHER` | General | Canonical language token |
 | `LEADING` | General | Canonical language token |
 | `LIMIT_TYPE` | General | Canonical language token |
 | `LIMIT_VALUE` | General | Canonical language token |
 | `LINEAGE` | General | Canonical language token |
 | `LINEAGE_IMPORT_CATALOG` | General | Canonical language token |
 | `LINEAGE_NAMESPACE` | General | Canonical language token |
-| `LINEAGE_TAGS` | General | Legacy alias for `eng.tags` |
+| `LINEAGE_TAGS` | General | Canonical language token |
 | `LOAD` | General | Canonical language token |
 | `LOCAL` | General | Canonical language token |
 | `MAP_BY_HEADER_NAME` | General | Canonical language token |
+| `MARGIN` | General | Canonical language token |
+| `MARGINS` | General | Canonical language token |
 | `MAX` | General | Canonical language token |
 | `MAXERRORS` | General | Canonical language token |
 | `MIN` | General | Canonical language token |
 | `NONE` | General | Canonical language token |
 | `NULL_MISSING_COLUMNS` | General | Canonical language token |
+| `NULL_PERCENT` | General | Canonical language token |
 | `OCTET_LENGTH` | General | Canonical language token |
 | `OFF` | General | Canonical language token |
 | `ON` | General | Canonical language token |
 | `OPERATOR_MEMORY_GRANT` | General | Canonical language token |
+| `ORIENTATION` | General | Canonical language token |
 | `OUTPUT` | General | Canonical language token |
+| `OVERFLOW` | General | Canonical language token |
 | `OVERLAY` | General | Canonical language token |
+| `PAGE_BREAK_AFTER` | General | Canonical language token |
+| `PAGE_BREAK_BEFORE` | General | Canonical language token |
+| `PAGE_LAYOUT` | General | Canonical language token |
+| `PAGE_SIZE` | General | Canonical language token |
 | `PARALLEL` | General | Canonical language token |
 | `PERSIST` | General | Canonical language token |
 | `PLACING` | General | Canonical language token |
 | `POLL_INTERVAL_MS` | General | Canonical language token |
 | `POSITION` | General | Canonical language token |
 | `PRINT` | General | Canonical language token |
+| `PRINT_LAYOUT` | General | Canonical language token |
+| `QUARANTINE_PERCENT` | General | Canonical language token |
 | `REFRESH` | General | Canonical language token |
 | `REFRESH_REPORT` | General | Canonical language token |
 | `REFRESH_VISUALS` | General | Canonical language token |
@@ -1991,12 +2022,16 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `REQUIRE` | General | Canonical language token |
 | `REQUIRED` | General | Canonical language token |
 | `RESTART` | General | Canonical language token |
+| `RETENTION` | General | Canonical language token |
+| `ROW_COUNT` | General | Canonical language token |
+| `ROW_DETAIL` | General | Canonical language token |
 | `SAFE` | General | Canonical language token |
 | `SAMPLE` | General | Canonical language token |
 | `SESSION` | General | Canonical language token |
 | `SESSIONS` | General | Canonical language token |
 | `SETS` | General | Canonical language token |
 | `SHUTDOWN` | General | Canonical language token |
+| `SIGMA` | General | Canonical language token |
 | `SKIP_ERROR` | General | Canonical language token |
 | `SPLIT` | General | Canonical language token |
 | `SUBSTRING` | General | Canonical language token |
@@ -2013,10 +2048,13 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `TRUE` | General | Canonical language token |
 | `TRUNCATE_STRING` | General | Canonical language token |
 | `TYPE` | General | Canonical language token |
+| `UNIT` | General | Canonical language token |
+| `UNITS` | General | Canonical language token |
 | `UNLOCKED` | General | Canonical language token |
 | `VALUE` | General | Canonical language token |
 | `VARIABLES` | General | Canonical language token |
 | `VERIFY` | General | Canonical language token |
+| `WARN_PERCENT` | General | Canonical language token |
 | `WINDOW` | General | Canonical language token |
 | `ZONES` | General | Canonical language token |
 
@@ -2059,6 +2097,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | :--- | :--- | :--- |
 | `ABS` | Function | Canonical built-in function |
 | `ACOS` | Function | Canonical built-in function |
+| `AGE_BUCKET` | Function | Canonical built-in function |
 | `APPEND_TO_LIST` | Function | Canonical built-in function |
 | `ASCII` | Function | Canonical built-in function |
 | `ASIN` | Function | Canonical built-in function |
@@ -2078,6 +2117,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `CHAR` | Function | Canonical built-in function |
 | `CHARINDEX` | Function | Canonical built-in function |
 | `CHECKSUM` | Function | Canonical built-in function |
+| `CLEAN_STRING` | Function | Canonical built-in function |
 | `COALESCE` | Function | Canonical built-in function |
 | `CONCAT` | Function | Canonical built-in function |
 | `CONNECTION_PROPERTY` | Function | Canonical built-in function |
@@ -2102,6 +2142,9 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `DIRECTORY_EXISTS` | Function | Canonical built-in function |
 | `DMETAPHONE` | Function | Canonical built-in function |
 | `DMETAPHONE_ALT` | Function | Canonical built-in function |
+| `END_OF_MONTH` | Function | Canonical built-in function |
+| `END_OF_QUARTER` | Function | Canonical built-in function |
+| `END_OF_WEEK` | Function | Canonical built-in function |
 | `EXP` | Function | Canonical built-in function |
 | `EXTRACTVALUE` | Function | Canonical built-in function |
 | `FILE_EXISTS` | Function | Canonical built-in function |
@@ -2142,6 +2185,9 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `LOWER` | Function | Canonical built-in function |
 | `LPAD` | Function | Canonical built-in function |
 | `LTRIM` | Function | Canonical built-in function |
+| `MASK_EMAIL` | Function | Canonical built-in function |
+| `MASK_PHONE` | Function | Canonical built-in function |
+| `MASK_SSN` | Function | Canonical built-in function |
 | `MAX` | Function | Canonical built-in function |
 | `METAPHONE` | Function | Canonical built-in function |
 | `MIN` | Function | Canonical built-in function |
@@ -2192,6 +2238,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `ROW_NUMBER` | Function | Canonical built-in function |
 | `RPAD` | Function | Canonical built-in function |
 | `RTRIM` | Function | Canonical built-in function |
+| `SAFE_DIVIDE` | Function | Canonical built-in function |
+| `SAME_PERIOD_LAST_YEAR` | Function | Canonical built-in function |
 | `SEQUENCE` | Function | Canonical built-in function |
 | `SIGN` | Function | Canonical built-in function |
 | `SIMILARITY` | Function | Canonical built-in function |
@@ -2199,6 +2247,9 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SORT_LIST` | Function | Canonical built-in function |
 | `SOUNDEX` | Function | Canonical built-in function |
 | `SQRT` | Function | Canonical built-in function |
+| `START_OF_MONTH` | Function | Canonical built-in function |
+| `START_OF_QUARTER` | Function | Canonical built-in function |
+| `START_OF_WEEK` | Function | Canonical built-in function |
 | `STDDEV` | Function | Canonical built-in function |
 | `STDDEV_POP` | Function | Canonical built-in function |
 | `STDDEV_SAMP` | Function | Canonical built-in function |
@@ -2224,6 +2275,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `TRY_CAST` | Function | Canonical built-in function |
 | `UNICODE` | Function | Canonical built-in function |
 | `UPPER` | Function | Canonical built-in function |
+| `VALUE_BUCKET` | Function | Canonical built-in function |
 | `VAR` | Function | Canonical built-in function |
 | `VAR_POP` | Function | Canonical built-in function |
 | `VAR_SAMP` | Function | Canonical built-in function |
@@ -2307,6 +2359,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `@domain` | Tag | Standard governance tag |
 | `@encrypted_at_rest` | Tag | Standard governance tag |
 | `@example` | Tag | Standard governance tag |
+| `@expect` | Tag | Standard governance tag |
+| `@fail` | Tag | Standard governance tag |
 | `@format` | Tag | Standard governance tag |
 | `@freshness` | Tag | Standard governance tag |
 | `@load_pattern` | Tag | Standard governance tag |
@@ -2317,6 +2371,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `@pii` | Tag | Standard governance tag |
 | `@quality` | Tag | Standard governance tag |
 | `@sensitive` | Tag | Standard governance tag |
+| `@sensitivity` | Tag | Standard governance tag |
 | `@sla` | Tag | Standard governance tag |
 | `@source_column` | Tag | Standard governance tag |
 | `@source_system` | Tag | Standard governance tag |
@@ -2326,5 +2381,3 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `@trusted` | Tag | Standard governance tag |
 | `@unit` | Tag | Standard governance tag |
 <!-- END GENERATED CANONICAL TOKEN INDEX -->
-
-

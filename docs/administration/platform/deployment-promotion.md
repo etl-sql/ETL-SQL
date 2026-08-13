@@ -98,6 +98,37 @@ the platform actor, approval reference, reason, grant expiry, tenant, and time s
 tenant Portal's user audit. Its `tenantUserImpersonation` value is always false: platform onboarding
 does not mint a tenant session or Portal role.
 
+Managed Dedicated release and capacity changes use `admin promotion saas-upgrade` after installing
+the target CLI/image and issuing a signed `saasUpgrade` policy grant:
+
+```powershell
+# Preflight the signed assignment and tenant boundary.
+etl-sql admin promotion saas-upgrade `
+  --tenant tenant-alpha `
+  --tenant-root D:\etl-sql-tenants\tenant-alpha `
+  --target-release 0.18.0+build.abc123 `
+  --max-concurrent-jobs 6 `
+  --max-storage-mb 20480 `
+  --max-report-sessions 30
+
+# Fence schedules, drain admissions, and cut over when no runtime authority remains.
+etl-sql admin promotion saas-upgrade `
+  --tenant tenant-alpha `
+  --tenant-root D:\etl-sql-tenants\tenant-alpha `
+  --target-release 0.18.0+build.abc123 `
+  --max-concurrent-jobs 6 `
+  --max-storage-mb 20480 `
+  --max-report-sessions 30 `
+  --execute
+```
+
+An executing pass may return exit code `2` with a durable `Draining` receipt. Scheduling remains
+fenced; let active attempts finish and reconcile any retained attempt with the runtime provider,
+then run the same authorized command again. Queued attempts are cancelled rather than carried into
+the new release. Cutover stores exact manifest/config rollback files under the tenant boundary,
+updates the three capacity limits and canonical Dedicated pool, and re-enables only jobs it fenced.
+An interrupted or failed cutover restores the prior assignment before retry.
+
 Managed Dedicated deletion is the paired deployment-plane lifecycle command and requires its own
 signed `saasDeletion` policy section:
 

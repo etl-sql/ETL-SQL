@@ -238,6 +238,35 @@ The grant is checked again immediately before the staging directory becomes the 
 Disable or remove the section after onboarding so a completed change does not leave reusable tenant
 provisioning authority.
 
+### Managed Dedicated tenant upgrade authorization
+
+Upgrade and capacity changes use their own short-lived signed grant. Every desired value is inside
+the signed policy; CLI values are mismatch assertions and cannot select a different release or
+capacity assignment:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "saasUpgrade": {
+    "enabled": true,
+    "tenantId": "tenant-alpha",
+    "operatorPrincipal": "release-operator@platform.example",
+    "authorizationReference": "change-2026-0813-upgrade",
+    "reason": "Upgrade the approved Managed Dedicated stack",
+    "targetRelease": "0.18.0+build.abc123",
+    "maxConcurrentJobs": 6,
+    "maxStorageMb": 20480,
+    "maxReportSessions": 30,
+    "expiresUtc": "2026-08-14T00:00:00Z"
+  }
+}
+```
+
+`targetRelease` must match the executing ETL-SQL binary's informational version. A managed image
+controller may instead inject its immutable release/image identity through
+`ETLSQL_MANAGED_RELEASE_ID`; that host-fixed value becomes the required target. Remove the grant
+after the idempotent Completed receipt is recorded.
+
 ### Managed Dedicated tenant deletion authorization
 
 Deletion uses a different signed grant so provisioning authority can never imply erasure authority.

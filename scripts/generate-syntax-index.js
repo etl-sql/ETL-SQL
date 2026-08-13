@@ -4,6 +4,7 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const languageMetadataPath = path.join(repoRoot, 'src', 'ETL-SQL.Core', 'Common', 'LanguageMetadata.cs');
+const stewardshipTagCatalogPath = path.join(repoRoot, 'src', 'ETL-SQL.Core', 'Common', 'StewardshipTagCatalog.cs');
 const syntaxIndexPath = path.join(repoRoot, 'docs', 'syntax-index.md');
 
 const beginMarker = '<!-- BEGIN GENERATED CANONICAL TOKEN INDEX -->';
@@ -46,6 +47,29 @@ function unique(values) {
     }
   }
   return result;
+}
+
+function extractStewardshipTags(source) {
+  const definitions = source.match(
+    /private\s+static\s+readonly\s+StewardshipTagDefinition\[\]\s+Definitions\s*=\s*\[([\s\S]*?)\n\s*\];/m
+  );
+  if (!definitions) {
+    throw new Error('Unable to locate Definitions in StewardshipTagCatalog.cs');
+  }
+
+  const tags = [];
+  const definitionPattern = /new\("([^"]+)"\s*,\s*StewardshipTagValueKind\.\w+\s*,\s*(?:\w+|\[[^\]]*\])\s*,\s*\[[^\]]*\]\s*,\s*\[([^\]]*)\]/g;
+  let match;
+  while ((match = definitionPattern.exec(definitions[1])) !== null) {
+    tags.push(match[1]);
+    const aliasPattern = /"([^"]+)"/g;
+    let alias;
+    while ((alias = aliasPattern.exec(match[2])) !== null) tags.push(alias[1]);
+  }
+  if (tags.length === 0) {
+    throw new Error('Unable to extract stewardship tags from StewardshipTagCatalog.cs');
+  }
+  return tags;
 }
 
 function renderRows(tokens, family, notePrefix) {
@@ -219,7 +243,7 @@ function upsertGeneratedSection(text, section) {
   const markerRegex = new RegExp(`${escapeRegex(beginMarker)}[\\s\\S]*?${escapeRegex(endMarker)}\\n?`, 'm');
 
   if (markerRegex.test(text)) {
-    return text.replace(markerRegex, generatedBlock);
+    return text.replace(markerRegex, generatedBlock).trimEnd() + '\n';
   }
 
   return `${text.trimEnd()}\n\n${generatedBlock}`;
@@ -228,6 +252,7 @@ function upsertGeneratedSection(text, section) {
 function main() {
   const checkOnly = process.argv.includes('--check');
   const source = readText(languageMetadataPath);
+  const stewardshipTags = readText(stewardshipTagCatalogPath);
 
   const data = {
     dmlKeywords: extractSet(source, 'DmlKeywords'),
@@ -239,7 +264,7 @@ function main() {
     connectors: unique(extractSet(source, 'ConnectorTypes')),
     functions: unique(extractSet(source, 'Functions')),
     dataTypes: unique(extractSet(source, 'DataTypes')),
-    tags: unique(extractSet(source, 'StandardTags'))
+    tags: unique(extractStewardshipTags(stewardshipTags))
   };
 
   const generatedSection = renderGeneratedSection(data);

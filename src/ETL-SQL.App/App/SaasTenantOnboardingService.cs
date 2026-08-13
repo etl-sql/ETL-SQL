@@ -245,6 +245,7 @@ internal static partial class SaasTenantOnboardingService
         string root, string tenant, CliContext ctx, TenantIdentityProvider? identityProvider,
         CancellationToken ct)
     {
+        var sandboxPoolId = $"dedicated-{tenant}";
         var config = new
         {
             SaasTenant = new
@@ -258,12 +259,21 @@ internal static partial class SaasTenantOnboardingService
                 {
                     MaxConcurrentJobs = ctx.SaasMaxConcurrentJobs,
                     MaxStorageMb = ctx.SaasMaxStorageMb,
-                    MaxReportSessions = ctx.SaasMaxReportSessions
-                }
+                    MaxReportSessions = ctx.SaasMaxReportSessions,
+                    SandboxPoolId = sandboxPoolId
+                },
+                Deployment = new { ActiveRelease = "unversioned" }
             },
             Orchestration = new
             {
-                JobThrottle = new { MaxConcurrentJobs = ctx.SaasMaxConcurrentJobs }
+                JobThrottle = new { MaxConcurrentJobs = ctx.SaasMaxConcurrentJobs },
+                SandboxAdmission = new
+                {
+                    PoolCapacities = new Dictionary<string, int>
+                    {
+                        [sandboxPoolId] = ctx.SaasMaxConcurrentJobs
+                    }
+                }
             },
             Orchestrator = new
             {

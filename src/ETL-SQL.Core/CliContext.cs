@@ -201,6 +201,12 @@ public class CliContext
     public int SaasMaxConcurrentJobs { get; set; } = 4;
     public int SaasMaxStorageMb { get; set; } = 10_240;
     public int SaasMaxReportSessions { get; set; } = 20;
+    public string? SaasUpgradeTenantRoot { get; set; }
+    public string? SaasUpgradeTargetRelease { get; set; }
+    public int? SaasUpgradeMaxConcurrentJobs { get; set; }
+    public int? SaasUpgradeMaxStorageMb { get; set; }
+    public int? SaasUpgradeMaxReportSessions { get; set; }
+    public bool SaasUpgradeExecute { get; set; }
     public string? SaasDeletionTenantRoot { get; set; }
     public string? SaasDeletionReceiptRoot { get; set; }
     public bool SaasDeletionExecute { get; set; }

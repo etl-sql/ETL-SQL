@@ -132,6 +132,13 @@ before activation is removal of the newly staged boundary; after activation, fen
 scheduler and restore that tenant's own coordinated database/artifact/key recovery set. Never restore
 one tenant over another or copy platform/other-tenant secrets into the boundary.
 
+After activation, run a one-tenant release/capacity transition with
+`admin promotion saas-upgrade`. The signed policy fixes the target release and capacity assignment,
+and the target must identify the executing binary or host-fixed managed image. The first executing
+pass fences schedules and drains durable admissions; rerun after active work completes and retained
+work is reconciled. Exact pre-cutover manifest/config files provide the reversible point. This
+single-boundary workflow does not certify rolling upgrades across a fleet of tenant deployments.
+
 ## References
 
 - [Deployment promotion](deployment-promotion.md)

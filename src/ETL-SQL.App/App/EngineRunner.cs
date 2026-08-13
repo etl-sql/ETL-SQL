@@ -164,6 +164,11 @@ namespace ETL_SQL.App
                 return await SaasTenantOnboardingService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command == "admin-promotion-saas-upgrade")
+            {
+                return await SaasTenantUpgradeService.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command == "admin-promotion-saas-delete")
             {
                 return await SaasTenantDeletionService.RunAsync(ctx, logger);

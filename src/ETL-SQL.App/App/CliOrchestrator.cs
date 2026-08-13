@@ -611,6 +611,35 @@ namespace ETL_SQL.App
             Description = "Tenant concurrent report-session limit.",
             DefaultValueFactory = _ => 20
         };
+        private static readonly Option<string?> SaasUpgradeTenantRootOption = new("--tenant-root", Array.Empty<string>())
+        {
+            Description = "Provisioned Managed Dedicated tenant boundary to upgrade.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> SaasUpgradeTargetReleaseOption = new("--target-release", Array.Empty<string>())
+        {
+            Description = "Release or immutable image digest assertion; must match signed upgrade authorization.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<int?> SaasUpgradeMaxConcurrentJobsOption = new("--max-concurrent-jobs", Array.Empty<string>())
+        {
+            Description = "Concurrent-job capacity assertion; must match signed upgrade authorization.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<int?> SaasUpgradeMaxStorageMbOption = new("--max-storage-mb", Array.Empty<string>())
+        {
+            Description = "Storage-capacity assertion in MiB; must match signed upgrade authorization.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<int?> SaasUpgradeMaxReportSessionsOption = new("--max-report-sessions", Array.Empty<string>())
+        {
+            Description = "Report-session capacity assertion; must match signed upgrade authorization.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<bool> SaasUpgradeExecuteOption = new("--execute", Array.Empty<string>())
+        {
+            Description = "Fence scheduling, drain durable admissions, and apply the authorized cutover."
+        };
         private static readonly Option<string?> SaasDeletionTenantRootOption = new("--tenant-root", Array.Empty<string>())
         {
             Description = "Provisioned Managed Dedicated tenant boundary to delete.",
@@ -1027,6 +1056,18 @@ namespace ETL_SQL.App
             };
             saasOnboardCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-onboard", handler));
             promotionCommand.Add(saasOnboardCommand);
+            var saasUpgradeCommand = new Command("saas-upgrade", "Drain and upgrade one Managed Dedicated tenant boundary")
+            {
+                SaasTenantOption,
+                SaasUpgradeTenantRootOption,
+                SaasUpgradeTargetReleaseOption,
+                SaasUpgradeMaxConcurrentJobsOption,
+                SaasUpgradeMaxStorageMbOption,
+                SaasUpgradeMaxReportSessionsOption,
+                SaasUpgradeExecuteOption,
+            };
+            saasUpgradeCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-upgrade", handler));
+            promotionCommand.Add(saasUpgradeCommand);
             var saasDeleteCommand = new Command("saas-delete", "Delete one Managed Dedicated tenant boundary under signed retention/legal authorization")
             {
                 SaasTenantOption,
@@ -1877,6 +1918,16 @@ namespace ETL_SQL.App
                 cliContext.SaasDeletionTenantRoot = res.GetValue(SaasDeletionTenantRootOption);
                 cliContext.SaasDeletionReceiptRoot = res.GetValue(SaasDeletionReceiptRootOption);
                 cliContext.SaasDeletionExecute = res.GetValue(SaasDeletionExecuteOption);
+            }
+            else if (commandName == "admin-promotion-saas-upgrade")
+            {
+                cliContext.SaasTenantId = res.GetValue(SaasTenantOption);
+                cliContext.SaasUpgradeTenantRoot = res.GetValue(SaasUpgradeTenantRootOption);
+                cliContext.SaasUpgradeTargetRelease = res.GetValue(SaasUpgradeTargetReleaseOption);
+                cliContext.SaasUpgradeMaxConcurrentJobs = res.GetValue(SaasUpgradeMaxConcurrentJobsOption);
+                cliContext.SaasUpgradeMaxStorageMb = res.GetValue(SaasUpgradeMaxStorageMbOption);
+                cliContext.SaasUpgradeMaxReportSessions = res.GetValue(SaasUpgradeMaxReportSessionsOption);
+                cliContext.SaasUpgradeExecute = res.GetValue(SaasUpgradeExecuteOption);
             }
             else if (commandName.StartsWith("admin-ha-soak-", StringComparison.Ordinal))
             {

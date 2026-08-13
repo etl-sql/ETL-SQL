@@ -35,6 +35,7 @@ public sealed record OrganizationPolicyDocument
     public SecurityEventPolicySection SecurityEvents { get; init; } = new();
     public MetadataGovernancePolicySection Metadata { get; init; } = new();
     public SaasOnboardingAuthorizationPolicySection SaasOnboarding { get; init; } = new();
+    public SaasUpgradeAuthorizationPolicySection SaasUpgrade { get; init; } = new();
     public SaasDeletionAuthorizationPolicySection SaasDeletion { get; init; } = new();
 
     public IReadOnlyDictionary<string, object> ToPolicyValues()
@@ -104,6 +105,18 @@ public sealed record OrganizationPolicyDocument
             values["SaaS:Deletion:LegalHoldCleared"] = SaasDeletion.LegalHoldCleared;
             values["SaaS:Deletion:ExpiresUtc"] = SaasDeletion.ExpiresUtc?.ToString("O") ?? string.Empty;
         }
+        if (SaasUpgrade.Enabled)
+        {
+            values["SaaS:Upgrade:TenantId"] = SaasUpgrade.TenantId ?? string.Empty;
+            values["SaaS:Upgrade:OperatorPrincipal"] = SaasUpgrade.OperatorPrincipal ?? string.Empty;
+            values["SaaS:Upgrade:AuthorizationReference"] = SaasUpgrade.AuthorizationReference ?? string.Empty;
+            values["SaaS:Upgrade:Reason"] = SaasUpgrade.Reason ?? string.Empty;
+            values["SaaS:Upgrade:TargetRelease"] = SaasUpgrade.TargetRelease ?? string.Empty;
+            values["SaaS:Upgrade:MaxConcurrentJobs"] = SaasUpgrade.MaxConcurrentJobs ?? 0;
+            values["SaaS:Upgrade:MaxStorageMb"] = SaasUpgrade.MaxStorageMb ?? 0;
+            values["SaaS:Upgrade:MaxReportSessions"] = SaasUpgrade.MaxReportSessions ?? 0;
+            values["SaaS:Upgrade:ExpiresUtc"] = SaasUpgrade.ExpiresUtc?.ToString("O") ?? string.Empty;
+        }
 
         return values;
     }
@@ -120,6 +133,25 @@ public sealed record SaasOnboardingAuthorizationPolicySection
     public string? OperatorPrincipal { get; init; }
     public string? AuthorizationReference { get; init; }
     public string? Reason { get; init; }
+    public DateTimeOffset? ExpiresUtc { get; init; }
+}
+
+/// <summary>
+/// One short-lived, signed authorization for a Managed Dedicated release and capacity cutover.
+/// All desired values are part of the signed policy so CLI values can only assert, never select,
+/// the deployment mutation.
+/// </summary>
+public sealed record SaasUpgradeAuthorizationPolicySection
+{
+    public bool Enabled { get; init; }
+    public string? TenantId { get; init; }
+    public string? OperatorPrincipal { get; init; }
+    public string? AuthorizationReference { get; init; }
+    public string? Reason { get; init; }
+    public string? TargetRelease { get; init; }
+    public int? MaxConcurrentJobs { get; init; }
+    public int? MaxStorageMb { get; init; }
+    public int? MaxReportSessions { get; init; }
     public DateTimeOffset? ExpiresUtc { get; init; }
 }
 
@@ -308,6 +340,7 @@ public static class OrganizationPolicySchema
         ValidateSecurityEvents(document.SecurityEvents, errors);
         ValidateMetadata(document.Metadata, errors);
         ValidateSaasOnboarding(document.SaasOnboarding, errors);
+        ValidateSaasUpgrade(document.SaasUpgrade, errors);
         ValidateSaasDeletion(document.SaasDeletion, errors);
 
         return errors.Count == 0
@@ -374,6 +407,47 @@ public static class OrganizationPolicySchema
             errors.Add("SaaS deletion authorization must affirm that legal holds are cleared.");
         if (!authorization.ExpiresUtc.HasValue || authorization.ExpiresUtc <= DateTimeOffset.UnixEpoch)
             errors.Add("SaaS deletion authorization must carry a valid expiry.");
+    }
+
+    private static void ValidateSaasUpgrade(
+        SaasUpgradeAuthorizationPolicySection authorization, List<string> errors)
+    {
+        var hasDetails = !string.IsNullOrWhiteSpace(authorization.TenantId)
+                         || !string.IsNullOrWhiteSpace(authorization.OperatorPrincipal)
+                         || !string.IsNullOrWhiteSpace(authorization.AuthorizationReference)
+                         || !string.IsNullOrWhiteSpace(authorization.Reason)
+                         || !string.IsNullOrWhiteSpace(authorization.TargetRelease)
+                         || authorization.MaxConcurrentJobs.HasValue
+                         || authorization.MaxStorageMb.HasValue
+                         || authorization.MaxReportSessions.HasValue
+                         || authorization.ExpiresUtc.HasValue;
+        if (!authorization.Enabled)
+        {
+            if (hasDetails)
+                errors.Add("SaaS upgrade authorization details must be empty when authorization is disabled.");
+            return;
+        }
+
+        if (!TenantId.TryParse(authorization.TenantId, out _))
+            errors.Add("SaaS upgrade tenant id must be a canonical tenant id.");
+        if (string.IsNullOrWhiteSpace(authorization.OperatorPrincipal))
+            errors.Add("SaaS upgrade authorization must name the platform operator.");
+        if (string.IsNullOrWhiteSpace(authorization.AuthorizationReference))
+            errors.Add("SaaS upgrade authorization must name its approval or change record.");
+        if (string.IsNullOrWhiteSpace(authorization.Reason))
+            errors.Add("SaaS upgrade authorization must state its reason.");
+        if (string.IsNullOrWhiteSpace(authorization.TargetRelease)
+            || authorization.TargetRelease.Length > 256
+            || authorization.TargetRelease.IndexOfAny(['\r', '\n']) >= 0)
+            errors.Add("SaaS upgrade authorization must name one release or immutable image digest.");
+        if (authorization.MaxConcurrentJobs is null or < 1)
+            errors.Add("SaaS upgrade maximum concurrent jobs must be positive.");
+        if (authorization.MaxStorageMb is null or < 128)
+            errors.Add("SaaS upgrade storage capacity must be at least 128 MiB.");
+        if (authorization.MaxReportSessions is null or < 1)
+            errors.Add("SaaS upgrade maximum report sessions must be positive.");
+        if (!authorization.ExpiresUtc.HasValue || authorization.ExpiresUtc <= DateTimeOffset.UnixEpoch)
+            errors.Add("SaaS upgrade authorization must carry a valid expiry.");
     }
 
     private static void ValidateMetadata(MetadataGovernancePolicySection metadata, List<string> errors)
