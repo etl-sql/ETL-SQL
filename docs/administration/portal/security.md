@@ -46,6 +46,28 @@ Three roles are enforced at the controller level via `[Authorize(Roles = "...")]
 
 Folder-level **ACLs** provide finer control within those role boundaries.
 
+## Managed Dedicated platform support approval
+
+A platform operator does not receive a Portal role or tenant session. On a host-fixed Managed
+Dedicated Portal, a tenant `Admin` can instead approve one redacted support-bundle disclosure for
+one named platform actor and purpose for 1–60 minutes:
+
+1. Call `GET /api/admin/support-bundle/review` and review the returned sections, exclusions, and
+   full SHA-256 `contentHash`.
+2. Call `POST /api/admin/support-access/approvals` with `platformActor`, `purpose`,
+   `acknowledgedContent`, and `lifetimeMinutes`. Service-account tokens cannot approve access.
+3. Deliver the returned capability to the named operator through an approved secret channel.
+4. The operator calls `POST /api/platform/support-bundle` over TLS with the capability in the
+   `X-ETL-SQL-Support-Capability` header.
+
+The capability is signed under a key purpose and audience distinct from Portal user JWTs. It is
+bound to the host-fixed tenant, exact disclosure hash, named actor, purpose, and expiry. It grants
+only `support.bundle.read`; a changed disclosure, another tenant, an expired token, or a standard
+Team/Enterprise/Shared host is refused. Approval, refusal, and successful download are durable audit
+events; the capability value itself is never written to audit. Rotate or remove the corresponding
+JWT validation key for emergency revocation. Do not place the capability in a URL, log, ticket, or
+command history.
+
 ## MustChangePassword Enforcement
 
 When a user has `MustChangePassword = true`, a middleware layer (`MustChangePasswordMiddleware`) intercepts all `POST /api/*` calls except `change-password`, `login`, `logout`, and `refresh`. Blocked requests return `403 Forbidden` with a `redirect` field pointing to the change-password page. This applies to all roles including Admin.
@@ -140,7 +162,7 @@ unreadable. Legacy sidecars containing plaintext `ApiKey` are automatically rewr
    `PreviousSecrets` and restart all instances.
 
 Removing the old key immediately is an emergency revocation procedure and invalidates access tokens
-signed with it. Refresh tokens are not JWT-signed and can still obtain a new access token unless the
+and support capabilities signed with it. Refresh tokens are not JWT-signed and can still obtain a new access token unless the
 user sessions are separately revoked.
 
 ### Rotate the Orchestrator API key without downtime

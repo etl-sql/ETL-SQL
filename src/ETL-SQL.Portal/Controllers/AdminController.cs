@@ -1107,6 +1107,66 @@ public class AdminController(
             $"etl-sql-portal-support-{DateTime.UtcNow:yyyyMMdd_HHmm}.json");
     }
 
+    /// <summary>
+    /// Approves one named platform support operator to download exactly the disclosure the tenant
+    /// administrator reviewed, for at most one hour. The returned capability grants no Portal role
+    /// and cannot be used against another tenant or a changed bundle.
+    /// </summary>
+    [HttpPost("support-access/approvals")]
+    public async Task<IActionResult> ApprovePlatformSupportAccess(
+        [FromServices] PortalSupportBundleService bundle,
+        [FromServices] SupportAccessApprovalService approvals,
+        [FromBody] CreateSupportAccessApprovalRequest request,
+        CancellationToken ct)
+    {
+        if (IsServiceIdentity)
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "support_approval_requires_interactive_tenant_admin"
+            });
+
+        var content = await bundle.BuildAsync(ct);
+        if (!string.Equals(request.AcknowledgedContent?.Trim(), content.ContentHash,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return Conflict(new
+            {
+                error = "support_disclosure_not_acknowledged",
+                currentContent = content.ContentHash
+            });
+        }
+
+        try
+        {
+            var issued = approvals.Issue(
+                request.PlatformActor ?? string.Empty,
+                content.ContentHash,
+                request.Purpose ?? string.Empty,
+                User.Identity?.Name ?? CurrentUserId.ToString(),
+                request.LifetimeMinutes);
+            await audit.LogAsync(CurrentUserId, "APPROVE_PLATFORM_SUPPORT_ACCESS", "SupportBundle",
+                issued.Approval.CapabilityId,
+                $"platformActor={issued.Approval.PlatformActor}; content={issued.Approval.ContentHash}; purpose={issued.Approval.Purpose}; expires={issued.Approval.ExpiresUtc:O}");
+            return Ok(new
+            {
+                capability = issued.Capability,
+                issued.Approval.PlatformActor,
+                issued.Approval.ContentHash,
+                issued.Approval.Purpose,
+                issued.Approval.ExpiresUtc,
+                issued.Approval.CapabilityId
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = "support_approval_invalid", message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = "support_approval_unavailable", message = ex.Message });
+        }
+    }
+
     // ── Dataset at-rest key posture ──────────────────────────────────────────
 
     /// <summary>

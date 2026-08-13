@@ -327,7 +327,7 @@ checked off meaningfully. Split:
 - [ ] **Dedicated — backup and recovery.** Tenant-scoped backup, export, restore, and key/artifact
       recovery, including proof that a restore cannot introduce another tenant's rows or resume its
       work.
-- [ ] **Dedicated — support approval.** Add the approval workflow behind the shipped audited platform
+- [x] **Dedicated — support approval.** Add the approval workflow behind the shipped audited platform
       support-access model.
 - [ ] **Dedicated — metering.** Tenant-specific usage records for dedicated operations.
 - [ ] **Dedicated — deletion.** Legal/retention-aware tenant deletion with a completion record.

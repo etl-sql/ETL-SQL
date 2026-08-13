@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added Managed Dedicated platform-support approval: a human tenant Admin can grant one named
+  operator short-lived, purpose-bound access to an exact reviewed support disclosure without
+  creating a tenant session or platform superuser; approvals, refusals, and downloads are audited.
 - Fixed concurrent Orchestrator startup against an existing SQLite database so additive schema migrations treat a column added by another process as success instead of stopping the scheduler.
 
 ### Breaking

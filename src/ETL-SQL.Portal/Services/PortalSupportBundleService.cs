@@ -141,6 +141,6 @@ public sealed class PortalSupportBundleService(
         var payload = string.Join("\n", sections
             .Where(section => !section.VolatileCounts)
             .Select(section => $"{section.Key}:{section.Payload.ToJsonString()}"));
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)))[..16].ToLowerInvariant();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
     }
 }

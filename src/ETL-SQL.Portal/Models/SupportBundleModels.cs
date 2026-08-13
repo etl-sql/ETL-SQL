@@ -25,3 +25,9 @@ public sealed record SupportBundleContentDto(
 /// </param>
 public sealed record SupportBundleSectionDto(
     string Key, string Title, JsonNode Payload, bool VolatileCounts = false);
+
+public sealed record CreateSupportAccessApprovalRequest(
+    string? PlatformActor,
+    string? Purpose,
+    string? AcknowledgedContent,
+    int LifetimeMinutes = 30);

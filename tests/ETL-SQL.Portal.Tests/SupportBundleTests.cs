@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Portal.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -57,6 +58,64 @@ public sealed class SupportBundleTests
 
         Assert.Equal("tenant-alpha", deployment["tenantId"]!.GetValue<string>());
         Assert.Equal("HostFixed", deployment["tenantContextOrigin"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task DedicatedPlatformSupportRequiresAndAuditsTenantApproval()
+    {
+        using var factory = new TenantFixedFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        using (var missing = new HttpRequestMessage(HttpMethod.Post, "/api/platform/support-bundle"))
+            Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(missing)).StatusCode);
+
+        var hash = (await ReviewAsync(client, adminToken))["contentHash"]!.GetValue<string>();
+        var issuedResponse = await AuthPost(client, adminToken, "/api/admin/support-access/approvals", new
+        {
+            platformActor = "platform:case-42",
+            purpose = "Investigate failed refreshes",
+            acknowledgedContent = hash,
+            lifetimeMinutes = 15
+        });
+        Assert.Equal(HttpStatusCode.OK, issuedResponse.StatusCode);
+        var issued = (await issuedResponse.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+        var capability = issued["capability"]!.GetValue<string>();
+
+        using var download = new HttpRequestMessage(HttpMethod.Post, "/api/platform/support-bundle");
+        download.Headers.Add(SupportAccessApprovalService.HeaderName, capability);
+        var result = await client.SendAsync(download);
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+        Assert.Equal("application/json", result.Content.Headers.ContentType?.MediaType);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.True(await db.AuditLogs.AnyAsync(log =>
+            log.Action == "APPROVE_PLATFORM_SUPPORT_ACCESS" && log.UserId != null));
+        var access = await db.AuditLogs.SingleAsync(log =>
+            log.Action == "PLATFORM_SUPPORT_BUNDLE_DOWNLOADED");
+        Assert.Null(access.UserId);
+        Assert.Equal("PlatformOperator", access.ActorType);
+        Assert.Equal("platform:case-42", access.ActorId);
+        Assert.Equal("support.bundle.read", access.EffectiveScopes);
+        Assert.DoesNotContain(capability, access.Detail ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SupportApprovalRequiresTheCurrentReviewedDisclosure()
+    {
+        using var factory = new TenantFixedFactory();
+        using var client = factory.CreateClient();
+        var response = await AuthPost(client, await GetAdminTokenAsync(client),
+            "/api/admin/support-access/approvals", new
+            {
+                platformActor = "platform:case-42",
+                purpose = "Investigate failed refreshes",
+                acknowledgedContent = new string('0', 64),
+                lifetimeMinutes = 15
+            });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Fact]
