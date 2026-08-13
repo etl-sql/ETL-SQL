@@ -1,6 +1,7 @@
 # ETL-SQL Tenant Portability Architecture
 
-**Status:** Approved target architecture; minimum bundle and migration journeys remain incremental
+**Status:** Minimum configuration/artifact bundle and Managed Dedicated SaaS → Enterprise exit shipped;
+large content, incremental deltas, and broader migration certification remain incremental
 
 **Applies to:** Deployment promotion, SaaS onboarding, SaaS-to-SaaS migration, SaaS-to-self-hosted
 Enterprise exit, profile down-migration, tenant export/import, cutover, rollback, and source deletion

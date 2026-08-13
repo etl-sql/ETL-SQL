@@ -383,7 +383,7 @@ checked off meaningfully. Split:
       tenant-partitioned ledger; it cannot read payload content or become execution authorization.
 - [ ] **Shared — provisioning, upgrade, and deletion** against shared control planes.
       **Gap — Phase C carried no managed-operations bullet at all.**
-- [ ] **Portability bundle (both).** Unify the existing Portal configuration export, Orchestrator
+- [x] **Portability bundle (both).** Unify the existing Portal configuration export, Orchestrator
       promotion package, source artifacts, and optional evidence/content into the one open,
       versioned, signed, tenant-encrypted format defined in
       [`TenantPortability.md`](docs/architecture/TenantPortability.md). Deliver the minimum
@@ -391,6 +391,20 @@ checked off meaningfully. Split:
       Dedicated SaaS GA; add large resumable content and incremental deltas later.
       Deliberately exclude resolved secrets, private keys, capabilities, checkpoints, leases, caches,
       and in-flight work rather than making an indefensible "zero-loss" claim.
+
+      **Closed for the defined minimum bundle (2026-08-13).** The production `admin tenant` workflow
+      now composes Portal configuration, the Orchestrator promotion package, and exact portable
+      artifacts into the single documented `etl-sql.tenant-bundle/v1` format. Its manifest records
+      stable logical IDs, dependencies, plaintext/stored hashes, counts, exclusions with reasons,
+      required target bindings, source profile/tenant/consistency point, recipient encryption, and a
+      detached operator signature. SaaS export requires tenant-recipient OpenPGP encryption; import
+      verifies tenant identity, signature, hashes, paths, size/count ceilings, bindings, and collisions
+      before mutation and leaves imported jobs disabled. Sixty-three focused tests prove composition,
+      deterministic comparison, tamper/traversal/duplicate refusal, production CLI inspection/import,
+      concurrent-plan refusal, and a customer-held-key Managed Dedicated SaaS → self-hosted Enterprise
+      exit that remains readable after the source operator is gone. Large selected content, resumable
+      chunks, and incremental/final deltas remain intentionally unsupported future modes, as allowed
+      by this cell; they are not represented as working.
 
 *Absorbs the retained discovery items **Usage Metering & Billing Collector** and **Full-Fidelity
 Tenant Portability Bundle**.*

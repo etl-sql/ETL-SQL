@@ -195,12 +195,15 @@ secrets, ephemeral security material, active sessions, leases, caches, and in-fl
 not transferable as durable tenant ownership, and saying so plainly is more defensible than a claim
 the product cannot keep.
 
-**Delivery stage.** The minimum configuration/artifact bundle and a certified SaaS → self-hosted
-Enterprise journey are release gates for Managed Dedicated SaaS, not late Shared-SaaS enhancements.
-Large evidence/content exports, incremental deltas, and cross-provider scale optimization may mature
-later without weakening the initial exit guarantee. One unified bundle extends the existing Portal
-configuration export and Orchestrator promotion package; do not introduce a competing packaging
-model, and do not represent the bundle as an opaque database backup.
+**Delivered minimum (2026-08-13).** The configuration/artifact v1 bundle and the customer-held-key
+Managed Dedicated SaaS → self-hosted Enterprise journey are shipped and covered by the portability
+test lane. The remaining certification below applies to broader migration operations.
+
+**Future delivery stage.** Large evidence/content exports, incremental deltas, cross-provider scale
+optimization, and Shared-source isolation mature without weakening the initial exit guarantee.
+One unified bundle continues to extend the existing Portal configuration export and Orchestrator
+promotion package; do not introduce a competing packaging model or represent the bundle as an opaque
+database backup.
 
 **Certification gate.** A representative tenant moves SaaS cluster A → SaaS cluster B and SaaS →
 self-hosted Enterprise without changing business logic; export under concurrent activity produces a
