@@ -184,6 +184,19 @@ Dedicated support from an Enterprise happy path, or Shared support from Dedicate
 
 ##### 4. Storage, paths, and artifacts
 
+**Current certification-environment constraint (2026-08-13).** The available development host is
+Docker Desktop on Linux/x86-64 with `runc` and NVIDIA runtimes only; it has no registered gVisor
+(`runsc`) or Kata runtime. ETL-SQL Portal and Orchestrator images and PostgreSQL/Testcontainers are
+available, so provider-neutral behavior, real Docker Desktop execution, multi-process coordination,
+forced `runc` termination, cleanup, recovery, and residue checks can be implemented and exercised
+here. Evidence produced on this host must be labeled **Docker Desktop / `runc`** and must not be
+represented as a hostile-tenant Hardened-runtime result. For the current development cycle, complete
+every testable portion on this host and retain the gVisor/Kata mount-isolation, forced-termination,
+and cross-sandbox checkpoint run as an explicit external certification gap until a suitable Linux
+host or CI runner becomes available. This constraint applies to the Shared storage cell below and
+the Dedicated/Shared Hardened execution cells in domain 5; it does not block their remaining
+provider-neutral scheduler and lifecycle work.
+
 - [ ] **Shared.** Server-derived storage identifiers with a negative test that a caller-supplied
       object, prefix, or path identifier cannot widen scope, and no reuse of volumes, directories,
       object prefixes, or encryption data keys across tenants or sandbox assignments.
