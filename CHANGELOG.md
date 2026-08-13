@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a counts-only tenant usage ledger at the Orchestrator scheduler boundary. Tenant-bound job
+  attempts persist idempotent row, memory, CPU, and duration measures from the immutable job tenant
+  binding without payload content, and metering failure cannot authorize, retry, or alter execution.
 - Added a durable Shared tenant resource registry for alias, gateway, resource, run, object,
   storage, queue, and index namespaces, with server-derived tenant scope and composite isolation on
   both SQLite and PostgreSQL.

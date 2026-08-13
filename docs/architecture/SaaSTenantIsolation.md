@@ -784,6 +784,16 @@ are potential data-exfiltration paths and carry explicit tenant/data classificat
 - Metering uses tenant-scoped counts and resource measures; it never becomes execution authority or
   a payload inspection service.
 
+Managed Dedicated scheduled work records one idempotent usage row per tenant-bound job-history
+attempt in the Orchestrator's provider-neutral state store. Attribution comes from the immutable
+`JobDefinition.TenantId`, not a request parameter or a script value. The row contains workload kind,
+terminal status, row count, peak memory, CPU seconds, duration, and recording time; it deliberately
+contains no script, parameters, connector destination, filenames, row values, or secrets. A ledger
+write failure is operationally visible but cannot fail, retry, or otherwise change the completed
+workload. This is the Dedicated topology contract only. Shared SaaS still requires attribution for
+sandbox I/O, Gateway traffic, storage, connector class, and fleet concurrency before it can claim
+metering support.
+
 ## 15. Availability, Upgrade, and Recovery
 
 - Attempts use monotonic identities, durable leases, fencing, cancellation, deadlines, and a durable

@@ -335,7 +335,20 @@ checked off meaningfully. Split:
       work.
 - [x] **Dedicated — support approval.** Add the approval workflow behind the shipped audited platform
       support-access model.
-- [ ] **Dedicated — metering.** Tenant-specific usage records for dedicated operations.
+- [x] **Dedicated — metering.** Tenant-specific usage records for dedicated operations.
+
+      **Closed with scheduler-bound counts-only evidence (2026-08-13).** Every tenant-bound
+      scheduled attempt now writes one idempotent `TenantUsageRecord` keyed by the immutable
+      server-owned `JobDefinition.TenantId` and job-history identity. The provider-neutral
+      SQLite/PostgreSQL history store retains workload class, terminal status, rows, peak memory,
+      CPU seconds, duration, and timestamp without script text, parameters, connector targets, row
+      content, or secret material. Equal history identifiers remain disjoint across tenant-specific
+      stores/partitions, retries cannot double count a persisted attempt, and a metering outage is
+      logged but cannot turn evidence into execution authority or change a successful outcome.
+      `TenantUsageStoreTests` and `SchedulerServiceTests` cover durable partitioning, restart,
+      cutoff queries, invalid measures, immutable scheduler attribution, legacy-unbound refusal,
+      and failure independence. This closes Dedicated metering only; the broader Shared-fleet
+      attribution cell remains open.
 - [ ] **Dedicated — deletion.** Legal/retention-aware tenant deletion with a completion record.
 - [ ] **Shared — backup and recovery.** Tenant-scoped export/restore from shared stores, including
       proof that point-in-time recovery, retry, or cache rebuild cannot introduce another tenant's

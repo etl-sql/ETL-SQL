@@ -52,6 +52,8 @@ namespace ETL_SQL.Tests.Orchestration
             mockStore.Setup(s => s.TryRenewJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
             mockStore.Setup(s => s.ReleaseJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>())).Returns(Task.CompletedTask);
+            mockStore.Setup(s => s.SaveTenantUsageAsync(It.IsAny<TenantUsageRecord>()))
+                .Returns(Task.CompletedTask);
             mockStore.Setup(s => s.UpdateJobLastRunAsync(It.IsAny<string>(), It.IsAny<DateTime>(),
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
@@ -439,6 +441,65 @@ namespace ETL_SQL.Tests.Orchestration
 
             store.Verify(s => s.LogJobStartAsync("LogJob"), Times.AtLeastOnce());
             store.Verify(s => s.LogJobEndAsync(1L, "SUCCESS", null, 42, It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.AtLeastOnce());
+        }
+
+        [Fact]
+        public async Task TenantBoundJob_WritesCountsOnlyUsageFromPersistedBinding()
+        {
+            var job = new JobDefinition(
+                "TenantJob", "SELECT 1;", 1, "HOUR", null, null, null,
+                TenantId: "tenant-alpha");
+            var (service, store, _) = Build([job], new ScriptExecutionResult(
+                true, 42, PeakMemoryBytes: 8192, CpuTimeSeconds: 1.5));
+
+            service.Start();
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.SaveTenantUsageAsync)));
+            service.Stop();
+
+            store.Verify(s => s.SaveTenantUsageAsync(It.Is<TenantUsageRecord>(usage =>
+                usage.TenantId == "tenant-alpha" &&
+                usage.JobHistoryId == 1 &&
+                usage.WorkloadKind == nameof(JobTargetKind.Script) &&
+                usage.Status == "SUCCESS" &&
+                usage.RowsProcessed == 42 &&
+                usage.PeakMemoryBytes == 8192 &&
+                usage.CpuTimeSeconds == 1.5 &&
+                usage.DurationMs >= 0)), Times.AtLeastOnce());
+        }
+
+        [Fact]
+        public async Task LegacyUnboundJob_DoesNotWriteTenantUsage()
+        {
+            var job = new JobDefinition("LegacyJob", "SELECT 1;", 1, "HOUR", null, null, null);
+            var (service, store, _) = Build([job], new ScriptExecutionResult(true, 1));
+
+            service.Start();
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.LogJobEndAsync)));
+            service.Stop();
+
+            store.Verify(s => s.SaveTenantUsageAsync(It.IsAny<TenantUsageRecord>()), Times.Never());
+        }
+
+        [Fact]
+        public async Task MeteringFailure_DoesNotChangeSuccessfulExecutionOutcome()
+        {
+            var job = new JobDefinition(
+                "MeterFailureJob", "SELECT 1;", 1, "HOUR", null, null, null,
+                TenantId: "tenant-alpha");
+            var (service, store, executor) = Build([job], new ScriptExecutionResult(true, 5));
+            store.Setup(s => s.SaveTenantUsageAsync(It.IsAny<TenantUsageRecord>()))
+                .ThrowsAsync(new InvalidOperationException("meter unavailable"));
+
+            service.Start();
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.SaveTenantUsageAsync)));
+            service.Stop();
+
+            executor.Verify(e => e.ExecuteTextAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(),
+                It.IsAny<string>(), It.IsAny<long>()), Times.AtLeastOnce());
+            store.Verify(s => s.LogJobEndAsync(
+                1L, "SUCCESS", null, 5, It.IsAny<long>(), It.IsAny<double>(),
+                It.IsAny<string?>(), It.IsAny<bool?>()), Times.AtLeastOnce());
         }
 
         [Fact]
