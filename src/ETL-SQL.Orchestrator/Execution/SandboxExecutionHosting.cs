@@ -1,0 +1,174 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace ETL_SQL.Orchestrator.Execution;
+
+public static class SandboxExecutionServiceCollectionExtensions
+{
+    public static IServiceCollection AddHardenedSandboxExecution(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var section = configuration.GetSection("Orchestration:SandboxExecution");
+        if (!section.GetValue("Enabled", false)) return services;
+        if (!configuration.GetValue("Orchestration:SandboxAdmission:Enabled", false))
+            throw new InvalidOperationException(
+                "Hardened sandbox execution requires durable sandbox admission to be enabled.");
+
+        var provider = new DockerSandboxExecutionOptions
+        {
+            DockerExecutable = section["DockerExecutable"] ?? "docker",
+            Image = Require(section, "Image"),
+            ImageDigest = Require(section, "ImageDigest").ToLowerInvariant(),
+            Runtime = Require(section, "Runtime"),
+            HostPolicyVersion = Require(section, "HostPolicyVersion"),
+            SessionRoot = RequireAbsolute(section, "SessionRoot"),
+            MachineKeyRoot = RequireAbsolute(section, "MachineKeyRoot"),
+            Entrypoint = section["Entrypoint"] ?? "etl-sql",
+            User = section["User"] ?? "65532:65532",
+            DedicatedTenantId = section["DedicatedTenantId"],
+            DedicatedPoolId = section["DedicatedPoolId"]
+        };
+        var profiles = ReadProfiles(section.GetSection("Profiles"));
+        var tenants = ReadTenants(section.GetSection("Tenants"));
+        var policyCatalog = new SandboxWorkloadPolicyCatalog { Profiles = profiles, Tenants = tenants };
+        // Constructor validation is intentionally performed during registration so malformed or
+        // incomplete hostile-runtime policy fails host startup before any scheduler loop begins.
+        _ = new SandboxWorkloadPolicyResolver(policyCatalog);
+        DockerSandboxExecutionProvider.ValidateOptions(provider);
+        ValidatePlacement(configuration, provider, profiles, tenants);
+
+        services.AddSingleton(provider);
+        services.AddSingleton(new SandboxScheduledJobExecutorOptions
+        {
+            PolicyVersion = Require(section, "PolicyVersion"),
+            BindingVersion = Require(section, "BindingVersion")
+        });
+        services.AddSingleton(new FileSystemSandboxWorkspaceOptions
+        {
+            RootPath = RequireAbsolute(section, "WorkspaceRoot")
+        });
+        services.AddSingleton(new ImmutableSandboxArtifactStoreOptions
+        {
+            RootPath = RequireAbsolute(section, "ArtifactRoot")
+        });
+        services.AddSingleton(policyCatalog);
+        services.AddSingleton<ISandboxCommandRunner, ProcessSandboxCommandRunner>();
+        services.AddSingleton<IImmutableSandboxArtifactStore, FileSystemImmutableSandboxArtifactStore>();
+        services.AddSingleton<ISandboxWorkspaceProvider, FileSystemSandboxWorkspaceProvider>();
+        services.AddSingleton<ISandboxWorkloadPolicyResolver, SandboxWorkloadPolicyResolver>();
+        services.AddSingleton<ISandboxTenantContextResolver>(
+            new SandboxTenantContextResolver(configuration["Orchestrator:TenantId"]));
+        services.AddSingleton<ISandboxExecutionProvider, DockerSandboxExecutionProvider>();
+        services.AddSingleton<ISandboxRuntimeReconciler, DockerSandboxRuntimeReconciler>();
+        services.AddSingleton<SandboxExecutionCoordinator>();
+        services.AddSingleton<ISandboxScheduledJobExecutor, SandboxScheduledJobExecutor>();
+        return services;
+    }
+
+    private static void ValidatePlacement(
+        IConfiguration configuration,
+        DockerSandboxExecutionOptions provider,
+        IReadOnlyDictionary<string, SandboxExecutionProfile> profiles,
+        IReadOnlyDictionary<string, SandboxTenantAdmissionPolicy> tenants)
+    {
+        var capacities = configuration.GetSection("Orchestration:SandboxAdmission:PoolCapacities")
+            .GetChildren().ToDictionary(child => child.Key, child => child.Value, StringComparer.Ordinal);
+        foreach (var profile in profiles.Values)
+        {
+            if (profile.IsolationTier < SandboxIsolationTier.Hardened)
+                throw new InvalidOperationException(
+                    "The hardened sandbox host cannot advertise Local or Standard profiles.");
+            if (!capacities.TryGetValue(profile.PoolId, out var capacity) ||
+                !int.TryParse(capacity, out var parsed) || parsed <= 0)
+                throw new InvalidOperationException(
+                    $"Sandbox profile pool '{profile.PoolId}' has no positive durable admission capacity.");
+        }
+
+        var dedicatedProfiles = profiles
+            .Where(pair => pair.Value.IsolationTier == SandboxIsolationTier.Dedicated)
+            .ToArray();
+        if (dedicatedProfiles.Length == 0) return;
+        var hostTenant = configuration["Orchestrator:TenantId"];
+        if (string.IsNullOrWhiteSpace(hostTenant) ||
+            !string.Equals(hostTenant, provider.DedicatedTenantId, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Dedicated sandbox profiles require matching Orchestrator:TenantId and DedicatedTenantId authority.");
+        if (dedicatedProfiles.Any(profile =>
+                !string.Equals(profile.Value.PoolId, provider.DedicatedPoolId, StringComparison.Ordinal)))
+            throw new InvalidOperationException(
+                "Every Dedicated profile on a tenant-dedicated worker must use its fixed DedicatedPoolId.");
+        if (tenants.Count != 1 || !tenants.ContainsKey(hostTenant))
+            throw new InvalidOperationException(
+                "A tenant-dedicated worker policy catalog must contain exactly its host-fixed tenant.");
+    }
+
+    private static Dictionary<string, SandboxExecutionProfile> ReadProfiles(IConfigurationSection section)
+    {
+        var profiles = new Dictionary<string, SandboxExecutionProfile>(StringComparer.Ordinal);
+        foreach (var child in section.GetChildren())
+        {
+            if (!Enum.TryParse<SandboxIsolationTier>(child["IsolationTier"], true, out var tier))
+                throw new InvalidOperationException($"Sandbox profile '{child.Key}' has an invalid isolation tier.");
+            profiles.Add(child.Key, new SandboxExecutionProfile
+            {
+                PoolId = Require(child, "PoolId"),
+                IsolationTier = tier,
+                Limits = new SandboxResourceLimits
+                {
+                    MaxDuration = TimeSpan.FromSeconds(RequirePositiveDouble(child, "MaxDurationSeconds")),
+                    MaxMemoryBytes = RequirePositiveLong(child, "MaxMemoryBytes"),
+                    MaxScratchBytes = RequirePositiveLong(child, "MaxScratchBytes"),
+                    MaxProcesses = checked((int)RequirePositiveLong(child, "MaxProcesses"))
+                }
+            });
+        }
+        return profiles;
+    }
+
+    private static Dictionary<string, SandboxTenantAdmissionPolicy> ReadTenants(IConfigurationSection section)
+    {
+        var tenants = new Dictionary<string, SandboxTenantAdmissionPolicy>(StringComparer.Ordinal);
+        foreach (var child in section.GetChildren())
+        {
+            var allowed = child.GetSection("AllowedProfiles").GetChildren()
+                .Select(item => item.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Cast<string>()
+                .ToArray();
+            tenants.Add(child.Key, new SandboxTenantAdmissionPolicy
+            {
+                DefaultProfile = Require(child, "DefaultProfile"),
+                AllowedProfiles = allowed,
+                Weight = checked((int)RequirePositiveLong(child, "Weight")),
+                MaxConcurrentAttempts = checked((int)RequirePositiveLong(child, "MaxConcurrentAttempts")),
+                MaxQueuedAttempts = checked((int)RequirePositiveLong(child, "MaxQueuedAttempts"))
+            });
+        }
+        return tenants;
+    }
+
+    private static string Require(IConfigurationSection section, string key) =>
+        string.IsNullOrWhiteSpace(section[key])
+            ? throw new InvalidOperationException($"Sandbox execution configuration '{section.Path}:{key}' is required.")
+            : section[key]!;
+
+    private static string RequireAbsolute(IConfigurationSection section, string key)
+    {
+        var value = Require(section, key);
+        if (!Path.IsPathFullyQualified(value))
+            throw new InvalidOperationException($"Sandbox execution configuration '{section.Path}:{key}' must be absolute.");
+        return Path.GetFullPath(value);
+    }
+
+    private static long RequirePositiveLong(IConfigurationSection section, string key) =>
+        long.TryParse(section[key], out var value) && value > 0
+            ? value
+            : throw new InvalidOperationException($"Sandbox execution configuration '{section.Path}:{key}' must be positive.");
+
+    private static double RequirePositiveDouble(IConfigurationSection section, string key) =>
+        double.TryParse(section[key], System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value) && value > 0
+            ? value
+            : throw new InvalidOperationException($"Sandbox execution configuration '{section.Path}:{key}' must be positive.");
+}

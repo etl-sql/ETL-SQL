@@ -51,6 +51,12 @@ public sealed record SandboxWorkloadRequest
     public required ResolvedSandboxAdmissionPolicy AdmissionPolicy { get; init; }
     public IReadOnlyList<string> CapabilityHandles { get; init; } = [];
     public string? CheckpointHandle { get; init; }
+    public string? SessionId { get; init; }
+    public bool ResumeFromCheckpoint { get; init; }
+    public IReadOnlyDictionary<string, string> VariableOverrides { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+    /// <summary>Set only by the admission coordinator after durable activation.</summary>
+    public string? AdmissionId { get; internal init; }
 
     internal void Validate()
     {
@@ -74,6 +80,10 @@ public sealed record SandboxWorkloadRequest
 
         if (CapabilityHandles.Any(string.IsNullOrWhiteSpace))
             throw new ArgumentException("Capability handles cannot contain blank values.", nameof(CapabilityHandles));
+        if (ResumeFromCheckpoint && string.IsNullOrWhiteSpace(SessionId))
+            throw new ArgumentException("Checkpoint resume requires a server-owned session id.", nameof(SessionId));
+        if (VariableOverrides.Any(pair => string.IsNullOrWhiteSpace(pair.Key)))
+            throw new ArgumentException("Variable override names cannot be blank.", nameof(VariableOverrides));
     }
 }
 
@@ -89,7 +99,8 @@ public sealed record SandboxProviderEvidence(
 public sealed record SandboxExecutionOutcome(
     SandboxTerminalStatus Status,
     int? ExitCode = null,
-    string? SanitizedDiagnostic = null);
+    string? SanitizedDiagnostic = null,
+    ScriptExecutionResult? Result = null);
 
 /// <summary>
 /// One started sandbox. A successful <see cref="DestroyAsync"/> call is the provider's guarantee that
@@ -134,6 +145,21 @@ public sealed class SandboxTeardownException : Exception
     public Exception? ExecutionFailure { get; }
 }
 
+public sealed class SandboxPrepareTeardownException : Exception
+{
+    public SandboxPrepareTeardownException(Exception preparationFailure, Exception teardownFailure, string admissionId)
+        : base(
+            "Sandbox preparation failed and runtime removal could not be proven; writable state was retained for reconciliation.",
+            teardownFailure)
+    {
+        PreparationFailure = preparationFailure;
+        AdmissionId = admissionId;
+    }
+
+    public Exception PreparationFailure { get; }
+    public string AdmissionId { get; }
+}
+
 /// <summary>
 /// Enforces the provider-neutral attempt lifecycle. Workspace deletion occurs only after the runtime
 /// provider proves the sandbox is destroyed and detached; uncertain teardown retains state rather than
@@ -162,10 +188,20 @@ public sealed class SandboxExecutionCoordinator(
         SandboxWorkspaceAssignment? workspace = null;
         ISandboxAttempt? attempt = null;
         var runtimeDestroyed = false;
+        var retainForReconciliation = false;
         try
         {
             workspace = await workspaces.AssignAsync(request.Assignment, executionToken);
-            attempt = await provider.PrepareAsync(request, workspace, executionToken);
+            try
+            {
+                attempt = await provider.PrepareAsync(
+                    request with { AdmissionId = admission.AdmissionId }, workspace, executionToken);
+            }
+            catch (SandboxPrepareTeardownException)
+            {
+                retainForReconciliation = true;
+                throw;
+            }
             if (attempt is null)
                 throw new InvalidOperationException("The sandbox provider prepared no attempt.");
 
@@ -204,7 +240,7 @@ public sealed class SandboxExecutionCoordinator(
         {
             // A failed transactional Prepare owns no runtime. A prepared runtime must first prove it has
             // detached; otherwise retain the workspace for fenced reconciliation and residue evidence.
-            if (attempt is null || runtimeDestroyed)
+            if (!retainForReconciliation && (attempt is null || runtimeDestroyed))
             {
                 try
                 {

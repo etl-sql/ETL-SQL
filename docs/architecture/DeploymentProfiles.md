@@ -468,8 +468,10 @@ For scheduled work, `JobDefinition.Options` may contain only a named `SandboxPro
 `SandboxWorkloadPolicyResolver` combines that durable request with the verified tenant's server-owned
 catalog entry. The catalog—not caller-controlled job metadata—sets entitlement, physical capacity
 pool, isolation tier, runtime limits, weight, and queue/concurrency ceilings. Missing tenant policy,
-unknown or unentitled profiles, and malformed or ambiguous metadata fail closed. The Orchestrator host
-still must wire the resolved policy into dispatch, restart recovery, and the selected runtime provider.
+unknown or unentitled profiles, and malformed or ambiguous metadata fail closed.
+`SandboxScheduledJobExecutor` wires the resolved policy into scheduled dispatch and the selected
+runtime provider. Cluster restart recovery still needs a durable admission-to-immutable-workload
+dispatch record before a different scheduler process can adopt queued work automatically.
 
 Scheduled jobs carry an immutable canonical `TenantId`. The Portal places its validated request tenant
 inside the signed Orchestrator identity assertion; Dedicated Orchestrators may instead set the fixed
@@ -482,8 +484,15 @@ The Orchestrator service invokes `AddSandboxAdmissionHosting`. With
 `Orchestration:SandboxAdmission:Enabled=true`, the registration uses the same configured relational
 authority as the job store, installs the ledger-backed controller, and starts periodic retained
 capacity reconciliation. Invalid pool/interval settings fail configuration, and an enabled host with
-no environment-owned `ISandboxRuntimeReconciler` fails dependency resolution. The default remains off
-until a deployment binds a runtime capable of proving stopped processes and detached mounts.
+no environment-owned `ISandboxRuntimeReconciler` fails dependency resolution.
+`AddHardenedSandboxExecution` provides the production Docker binding when explicitly enabled. It
+requires a digest-pinned engine image, a registered allowlisted gVisor/Kata runtime, absolute
+workspace/artifact/session/machine-key roots, and a server-owned policy catalog. The provider stages a
+rehashed read-only script, creates the workload stopped, reports evidence before start, uses a
+read-only root, non-root user, no network, dropped capabilities, no-new-privileges, bounded memory,
+PIDs, duration and tmpfs scratch, then proves container removal before assignment cleanup. Dedicated
+workers accept only their host-fixed tenant and exact pool. The default remains off, and a deployment
+without an actual hardened runtime cannot satisfy certification merely by configuring these values.
 
 ### 10.1 Isolation Tiers
 

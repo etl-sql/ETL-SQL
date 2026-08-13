@@ -644,17 +644,26 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         attemptQueueWaitMs = queueWaitMs;
                         _logger.LogInformation("Job {JobName} acquired throttle slot. Queue wait: {QueueWaitMs} ms.", job.Name, queueWaitMs);
                         using var scope = _serviceProvider.CreateScope();
-                        var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
-
-                        lastResult = resumeFromCheckpoint
-                            ? await executor.ResumeTextAsync(
-                                job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs)
-                            : variableOverrides is { Count: > 0 }
-                            ? await executor.ExecuteTextAsync(
-                                job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
-                                executionIdentity: null, variableOverrides: variableOverrides)
-                            : await executor.ExecuteTextAsync(
-                                job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs);
+                        var sandboxExecutor = scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>();
+                        if (sandboxExecutor is not null)
+                        {
+                            lastResult = await sandboxExecutor.ExecuteAsync(
+                                job, historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
+                                variableOverrides, cycleCts.Token);
+                        }
+                        else
+                        {
+                            var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
+                            lastResult = resumeFromCheckpoint
+                                ? await executor.ResumeTextAsync(
+                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs)
+                                : variableOverrides is { Count: > 0 }
+                                ? await executor.ExecuteTextAsync(
+                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                    executionIdentity: null, variableOverrides: variableOverrides)
+                                : await executor.ExecuteTextAsync(
+                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs);
+                        }
                         sessionId = lastResult.SessionId ?? sessionId;
 
                         if (lastResult.Success)

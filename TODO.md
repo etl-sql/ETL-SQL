@@ -215,6 +215,24 @@ Dedicated support from an Enterprise happy path, or Shared support from Dedicate
 - [ ] **Dedicated.** Provision tenant-dedicated queues, schedules, leases, quotas, session roots, and
       VM/worker boundaries; run disposable OCI tasks without treating a shared-kernel container as
       the boundary between customers. Prove reserved placement.
+
+      **Production hardened-provider slice completed (2026-08-13).** Scheduled jobs now prefer the
+      configured `ISandboxScheduledJobExecutor`, which binds the job's immutable tenant, attempt,
+      session/checkpoint, server-resolved profile, durable admission, and content-addressed script to
+      `SandboxExecutionCoordinator`. `DockerSandboxExecutionProvider` accepts only digest-pinned
+      images and registered gVisor/Kata runtimes; ordinary `runc`/`crun` cannot claim Hardened
+      evidence. It creates tenant code stopped, then uses a read-only root, non-root user, no network,
+      all capabilities dropped, no-new-privileges, bounded memory/PIDs/tmpfs, exact assignment mounts,
+      and a tenant-specific persistent session/key mount. Dedicated hosts are fixed to exactly one
+      tenant and capacity pool and refuse foreign placement before invoking Docker. Runtime removal
+      is verified before workspace/capacity release; retained reconciliation locates containers by
+      durable admission ID and releases only absent or proven-removed work. Tests pin scheduler
+      routing, immutable input/tamper refusal, command construction, reserved placement, session-key
+      separation, prepare cleanup, terminal teardown, and stopped/running/absent reconciliation.
+      This cell remains open because the current certification host exposes only ordinary `runc` and
+      NVIDIA runtimes and has no pinned runnable ETL-SQL engine image for gVisor/Kata. A real hardened
+      runtime run, forced termination, different-sandbox checkpoint resume, and residue proof are
+      still required; mocked command evidence is not substituted for that gate.
 - [ ] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
       tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
       ambiguous-outcome handling, and destructive cleanup. Tenant-partitioned queues and
@@ -270,7 +288,9 @@ Dedicated support from an Enterprise happy path, or Shared support from Dedicate
       `CREATE JOB`, and tenant-scoped subscription generation carry the binding; conflicting host and
       signed identities are denied, replacement cannot change it, and legacy/unbound jobs cannot enter
       sandbox policy resolution. Global/durable weighted selection, scheduler-execution/restart
-      dispatch, and an actual Hardened OCI/microVM provider remain open.
+      dispatch remain open. The production Docker OCI provider and scheduler dispatch seam described
+      in the Dedicated slice above now exist, but Shared cannot claim them until a real Hardened
+      runtime lane proves the boundary and cluster-global fair queued-work recovery is complete.
 - [ ] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security

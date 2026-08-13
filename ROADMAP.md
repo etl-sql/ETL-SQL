@@ -171,6 +171,11 @@ a replacement sandbox rehydrates it. It never resumes at an arbitrary statement 
 **Delivery stage.** Managed Dedicated may use a tenant-dedicated VM, worker pool, or cluster as the
 hypervisor boundary, with disposable OCI tasks per run inside it. Shared SaaS requires the Hardened
 per-run boundary, the provider-neutral Execution Scheduler, and shared-fleet negative certification.
+The production scheduler now has an opt-in content-addressed Docker provider binding that accepts
+only registered gVisor/Kata runtimes and digest-pinned images, with fixed tenant/pool placement for
+Dedicated workers and fenced teardown reconciliation. Its live hardened-runtime certification and
+cluster-global Shared queued-work recovery remain delivery gates; an ordinary local `runc` runtime
+does not satisfy them.
 
 **Certification gate.** Cross-tenant attempts fail across scheduling, workload identity, network,
 storage, checkpoints, spill, caches, queues, secrets, connections, gateways, logs, metrics, and

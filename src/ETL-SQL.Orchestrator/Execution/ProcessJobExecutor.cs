@@ -329,7 +329,7 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private ScriptExecutionResult ParseResult(int exitCode, string stdout, string stderr, long peakMemory, double cpuSeconds)
+        internal static ScriptExecutionResult ParseResult(int exitCode, string stdout, string stderr, long peakMemory, double cpuSeconds)
         {
             // ETL-SQL.exe with --json writes a JSON envelope as the LAST non-empty line
             var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);

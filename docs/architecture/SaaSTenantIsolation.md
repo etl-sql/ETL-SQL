@@ -459,9 +459,12 @@ the filesystem implementation returns a cryptographically identified root that h
 existed. Its input, scratch, and staged-output directories belong to exactly that assignment. Before
 destructive teardown the provider rechecks both root containment and a cryptographic ownership marker,
 then deletes without following reparse points and verifies that no writable root remains. Marker loss
-or alteration fails closed instead of risking deletion of an unowned path. This contract is not the
-Hardened compute boundary: an OCI/microVM provider must consume it, mount only the returned assignment,
-and certify abnormal-exit cleanup and mount non-reuse.
+or alteration fails closed instead of risking deletion of an unowned path. This contract is not by
+itself the Hardened compute boundary. The production `DockerSandboxExecutionProvider` consumes it
+only through a digest-pinned image and a registered gVisor/Kata runtime, mounts assignment input
+read-only and output writable, and uses bounded tmpfs scratch. Ordinary `runc` and `crun` are rejected
+rather than relabeled Hardened. Deployment certification must still execute forced-exit and non-reuse
+probes against the actual selected runtime.
 
 `SandboxExecutionCoordinator` binds that workspace lifecycle to the provider-neutral execution
 contract. `ISandboxExecutionProvider.PrepareAsync` must return a non-executing attempt with provider,
@@ -757,8 +760,12 @@ request: it resolves the verified tenant against a server-owned policy catalog, 
 profile is entitled, and returns the catalog's physical pool, required isolation tier, resource
 limits, tenant weight, and queue/concurrency ceilings. Jobs cannot supply those authoritative values
 directly. Unknown tenants or profiles, unentitled profiles, malformed option JSON, non-string profile
-values, and case-ambiguous duplicate profile keys fail closed. Connecting this resolved policy and
-recovered admission identity to scheduler execution remains host integration work.
+values, and case-ambiguous duplicate profile keys fail closed. `SandboxScheduledJobExecutor` connects
+this resolved policy to normal scheduler execution. It stores the script in a content-addressed
+append-only artifact store, creates server-owned run/attempt identity, and passes named-checkpoint and
+variable-override intent as typed fields rather than raw provider arguments. Recovery of an orphaned
+queued admission after total scheduler-process loss still requires a durable
+admission-to-workload dispatch record.
 
 `JobDefinition.TenantId` is the immutable scheduler tenant binding. In shared deployments the Portal
 derives it from the already-validated request `TenantContext` and includes it in the short-lived,
@@ -774,9 +781,14 @@ Long-running Orchestrator hosts call `AddSandboxAdmissionHosting`. The feature i
 as the job store, registers `LedgerBackedSandboxAdmissionController`, and runs retained-admission
 reconciliation on the configured interval. Pool capacities and all intervals must be positive. The
 environment must register `ISandboxRuntimeReconciler`; omission is a startup dependency failure, not
-an implicit `Detached` result. The feature stays disabled until a runtime provider supplies that proof
-binding, so existing in-process and process-spawn execution paths are not silently reclassified as
-hardened sandboxes.
+an implicit `Detached` result. `AddHardenedSandboxExecution` supplies the Docker runtime/reconciler
+binding when `Orchestration:SandboxExecution:Enabled=true`. It also replaces scheduled dispatch with
+the sandbox seam; existing in-process and process-spawn paths are never silently reclassified.
+Startup requires durable admission, an entitled profile/tenant catalog, absolute artifact,
+workspace, session, and key roots, a digest-pinned image, an allowlisted runtime, and matching fixed
+tenant/pool authority for Dedicated profiles. Each tenant has a distinct mounted machine-key file so
+encrypted checkpoints survive a disposable worker without placing key material in arguments or
+environment values.
 
 ## 14. Observability, Audit, and Support
 

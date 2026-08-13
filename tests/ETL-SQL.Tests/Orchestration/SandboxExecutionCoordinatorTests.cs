@@ -89,6 +89,33 @@ public sealed class SandboxExecutionCoordinatorTests
     }
 
     [Fact]
+    public async Task UncertainPrepareCleanupRetainsWorkspaceAndAdmission()
+    {
+        using var temp = new TempDirectory();
+        var admissions = CreateAdmissionController();
+        var coordinator = new SandboxExecutionCoordinator(CreateWorkspaceProvider(temp.Root), admissions);
+        var provider = new FakeProvider(
+            SandboxTerminalStatus.Failed,
+            prepareFailure: new SandboxPrepareTeardownException(
+                new IOException("create failed"), new IOException("remove unproven"), "provider-id"));
+
+        var error = await Assert.ThrowsAsync<SandboxPrepareTeardownException>(() =>
+            coordinator.ExecuteAsync(provider, Request()));
+
+        Assert.Contains("retained", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(provider.WorkspaceRoot));
+        var blocked = admissions.AcquireAsync(
+            TenantContext.FromVerifiedCredential("tenant-a"), AdmissionPolicy()).AsTask();
+        Assert.False(blocked.IsCompleted);
+        // The coordinator's durable admission id, rather than the provider's test placeholder, is
+        // the authority retained by the controller.
+        var retainedId = GetOnlyAssignmentAdmission(admissions);
+        Assert.True(await admissions.ReleaseReconciledAsync(retainedId));
+        var released = await blocked;
+        await released.ReleaseAsync();
+    }
+
+    [Fact]
     public async Task UnprovenRuntimeTeardownRetainsWorkspaceForReconciliation()
     {
         using var temp = new TempDirectory();
@@ -168,6 +195,14 @@ public sealed class SandboxExecutionCoordinatorTests
         MaxConcurrentAttempts = 1,
         MaxQueuedAttempts = 8
     };
+
+    private static string GetOnlyAssignmentAdmission(FairShareSandboxAdmissionController admissions)
+    {
+        var field = typeof(FairShareSandboxAdmissionController).GetField(
+            "_activeLeases", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var value = (System.Collections.IDictionary)field.GetValue(admissions)!;
+        return Assert.Single(value.Keys.Cast<string>());
+    }
 
     private sealed class FakeProvider(
         SandboxTerminalStatus status,

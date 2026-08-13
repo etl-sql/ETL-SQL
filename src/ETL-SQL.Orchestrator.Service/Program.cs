@@ -105,6 +105,7 @@ try
 
     builder.Services.AddEtlSqlEngine(cfg);
     builder.Services.AddSandboxAdmissionHosting(cfg);
+    builder.Services.AddHardenedSandboxExecution(cfg);
     builder.Services.AddSingleton<OrchestratorObjectAuthorizationService>();
     builder.Services.AddSingleton<IOrchestratorObjectAuthorizer>(sp =>
         sp.GetRequiredService<OrchestratorObjectAuthorizationService>());

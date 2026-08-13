@@ -112,6 +112,30 @@ Configures concurrency limits, memory floors, and polling intervals for job exec
 | `Orchestration:SandboxAdmission:LeaseSeconds` | number | `120` | > 0 | Durable admission ownership lease. The active controller renews at one third of this duration. |
 | `Orchestration:SandboxAdmission:ActivationPollMilliseconds` | number | `100` | > 0 | Delay before retrying a durable activation when relational capacity is unavailable. |
 | `Orchestration:SandboxAdmission:ReconciliationSeconds` | number | `30` | > 0 | Interval for retaining expired leases and probing retained runtimes for proven detachment. |
+| `Orchestration:SandboxExecution:Enabled` | boolean | `false` | — | Routes scheduled jobs through the hardened Docker provider. Requires SandboxAdmission to be enabled. |
+| `Orchestration:SandboxExecution:Image` | string | — | digest-pinned OCI reference | Full engine image reference ending in `@sha256:...`; tags alone are refused. |
+| `Orchestration:SandboxExecution:ImageDigest` | string | — | canonical SHA-256 | Digest that must match the image reference and Docker repository-digest evidence. |
+| `Orchestration:SandboxExecution:Runtime` | string | — | allowlist | Registered `runsc`, containerd-runsc, or Kata runtime. `runc`/`crun` are never Hardened. |
+| `Orchestration:SandboxExecution:HostPolicyVersion` | string | — | nonblank | Immutable host-hardening policy version recorded in provider evidence. |
+| `Orchestration:SandboxExecution:PolicyVersion` | string | — | nonblank | Version of the server-owned workload profile/entitlement catalog. |
+| `Orchestration:SandboxExecution:BindingVersion` | string | — | nonblank | Version of the deployment/runtime binding carried into every attempt. |
+| `Orchestration:SandboxExecution:WorkspaceRoot` | path | — | absolute | Single-use assignment roots. Must be writable by the Orchestrator and never shared with another worker assignment. |
+| `Orchestration:SandboxExecution:ArtifactRoot` | path | — | absolute | Append-only content-addressed script artifact root. |
+| `Orchestration:SandboxExecution:SessionRoot` | path | — | absolute | Parent of tenant-specific persistent checkpoint/session roots. |
+| `Orchestration:SandboxExecution:MachineKeyRoot` | path | — | absolute | Parent containing one provisioned `<tenant-id>.key` file per tenant (minimum 32 characters, no reparse points). |
+| `Orchestration:SandboxExecution:DedicatedTenantId` | string | — | paired | Fixed tenant accepted by a Dedicated worker; must match `Orchestrator:TenantId`. |
+| `Orchestration:SandboxExecution:DedicatedPoolId` | string | — | paired | Exact non-borrowing pool accepted by a Dedicated worker. Required with `DedicatedTenantId`. |
+| `Orchestration:SandboxExecution:Profiles:{name}:PoolId` | string | — | configured admission pool | Physical pool selected only by server policy. |
+| `Orchestration:SandboxExecution:Profiles:{name}:IsolationTier` | enum | — | `Hardened` or `Dedicated` | Minimum provider evidence required before tenant code starts. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxDurationSeconds` | number | — | > 0 | Per-attempt wall-clock ceiling. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxMemoryBytes` | integer | — | > 0 | Hard memory and memory+swap ceiling. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxScratchBytes` | integer | — | > 0 | Size of the assignment-local noexec/nosuid/nodev tmpfs. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxProcesses` | integer | — | > 0 | Container PID ceiling. |
+| `Orchestration:SandboxExecution:Tenants:{tenant}:DefaultProfile` | string | — | existing profile | Default server-owned profile for the tenant. |
+| `Orchestration:SandboxExecution:Tenants:{tenant}:AllowedProfiles` | array | — | nonempty | Exact profile entitlements; workload metadata may request only one of these names. |
+| `Orchestration:SandboxExecution:Tenants:{tenant}:Weight` | integer | — | 1–16 | Fair-admission weight. |
+| `Orchestration:SandboxExecution:Tenants:{tenant}:MaxConcurrentAttempts` | integer | — | > 0 | Tenant running-attempt ceiling. |
+| `Orchestration:SandboxExecution:Tenants:{tenant}:MaxQueuedAttempts` | integer | — | > 0 | Tenant queue backpressure ceiling. |
 | `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | integer | `2048` | — | Memory floor threshold for scheduling new background tasks (2GB). |
 | `Orchestration:ResourceManagement:MaxStreamingCursors` | integer | `50` | — | Max open active cursors across all jobs. |
 | `Orchestration:ResourceManagement:ResourceWaitTimeoutSeconds` | integer | `600` | — | Duration jobs will wait in queue for RAM to free up before timing out. |

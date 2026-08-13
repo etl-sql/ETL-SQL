@@ -20,15 +20,24 @@ public enum PathProtectionMode
 public partial class SecurityService
 {
     /// <summary>
-    /// Returns a SHA-256 digest of <c>MachineName:UserName</c> as a stable per-machine identifier.
-    /// <para><b>Entropy note:</b> Container orchestrators (Docker, Kubernetes) often assign predictable
-    /// hostnames (e.g. <c>pod-abc123</c>) and run all workloads as the same OS user, which weakens the
-    /// "machine-unique" property. For production deployments where strong uniqueness is required, override
-    /// by setting <c>Security:MachineKey</c> in configuration to a secret injected via environment
-    /// variable or a secrets manager.</para>
+    /// Returns the server-mounted machine/session key when <c>ETLSQL_MACHINE_KEY_FILE</c> is set;
+    /// otherwise returns the legacy SHA-256 digest of <c>MachineName:UserName</c>. The file indirection
+    /// keeps key material out of process arguments and environment values while allowing disposable
+    /// workers to rehydrate encrypted checkpoints.
     /// </summary>
     public static string GetMachineKey()
     {
+        var keyFile = Environment.GetEnvironmentVariable("ETLSQL_MACHINE_KEY_FILE");
+        if (!string.IsNullOrWhiteSpace(keyFile))
+        {
+            if (!Path.IsPathFullyQualified(keyFile))
+                throw new InvalidOperationException("ETLSQL_MACHINE_KEY_FILE must be an absolute server-mounted path.");
+            var key = File.ReadAllText(keyFile).Trim();
+            if (key.Length < 32)
+                throw new InvalidOperationException("The mounted ETL-SQL machine key must contain at least 32 characters.");
+            return key;
+        }
+
         var rawKey = $"{Environment.MachineName}:{Environment.UserName}";
         using var sha256 = System.Security.Cryptography.SHA256.Create();
         var bytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(rawKey));

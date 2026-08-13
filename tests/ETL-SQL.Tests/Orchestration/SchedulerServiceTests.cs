@@ -37,7 +37,8 @@ namespace ETL_SQL.Tests.Orchestration
                 IEnumerable<JobDefinition> jobs,
                 ScriptExecutionResult result,
                 INodeCapacityMonitor? capacityMonitor = null,
-                Dictionary<string, string?>? config = null)
+                Dictionary<string, string?>? config = null,
+                Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null)
         {
             capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             var mockStore = new Mock<IJobHistoryStore>();
@@ -61,7 +62,8 @@ namespace ETL_SQL.Tests.Orchestration
             mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()))
                         .ReturnsAsync(result);
 
-            return (BuildService(mockStore, mockExecutor, capacityMonitor, config), mockStore, mockExecutor);
+            return (BuildService(mockStore, mockExecutor, capacityMonitor, config,
+                sandboxExecutor: sandboxExecutor), mockStore, mockExecutor);
         }
 
         private SchedulerService BuildService(
@@ -69,7 +71,8 @@ namespace ETL_SQL.Tests.Orchestration
             Mock<IScriptExecutor> mockExecutor,
             INodeCapacityMonitor? capacityMonitor = null,
             Dictionary<string, string?>? config = null,
-            Mock<ISessionStateManager>? sessionManager = null)
+            Mock<ISessionStateManager>? sessionManager = null,
+            Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null)
         {
             capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             // IServiceProvider.CreateScope() is an extension that calls
@@ -77,6 +80,8 @@ namespace ETL_SQL.Tests.Orchestration
             var mockScopeServiceProvider = new Mock<IServiceProvider>();
             mockScopeServiceProvider.Setup(p => p.GetService(typeof(IScriptExecutor)))
                                     .Returns(mockExecutor.Object);
+            mockScopeServiceProvider.Setup(p => p.GetService(typeof(ISandboxScheduledJobExecutor)))
+                                    .Returns(sandboxExecutor?.Object);
 
             var mockScope = new Mock<IServiceScope>();
             mockScope.Setup(s => s.ServiceProvider).Returns(mockScopeServiceProvider.Object);
@@ -441,6 +446,32 @@ namespace ETL_SQL.Tests.Orchestration
 
             store.Verify(s => s.LogJobStartAsync("LogJob"), Times.AtLeastOnce());
             store.Verify(s => s.LogJobEndAsync(1L, "SUCCESS", null, 42, It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.AtLeastOnce());
+        }
+
+        [Fact]
+        public async Task ConfiguredSandboxExecutorOwnsScheduledDispatch()
+        {
+            var job = new JobDefinition(
+                "TenantJob", "PRINT 'isolated';", 1, "HOUR", null, null, null,
+                TenantId: "tenant-a");
+            var sandbox = new Mock<ISandboxScheduledJobExecutor>();
+            sandbox.Setup(executor => executor.ExecuteAsync(
+                    job, It.IsAny<long>(), It.IsAny<int>(), It.IsAny<string>(), false,
+                    It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ScriptExecutionResult(true, 3));
+            var (service, _, processExecutor) = Build(
+                [job], new ScriptExecutionResult(true, 0), sandboxExecutor: sandbox);
+
+            service.Start();
+            await WaitUntilAsync(() => Invoked(sandbox, nameof(ISandboxScheduledJobExecutor.ExecuteAsync)));
+            service.Stop();
+
+            sandbox.Verify(executor => executor.ExecuteAsync(
+                job, It.IsAny<long>(), 1, It.IsAny<string>(), false,
+                It.IsAny<long>(), null, It.IsAny<CancellationToken>()), Times.AtLeastOnce());
+            processExecutor.Verify(executor => executor.ExecuteTextAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(),
+                It.IsAny<string>(), It.IsAny<long>()), Times.Never());
         }
 
         [Fact]
