@@ -113,6 +113,7 @@ builder.Services.AddScoped<DatasetKeyPostureService>();
 builder.Services.AddScoped<CredentialPostureService>();
 builder.Services.AddScoped<PortalSupportBundleService>();
 builder.Services.AddSingleton<SupportAccessApprovalService>();
+builder.Services.AddScoped<SharedTenantResourceRegistry>();
 builder.Services.AddScoped<PolicyImpactService>();
 builder.Services.AddScoped<EnvironmentPlanService>();
 builder.Services.AddSingleton<ETL_SQL.Core.IMetadataManager, ETL_SQL.Core.Services.MetadataManager>();

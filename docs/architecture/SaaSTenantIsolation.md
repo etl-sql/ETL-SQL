@@ -153,6 +153,14 @@ Every shared entry point resolves:
 The resulting authority is passed forward as an internal immutable context. Downstream services
 validate it independently and compare it with their own resource ownership records.
 
+Shared control-plane identifiers use `SharedTenantResourceRegistry`, a provider-neutral durable
+registry backed by the Portal's configured SQLite or PostgreSQL store. Alias, Gateway, resource,
+run, object, storage, queue, and index names are stored with a composite tenant/kind/logical key and
+a server-derived scoped identifier. Reads, enumeration, deletion, and collision handling always
+include the request's verified `TenantContext`; numeric IDs and caller-provided scoped IDs cannot
+select a tenant. The registry stores namespace ownership only—provider credentials, payloads, and
+runtime authority remain in their purpose-specific systems.
+
 Managed Dedicated adoption is implemented on every shipped surface that can name or disclose a
 tenant across deployment boundaries:
 
@@ -171,8 +179,12 @@ Current evidence is
 [`SaasTenantOnboardingTests`](../../tests/ETL-SQL.Tests/Orchestration/SaasTenantOnboardingTests.cs),
 [`TenantBundleComposerTests`](../../tests/ETL-SQL.Tests/Portability/TenantBundleComposerTests.cs),
 [`FleetWorkspaceAndExportPlanTests`](../../tests/ETL-SQL.Portal.Tests/FleetWorkspaceAndExportPlanTests.cs),
-and [`SupportBundleTests`](../../tests/ETL-SQL.Portal.Tests/SupportBundleTests.cs). This certifies the
-Managed Dedicated cell only; Shared remains uncertified.
+and [`SupportBundleTests`](../../tests/ETL-SQL.Portal.Tests/SupportBundleTests.cs). Shared tenant
+context and namespace evidence is in
+[`SharedTenantHttpBoundaryTests`](../../tests/ETL-SQL.Portal.Tests/SharedTenantHttpBoundaryTests.cs)
+and [`SharedTenantResourceRegistryTests`](../../tests/ETL-SQL.Portal.Tests/SharedTenantResourceRegistryTests.cs).
+These certify their topology-specific tenant-context cells only; neither proves the remaining
+Shared storage, execution, Gateway transport, or data-evidence boundaries.
 
 ### 6.2 Managed Dedicated identity separation
 

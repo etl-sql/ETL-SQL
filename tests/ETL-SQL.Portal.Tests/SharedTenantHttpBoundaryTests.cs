@@ -140,6 +140,73 @@ public sealed class SharedTenantHttpBoundaryTests
         Assert.Null(leased.EditSessionUserId);
     }
 
+    [Fact]
+    public async Task SharedResourceNamespacesIgnoreCallerTenantSelectorsAndForeignIds()
+    {
+        using var factory = new SharedPortalFactory();
+        using var client = factory.CreateClient();
+        string alphaToken;
+        long betaId;
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
+            var admin = await users.FindByNameAsync("admin")
+                ?? throw new InvalidOperationException("Seeded admin was not found.");
+            admin.TenantId = "tenant-alpha";
+            admin.MustChangePassword = false;
+            db.SharedTenantResources.Add(new SharedTenantResource
+            {
+                TenantId = "tenant-beta",
+                Kind = "gateway",
+                LogicalId = "equal-id",
+                ScopedId = "tenant-beta/gateway/equal-id"
+            });
+            await db.SaveChangesAsync();
+            betaId = await db.SharedTenantResources
+                .Where(value => value.TenantId == "tenant-beta")
+                .Select(value => value.Id)
+                .SingleAsync();
+            alphaToken = scope.ServiceProvider.GetRequiredService<TokenService>().GenerateJwt(
+                admin, await users.GetRolesAsync(admin),
+                tenantContext: TenantContext.FromVerifiedCredential("tenant-alpha"));
+        }
+
+        using var create = new HttpRequestMessage(
+            HttpMethod.Post,
+            "/api/shared/resources/gateway?tenant=tenant-beta")
+        {
+            Content = JsonContent.Create(new { logicalId = "equal-id" })
+        };
+        create.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        create.Headers.Add("X-Tenant-Id", "tenant-beta");
+        var created = await client.SendAsync(create);
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var createdBody = await created.Content.ReadFromJsonAsync<SharedTenantResourceDto>();
+        Assert.Equal("tenant-alpha/gateway/equal-id", createdBody!.ScopedId);
+
+        using var foreignNumeric = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/shared/resources/gateway/{betaId}?tenant=tenant-beta");
+        foreignNumeric.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        foreignNumeric.Headers.Add("X-Tenant-Id", "tenant-beta");
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignNumeric)).StatusCode);
+
+        using var foreignScope = new HttpRequestMessage(
+            HttpMethod.Get,
+            "/api/shared/resources/gateway/by-scope?scopedId=tenant-beta%2Fgateway%2Fequal-id");
+        foreignScope.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignScope)).StatusCode);
+
+        using var list = new HttpRequestMessage(HttpMethod.Get, "/api/shared/resources/gateway");
+        list.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        var listed = await client.SendAsync(list);
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        var values = await listed.Content.ReadFromJsonAsync<List<SharedTenantResourceDto>>();
+        Assert.Single(values!);
+        Assert.Equal("tenant-alpha/gateway/equal-id", values![0].ScopedId);
+    }
+
     private sealed class SharedPortalFactory : PortalWebFactory
     {
         protected override void CustomizeConfiguration(Dictionary<string, string?> settings) =>

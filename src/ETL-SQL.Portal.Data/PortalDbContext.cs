@@ -18,6 +18,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<SharedIdentityAuthority> SharedIdentityAuthorities => Set<SharedIdentityAuthority>();
+    public DbSet<SharedTenantResource> SharedTenantResources => Set<SharedTenantResource>();
     public DbSet<UserGroup> UserGroups => Set<UserGroup>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<FolderAcl> FolderAcls => Set<FolderAcl>();
@@ -86,6 +87,18 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Issuer).HasMaxLength(2048);
             e.Property(x => x.ClientId).HasMaxLength(512);
             e.Property(x => x.ClientSecretReference).HasMaxLength(256);
+        });
+
+        builder.Entity<SharedTenantResource>(e =>
+        {
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.TenantId, x.Kind, x.LogicalId }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.ScopedId }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Kind, x.Id });
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.Kind).HasMaxLength(32);
+            e.Property(x => x.LogicalId).HasMaxLength(128);
+            e.Property(x => x.ScopedId).HasMaxLength(300);
         });
 
         builder.Entity<UserGroup>(e =>

@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a durable Shared tenant resource registry for alias, gateway, resource, run, object,
+  storage, queue, and index namespaces, with server-derived tenant scope and composite isolation on
+  both SQLite and PostgreSQL.
 - Added Managed Dedicated platform-support approval: a human tenant Admin can grant one named
   operator short-lived, purpose-bound access to an exact reviewed support disclosure without
   creating a tenant session or platform superuser; approvals, refusals, and downloads are audited.

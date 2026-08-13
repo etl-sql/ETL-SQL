@@ -136,7 +136,7 @@ Dedicated support from an Enterprise happy path, or Shared support from Dedicate
 
 ##### 1. Tenant context and authority
 
-- [ ] **Shared.** Prove tenant context is server-derived at every shared entry point — a negative
+- [x] **Shared.** Prove tenant context is server-derived at every shared entry point — a negative
       test per surface that a caller-supplied tenant, alias, gateway, resource, run, object, or
       storage identifier cannot widen scope, plus collision tests for equal numeric/logical IDs
       across tenants.
@@ -164,17 +164,23 @@ Dedicated support from an Enterprise happy path, or Shared support from Dedicate
       is not `ScopeKey("")`: a range scan on the bare name `acme` also matches every `acme-evil/…`
       key.
 
-      This cell stays **open**: a contract with no shared implementations is not evidence that shared
-      isolation holds. It closes when real surfaces exist and inherit it.
+      **Closed with durable adoption (2026-08-13).** `SharedTenantResourceRegistry` is a real
+      SQLite/PostgreSQL-backed Shared control-plane namespace for aliases, gateways, resources, runs,
+      objects, storage, queues, and indexes. It accepts only a verified request `TenantContext`,
+      persists composite tenant/kind/logical identity, and scopes lookup, enumeration, deletion, and
+      collision handling below that tenant. Provider and authenticated HTTP tests prove equal logical
+      IDs coexist, foreign numeric and scoped IDs are absent, caller tenant headers/query values do
+      not select scope, `acme` cannot enumerate `acme-evil`, and state remains partitioned after a
+      store restart. This closes tenant-context derivation only; it does not certify the separate
+      storage, scheduler, Gateway transport, data-evidence, or hardened-execution cells below.
 
       **HTTP credential adoption started (2026-08-10).** Shared Portal JWTs now carry exactly one
       canonical tenant claim minted only from a trusted `TenantContext`. After normal JWT validation,
       middleware converts that signed claim into the request-scoped context consumed below controller
       code; missing, duplicate, and malformed claims fail before controller activation. An HTTP
       collision test proves spoofed tenant headers, tenant/issuer query values, and an equal shared
-      secret row cannot replace the signed tenant or widen enumeration. The cell remains open because
-      gateway, resource, run, object, storage, queue, and index surfaces still need equivalent concrete
-      adoption evidence.
+      secret row cannot replace the signed tenant or widen enumeration. The durable registry above
+      now supplies equivalent concrete adoption evidence for the remaining identifier namespaces.
 
 ##### 4. Storage, paths, and artifacts
 

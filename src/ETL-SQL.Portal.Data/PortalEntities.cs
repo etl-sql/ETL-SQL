@@ -66,6 +66,23 @@ public class SharedIdentityAuthority : IVersionedEntity
     public long Version { get; set; } = 1;
 }
 
+/// <summary>
+/// Provider-neutral namespace reservation for Shared control-plane surfaces. Tenant identity is
+/// always copied from verified server context; callers supply only the logical identifier inside
+/// that partition. The registry deliberately stores no payload or credential material.
+/// </summary>
+public class SharedTenantResource : IVersionedEntity
+{
+    public long Id { get; set; }
+    public string TenantId { get; set; } = "";
+    public string Kind { get; set; } = "";
+    public string LogicalId { get; set; } = "";
+    public string ScopedId { get; set; } = "";
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public long Version { get; set; } = 1;
+}
+
 // ── Groups ────────────────────────────────────────────────────────────────────
 
 public class Group : IVersionedEntity
