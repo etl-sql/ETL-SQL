@@ -401,6 +401,20 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
       continuing authority within the report's own tenant. This parent cell remains open for
       cache/search rebuilds and full queued/interactive worker-fleet certification.
 
+      **Cache and execution-worker slice completed (2026-08-13).** Durable Portal execution jobs
+      now persist their immutable `TenantId`; status, cancellation, active-refresh de-duplication,
+      recovery, snapshot/alert work, operational metrics, and tenant deletion all predicate on that
+      root. In-memory job access, per-user/group fairness gates, interactive report sessions,
+      schema-discovery coalescing, dataset previews, and PDF throttles include the tenant in their
+      cache key. A signed caller cannot inspect or cancel a foreign running job even with its exact
+      id and hostile tenant selectors, and equal report/user ids in two tenant session namespaces
+      produce distinct dashboard services. Shared configuration promotion and dataset registration
+      also refuse foreign catalog roots; identifier-bearing background admin digests fail closed in
+      Shared mode until invoked by a tenant-authorized scheduler. SQLite/PostgreSQL migrations,
+      hostile HTTP, cache-key tests, migration convergence, and the real PostgreSQL provider pin
+      this slice. The parent cell remains open only for clean multi-node/shared-worker fleet
+      certification across these combined surfaces.
+
 *Absorbs the retained discovery item **Tenant-Isolated Lineage Graphs**.*
 
 ##### 9. Lifecycle — provisioning, backup, portability, deletion, metering

@@ -76,6 +76,20 @@ public sealed class SessionCacheTests : IDisposable
         Assert.NotSame(first, second);
     }
 
+    [Fact]
+    public void GetOrCreate_SameNumericIdsAcrossTenants_ReturnsDifferentInstances()
+    {
+        using var cache = NewCache();
+        var script = Path.Combine(_tempDir, "a.rptsql");
+
+        var alpha = cache.GetOrCreate(1, 7, script, keyScope: "tenant-alpha");
+        var beta = cache.GetOrCreate(1, 7, script, keyScope: "tenant-beta");
+
+        Assert.NotSame(alpha, beta);
+        Assert.Same(alpha, cache.GetOrCreate(1, 7, script, keyScope: "tenant-alpha"));
+        Assert.Same(beta, cache.GetOrCreate(1, 7, script, keyScope: "tenant-beta"));
+    }
+
     /// <summary>
     /// Regression for the construction race: concurrent GetOrCreate calls for the same key
     /// must all observe a single winning session rather than each keeping its own.

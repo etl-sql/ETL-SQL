@@ -115,6 +115,28 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
             });
         await db.SaveChangesAsync();
         Assert.Equal(2, await db.Reports.CountAsync(report => report.Name == "Equal report"));
+        var alphaReportId = await db.Reports
+            .Where(report => report.TenantId == "tenant-alpha")
+            .Select(report => report.Id)
+            .SingleAsync();
+        var betaReportId = await db.Reports
+            .Where(report => report.TenantId == "tenant-beta")
+            .Select(report => report.Id)
+            .SingleAsync();
+        db.PortalExecutionJobs.AddRange(
+            new PortalExecutionJob
+            {
+                Id = "alpha-equal-purpose", TenantId = "tenant-alpha", ReportId = alphaReportId,
+                UserId = owner.Id, Status = "Pending"
+            },
+            new PortalExecutionJob
+            {
+                Id = "beta-equal-purpose", TenantId = "tenant-beta", ReportId = betaReportId,
+                UserId = betaOwner.Id, Status = "Pending"
+            });
+        await db.SaveChangesAsync();
+        Assert.Equal(1, await db.PortalExecutionJobs.CountAsync(job => job.TenantId == "tenant-alpha"));
+        Assert.Equal(1, await db.PortalExecutionJobs.CountAsync(job => job.TenantId == "tenant-beta"));
 
         db.StewardshipSettings.AddRange(
             new StewardshipSettings { TenantId = "tenant-alpha" },

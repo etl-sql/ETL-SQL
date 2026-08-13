@@ -472,12 +472,14 @@ public class SubscriptionDeliveryService(
 
         if (sub.Report is null || sub.Report.IsDeleted)
             return "Report no longer exists.";
+        if (!string.Equals(owner.TenantId, sub.Report.TenantId, StringComparison.Ordinal))
+            return "Subscription owner and report belong to different tenants.";
 
         if (await IsAdminAsync(owner.Id, ct))
             return null;
 
         var groupIds = new HashSet<int>(await db.UserGroups
-            .Where(ug => ug.UserId == owner.Id)
+            .Where(ug => ug.TenantId == sub.Report.TenantId && ug.UserId == owner.Id)
             .Select(ug => ug.GroupId)
             .ToListAsync(ct));
         var permission = await folderPermissions.GetEffectivePermissionAsync(sub.Report.FolderId, groupIds, owner.Id);

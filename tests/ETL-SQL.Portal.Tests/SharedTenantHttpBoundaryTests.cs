@@ -285,6 +285,7 @@ public sealed class SharedTenantHttpBoundaryTests
         int alphaReportId;
         int betaReportId;
         int betaSubscriptionId;
+        const string BetaJobId = "same-visible-job-id";
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -339,6 +340,28 @@ public sealed class SharedTenantHttpBoundaryTests
                 Recipients = "beta-secret@test.local"
             };
             db.Subscriptions.Add(betaSubscription);
+            db.ReportShareLinks.Add(new ReportShareLink
+            {
+                ReportId = betaReport.Id,
+                CreatedBy = beta.Id,
+                Name = "Beta share secret",
+                Token = "beta-share-secret"
+            });
+            db.ReportEmbedTokens.Add(new ReportEmbedToken
+            {
+                ReportId = betaReport.Id,
+                CreatedBy = beta.Id,
+                Name = "Beta embed secret",
+                Token = "beta-embed-secret"
+            });
+            db.PortalExecutionJobs.Add(new PortalExecutionJob
+            {
+                Id = BetaJobId,
+                TenantId = "tenant-beta",
+                ReportId = betaReport.Id,
+                UserId = beta.Id,
+                Status = "Running"
+            });
             await db.SaveChangesAsync();
             betaFolderId = betaFolder.Id;
             alphaReportId = alphaReport.Id;
@@ -385,6 +408,31 @@ public sealed class SharedTenantHttpBoundaryTests
             HttpMethod.Get, $"/api/subscriptions/{betaSubscriptionId}?tenant=tenant-beta");
         foreignSubscription.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
         Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignSubscription)).StatusCode);
+
+        using var foreignJob = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/jobs/{BetaJobId}?tenant=tenant-beta");
+        foreignJob.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        foreignJob.Headers.Add("X-Tenant-Id", "tenant-beta");
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignJob)).StatusCode);
+
+        using var cancelForeignJob = new HttpRequestMessage(
+            HttpMethod.Delete, $"/api/jobs/{BetaJobId}?tenant=tenant-beta");
+        cancelForeignJob.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(cancelForeignJob)).StatusCode);
+
+        await using var verifyScope = factory.Services.CreateAsyncScope();
+        var betaJob = await verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>()
+            .PortalExecutionJobs.AsNoTracking().SingleAsync(job => job.Id == BetaJobId);
+        Assert.Equal("Running", betaJob.Status);
+
+        using var anonymousInventory = new HttpRequestMessage(
+            HttpMethod.Get, "/api/admin/anonymous-report-access?tenant=tenant-beta");
+        anonymousInventory.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        anonymousInventory.Headers.Add("X-Tenant-Id", "tenant-beta");
+        var anonymousInventoryBody = await (await client.SendAsync(anonymousInventory))
+            .Content.ReadAsStringAsync();
+        Assert.DoesNotContain("Beta share secret", anonymousInventoryBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("Beta embed secret", anonymousInventoryBody, StringComparison.Ordinal);
     }
 
     private static JobDefinition Job(string name, string tenant) => new(

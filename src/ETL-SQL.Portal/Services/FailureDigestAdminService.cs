@@ -23,6 +23,11 @@ public sealed class FailureDigestAdminService(
 
     protected override async Task<AdminDigestContent?> BuildAsync(IServiceProvider scope, CancellationToken ct)
     {
+        // Failure details can contain job names and delivery metadata. Never aggregate them across
+        // tenants on a shared host without an explicit tenant-scoped scheduler invocation.
+        if (Config.SharedTenancy.Enabled)
+            return null;
+
         var cfg = Config.AdminServices.FailureDigest;
         var since = DateTime.UtcNow.AddHours(-Math.Max(1, cfg.LookbackHours));
         var db = scope.GetRequiredService<PortalDbContext>();

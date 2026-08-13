@@ -702,14 +702,19 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompletedAt");
+                    b.HasIndex("TenantId", "CompletedAt");
 
-                    b.HasIndex("ReportId", "Kind")
+                    b.HasIndex("TenantId", "ReportId", "Kind")
                         .IsUnique()
                         .HasFilter("\"Kind\" = 'Refresh' AND \"Status\" IN ('Pending', 'Running')");
 

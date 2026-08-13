@@ -48,5 +48,5 @@ public sealed class PortalTenantCatalogScope(
         Reports.Any(report => report.Id == subscription.ReportId));
 
     public IQueryable<PortalExecutionJob> ExecutionJobs => db.PortalExecutionJobs.Where(job =>
-        Reports.Any(report => report.Id == job.ReportId));
+        job.TenantId == TenantId);
 }

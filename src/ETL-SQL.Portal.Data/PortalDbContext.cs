@@ -184,10 +184,11 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<PortalExecutionJob>(e =>
         {
             e.HasKey(x => x.Id);
-            e.HasIndex(x => new { x.ReportId, x.Kind })
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.HasIndex(x => new { x.TenantId, x.ReportId, x.Kind })
                 .IsUnique()
                 .HasFilter("\"Kind\" = 'Refresh' AND \"Status\" IN ('Pending', 'Running')");
-            e.HasIndex(x => x.CompletedAt);
+            e.HasIndex(x => new { x.TenantId, x.CompletedAt });
         });
 
         builder.Entity<RefreshToken>(e =>

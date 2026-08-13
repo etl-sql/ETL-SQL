@@ -68,8 +68,11 @@ namespace ETL_SQL.Portal.Services
             // Link to a folder for PUBLIC access checks: from the owning report when there is one,
             // otherwise (e.g. a published dataset) resolve the target folder by its logical Path.
             existing.FolderId = metadata.OwningReportId is int rid
-                ? await _db.Reports.Where(r => r.Id == rid).Select(r => (int?)r.FolderId).FirstOrDefaultAsync()
-                : await _db.Folders.Where(f => f.Path == metadata.FolderPath).Select(f => (int?)f.Id).FirstOrDefaultAsync();
+                ? await _db.Reports.Where(r => r.TenantId == _tenantScope.TenantId && r.Id == rid)
+                    .Select(r => (int?)r.FolderId).FirstOrDefaultAsync()
+                : await _db.Folders.Where(f => f.TenantId == _tenantScope.TenantId
+                        && f.Path == metadata.FolderPath)
+                    .Select(f => (int?)f.Id).FirstOrDefaultAsync();
             existing.SourceQuery = metadata.SourceQuery;
             existing.AccessLevel = metadata.AccessLevel;
             // The stored mode describes the cache at rest: with a portal key configured the file
@@ -107,7 +110,7 @@ namespace ETL_SQL.Portal.Services
             if (dataset.OwningReportId is int reportId)
             {
                 var reportAuthor = await _db.Reports
-                    .Where(r => r.Id == reportId)
+                    .Where(r => r.TenantId == _tenantScope.TenantId && r.Id == reportId)
                     .Select(r => r.CreatedBy)
                     .FirstOrDefaultAsync();
                 if (reportAuthor is int author) authorIds.Add(author);

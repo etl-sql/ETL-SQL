@@ -443,6 +443,7 @@ public class ReportSnapshot
 public class PortalExecutionJob
 {
     public string Id { get; set; } = "";
+    public string TenantId { get; set; } = "portal-host";
     public int ReportId { get; set; }
     public int UserId { get; set; }
     public string ActorType { get; set; } = "User";

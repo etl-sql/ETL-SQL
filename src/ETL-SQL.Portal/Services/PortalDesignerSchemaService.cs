@@ -188,11 +188,12 @@ public sealed class PortalDesignerSchemaService(
         var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? user.Identity?.Name
             ?? "anonymous";
+        var tenantId = user.FindFirstValue(TokenService.TenantClaim) ?? "portal-host";
         var alias = NormalizeConnectionRef(connectionRef);
         var suffix = string.IsNullOrWhiteSpace(documentUri)
             ? "default"
             : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(documentUri))).ToLowerInvariant();
-        return $"{ScopedDesignerUriPrefix}u/{Uri.EscapeDataString(userId)}/c/{Uri.EscapeDataString(alias)}/{suffix}";
+        return $"{ScopedDesignerUriPrefix}t/{Uri.EscapeDataString(tenantId)}/u/{Uri.EscapeDataString(userId)}/c/{Uri.EscapeDataString(alias)}/{suffix}";
     }
 
     public static string ResolveDocumentUri(ClaimsPrincipal user, string connectionRef, string? documentUri = null)

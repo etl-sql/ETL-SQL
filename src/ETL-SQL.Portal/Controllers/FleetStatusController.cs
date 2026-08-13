@@ -100,7 +100,7 @@ public sealed class FleetStatusController(
     public async Task<IActionResult> Status(CancellationToken ct)
     {
         var report = await health.CheckHealthAsync(ct);
-        var (queued, running) = executions.GetWorkloadCounts();
+        var (queued, running) = executions.GetWorkloadCounts(tenantScope.TenantId);
 
         var failedRefreshes = await catalogScope.Reports.CountAsync(r => r.LastRefreshStatus == "Failed", ct);
         var outboxPending = await db.AuditOutboxMessages.CountAsync(

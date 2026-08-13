@@ -132,7 +132,7 @@ public class ExecutionController(
     [HttpGet("jobs/{jobId}")]
     public async Task<IActionResult> GetJob(string jobId)
     {
-        var job = await jobService.GetAsync(jobId);
+        var job = await jobService.GetAsync(jobId, _datasetScope.TenantId);
         if (job is null) return NotFound();
 
         return Ok(new JobStatusResponse(
@@ -145,15 +145,15 @@ public class ExecutionController(
     [HttpDelete("jobs/{jobId}")]
     public async Task<IActionResult> CancelJob(string jobId)
     {
-        var job = await jobService.GetAsync(jobId);
+        var job = await jobService.GetAsync(jobId, _datasetScope.TenantId);
         if (job is null) return NotFound();
         if (!IsAdmin && job.UserId != CurrentUserId) return Forbid();
 
         var reason = $"Execution was cancelled by user {CurrentUserId}.";
-        var cancelled = await jobService.CancelAsync(jobId, reason);
+        var cancelled = await jobService.CancelAsync(jobId, reason, _datasetScope.TenantId);
         if (!cancelled)
         {
-            var current = await jobService.GetAsync(jobId);
+            var current = await jobService.GetAsync(jobId, _datasetScope.TenantId);
             return Conflict(new
             {
                 jobId,
@@ -330,7 +330,7 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
-        string? existingJobId = await jobService.GetActiveRefreshJobIdAsync(id);
+        string? existingJobId = await jobService.GetActiveRefreshJobIdAsync(id, _datasetScope.TenantId);
         bool alreadyRunning = existingJobId is not null;
 
         var jobId = alreadyRunning
@@ -366,7 +366,7 @@ public class ExecutionController(
             if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
                 return Forbid();
 
-            string? existingJobId = await jobService.GetActiveRefreshJobIdAsync(id);
+            string? existingJobId = await jobService.GetActiveRefreshJobIdAsync(id, _datasetScope.TenantId);
             if (existingJobId is not null)
                 return Ok(new { status = "AlreadyQueued", message = "A data refresh is already running.", jobId = existingJobId });
 

@@ -34,7 +34,7 @@ public sealed class PortalDesignerSchemaServiceTests
         var response = await service.RegisterResolvedConnectionAsync(
             "sales",
             new SharedConnectionDefinition("sales", "FAKE", "target", new Dictionary<string, string>(), false),
-            "portal-designer://u/1/c/sales/default");
+            "portal-designer://t/portal-host/u/1/c/sales/default");
 
         Assert.Equal(["A_orders", "B_customers"], response.Tables.Select(t => t.Name));
         Assert.All(response.Tables, table => Assert.Single(table.Columns));

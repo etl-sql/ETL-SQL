@@ -60,7 +60,7 @@ public sealed class DatasetMoveService(
         }
 
         if (dataset.OwningReportId is int reportId)
-            await sessions.InvalidateReportAsync(reportId);
+            await sessions.InvalidateReportAsync(reportId, dataset.TenantId);
 
         return DatasetMoveResult.Moved();
     }

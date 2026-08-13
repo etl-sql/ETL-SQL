@@ -28,6 +28,11 @@ public sealed class CapacityReportAdminService(
 
     protected override async Task<AdminDigestContent?> BuildAsync(IServiceProvider scope, CancellationToken ct)
     {
+        // This digest contains job/report identifiers. A shared host has no single tenant recipient,
+        // so fail closed until the scheduler invokes it with an explicit tenant authority.
+        if (Config.SharedTenancy.Enabled)
+            return null;
+
         var cfg = Config.AdminServices.CapacityReport;
         var now = DateTime.UtcNow;
         var since = now.AddHours(-Math.Max(1, cfg.LookbackHours));

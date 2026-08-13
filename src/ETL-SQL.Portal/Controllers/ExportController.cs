@@ -29,7 +29,7 @@ public class ExportController(
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
-    private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
+    private static readonly ConcurrentDictionary<(string TenantId, int UserId), (int Count, DateTime WindowStart)> _pdfBucket = new();
     private const int PdfRateLimit = 5;
 
     private int CurrentUserId =>
@@ -140,8 +140,9 @@ public class ExportController(
         var userId = CurrentUserId;
         if (!IsAdmin)
         {
+            var bucketKey = (_datasetScope.TenantId, userId);
             var now = DateTime.UtcNow;
-            var bucket = _pdfBucket.GetOrAdd(userId, _ => (0, now));
+            var bucket = _pdfBucket.GetOrAdd(bucketKey, _ => (0, now));
 
             if ((now - bucket.WindowStart).TotalMinutes >= 1)
                 bucket = (0, now);
@@ -149,7 +150,7 @@ public class ExportController(
             if (bucket.Count >= PdfRateLimit)
                 return StatusCode(429, new { error = "PDF export rate limit reached. Try again in a minute." });
 
-            _pdfBucket[userId] = (bucket.Count + 1, bucket.WindowStart);
+            _pdfBucket[bucketKey] = (bucket.Count + 1, bucket.WindowStart);
         }
 
         var (manifest, err, forbidden) = await LoadManifestAsync(id);

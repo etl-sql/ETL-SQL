@@ -228,11 +228,8 @@ public sealed class SharedTenantLifecycleService(
 
         if (authority.Kind != SharedTenantLifecycleKind.Provision)
         {
-            var tenantUsers = db.Users.Where(value => value.TenantId == tenant).Select(value => value.Id);
-            var tenantReports = db.Reports.Where(value => value.TenantId == tenant)
-                .Select(value => value.Id);
             var activePortalWork = await db.PortalExecutionJobs.CountAsync(
-                value => tenantReports.Contains(value.ReportId)
+                value => value.TenantId == tenant
                          && (value.Status == "Pending" || value.Status == "Running"),
                 cancellationToken);
             if (activePortalWork > 0)
@@ -361,7 +358,7 @@ public sealed class SharedTenantLifecycleService(
         var folderIds = db.Folders.Where(x => userIds.Contains(x.OwnerId)).Select(x => x.Id);
         var datasetIds = db.Datasets.Where(x => x.TenantId == tenant).Select(x => x.Id);
 
-        await db.PortalExecutionJobs.Where(x => reportIds.Contains(x.ReportId)).ExecuteDeleteAsync(ct);
+        await db.PortalExecutionJobs.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.ReportScriptDraftDecisions.Where(x => db.ReportScriptDrafts
             .Where(d => reportIds.Contains(d.ReportId)).Select(d => d.Id).Contains(x.DraftId)).ExecuteDeleteAsync(ct);
         await db.ReportScriptDrafts.Where(x => reportIds.Contains(x.ReportId)).ExecuteDeleteAsync(ct);

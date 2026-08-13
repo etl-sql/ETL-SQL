@@ -62,18 +62,18 @@ public record ExecutionJob(
 public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDisposable
 {
     private readonly ConcurrentDictionary<string, ExecutionJob> _jobs = new();
-    private readonly ConcurrentDictionary<int, string> _activeRefreshes = new();
+    private readonly ConcurrentDictionary<(string TenantId, int ReportId), string> _activeRefreshes = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _runningJobCancellations = new();
     private readonly ConcurrentDictionary<string, string> _jobCancellationReasons = new();
     private readonly WeightedExecutionAdmission _admission;
 
     /// <summary>Per-user concurrency limiters (workload fairness, P2.6). Keyed by user id; one
     /// gate per user with <c>MaxConcurrentExecutionsPerUser</c> permits.</summary>
-    private readonly ConcurrentDictionary<int, SemaphoreSlim> _userGates = new();
+    private readonly ConcurrentDictionary<(string TenantId, int UserId), SemaphoreSlim> _userGates = new();
 
     /// <summary>Per-group concurrency limiters (workload fairness, P2.6). A user in multiple
     /// groups must acquire all group gates in sorted order before consuming a global slot.</summary>
-    private readonly ConcurrentDictionary<int, SemaphoreSlim> _groupGates = new();
+    private readonly ConcurrentDictionary<(string TenantId, int GroupId), SemaphoreSlim> _groupGates = new();
     private readonly PortalConfig _config;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExecutionJobService> _log;
@@ -121,31 +121,35 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     /// <summary>Node-local execution workload snapshot for read-only fleet health (P2.2): how many
     /// jobs are queued (Pending) and actively running on this node. In an HA environment each node
     /// reports its own; the fleet aggregator polls per environment.</summary>
-    public (int Queued, int Running) GetWorkloadCounts()
+    public (int Queued, int Running) GetWorkloadCounts(string? tenantId = null)
     {
         var queued = 0;
         var running = 0;
         foreach (var job in _jobs.Values)
         {
+            if (tenantId is not null && !string.Equals(job.KeyScope, tenantId, StringComparison.Ordinal))
+                continue;
             if (job.Status == JobStatus.Pending) queued++;
             else if (job.Status == JobStatus.Running) running++;
         }
         return (queued, running);
     }
 
-    public async Task<ExecutionJob?> GetAsync(string jobId)
+    public async Task<ExecutionJob?> GetAsync(string jobId, string? tenantId = null)
     {
-        if (_jobs.TryGetValue(jobId, out var job))
+        if (_jobs.TryGetValue(jobId, out var job)
+            && (tenantId is null || string.Equals(job.KeyScope, tenantId, StringComparison.Ordinal)))
             return job;
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetService<PortalDbContext>();
         var stored = db is null ? null : await db.PortalExecutionJobs.AsNoTracking()
-            .FirstOrDefaultAsync(value => value.Id == jobId);
+            .FirstOrDefaultAsync(value => value.Id == jobId
+                && (tenantId == null || value.TenantId == tenantId));
         return stored is null ? null : FromEntity(stored);
     }
 
-    public async Task<bool> CancelAsync(string jobId, string reason)
+    public async Task<bool> CancelAsync(string jobId, string reason, string? tenantId = null)
     {
         var now = DateTime.UtcNow;
         using var scope = _scopeFactory.CreateScope();
@@ -153,7 +157,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         if (db is null)
             return false;
 
-        var stored = await db.PortalExecutionJobs.FindAsync(jobId);
+        var stored = await db.PortalExecutionJobs.FirstOrDefaultAsync(value => value.Id == jobId
+            && (tenantId == null || value.TenantId == tenantId));
         if (stored is null)
             return false;
 
@@ -180,7 +185,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
         if (stored.Kind == "Refresh")
         {
-            _activeRefreshes.TryRemove(new KeyValuePair<int, string>(stored.ReportId, stored.Id));
+            _activeRefreshes.TryRemove(
+                new KeyValuePair<(string TenantId, int ReportId), string>(
+                    (stored.TenantId, stored.ReportId), stored.Id));
             await UpdateReportRefreshStatusAsync(FromEntity(stored), "Cancelled", reason);
         }
         return true;
@@ -197,9 +204,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     }
 
     /// <summary>Returns the in-progress jobId for a report if a refresh is already running.</summary>
-    public async Task<string?> GetActiveRefreshJobIdAsync(int reportId)
+    public async Task<string?> GetActiveRefreshJobIdAsync(int reportId, string? tenantId = null)
     {
-        if (_activeRefreshes.TryGetValue(reportId, out var id))
+        if (tenantId is not null && _activeRefreshes.TryGetValue((tenantId, reportId), out var id))
             return id;
 
         using var scope = _scopeFactory.CreateScope();
@@ -208,6 +215,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             ? null
             : await db.PortalExecutionJobs.AsNoTracking()
                 .Where(value => value.ReportId == reportId
+                    && (tenantId == null || value.TenantId == tenantId)
                     && value.Kind == "Refresh"
                     && (value.Status == "Pending" || value.Status == "Running"))
                 .Select(value => value.Id)
@@ -267,16 +275,16 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             return string.Empty;
         }
 
-        var existingPersisted = await GetActiveRefreshJobIdAsync(reportId);
+        var existingPersisted = await GetActiveRefreshJobIdAsync(reportId, keyScope);
         if (existingPersisted is not null)
             return existingPersisted;
 
         var jobId = Guid.NewGuid().ToString("N");
-        while (!_activeRefreshes.TryAdd(reportId, jobId))
+        while (!_activeRefreshes.TryAdd((keyScope, reportId), jobId))
         {
             // The in-flight refresh can complete between the failed TryAdd and this read;
             // fall through and retry the claim instead of throwing on a missing key.
-            if (_activeRefreshes.TryGetValue(reportId, out var existingJobId))
+            if (_activeRefreshes.TryGetValue((keyScope, reportId), out var existingJobId))
                 return existingJobId;
         }
 
@@ -296,8 +304,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         if (!await TryPersistRefreshJobAsync(job))
         {
             _jobs.TryRemove(jobId, out _);
-            _activeRefreshes.TryRemove(new KeyValuePair<int, string>(reportId, jobId));
-            return await GetActiveRefreshJobIdAsync(reportId)
+            _activeRefreshes.TryRemove(
+                new KeyValuePair<(string TenantId, int ReportId), string>((keyScope, reportId), jobId));
+            return await GetActiveRefreshJobIdAsync(reportId, keyScope)
                 ?? throw new InvalidOperationException("The active refresh claim could not be resolved.");
         }
 
@@ -320,7 +329,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         // Workload fairness (P2.6): a non-admin holds at most MaxConcurrentExecutionsPerUser of the
         // shared slots. Acquire the per-user slot FIRST and without holding a global permit, so a
         // capped user queues without blocking the shared pool. Administrators are exempt.
-        var userGate = job.IsAdministrator ? null : GetUserGate(job.UserId);
+        var userGate = job.IsAdministrator ? null : GetUserGate(job.KeyScope, job.UserId);
         var userGateHeld = false;
         var groupGates = new List<SemaphoreSlim>();
         WeightedExecutionAdmission.Permit? executionPermit = null;
@@ -336,7 +345,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
             foreach (var groupId in await GetExecutionGroupIdsAsync(job, cts.Token).ConfigureAwait(false))
             {
-                var groupGate = GetGroupGate(groupId);
+                var groupGate = GetGroupGate(job.KeyScope, groupId);
                 await groupGate.WaitAsync(cts.Token).ConfigureAwait(false);
                 groupGates.Add(groupGate);
             }
@@ -357,7 +366,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             job.Error = "Execution timed out while waiting for an execution slot";
             job.CompletedAt = DateTime.UtcNow;
             job.Status = JobStatus.Cancelled;
-            _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
+            _activeRefreshes.TryRemove(
+                new KeyValuePair<(string TenantId, int ReportId), string>(
+                    (job.KeyScope, job.ReportId), job.Id));
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
             PortalObservability.CompleteExecutionJobActivity(activity, job, workloadKind: workloadKind.ToString());
@@ -375,11 +386,11 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         Task? cancellationMonitor = null;
         try
         {
-            if (await ApplyPersistedCancellationAsync(job.Id, cts).ConfigureAwait(false))
+            if (await ApplyPersistedCancellationAsync(job.Id, job.KeyScope, cts).ConfigureAwait(false))
                 throw new OperationCanceledException(cts.Token);
 
             _runningJobCancellations[job.Id] = cts;
-            cancellationMonitor = MonitorPersistedCancellationAsync(job.Id, cts);
+            cancellationMonitor = MonitorPersistedCancellationAsync(job.Id, job.KeyScope, cts);
 
             job.Status = JobStatus.Running;
             job.StartedAt = DateTime.UtcNow;
@@ -490,7 +501,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
             // Compare hash against published hash
-            var report = await db.Reports.FindAsync(job.ReportId);
+            var report = await db.Reports.FirstOrDefaultAsync(value =>
+                value.Id == job.ReportId && value.TenantId == job.KeyScope);
             if (report?.PublishedScriptHash is not null && runTimeHash is not null)
             {
                 hashMatched = string.Equals(runTimeHash, report.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
@@ -575,7 +587,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             }
 
             // Invalidate sessions so next parameter interaction picks up fresh data
-            await _sessions.InvalidateReportAsync(job.ReportId);
+            await _sessions.InvalidateReportAsync(job.ReportId, job.KeyScope);
 
             job.Status = JobStatus.Completed;
             job.ManifestPath = manifestPath;
@@ -617,21 +629,26 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             executionPermit?.Dispose();
             ReleaseGates(groupGates);
             if (userGateHeld) userGate!.Release();
-            _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
+            _activeRefreshes.TryRemove(
+                new KeyValuePair<(string TenantId, int ReportId), string>(
+                    (job.KeyScope, job.ReportId), job.Id));
         }
 
         if (cancellationMonitor is not null)
             await cancellationMonitor.ConfigureAwait(false);
     }
 
-    private async Task MonitorPersistedCancellationAsync(string jobId, CancellationTokenSource cts)
+    private async Task MonitorPersistedCancellationAsync(
+        string jobId,
+        string tenantId,
+        CancellationTokenSource cts)
     {
         try
         {
             while (!cts.Token.IsCancellationRequested)
             {
                 await Task.Delay(250, cts.Token).ConfigureAwait(false);
-                if (await ApplyPersistedCancellationAsync(jobId, cts).ConfigureAwait(false))
+                if (await ApplyPersistedCancellationAsync(jobId, tenantId, cts).ConfigureAwait(false))
                     return;
             }
         }
@@ -641,7 +658,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         }
     }
 
-    private async Task<bool> ApplyPersistedCancellationAsync(string jobId, CancellationTokenSource cts)
+    private async Task<bool> ApplyPersistedCancellationAsync(
+        string jobId,
+        string tenantId,
+        CancellationTokenSource cts)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetService<PortalDbContext>();
@@ -649,7 +669,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             return false;
 
         var stored = await db.PortalExecutionJobs.AsNoTracking()
-            .FirstOrDefaultAsync(value => value.Id == jobId, cts.Token)
+            .FirstOrDefaultAsync(value => value.Id == jobId && value.TenantId == tenantId, cts.Token)
             .ConfigureAwait(false);
         if (stored?.Status != JobStatus.Cancelled.ToString())
             return false;
@@ -691,16 +711,16 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         return cancelled;
     }
 
-    private SemaphoreSlim GetUserGate(int userId)
+    private SemaphoreSlim GetUserGate(string tenantId, int userId)
     {
         var limit = Math.Max(1, _config.Resources.MaxConcurrentExecutionsPerUser);
-        return _userGates.GetOrAdd(userId, _ => new SemaphoreSlim(limit, limit));
+        return _userGates.GetOrAdd((tenantId, userId), _ => new SemaphoreSlim(limit, limit));
     }
 
-    private SemaphoreSlim GetGroupGate(int groupId)
+    private SemaphoreSlim GetGroupGate(string tenantId, int groupId)
     {
         var limit = Math.Max(1, _config.Resources.MaxConcurrentExecutionsPerGroup);
-        return _groupGates.GetOrAdd(groupId, _ => new SemaphoreSlim(limit, limit));
+        return _groupGates.GetOrAdd((tenantId, groupId), _ => new SemaphoreSlim(limit, limit));
     }
 
     private async Task<IReadOnlyList<int>> GetExecutionGroupIdsAsync(ExecutionJob job, CancellationToken ct)
@@ -715,7 +735,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
         return await db.UserGroups
             .AsNoTracking()
-            .Where(value => value.UserId == job.UserId)
+            .Where(value => value.TenantId == job.KeyScope && value.UserId == job.UserId)
             .Select(value => value.GroupId)
             .Distinct()
             .OrderBy(value => value)
@@ -828,7 +848,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             if (db is null)
                 return;
 
-            var stored = await db.PortalExecutionJobs.FindAsync(job.Id);
+            var stored = await db.PortalExecutionJobs.FirstOrDefaultAsync(value =>
+                value.Id == job.Id && value.TenantId == job.KeyScope);
             if (stored is null)
                 return;
 
@@ -851,6 +872,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     private static PortalExecutionJob ToEntity(ExecutionJob job, string kind) => new()
     {
         Id = job.Id,
+        TenantId = job.KeyScope,
         ReportId = job.ReportId,
         UserId = job.UserId,
         ActorType = job.ActorType,
@@ -875,7 +897,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             ActorType: stored.ActorType,
             ActorId: stored.ActorId,
             EffectiveScopes: stored.EffectiveScopes,
-            CorrelationId: stored.CorrelationId)
+            CorrelationId: stored.CorrelationId,
+            KeyScope: stored.TenantId)
         {
             Status = Enum.TryParse<JobStatus>(stored.Status, out var status) ? status : JobStatus.Failed,
             CreatedAt = stored.CreatedAt,
@@ -936,7 +959,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     {
         var keep = Math.Max(1, _config.Resources.SnapshotRetentionPerReport);
         var stale = await db.ReportSnapshots
-            .Where(s => s.ReportId == reportId)
+            .Where(s => s.ReportId == reportId
+                && (keyScope == null || db.Reports.Any(report => report.Id == s.ReportId
+                    && report.TenantId == keyScope)))
             .OrderByDescending(s => s.BuiltAt)
             .Skip(keep)
             .ToListAsync();
@@ -971,7 +996,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            var report = await db.Reports.FindAsync(job.ReportId);
+            var report = await db.Reports.FirstOrDefaultAsync(value =>
+                value.Id == job.ReportId && value.TenantId == job.KeyScope);
             if (report is null) return;
 
             if (string.Equals(status, "Running", StringComparison.OrdinalIgnoreCase))
@@ -1025,16 +1051,12 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        var tenantId = userId > 0
-            ? await db.Users.AsNoTracking()
-                .Where(user => user.Id == userId)
-                .Select(user => user.TenantId)
-                .SingleOrDefaultAsync()
-            : await db.Reports.AsNoTracking()
-                .Where(report => report.Id == reportId)
-                .Join(db.Users.AsNoTracking(), report => report.CreatedBy, user => user.Id,
-                    (_, user) => user.TenantId)
-                .SingleOrDefaultAsync();
+        var tenantId = await db.Reports.AsNoTracking()
+            .Where(report => report.Id == reportId
+                && (userId <= 0 || db.Users.Any(user => user.Id == userId
+                    && user.TenantId == report.TenantId)))
+            .Select(report => report.TenantId)
+            .SingleOrDefaultAsync();
 
         if (string.IsNullOrWhiteSpace(tenantId))
             throw new UnauthorizedAccessException(

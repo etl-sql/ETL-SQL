@@ -120,6 +120,7 @@ public sealed class SharedTenantLifecycleServiceTests : IDisposable
         db.PortalExecutionJobs.Add(new PortalExecutionJob
         {
             Id = "run-alpha",
+            TenantId = "tenant-alpha",
             ReportId = 301,
             UserId = 101,
             Status = "Running"

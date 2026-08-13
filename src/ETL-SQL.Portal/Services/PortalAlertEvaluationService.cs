@@ -54,7 +54,9 @@ public sealed class PortalAlertEvaluationService(
             .Include(alert => alert.Notifications)
             .Include(alert => alert.Report)
             .Include(alert => alert.Owner)
-            .Where(alert => alert.ReportId == reportId && alert.IsActive && !alert.Report.IsDeleted)
+            .Where(alert => alert.ReportId == reportId
+                && (keyScope == null || alert.Report.TenantId == keyScope)
+                && alert.IsActive && !alert.Report.IsDeleted)
             .ToListAsync(ct);
         if (alerts.Count == 0) return;
 

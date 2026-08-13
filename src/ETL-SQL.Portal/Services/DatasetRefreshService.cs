@@ -19,7 +19,8 @@ public sealed class DatasetRefreshService(
     {
         if (dataset.OwningReportId.HasValue)
         {
-            var existingJobId = await jobService.GetActiveRefreshJobIdAsync(dataset.OwningReportId.Value);
+            var existingJobId = await jobService.GetActiveRefreshJobIdAsync(
+                dataset.OwningReportId.Value, dataset.TenantId);
             if (existingJobId is not null)
                 return DatasetRefreshResult.Conflict(existingJobId);
         }
@@ -57,10 +58,11 @@ public sealed class DatasetRefreshService(
     {
         if (dataset.OwningReportId.HasValue)
         {
-            var jobId = await jobService.GetActiveRefreshJobIdAsync(dataset.OwningReportId.Value);
+            var jobId = await jobService.GetActiveRefreshJobIdAsync(
+                dataset.OwningReportId.Value, dataset.TenantId);
             if (jobId is not null)
             {
-                var job = await jobService.GetAsync(jobId);
+                var job = await jobService.GetAsync(jobId, dataset.TenantId);
                 return new DatasetRefreshStatusDto(
                     "InProgress", jobId,
                     job?.StartedAt, null, null,

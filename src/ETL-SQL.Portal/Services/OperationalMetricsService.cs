@@ -19,8 +19,17 @@ public sealed class OperationalMetricsService(
     HealthCheckService? healthChecks = null,
     PortalStorageUsageSampler? storageUsage = null,
     PortalTopologyReadinessService? topologyReadiness = null,
-    RequestTenantContextAccessor? tenantContext = null)
+    RequestTenantContextAccessor? tenantContext = null,
+    PortalTenantCatalogScope? catalogScope = null)
 {
+    private IQueryable<PortalExecutionJob> ExecutionJobs => catalogScope?.ExecutionJobs ?? db.PortalExecutionJobs;
+    private IQueryable<Subscription> Subscriptions => catalogScope?.Subscriptions ?? db.Subscriptions;
+    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports;
+    private IQueryable<SubscriptionDelivery> SubscriptionDeliveries => catalogScope is null
+        ? db.SubscriptionDeliveries
+        : db.SubscriptionDeliveries.Where(delivery =>
+            Subscriptions.Any(subscription => subscription.Id == delivery.SubscriptionId));
+
     /// <summary>The window over which failure rates are computed.</summary>
     public static readonly TimeSpan FailureWindow = TimeSpan.FromHours(24);
 
@@ -85,19 +94,19 @@ public sealed class OperationalMetricsService(
         var now = DateTime.UtcNow;
         var since = now - FailureWindow;
 
-        var activeExecutions = await db.PortalExecutionJobs.CountAsync(j => j.Status == "Running", ct);
-        var queuedExecutions = await db.PortalExecutionJobs.CountAsync(j => j.Status == "Pending", ct);
+        var activeExecutions = await ExecutionJobs.CountAsync(j => j.Status == "Running", ct);
+        var queuedExecutions = await ExecutionJobs.CountAsync(j => j.Status == "Pending", ct);
 
-        var queuedJobs = await db.PortalExecutionJobs
+        var queuedJobs = await ExecutionJobs
             .AsNoTracking()
             .Where(j => j.Status == "Pending")
             .Select(j => j.CreatedAt)
             .ToListAsync(ct);
-        var recentExecutions = await db.PortalExecutionJobs
+        var recentExecutions = await ExecutionJobs
             .CountAsync(j => j.CompletedAt != null && j.CompletedAt >= since, ct);
-        var recentExecutionFailures = await db.PortalExecutionJobs
+        var recentExecutionFailures = await ExecutionJobs
             .CountAsync(j => j.CompletedAt >= since && (j.Status == "Failed" || j.Status == "Cancelled"), ct);
-        var hourlyRows = await db.PortalExecutionJobs
+        var hourlyRows = await ExecutionJobs
             .AsNoTracking()
             .Where(j => j.CompletedAt != null && j.CompletedAt >= since)
             .GroupBy(j => new
@@ -126,7 +135,7 @@ public sealed class OperationalMetricsService(
                 row.Failures,
                 row.RowsProcessed,
                 row.PeakMemoryBytes)));
-        var durationRows = await db.PortalExecutionJobs
+        var durationRows = await ExecutionJobs
             .AsNoTracking()
             .Where(j => j.CompletedAt != null && j.CompletedAt >= since && j.StartedAt != null)
             .Select(j => new { j.StartedAt, j.CompletedAt })
@@ -142,12 +151,12 @@ public sealed class OperationalMetricsService(
             ? 0
             : queuedJobs.Select(createdAt => Math.Max(0, (now - createdAt).TotalSeconds)).Average();
 
-        var recentDeliveries = await db.SubscriptionDeliveries
+        var recentDeliveries = await SubscriptionDeliveries
             .CountAsync(d => d.CompletedAt != null && d.CompletedAt >= since, ct);
-        var recentDeliveryFailures = await db.SubscriptionDeliveries
+        var recentDeliveryFailures = await SubscriptionDeliveries
             .CountAsync(d => d.CompletedAt >= since && (d.Outcome == "Failed" || d.Outcome == "Denied"), ct);
 
-        var activeSubscriptions = await db.Subscriptions.CountAsync(s => s.IsActive, ct);
+        var activeSubscriptions = await Subscriptions.CountAsync(s => s.IsActive, ct);
         // Counted from the governed catalog since the bespoke SmtpConnections table was retired.
         // ToUpper() rather than a case-insensitive comparison so it translates on both providers.
         var smtpConnections = await db.PortalSharedConnections
@@ -300,7 +309,7 @@ public sealed class OperationalMetricsService(
             return 0;
 
         var cutoff = now.AddHours(-config.OperationalDigest.SnapshotFreshnessHours);
-        return await db.Reports
+        return await Reports
             .AsNoTracking()
             .Where(r => !r.IsDeleted
                 && (r.LastRefreshCompletedAt == null || r.LastRefreshCompletedAt < cutoff))

@@ -6,12 +6,12 @@ namespace ETL_SQL.Portal.Services;
 
 /// <summary>
 /// Per-user DashboardService pool with LRU eviction.
-/// Keyed on (reportId, userId) so each user has independent parameter state.
+/// Keyed on (tenantId, reportId, userId) so tenants and users have independent parameter state.
 /// On eviction the user's next interaction transparently rebuilds from the current snapshot.
 /// </summary>
 public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
 {
-    private readonly record struct SessionKey(int ReportId, int UserId);
+    private readonly record struct SessionKey(string TenantId, int ReportId, int UserId);
 
     private readonly record struct Entry(DashboardService Service, string ScriptPath, string CallerContext)
     {
@@ -40,7 +40,8 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         bool isAdministrator = false,
         string? keyScope = null)
     {
-        var key = new SessionKey(reportId, userId);
+        var tenantId = string.IsNullOrWhiteSpace(keyScope) ? "portal-host" : keyScope;
+        var key = new SessionKey(tenantId, reportId, userId);
         // Interactive viewing runs as the real user so dataset ACLs (CanReadAsync) are enforced;
         // reportId links any datasets the script CREATEs to this report (and thus its folder).
         var callerContext = isAdministrator
@@ -99,9 +100,9 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
     }
 
     /// <summary>Removes all sessions for a report (called on snapshot invalidation).</summary>
-    public async Task InvalidateReportAsync(int reportId)
+    public async Task InvalidateReportAsync(int reportId, string keyScope = "portal-host")
     {
-        foreach (var key in _sessions.Keys.Where(k => k.ReportId == reportId))
+        foreach (var key in _sessions.Keys.Where(k => k.TenantId == keyScope && k.ReportId == reportId))
             if (_sessions.TryRemove(key, out var entry)) await entry.Service.DisposeAsync();
     }
 

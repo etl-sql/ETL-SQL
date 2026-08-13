@@ -9,8 +9,22 @@ using Microsoft.EntityFrameworkCore;
 namespace ETL_SQL.Portal.Services;
 
 /// <summary>Validates a Portal bootstrap against target logical state without executing it.</summary>
-public sealed partial class ConfigurationPromotionValidationService(PortalDbContext db)
+public sealed partial class ConfigurationPromotionValidationService(
+    PortalDbContext db,
+    PortalTenantCatalogScope? catalogScope = null)
 {
+    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports;
+    private IQueryable<Folder> Folders => catalogScope?.Folders ?? db.Folders;
+    private IQueryable<PortalUser> Users => catalogScope is null
+        ? db.Users
+        : db.Users.Where(user => user.TenantId == catalogScope.TenantId);
+    private IQueryable<ETL_SQL.Portal.Data.Group> Groups => catalogScope is null
+        ? db.Groups
+        : db.Groups.Where(group => group.TenantId == catalogScope.TenantId);
+    private IQueryable<PortalSharedConnection> Connections => catalogScope is null
+        ? db.PortalSharedConnections
+        : db.PortalSharedConnections.Where(connection => connection.TenantId == catalogScope.TenantId);
+
     public sealed record Finding(string Code, string Severity, string Resource, string Message);
 
     /// <summary>
@@ -72,7 +86,7 @@ public sealed partial class ConfigurationPromotionValidationService(PortalDbCont
             switch (statement)
             {
                 case CreatePortalGroupStatement group:
-                    var existingGroup = await db.Groups.AsNoTracking().SingleOrDefaultAsync(g => g.Name == group.Name, ct);
+                    var existingGroup = await Groups.AsNoTracking().SingleOrDefaultAsync(g => g.Name == group.Name, ct);
                     var groupCollides = existingGroup is not null &&
                         (!Same(existingGroup.Description, group.Description)
                          || !Same(existingGroup.Provider, group.Provider ?? "Local")
@@ -81,7 +95,7 @@ public sealed partial class ConfigurationPromotionValidationService(PortalDbCont
                     plan.Add(Planned("group", group.Name, existingGroup is not null, groupCollides));
                     break;
                 case CreatePortalUserStatement user:
-                    var existingUser = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.UserName == user.Username, ct);
+                    var existingUser = await Users.AsNoTracking().SingleOrDefaultAsync(u => u.UserName == user.Username, ct);
                     var userCollides = false;
                     if (existingUser is not null)
                     {
@@ -96,11 +110,11 @@ public sealed partial class ConfigurationPromotionValidationService(PortalDbCont
                     plan.Add(Planned("user", user.Username, existingUser is not null, userCollides));
                     break;
                 case CreatePortalFolderStatement folder:
-                    var existingFolder = await db.Folders.AsNoTracking().SingleOrDefaultAsync(f => f.Path == folder.Path, ct);
+                    var existingFolder = await Folders.AsNoTracking().SingleOrDefaultAsync(f => f.Path == folder.Path, ct);
                     var folderCollides = false;
                     if (existingFolder is not null && folder.CatalogOwner is not null)
                     {
-                        var owner = await db.Users.AsNoTracking().Where(u => u.Id == existingFolder.OwnerId)
+                        var owner = await Users.AsNoTracking().Where(u => u.Id == existingFolder.OwnerId)
                             .Select(u => u.UserName).SingleOrDefaultAsync(ct);
                         folderCollides = !Same(owner, folder.CatalogOwner);
                         if (folderCollides) Collision(findings, "folder", folder.Path);
@@ -108,7 +122,7 @@ public sealed partial class ConfigurationPromotionValidationService(PortalDbCont
                     plan.Add(Planned("folder", folder.Path, existingFolder is not null, folderCollides));
                     break;
                 case CreateConnectionStatement connection:
-                    var existingConnection = await db.PortalSharedConnections.AsNoTracking()
+                    var existingConnection = await Connections.AsNoTracking()
                         .SingleOrDefaultAsync(c => c.Alias == connection.name, ct);
                     var connectionCollides = false;
                     if (existingConnection is not null)
@@ -125,12 +139,12 @@ public sealed partial class ConfigurationPromotionValidationService(PortalDbCont
                     plan.Add(Planned("connection", connection.name, existingConnection is not null, connectionCollides));
                     break;
                 case PublishPortalReportStatement report:
-                    var existingReport = await db.Reports.AsNoTracking().Include(r => r.Folder)
+                    var existingReport = await Reports.AsNoTracking().Include(r => r.Folder)
                         .SingleOrDefaultAsync(r => !r.IsDeleted && r.Name == report.ReportName && r.Folder.Path == report.FolderPath, ct);
                     var reportCollides = false;
                     if (existingReport is not null)
                     {
-                        var owner = await db.Users.AsNoTracking().Where(u => u.Id == existingReport.CreatedBy)
+                        var owner = await Users.AsNoTracking().Where(u => u.Id == existingReport.CreatedBy)
                             .Select(u => u.UserName).SingleOrDefaultAsync(ct);
                         reportCollides = !Same(existingReport.ScriptPath, report.ScriptPath)
                             || !Same(existingReport.Description, report.Description)
