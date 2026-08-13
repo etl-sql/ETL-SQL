@@ -6,6 +6,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Multitenancy;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Orchestrator.Storage;
 using Xunit;
 
@@ -398,6 +400,61 @@ namespace ETL_SQL.Tests.Orchestration
 
             await _store.SaveJobAsync(legacy with { TenantId = "tenant-a" });
             Assert.Equal("tenant-a", (await _store.GetJobAsync("LegacyBinding"))!.TenantId);
+        }
+
+        [Fact]
+        public async Task TenantEvidenceStore_FiltersCatalogStateHistoryAndQualityInProvider()
+        {
+            await _store.InitializeAsync();
+            await _store.SaveJobAsync(MakeJob("tenant-alpha--daily") with
+            {
+                DisplayName = "daily-quality",
+                TenantId = "tenant-alpha"
+            });
+            await _store.SaveJobAsync(MakeJob("tenant-beta--daily") with
+            {
+                DisplayName = "daily-quality",
+                TenantId = "tenant-beta"
+            });
+            var tenantStore = (ITenantJobEvidenceStore)_store;
+            var alpha = TenantContext.FromVerifiedCredential("tenant-alpha");
+            var beta = TenantContext.FromVerifiedCredential("tenant-beta");
+
+            await tenantStore.SetJobStateAsync(alpha, "tenant-alpha--daily", "dq:quarantine-manifest:same", "alpha");
+            await tenantStore.SetJobStateAsync(beta, "tenant-beta--daily", "dq:quarantine-manifest:same", "beta");
+            var alphaRun = await _store.LogJobStartAsync("tenant-alpha--daily");
+            var betaRun = await _store.LogJobStartAsync("tenant-beta--daily");
+            await _store.LogJobEndAsync(alphaRun, "SUCCESS", rowsProcessed: 10, rowsQuarantined: 1);
+            await _store.LogJobEndAsync(betaRun, "SUCCESS", rowsProcessed: 20, rowsQuarantined: 2);
+            await _store.SaveJobDataQualityFailuresAsync(alphaRun,
+                [new DataQualityRuleFailureMetric("same.table", "id", "NOT NULL", "QUARANTINE", 1)]);
+            await _store.SaveJobDataQualityFailuresAsync(betaRun,
+                [new DataQualityRuleFailureMetric("same.table", "id", "NOT NULL", "QUARANTINE", 2)]);
+            await _store.SaveJobStatementMetricsAsync(alphaRun,
+                [new ETL_SQL.Core.Profiling.StatementMetricsPayload { Statement = "SELECT ?" }]);
+            await _store.SaveJobStatementMetricsAsync(betaRun,
+                [new ETL_SQL.Core.Profiling.StatementMetricsPayload { Statement = "DELETE ?" }]);
+
+            Assert.Single(await tenantStore.GetAllJobsAsync(alpha));
+            Assert.Single(await tenantStore.GetAllJobsAsync(beta));
+            Assert.Null(await tenantStore.GetJobAsync(alpha, "tenant-beta--daily"));
+            Assert.Equal("alpha", await tenantStore.GetJobStateAsync(
+                alpha, "tenant-alpha--daily", "dq:quarantine-manifest:same"));
+            Assert.Single(await tenantStore.GetJobStatesAsync(alpha));
+            Assert.Single(await tenantStore.GetHistoryAsync(alpha));
+            Assert.Equal(alphaRun, (await tenantStore.GetHistoryAsync(alpha)).Single().Id);
+            Assert.Null(await tenantStore.GetHistoryEntryAsync(alpha, betaRun));
+            Assert.Equal(1, (await tenantStore.GetDataQualityFailuresForJobAsync(
+                alpha, "tenant-alpha--daily")).Single().FailureCount);
+            Assert.Empty(await tenantStore.GetDataQualityFailuresForRunAsync(alpha, betaRun));
+            Assert.Equal("SELECT ?", (await tenantStore.GetJobStatementMetricsAsync(
+                alpha, alphaRun)).Single().Statement);
+            Assert.Empty(await tenantStore.GetJobStatementMetricsAsync(alpha, betaRun));
+
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => tenantStore.SetJobStateAsync(
+                alpha, "tenant-beta--daily", "dq:quarantine-manifest:same", "tampered"));
+            Assert.Equal("beta", await tenantStore.GetJobStateAsync(
+                beta, "tenant-beta--daily", "dq:quarantine-manifest:same"));
         }
 
         [Fact]

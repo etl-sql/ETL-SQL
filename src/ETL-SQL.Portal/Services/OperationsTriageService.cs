@@ -11,7 +11,7 @@ namespace ETL_SQL.Portal.Services;
 /// from the Orchestrator. The direct read preserves detailed offline diagnostics without allowing a
 /// coarse Portal role to bypass the Orchestrator's per-job ACL.
 /// </summary>
-public sealed class OperationsTriageService(IJobHistoryStore jobHistory)
+public sealed class OperationsTriageService(PortalTenantJobEvidenceStore jobHistory)
 {
     /// <summary>Row cap for the history read; also the value that decides <c>Truncated</c>.</summary>
     private const int HistoryReadLimit = 1000;

@@ -392,6 +392,18 @@ the remote event envelope. Provider migrations backfill legacy rows into the Ded
 [`AuditOutboxTransportTests`](../../tests/ETL-SQL.Portal.Tests/AuditOutboxTransportTests.cs), and
 [`PortalPostgresProviderTests`](../../tests/ETL-SQL.Portal.Tests/PortalPostgresProviderTests.cs).
 
+Shared data-quality and quarantine evidence is resolved through `ITenantJobEvidenceStore`. The
+provider joins job state, run history, normalized rule failures, and statement measurements to the
+persisted job and applies its immutable `TenantId` before returning rows. Portal quarantine search,
+trend/rule views, submission status, impact scans, and operations triage use that contract in Shared
+mode; query parameters, copied job names, and copied numeric run IDs cannot select another tenant.
+State writes likewise succeed only when the named job belongs to the verified tenant. Tenant
+deletion purges job state and daily rollups before deleting the owning job. Evidence is
+[`SQLiteJobHistoryStoreTests`](../../tests/ETL-SQL.Tests/Orchestration/SQLiteJobHistoryStoreTests.cs),
+[`OrchestratorPostgresStoreTests`](../../tests/ETL-SQL.Tests/Orchestration/OrchestratorPostgresStoreTests.cs),
+[`SharedTenantHttpBoundaryTests`](../../tests/ETL-SQL.Portal.Tests/SharedTenantHttpBoundaryTests.cs),
+and [`QuarantineRowPreviewTests`](../../tests/ETL-SQL.Portal.Tests/QuarantineRowPreviewTests.cs).
+
 ### 6.4 Short-Lived Capabilities
 
 The control plane issues attempt- or operation-specific capabilities containing only the necessary

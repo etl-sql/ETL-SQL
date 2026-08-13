@@ -224,6 +224,7 @@ namespace ETL_SQL.Orchestrator
                     ? null
                     : configuration["Orchestrator:DatabasePath"]));
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<ITenantJobEvidenceStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IJobCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IOrchestratorAuthorizationStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());

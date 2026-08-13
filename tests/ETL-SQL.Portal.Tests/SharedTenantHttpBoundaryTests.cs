@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
@@ -206,6 +208,81 @@ public sealed class SharedTenantHttpBoundaryTests
         Assert.Single(values!);
         Assert.Equal("tenant-alpha/gateway/equal-id", values![0].ScopedId);
     }
+
+    [Fact]
+    public async Task SignedTenantScopesQualityJobsHistoryAndQuarantineSearchBelowController()
+    {
+        using var factory = new SharedPortalFactory();
+        using var client = factory.CreateClient();
+        string alphaToken;
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
+            var admin = await users.FindByNameAsync("admin")
+                ?? throw new InvalidOperationException("Seeded admin was not found.");
+            admin.TenantId = "tenant-alpha";
+            admin.MustChangePassword = false;
+            await db.SaveChangesAsync();
+
+            var jobs = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            await jobs.SaveJobAsync(Job("tenant-alpha--daily", "tenant-alpha"));
+            await jobs.SaveJobAsync(Job("tenant-beta--daily", "tenant-beta"));
+            var evidence = scope.ServiceProvider.GetRequiredService<ITenantJobEvidenceStore>();
+            await evidence.SetJobStateAsync(
+                TenantContext.FromVerifiedCredential("tenant-alpha"),
+                "tenant-alpha--daily",
+                "dq:quarantine-manifest:same",
+                JsonSerializer.Serialize(Manifest("tenant-alpha--daily", "alpha.q_rows")));
+            await evidence.SetJobStateAsync(
+                TenantContext.FromVerifiedCredential("tenant-beta"),
+                "tenant-beta--daily",
+                "dq:quarantine-manifest:same",
+                JsonSerializer.Serialize(Manifest("tenant-beta--daily", "beta.q_rows")));
+
+            alphaToken = scope.ServiceProvider.GetRequiredService<TokenService>().GenerateJwt(
+                admin, await users.GetRolesAsync(admin),
+                tenantContext: TenantContext.FromVerifiedCredential("tenant-alpha"));
+        }
+
+        using var listRequest = new HttpRequestMessage(
+            HttpMethod.Get, "/api/data-quality/jobs?tenant=tenant-beta");
+        listRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        listRequest.Headers.Add("X-Tenant-Id", "tenant-beta");
+        var jobsBody = await (await client.SendAsync(listRequest)).Content.ReadAsStringAsync();
+        Assert.Contains("tenant-alpha--daily", jobsBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("tenant-beta--daily", jobsBody, StringComparison.Ordinal);
+
+        using var queueRequest = new HttpRequestMessage(
+            HttpMethod.Get, "/api/data-quality/quarantine?tenant=tenant-beta");
+        queueRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        queueRequest.Headers.Add("X-Tenant-Id", "tenant-beta");
+        var queueBody = await (await client.SendAsync(queueRequest)).Content.ReadAsStringAsync();
+        Assert.Contains("alpha.q_rows", queueBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("beta.q_rows", queueBody, StringComparison.Ordinal);
+
+        using var foreignJobRequest = new HttpRequestMessage(
+            HttpMethod.Get, "/api/data-quality/quarantine?jobName=tenant-beta--daily");
+        foreignJobRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        Assert.Equal("[]", await (await client.SendAsync(foreignJobRequest)).Content.ReadAsStringAsync());
+    }
+
+    private static JobDefinition Job(string name, string tenant) => new(
+        name, "SELECT 1;", 1, "HOUR", null, null, null,
+        DisplayName: "daily-quality", TenantId: tenant);
+
+    private static QuarantineReplayManifest Manifest(string jobName, string target) => new(
+        jobName,
+        "quality/daily.etlsql",
+        "load",
+        "source.rows",
+        target,
+        true,
+        null,
+        ["id"],
+        "same-schema",
+        DateTimeOffset.UtcNow);
 
     private sealed class SharedPortalFactory : PortalWebFactory
     {

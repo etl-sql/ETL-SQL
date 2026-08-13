@@ -377,6 +377,17 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
       `AuditCollectorHealthTests`, and `PortalPostgresProviderTests` pin this slice. The parent cell
       remains open for the surfaces listed above and non-audit support diagnostics.
 
+      **Quality/quarantine evidence slice completed (2026-08-13).** Shared Portal quality jobs,
+      run trends, normalized rule failures, statement detail, quarantine manifests, submissions,
+      queue search, and triage now use `ITenantJobEvidenceStore`. Its SQLite/PostgreSQL queries join
+      every row to the job's immutable `TenantId` inside the provider; a foreign job name or numeric
+      run id returns no evidence, caller tenant selectors are inert, and writes cannot attach state
+      to another tenant's job. Tenant deletion also removes that tenant's job state and rollups while
+      retaining foreign equal-purpose evidence. SQLite restart/provider tests, hostile signed HTTP,
+      the complete quarantine/quality Portal suite, and a real PostgreSQL test pin the boundary.
+      This parent cell remains open for report/catalog relational roots, cache/search rebuilds,
+      exports/subscriptions/tokens, interactive-session fleets, and remaining support diagnostics.
+
 *Absorbs the retained discovery item **Tenant-Isolated Lineage Graphs**.*
 
 ##### 9. Lifecycle — provisioning, backup, portability, deletion, metering

@@ -18,7 +18,7 @@ public sealed record ImpactReport(string Reference, int ConsumerCount, IReadOnly
 public sealed class ReferenceImpactService(
     PortalDbContext db,
     PortalConfig portalConfig,
-    IJobHistoryStore jobHistory,
+    PortalTenantJobEvidenceStore jobHistory,
     ILogger<ReferenceImpactService> logger,
     DatasetTenantScope? tenantScope = null)
 {

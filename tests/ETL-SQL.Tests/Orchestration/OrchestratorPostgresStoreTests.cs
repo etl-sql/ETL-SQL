@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Multitenancy;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
@@ -94,6 +95,45 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(id, entry.Id);
             Assert.Equal("SUCCESS", entry.Status);
             Assert.Equal(42, entry.RowsProcessed);
+        }
+
+        [Fact]
+        public async Task TenantQualityEvidence_IsPartitionedOnPostgres()
+        {
+            var store = NewStore();
+            await store.InitializeAsync();
+            await store.SaveJobAsync(Job("alpha-quality") with
+            {
+                DisplayName = "same-quality",
+                TenantId = "tenant-alpha"
+            });
+            await store.SaveJobAsync(Job("beta-quality") with
+            {
+                DisplayName = "same-quality",
+                TenantId = "tenant-beta"
+            });
+            var evidence = (ITenantJobEvidenceStore)store;
+            var alpha = TenantContext.FromVerifiedCredential("tenant-alpha");
+            var beta = TenantContext.FromVerifiedCredential("tenant-beta");
+            await evidence.SetJobStateAsync(alpha, "alpha-quality", "dq:quarantine-manifest:same", "alpha");
+            await evidence.SetJobStateAsync(beta, "beta-quality", "dq:quarantine-manifest:same", "beta");
+            var alphaRun = await store.LogJobStartAsync("alpha-quality");
+            var betaRun = await store.LogJobStartAsync("beta-quality");
+            await store.LogJobEndAsync(alphaRun, "SUCCESS", rowsProcessed: 1, rowsQuarantined: 1);
+            await store.LogJobEndAsync(betaRun, "SUCCESS", rowsProcessed: 2, rowsQuarantined: 2);
+            await store.SaveJobDataQualityFailuresAsync(alphaRun,
+                [new DataQualityRuleFailureMetric("same.table", "id", "NOT NULL", "QUARANTINE", 1)]);
+            await store.SaveJobDataQualityFailuresAsync(betaRun,
+                [new DataQualityRuleFailureMetric("same.table", "id", "NOT NULL", "QUARANTINE", 2)]);
+
+            Assert.Single(await evidence.GetAllJobsAsync(alpha));
+            Assert.Single(await evidence.GetJobStatesAsync(alpha));
+            Assert.Equal(alphaRun, (await evidence.GetHistoryAsync(alpha)).Single().Id);
+            Assert.Equal(1, (await evidence.GetDataQualityFailuresForJobAsync(
+                alpha, "alpha-quality")).Single().FailureCount);
+            Assert.Null(await evidence.GetJobAsync(alpha, "beta-quality"));
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => evidence.SetJobStateAsync(
+                alpha, "beta-quality", "dq:quarantine-manifest:same", "tampered"));
         }
 
         [Fact]

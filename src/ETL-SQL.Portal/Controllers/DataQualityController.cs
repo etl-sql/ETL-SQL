@@ -18,7 +18,7 @@ namespace ETL_SQL.Portal.Controllers;
 [Authorize(Policy = "DataQualityStewardAccess")]
 [RequirePortalModule("Reporting")]
 public sealed class DataQualityController(
-    IJobHistoryStore jobHistory,
+    ETL_SQL.Portal.Services.PortalTenantJobEvidenceStore jobHistory,
     IJobChannel jobChannel,
     IServiceProvider services,
     ETL_SQL.Common.ILogger engineLogger,

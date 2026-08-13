@@ -23,7 +23,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public partial class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, ITenantLineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore
+    public partial class RelationalJobHistoryStore : IJobHistoryStore, ITenantJobEvidenceStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, ITenantLineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;

@@ -173,6 +173,30 @@ public interface ITenantLineageCatalogStore
         TenantContext tenant, string sourceFile, int limit = 100);
 }
 
+/// <summary>
+/// Tenant-qualified job catalog, run history, data-quality evidence, and durable job state for a
+/// shared control plane. Implementations must apply the tenant predicate in the provider query;
+/// loading deployment-wide evidence and filtering it in a controller is not an isolation boundary.
+/// </summary>
+public interface ITenantJobEvidenceStore
+{
+    Task<IEnumerable<JobDefinition>> GetAllJobsAsync(TenantContext tenant);
+    Task<JobDefinition?> GetJobAsync(TenantContext tenant, string name);
+    Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(
+        TenantContext tenant, string? jobName = null, int limit = 100);
+    Task<JobHistoryEntry?> GetHistoryEntryAsync(TenantContext tenant, long entryId);
+    Task<IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>> GetJobStatementMetricsAsync(
+        TenantContext tenant, long entryId);
+    Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForJobAsync(
+        TenantContext tenant, string jobName, int limit = 1000);
+    Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForRunAsync(
+        TenantContext tenant, long entryId, int limit = 1000);
+    Task<string?> GetJobStateAsync(TenantContext tenant, string jobName, string key);
+    Task SetJobStateAsync(TenantContext tenant, string jobName, string key, string? value);
+    Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(
+        TenantContext tenant, string? jobName = null, int limit = 1000);
+}
+
 /// <summary>One normalized, counts-only data-quality failure joined to its run identity.</summary>
 /// <summary>
 /// A persisted statement measurement joined to the run it belongs to, for the

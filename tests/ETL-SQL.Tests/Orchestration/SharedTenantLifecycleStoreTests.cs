@@ -81,6 +81,9 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
         var betaHistory = await store.LogJobStartAsync("beta-job");
         await store.LogJobEndAsync(alphaHistory, "SUCCESS");
         await store.LogJobEndAsync(betaHistory, "SUCCESS");
+        await store.SetJobStateAsync("alpha-job", "dq:quarantine-manifest:same", "alpha");
+        await store.SetJobStateAsync("beta-job", "dq:quarantine-manifest:same", "beta");
+        await store.RollUpJobHistoryAsync();
 
         var result = await store.ApplySharedTenantLifecycleAsync(alpha,
             Command("delete-alpha", SharedTenantLifecycleKind.Delete, "change-d"));
@@ -88,8 +91,13 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
         Assert.Equal("Deleted", result.State.State);
         Assert.Null(await store.GetJobAsync("alpha-job"));
         Assert.Empty(await store.GetHistoryAsync("alpha-job"));
+        Assert.Null(await store.GetJobStateAsync("alpha-job", "dq:quarantine-manifest:same"));
+        Assert.Empty(await store.GetJobHistoryDailyAsync("alpha-job", DateTime.UtcNow.AddDays(-1)));
         Assert.NotNull(await store.GetJobAsync("beta-job"));
         Assert.Single(await store.GetHistoryAsync("beta-job"));
+        Assert.Equal("beta", await store.GetJobStateAsync(
+            "beta-job", "dq:quarantine-manifest:same"));
+        Assert.Single(await store.GetJobHistoryDailyAsync("beta-job", DateTime.UtcNow.AddDays(-1)));
         Assert.Equal("Active", (await store.GetSharedTenantStateAsync(beta))!.State);
     }
 

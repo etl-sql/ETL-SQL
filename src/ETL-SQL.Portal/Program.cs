@@ -521,6 +521,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetTenantScope>(sp =>
         sp.GetRequiredService<PortalConfig>(),
         sp.GetService<ETL_SQL.Core.Multitenancy.TenantContext>()));
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantLineageCatalog>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantJobEvidenceStore>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalConnectionCatalogService>();
