@@ -21,6 +21,7 @@ public sealed class ContainerBuildContextTests
     [
         Path.Combine("src", "ETL-SQL.Portal", "Dockerfile"),
         Path.Combine("src", "ETL-SQL.Orchestrator.Service", "Dockerfile"),
+        Path.Combine("src", "ETL-SQL.App", "Dockerfile.sandbox"),
     ];
 
     [Fact]
@@ -71,6 +72,16 @@ public sealed class ContainerBuildContextTests
                 $"'{directory}/' is now copied by a Dockerfile; the exclusion below needs revisiting.");
             Assert.Contains(directory, ignored);
         }
+    }
+
+    [Fact]
+    public void SandboxWorkerImage_HasSecureSourceContract()
+    {
+        var path = Path.Combine(RepoRoot(), "src", "ETL-SQL.App", "Dockerfile.sandbox");
+        var dockerfile = File.ReadAllText(path);
+
+        Assert.Matches(@"(?m)^\s*USER\s+65532:65532\s*$", dockerfile);
+        Assert.Matches(@"(?m)^\s*ENTRYPOINT\s+\[""/app/etl-sql""\]\s*$", dockerfile);
     }
 
     /// <summary>Top-level paths <c>.dockerignore</c> excludes, normalized to bare directory names.</summary>

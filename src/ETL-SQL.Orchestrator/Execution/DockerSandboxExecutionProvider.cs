@@ -69,11 +69,19 @@ public sealed class ProcessSandboxCommandRunner : ISandboxCommandRunner
     }
 }
 
+public enum DockerSandboxMode
+{
+    Hardened,
+    Standard
+}
+
 public sealed class DockerSandboxExecutionOptions
 {
+    public DockerSandboxMode Mode { get; init; } = DockerSandboxMode.Hardened;
     public string DockerExecutable { get; init; } = "docker";
     public required string Image { get; init; }
-    public required string ImageDigest { get; init; }
+    public string? ImageDigest { get; init; }
+    public string? LocalImageId { get; init; }
     public required string Runtime { get; init; }
     public required string HostPolicyVersion { get; init; }
     public required string SessionRoot { get; init; }
@@ -129,8 +137,10 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         ArgumentNullException.ThrowIfNull(workspace);
         if (string.IsNullOrWhiteSpace(request.AdmissionId))
             throw new InvalidOperationException("A durably activated admission id is required before runtime preparation.");
-        if (request.RequiredIsolationTier < SandboxIsolationTier.Hardened)
+        if (request.RequiredIsolationTier < SandboxIsolationTier.Hardened && _options.Mode == DockerSandboxMode.Hardened)
             throw new InvalidOperationException("The hardened Docker provider accepts only Hardened or Dedicated work.");
+        if (request.RequiredIsolationTier >= SandboxIsolationTier.Hardened && _options.Mode == DockerSandboxMode.Standard)
+            throw new InvalidOperationException("The Standard Docker provider accepts only Standard work.");
         if (request.CapabilityHandles.Count != 0)
             throw new NotSupportedException(
                 "Docker sandbox capability injection is not configured; raw capability handles will not be exposed.");
@@ -185,9 +195,11 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             if (!state.Trim().Equals("created", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Sandbox preparation did not leave tenant code stopped.");
 
-            var tier = request.RequiredIsolationTier == SandboxIsolationTier.Dedicated
-                ? SandboxIsolationTier.Dedicated
-                : SandboxIsolationTier.Hardened;
+            var tier = _options.Mode == DockerSandboxMode.Standard 
+                ? SandboxIsolationTier.Standard
+                : (request.RequiredIsolationTier == SandboxIsolationTier.Dedicated 
+                    ? SandboxIsolationTier.Dedicated 
+                    : SandboxIsolationTier.Hardened);
             var evidence = new SandboxProviderEvidence(
                 "docker-oci", version.Trim(), _options.Runtime, tier, image, _options.HostPolicyVersion);
             return new DockerSandboxAttempt(
@@ -286,21 +298,33 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
 
     private async Task<string> InspectImageAsync(CancellationToken cancellationToken)
     {
-        var raw = await RequireSuccessAsync(
-            ["image", "inspect", "--format", "{{json .RepoDigests}}", _options.Image],
-            "inspect sandbox image", cancellationToken);
-        string[] repoDigests;
-        try
+        if (!string.IsNullOrWhiteSpace(_options.LocalImageId))
         {
-            repoDigests = JsonSerializer.Deserialize<string[]>(raw.Trim()) ?? [];
+            var raw = await RequireSuccessAsync(
+                ["image", "inspect", "--format", "{{.Id}}", _options.Image],
+                "inspect sandbox local image", cancellationToken);
+            if (!string.Equals(raw.Trim(), _options.LocalImageId, StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException("The local sandbox image does not match the pinned local image ID.");
+            return _options.LocalImageId;
         }
-        catch (JsonException ex)
+        else
         {
-            throw new InvalidOperationException("Docker returned malformed sandbox image digest evidence.", ex);
+            var raw = await RequireSuccessAsync(
+                ["image", "inspect", "--format", "{{json .RepoDigests}}", _options.Image],
+                "inspect sandbox image", cancellationToken);
+            string[] repoDigests;
+            try
+            {
+                repoDigests = JsonSerializer.Deserialize<string[]>(raw.Trim()) ?? [];
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException("Docker returned malformed sandbox image digest evidence.", ex);
+            }
+            if (!repoDigests.Contains(_options.Image, StringComparer.Ordinal))
+                throw new UnauthorizedAccessException("The local sandbox image does not match the pinned digest.");
+            return _options.ImageDigest!;
         }
-        if (!repoDigests.Contains(_options.Image, StringComparer.Ordinal))
-            throw new UnauthorizedAccessException("The local sandbox image does not match the pinned digest.");
-        return _options.ImageDigest;
     }
 
     private static void RequireDockerMountSource(string path)
@@ -358,21 +382,56 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(options.DockerExecutable);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Image);
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ImageDigest);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Runtime);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.HostPolicyVersion);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.SessionRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.MachineKeyRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Entrypoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.User);
-        var digest = options.ImageDigest.ToLowerInvariant();
-        if (!digest.StartsWith("sha256:", StringComparison.Ordinal) || digest.Length != 71 ||
-            digest[7..].Any(character => !(character is >= '0' and <= '9' or >= 'a' and <= 'f')))
-            throw new ArgumentException("The sandbox image must have a canonical sha256 digest.", nameof(options));
-        if (!options.Image.EndsWith("@" + digest, StringComparison.Ordinal))
-            throw new ArgumentException("The sandbox image reference must be pinned to ImageDigest.", nameof(options));
-        if (!HardenedRuntimes.Contains(options.Runtime))
-            throw new ArgumentException("Hardened sandbox runtime must be an allowlisted gVisor or Kata runtime.", nameof(options));
+
+        if (options.Mode == DockerSandboxMode.Hardened)
+        {
+            if (string.IsNullOrWhiteSpace(options.ImageDigest))
+                throw new ArgumentException("Hardened mode requires ImageDigest.", nameof(options));
+            if (!string.IsNullOrWhiteSpace(options.LocalImageId))
+                throw new ArgumentException("Hardened mode cannot use LocalImageId.", nameof(options));
+
+            var digest = options.ImageDigest.ToLowerInvariant();
+            if (!digest.StartsWith("sha256:", StringComparison.Ordinal) || digest.Length != 71 ||
+                digest[7..].Any(character => !(character is >= '0' and <= '9' or >= 'a' and <= 'f')))
+                throw new ArgumentException("The sandbox image must have a canonical sha256 digest.", nameof(options));
+            if (!options.Image.EndsWith("@" + digest, StringComparison.Ordinal))
+                throw new ArgumentException("The sandbox image reference must be pinned to ImageDigest.", nameof(options));
+            if (!HardenedRuntimes.Contains(options.Runtime))
+                throw new ArgumentException("Hardened sandbox runtime must be an allowlisted gVisor or Kata runtime.", nameof(options));
+        }
+        else if (options.Mode == DockerSandboxMode.Standard)
+        {
+            if (string.IsNullOrWhiteSpace(options.ImageDigest) && string.IsNullOrWhiteSpace(options.LocalImageId))
+                throw new ArgumentException("Standard mode requires ImageDigest or LocalImageId.", nameof(options));
+            if (!string.IsNullOrWhiteSpace(options.ImageDigest) && !string.IsNullOrWhiteSpace(options.LocalImageId))
+                throw new ArgumentException("Standard mode cannot specify both ImageDigest and LocalImageId.", nameof(options));
+            
+            if (!string.IsNullOrWhiteSpace(options.LocalImageId))
+            {
+                var id = options.LocalImageId.ToLowerInvariant();
+                if (!id.StartsWith("sha256:", StringComparison.Ordinal) || id.Length != 71 ||
+                    id[7..].Any(character => !(character is >= '0' and <= '9' or >= 'a' and <= 'f')))
+                    throw new ArgumentException("The local image id must have a canonical sha256 digest.", nameof(options));
+            }
+            else if (!string.IsNullOrWhiteSpace(options.ImageDigest))
+            {
+                var digest = options.ImageDigest.ToLowerInvariant();
+                if (!digest.StartsWith("sha256:", StringComparison.Ordinal) || digest.Length != 71 ||
+                    digest[7..].Any(character => !(character is >= '0' and <= '9' or >= 'a' and <= 'f')))
+                    throw new ArgumentException("The sandbox image must have a canonical sha256 digest.", nameof(options));
+                if (!options.Image.EndsWith("@" + digest, StringComparison.Ordinal))
+                    throw new ArgumentException("The sandbox image reference must be pinned to ImageDigest.", nameof(options));
+            }
+            
+            if (HardenedRuntimes.Contains(options.Runtime))
+                throw new ArgumentException("Standard sandbox mode cannot use a Hardened runtime.", nameof(options));
+        }
         if (!Path.IsPathFullyQualified(options.SessionRoot))
             throw new ArgumentException("The sandbox session root must be absolute.", nameof(options));
         if (!Path.IsPathFullyQualified(options.MachineKeyRoot))

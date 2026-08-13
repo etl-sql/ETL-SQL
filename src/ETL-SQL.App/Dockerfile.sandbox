@@ -1,0 +1,68 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Copy all project files first for layer caching
+COPY ["Directory.Build.props", "."]
+COPY ["Directory.Packages.props", "."]
+COPY ["NuGet.Config", "."]
+COPY ["build/signing/etl-sql.snk", "build/signing/"]
+COPY ["THIRD-PARTY-NOTICES.md", "/"]
+COPY ["src/ETL-SQL.Core/ETL-SQL.Core.csproj", "ETL-SQL.Core/"]
+COPY ["src/ETL-SQL.Engine/ETL-SQL.Engine.csproj", "ETL-SQL.Engine/"]
+COPY ["src/ETL-SQL.Connectors.Common/ETL-SQL.Connectors.Common.csproj", "ETL-SQL.Connectors.Common/"]
+COPY ["src/ETL-SQL.Connectors.Files/ETL-SQL.Connectors.Files.csproj", "ETL-SQL.Connectors.Files/"]
+COPY ["src/ETL-SQL.Connectors.Databases/ETL-SQL.Connectors.Databases.csproj", "ETL-SQL.Connectors.Databases/"]
+COPY ["src/ETL-SQL.Connectors.Cloud/ETL-SQL.Connectors.Cloud.csproj", "ETL-SQL.Connectors.Cloud/"]
+COPY ["src/ETL-SQL.Connectors.Remote/ETL-SQL.Connectors.Remote.csproj", "ETL-SQL.Connectors.Remote/"]
+COPY ["src/ETL-SQL.Connectors.Messaging/ETL-SQL.Connectors.Messaging.csproj", "ETL-SQL.Connectors.Messaging/"]
+COPY ["src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj", "ETL-SQL.Connectors/"]
+COPY ["src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj", "ETL-SQL.Orchestrator/"]
+COPY ["src/ETL-SQL.Analysis/ETL-SQL.Analysis.csproj", "ETL-SQL.Analysis/"]
+COPY ["src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj", "ETL-SQL.Reporting/"]
+COPY ["src/ETL-SQL.ReportBuilder/ETL-SQL.ReportBuilder.csproj", "ETL-SQL.ReportBuilder/"]
+COPY ["src/ETL-SQL.App/ETL-SQL.App.csproj", "ETL-SQL.App/"]
+COPY ["src/ETL-SQL.TUI/ETL-SQL.TUI.csproj", "ETL-SQL.TUI/"]
+COPY ["src/ETL-SQL.Infrastructure.Docker/ETL-SQL.Infrastructure.Docker.csproj", "ETL-SQL.Infrastructure.Docker/"]
+COPY ["src/ETL-SQL.Infrastructure.Logging/ETL-SQL.Infrastructure.Logging.csproj", "ETL-SQL.Infrastructure.Logging/"]
+COPY ["src/ETL-SQL.Infrastructure.Sqlite/ETL-SQL.Infrastructure.Sqlite.csproj", "ETL-SQL.Infrastructure.Sqlite/"]
+
+RUN dotnet restore "ETL-SQL.App/ETL-SQL.App.csproj" -r linux-x64 /p:NuGetAudit=false /p:TreatWarningsAsErrors=false
+
+# Copy the rest of the source
+COPY src/ .
+COPY deploy/docker/docker-compose.ha.yml /deploy/docker/docker-compose.ha.yml
+COPY deploy/docker/environment-ha.env.example /deploy/docker/environment-ha.env.example
+COPY capacity-results/workloads/postgres-ha-sustained.workload.json /capacity-results/workloads/postgres-ha-sustained.workload.json
+COPY certification-results/ha-large-job-soak-scenarios.json /certification-results/ha-large-job-soak-scenarios.json
+COPY certification-results/ha-fault-injection-matrix.json /certification-results/ha-fault-injection-matrix.json
+COPY docs/ /docs/
+COPY snippets/ /snippets/
+
+WORKDIR "/src/ETL-SQL.App"
+RUN dotnet build "ETL-SQL.App.csproj" -c Release -r linux-x64 --no-restore -o /app/build /p:NuGetAudit=false /p:TreatWarningsAsErrors=false
+
+FROM build AS publish
+RUN dotnet publish "ETL-SQL.App.csproj" -c Release -r linux-x64 --self-contained false --no-restore -o /app/publish /p:UseAppHost=true /p:PublishSingleFile=false /p:PublishReadyToRun=false /p:NuGetAudit=false /p:TreatWarningsAsErrors=false
+# Ensure the executable has the exact requested lowercase name
+RUN if [ -f /app/publish/ETL-SQL ]; then mv /app/publish/ETL-SQL /app/publish/etl-sql; fi
+
+# Final image contains the .NET 10 runtime needed by the CLI, not the ASP.NET service host
+FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+WORKDIR /app
+
+# Same native dependencies as service hosts:
+# SkiaSharp (PDF chart rendering via Svg.Skia) needs fontconfig + a font at runtime.
+# libgssapi-krb5-2 is needed for database auth.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=publish /app/publish .
+
+ENV ETLSQL_SECURITY_EVENT_OUTBOX_PATH=/tmp/security-events.db
+ENV Logging__AppLog__Directory=/tmp/logs
+
+# Run as non-root user/group 65532:65532
+USER 65532:65532
+
+ENTRYPOINT ["/app/etl-sql"]

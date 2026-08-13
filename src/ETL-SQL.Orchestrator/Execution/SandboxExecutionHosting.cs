@@ -66,6 +66,67 @@ public static class SandboxExecutionServiceCollectionExtensions
         return services;
     }
 
+    public static IServiceCollection AddStandardDockerSandboxExecution(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var section = configuration.GetSection("Orchestration:SandboxExecution");
+        if (!section.GetValue("Enabled", false)) return services;
+        if (!configuration.GetValue("Orchestration:SandboxAdmission:Enabled", false))
+            throw new InvalidOperationException(
+                "Standard sandbox execution requires durable sandbox admission to be enabled.");
+
+        var provider = new DockerSandboxExecutionOptions
+        {
+            Mode = DockerSandboxMode.Standard,
+            DockerExecutable = section["DockerExecutable"] ?? "docker",
+            Image = Require(section, "Image"),
+            ImageDigest = section["ImageDigest"],
+            LocalImageId = section["LocalImageId"],
+            Runtime = Require(section, "Runtime"),
+            HostPolicyVersion = Require(section, "HostPolicyVersion"),
+            SessionRoot = RequireAbsolute(section, "SessionRoot"),
+            MachineKeyRoot = RequireAbsolute(section, "MachineKeyRoot"),
+            Entrypoint = section["Entrypoint"] ?? "etl-sql",
+            User = section["User"] ?? "65532:65532",
+            DedicatedTenantId = section["DedicatedTenantId"],
+            DedicatedPoolId = section["DedicatedPoolId"]
+        };
+        var profiles = ReadProfiles(section.GetSection("Profiles"));
+        var tenants = ReadTenants(section.GetSection("Tenants"));
+        var policyCatalog = new SandboxWorkloadPolicyCatalog { Profiles = profiles, Tenants = tenants };
+        _ = new SandboxWorkloadPolicyResolver(policyCatalog);
+        DockerSandboxExecutionProvider.ValidateOptions(provider);
+        ValidatePlacement(configuration, provider, profiles, tenants);
+
+        services.AddSingleton(provider);
+        services.AddSingleton(new SandboxScheduledJobExecutorOptions
+        {
+            PolicyVersion = Require(section, "PolicyVersion"),
+            BindingVersion = Require(section, "BindingVersion")
+        });
+        services.AddSingleton(new FileSystemSandboxWorkspaceOptions
+        {
+            RootPath = RequireAbsolute(section, "WorkspaceRoot")
+        });
+        services.AddSingleton(new ImmutableSandboxArtifactStoreOptions
+        {
+            RootPath = RequireAbsolute(section, "ArtifactRoot")
+        });
+        services.AddSingleton(policyCatalog);
+        services.AddSingleton<ISandboxCommandRunner, ProcessSandboxCommandRunner>();
+        services.AddSingleton<IImmutableSandboxArtifactStore, FileSystemImmutableSandboxArtifactStore>();
+        services.AddSingleton<ISandboxWorkspaceProvider, FileSystemSandboxWorkspaceProvider>();
+        services.AddSingleton<ISandboxWorkloadPolicyResolver, SandboxWorkloadPolicyResolver>();
+        services.AddSingleton<ISandboxTenantContextResolver>(
+            new SandboxTenantContextResolver(configuration["Orchestrator:TenantId"]));
+        services.AddSingleton<ISandboxExecutionProvider, DockerSandboxExecutionProvider>();
+        services.AddSingleton<ISandboxRuntimeReconciler, DockerSandboxRuntimeReconciler>();
+        services.AddSingleton<SandboxExecutionCoordinator>();
+        services.AddSingleton<ISandboxScheduledJobExecutor, SandboxScheduledJobExecutor>();
+        return services;
+    }
+
     private static void ValidatePlacement(
         IConfiguration configuration,
         DockerSandboxExecutionOptions provider,
@@ -76,9 +137,13 @@ public static class SandboxExecutionServiceCollectionExtensions
             .GetChildren().ToDictionary(child => child.Key, child => child.Value, StringComparer.Ordinal);
         foreach (var profile in profiles.Values)
         {
-            if (profile.IsolationTier < SandboxIsolationTier.Hardened)
+            if (provider.Mode == DockerSandboxMode.Hardened && profile.IsolationTier < SandboxIsolationTier.Hardened)
                 throw new InvalidOperationException(
                     "The hardened sandbox host cannot advertise Local or Standard profiles.");
+            if (provider.Mode == DockerSandboxMode.Standard && profile.IsolationTier >= SandboxIsolationTier.Hardened)
+                throw new InvalidOperationException(
+                    "The standard sandbox host cannot advertise Hardened or Dedicated profiles.");
+
             if (!capacities.TryGetValue(profile.PoolId, out var capacity) ||
                 !int.TryParse(capacity, out var parsed) || parsed <= 0)
                 throw new InvalidOperationException(

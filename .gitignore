@@ -214,3 +214,6 @@ samples/output/*.enc
 /release-validation-*.log
 
 smoke-parity/
+
+# Ignore gemini task references
+docs/architecture/implementation-tasks/gemini/
