@@ -79,7 +79,7 @@ Keep the roadmap's P0/P1/P2 ordering unless a release plan explicitly changes it
 
 #### P2 — Deployment-profile certification
 
-- [ ] Add current per-profile and per-transition evidence to release claims. Report Managed Dedicated
+- [x] Add current per-profile and per-transition evidence to release claims. Report Managed Dedicated
       and Shared SaaS separately; neither inherits the other's claim status.
 
 ### Orchestrator — Operations Triage and Run Flight Recorder
@@ -89,7 +89,7 @@ Keep the roadmap's P0/P1/P2 ordering unless a release plan explicitly changes it
 Required by [Deployment_Profile_Standards.md](docs/architecture/standards/Deployment_Profile_Standards.md#feature-design-portability-review).
 Smallest safe profile is **Solo**, and the capability must not become Portal-only.
 
-- [ ] Confirm no matrix cell moves backward, record Dedicated and Shared SaaS status separately, and
+- [x] Confirm no matrix cell moves backward, record Dedicated and Shared SaaS status separately, and
       record the review outcome the way
       [v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) did.
 
