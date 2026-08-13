@@ -501,6 +501,33 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task CliOrchestrator_SaasDeleteParsesExplicitDestructiveBoundary()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[]
+            {
+                "admin", "promotion", "saas-delete",
+                "--tenant", "tenant-alpha",
+                "--tenant-root", "D:/saas/tenant-alpha",
+                "--receipt-root", "D:/saas-deletion-receipts",
+                "--execute"
+            }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-promotion-saas-delete", capturedContext!.Command);
+            Assert.Equal("tenant-alpha", capturedContext.SaasTenantId);
+            Assert.Equal("D:/saas/tenant-alpha", capturedContext.SaasDeletionTenantRoot);
+            Assert.Equal("D:/saas-deletion-receipts", capturedContext.SaasDeletionReceiptRoot);
+            Assert.True(capturedContext.SaasDeletionExecute);
+        }
+
+        [Fact]
         public async Task CliOrchestrator_AdminHaSoakValidateParsesEvidenceOptions()
         {
             CliContext? capturedContext = null;

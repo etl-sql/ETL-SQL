@@ -361,7 +361,20 @@ checked off meaningfully. Split:
       cutoff queries, invalid measures, immutable scheduler attribution, legacy-unbound refusal,
       and failure independence. This closes Dedicated metering only; the broader Shared-fleet
       attribution cell remains open.
-- [ ] **Dedicated — deletion.** Legal/retention-aware tenant deletion with a completion record.
+- [x] **Dedicated — deletion.** Legal/retention-aware tenant deletion with a completion record.
+
+      **Closed with signed erasure authority (2026-08-13).** `admin promotion saas-delete` derives
+      tenant authority from the active signed organization policy; the CLI tenant is a mismatch
+      assertion only. The typed policy names the platform actor, approval, reason, expiry, retention
+      boundary, and affirmative legal-hold clearance. Preflight is non-destructive unless `--execute`
+      is present. Execution verifies the provisioned manifest/config identity, refuses filesystem
+      roots, nested receipts, and reparse points, inventories and hashes the boundary without
+      recording payloads, atomically removes it from service, and persists a Started/Completed record
+      outside the erased boundary. Partial deletion retains the tombstone and Started receipt for
+      explicit reconciliation rather than re-authorizing damaged state. Tests prove completed
+      erasure, durable receipts, tenant mismatch refusal, external-receipt enforcement, expired/future
+      retention and legal-hold denial, and typed policy validation. Shared control-plane deletion
+      remains open.
 - [ ] **Shared — backup and recovery.** Tenant-scoped export/restore from shared stores, including
       proof that point-in-time recovery, retry, or cache rebuild cannot introduce another tenant's
       rows.

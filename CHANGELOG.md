@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added signed, retention/legal-hold-aware Managed Dedicated tenant deletion with explicit execution,
+  reparse/root safeguards, non-payload boundary digesting, atomic service removal, and an external
+  durable Started/Completed receipt attributed to the platform operator and approval.
 - Added Managed Dedicated split-custody recovery with tenant-bound archive pairs, foreign-tenant row
   refusal, explicit recovery-environment tenant matching, actual provisioned key/artifact paths, and
   post-restore job/admission fencing so recovered work cannot silently resume.

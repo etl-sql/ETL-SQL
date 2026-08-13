@@ -98,6 +98,28 @@ the platform actor, approval reference, reason, grant expiry, tenant, and time s
 tenant Portal's user audit. Its `tenantUserImpersonation` value is always false: platform onboarding
 does not mint a tenant session or Portal role.
 
+Managed Dedicated deletion is the paired deployment-plane lifecycle command and requires its own
+signed `saasDeletion` policy section:
+
+```powershell
+# Preflight: validates signed authority, retention, legal hold, and boundary identity.
+etl-sql admin promotion saas-delete `
+  --tenant tenant-alpha `
+  --tenant-root D:\etl-sql-tenants\tenant-alpha `
+  --receipt-root D:\etl-sql-tenant-deletion-receipts
+
+# Execute only after reviewing the preflight and taking the required backup/export.
+etl-sql admin promotion saas-delete `
+  --tenant tenant-alpha `
+  --tenant-root D:\etl-sql-tenants\tenant-alpha `
+  --receipt-root D:\etl-sql-tenant-deletion-receipts `
+  --execute
+```
+
+The completion record deliberately lives outside the deleted boundary and contains attribution,
+retention/legal-hold proof, file/byte counts, and a boundary digest—not tenant payloads. The command
+refuses filesystem roots, reparse points, and a receipt path nested inside the boundary.
+
 Before replaying that bootstrap, an administrator submits it and the target binding map to
 `POST /api/admin/configuration/validate`. The endpoint applies bindings only to its in-memory copy,
 uses reference-shaped sentinels for unresolved password placeholders, parses the real bootstrap,

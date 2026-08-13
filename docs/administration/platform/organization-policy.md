@@ -238,6 +238,33 @@ The grant is checked again immediately before the staging directory becomes the 
 Disable or remove the section after onboarding so a completed change does not leave reusable tenant
 provisioning authority.
 
+### Managed Dedicated tenant deletion authorization
+
+Deletion uses a different signed grant so provisioning authority can never imply erasure authority.
+The policy must name the retention boundary and affirm that legal holds were cleared:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "saasDeletion": {
+    "enabled": true,
+    "tenantId": "tenant-alpha",
+    "operatorPrincipal": "privacy-operator@platform.example",
+    "authorizationReference": "privacy-2026-0813",
+    "reason": "Approved tenant erasure",
+    "retentionUntilUtc": "2026-08-13T00:00:00Z",
+    "legalHoldCleared": true,
+    "expiresUtc": "2026-08-14T00:00:00Z"
+  }
+}
+```
+
+`admin promotion saas-delete` refuses an absent/expired grant, a future retention boundary, an
+uncleared legal hold, or a CLI/boundary tenant mismatch. Omit `--execute` for authorization and
+boundary preflight. An executed deletion writes its Started/Completed record to the external
+`--receipt-root`; keep that root under independent retention and remove the signed policy grant after
+the operation.
+
 Organization policy can also make catalog metadata a hard report-publishing boundary. Configure the
 Portal authority scope explicitly on every node with `Portal:PolicyAuthority:Tenant` and
 `Portal:PolicyAuthority:Environment` (both default to `default`). Required tags support `REPORT`,

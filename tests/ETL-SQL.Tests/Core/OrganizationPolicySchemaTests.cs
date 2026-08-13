@@ -330,5 +330,55 @@ public class OrganizationPolicySchemaTests
         Assert.False(result.IsValid);
     }
 
+    [Fact]
+    public void SaasDeletionAuthorizationIsTypedValidatedAndFlattened()
+    {
+        var expires = DateTimeOffset.UtcNow.AddMinutes(15);
+        var retainedUntil = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var document = new OrganizationPolicyDocument
+        {
+            SaasDeletion = new SaasDeletionAuthorizationPolicySection
+            {
+                Enabled = true,
+                TenantId = "tenant-alpha",
+                OperatorPrincipal = "privacy@platform.test",
+                AuthorizationReference = "privacy-42",
+                Reason = "approved erasure",
+                RetentionUntilUtc = retainedUntil,
+                LegalHoldCleared = true,
+                ExpiresUtc = expires
+            }
+        };
+
+        Assert.True(OrganizationPolicySchema.Validate(document).IsValid);
+        var flat = document.ToPolicyValues();
+        Assert.Equal("tenant-alpha", flat["SaaS:Deletion:TenantId"]);
+        Assert.Equal("privacy-42", flat["SaaS:Deletion:AuthorizationReference"]);
+        Assert.Equal(true, flat["SaaS:Deletion:LegalHoldCleared"]);
+        Assert.Equal(retainedUntil.ToString("O"), flat["SaaS:Deletion:RetentionUntilUtc"]);
+    }
+
+    [Fact]
+    public void SaasDeletionAuthorizationRejectsUnclearedOrIncompletePolicy()
+    {
+        var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            SaasDeletion = new SaasDeletionAuthorizationPolicySection
+            {
+                Enabled = true,
+                TenantId = "tenant-alpha",
+                OperatorPrincipal = "privacy@platform.test",
+                AuthorizationReference = "privacy-42",
+                Reason = "approved erasure",
+                RetentionUntilUtc = DateTimeOffset.UtcNow.AddMinutes(-1),
+                LegalHoldCleared = false,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(10)
+            }
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Contains("legal holds", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string Escape(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal);
 }

@@ -570,7 +570,7 @@ namespace ETL_SQL.App
 
         private static readonly Option<string?> SaasTenantOption = new("--tenant", Array.Empty<string>())
         {
-            Description = "Tenant assertion; must match the active signed onboarding authorization.",
+            Description = "Tenant assertion; must match the active signed operation authorization.",
             Arity = ArgumentArity.ExactlyOne
         };
         private static readonly Option<string?> SaasSourceProfileOption = new("--source-profile", Array.Empty<string>())
@@ -610,6 +610,20 @@ namespace ETL_SQL.App
         {
             Description = "Tenant concurrent report-session limit.",
             DefaultValueFactory = _ => 20
+        };
+        private static readonly Option<string?> SaasDeletionTenantRootOption = new("--tenant-root", Array.Empty<string>())
+        {
+            Description = "Provisioned Managed Dedicated tenant boundary to delete.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> SaasDeletionReceiptRootOption = new("--receipt-root", Array.Empty<string>())
+        {
+            Description = "External durable directory for the deletion completion record.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<bool> SaasDeletionExecuteOption = new("--execute", Array.Empty<string>())
+        {
+            Description = "Perform deletion after signed authorization, retention, and legal-hold checks pass."
         };
         private static readonly Option<string?> HaSoakRunIdOption = new("--run-id", Array.Empty<string>())
         {
@@ -1013,6 +1027,15 @@ namespace ETL_SQL.App
             };
             saasOnboardCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-onboard", handler));
             promotionCommand.Add(saasOnboardCommand);
+            var saasDeleteCommand = new Command("saas-delete", "Delete one Managed Dedicated tenant boundary under signed retention/legal authorization")
+            {
+                SaasTenantOption,
+                SaasDeletionTenantRootOption,
+                SaasDeletionReceiptRootOption,
+                SaasDeletionExecuteOption,
+            };
+            saasDeleteCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-delete", handler));
+            promotionCommand.Add(saasDeleteCommand);
             adminCommand.Add(promotionCommand);
 
             var tenantCommand = new Command("tenant", "Export, inspect, and import tenant portability bundles");
@@ -1847,6 +1870,13 @@ namespace ETL_SQL.App
                 cliContext.SaasMaxConcurrentJobs = res.GetValue(SaasMaxConcurrentJobsOption);
                 cliContext.SaasMaxStorageMb = res.GetValue(SaasMaxStorageMbOption);
                 cliContext.SaasMaxReportSessions = res.GetValue(SaasMaxReportSessionsOption);
+            }
+            else if (commandName == "admin-promotion-saas-delete")
+            {
+                cliContext.SaasTenantId = res.GetValue(SaasTenantOption);
+                cliContext.SaasDeletionTenantRoot = res.GetValue(SaasDeletionTenantRootOption);
+                cliContext.SaasDeletionReceiptRoot = res.GetValue(SaasDeletionReceiptRootOption);
+                cliContext.SaasDeletionExecute = res.GetValue(SaasDeletionExecuteOption);
             }
             else if (commandName.StartsWith("admin-ha-soak-", StringComparison.Ordinal))
             {

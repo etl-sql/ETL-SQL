@@ -23,7 +23,7 @@ etl-sql admin promotion saas-onboard [options]
 | `--portal-bootstrap` | Optional secret-free Portal configuration bootstrap to stage for tenant replay. |
 | `--source, -s` | Workspace or export root to inventory (default: current directory). |
 | `--source-profile` | Onboarding source profile: Solo or Enterprise. |
-| `--tenant` | Tenant assertion; must match the active signed onboarding authorization. |
+| `--tenant` | Tenant assertion; must match the active signed operation authorization. |
 
 ## References
 

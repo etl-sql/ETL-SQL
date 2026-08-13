@@ -35,6 +35,7 @@ public sealed record OrganizationPolicyDocument
     public SecurityEventPolicySection SecurityEvents { get; init; } = new();
     public MetadataGovernancePolicySection Metadata { get; init; } = new();
     public SaasOnboardingAuthorizationPolicySection SaasOnboarding { get; init; } = new();
+    public SaasDeletionAuthorizationPolicySection SaasDeletion { get; init; } = new();
 
     public IReadOnlyDictionary<string, object> ToPolicyValues()
     {
@@ -93,6 +94,16 @@ public sealed record OrganizationPolicyDocument
             values["SaaS:Onboarding:Reason"] = SaasOnboarding.Reason ?? string.Empty;
             values["SaaS:Onboarding:ExpiresUtc"] = SaasOnboarding.ExpiresUtc?.ToString("O") ?? string.Empty;
         }
+        if (SaasDeletion.Enabled)
+        {
+            values["SaaS:Deletion:TenantId"] = SaasDeletion.TenantId ?? string.Empty;
+            values["SaaS:Deletion:OperatorPrincipal"] = SaasDeletion.OperatorPrincipal ?? string.Empty;
+            values["SaaS:Deletion:AuthorizationReference"] = SaasDeletion.AuthorizationReference ?? string.Empty;
+            values["SaaS:Deletion:Reason"] = SaasDeletion.Reason ?? string.Empty;
+            values["SaaS:Deletion:RetentionUntilUtc"] = SaasDeletion.RetentionUntilUtc?.ToString("O") ?? string.Empty;
+            values["SaaS:Deletion:LegalHoldCleared"] = SaasDeletion.LegalHoldCleared;
+            values["SaaS:Deletion:ExpiresUtc"] = SaasDeletion.ExpiresUtc?.ToString("O") ?? string.Empty;
+        }
 
         return values;
     }
@@ -109,6 +120,22 @@ public sealed record SaasOnboardingAuthorizationPolicySection
     public string? OperatorPrincipal { get; init; }
     public string? AuthorizationReference { get; init; }
     public string? Reason { get; init; }
+    public DateTimeOffset? ExpiresUtc { get; init; }
+}
+
+/// <summary>
+/// One short-lived, signed authorization to remove a Managed Dedicated tenant boundary after its
+/// retention period and legal holds have been cleared.
+/// </summary>
+public sealed record SaasDeletionAuthorizationPolicySection
+{
+    public bool Enabled { get; init; }
+    public string? TenantId { get; init; }
+    public string? OperatorPrincipal { get; init; }
+    public string? AuthorizationReference { get; init; }
+    public string? Reason { get; init; }
+    public DateTimeOffset? RetentionUntilUtc { get; init; }
+    public bool LegalHoldCleared { get; init; }
     public DateTimeOffset? ExpiresUtc { get; init; }
 }
 
@@ -281,6 +308,7 @@ public static class OrganizationPolicySchema
         ValidateSecurityEvents(document.SecurityEvents, errors);
         ValidateMetadata(document.Metadata, errors);
         ValidateSaasOnboarding(document.SaasOnboarding, errors);
+        ValidateSaasDeletion(document.SaasDeletion, errors);
 
         return errors.Count == 0
             ? OrganizationPolicyValidationResult.Success
@@ -312,6 +340,40 @@ public static class OrganizationPolicySchema
             errors.Add("SaaS onboarding authorization must state its reason.");
         if (!authorization.ExpiresUtc.HasValue || authorization.ExpiresUtc <= DateTimeOffset.UnixEpoch)
             errors.Add("SaaS onboarding authorization must carry a valid expiry.");
+    }
+
+    private static void ValidateSaasDeletion(
+        SaasDeletionAuthorizationPolicySection authorization, List<string> errors)
+    {
+        var hasDetails = !string.IsNullOrWhiteSpace(authorization.TenantId)
+                         || !string.IsNullOrWhiteSpace(authorization.OperatorPrincipal)
+                         || !string.IsNullOrWhiteSpace(authorization.AuthorizationReference)
+                         || !string.IsNullOrWhiteSpace(authorization.Reason)
+                         || authorization.RetentionUntilUtc.HasValue
+                         || authorization.LegalHoldCleared
+                         || authorization.ExpiresUtc.HasValue;
+        if (!authorization.Enabled)
+        {
+            if (hasDetails)
+                errors.Add("SaaS deletion authorization details must be empty when authorization is disabled.");
+            return;
+        }
+
+        if (!TenantId.TryParse(authorization.TenantId, out _))
+            errors.Add("SaaS deletion tenant id must be a canonical tenant id.");
+        if (string.IsNullOrWhiteSpace(authorization.OperatorPrincipal))
+            errors.Add("SaaS deletion authorization must name the platform operator.");
+        if (string.IsNullOrWhiteSpace(authorization.AuthorizationReference))
+            errors.Add("SaaS deletion authorization must name its approval or change record.");
+        if (string.IsNullOrWhiteSpace(authorization.Reason))
+            errors.Add("SaaS deletion authorization must state its reason.");
+        if (!authorization.RetentionUntilUtc.HasValue
+            || authorization.RetentionUntilUtc <= DateTimeOffset.UnixEpoch)
+            errors.Add("SaaS deletion authorization must carry a valid retention boundary.");
+        if (!authorization.LegalHoldCleared)
+            errors.Add("SaaS deletion authorization must affirm that legal holds are cleared.");
+        if (!authorization.ExpiresUtc.HasValue || authorization.ExpiresUtc <= DateTimeOffset.UnixEpoch)
+            errors.Add("SaaS deletion authorization must carry a valid expiry.");
     }
 
     private static void ValidateMetadata(MetadataGovernancePolicySection metadata, List<string> errors)

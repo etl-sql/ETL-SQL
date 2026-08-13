@@ -201,6 +201,9 @@ public class CliContext
     public int SaasMaxConcurrentJobs { get; set; } = 4;
     public int SaasMaxStorageMb { get; set; } = 10_240;
     public int SaasMaxReportSessions { get; set; } = 20;
+    public string? SaasDeletionTenantRoot { get; set; }
+    public string? SaasDeletionReceiptRoot { get; set; }
+    public bool SaasDeletionExecute { get; set; }
 
     // admin ha-soak commands
     public string? HaSoakRunId { get; set; }

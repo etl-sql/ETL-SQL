@@ -817,6 +817,15 @@ sandbox admissions are cancelled, while formerly active attempts are retained fo
 runtime reconciliation. This physical-boundary recovery contract does not certify recovery from
 Shared stores.
 
+Managed Dedicated deletion is a separately signed deployment-plane operation. Its policy grant names
+one canonical tenant, platform actor, approval reference, reason, short expiry, retention boundary,
+and affirmative legal-hold clearance. The operator-facing tenant argument is only a mismatch
+assertion. Execution requires an explicit flag, verifies both provisioned identity files, refuses
+filesystem roots and reparse points, inventories a counts-and-hashes-only boundary digest, and moves
+the boundary out of service before erasing it. A Started record is durable outside the boundary
+before mutation and becomes Completed only after erasure; interruption leaves that record plus a
+uniquely named tombstone for reconciliation and never puts partially deleted state back into service.
+
 ## 16. Failure and Outcome Semantics
 
 The system distinguishes script failure, policy denial, quota exhaustion, connector failure,
