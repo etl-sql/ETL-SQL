@@ -11,7 +11,7 @@
 
 > **Octocolee™** — an ETL-SQL engine. *Octocolee* is the product name; *ETL-SQL* is the engine and the name used throughout this documentation and the CLI (`etlsql`).
 
-ETL-SQL is a SQL-first automation engine for moving, transforming, validating, scheduling, and reporting on data across mixed systems. A single script can connect to databases, APIs, files, SFTP servers, and cloud storage; stage data in engine-managed `#temp` tables; apply procedural logic; publish dashboards; and run headless, in a terminal IDE, in VS Code, or as a scheduled job.
+ETL-SQL is a SQL-first automation engine for moving, transforming, validating, scheduling, and reporting on data across mixed systems. A single script can connect to 25+ data source types (relational databases, cloud warehouses, NoSQL, Kafka, APIs, FlatFiles, SFTP, and Cloud Storage); stage data in engine-managed `#temp` tables; apply procedural logic; publish dashboards; and run headless, in a terminal IDE, in VS Code, or as a scheduled job.
 
 Use ETL-SQL when you want SQL to be the orchestration language, not just the query language.
 
@@ -33,6 +33,10 @@ A pipeline can extract, transform, validate, load, and then declare its report i
 
 Pipelines and dashboards are reviewable text instead of opaque designer files. The same script can run headlessly, in the terminal IDE, in VS Code or notebooks, through Orchestrator, or as part of CI/CD. Changes can be diffed, reviewed, tested, packaged, and rolled back with the same source-control workflow used for application code.
 
+### AI Agent & CI/CD Native
+
+ETL-SQL pipelines and dashboards are plain-text artifacts with zero hidden state. Structured AST linter diagnostics, deterministic `WHAT_IF` pre-flight simulations, and rich LSP feedback make ETL-SQL exceptionally reliable for AI-assisted workflow authoring, automated code review, and self-healing CI/CD execution.
+
 ### Security and Lineage in the Execution Model
 
 Runtime controls enforce path boundaries, protected-script immutability, encrypted credential handling, and limits on file operations. `SECRET` variables reduce credential lifetime, while `SET WHAT_IF ON` provides a dry-run path for side-effecting operations. Lineage metadata can follow data from source operations through transformations and into report assets.
@@ -45,16 +49,20 @@ ELT is attractive because it centralizes execution in a warehouse, but it often 
 
 | Capability | What it adds |
 | :--- | :--- |
-| Cross-source staging | Join, cleanse, validate, and enrich data from unrelated systems in engine-managed `#temp` tables. |
+| Cross-source staging | Join, cleanse, validate, and enrich data from 25+ unrelated systems in engine-managed `#temp` tables. |
 | Transform-centered ETL | Stage data before load so validation, masking, enrichment, dedupe, lineage tagging, and quality gates happen before downstream systems are mutated. |
+| Native data quality & routing | Declare column rules (`@expect`, `@fail`) directly in `SELECT` queries with automated `ON FAILURE QUARANTINE / WARN / ABORT` routing. |
+| Stateful incremental watermarks | Persist atomic high-water mark cursors across scheduled job runs using `GET_JOB_STATE` and `SET_JOB_STATE`. |
 | Source-control native pipelines | Plain-text `.etlsql` and `.rptsql` files are diffable, reviewable, testable, and runnable unchanged in CLI, VS Code, notebooks, Orchestrator, and CI/CD. |
 | Built-in lineage and tags | Attach metadata where transformations happen, then query, diagram, or export lineage instead of reconstructing it after the fact. |
+| Secure tool extensibility | Register and run external Python scripts or hardened OCI containers (`CREATE TOOL` / `EXECUTE TOOL`) with `EXPECT SCHEMA` validation and network isolation. |
 | Report-SQL | Define data preparation and interactive dashboards together in a `.rptsql` file. |
 | Resumable sessions | Use labels, `--session`, and `--resume` to continue checkpointed workflows after a failure. |
 | Fuzzy matching | Use `FUZZY JOIN`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and related engine functions. |
 | Relative dates | Express engine-side date parameters such as `D-7` and `M-1` without embedding a database-specific date function. |
 | Docker lifecycle commands | Start disposable services for development or testing with `USE DOCKER`, then release them with `CLOSE DOCKER`. |
 | Specification-driven scaffolding | Convert a reviewed JSON specification contract into a schema-validated starter script with lineage, validation, and quarantine scaffolding. This workflow is experimental and still requires developer review. |
+
 
 ---
 
@@ -245,8 +253,11 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 ### Data Movement & Transformation
 
-- Read and write across SQL databases, flat files, document formats, APIs, SFTP/FTP, Azure Blob, and SMTP.
+- Read and write across 25+ connectors: relational databases (`MSSQL`, `POSTGRES`, `ORACLE`, `MYSQL`, `SQLITE`, `ODBC`), cloud warehouses (`SNOWFLAKE`, `BIGQUERY`), storage & files (`FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `S3`, `AZURE_BLOB`), NoSQL & messaging (`KAFKA`, `MONGODB`, `NEO4J`), and services (`API`/`REST`, `SFTP`, `FTP`, `SMTP`, `WEBHOOK`, `SHAREPOINT`, `ACTIVE_DIRECTORY`).
 - Stage rows in engine-managed `#temp` tables for cross-source joins, validation, filtering, enrichment, lineage, and reporting.
+- Apply inline data quality validation gates with `@expect` / `@fail` column rules and `ON FAILURE` routing (Quarantine, Warn, Abort).
+- Manage atomic incremental watermarks across scheduled executions (`GET_JOB_STATE` / `SET_JOB_STATE`).
+- Run external Python scripts or hardened OCI containers with schema guarantees via `CREATE TOOL` and `EXECUTE TOOL`.
 - Use procedural control flow: variables, `IF`, `WHILE`, `FOR`, `FOREACH`, `TRY...CATCH`, transactions, and `PARALLEL`.
 - Push compatible joins and filters to database connectors while keeping cross-source operations engine-side.
 

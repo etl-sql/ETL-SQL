@@ -219,6 +219,20 @@ tampered, replayed, cross-tenant, or oversized packages fail before target activ
 can validate and retain the export with published tooling and customer-held keys after source SaaS
 access is gone.
 
+### SaaS Multi-Tenancy — Control Plane Dashboard (Platform Admin UI)
+
+**Candidate, not scheduled.** As the SaaS offering matures beyond initial CLI-driven onboarding and configuration, tier-1/tier-2 support and platform operations will require a dedicated visual dashboard for fleet observability, tenant lifecycle management, and resource monitoring.
+
+**Design principles and boundaries:**
+
+- **Physical separation from the Portal:** The SaaS Admin UI must be a completely separate application (or physically separate endpoint) from the customer-facing `ETL-SQL.Portal`. Adding a "Super Admin" tab to the existing Portal introduces the hazard of context bleed, where a platform admin might bypass tenant scopes or leak data across the deeply baked `TenantContext`.
+- **Identity isolation:** It must enforce the Platform Identity Separation contract (`PlatformAccessGrant`). Platform administrators operate under a distinct identity model that cannot mint tenant sessions or assume "God Mode" within a tenant's data space.
+- **Observability over mutation:** The primary goal of the UI is situational awareness—monitoring shared worker capacity, tracking Gateway Broker health, viewing tenant execution quotas, and identifying head-of-line blocking in queues. Declarative mutations (like tenant provisioning) should remain heavily CLI/API driven.
+
+**Delivery stage.** This is a Phase 2 maturity goal. The current CLI-first approach (`admin promotion saas-onboard`, `admin tenant preflight`) correctly forces robust API design and scripting automation. The Control Plane Dashboard will be scheduled when the Shared SaaS topology reaches sufficient density to make CLI-based fleet health checks unscalable.
+
+**Certification gate.** The Control Plane UI authenticates only platform principals (never tenant users); it physically cannot render a tenant's `.etlsql` scripts, report artifacts, or `SHARED:` gateway credentials; its telemetry scopes aggregate usage across the fleet without retrieving tenant-owned raw data; and any tenant lifecycle mutations it performs generate an attributed platform audit receipt.
+
 ### Language — Compound `@expect` Rules (AND / OR)
 
 **Candidate, not scheduled.** A comma between `@expect` rules means AND, and there is no OR: a
@@ -250,3 +264,65 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
   expression before writing the parser, or the metrics surface will report sub-terms as failures
   that never failed a row.
 - Language change, so the **Syntax Addition Checklist** in `CONTRIBUTING.md` applies.
+
+### Platform — Native Object Storage for HA Artifacts
+
+**Candidate, not scheduled.** Current High Availability (HA) deployments rely on shared network file systems (SMB/UNC) for Portal and Orchestrator artifact roots. As the SaaS offering scales, SMB becomes a significant latency bottleneck and a single point of failure (SPOF) due to file-locking contention.
+
+**Delivery stage.** This work introduces native S3 / Azure Blob Storage provider bindings for the Artifact store. It replaces the reliance on durable POSIX file semantics in HA and SaaS environments, ensuring execution checkpoints, datasets, and script histories can scale horizontally without network filesystem lock contention.
+
+### Identity — Service Accounts and M2M API Workflows
+
+**Candidate, not scheduled.** While Enterprise OIDC identity is actively maturing for human users, automated deployments (CI/CD) and integration workflows currently lack hardened Machine-to-Machine (M2M) capabilities.
+
+**Delivery stage.** This introduces formal Service Accounts, long-lived but tightly scoped API tokens, and approval workflows. It enables headless systems to securely publish `.rptsql` artifacts or trigger Orchestrator jobs without assuming a human identity or relying on legacy basic-auth patterns.
+
+### Execution — Lean Worker Profiles and Binary Trimming
+
+**Candidate, not scheduled.** The unified `ETL-SQL.exe` binary provides an excellent developer experience (DX) by bundling the Portal, Admin CLI, and Orchestrator into one drop-in executable. However, loading the entire DI graph and assemblies for these control-plane features adds unnecessary memory footprint and cold-start latency to ephemeral sandboxes.
+
+**Delivery stage.** This work leverages .NET trimming and feature flags to produce a dedicated `ETL-SQL-Engine` binary artifact. It strips out all administrative, portal, and orchestration-hosting code, leaving only the pure script evaluator and connectors. This minimizes the compute cost and attack surface inside Shared SaaS OCI sandboxes.
+
+### SaaS Testing — API Load and Soak Testing
+
+**Candidate, not scheduled.** Current UI, SLT, and fuzzy testing validate functional correctness but do not stress the concurrency mechanisms required for SaaS density.
+
+**Delivery stage.** This work introduces formal load-testing pipelines (e.g., k6 or JMeter) targeting the Orchestrator and Portal APIs. It will simulate hundreds of concurrent workflows to expose connection pool exhaustion, memory leaks, and head-of-line blocking in the Shared SaaS infrastructure under sustained load.
+
+### SaaS Testing — Chaos Engineering (Fault Injection)
+
+**Candidate, not scheduled.** Shared SaaS High Availability relies on the Orchestrator to handle node and network failures gracefully, but this is difficult to prove without deliberately destructive testing.
+
+**Delivery stage.** This phase integrates automated fault injection (e.g., Chaos Mesh) into the testing pipeline. It ensures the platform survives abrupt worker node reboots, dropped SMB packets, and database disconnects, proving that failed jobs correctly fence themselves and resume from the last valid named checkpoint.
+
+### SaaS Testing — Synthetic Monitoring (Production Canaries)
+
+**Candidate, not scheduled.** Internal staging environments cannot always replicate the specific friction points of production traffic and latency. 
+
+**Delivery stage.** This initiative deploys a persistent "Canary Tenant" in the live production environment. The canary will execute a comprehensive synthetic end-to-end workflow at strict intervals. Any deviation in correctness or latency triggers proactive alerts to platform operations before real tenants experience degradation.
+
+### Developer Experience & CI/CD — Native Unit Testing & Table Assertions
+
+**Candidate, not scheduled.** While `SET WHAT_IF ON` provides pre-flight dry runs against real data sources and `ASSERT JOB` evaluates operational run metrics, testing discrete transformation logic against synthetic edge cases currently requires ad-hoc scripts or manual `EXCEPT` queries.
+
+**Delivery stage.** This work introduces native unit testing primitives for ETL-SQL:
+- **Table Comparison Assertions:** Native syntax (`ASSERT TABLE #actual MATCHES #expected`) that compares two staging tables by schema and content, outputting detailed row/column diffs and mismatch summaries on failure.
+- **Script Test Harness:** A dedicated CLI test runner (`etlsql test MyPipeline.test.etlsql`) that executes scripts in isolated test environments using `MOCKDB` and synthetic `#temp` tables, asserting deterministic output states for pull request validation and AI agent self-verification.
+
+### Tooling & Authoring — Visual Report Builder Round-Trip Fidelity & Trivia Preservation
+
+**Candidate, not scheduled.** The Visual Report Builder provides bi-directional synchronization between the 12-column visual grid and `.rptsql` scripts. To ensure zero loss of developer comments and formatting during visual editing, the authoring surface requires enhanced AST serialization controls.
+
+**Delivery stage.** This phase hardens round-trip fidelity in VS Code, Portal Studio, and Report Player:
+- **Surgical Statement Patching:** Modifying or moving a visual card replaces only the exact source character span of that specific `CREATE VISUAL` or `CREATE PAGE ... STRUCTURE` statement, leaving preceding data prep SQL, CTEs, and whitespace untouched.
+- **Comment & Trivia Preservation:** The AST parser and serializer retain all leading/trailing comments (`-- ...`, `/* ... */`) and formatting trivia when writing back changes.
+- **Fault-Tolerant Canvas State:** Syntax errors introduced during split-screen text editing trigger inline visual warning badges rather than destroying or resetting canvas layout state.
+
+### Language & Execution — Declarative Incremental Watermarking Syntax
+
+**Candidate, not scheduled.** ETL-SQL currently supports atomic, job-scoped incremental state through `GET_JOB_STATE` and `SET_JOB_STATE`. While functional and safe, setting up delta loads requires manual variable declaration and explicit update calls in the success path.
+
+**Delivery stage.** This work introduces declarative syntax sugar for incremental ingestion:
+- **Declarative Watermark Clause:** Direct support on source queries (e.g. `FROM src.Orders WITH (WATERMARK = 'OrderId', INITIAL = '0')`).
+- **Engine-Managed State Lifecycle:** The engine automatically retrieves the last recorded high-water mark, applies the filtering predicate, and stages the maximum observed key value to atomically update `eng.job_state` upon successful script completion.
+
