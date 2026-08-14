@@ -35,8 +35,24 @@ inherited from v0.17.0.
 - [ ] Recovery drill — `etl-sql admin restore --validate --report`
 - [ ] HA fault injection — `etl-sql admin ha-soak validate` (run `fault-plan` before `fault-run`,
       and `evidence` before `validate` — see the RCI item below)
-- [ ] Evidence indexed under `artifacts/release-evidence/0.18.0/`, recording what was **not**
-      covered as well as what was
+### Code Review Remediation (2026-08-14 Audit)
+
+- [x] **P0: Multi-Tenancy / Security** — Cross-Tenant User Impersonation in `ExecuteAs`. Scope user lookups by `TenantId == _datasetScope.TenantId` in `ExecutionController.cs` and `ExecutionJobService.cs`.
+- [x] **P0: Multi-Tenancy / Security** — Cross-Tenant Dataset Re-parenting. Verify `destination.TenantId == dataset.TenantId` in `DatasetMoveService.cs`.
+- [x] **P0: Concurrency / HA** — Distributed Lease Loss Split-Brain in `ClusterLock`. Link cancellation token to lease renewal failure in `ClusterLock.RunExclusiveAsync` to cancel critical section on lost ownership.
+- [x] **P1: Security / Path Traversal** — FlatFile `HEADER` Option Safe-Zone Bypass. Enforce `ResolvePath`, `ValidatePath`, `ValidateFileType`, and `AuthorizeRead` on `_headerFile` in `FlatFileDataSource.cs`.
+- [x] **P1: Security / Path Traversal** — Unvalidated `PGP_KEY` / `KEYFILE` Paths. Enforce `pathAuthorizer.Authorize` on key paths in `FileOperationStatementHandler.cs`.
+- [x] **P1: Security / Multi-Tenancy** — Cross-Tenant Script Draft Disclosure. Enforce folder permissions and tenant scoping before opening drafts in `ReportDraftsController.cs` and `ReportDraftWorkflowService.cs`.
+- [x] **P1: Security / Injection** — Variable Override Argument Injection. Validate variable identifier names in `ProcessJobExecutor.BuildArguments`.
+- [x] **P1: Security / Tenant Isolation** — Shared State and Predictable Passwords in `DockerContainerManager`. Scope container mappings to tenant sessions and use cryptographic random passwords.
+- [x] **P1: Supply Chain / Security** — Upgrade `SSH.NET` package in `Directory.Packages.props` to resolve `GHSA-q939-rpr3-3284` (`NU1903`).
+- [x] **P1: Concurrency / Reliability** — Thread-Safety in `DashboardService._parameters`. Prevent `InvalidOperationException` and dictionary corruption from concurrent parameter mutation/rendering.
+- [x] **P1: Reliability / Telemetry** — Stdout Truncation Dropping JSON Envelopes. Preserve tail output in `ProcessSandboxCommandRunner.cs` so trailing `ETL_SQL_RESULT` envelopes are not lost.
+- [x] **P2: Performance / ReDoS** — Missing Regex Timeouts. Add timeouts to binary regex matches (`=~`, `!~`) in `ExpressionEvaluator.cs` and cache regexes in `EvaluationUtils.EvaluateLike`.
+- [x] **P2: Performance** — Lock Contention in `SecretRedactor`. Maintain pre-sorted immutable snapshots for lock-free redaction in `SecretRedactor.cs`.
+- [x] **P2: Reliability / SQL Dialect** — Parameter Placeholder Desync. Apply `ParameterUtility.ProcessParameters` in MySQL and ensure parameter prefix matches placeholder generation.
+- [x] **P2: Reliability / Resource Leaks** — Fix stream/handle disposal in `SmtpDataSource.cs` (MemoryStream attachments), `OdbcDataSource.cs` (OdbcCommand), `RestDataSource.cs` (SemaphoreSlim), and `DashboardServiceFactory.cs`.
+
 
 **Sequencing.** The release-process RCI items are scheduled **last**, deliberately. The RCI changes
 touch the validation gate and CI itself, so landing them

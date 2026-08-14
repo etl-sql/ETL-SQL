@@ -146,10 +146,10 @@ namespace ETL_SQL.Connectors.Odbc
             OdbcTransaction? localTx = null;
             if (_activeTransaction == null) localTx = conn.BeginTransaction();
 
+            OdbcCommand? insertCmd = null;
             try
             {
                 var isFirstBatch = true;
-                OdbcCommand? insertCmd = null;
 
                 await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
@@ -194,6 +194,7 @@ namespace ETL_SQL.Connectors.Odbc
             }
             finally
             {
+                insertCmd?.Dispose();
                 localTx?.Dispose();
                 if (!isShared) conn.Dispose();
             }

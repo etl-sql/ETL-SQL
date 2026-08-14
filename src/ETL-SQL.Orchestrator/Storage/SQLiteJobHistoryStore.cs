@@ -313,9 +313,7 @@ namespace ETL_SQL.Orchestrator.Storage
                 CREATE INDEX IF NOT EXISTS idx_jobs_sched ON Jobs(IsEnabled, NextRun);
                 CREATE INDEX IF NOT EXISTS idx_jh_job_start ON JobHistory(JobName, StartTime);
                 CREATE INDEX IF NOT EXISTS idx_jh_start ON JobHistory(StartTime);
-                CREATE INDEX IF NOT EXISTS idx_jh_end ON JobHistory(EndTime);
-                CREATE INDEX IF NOT EXISTS idx_lh_tenant_target ON LineageHistory(TenantId, TargetTable COLLATE NOCASE);
-                CREATE INDEX IF NOT EXISTS idx_lh_tenant_runAt ON LineageHistory(TenantId, RunAt);";
+                CREATE INDEX IF NOT EXISTS idx_jh_end ON JobHistory(EndTime);";
 
                     // Cluster node registry (P1.7): one row per live Portal/Orchestrator process, kept fresh
                     // by a TTL heartbeat. NodeId is a process-unique generated id, so no NOCASE is needed.

@@ -108,8 +108,6 @@ public sealed class EngineSubsystemCoverageTests
             "Signed tenant-bundle composition, validation and encryption behind export/import."),
         ["ETL-SQL.Core/Dialects"] = new("Engine.md", "Dialects",
             "Target-specific SQL translation boundaries."),
-        ["ETL-SQL.Core/Reporting"] = new("Presentation.md", "Reporting",
-            "Shared presentation AST elements and parsing for report generation."),
     };
 
     [Fact]

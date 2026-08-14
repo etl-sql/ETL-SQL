@@ -517,9 +517,14 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionDeliveryService>(
 builder.Services.AddScoped<ETL_SQL.Portal.Services.FolderPermissionService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetPermissionService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetTenantScope>(sp =>
-    new ETL_SQL.Portal.Services.DatasetTenantScope(
-        sp.GetRequiredService<PortalConfig>(),
-        sp.GetService<ETL_SQL.Core.Multitenancy.TenantContext>()));
+{
+    var config = sp.GetRequiredService<PortalConfig>();
+    var accessor = sp.GetRequiredService<ETL_SQL.Portal.Services.RequestTenantContextAccessor>();
+    var context = accessor.Current;
+    return (config.SharedTenancy.Enabled && (context is null || context.Origin != ETL_SQL.Core.Multitenancy.TenantContextOrigin.VerifiedCredential))
+        ? null!
+        : new ETL_SQL.Portal.Services.DatasetTenantScope(config, context);
+});
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantCatalogScope>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantLineageCatalog>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantJobEvidenceStore>();

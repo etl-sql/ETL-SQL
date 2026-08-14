@@ -15,6 +15,7 @@ public static partial class SecretRedactor
     private const int MaxRuntimeSecrets = 1024;
     private static readonly object RuntimeSecretsLock = new();
     private static readonly List<string> RuntimeSecrets = [];
+    private static string[] _cachedOrderedSecrets = [];
 
     [GeneratedRegex(@"\b(ENC|DPAPI-M|DPAPI|MACHINE):[A-Za-z0-9+/=_:.\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex ProtectedValuePattern();
@@ -124,18 +125,13 @@ public static partial class SecretRedactor
             if (RuntimeSecrets.Count >= MaxRuntimeSecrets)
                 RuntimeSecrets.RemoveAt(0);
             RuntimeSecrets.Add(value);
-        }
-    }
-
-    private static IReadOnlyList<string> RegisteredRuntimeSecrets()
-    {
-        lock (RuntimeSecretsLock)
-        {
-            return RuntimeSecrets
-                .OrderByDescending(value => value.Length)
+            _cachedOrderedSecrets = RuntimeSecrets
+                .OrderByDescending(v => v.Length)
                 .ToArray();
         }
     }
+
+    private static string[] RegisteredRuntimeSecrets() => _cachedOrderedSecrets;
 
     public static object? RedactValue(string? key, object? value)
     {

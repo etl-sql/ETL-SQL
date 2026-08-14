@@ -552,8 +552,13 @@ namespace ETL_SQL.Orchestrator.Execution
 
             foreach (var (name, value) in variableOverrides ?? new Dictionary<string, string>())
             {
+                if (string.IsNullOrWhiteSpace(name))
+                    throw new ArgumentException("Variable override name cannot be null or whitespace.");
+                var cleanName = name.StartsWith('@') ? name[1..] : name;
+                if (cleanName.Length == 0 || !cleanName.All(c => char.IsLetterOrDigit(c) || c == '_'))
+                    throw new ArgumentException($"Invalid variable override name: '{name}'");
                 result.Add("--var");
-                result.Add($"{(name.StartsWith('@') ? name : "@" + name)}={value}");
+                result.Add($"@{cleanName}={value}");
             }
             if (resume)
             {

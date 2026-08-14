@@ -69,11 +69,14 @@ SubscriptionDelivery    (at-most-once subscription delivery ledger, keyed by tri
 AuditOutboxMessage      (durable remote-audit outbox; fail-closed when delivery is required)
 ReportAccessRequest     (access requests and their approval decisions)
 
-Governance workflow state — decisions and derived state, never the asset metadata itself, which
+Shared tenancy and lifecycle:
+SharedTenantResource / SharedTenantLifecycle / SharedTenantLifecycleOperation
+
+Stewardship workflow state — decisions and derived state, never the asset metadata itself, which
 stays in .etlsql/.rptsql sources and the lineage catalog:
-GovernanceSettings / GovernanceResolutionCategory / GovernanceGlossaryTerm
-GovernanceFinding ──< GovernanceFindingDecision
-GovernanceAssetBadge / GovernanceAssetReview / GovernanceScan
+StewardshipSettings / StewardshipResolutionCategory / StewardshipGlossaryTerm
+StewardshipFinding ──< StewardshipFindingDecision
+StewardshipAssetBadge / StewardshipAssetReview / StewardshipScan
 
 Authoring workflow:
 ReportScriptDraft ──< ReportScriptDraftDecision   (draft → review → publish; opt-in)
@@ -146,9 +149,9 @@ var rawSecret = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
 | `Viewer` | Browse, run, and export accessible reports |
 | `OrchestratorManager` | Scheduled jobs and execution history; no Admin panel |
 | `FleetReader` | Scoped cross-environment fleet status reads |
-| `GovernanceViewer` | Read the governance dashboard |
-| `DataSteward` | Governance decisions and the data-quality quarantine queue |
-| `GovernanceManager` | Governance configuration: thresholds, checks, glossary |
+| `StewardshipViewer` | Read the stewardship dashboard |
+| `DataSteward` | Stewardship decisions and the data-quality quarantine queue |
+| `StewardshipManager` | Stewardship configuration: thresholds, checks, glossary |
 
 
 Authorization has **two independent axes**, and they are not interchangeable: a **role** decides
@@ -592,6 +595,8 @@ by the administration guides rather than restated here.
 | `/api/designer/lease` | `ScriptSave` + report Author | Atomic five-minute edit-session acquire/renew and owner-only release. Lease metadata does not advance the report content version; shared-tenancy requests additionally match the report creator's stored tenant to the signed tenant claim. |
 | `/api/docs` | Any | Embedded documentation, served from the `docs/` copied into the image |
 | `/api/fleet` | FleetReader | Read-only cross-environment status; visibility, never authority |
+| `/api/platform/support-bundle` | Anonymous (capability-bound) | Capability-only Managed Dedicated support surface |
+| `/api/platform/shared-tenants` | Anonymous (management key + signed policy) | Platform-only Shared tenant lifecycle management |
 
 ### Orchestrator Proxy
 

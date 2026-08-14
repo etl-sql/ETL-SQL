@@ -1856,7 +1856,11 @@ namespace ETL_SQL.Connectors.Rest
             }
         }
 
-        public async ValueTask DisposeAsync() => await Task.CompletedTask;
+        public ValueTask DisposeAsync()
+        {
+            _tokenSemaphore.Dispose();
+            return ValueTask.CompletedTask;
+        }
 
         private async Task<HttpRequestMessage> BuildRequestAsync(
             string? url = null,

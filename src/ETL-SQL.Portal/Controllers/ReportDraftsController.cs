@@ -5,6 +5,8 @@ using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace ETL_SQL.Portal.Controllers;
 
 public sealed record SaveDraftRequest(string ScriptText, string? BaseScriptHash);
@@ -44,9 +46,16 @@ public sealed record DraftDecisionDto(
 public sealed class ReportDraftsController(
     ReportDraftWorkflowService workflow,
     ReportScriptSaveService scriptSave,
+    PortalDbContext db,
+    FolderPermissionService folderPermissions,
     PortalConfig portalConfig,
-    Microsoft.Extensions.Logging.ILogger<ReportDraftsController> logger) : ControllerBase
+    Microsoft.Extensions.Logging.ILogger<ReportDraftsController> logger,
+    DatasetTenantScope? tenantScope = null,
+    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
 {
+    private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(portalConfig);
+    private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _tenantScope);
+
     private int CurrentUserId =>
         int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
 
@@ -58,6 +67,12 @@ public sealed class ReportDraftsController(
     public async Task<IActionResult> Get(int reportId, CancellationToken cancellationToken)
     {
         if (!WorkflowEnabled) return Disabled();
+        var report = await CatalogScope.Reports.Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted, cancellationToken);
+        if (report is null) return NotFound();
+        var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
+        if (!permission.AtLeast(FolderPermission.Read)) return Forbid();
+
         var draft = await workflow.OpenDraftAsync(reportId, cancellationToken);
         return draft is null ? NoContent() : Ok(ToDto(draft));
     }

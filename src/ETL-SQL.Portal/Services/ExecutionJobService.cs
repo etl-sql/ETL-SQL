@@ -29,6 +29,7 @@ public record ExecutionJob(
     string? CorrelationId = null,
     string KeyScope = "portal-host")
 {
+    public string TenantId => KeyScope;
     public JobStatus Status { get; set; } = JobStatus.Pending;
 
     /// <summary>
@@ -1111,7 +1112,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             // restricted view. Permission to run the report was already gated on the real admin.
             var effectiveUserId = job.ImpersonatedUserId ?? job.UserId;
 
-            var effective = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == effectiveUserId, ct);
+            var effective = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == effectiveUserId && u.TenantId == job.TenantId, ct);
             if (effective is null) return null;
 
             var roles = await (from ur in db.UserRoles
@@ -1127,7 +1128,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             var realName = effectiveName;
             if (job.ImpersonatedUserId is not null)
             {
-                var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == job.UserId, ct);
+                var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == job.UserId && u.TenantId == job.TenantId, ct);
                 realName = actor?.UserName ?? job.UserId.ToString();
             }
 

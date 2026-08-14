@@ -308,8 +308,9 @@ public class DockerContainerManager : IDockerManager
 
     private static DockerCredentials GetCredentials(string containerName, string imageName)
     {
-        var seed = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{Environment.UserName}|{Environment.MachineName}|{containerName}"))).ToLowerInvariant();
-        var password = $"Et1!{seed[..28]}";
+        var rawBytes = RandomNumberGenerator.GetBytes(16);
+        var seed = Convert.ToHexString(rawBytes).ToLowerInvariant();
+        var password = $"Et1!{seed}";
 
         if (imageName.Contains("postgres", StringComparison.OrdinalIgnoreCase))
             return new DockerCredentials("etluser", password, "etldb");

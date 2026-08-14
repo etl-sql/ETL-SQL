@@ -57,15 +57,47 @@ public sealed class ProcessSandboxCommandRunner : ISandboxCommandRunner
     private static async Task<string> ReadBoundedAsync(StreamReader reader, CancellationToken cancellationToken)
     {
         var buffer = new char[8192];
-        var output = new StringBuilder();
+        var head = new StringBuilder();
+        var tail = new StringBuilder();
+        const int halfMax = MaxCapturedCharacters / 2;
+        long totalRead = 0;
+
         while (true)
         {
             var read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken);
             if (read == 0) break;
-            var remaining = MaxCapturedCharacters - output.Length;
-            if (remaining > 0) output.Append(buffer, 0, Math.Min(read, remaining));
+            totalRead += read;
+
+            if (head.Length < halfMax)
+            {
+                var takeHead = Math.Min(read, halfMax - head.Length);
+                head.Append(buffer, 0, takeHead);
+                if (takeHead < read)
+                {
+                    var rem = read - takeHead;
+                    tail.Append(buffer, takeHead, rem);
+                    if (tail.Length > halfMax)
+                    {
+                        tail.Remove(0, tail.Length - halfMax);
+                    }
+                }
+            }
+            else
+            {
+                tail.Append(buffer, 0, read);
+                if (tail.Length > halfMax)
+                {
+                    tail.Remove(0, tail.Length - halfMax);
+                }
+            }
         }
-        return output.ToString();
+
+        if (totalRead <= MaxCapturedCharacters)
+        {
+            return head.ToString() + tail.ToString();
+        }
+
+        return head.ToString() + "\n... [truncated] ...\n" + tail.ToString();
     }
 }
 

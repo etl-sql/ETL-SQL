@@ -312,11 +312,13 @@ public class FileOperationStatementHandler : IStatementHandler
                         if (stmt.PgpKey != null)
                         {
                             string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                            pgpKeyPath = pathAuthorizer.Authorize(context, pgpKeyPath, FileSystemAccessKind.Read).CanonicalPath;
                             await CryptoUtils.EncryptFileWithPgp(source, dest, pgpKeyPath, overwrite);
                         }
                         else if (stmt.KeyFile != null)
                         {
                             string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
+                            keyFilePath = pathAuthorizer.Authorize(context, keyFilePath, FileSystemAccessKind.Read).CanonicalPath;
                             await CryptoUtils.EncryptFileWithSshAsync(source, dest, keyFilePath, overwrite);
                         }
                         else
@@ -339,12 +341,14 @@ public class FileOperationStatementHandler : IStatementHandler
                         if (stmt.PgpKey != null)
                         {
                             string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                            pgpKeyPath = pathAuthorizer.Authorize(context, pgpKeyPath, FileSystemAccessKind.Read).CanonicalPath;
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                             await CryptoUtils.DecryptFileWithPgp(source, dest, pgpKeyPath, pwd, overwrite);
                         }
                         else if (stmt.KeyFile != null)
                         {
                             string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
+                            keyFilePath = pathAuthorizer.Authorize(context, keyFilePath, FileSystemAccessKind.Read).CanonicalPath;
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                             await CryptoUtils.DecryptFileWithSshAsync(source, dest, keyFilePath, overwrite, pwd);
                         }

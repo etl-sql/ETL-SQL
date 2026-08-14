@@ -98,7 +98,7 @@ About screens. It is not legal advice.
 | Snowflake.Data | 5.7.0 | runtime | Apache-2.0 | expression | https://github.com/snowflakedb/snowflake-connector-net | src/ETL-SQL.Connectors.Databases/ETL-SQL.Connectors.Databases.csproj |
 | Spectre.Console | 0.57.2 | runtime, test | MIT | expression | https://github.com/spectreconsole/spectre.console | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | SQLitePCLRaw.bundle_e_sqlite3 | 3.0.3 | runtime | Apache-2.0 | expression | https://licenses.nuget.org/Apache-2.0 | src/ETL-SQL.Infrastructure.Sqlite/ETL-SQL.Infrastructure.Sqlite.csproj |
-| SSH.NET | 2025.1.0 | runtime | MIT | expression | https://licenses.nuget.org/MIT | src/ETL-SQL.Connectors.Remote/ETL-SQL.Connectors.Remote.csproj |
+| SSH.NET | 2026.0.0 | runtime | MIT | expression | https://licenses.nuget.org/MIT | src/ETL-SQL.Connectors.Remote/ETL-SQL.Connectors.Remote.csproj |
 | Svg.Skia | 5.1.1 | runtime | MIT | expression | https://github.com/wieslawsoltes/Svg.Skia | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Swashbuckle.AspNetCore | 10.2.3 | runtime | MIT | expression | https://github.com/domaindrivendev/Swashbuckle.AspNetCore | src/ETL-SQL.Portal/ETL-SQL.Portal.csproj |
 | System.CommandLine | 2.0.9 | runtime | MIT | expression | https://github.com/dotnet/command-line-api | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |

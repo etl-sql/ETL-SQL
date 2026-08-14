@@ -8,14 +8,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
 {
     /// <summary>
     /// Runs a cluster-singleton critical section under a database-backed lock (Practical HA P1.9). Every
-    /// node calls <see cref="RunExclusiveAsync"/>; the first to claim the lock runs the action while the
-    /// others block-wait, then take their turn. The action must therefore be idempotent (the motivating
-    /// case — applying EF migrations — is: the second node through finds nothing pending and no-ops),
-    /// which serializes it cluster-wide and prevents concurrent-startup migration collisions.
+    /// node calls <see cref="RunExclusiveAsync(IClusterLockStore, string, string, Func{Task}, ILogger, TimeSpan?, TimeSpan?, CancellationToken)"/>;
+    /// the first to claim the lock runs the action while the others block-wait, then take their turn.
+    /// The action must therefore be idempotent (the motivating case — applying EF migrations — is: the
+    /// second node through finds nothing pending and no-ops), which serializes it cluster-wide and
+    /// prevents concurrent-startup migration collisions.
     ///
     /// <para>While the action runs, the lock is renewed on a background heartbeat so a long operation
     /// cannot let the lease expire and a second node start in parallel; the lock is always released in a
-    /// finally block.</para>
+    /// finally block. If renewal fails (e.g. lease lost), the critical section's execution token is
+    /// cancelled immediately to avoid split-brain execution.</para>
     /// </summary>
     public static class ClusterLock
     {
@@ -25,11 +27,35 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// <see cref="TimeoutException"/> if the lock cannot be acquired within <paramref name="maxWait"/>
         /// (fail fast rather than run the guarded action unprotected).
         /// </summary>
-        public static async Task RunExclusiveAsync(
+        public static Task RunExclusiveAsync(
             IClusterLockStore store,
             string lockName,
             string owner,
             Func<Task> criticalSection,
+            ILogger logger,
+            TimeSpan? ttl = null,
+            TimeSpan? maxWait = null,
+            CancellationToken ct = default) =>
+            RunExclusiveAsync(
+                store,
+                lockName,
+                owner,
+                _ => criticalSection(),
+                logger,
+                ttl,
+                maxWait,
+                ct);
+
+        /// <summary>
+        /// Acquires <paramref name="lockName"/> (blocking up to <paramref name="maxWait"/>), runs
+        /// <paramref name="criticalSection"/> receiving a cancellation token linked to lease renewal liveness,
+        /// then releases the lock.
+        /// </summary>
+        public static async Task RunExclusiveAsync(
+            IClusterLockStore store,
+            string lockName,
+            string owner,
+            Func<CancellationToken, Task> criticalSection,
             ILogger logger,
             TimeSpan? ttl = null,
             TimeSpan? maxWait = null,
@@ -51,10 +77,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             logger.LogInformation("Acquired cluster lock '{Lock}' as '{Owner}'.", lockName, owner);
             using var renewCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var renewal = RenewLoopAsync(store, lockName, owner, lease, logger, renewCts.Token);
+            var renewal = RenewLoopAsync(store, lockName, owner, lease, logger, renewCts);
             try
             {
-                await criticalSection();
+                await criticalSection(renewCts.Token);
             }
             finally
             {
@@ -99,12 +125,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
         }
 
         private static async Task RenewLoopAsync(
-            IClusterLockStore store, string lockName, string owner, TimeSpan lease, ILogger logger, CancellationToken ct)
+            IClusterLockStore store, string lockName, string owner, TimeSpan lease, ILogger logger, CancellationTokenSource renewCts)
         {
             var interval = TimeSpan.FromSeconds(Math.Max(2, lease.TotalSeconds / 3));
-            while (!ct.IsCancellationRequested)
+            while (!renewCts.IsCancellationRequested)
             {
-                try { await Task.Delay(interval, ct); }
+                try { await Task.Delay(interval, renewCts.Token); }
                 catch (OperationCanceledException) { return; }
 
                 try
@@ -112,8 +138,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     if (!await store.TryRenewLockAsync(lockName, owner, lease))
                     {
                         // We unexpectedly lost the lock mid-critical-section (e.g. a long stall let it
-                        // expire and another node took it). Surface it loudly; the action is idempotent.
-                        logger.LogWarning("Lost cluster lock '{Lock}' during the critical section.", lockName);
+                        // expire and another node took it). Surface it loudly and cancel critical section.
+                        logger.LogWarning("Lost cluster lock '{Lock}' during the critical section; cancelling execution.", lockName);
+                        try { renewCts.Cancel(); } catch { }
                         return;
                     }
                 }

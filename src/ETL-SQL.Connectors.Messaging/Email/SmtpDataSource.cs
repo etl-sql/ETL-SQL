@@ -118,6 +118,7 @@ namespace ETL_SQL.Connectors.Email
                 Text = (row.Columns.TryGetValue("Body", out var b) ? b?.ToString() : "") ?? ""
             };
 
+            var attachmentStreams = new List<IDisposable>();
             // Handle Attachments
             if (row.Columns.TryGetValue("Attachments", out var att) && att != null)
             {
@@ -139,8 +140,10 @@ namespace ETL_SQL.Connectors.Email
 
                         if (System.IO.File.Exists(resolvedPath))
                         {
-                            using var fs = System.IO.File.OpenRead(resolvedPath);
+                            var fs = System.IO.File.OpenRead(resolvedPath);
+                            attachmentStreams.Add(fs);
                             var ms = new System.IO.MemoryStream();
+                            attachmentStreams.Add(ms);
                             await fs.CopyToAsync(ms, effectiveCancellationToken);
                             ms.Position = 0;
 
@@ -191,6 +194,11 @@ namespace ETL_SQL.Connectors.Email
                                        && ex is not ETL_SQL.Services.SecurityException)
             {
                 throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"SMTP connector error: {ex.Message}", ex);
+            }
+            finally
+            {
+                foreach (var stream in attachmentStreams) stream.Dispose();
+                message.Dispose();
             }
         }
 

@@ -45,7 +45,7 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly List<FixedWidthColumn>? _fixedColumns;
         private readonly bool _trim = true;
         private readonly CultureInfo _culture = CultureInfo.InvariantCulture;
-        private readonly ILogger _logger;
+        private readonly ILogger? _logger;
         private readonly IExecutionContext? _context; // Optional for backward compatibility, but required for security enforcement
         private bool _hasValidatedAccess = false;
         private readonly bool _transactional = false;
@@ -86,10 +86,10 @@ namespace ETL_SQL.Connectors.FlatFile
         public IDataSource WithTable(string tableName) => this;
         public string ConnectorType => "FLATFILE";
 
-        public FlatFileDataSource(IExecutionContext context, string filePath, Dictionary<string, string>? options = null, IEnumerable<ColumnDefinition>? templateSchema = null)
+        public FlatFileDataSource(IExecutionContext? context, string filePath, Dictionary<string, string>? options = null, IEnumerable<ColumnDefinition>? templateSchema = null)
         {
             _context = context;
-            _logger = context.Logger;
+            _logger = context?.Logger;
             _options = options;
             _templateSchema = templateSchema;
             _hasHeader = true;
@@ -109,7 +109,31 @@ namespace ETL_SQL.Connectors.FlatFile
                     string hv = h.ToUpperInvariant();
                     if (hv == "OFF" || hv == "FALSE") _hasHeader = false;
                     else if (hv == "ON" || hv == "TRUE") _hasHeader = true;
-                    else _headerFile = h;
+                    else
+                    {
+                        if (h.Contains('\n') || h.Contains('\r') || h.Contains(',') || h.Contains('|') || h.Contains('\t'))
+                        {
+                            _headerFile = h;
+                        }
+                        else if (context != null)
+                        {
+                            var resolved = context.ResolvePath(h);
+                            if (System.IO.File.Exists(resolved))
+                            {
+                                context.SecurityService.ValidatePath(resolved);
+                                context.SecurityService.ValidateFileType(resolved, context.AllowUnknownFileTypes);
+                                _headerFile = resolved;
+                            }
+                            else
+                            {
+                                _headerFile = h;
+                            }
+                        }
+                        else
+                        {
+                            _headerFile = h;
+                        }
+                    }
                 }
 
                 if (options.TryGetValue("DELIMITER", out var d))
@@ -196,7 +220,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (options.TryGetValue("CULTURE", out var cult))
                 {
                     try { _culture = new CultureInfo(cult); }
-                    catch { _logger.Debug("[FlatFileDataSource] Invalid culture '{Culture}', falling back to Invariant.", cult); }
+                    catch { _logger?.Debug("[FlatFileDataSource] Invalid culture '{Culture}', falling back to Invariant.", cult); }
                 }
 
                 if (options.TryGetValue("TEXT_QUALIFIER", out var tq))
@@ -261,12 +285,16 @@ namespace ETL_SQL.Connectors.FlatFile
 
             _encryption = new EncryptionOptions(options);
 
-            var resolvedPath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            var cleanPath = filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n');
+            var resolvedPath = context != null ? context.ResolvePath(cleanPath) : cleanPath;
             _filePath = FileConnectorPathHelper.CoerceFilePathExtension(resolvedPath, _encryption.Enabled, _compress);
 
             // Security Hardening: Defense in depth
-            context.SecurityService.ValidatePath(_filePath);
-            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
+            if (context != null)
+            {
+                context.SecurityService.ValidatePath(_filePath);
+                context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
+            }
         }
 
         /// <summary>
@@ -538,6 +566,7 @@ namespace ETL_SQL.Connectors.FlatFile
             {
                 if (System.IO.File.Exists(_headerFile))
                 {
+                    FileConnectorPathHelper.AuthorizeRead(_context, _headerFile);
                     headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile, effectiveCancellationToken)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
                 }
                 else
@@ -720,7 +749,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
             if (emitResilienceDiagnostics)
             {
-                _logger.Info(
+                _logger?.Info(
                     "FLATFILE schema resilience applied: ignored extra columns={IgnoredExtraColumns}; null-filled missing columns={NullFilledMissingColumns}; affected rows={AffectedRows}.",
                     ignoredExtraColumnCount,
                     nullFilledMissingColumnCount,
@@ -860,7 +889,7 @@ namespace ETL_SQL.Connectors.FlatFile
             {
                 if (int.TryParse(match.Groups[1].Value, out var expected) && expected != actualCount)
                 {
-                    _logger.WriteLine($"[WARNING] CSV Count Mismatch! Expected: {expected}, Actual: {actualCount}", ConsoleColor.Yellow);
+                    _logger?.WriteLine($"[WARNING] CSV Count Mismatch! Expected: {expected}, Actual: {actualCount}", ConsoleColor.Yellow);
                 }
             }
         }
@@ -898,6 +927,7 @@ namespace ETL_SQL.Connectors.FlatFile
                         {
                             if (!string.IsNullOrEmpty(_headerFile) && System.IO.File.Exists(_headerFile))
                             {
+                                FileConnectorPathHelper.AuthorizeRead(_context, _headerFile);
                                 await writer.WriteLineAsync(
                                     await System.IO.File.ReadAllTextAsync(_headerFile, effectiveCancellationToken).ConfigureAwait(false))
                                     .ConfigureAwait(false);
@@ -1098,7 +1128,10 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (_headerFile != null)
                 {
                     if (System.IO.File.Exists(_headerFile))
+                    {
+                        FileConnectorPathHelper.AuthorizeRead(_context, _headerFile);
                         headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile, effectiveCancellationToken)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                    }
                     else
                         headerLine = _headerFile;
                 }
@@ -1119,7 +1152,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (_hasHeader) return headers.Select(h => h.Trim());
                 return headers.Select((h, i) => $"Col{i + 1}");
             }
-            catch (Exception ex) { _logger.Debug("[FlatFileDataSource.GetColumnsAsync] Failed to read headers from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
+            catch (Exception ex) { _logger?.Debug("[FlatFileDataSource.GetColumnsAsync] Failed to read headers from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
         }
 
         private void ValidateFileAccess()
@@ -1224,7 +1257,7 @@ namespace ETL_SQL.Connectors.FlatFile
             }
             else
             {
-                _logger.Debug("[FlatFile] ExecuteRawSql received unknown SQL: {Sql}. Returning empty result as native pushdown is not supported.", sql);
+                _logger?.Debug("[FlatFile] ExecuteRawSql received unknown SQL: {Sql}. Returning empty result as native pushdown is not supported.", sql);
                 yield return new DataTable { ColumnNames = { "Status" }, Rows = { new Row { ["Status"] = "NOT_SUPPORTED" } } };
             }
         }

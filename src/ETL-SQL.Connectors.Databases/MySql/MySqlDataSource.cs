@@ -252,7 +252,7 @@ namespace ETL_SQL.Connectors.MySql
                 {
                     foreach (var param in parameters)
                     {
-                        cmd.Parameters.AddWithValue($"p{paramCount++}", param ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue($"@p{paramCount++}", param ?? DBNull.Value);
                     }
                 }
 

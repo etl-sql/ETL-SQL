@@ -42,7 +42,7 @@ namespace ETL_SQL.ReportHosting
         private IServiceScope? _currentScope;
         private ReportManifest? _manifest;
         private Evaluator? _evaluator;
-        private Dictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _runPages = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, VisualDrillState> _drillStates = new(StringComparer.OrdinalIgnoreCase);
 
@@ -267,7 +267,8 @@ namespace ETL_SQL.ReportHosting
                     var parser = new Parser(tokens, source);
                     var script = parser.Parse();
 
-                    await evaluator.Evaluate(script);
+                    using var timeoutCts = new CancellationTokenSource(_executionTimeout);
+                    await evaluator.Evaluate(script, timeoutCts.Token);
 
                     // Heuristic: refresh if script looks like it modified data
                     bool needsRefresh = source.Contains("INSERT", StringComparison.OrdinalIgnoreCase) ||

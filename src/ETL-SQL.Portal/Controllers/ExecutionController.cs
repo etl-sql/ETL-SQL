@@ -102,7 +102,7 @@ public class ExecutionController(
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!IsAdmin && !perm.AtLeast(FolderPermission.Manage)) return Forbid();
 
-        var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId);
+        var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId && u.TenantId == _datasetScope.TenantId);
         if (target is null) return NotFound(new { error = "Target user not found." });
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))

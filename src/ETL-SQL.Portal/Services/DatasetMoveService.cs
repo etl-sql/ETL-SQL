@@ -19,6 +19,9 @@ public sealed class DatasetMoveService(
         int currentUserId,
         bool isAdmin)
     {
+        if (!string.Equals(dataset.TenantId, destination.TenantId, StringComparison.Ordinal))
+            return DatasetMoveResult.Forbidden();
+
         if (dataset.FolderId == destination.Id)
             return DatasetMoveResult.Unchanged();
 
@@ -68,16 +71,17 @@ public sealed class DatasetMoveService(
 
 public enum DatasetMoveResultKind
 {
+    Moved,
     Unchanged,
-    Forbidden,
     Conflict,
-    Moved
+    Forbidden
 }
 
 public sealed record DatasetMoveResult(DatasetMoveResultKind Kind)
 {
-    public static DatasetMoveResult Unchanged() => new(DatasetMoveResultKind.Unchanged);
-    public static DatasetMoveResult Forbidden() => new(DatasetMoveResultKind.Forbidden);
-    public static DatasetMoveResult Conflict() => new(DatasetMoveResultKind.Conflict);
+    public bool Succeeded => Kind == DatasetMoveResultKind.Moved;
     public static DatasetMoveResult Moved() => new(DatasetMoveResultKind.Moved);
+    public static DatasetMoveResult Unchanged() => new(DatasetMoveResultKind.Unchanged);
+    public static DatasetMoveResult Conflict() => new(DatasetMoveResultKind.Conflict);
+    public static DatasetMoveResult Forbidden() => new(DatasetMoveResultKind.Forbidden);
 }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using ETL_SQL.Core;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,7 +16,7 @@ namespace ETL_SQL.ReportHosting
     /// Thread-safe; concurrent first-access races resolve to a single instance via
     /// <see cref="ConcurrentDictionary{TKey,TValue}.GetOrAdd"/>.
     /// </summary>
-    public class DashboardServiceFactory
+    public class DashboardServiceFactory : IAsyncDisposable, IDisposable
     {
         private readonly string _manifestDir;
         private readonly IReadOnlyList<ReportEntry> _reports;
@@ -58,6 +59,24 @@ namespace ETL_SQL.ReportHosting
                     throw new InvalidOperationException("Report path is outside the manifest directory.");
                 return new DashboardService(fullPath, _scopeFactory, _executionTimeout);
             });
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            foreach (var svc in _services.Values)
+            {
+                await svc.DisposeAsync();
+            }
+            _services.Clear();
+        }
+
+        public void Dispose()
+        {
+            foreach (var svc in _services.Values)
+            {
+                svc.Dispose();
+            }
+            _services.Clear();
         }
     }
 }

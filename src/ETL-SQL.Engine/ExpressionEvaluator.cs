@@ -1236,7 +1236,7 @@ public class ExpressionEvaluator
     private static object? EvaluateRegexMatch(object? input, object? pattern, RegexOptions options)
     {
         if (input.IsNull() || pattern.IsNull()) return null;
-        return Regex.IsMatch(input?.ToString() ?? "", pattern?.ToString() ?? "", options);
+        return Regex.IsMatch(input?.ToString() ?? "", pattern?.ToString() ?? "", options, TimeSpan.FromSeconds(2));
     }
 
     private static byte[] ParseHex(string hex)

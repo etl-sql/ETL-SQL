@@ -208,58 +208,103 @@ public static class EvaluationUtils
         return BinaryOperatorFactory.Execute(tokenType.Value, a, b);
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Regex> _likeRegexCache = new();
+    private const int MaxLikeCacheSize = 1000;
+
     public static bool EvaluateLike(object? input, object? pattern, string? escapeChar = null)
     {
         if (input == null || pattern == null) return false;
         string s = input.ToString() ?? "";
         string p = pattern.ToString() ?? "";
 
-        string regexPattern;
-        if (!string.IsNullOrEmpty(escapeChar) && escapeChar.Length == 1)
+        // Fast path for simple non-escaped patterns
+        if (string.IsNullOrEmpty(escapeChar))
         {
-            char esc = escapeChar[0];
-            // Manually build regex for explicitly escaped sequences vs non-escaped wildcards
-            var sb = new System.Text.StringBuilder("^");
-            bool escaped = false;
-            for (int i = 0; i < p.Length; i++)
+            if (p == "%") return true;
+            if (!p.Contains('%') && !p.Contains('_') && !p.Contains('[') && !p.Contains(']'))
+                return string.Equals(s, p, StringComparison.OrdinalIgnoreCase);
+
+            if (p.StartsWith('%') && p.EndsWith('%') && p.Length >= 2)
             {
-                char c = p[i];
-                if (escaped)
-                {
-                    sb.Append(Regex.Escape(c.ToString()));
-                    escaped = false;
-                }
-                else if (c == esc)
-                {
-                    escaped = true;
-                }
-                else if (c == '%')
-                {
-                    sb.Append(".*");
-                }
-                else if (c == '_')
-                {
-                    sb.Append(".");
-                }
-                else
-                {
-                    sb.Append(Regex.Escape(c.ToString()));
-                }
+                var middle = p.Substring(1, p.Length - 2);
+                if (!middle.Contains('%') && !middle.Contains('_') && !middle.Contains('[') && !middle.Contains(']'))
+                    return s.Contains(middle, StringComparison.OrdinalIgnoreCase);
             }
-            if (escaped)
+            else if (p.StartsWith('%') && p.Length >= 1)
             {
-                // hanging escape character
-                sb.Append(Regex.Escape(esc.ToString()));
+                var suffix = p.Substring(1);
+                if (!suffix.Contains('%') && !suffix.Contains('_') && !suffix.Contains('[') && !suffix.Contains(']'))
+                    return s.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
             }
-            sb.Append("$");
-            regexPattern = sb.ToString();
-        }
-        else
-        {
-            regexPattern = "^" + Regex.Escape(p).Replace("%", ".*").Replace("_", ".") + "$";
+            else if (p.EndsWith('%') && p.Length >= 1)
+            {
+                var prefix = p.Substring(0, p.Length - 1);
+                if (!prefix.Contains('%') && !prefix.Contains('_') && !prefix.Contains('[') && !prefix.Contains(']'))
+                    return s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+            }
         }
 
-        return Regex.IsMatch(s, regexPattern, RegexOptions.IgnoreCase);
+        string cacheKey = (escapeChar ?? "") + ":" + p;
+        if (!_likeRegexCache.TryGetValue(cacheKey, out var regex))
+        {
+            string regexPattern;
+            if (!string.IsNullOrEmpty(escapeChar) && escapeChar.Length == 1)
+            {
+                char esc = escapeChar[0];
+                var sb = new System.Text.StringBuilder("^");
+                bool escaped = false;
+                for (int i = 0; i < p.Length; i++)
+                {
+                    char c = p[i];
+                    if (escaped)
+                    {
+                        sb.Append(Regex.Escape(c.ToString()));
+                        escaped = false;
+                    }
+                    else if (c == esc)
+                    {
+                        escaped = true;
+                    }
+                    else if (c == '%')
+                    {
+                        sb.Append(".*");
+                    }
+                    else if (c == '_')
+                    {
+                        sb.Append(".");
+                    }
+                    else
+                    {
+                        sb.Append(Regex.Escape(c.ToString()));
+                    }
+                }
+                if (escaped)
+                {
+                    sb.Append(Regex.Escape(esc.ToString()));
+                }
+                sb.Append("$");
+                regexPattern = sb.ToString();
+            }
+            else
+            {
+                regexPattern = "^" + Regex.Escape(p).Replace("%", ".*").Replace("_", ".") + "$";
+            }
+
+            regex = new Regex(regexPattern, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+            if (_likeRegexCache.Count < MaxLikeCacheSize)
+            {
+                _likeRegexCache.TryAdd(cacheKey, regex);
+            }
+        }
+
+        try
+        {
+            return regex.IsMatch(s);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
+        }
     }
 
     public static object? CastToType(object? value, string? type)
