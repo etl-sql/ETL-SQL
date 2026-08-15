@@ -372,7 +372,7 @@ public class AssertJobStatementHandler(
         List<string> failures,
         string summary)
     {
-        var notification = await ResolveFailureNotificationAsync(stmt);
+        var notification = await ResolveFailureNotificationAsync(stmt, CatalogStatementSupport.ActingTenant(context));
         if (notification is null) return false;
 
         try
@@ -438,7 +438,8 @@ public class AssertJobStatementHandler(
         }
     }
 
-    private async Task<NotificationDefinition?> ResolveFailureNotificationAsync(AssertJobStatement stmt)
+    private async Task<NotificationDefinition?> ResolveFailureNotificationAsync(
+        AssertJobStatement stmt, string? tenantId)
     {
         if (catalog is null)
             throw new ExecutionException(
@@ -446,7 +447,7 @@ public class AssertJobStatementHandler(
                 "Run the script in an orchestrator context or remove the NOTIFY clause.",
                 null, stmt.Line, stmt.Column);
 
-        var notification = await catalog.GetNotificationAsync(stmt.FailureNotification!);
+        var notification = await catalog.GetNotificationAsync(tenantId, stmt.FailureNotification!);
         if (notification is null)
         {
             logger.Warning(

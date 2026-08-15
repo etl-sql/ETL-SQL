@@ -54,7 +54,7 @@ public class EnableJobStatementHandler : IStatementHandler
         if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
             return;
 
-        var existing = await _store.GetJobAsync(stmt.Name)
+        var existing = await _store.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name)
             ?? throw new ExecutionException($"ENABLE JOB failed: job '{stmt.Name}' not found.");
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
             stmt.Name, existing.Id, existing.TenantId,
@@ -84,7 +84,7 @@ public class DisableJobStatementHandler : IStatementHandler
         if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
             return;
 
-        var existing = await _store.GetJobAsync(stmt.Name)
+        var existing = await _store.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name)
             ?? throw new ExecutionException($"DISABLE JOB failed: job '{stmt.Name}' not found.");
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
             stmt.Name, existing.Id, existing.TenantId,
@@ -115,7 +115,7 @@ public class TriggerJobStatementHandler : IStatementHandler
         if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
             return;
 
-        var existing = await _store.GetJobAsync(stmt.Name)
+        var existing = await _store.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name)
             ?? throw new ExecutionException($"TRIGGER JOB failed: job '{stmt.Name}' not found.");
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
             stmt.Name, existing.Id, existing.TenantId,

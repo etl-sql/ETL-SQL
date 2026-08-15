@@ -679,10 +679,14 @@ namespace ETL_SQL.Orchestrator.Storage
 
             // Upsert (not INSERT OR REPLACE): REPLACE deletes and reinserts the row, which would
             // silently clear an active execution lease whenever a job definition is re-saved.
+            // The conflict target is (TenantId, Name), which is what makes the tenant binding
+            // immutable without a guard clause: a save naming another tenant's job simply does not
+            // conflict with it, so it can never rewrite that row. Id is set on insert only and never
+            // updated, so an object keeps its identity — and its grants — across re-saves.
             var sql = @"
-                INSERT INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy, JobType, TargetPath, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
-                VALUES (@name, @script, @interval, @unit, @atTime, @lastRun, @nextRun, @isEnabled, @maxRetries, @retryDelay, @scriptHash, @hashPolicy, @jobType, @targetPath, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
-                ON CONFLICT(Name) DO UPDATE SET
+                INSERT INTO Jobs (Id, Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy, JobType, TargetPath, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
+                VALUES (@id, @name, @script, @interval, @unit, @atTime, @lastRun, @nextRun, @isEnabled, @maxRetries, @retryDelay, @scriptHash, @hashPolicy, @jobType, @targetPath, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
+                ON CONFLICT(TenantId, Name) DO UPDATE SET
                     Script            = excluded.Script,
                     Interval          = excluded.Interval,
                     Unit              = excluded.Unit,
@@ -700,16 +704,14 @@ namespace ETL_SQL.Orchestrator.Storage
                     Description       = excluded.Description,
                     Options           = excluded.Options,
                     ModifiedBy        = excluded.ModifiedBy,
-                    TenantId          = COALESCE(Jobs.TenantId, excluded.TenantId),
-                    Version           = Jobs.Version + 1
-                WHERE Jobs.TenantId IS NULL OR excluded.TenantId IS NULL OR Jobs.TenantId = excluded.TenantId;";
+                    Version           = Jobs.Version + 1;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             AddJobParameters(command, job);
 
             if (await command.ExecuteNonQueryAsync() != 1)
-                throw new InvalidOperationException("A scheduled job tenant binding cannot be replaced.");
+                throw new InvalidOperationException("The scheduled job could not be saved.");
         }
 
         public async Task<bool> TrySaveJobAsync(JobDefinition job, long expectedVersion)
@@ -740,9 +742,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     ModifiedBy = @modifiedBy,
                     CreatedBy = COALESCE(CreatedBy, @createdBy),
                     Version = Version + 1
-                WHERE Name = @name COLLATE NOCASE AND Version = @expectedVersion
-                  AND (TenantId IS NULL OR CAST(@tenantId AS TEXT) IS NULL
-                       OR TenantId = CAST(@tenantId AS TEXT));";
+                WHERE Id = @id AND Version = @expectedVersion;";
             AddJobParameters(command, job);
             command.AddParam("@expectedVersion", expectedVersion);
             return await command.ExecuteNonQueryAsync() == 1;
@@ -750,6 +750,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         private static void AddJobParameters(DbCommand command, JobDefinition job)
         {
+            command.AddParam("@id", NewOrExistingId(job.Id));
             command.AddParam("@name", job.Name);
             command.AddParam("@script", job.Script);
             command.AddParam("@interval", job.Interval);
@@ -770,9 +771,17 @@ namespace ETL_SQL.Orchestrator.Storage
             command.AddParam("@createdBy", (object?)job.CreatedBy ?? DBNull.Value);
             command.AddParam("@modifiedBy", (object?)job.ModifiedBy ?? DBNull.Value);
             command.AddParam("@tenantId", string.IsNullOrWhiteSpace(job.TenantId)
-                ? DBNull.Value
+                ? UnboundTenantSentinel
                 : TenantId.FromTrustedSource(job.TenantId).Value);
         }
+
+        /// <summary>
+        /// Identity is assigned once, on first insert, and never reassigned. A caller that already
+        /// holds a definition round-trips its id so a re-save updates the same object rather than
+        /// orphaning its grants, links, history, and watermarks behind a new one.
+        /// </summary>
+        internal static string NewOrExistingId(string? existingId) =>
+            string.IsNullOrWhiteSpace(existingId) ? Guid.NewGuid().ToString("N") : existingId;
 
         // ── Execution lease (P1.1) ────────────────────────────────────────────────
         // Lease times are UTC ISO-8601 ("O") strings: they compare correctly both lexically
@@ -781,10 +790,10 @@ namespace ETL_SQL.Orchestrator.Storage
         // entire claim mechanism — but it also means the lease only coordinates processes
         // that share this database file (see the P3.1 topology decision).
 
-        public async Task<bool> TryAcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration)
+        public async Task<bool> TryAcquireJobLeaseAsync(string jobId, string owner, TimeSpan duration)
             => await AcquireJobLeaseAsync(jobName, owner, duration) is not null;
 
-        public async Task<long?> AcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration)
+        public async Task<long?> AcquireJobLeaseAsync(string jobId, string owner, TimeSpan duration)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -797,7 +806,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var claim = connection.CreateCommand();
             claim.CommandText = @"
                 UPDATE Jobs SET LeaseOwner = @owner, LeaseExpiresAt = @expires, LeaseFenceToken = LeaseFenceToken + 1
-                WHERE Name = @name
+                WHERE Id = @id
                   AND IsEnabled = 1
                   AND (LeaseOwner IS NULL OR LeaseExpiresAt IS NULL OR LeaseExpiresAt <= @now)
                   AND NOT EXISTS (
@@ -806,7 +815,7 @@ namespace ETL_SQL.Orchestrator.Storage
                          AND lifecycle.State <> 'Active');";
             claim.AddParam("@owner", owner);
             claim.AddParam("@expires", now.Add(duration).ToString("O"));
-            claim.AddParam("@name", jobName);
+            claim.AddParam("@id", jobId);
             claim.AddParam("@now", now.ToString("O"));
 
             if (await claim.ExecuteNonQueryAsync() != 1)
@@ -814,29 +823,29 @@ namespace ETL_SQL.Orchestrator.Storage
 
             // We now own the row; read back the token we were granted.
             using var read = connection.CreateCommand();
-            read.CommandText = "SELECT LeaseFenceToken FROM Jobs WHERE Name = @name AND LeaseOwner = @owner;";
-            read.AddParam("@name", jobName);
+            read.CommandText = "SELECT LeaseFenceToken FROM Jobs WHERE Id = @id AND LeaseOwner = @owner;";
+            read.AddParam("@id", jobId);
             read.AddParam("@owner", owner);
             var token = await read.ExecuteScalarAsync();
             return token is null or DBNull ? null : Convert.ToInt64(token);
         }
 
-        public async Task<bool> ValidateFenceTokenAsync(string jobName, long fenceToken)
+        public async Task<bool> ValidateFenceTokenAsync(string jobId, long fenceToken)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT LeaseFenceToken FROM Jobs WHERE Name = @name;";
-            command.AddParam("@name", jobName);
+            command.CommandText = "SELECT LeaseFenceToken FROM Jobs WHERE Id = @id;";
+            command.AddParam("@id", jobId);
             var current = await command.ExecuteScalarAsync();
             // A token is valid only if it is the latest issued — a newer acquisition would have advanced
             // the stored token beyond the holder's.
             return current is not (null or DBNull) && fenceToken >= Convert.ToInt64(current);
         }
 
-        public async Task<bool> TryUpdateJobLastRunFencedAsync(string name, DateTime lastRun, DateTime? nextRun, long fenceToken)
+        public async Task<bool> TryUpdateJobLastRunFencedAsync(string jobId, DateTime lastRun, DateTime? nextRun, long fenceToken)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -848,16 +857,16 @@ namespace ETL_SQL.Orchestrator.Storage
             // UPDATE matches zero rows — the stale writer is fenced out.
             command.CommandText = @"
                 UPDATE Jobs SET LastRun = @lastRun, NextRun = @nextRun
-                WHERE Name = @name AND LeaseFenceToken = @token;";
+                WHERE Id = @id AND LeaseFenceToken = @token;";
             command.AddParam("@lastRun", lastRun.ToString("O"));
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
-            command.AddParam("@name", name);
+            command.AddParam("@id", jobId);
             command.AddParam("@token", fenceToken);
 
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        public async Task<bool> TryRenewJobLeaseAsync(string jobName, string owner, TimeSpan duration)
+        public async Task<bool> TryRenewJobLeaseAsync(string jobId, string owner, TimeSpan duration)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -866,15 +875,15 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 UPDATE Jobs SET LeaseExpiresAt = @expires
-                WHERE Name = @name AND LeaseOwner = @owner;";
+                WHERE Id = @id AND LeaseOwner = @owner;";
             command.AddParam("@expires", DateTime.UtcNow.Add(duration).ToString("O"));
-            command.AddParam("@name", jobName);
+            command.AddParam("@id", jobId);
             command.AddParam("@owner", owner);
 
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        public async Task ReleaseJobLeaseAsync(string jobName, string owner)
+        public async Task ReleaseJobLeaseAsync(string jobId, string owner)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -883,8 +892,8 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 UPDATE Jobs SET LeaseOwner = NULL, LeaseExpiresAt = NULL
-                WHERE Name = @name AND LeaseOwner = @owner;";
-            command.AddParam("@name", jobName);
+                WHERE Id = @id AND LeaseOwner = @owner;";
+            command.AddParam("@id", jobId);
             command.AddParam("@owner", owner);
 
             await command.ExecuteNonQueryAsync();
@@ -1146,7 +1155,7 @@ namespace ETL_SQL.Orchestrator.Storage
                 SELECT * FROM Jobs
                 WHERE IsEnabled = 1
                   AND (NextRun IS NULL OR NextRun <= @now)
-                  AND NOT EXISTS (SELECT 1 FROM JobSchedules js WHERE js.JobName = Jobs.Name COLLATE NOCASE);";
+                  AND NOT EXISTS (SELECT 1 FROM JobSchedules js WHERE js.JobId = Jobs.Id);";
             command.AddParam("@now", now.ToString("O"));
 
             var jobs = new List<JobDefinition>();
@@ -1193,20 +1202,37 @@ namespace ETL_SQL.Orchestrator.Storage
             return jobs;
         }
 
-        public async Task<JobDefinition?> GetJobAsync(string name)
+        public async Task<JobDefinition?> GetJobAsync(string? tenantId, string name)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Jobs WHERE Name = @name COLLATE NOCASE LIMIT 1;";
+            command.CommandText =
+                "SELECT * FROM Jobs WHERE TenantId = @tenant AND Name = @name COLLATE NOCASE LIMIT 1;";
+            command.AddParam("@tenant", TenantKey(tenantId));
             command.AddParam("@name", name);
 
             using var reader = await command.ExecuteReaderAsync();
             if (!await reader.ReadAsync()) return null;
 
             return ReadJob(reader);
+        }
+
+        public async Task<JobDefinition?> GetJobByIdAsync(string jobId)
+        {
+            if (string.IsNullOrWhiteSpace(jobId)) return null;
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM Jobs WHERE Id = @id LIMIT 1;";
+            command.AddParam("@id", jobId);
+
+            using var reader = await command.ExecuteReaderAsync();
+            return await reader.ReadAsync() ? ReadJob(reader) : null;
         }
 
         private static JobDefinition ReadJob(DbDataReader reader)
@@ -1238,7 +1264,8 @@ namespace ETL_SQL.Orchestrator.Storage
                 ReadOptionalString(reader, "Options"),
                 ReadOptionalString(reader, "CreatedBy"),
                 ReadOptionalString(reader, "ModifiedBy"),
-                ReadOptionalString(reader, "TenantId"));
+                TenantOrNull(ReadOptionalString(reader, "TenantId")),
+                ReadOptionalString(reader, "Id"));
         }
 
         /// <summary>
@@ -1252,7 +1279,7 @@ namespace ETL_SQL.Orchestrator.Storage
             return Enum.TryParse<JobTargetKind>(raw, ignoreCase: true, out var kind) ? kind : JobTargetKind.Script;
         }
 
-        public async Task DeleteJobAsync(string name)
+        public async Task DeleteJobAsync(string jobId)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -1261,39 +1288,39 @@ namespace ETL_SQL.Orchestrator.Storage
             using var transaction = connection.BeginTransaction();
             try
             {
-                var sql1 = "DELETE FROM Jobs WHERE Name = @name;";
+                var sql1 = "DELETE FROM Jobs WHERE Id = @id;";
                 using var command1 = connection.CreateCommand();
                 command1.CommandText = sql1;
                 command1.Transaction = transaction;
-                command1.AddParam("@name", name);
+                command1.AddParam("@id", jobId);
                 await command1.ExecuteNonQueryAsync();
 
-                var sqlMetrics = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+                var sqlMetrics = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
                 using var commandMetrics = connection.CreateCommand();
                 commandMetrics.CommandText = sqlMetrics;
                 commandMetrics.Transaction = transaction;
-                commandMetrics.AddParam("@name", name);
+                commandMetrics.AddParam("@id", jobId);
                 await commandMetrics.ExecuteNonQueryAsync();
 
-                var sqlFailures = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+                var sqlFailures = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
                 using var commandFailures = connection.CreateCommand();
                 commandFailures.CommandText = sqlFailures;
                 commandFailures.Transaction = transaction;
-                commandFailures.AddParam("@name", name);
+                commandFailures.AddParam("@id", jobId);
                 await commandFailures.ExecuteNonQueryAsync();
 
-                var sqlStatements = "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+                var sqlStatements = "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
                 using var commandStatements = connection.CreateCommand();
                 commandStatements.CommandText = sqlStatements;
                 commandStatements.Transaction = transaction;
-                commandStatements.AddParam("@name", name);
+                commandStatements.AddParam("@id", jobId);
                 await commandStatements.ExecuteNonQueryAsync();
 
-                var sql2 = "DELETE FROM JobHistory WHERE JobName = @name;";
+                var sql2 = "DELETE FROM JobHistory WHERE JobId = @id;";
                 using var command2 = connection.CreateCommand();
                 command2.CommandText = sql2;
                 command2.Transaction = transaction;
-                command2.AddParam("@name", name);
+                command2.AddParam("@id", jobId);
                 await command2.ExecuteNonQueryAsync();
 
                 // Attachments cascade with the job: a link has no meaning without one side of it.
@@ -1309,7 +1336,7 @@ namespace ETL_SQL.Orchestrator.Storage
             }
         }
 
-        public async Task<bool> TryDeleteJobAsync(string name, long expectedVersion)
+        public async Task<bool> TryDeleteJobAsync(string jobId, long expectedVersion)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -1318,8 +1345,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var deleteJob = connection.CreateCommand();
             deleteJob.Transaction = transaction;
-            deleteJob.CommandText = "DELETE FROM Jobs WHERE Name = @name COLLATE NOCASE AND Version = @version;";
-            deleteJob.AddParam("@name", name);
+            deleteJob.CommandText = "DELETE FROM Jobs WHERE Id = @id AND Version = @version;";
+            deleteJob.AddParam("@id", jobId);
             deleteJob.AddParam("@version", expectedVersion);
             if (await deleteJob.ExecuteNonQueryAsync() != 1)
             {
@@ -1329,26 +1356,26 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var deleteMetrics = connection.CreateCommand();
             deleteMetrics.Transaction = transaction;
-            deleteMetrics.CommandText = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
-            deleteMetrics.AddParam("@name", name);
+            deleteMetrics.CommandText = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+            deleteMetrics.AddParam("@id", jobId);
             await deleteMetrics.ExecuteNonQueryAsync();
 
             using var deleteFailures = connection.CreateCommand();
             deleteFailures.Transaction = transaction;
-            deleteFailures.CommandText = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
-            deleteFailures.AddParam("@name", name);
+            deleteFailures.CommandText = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+            deleteFailures.AddParam("@id", jobId);
             await deleteFailures.ExecuteNonQueryAsync();
 
             using var deleteStatements = connection.CreateCommand();
             deleteStatements.Transaction = transaction;
-            deleteStatements.CommandText = "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
-            deleteStatements.AddParam("@name", name);
+            deleteStatements.CommandText = "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+            deleteStatements.AddParam("@id", jobId);
             await deleteStatements.ExecuteNonQueryAsync();
 
             using var deleteHistory = connection.CreateCommand();
             deleteHistory.Transaction = transaction;
-            deleteHistory.CommandText = "DELETE FROM JobHistory WHERE JobName = @name;";
-            deleteHistory.AddParam("@name", name);
+            deleteHistory.CommandText = "DELETE FROM JobHistory WHERE JobId = @id;";
+            deleteHistory.AddParam("@id", jobId);
             await deleteHistory.ExecuteNonQueryAsync();
 
             await DeleteJobLinksAsync(connection, transaction, name);
@@ -1357,32 +1384,36 @@ namespace ETL_SQL.Orchestrator.Storage
             return true;
         }
 
-        public async Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun)
+        public async Task UpdateJobLastRunAsync(string jobId, DateTime lastRun, DateTime? nextRun)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "UPDATE Jobs SET LastRun = @lastRun, NextRun = @nextRun WHERE Name = @name;";
+            var sql = "UPDATE Jobs SET LastRun = @lastRun, NextRun = @nextRun WHERE Id = @id;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            command.AddParam("@name", name);
+            command.AddParam("@id", jobId);
             command.AddParam("@lastRun", lastRun.ToString("O"));
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<long> LogJobStartAsync(string jobName)
+        public async Task<long> LogJobStartAsync(string jobId)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
+            // Name and tenant are copied from the job row rather than passed in: history outlives the
+            // job, and a run must record the name it actually ran under even if that name is later
+            // taken by a different object.
             var sql = _dialect.InsertReturningId(
-                "INSERT INTO JobHistory (JobName, StartTime, Status) VALUES (@name, @start, 'RUNNING')", "Id");
+                @"INSERT INTO JobHistory (JobId, TenantId, JobName, StartTime, Status)
+                  SELECT j.Id, j.TenantId, j.Name, @start, 'RUNNING' FROM Jobs j WHERE j.Id = @id", "Id");
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            command.AddParam("@name", jobName);
+            command.AddParam("@id", jobId);
             command.AddParam("@start", DateTime.Now.ToString("O"));
 
             // SQLite's last_insert_rowid() returns long; Postgres RETURNING id returns int — normalize.
@@ -1821,7 +1852,7 @@ namespace ETL_SQL.Orchestrator.Storage
             return results;
         }
 
-        public async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForJobAsync(string jobName, int limit = 1000)
+        public async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForJobAsync(string jobId, int limit = 1000)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -1832,10 +1863,10 @@ namespace ETL_SQL.Orchestrator.Storage
                        f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
                 FROM JobDataQualityFailures f
                 INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
-                WHERE h.JobName = @jobName
+                WHERE h.JobId = @jobId
                 ORDER BY h.StartTime DESC, h.Id DESC, f.TargetTable, f.ColumnName, f.RuleText, f.Action
                 LIMIT @limit;";
-            command.AddParam("@jobName", jobName);
+            command.AddParam("@jobId", jobId);
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
 
             var results = new List<JobDataQualityFailure>();
@@ -2123,7 +2154,7 @@ namespace ETL_SQL.Orchestrator.Storage
             return written;
         }
 
-        public async Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(string? jobName, DateTime sinceDay, int limit = 1000)
+        public async Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(string? jobId, DateTime sinceDay, int limit = 1000)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2223,7 +2254,7 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100)
+        public async Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobId = null, int limit = 100)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2322,22 +2353,22 @@ namespace ETL_SQL.Orchestrator.Storage
             return -1;
         }
 
-        public async Task<string?> GetJobStateAsync(string jobName, string key)
+        public async Task<string?> GetJobStateAsync(string jobId, string key)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT StateValue FROM JobState WHERE JobName = @jobName AND StateKey = @key;";
-            command.AddParam("@jobName", jobName);
+            command.CommandText = "SELECT StateValue FROM JobState WHERE JobId = @jobId AND StateKey = @key;";
+            command.AddParam("@jobId", jobId);
             command.AddParam("@key", key);
 
             var result = await command.ExecuteScalarAsync();
             return result == null || result == DBNull.Value ? null : (string?)result;
         }
 
-        public async Task SetJobStateAsync(string jobName, string key, string? value)
+        public async Task SetJobStateAsync(string jobId, string key, string? value)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2345,12 +2376,12 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO JobState (JobName, StateKey, StateValue, UpdatedAt)
+                INSERT INTO JobState (JobId, StateKey, StateValue, UpdatedAt)
                 VALUES (@jobName, @key, @value, @updatedAt)
                 ON CONFLICT (JobName, StateKey)
                 DO UPDATE SET StateValue = EXCLUDED.StateValue, UpdatedAt = EXCLUDED.UpdatedAt;";
 
-            command.AddParam("@jobName", jobName);
+            command.AddParam("@jobId", jobId);
             command.AddParam("@key", key);
             command.AddParam("@value", value);
             command.AddParam("@updatedAt", DateTime.UtcNow.ToString("o"));
@@ -2358,14 +2389,14 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(string? jobName = null, int limit = 1000)
+        public async Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(string? jobId = null, int limit = 1000)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            var sql = "SELECT JobName, StateKey, StateValue, UpdatedAt FROM JobState ";
+            var sql = "SELECT JobId, StateKey, StateValue, UpdatedAt FROM JobState ";
             if (!string.IsNullOrEmpty(jobName)) { sql += "WHERE JobName = @job "; command.AddParam("@job", jobName); }
             sql += "ORDER BY JobName, StateKey LIMIT @limit;";
             command.CommandText = sql;

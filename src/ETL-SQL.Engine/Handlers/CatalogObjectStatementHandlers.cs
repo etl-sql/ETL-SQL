@@ -37,6 +37,13 @@ internal static class CatalogStatementSupport
         return string.IsNullOrWhiteSpace(user) ? null : user;
     }
 
+    /// <summary>
+    /// The tenant a script's object names are resolved in — the server-verified binding on the
+    /// execution identity, or null for the unbound (Solo) scope. A statement naming an object always
+    /// means <em>this tenant's</em> object; there is no cross-tenant addressing from script.
+    /// </summary>
+    public static string? ActingTenant(IExecutionContext context) => context.ExecutionIdentity?.TenantId;
+
     public static void DemandCreate(IExecutionContext context, Statement statement, string kind)
     {
         var authorizer = context.ServiceProvider.GetService<IOrchestratorObjectAuthorizer>();
@@ -146,7 +153,7 @@ public class CreateScheduleStatementHandler(IJobCatalogStore? catalog = null, IC
         var stmt = (CreateScheduleStatement)statement;
         var store = CatalogStatementSupport.Require(catalog, stmt, "CREATE SCHEDULE");
 
-        var existing = await store.GetScheduleAsync(stmt.Name);
+        var existing = await store.GetScheduleAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name);
         if (existing is not null && stmt.Mode == ObjectCreationMode.Create)
             throw new ExecutionException(
                 $"Schedule '{stmt.Name}' already exists. Use CREATE OR ALTER SCHEDULE to update it, " +
@@ -201,7 +208,7 @@ public class CreateNotificationStatementHandler(IJobCatalogStore? catalog = null
         var stmt = (CreateNotificationStatement)statement;
         var store = CatalogStatementSupport.Require(catalog, stmt, "CREATE NOTIFICATION");
 
-        var existing = await store.GetNotificationAsync(stmt.Name);
+        var existing = await store.GetNotificationAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name);
         if (existing is not null && stmt.Mode == ObjectCreationMode.Create)
             throw new ExecutionException(
                 $"Notification '{stmt.Name}' already exists. Use CREATE OR ALTER NOTIFICATION to " +
@@ -256,7 +263,7 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
 
         if (stmt.Kind == CatalogObjectKind.Schedule)
         {
-            var existing = await store.GetScheduleAsync(stmt.Name)
+            var existing = await store.GetScheduleAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name)
                 ?? throw NotFound(stmt, kind);
             await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Schedule,
                 stmt.Name, existing.Id, existing.TenantId,
@@ -291,7 +298,7 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
         }
         else
         {
-            var existing = await store.GetNotificationAsync(stmt.Name)
+            var existing = await store.GetNotificationAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name)
                 ?? throw NotFound(stmt, kind);
             await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Notification,
                 stmt.Name, existing.Id, existing.TenantId,
@@ -346,8 +353,8 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
         var kind = stmt.Kind.ToString().ToUpperInvariant();
         var store = CatalogStatementSupport.Require(catalog, stmt, $"DROP {kind}");
 
-        var schedule = stmt.Kind == CatalogObjectKind.Schedule ? await store.GetScheduleAsync(stmt.Name) : null;
-        var notification = stmt.Kind == CatalogObjectKind.Notification ? await store.GetNotificationAsync(stmt.Name) : null;
+        var schedule = stmt.Kind == CatalogObjectKind.Schedule ? await store.GetScheduleAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name) : null;
+        var notification = stmt.Kind == CatalogObjectKind.Notification ? await store.GetNotificationAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name) : null;
         var exists = schedule is not null || notification is not null;
 
         if (!exists)
@@ -414,8 +421,8 @@ public class SetCatalogObjectEnabledStatementHandler(IJobCatalogStore? catalog =
         var verb = stmt.IsEnabled ? "ENABLE" : "DISABLE";
         var store = CatalogStatementSupport.Require(catalog, stmt, $"{verb} {kind}");
 
-        var schedule = stmt.Kind == CatalogObjectKind.Schedule ? await store.GetScheduleAsync(stmt.Name) : null;
-        var notification = stmt.Kind == CatalogObjectKind.Notification ? await store.GetNotificationAsync(stmt.Name) : null;
+        var schedule = stmt.Kind == CatalogObjectKind.Schedule ? await store.GetScheduleAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name) : null;
+        var notification = stmt.Kind == CatalogObjectKind.Notification ? await store.GetNotificationAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name) : null;
         var exists = schedule is not null || notification is not null;
         if (!exists)
             throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
@@ -472,7 +479,7 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         {
             var jobs = context.ServiceProvider.GetService<IJobHistoryStore>() ?? store as IJobHistoryStore
                 ?? throw new ExecutionException("The shared Orchestrator job store is unavailable.", null, stmt.Line, stmt.Column);
-            var job = await jobs.GetJobAsync(stmt.JobName)
+            var job = await jobs.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.JobName)
                 ?? throw new ExecutionException($"Job '{stmt.JobName}' does not exist.", null, stmt.Line, stmt.Column);
             await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
                 job.Name, job.Id, job.TenantId, OrchestratorObjectPermission.Manage, job.CreatedBy);
@@ -511,7 +518,7 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
             return;
         }
 
-        var schedule = await store.GetScheduleAsync(stmt.TargetName)
+        var schedule = await store.GetScheduleAsync(CatalogStatementSupport.ActingTenant(context), stmt.TargetName)
             ?? throw new ExecutionException(
                 $"Schedule '{stmt.TargetName}' does not exist. Create it before attaching it to a job.",
                 null, stmt.Line, stmt.Column);
@@ -561,7 +568,7 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
             return;
         }
 
-        var notification = await store.GetNotificationAsync(stmt.TargetName)
+        var notification = await store.GetNotificationAsync(CatalogStatementSupport.ActingTenant(context), stmt.TargetName)
             ?? throw new ExecutionException(
                 $"Notification '{stmt.TargetName}' does not exist. Create it before attaching it to a job.",
                 null, stmt.Line, stmt.Column);

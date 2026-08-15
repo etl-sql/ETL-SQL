@@ -35,7 +35,7 @@ public class KillJobStatementHandler : IStatementHandler
         var historyStore = context.ServiceProvider.GetService<IJobHistoryStore>();
         if (historyStore is not null && await historyStore.GetHistoryEntryAsync(historyId) is { } history)
         {
-            var job = await historyStore.GetJobAsync(history.JobName);
+            var job = await historyStore.GetJobAsync(CatalogStatementSupport.ActingTenant(context), history.JobName);
             if (job is not null)
                 await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
                     job.Name, job.Id, job.TenantId,

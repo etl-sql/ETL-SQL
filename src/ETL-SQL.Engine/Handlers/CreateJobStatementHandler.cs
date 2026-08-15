@@ -34,7 +34,7 @@ public class CreateJobStatementHandler : IStatementHandler
                 "Choose a stable script-facing name and use DISPLAY_NAME for the operator-facing label.",
                 null, stmt.Line, stmt.Column);
 
-        var existing = await _store.GetJobAsync(stmt.JobName);
+        var existing = await _store.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.JobName);
         if (existing is not null && stmt.Mode == ObjectCreationMode.Create)
             throw new ExecutionException(
                 $"Job '{stmt.JobName}' already exists. Use CREATE OR ALTER JOB to update it, " +
@@ -94,7 +94,10 @@ public class CreateJobStatementHandler : IStatementHandler
                      ?? (patches ? existing!.Options : null),
             CreatedBy: existing?.CreatedBy ?? identity,
             ModifiedBy: identity,
-            TenantId: existing?.TenantId ?? context.ExecutionIdentity?.TenantId);
+            TenantId: existing?.TenantId ?? context.ExecutionIdentity?.TenantId,
+            // Round-trip the existing identity so an update keeps the same object; a create leaves it
+            // null and the store assigns one.
+            Id: existing?.Id);
 
         if (existing is not null
             && stmt.Mode == ObjectCreationMode.CreateOrReplace
@@ -105,8 +108,9 @@ public class CreateJobStatementHandler : IStatementHandler
 
         await _store.SaveJobAsync(job);
 
-        if (existing is not null && stmt.Mode == ObjectCreationMode.CreateOrReplace)
-            await ResetAttachmentsAsync(stmt.JobName);
+        if (existing is not null && stmt.Mode == ObjectCreationMode.CreateOrReplace
+            && existing.Id is { Length: > 0 } existingId)
+            await ResetAttachmentsAsync(existingId);
 
         CatalogStatementSupport.AuditMutation(
             context,
@@ -117,13 +121,13 @@ public class CreateJobStatementHandler : IStatementHandler
                     $"{stmt.TargetKind.ToString().ToUpperInvariant()} '{targetPath}'.", ConsoleColor.Green);
     }
 
-    private async Task ResetAttachmentsAsync(string jobName)
+    private async Task ResetAttachmentsAsync(string jobId)
     {
         if (_catalog is null) return;
-        foreach (var link in await _catalog.GetJobSchedulesAsync(jobName))
-            await _catalog.RemoveJobScheduleAsync(jobName, link.ScheduleName);
-        foreach (var link in await _catalog.GetJobNotificationsAsync(jobName))
-            await _catalog.RemoveJobNotificationAsync(jobName, link.NotificationName, link.Trigger);
+        foreach (var link in await _catalog.GetJobSchedulesAsync(jobId))
+            await _catalog.RemoveJobScheduleAsync(jobId, link.ScheduleId);
+        foreach (var link in await _catalog.GetJobNotificationsAsync(jobId))
+            await _catalog.RemoveJobNotificationAsync(jobId, link.NotificationId, link.Trigger);
     }
 
     private static async Task<string> PinBundlePathAsync(string path, IExecutionContext context)

@@ -77,16 +77,20 @@ public sealed record NotificationDefinition(
 /// job stay distinguishable in operations — which is the defect this whole model exists to fix.
 /// </summary>
 public sealed record JobScheduleLink(
-    string JobName,
-    string ScheduleName,
+    string JobId,
+    string ScheduleId,
     DateTime? LastRun = null,
-    DateTime? NextRun = null);
+    DateTime? NextRun = null,
+    string? JobName = null,
+    string? ScheduleName = null);
 
 /// <summary>One job↔notification attachment, qualified by the outcome that fires it.</summary>
 public sealed record JobNotificationLink(
-    string JobName,
-    string NotificationName,
-    NotificationTrigger Trigger);
+    string JobId,
+    string NotificationId,
+    NotificationTrigger Trigger,
+    string? JobName = null,
+    string? NotificationName = null);
 
 /// <summary>
 /// The Orchestrator's catalog of schedules, notifications, and their attachments to jobs. The
@@ -103,7 +107,16 @@ public interface IJobCatalogStore
     // ── Schedules ─────────────────────────────────────────────────────────────
 
     Task SaveScheduleAsync(ScheduleDefinition schedule);
-    Task<ScheduleDefinition?> GetScheduleAsync(string name);
+    /// <summary>
+    /// Resolves a name within a tenant. Pass null for the unbound (Solo) scope — a scope of its own,
+    /// never a wildcard, because a name identifies a schedule only within one tenant.
+    /// </summary>
+    Task<ScheduleDefinition?> GetScheduleAsync(string? tenantId, string name);
+    /// <summary>
+    /// Reads by identity. Internal callers that already hold a link or definition use this rather than
+    /// re-resolving a name, which would need a tenant and could land on a different object.
+    /// </summary>
+    Task<ScheduleDefinition?> GetScheduleByIdAsync(string scheduleId);
     Task<IReadOnlyList<ScheduleDefinition>> GetSchedulesAsync(int limit = 1000, int offset = 0);
 
     /// <summary>
@@ -114,21 +127,24 @@ public interface IJobCatalogStore
     /// The names of the jobs blocking the delete, empty when the delete succeeded or the schedule
     /// did not exist.
     /// </returns>
-    Task<IReadOnlyList<string>> DeleteScheduleAsync(string name);
+    Task<IReadOnlyList<string>> DeleteScheduleAsync(string scheduleId);
 
-    Task<bool> SetScheduleEnabledAsync(string name, bool isEnabled);
+    Task<bool> SetScheduleEnabledAsync(string scheduleId, bool isEnabled);
 
     // ── Notifications ─────────────────────────────────────────────────────────
 
     Task SaveNotificationAsync(NotificationDefinition notification);
-    Task<NotificationDefinition?> GetNotificationAsync(string name);
+    /// <summary>Resolves a name within a tenant; null is the unbound (Solo) scope.</summary>
+    Task<NotificationDefinition?> GetNotificationAsync(string? tenantId, string name);
+    /// <summary>Reads by identity — see <see cref="GetScheduleByIdAsync"/>.</summary>
+    Task<NotificationDefinition?> GetNotificationByIdAsync(string notificationId);
     Task<IReadOnlyList<NotificationDefinition>> GetNotificationsAsync(int limit = 1000, int offset = 0);
 
     /// <summary>Deletes a notification. <b>Restricts</b> when jobs are still attached.</summary>
     /// <returns>The names of the jobs blocking the delete; empty on success.</returns>
-    Task<IReadOnlyList<string>> DeleteNotificationAsync(string name);
+    Task<IReadOnlyList<string>> DeleteNotificationAsync(string notificationId);
 
-    Task<bool> SetNotificationEnabledAsync(string name, bool isEnabled);
+    Task<bool> SetNotificationEnabledAsync(string notificationId, bool isEnabled);
 
     // ── Attachments ───────────────────────────────────────────────────────────
 
@@ -137,21 +153,21 @@ public interface IJobCatalogStore
     /// existing link leaves its run state alone and returns <c>false</c>.
     /// </summary>
     /// <returns><c>true</c> when a new link was created.</returns>
-    Task<bool> AddJobScheduleAsync(string jobName, string scheduleName, DateTime? nextRun);
+    Task<bool> AddJobScheduleAsync(string jobId, string scheduleId, DateTime? nextRun);
 
     /// <summary>Detaches a schedule. Idempotent; <c>false</c> when there was nothing to remove.</summary>
-    Task<bool> RemoveJobScheduleAsync(string jobName, string scheduleName);
+    Task<bool> RemoveJobScheduleAsync(string jobId, string scheduleId);
 
-    Task<IReadOnlyList<JobScheduleLink>> GetJobSchedulesAsync(string? jobName = null);
+    Task<IReadOnlyList<JobScheduleLink>> GetJobSchedulesAsync(string? jobId = null);
 
     /// <summary>Records a fired occurrence against one link, and arms the next.</summary>
-    Task UpdateJobScheduleRunAsync(string jobName, string scheduleName, DateTime lastRun, DateTime? nextRun);
+    Task UpdateJobScheduleRunAsync(string jobId, string scheduleId, DateTime lastRun, DateTime? nextRun);
 
     /// <summary>
     /// Sets a link's <c>NextRun</c> without recording a run against it — used to re-arm a link whose
     /// next occurrence is missing or stale.
     /// </summary>
-    Task ArmJobScheduleAsync(string jobName, string scheduleName, DateTime? nextRun);
+    Task ArmJobScheduleAsync(string jobId, string scheduleId, DateTime? nextRun);
 
     /// <summary>
     /// Jobs with at least one enabled schedule link that is due at <paramref name="nowUtc"/>.
@@ -176,10 +192,10 @@ public interface IJobCatalogStore
     /// The requested trigger overlaps one already attached for the same job and notification —
     /// <c>COMPLETION</c> together with <c>SUCCESS</c> or <c>FAILURE</c> would deliver twice.
     /// </exception>
-    Task<bool> AddJobNotificationAsync(string jobName, string notificationName, NotificationTrigger trigger);
+    Task<bool> AddJobNotificationAsync(string jobId, string notificationId, NotificationTrigger trigger);
 
     /// <summary>Detaches a notification. Idempotent; <c>false</c> when there was nothing to remove.</summary>
-    Task<bool> RemoveJobNotificationAsync(string jobName, string notificationName, NotificationTrigger trigger);
+    Task<bool> RemoveJobNotificationAsync(string jobId, string notificationId, NotificationTrigger trigger);
 
-    Task<IReadOnlyList<JobNotificationLink>> GetJobNotificationsAsync(string? jobName = null);
+    Task<IReadOnlyList<JobNotificationLink>> GetJobNotificationsAsync(string? jobId = null);
 }

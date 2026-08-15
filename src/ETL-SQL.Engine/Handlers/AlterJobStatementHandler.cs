@@ -28,7 +28,7 @@ public class AlterJobStatementHandler : IStatementHandler
         var stmt = (AlterJobStatement)statement;
 
         // Require the job to already exist — ALTER is not CREATE.
-        var existing = await _store.GetJobAsync(stmt.JobName)
+        var existing = await _store.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.JobName)
             ?? throw new ExecutionException($"ALTER JOB failed: job '{stmt.JobName}' not found. Use CREATE JOB to create it.");
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
             stmt.JobName, existing.Id, existing.TenantId,

@@ -23,7 +23,7 @@ public class DropJobStatementHandler : IStatementHandler
     {
         var stmt = (DropJobStatement)statement;
 
-        var existing = await _store.GetJobAsync(stmt.Name);
+        var existing = await _store.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name);
         if (existing is null)
         {
             if (stmt.IfExists) return;

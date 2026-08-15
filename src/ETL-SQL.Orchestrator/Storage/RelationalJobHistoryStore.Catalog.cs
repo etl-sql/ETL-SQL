@@ -35,9 +35,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             // CreatedBy is set on insert only — the point of the column is that it does not move.
             command.CommandText = @"
-                INSERT INTO Schedules (Name, Cron, TimeZone, IsEnabled, DisplayName, Description, Options, CreatedBy, ModifiedBy)
-                VALUES (@name, @cron, @timeZone, @isEnabled, @displayName, @description, @options, @createdBy, @modifiedBy)
-                ON CONFLICT(Name) DO UPDATE SET
+                INSERT INTO Schedules (Id, Name, Cron, TimeZone, IsEnabled, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
+                VALUES (@id, @name, @cron, @timeZone, @isEnabled, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
+                ON CONFLICT(TenantId, Name) DO UPDATE SET
                     Cron        = excluded.Cron,
                     TimeZone    = excluded.TimeZone,
                     IsEnabled   = excluded.IsEnabled,
@@ -47,7 +47,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     CreatedBy   = COALESCE(Schedules.CreatedBy, excluded.CreatedBy),
                     ModifiedBy  = excluded.ModifiedBy,
                     Version     = Schedules.Version + 1;";
+            command.AddParam("@id", NewOrExistingId(schedule.Id));
             command.AddParam("@name", schedule.Name);
+            command.AddParam("@tenantId", TenantKey(schedule.TenantId));
             command.AddParam("@cron", schedule.Cron);
             command.AddParam("@timeZone", schedule.TimeZone);
             command.AddParam("@isEnabled", schedule.IsEnabled ? 1 : 0);
@@ -59,15 +61,30 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<ScheduleDefinition?> GetScheduleAsync(string name)
+        public async Task<ScheduleDefinition?> GetScheduleAsync(string? tenantId, string name)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Schedules WHERE Name = @name COLLATE NOCASE;";
+            command.CommandText =
+                "SELECT * FROM Schedules WHERE TenantId = @tenant AND Name = @name COLLATE NOCASE;";
+            command.AddParam("@tenant", TenantKey(tenantId));
             command.AddParam("@name", name);
+            using var reader = await command.ExecuteReaderAsync();
+            return await reader.ReadAsync() ? ReadSchedule(reader) : null;
+        }
+
+        public async Task<ScheduleDefinition?> GetScheduleByIdAsync(string scheduleId)
+        {
+            if (string.IsNullOrWhiteSpace(scheduleId)) return null;
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM Schedules WHERE Id = @id;";
+            command.AddParam("@id", scheduleId);
             using var reader = await command.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadSchedule(reader) : null;
         }
@@ -89,15 +106,20 @@ namespace ETL_SQL.Orchestrator.Storage
             return results;
         }
 
-        public async Task<IReadOnlyList<string>> DeleteScheduleAsync(string name)
+        public async Task<IReadOnlyList<string>> DeleteScheduleAsync(string scheduleId)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var transaction = connection.BeginTransaction();
 
+            // Blockers are reported by name because that is what an operator can act on, but they are
+            // found by id — the link table no longer stores names at all.
             var blockers = await ReadLinkedJobNamesAsync(
-                connection, transaction, "SELECT JobName FROM JobSchedules WHERE ScheduleName = @name COLLATE NOCASE;", name);
+                connection, transaction,
+                @"SELECT j.Name FROM JobSchedules js
+                  INNER JOIN Jobs j ON j.Id = js.JobId
+                  WHERE js.ScheduleId = @id;", scheduleId);
             if (blockers.Count > 0)
             {
                 transaction.Rollback();
@@ -106,16 +128,16 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var delete = connection.CreateCommand();
             delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM Schedules WHERE Name = @name COLLATE NOCASE;";
-            delete.AddParam("@name", name);
+            delete.CommandText = "DELETE FROM Schedules WHERE Id = @id;";
+            delete.AddParam("@id", scheduleId);
             await delete.ExecuteNonQueryAsync();
 
             transaction.Commit();
             return Array.Empty<string>();
         }
 
-        public Task<bool> SetScheduleEnabledAsync(string name, bool isEnabled) =>
-            SetEnabledAsync("Schedules", name, isEnabled);
+        public Task<bool> SetScheduleEnabledAsync(string scheduleId, bool isEnabled) =>
+            SetEnabledAsync("Schedules", scheduleId, isEnabled);
 
         private static ScheduleDefinition ReadSchedule(DbDataReader reader) => new(
             reader.GetString(reader.GetOrdinal("Name")),
@@ -127,7 +149,9 @@ namespace ETL_SQL.Orchestrator.Storage
             ReadOptionalString(reader, "Options"),
             ReadOptionalString(reader, "CreatedBy"),
             ReadOptionalString(reader, "ModifiedBy"),
-            reader.GetInt64(reader.GetOrdinal("Version")));
+            reader.GetInt64(reader.GetOrdinal("Version")),
+            TenantOrNull(ReadOptionalString(reader, "TenantId")),
+            ReadOptionalString(reader, "Id"));
 
         // ── Notifications ─────────────────────────────────────────────────────────
 
@@ -139,9 +163,9 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO Notifications (Name, ConnectionName, Recipient, IsEnabled, DisplayName, Description, Options, CreatedBy, ModifiedBy)
-                VALUES (@name, @connectionName, @recipient, @isEnabled, @displayName, @description, @options, @createdBy, @modifiedBy)
-                ON CONFLICT(Name) DO UPDATE SET
+                INSERT INTO Notifications (Id, Name, ConnectionName, Recipient, IsEnabled, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
+                VALUES (@id, @name, @connectionName, @recipient, @isEnabled, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
+                ON CONFLICT(TenantId, Name) DO UPDATE SET
                     ConnectionName = excluded.ConnectionName,
                     Recipient      = excluded.Recipient,
                     IsEnabled      = excluded.IsEnabled,
@@ -151,7 +175,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     CreatedBy      = COALESCE(Notifications.CreatedBy, excluded.CreatedBy),
                     ModifiedBy     = excluded.ModifiedBy,
                     Version        = Notifications.Version + 1;";
+            command.AddParam("@id", NewOrExistingId(notification.Id));
             command.AddParam("@name", notification.Name);
+            command.AddParam("@tenantId", TenantKey(notification.TenantId));
             command.AddParam("@connectionName", notification.ConnectionName);
             command.AddParam("@recipient", (object?)notification.Recipient ?? DBNull.Value);
             command.AddParam("@isEnabled", notification.IsEnabled ? 1 : 0);
@@ -163,15 +189,30 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<NotificationDefinition?> GetNotificationAsync(string name)
+        public async Task<NotificationDefinition?> GetNotificationAsync(string? tenantId, string name)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Notifications WHERE Name = @name COLLATE NOCASE;";
+            command.CommandText =
+                "SELECT * FROM Notifications WHERE TenantId = @tenant AND Name = @name COLLATE NOCASE;";
+            command.AddParam("@tenant", TenantKey(tenantId));
             command.AddParam("@name", name);
+            using var reader = await command.ExecuteReaderAsync();
+            return await reader.ReadAsync() ? ReadNotification(reader) : null;
+        }
+
+        public async Task<NotificationDefinition?> GetNotificationByIdAsync(string notificationId)
+        {
+            if (string.IsNullOrWhiteSpace(notificationId)) return null;
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM Notifications WHERE Id = @id;";
+            command.AddParam("@id", notificationId);
             using var reader = await command.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadNotification(reader) : null;
         }
@@ -202,7 +243,9 @@ namespace ETL_SQL.Orchestrator.Storage
 
             var blockers = await ReadLinkedJobNamesAsync(
                 connection, transaction,
-                "SELECT DISTINCT JobName FROM JobNotifications WHERE NotificationName = @name COLLATE NOCASE;", name);
+                @"SELECT DISTINCT j.Name FROM JobNotifications jn
+                   INNER JOIN Jobs j ON j.Id = jn.JobId
+                   WHERE jn.NotificationId = @id;", notificationId);
             if (blockers.Count > 0)
             {
                 transaction.Rollback();
@@ -211,16 +254,16 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var delete = connection.CreateCommand();
             delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM Notifications WHERE Name = @name COLLATE NOCASE;";
-            delete.AddParam("@name", name);
+            delete.CommandText = "DELETE FROM Notifications WHERE Id = @id;";
+            delete.AddParam("@id", notificationId);
             await delete.ExecuteNonQueryAsync();
 
             transaction.Commit();
             return Array.Empty<string>();
         }
 
-        public Task<bool> SetNotificationEnabledAsync(string name, bool isEnabled) =>
-            SetEnabledAsync("Notifications", name, isEnabled);
+        public Task<bool> SetNotificationEnabledAsync(string notificationId, bool isEnabled) =>
+            SetEnabledAsync("Notifications", notificationId, isEnabled);
 
         private static NotificationDefinition ReadNotification(DbDataReader reader) => new(
             reader.GetString(reader.GetOrdinal("Name")),
@@ -232,11 +275,13 @@ namespace ETL_SQL.Orchestrator.Storage
             ReadOptionalString(reader, "Options"),
             ReadOptionalString(reader, "CreatedBy"),
             ReadOptionalString(reader, "ModifiedBy"),
-            reader.GetInt64(reader.GetOrdinal("Version")));
+            reader.GetInt64(reader.GetOrdinal("Version")),
+            TenantOrNull(ReadOptionalString(reader, "TenantId")),
+            ReadOptionalString(reader, "Id"));
 
         // ── Job ↔ Schedule ────────────────────────────────────────────────────────
 
-        public async Task<bool> AddJobScheduleAsync(string jobName, string scheduleName, DateTime? nextRun)
+        public async Task<bool> AddJobScheduleAsync(string jobId, string scheduleId, DateTime? nextRun)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -246,16 +291,16 @@ namespace ETL_SQL.Orchestrator.Storage
             // state of a link that is already armed and firing.
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO JobSchedules (JobName, ScheduleName, LastRun, NextRun)
-                VALUES (@jobName, @scheduleName, NULL, @nextRun)
-                ON CONFLICT(JobName, ScheduleName) DO NOTHING;";
-            command.AddParam("@jobName", jobName);
-            command.AddParam("@scheduleName", scheduleName);
+                INSERT INTO JobSchedules (JobId, ScheduleId, LastRun, NextRun)
+                VALUES (@jobId, @scheduleId, NULL, @nextRun)
+                ON CONFLICT(JobId, ScheduleId) DO NOTHING;";
+            command.AddParam("@jobId", jobId);
+            command.AddParam("@scheduleId", scheduleId);
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        public async Task<bool> RemoveJobScheduleAsync(string jobName, string scheduleName)
+        public async Task<bool> RemoveJobScheduleAsync(string jobId, string scheduleId)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -263,39 +308,48 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                DELETE FROM JobSchedules
-                WHERE JobName = @jobName COLLATE NOCASE AND ScheduleName = @scheduleName COLLATE NOCASE;";
-            command.AddParam("@jobName", jobName);
-            command.AddParam("@scheduleName", scheduleName);
+                DELETE FROM JobSchedules WHERE JobId = @jobId AND ScheduleId = @scheduleId;";
+            command.AddParam("@jobId", jobId);
+            command.AddParam("@scheduleId", scheduleId);
             return await command.ExecuteNonQueryAsync() > 0;
         }
 
-        public async Task<IReadOnlyList<JobScheduleLink>> GetJobSchedulesAsync(string? jobName = null)
+        public async Task<IReadOnlyList<JobScheduleLink>> GetJobSchedulesAsync(string? jobId = null)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
+            // Names are joined in for display only. They are never the key: two tenants may each
+            // have a schedule called 'nightly', and a link belongs to exactly one of them.
             using var command = connection.CreateCommand();
-            command.CommandText = jobName is null
-                ? "SELECT * FROM JobSchedules ORDER BY JobName, ScheduleName;"
-                : "SELECT * FROM JobSchedules WHERE JobName = @jobName COLLATE NOCASE ORDER BY ScheduleName;";
-            if (jobName is not null) command.AddParam("@jobName", jobName);
+            var select = @"
+                SELECT js.JobId, js.ScheduleId, js.LastRun, js.NextRun,
+                       j.Name AS JobName, s.Name AS ScheduleName
+                FROM JobSchedules js
+                INNER JOIN Jobs j ON j.Id = js.JobId
+                INNER JOIN Schedules s ON s.Id = js.ScheduleId ";
+            command.CommandText = jobId is null
+                ? select + "ORDER BY j.Name, s.Name;"
+                : select + "WHERE js.JobId = @jobId ORDER BY s.Name;";
+            if (jobId is not null) command.AddParam("@jobId", jobId);
 
             var results = new List<JobScheduleLink>();
             using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
                 results.Add(new JobScheduleLink(
-                    reader.GetString(reader.GetOrdinal("JobName")),
-                    reader.GetString(reader.GetOrdinal("ScheduleName")),
+                    reader.GetString(reader.GetOrdinal("JobId")),
+                    reader.GetString(reader.GetOrdinal("ScheduleId")),
                     ParseOptionalTimestamp(reader, "LastRun"),
-                    ParseOptionalTimestamp(reader, "NextRun")));
+                    ParseOptionalTimestamp(reader, "NextRun"),
+                    ReadOptionalString(reader, "JobName"),
+                    ReadOptionalString(reader, "ScheduleName")));
             }
             return results;
         }
 
-        public async Task UpdateJobScheduleRunAsync(string jobName, string scheduleName, DateTime lastRun, DateTime? nextRun)
+        public async Task UpdateJobScheduleRunAsync(string jobId, string scheduleId, DateTime lastRun, DateTime? nextRun)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -304,15 +358,15 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 UPDATE JobSchedules SET LastRun = @lastRun, NextRun = @nextRun
-                WHERE JobName = @jobName COLLATE NOCASE AND ScheduleName = @scheduleName COLLATE NOCASE;";
+                WHERE JobId = @jobId AND ScheduleId = @scheduleId;";
             command.AddParam("@lastRun", lastRun.ToString("O"));
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
-            command.AddParam("@jobName", jobName);
-            command.AddParam("@scheduleName", scheduleName);
+            command.AddParam("@jobId", jobId);
+            command.AddParam("@scheduleId", scheduleId);
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task ArmJobScheduleAsync(string jobName, string scheduleName, DateTime? nextRun)
+        public async Task ArmJobScheduleAsync(string jobId, string scheduleId, DateTime? nextRun)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -321,10 +375,10 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 UPDATE JobSchedules SET NextRun = @nextRun
-                WHERE JobName = @jobName COLLATE NOCASE AND ScheduleName = @scheduleName COLLATE NOCASE;";
+                WHERE JobId = @jobId AND ScheduleId = @scheduleId;";
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
-            command.AddParam("@jobName", jobName);
-            command.AddParam("@scheduleName", scheduleName);
+            command.AddParam("@jobId", jobId);
+            command.AddParam("@scheduleId", scheduleId);
             await command.ExecuteNonQueryAsync();
         }
 
@@ -341,8 +395,8 @@ namespace ETL_SQL.Orchestrator.Storage
             // must not mean "run now".
             command.CommandText = @"
                 SELECT DISTINCT j.* FROM Jobs j
-                JOIN JobSchedules js ON js.JobName = j.Name COLLATE NOCASE
-                JOIN Schedules s ON s.Name = js.ScheduleName COLLATE NOCASE
+                JOIN JobSchedules js ON js.JobId = j.Id
+                JOIN Schedules s ON s.Id = js.ScheduleId
                 WHERE j.IsEnabled = 1
                   AND s.IsEnabled = 1
                   AND js.NextRun IS NOT NULL
@@ -357,31 +411,31 @@ namespace ETL_SQL.Orchestrator.Storage
 
         // ── Job ↔ Notification ────────────────────────────────────────────────────
 
-        public async Task<bool> AddJobNotificationAsync(string jobName, string notificationName, NotificationTrigger trigger)
+        public async Task<bool> AddJobNotificationAsync(string jobId, string notificationId, NotificationTrigger trigger)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var conflicting = await FindOverlappingTriggerAsync(connection, jobName, notificationName, trigger);
+            var conflicting = await FindOverlappingTriggerAsync(connection, jobId, notificationId, trigger);
             if (conflicting is not null)
                 throw new InvalidOperationException(
-                    $"Job '{jobName}' already notifies '{notificationName}' ON {conflicting.Value.ToString().ToUpperInvariant()}, " +
+                    $"This job already notifies that destination ON {conflicting.Value.ToString().ToUpperInvariant()}, " +
                     $"which overlaps ON {trigger.ToString().ToUpperInvariant()} — COMPLETION covers both SUCCESS and FAILURE, " +
                     "so the pair would deliver twice for the same run. Remove one before adding the other.");
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO JobNotifications (JobName, NotificationName, TriggerCondition)
-                VALUES (@jobName, @notificationName, @trigger)
-                ON CONFLICT(JobName, NotificationName, TriggerCondition) DO NOTHING;";
-            command.AddParam("@jobName", jobName);
-            command.AddParam("@notificationName", notificationName);
+                INSERT INTO JobNotifications (JobId, NotificationId, TriggerCondition)
+                VALUES (@jobId, @notificationId, @trigger)
+                ON CONFLICT(JobId, NotificationId, TriggerCondition) DO NOTHING;";
+            command.AddParam("@jobId", jobId);
+            command.AddParam("@notificationId", notificationId);
             command.AddParam("@trigger", trigger.ToString());
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        public async Task<bool> RemoveJobNotificationAsync(string jobName, string notificationName, NotificationTrigger trigger)
+        public async Task<bool> RemoveJobNotificationAsync(string jobId, string notificationId, NotificationTrigger trigger)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -390,26 +444,31 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 DELETE FROM JobNotifications
-                WHERE JobName = @jobName COLLATE NOCASE
-                  AND NotificationName = @notificationName COLLATE NOCASE
+                WHERE JobId = @jobId AND NotificationId = @notificationId
                   AND TriggerCondition = @trigger COLLATE NOCASE;";
-            command.AddParam("@jobName", jobName);
-            command.AddParam("@notificationName", notificationName);
+            command.AddParam("@jobId", jobId);
+            command.AddParam("@notificationId", notificationId);
             command.AddParam("@trigger", trigger.ToString());
             return await command.ExecuteNonQueryAsync() > 0;
         }
 
-        public async Task<IReadOnlyList<JobNotificationLink>> GetJobNotificationsAsync(string? jobName = null)
+        public async Task<IReadOnlyList<JobNotificationLink>> GetJobNotificationsAsync(string? jobId = null)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = jobName is null
-                ? "SELECT * FROM JobNotifications ORDER BY JobName, NotificationName, TriggerCondition;"
-                : "SELECT * FROM JobNotifications WHERE JobName = @jobName COLLATE NOCASE ORDER BY NotificationName, TriggerCondition;";
-            if (jobName is not null) command.AddParam("@jobName", jobName);
+            var select = @"
+                SELECT jn.JobId, jn.NotificationId, jn.TriggerCondition,
+                       j.Name AS JobName, n.Name AS NotificationName
+                FROM JobNotifications jn
+                INNER JOIN Jobs j ON j.Id = jn.JobId
+                INNER JOIN Notifications n ON n.Id = jn.NotificationId ";
+            command.CommandText = jobId is null
+                ? select + "ORDER BY j.Name, n.Name, jn.TriggerCondition;"
+                : select + "WHERE jn.JobId = @jobId ORDER BY n.Name, jn.TriggerCondition;";
+            if (jobId is not null) command.AddParam("@jobId", jobId);
 
             var results = new List<JobNotificationLink>();
             using var reader = await command.ExecuteReaderAsync();
@@ -419,9 +478,11 @@ namespace ETL_SQL.Orchestrator.Storage
                 if (!Enum.TryParse<NotificationTrigger>(raw, ignoreCase: true, out var trigger))
                     continue;
                 results.Add(new JobNotificationLink(
-                    reader.GetString(reader.GetOrdinal("JobName")),
-                    reader.GetString(reader.GetOrdinal("NotificationName")),
-                    trigger));
+                    reader.GetString(reader.GetOrdinal("JobId")),
+                    reader.GetString(reader.GetOrdinal("NotificationId")),
+                    trigger,
+                    ReadOptionalString(reader, "JobName"),
+                    ReadOptionalString(reader, "NotificationName")));
             }
             return results;
         }
@@ -432,7 +493,7 @@ namespace ETL_SQL.Orchestrator.Storage
         /// of the other two, so it conflicts with both and they conflict with it.
         /// </summary>
         private static async Task<NotificationTrigger?> FindOverlappingTriggerAsync(
-            DbConnection connection, string jobName, string notificationName, NotificationTrigger trigger)
+            DbConnection connection, string jobId, string notificationId, NotificationTrigger trigger)
         {
             var opposed = trigger == NotificationTrigger.Completion
                 ? new[] { NotificationTrigger.Success, NotificationTrigger.Failure }
@@ -441,10 +502,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 SELECT TriggerCondition FROM JobNotifications
-                WHERE JobName = @jobName COLLATE NOCASE
-                  AND NotificationName = @notificationName COLLATE NOCASE;";
-            command.AddParam("@jobName", jobName);
-            command.AddParam("@notificationName", notificationName);
+                WHERE JobId = @jobId AND NotificationId = @notificationId;";
+            command.AddParam("@jobId", jobId);
+            command.AddParam("@notificationId", notificationId);
 
             using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -458,7 +518,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         // ── Shared helpers ────────────────────────────────────────────────────────
 
-        private async Task<bool> SetEnabledAsync(string table, string name, bool isEnabled)
+        private async Task<bool> SetEnabledAsync(string table, string objectId, bool isEnabled)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -468,19 +528,19 @@ namespace ETL_SQL.Orchestrator.Storage
             // The table name is a compile-time literal from this class, never caller input.
             command.CommandText = $@"
                 UPDATE {table} SET IsEnabled = @isEnabled, Version = Version + 1
-                WHERE Name = @name COLLATE NOCASE;";
+                WHERE Id = @id;";
             command.AddParam("@isEnabled", isEnabled ? 1 : 0);
-            command.AddParam("@name", name);
+            command.AddParam("@id", objectId);
             return await command.ExecuteNonQueryAsync() > 0;
         }
 
         private static async Task<List<string>> ReadLinkedJobNamesAsync(
-            DbConnection connection, DbTransaction transaction, string sql, string name)
+            DbConnection connection, DbTransaction transaction, string sql, string objectId)
         {
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = sql;
-            command.AddParam("@name", name);
+            command.AddParam("@id", objectId);
 
             var names = new List<string>();
             using var reader = await command.ExecuteReaderAsync();
