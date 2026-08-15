@@ -51,10 +51,22 @@ or an `EXPR` function call are literal.
 | `EXPR <predicate>` | Boolean predicate over the whole projected row, e.g. `EXPR StartDate <= EndDate`. |
 | `>=` `<=` `>` `<` `=` | Numeric comparison against a literal bound, e.g. `>= 0`. |
 
+| `<rule1> AND <rule2>` | Logical AND: both sub-rules must pass (e.g. `NOT NULL AND > 0`). |
+| `<rule1> OR <rule2>` | Logical OR: at least one sub-rule must pass (e.g. `MATCHES ^A OR MATCHES ^B`). |
+| `(<rule>)` | Parentheses for grouping and overriding operator precedence. |
+
 Quote the rule string. Because tag values keep their quotes through the comment layer, a `;`, `,`,
 or `@` inside a quoted value is literal — which is what lets regexes and `IN` lists work. To
 include the same kind of quote inside the value, double it (SQL style): `'IN (''NA'',''EMEA'')'`.
 Backslash escaping is *not* used, so `MATCHES` patterns pass through untouched.
+
+### Compound Rules (AND / OR)
+
+Rules can be composed with logical `AND` and `OR` operators and grouped with parentheses `(...)`:
+- **Operator Precedence**: `NOT` > `AND` (and `,`) > `OR`. `AND` binds tighter than `OR`.
+- **Parentheses**: Use parentheses to control evaluation order, e.g. `NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES ^LEGACY-)`.
+- **Three-Valued Logic**: `NULL` values skip all non-`NOT NULL` rules.
+- **Internal Keywords**: The `AND` keyword inside `BETWEEN <lower> AND <upper>` and `LENGTH BETWEEN <min> AND <max>` is automatically preserved as part of the range rather than parsed as a rule conjunction.
 
 ### Rule semantics
 

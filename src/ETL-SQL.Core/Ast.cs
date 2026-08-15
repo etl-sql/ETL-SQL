@@ -1490,6 +1490,19 @@ public sealed record AssertStatement(Expression Condition, Expression? Message =
 {
 }
 
+/// <summary>
+/// <c>ASSERT TABLE &lt;actual&gt; MATCHES &lt;expected&gt; [WITH (IGNORE_ORDER = TRUE, TOLERANCE = 0.001, IGNORE_COLUMNS = 'col1,col2', MESSAGE = '...')];</c>
+/// Asserts that two tables (e.g. #temp tables produced during a test pipeline) have matching schema and data.
+/// </summary>
+public sealed record AssertTableStatement(
+    string ActualTable,
+    string ExpectedTable,
+    bool IgnoreOrder = false,
+    decimal? Tolerance = null,
+    IReadOnlyList<string>? IgnoreColumns = null,
+    Expression? Message = null,
+    IReadOnlyDictionary<string, Expression>? Options = null) : Statement;
+
 /// <summary>The run metric an <c>ASSERT JOB</c> predicate is measured against.</summary>
 public enum JobMetricKind
 {

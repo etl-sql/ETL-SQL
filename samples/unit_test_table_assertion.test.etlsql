@@ -1,0 +1,56 @@
+-- Native Unit Test & Table Assertion Sample
+--
+-- Demonstrates native pipeline testing with ASSERT TABLE:
+-- 1. Sets up mock input data (#inbound_orders)
+-- 2. Executes business logic / pipeline transformation
+-- 3. Prepares expected gold standard table (#expected_orders)
+-- 4. Asserts full equality using ASSERT TABLE ... MATCHES ...
+--
+-- Run with CLI test runner:
+--   dotnet run --project src/ETL-SQL.App -- test samples/unit_test_table_assertion.test.etlsql
+
+-- Step 1: Inbound raw orders
+CREATE TABLE #inbound_orders (
+    OrderId     INT,
+    Customer    VARCHAR(50),
+    Subtotal    DECIMAL(10,2),
+    TaxRate     DECIMAL(5,4),
+    Region      VARCHAR(10)
+);
+
+INSERT INTO #inbound_orders VALUES
+    (1001, 'Acme Corp',   500.00, 0.0825, 'NA'),
+    (1002, 'Beta LLC',    120.00, 0.2000, 'EMEA'),
+    (1003, 'Global Inc', 1000.00, 0.0000, 'APAC');
+
+-- Step 2: Pipeline transformation to test
+SELECT
+    OrderId,
+    UPPER(Customer) AS Customer,
+    Subtotal,
+    ROUND(Subtotal * (1 + TaxRate), 2) AS TotalAmount,
+    Region
+INTO #actual_orders
+FROM #inbound_orders;
+
+-- Step 3: Expected dataset (Gold Standard)
+CREATE TABLE #expected_orders (
+    OrderId     INT,
+    Customer    VARCHAR(50),
+    Subtotal    DECIMAL(10,2),
+    TotalAmount DECIMAL(10,2),
+    Region      VARCHAR(10)
+);
+
+INSERT INTO #expected_orders VALUES
+    (1001, 'ACME CORP',   500.00,  541.25, 'NA'),
+    (1002, 'BETA LLC',    120.00,  144.00, 'EMEA'),
+    (1003, 'GLOBAL INC', 1000.00, 1000.00, 'APAC');
+
+-- Step 4: Table assertion (validates structure, ordering, and values within tolerance)
+ASSERT TABLE #actual_orders MATCHES #expected_orders WITH (
+    TOLERANCE = 0.01,
+    MESSAGE = 'Order total calculation and customer normalization test failed'
+);
+
+PRINT 'Order pipeline unit test passed successfully!';

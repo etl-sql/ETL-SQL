@@ -1909,6 +1909,76 @@ namespace ETL_SQL.Tests.Engine
                 $"Hoisted BETWEEN validation allocated {allocated:N0} bytes for {measuredRows:N0} passing rows.");
         }
 
+        [Fact]
+        public async Task CompoundRules_AndOrEvaluation_QuarantinesExpectedRows()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #src (Id INT, Status VARCHAR(50), Score DECIMAL(5,2));
+                INSERT INTO #src (Id, Status, Score) VALUES
+                    (1, 'active', 85.5),
+                    (2, 'pending', 90.0),
+                    (3, 'inactive', 45.0),
+                    (4, 'active', -5.0),
+                    (5, 'unknown', 75.0);
+
+                SELECT
+                    Id,
+                    Status /* @expect: ""NOT NULL AND (MATCHES ^act OR MATCHES ^pend)""; @fail: 'QUARANTINE'; */,
+                    Score  /* @expect: '>= 0 AND <= 100'; @fail: 'QUARANTINE'; */
+                INTO #clean
+                FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(2, await CountRows(eval, "#clean")); // Id 1 and 2
+            Assert.Equal(3, await CountRows(eval, "#bad"));   // Id 3 (inactive), 4 (negative score), 5 (unknown status)
+        }
+
+        [Fact]
+        public async Task CompoundRules_NullBehavior_ThreeValuedLogic()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #src (Id INT, Code VARCHAR(50));
+                INSERT INTO #src (Id, Code) VALUES
+                    (1, 'A100'),
+                    (2, NULL),
+                    (3, 'B200'),
+                    (4, 'INVALID');
+
+                -- Optional column: if provided, must match pattern OR be in specific set.
+                -- NULL skips non-NOT NULL compound rules.
+                SELECT
+                    Id,
+                    Code /* @expect: ""MATCHES ^[A-Z][0-9]{3}$ OR IN ('SPECIAL', 'TEST')""; @fail: 'QUARANTINE'; */
+                INTO #clean
+                FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(3, await CountRows(eval, "#clean")); // Id 1, 2 (NULL skips), 3
+            Assert.Equal(1, await CountRows(eval, "#bad"));   // Id 4 (INVALID)
+        }
+
+        [Fact]
+        public async Task CompoundRules_FailureReporting_ContainsCompoundRuleText()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #src (Id INT, Val INT);
+                INSERT INTO #src (Id, Val) VALUES (1, -10);
+
+                SELECT
+                    Id,
+                    Val /* @expect: 'NOT NULL AND > 0'; @fail: 'WARN'; */
+                INTO #clean
+                FROM #src
+                ON FAILURE WARN;");
+
+            var failure = Assert.Single(eval.DataQuality.Failures);
+            Assert.Equal("Val", failure.Column);
+            Assert.Equal("NOT NULL AND > 0", failure.Rule);
+        }
+
         private static bool ReadCompleted(ValueTask<bool> result) =>
             result.IsCompletedSuccessfully && result.Result;
 

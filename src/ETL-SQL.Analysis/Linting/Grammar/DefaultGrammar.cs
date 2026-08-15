@@ -506,6 +506,7 @@ public static class DefaultGrammar
         joinOnNode.AddTransitionTo("JOIN", joinNode, SuggestionType.Keyword);
 
         // WHERE / GROUP BY / ORDER BY routing from FROM & JOIN ON
+        fromSource.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
         fromSource.AddTransitionTo("WHERE", whereNode, SuggestionType.Keyword);
         fromSource.AddTransitionTo("GROUP", groupKey, SuggestionType.Keyword);
         fromSource.AddTransitionTo("ORDER", orderKey, SuggestionType.Keyword);

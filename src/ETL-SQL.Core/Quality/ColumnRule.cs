@@ -183,6 +183,46 @@ public sealed record BetweenRule(Expression Lower, Expression Upper) : ColumnRul
 public sealed record ExprRule(Expression Predicate) : ColumnRule;
 
 /// <summary>
+/// Compound rule combining sub-rules with logical AND (<c>rule1 AND rule2</c>).
+/// Evaluates to true if all operand rules pass.
+/// </summary>
+public sealed record AndRule(IReadOnlyList<ColumnRule> Operands) : ColumnRule;
+
+/// <summary>
+/// Compound rule combining sub-rules with logical OR (<c>rule1 OR rule2</c>).
+/// Evaluates to true if any operand rule passes.
+/// </summary>
+public sealed record OrRule(IReadOnlyList<ColumnRule> Operands) : ColumnRule;
+
+/// <summary>
+/// Helper extensions for working with nested compound rules.
+/// </summary>
+public static class ColumnRuleExtensions
+{
+    /// <summary>Recursively enumerates all atomic and composite rules in the tree.</summary>
+    public static IEnumerable<ColumnRule> Flatten(this ColumnRule rule)
+    {
+        yield return rule;
+        if (rule is AndRule and)
+        {
+            foreach (var op in and.Operands)
+                foreach (var nested in op.Flatten())
+                    yield return nested;
+        }
+        else if (rule is OrRule or)
+        {
+            foreach (var op in or.Operands)
+                foreach (var nested in op.Flatten())
+                    yield return nested;
+        }
+    }
+
+    /// <summary>Recursively flattens a collection of rules.</summary>
+    public static IEnumerable<ColumnRule> FlattenAll(this IEnumerable<ColumnRule> rules) =>
+        rules.SelectMany(r => r.Flatten());
+}
+
+/// <summary>
 /// One <c>@expect</c>/<c>@fail</c> pair resolved from a column's metadata: the parsed rules,
 /// the bound action (default <see cref="FailAction.Warn"/> when <c>@fail</c> is omitted —
 /// fail-safe, not silent), and the metadata key it came from (<c>expect</c>, <c>expect_1</c>, …).

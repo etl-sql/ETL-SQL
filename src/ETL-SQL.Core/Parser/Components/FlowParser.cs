@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Quality;
 
@@ -279,6 +281,12 @@ public class FlowParser : ParserComponent
 
     public Statement ParseAssert(Token startToken)
     {
+        if (_parser.Current.Type == TokenType.TABLE || IsContextualWord(_parser.Current, "TABLE"))
+        {
+            Advance(); // TABLE
+            return ParseAssertTable(startToken);
+        }
+
         // ASSERT JOB <name> (...) asserts on the run's own metrics. JOB is a keyword token, but
         // only treat it as the ASSERT JOB form when a job name follows — so a bare `ASSERT job = 1`
         // over a column named "job" still parses as a boolean assertion.
@@ -294,6 +302,95 @@ public class FlowParser : ParserComponent
         if (Match(TokenType.COMMA)) message = ParseExpression();
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
         return new AssertStatement(condition, message) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    private Statement ParseAssertTable(Token startToken)
+    {
+        var actualRef = ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+        string actualTable = actualRef.ToString();
+
+        if (IsContextualWord(_parser.Current, "MATCHES") || IsContextualWord(_parser.Current, "EQUALS"))
+        {
+            Advance();
+        }
+        else
+        {
+            throw new SyntaxException($"Expected 'MATCHES' after ASSERT TABLE {actualTable}", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        var expectedRef = ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+        string expectedTable = expectedRef.ToString();
+
+        bool ignoreOrder = false;
+        decimal? tolerance = null;
+        List<string>? ignoreColumns = null;
+        Expression? message = null;
+        var options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+
+        if (IsContextualWord(_parser.Current, "WITH"))
+        {
+            Advance();
+            Consume(TokenType.LPAREN, "Expected '(' after ASSERT TABLE ... WITH");
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                var optToken = ConsumeIdentifier("Expected option name in ASSERT TABLE ... WITH clause");
+                var optName = optToken.Value.ToUpperInvariant();
+                Consume(TokenType.EQUALS, $"Expected '=' after option '{optName}' in ASSERT TABLE WITH clause");
+                var expr = ParseExpression();
+                options[optName] = expr;
+
+                switch (optName)
+                {
+                    case "IGNORE_ORDER":
+                        if (expr is LiteralExpression litOrder && litOrder.Value is bool bOrder)
+                            ignoreOrder = bOrder;
+                        else if (expr is IdentifierExpression idOrder && bool.TryParse(idOrder.Name, out var bParsed))
+                            ignoreOrder = bParsed;
+                        break;
+                    case "TOLERANCE":
+                        if (expr is LiteralExpression litTol && litTol.Value != null)
+                            tolerance = Convert.ToDecimal(litTol.Value, CultureInfo.InvariantCulture);
+                        break;
+                    case "IGNORE_COLUMNS":
+                        if (expr is LiteralExpression litCols && litCols.Value is string colStr)
+                            ignoreColumns = colStr.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+                        else if (expr is ListExpression listExpr)
+                        {
+                            ignoreColumns = listExpr.Items
+                                .Select(item => item is LiteralExpression l && l.Value is string s ? s : item.ToString() ?? "")
+                                .Where(s => !string.IsNullOrWhiteSpace(s))
+                                .ToList();
+                        }
+                        break;
+                    case "MESSAGE":
+                        message = expr;
+                        break;
+                }
+
+                if (!Match(TokenType.COMMA)) break;
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close ASSERT TABLE WITH clause");
+        }
+
+        if (Match(TokenType.COMMA) && message == null)
+        {
+            message = ParseExpression();
+        }
+
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+
+        return new AssertTableStatement(
+            actualTable,
+            expectedTable,
+            ignoreOrder,
+            tolerance,
+            ignoreColumns,
+            message,
+            options.Count > 0 ? options : null)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
     }
 
     /// <summary>

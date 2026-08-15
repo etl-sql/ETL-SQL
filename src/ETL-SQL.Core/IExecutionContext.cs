@@ -467,6 +467,7 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     /// <summary>The ID of the currently executing node in this task/context.</summary>
     Guid? CurrentNodeId { get; set; }
     Dictionary<string, string> PendingJobStateUpdates { get; }
+    Dictionary<string, string> SessionJobState => PendingJobStateUpdates;
 
     /// <summary>Whether adaptive execution advice may affect this session's effective setpoints.</summary>
     bool AdaptiveExecutionEnabled { get => false; set { } }

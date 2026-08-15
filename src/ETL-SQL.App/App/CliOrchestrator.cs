@@ -278,10 +278,11 @@ namespace ETL_SQL.App
         {
             Description = "The string to encrypt."
         };
-        private static readonly Argument<string> TestValArg = new("testVal")
+        private static readonly Argument<string?> TestValArg = new("target")
         {
-            Description = "Test category: unit, integration, etc.",
-            DefaultValueFactory = _ => "unit"
+            Description = "Test file, directory, or pattern to execute (e.g. tests/, *.test.etlsql).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
         };
 
         private static readonly Argument<string?> ServeScriptArg = new("script")
@@ -851,9 +852,10 @@ namespace ETL_SQL.App
             runCommand.SetAction(context => Dispatch(context, "run", handler));
 
             // 2. TEST Command
-            var testCommand = new Command("test", "Run internal diagnostics or unit tests")
+            var testCommand = new Command("test", "Run native ETL-SQL test suites (*.test.etlsql) and table assertions")
             {
-                TestValArg
+                TestValArg,
+                JsonOption, VerboseOption, PerfOption
             };
             testCommand.SetAction(context => Dispatch(context, "test", handler));
 

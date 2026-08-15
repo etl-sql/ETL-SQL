@@ -61,7 +61,7 @@ public sealed class ColumnQualityValidator
         _routing = routing;
         // The rules that need the evaluator, and so force the async validation path. Everything
         // else is a pure per-row predicate that costs no state machine.
-        foreach (var rule in ruleSets.SelectMany(rs => rs.Bindings).SelectMany(b => b.Rules))
+        foreach (var rule in ruleSets.SelectMany(rs => rs.Bindings).SelectMany(b => b.Rules).FlattenAll())
         {
             if (rule is BetweenRule between && IsRowInvariant(between.Lower) && IsRowInvariant(between.Upper))
             {
@@ -69,12 +69,12 @@ public sealed class ColumnQualityValidator
             }
         }
 
-        _hasExpressionRules = ruleSets.Any(rs => rs.Bindings.Any(binding => binding.Rules.Any(rule =>
+        _hasExpressionRules = ruleSets.Any(rs => rs.Bindings.Any(binding => binding.Rules.FlattenAll().Any(rule =>
             rule is ExprRule || rule is BetweenRule between && !_rowInvariantBetweenRules.Contains(between))));
     }
 
     /// <summary>True when at least one rule needs the whole-input UNIQUE pre-pass.</summary>
-    public bool RequiresUniquePrePass => _ruleSets.Any(rs => rs.Bindings.Any(b => b.Rules.Any(r => r is UniqueRule)));
+    public bool RequiresUniquePrePass => _ruleSets.Any(rs => rs.Bindings.Any(b => b.Rules.FlattenAll().Any(r => r is UniqueRule)));
 
     /// <summary>
     /// Builds a validator for <paramref name="statement"/>, or returns null when no column carries
@@ -146,7 +146,7 @@ public sealed class ColumnQualityValidator
         if (outputColumnNames.Count == 0) return;
         var projectedNames = new HashSet<string>(outputColumnNames, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var rule in ruleSets.SelectMany(rs => rs.Bindings).SelectMany(b => b.Rules))
+        foreach (var rule in ruleSets.SelectMany(rs => rs.Bindings).SelectMany(b => b.Rules).FlattenAll())
         {
             (IReadOnlyList<string> Columns, string Form)? composite = rule switch
             {
@@ -265,7 +265,7 @@ public sealed class ColumnQualityValidator
         var entries = new List<UniqueRuleEntry>();
         foreach (var ruleSet in _ruleSets)
         {
-            foreach (var rule in ruleSet.Bindings.SelectMany(b => b.Rules).OfType<UniqueRule>())
+            foreach (var rule in ruleSet.Bindings.SelectMany(b => b.Rules).FlattenAll().OfType<UniqueRule>())
                 entries.Add(new UniqueRuleEntry(entries.Count, ruleSet, rule));
         }
         _uniqueRuleEntries = entries;
@@ -352,7 +352,7 @@ public sealed class ColumnQualityValidator
     {
         var builder = new StringBuilder();
         foreach (var (name, value) in projected.Columns.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
-            builder.Append(name).Append('=').Append(Stringify(value)).Append('');
+            builder.Append(name).Append('=').Append(Stringify(value)).Append(' ');
         builder.Append("__dq_ordinal=").Append(rowOrdinal.ToString("D20", CultureInfo.InvariantCulture));
         return builder.ToString();
     }
@@ -378,7 +378,6 @@ public sealed class ColumnQualityValidator
             // Deterministic tiebreak when the order key does not separate the rows.
             if (comparison == 0)
                 wins = string.CompareOrdinal(identity, KeeperIdentity) < 0;
-
             if (wins)
             {
                 KeeperOrderKey = orderKey;
@@ -388,180 +387,93 @@ public sealed class ColumnQualityValidator
     }
 
     /// <summary>
-    /// True when this row violates the UNIQUE rule: for plain <c>UNIQUE</c>, any key seen more than
-    /// once; for <c>UNIQUE_FIRST/LAST</c>, every row in a duplicated group except the keeper.
+    /// True when this row violates <paramref name="rule"/>. Must run only after
+    /// <see cref="FinalizeUniquePrePassAsync"/> has resolved all duplicates.
     /// </summary>
     private bool ViolatesUnique(UniqueRule rule, ColumnRuleSet ruleSet, Row projected, long? rowOrdinal)
     {
-        if (!_uniquePrePassComplete) return false;
-        var key = BuildUniqueKey(rule, ruleSet, projected);
-        if (key == null) return false;
-        var entry = FindUniqueEntry(ruleSet, rule);
-        if (!_uniqueGroups.TryGetValue(entry.Id, out var groups) || !groups.TryGetValue(key, out var group)) return false;
+        if (!_uniquePrePassComplete)
+            throw new InvalidOperationException("UNIQUE rules require a completed pre-pass.");
 
-        return rule.Mode == UniqueMode.All || rowOrdinal == null || RowIdentity(projected, rowOrdinal.Value) != group.KeeperIdentity;
+        var key = BuildUniqueKey(rule, ruleSet, projected);
+        if (key == null) return false; // NULL keys skip UNIQUE
+
+        var entry = FindUniqueEntry(ruleSet, rule);
+        if (!_uniqueGroups.TryGetValue(entry.Id, out var duplicateGroups)) return false;
+        if (!duplicateGroups.TryGetValue(key, out var group)) return false;
+
+        // Mode.All: any duplicate makes every row of that group invalid.
+        if (rule.Mode == UniqueMode.All) return true;
+
+        // Mode.First/Last: the winner is the row whose identity matches the group's keeper.
+        if (rowOrdinal is not { } ordinal)
+            throw new ExecutionException(
+                $"UNIQUE_{rule.Mode.ToString().ToUpperInvariant()} requires row ordinals during validation.");
+
+        var identity = RowIdentity(projected, ordinal);
+        return !string.Equals(identity, group.KeeperIdentity, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Validates one row. Returns <c>false</c> when the row was quarantined — the caller must
-    /// drop it from the output. Warned rows return <c>true</c> (they still reach the target);
-    /// a THROW failure raises <see cref="ExecutionException"/> and aborts the statement.
-    /// </summary>
-    public ValueTask<bool> TryAcceptRowAsync(Row input, Row projected, CancellationToken cancellationToken = default)
-        => TryAcceptRowAsync(input, projected, rowOrdinal: null, cancellationToken);
+    // ── Pipeline wrapping ──────────────────────────────────────────────────
 
+    private long _processedRowCount;
+
+    /// <summary>
+    /// Validates a single row as it streams through. Returns true if the row is accepted (clean or warned),
+    /// or false if the row was diverted to quarantine. Aborts if THROW action was specified.
+    /// </summary>
     public ValueTask<bool> TryAcceptRowAsync(
         Row input,
         Row projected,
-        long? rowOrdinal,
+        long? rowOrdinal = null,
         CancellationToken cancellationToken = default)
-        => _hasExpressionRules
-            ? TryAcceptRowCoreAsync(input, projected, rowOrdinal, cancellationToken)
-            : TryAcceptSynchronousRules(input, projected, rowOrdinal, cancellationToken);
-
-    private async ValueTask<bool> TryAcceptRowCoreAsync(
-        Row input,
-        Row projected,
-        long? rowOrdinal,
-        CancellationToken cancellationToken)
-    {
-        // Timed only while profiling — and note that IsProfiling defaults to true, so these two
-        // timestamp reads per row are the normal case rather than the exception. They are cheap
-        // (tens of nanoseconds each) but not free; `SET PROFILE OFF` removes them, which is the
-        // lever to reach for if the row pipeline is ever measured down to that level.
-        var profiling = _context.Telemetry.IsProfiling;
-        var startTicks = profiling ? Stopwatch.GetTimestamp() : 0L;
-        try
-        {
-            return await ValidateRowAsync(input, projected, rowOrdinal, cancellationToken);
-        }
-        finally
-        {
-            if (profiling)
-                _context.Telemetry.DataQualityValidationTicks += Stopwatch.GetTimestamp() - startTicks;
-        }
-    }
-
-    private ValueTask<bool> TryAcceptSynchronousRules(
-        Row input,
-        Row projected,
-        long? rowOrdinal,
-        CancellationToken cancellationToken)
-    {
-        var profiling = _context.Telemetry.IsProfiling;
-        var startTicks = profiling ? Stopwatch.GetTimestamp() : 0L;
-        var timingDeferred = false;
-        try
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _context.DataQuality.RecordRowValidated();
-            var failure = EvaluateSynchronousRow(projected, rowOrdinal);
-
-            if (_context.DataQualityDryRun)
-            {
-                if (failure is not null) _context.DataQuality.RecordRowDryRunAffected();
-                return ValueTask.FromResult(true);
-            }
-
-            if (failure is { Action: FailAction.Quarantine })
-            {
-                timingDeferred = true;
-                return CompleteQuarantineAsync(input, failure, profiling, startTicks, cancellationToken);
-            }
-
-            if (failure is { Action: FailAction.Warn })
-            {
-                _context.DataQuality.RecordRowWarned();
-                if (_routing.TryGetValue(FailAction.Warn, out var clause) && clause.Target != null)
-                {
-                    timingDeferred = true;
-                    return CompleteWarnCaptureAsync(input, failure, clause, profiling, startTicks, cancellationToken);
-                }
-            }
-
-            return ValueTask.FromResult(true);
-        }
-        finally
-        {
-            if (profiling && !timingDeferred)
-                _context.Telemetry.DataQualityValidationTicks += Stopwatch.GetTimestamp() - startTicks;
-        }
-    }
-
-    private async ValueTask<bool> CompleteQuarantineAsync(
-        Row input,
-        RowFailure failure,
-        bool profiling,
-        long startTicks,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await QuarantineAsync(input, failure, cancellationToken);
-            return false;
-        }
-        finally
-        {
-            if (profiling)
-                _context.Telemetry.DataQualityValidationTicks += Stopwatch.GetTimestamp() - startTicks;
-        }
-    }
-
-    private async ValueTask<bool> CompleteWarnCaptureAsync(
-        Row input,
-        RowFailure failure,
-        FailureActionClause clause,
-        bool profiling,
-        long startTicks,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            _warnWriter ??= new QuarantineWriter(
-                _context, clause.Target!, DataQualityColumns.WarnedStatus, includeTargetWritten: true);
-            await _warnWriter.WriteAsync(input, failure, cancellationToken);
-            return true;
-        }
-        finally
-        {
-            if (profiling)
-                _context.Telemetry.DataQualityValidationTicks += Stopwatch.GetTimestamp() - startTicks;
-        }
-    }
-
-    private async ValueTask<bool> ValidateRowAsync(
-        Row input,
-        Row projected,
-        long? rowOrdinal,
-        CancellationToken cancellationToken)
     {
         _context.DataQuality.RecordRowValidated();
-        var failure = await EvaluateRowAsync(input, projected, rowOrdinal, cancellationToken);
-
-        // Dry run: the failure has already been counted into the report, which is the whole point —
-        // the steward gets the impact numbers. Enforcement is skipped, so no row leaves the output,
-        // no capture table is written, and the load behaves exactly as it would without the rule.
-        if (_context.DataQualityDryRun)
+        long ordinal = rowOrdinal ?? _processedRowCount++;
+        if (!_hasExpressionRules)
         {
-            if (failure is not null) _context.DataQuality.RecordRowDryRunAffected();
-            return true;
+            var failure = EvaluateRowSynchronously(input, projected, ordinal);
+            if (failure == null || _context.DataQualityDryRun) return ValueTask.FromResult(true);
+            return HandleFailureAsync(input, failure, cancellationToken);
         }
 
-        if (failure is { Action: FailAction.Quarantine })
-        {
-            await QuarantineAsync(input, failure, cancellationToken);
-            return false;
-        }
-        if (failure is { Action: FailAction.Warn })
-        {
-            await WarnAsync(input, failure, cancellationToken);
-        }
-        return true;
+        return EvaluateAndHandleAsync(input, projected, ordinal, cancellationToken);
     }
 
+    private async ValueTask<bool> EvaluateAndHandleAsync(
+        Row input,
+        Row projected,
+        long ordinal,
+        CancellationToken cancellationToken)
+    {
+        var failure = await EvaluateRowAsync(input, projected, ordinal, cancellationToken);
+        if (failure == null || _context.DataQualityDryRun) return true;
+        return await HandleFailureAsync(input, failure, cancellationToken);
+    }
+
+    private async ValueTask<bool> HandleFailureAsync(Row input, RowFailure failure, CancellationToken cancellationToken)
+    {
+        switch (failure.Action)
+        {
+            case FailAction.Warn:
+                await WarnAsync(input, failure, cancellationToken);
+                return true;
+            case FailAction.Quarantine:
+                await QuarantineAsync(input, failure, cancellationToken);
+                return false;
+            case FailAction.Throw:
+                // Thrown inside EvaluateRow* unless DryRun was set; DryRun records it and lets the row pass
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    public ValueTask<bool> TryAcceptRowAsync(Row input, Row projected, CancellationToken cancellationToken) =>
+        TryAcceptRowAsync(input, projected, null, cancellationToken);
+
     /// <summary>
-    /// Flushes captured rows, applies retention pruning, and emits the aggregated end-of-stream
-    /// diagnostics. Call once after the last row.
+    /// Completes validation after all rows have been processed, flushing buffers and emitting aggregated diagnostics.
     /// </summary>
     public async Task CompleteAsync(CancellationToken cancellationToken = default)
     {
@@ -570,31 +482,56 @@ public sealed class ColumnQualityValidator
     }
 
     /// <summary>
-    /// Convenience wrapper enforcing rules over a stream of (input, projected) pairs — quarantined
-    /// rows are never yielded.
+    /// Validates every projected row, applying the statement's failure routing (WARNs recorded,
+    /// QUARANTINEs diverted to the target, THROWs aborting). Clean and WARNed rows continue down
+    /// the returned stream.
     /// </summary>
-    public async IAsyncEnumerable<Row> ValidateAsync(
-        IAsyncEnumerable<(Row Input, Row Projected)> rows,
+    public async IAsyncEnumerable<Row> WrapAsync(
+        IAsyncEnumerable<Row> source,
+        Func<Row, Row> projectRow,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (RequiresUniquePrePass)
-            throw new InvalidOperationException("ValidateAsync does not support UNIQUE rules; use the select pipeline pre-pass.");
-
-        await InitializeAsync(cancellationToken);
-        await foreach (var (input, projected) in rows.WithCancellation(cancellationToken))
+        long rowOrdinal = 0;
+        await foreach (var row in source.WithCancellation(cancellationToken))
         {
-            if (await TryAcceptRowAsync(input, projected, cancellationToken))
+            _context.DataQuality.RecordRowValidated();
+            var projected = projectRow(row);
+            var failure = _hasExpressionRules
+                ? await EvaluateRowAsync(row, projected, rowOrdinal, cancellationToken)
+                : EvaluateRowSynchronously(row, projected, rowOrdinal);
+
+            rowOrdinal++;
+            if (failure == null || _context.DataQualityDryRun)
+            {
                 yield return projected;
+                continue;
+            }
+
+            switch (failure.Action)
+            {
+                case FailAction.Warn:
+                    await WarnAsync(row, failure, cancellationToken);
+                    yield return projected;
+                    break;
+                case FailAction.Quarantine:
+                    await QuarantineAsync(row, failure, cancellationToken);
+                    break;
+                case FailAction.Throw:
+                    // Thrown inside EvaluateRow* unless DryRun was set; DryRun records it and lets the row pass
+                    yield return projected;
+                    break;
+            }
         }
-        await CompleteAsync(cancellationToken);
+
+        await FlushAsync(cancellationToken);
+        EmitAggregatedDiagnostics();
     }
 
     /// <summary>
-    /// Evaluates every rule against one row. Returns the first failure that determines the row's
-    /// fate — THROW is raised immediately; otherwise QUARANTINE wins over WARN, because a
-    /// quarantined row leaves the output and cannot also be warned into it.
+    /// Synchronous row check — the fast path taken when every rule is a pure per-row predicate
+    /// (NOT NULL, MATCHES, IN, length, castable, comparison, or row-invariant BETWEEN).
     /// </summary>
-    private RowFailure? EvaluateSynchronousRow(Row projected, long? rowOrdinal)
+    private RowFailure? EvaluateRowSynchronously(Row input, Row projected, long? rowOrdinal)
     {
         RowFailure? decided = null;
         for (var ruleSetIndex = 0; ruleSetIndex < _ruleSets.Count; ruleSetIndex++)
@@ -607,9 +544,7 @@ public sealed class ColumnQualityValidator
                 for (var ruleIndex = 0; ruleIndex < binding.Rules.Count; ruleIndex++)
                 {
                     var rule = binding.Rules[ruleIndex];
-                    var passed = rule is UniqueRule unique
-                        ? !ViolatesUnique(unique, ruleSet, projected, rowOrdinal)
-                        : RulePassesSynchronously(rule, value, projected);
+                    var passed = RulePassesSynchronously(rule, value, projected, ruleSet, rowOrdinal);
                     if (passed) continue;
 
                     _context.DataQuality.RecordFailure(
@@ -630,6 +565,8 @@ public sealed class ColumnQualityValidator
                 }
             }
         }
+        if (decided != null && _context.DataQualityDryRun)
+            _context.DataQuality.RecordRowDryRunAffected();
         return decided;
     }
 
@@ -654,11 +591,7 @@ public sealed class ColumnQualityValidator
                 for (var ruleIndex = 0; ruleIndex < binding.Rules.Count; ruleIndex++)
                 {
                     var rule = binding.Rules[ruleIndex];
-                    // UNIQUE is decided by the pre-pass over the whole spilled stream; every other
-                    // rule is a pure per-row predicate.
-                    bool passed = rule is UniqueRule unique
-                        ? !ViolatesUnique(unique, ruleSet, projected, rowOrdinal)
-                        : await RulePassesAsync(rule, value, projected);
+                    bool passed = await RulePassesAsync(rule, value, projected, ruleSet, rowOrdinal);
                     if (passed) continue;
 
                     _context.DataQuality.RecordFailure(
@@ -681,6 +614,8 @@ public sealed class ColumnQualityValidator
                 }
             }
         }
+        if (decided != null && _context.DataQualityDryRun)
+            _context.DataQuality.RecordRowDryRunAffected();
         return decided;
     }
 
@@ -690,13 +625,53 @@ public sealed class ColumnQualityValidator
     /// <para>NOT NULL is the only rule that fails on NULL; every other rule skips NULL values (the
     /// SQL CHECK-constraint convention) -- pair with NOT NULL explicitly to reject them.</para>
     /// </summary>
-    private bool RulePassesSynchronously(ColumnRule rule, object? value, Row projected)
+    private bool RulePassesSynchronously(ColumnRule rule, object? value, Row projected, ColumnRuleSet? ruleSet = null, long? rowOrdinal = null)
     {
         if (rule is NotNullRule) return value is not null and not DBNull;
-        if (value is null or DBNull) return true;
+        if (value is null or DBNull)
+        {
+            if (rule is AndRule andRule)
+            {
+                for (int i = 0; i < andRule.Operands.Count; i++)
+                {
+                    if (!RulePassesSynchronously(andRule.Operands[i], value, projected, ruleSet, rowOrdinal))
+                        return false;
+                }
+                return true;
+            }
+            if (rule is OrRule orRule)
+            {
+                for (int i = 0; i < orRule.Operands.Count; i++)
+                {
+                    if (RulePassesSynchronously(orRule.Operands[i], value, projected, ruleSet, rowOrdinal))
+                        return true;
+                }
+                return false;
+            }
+            return true;
+        }
 
         switch (rule)
         {
+            case AndRule andRule:
+                for (int i = 0; i < andRule.Operands.Count; i++)
+                {
+                    if (!RulePassesSynchronously(andRule.Operands[i], value, projected, ruleSet, rowOrdinal))
+                        return false;
+                }
+                return true;
+
+            case OrRule orRule:
+                for (int i = 0; i < orRule.Operands.Count; i++)
+                {
+                    if (RulePassesSynchronously(orRule.Operands[i], value, projected, ruleSet, rowOrdinal))
+                        return true;
+                }
+                return false;
+
+            case UniqueRule unique when ruleSet != null:
+                return !ViolatesUnique(unique, ruleSet, projected, rowOrdinal);
+
             case NotBlankRule:
                 return !string.IsNullOrWhiteSpace(Stringify(value));
 
@@ -748,13 +723,42 @@ public sealed class ColumnQualityValidator
     /// forms and defers the rest to <see cref="RulePassesSynchronously"/> rather than restating
     /// them — two copies of the rule semantics is two places for them to drift.
     /// </summary>
-    private ValueTask<bool> RulePassesAsync(ColumnRule rule, object? value, Row projected) => rule switch
+    private async ValueTask<bool> RulePassesAsync(ColumnRule rule, object? value, Row projected, ColumnRuleSet? ruleSet = null, long? rowOrdinal = null)
     {
-        ExprRule expr => _context.EvaluateCondition(expr.Predicate, projected),
-        BetweenRule between when value is not null and not DBNull => BetweenPassesAsync(between, value, projected),
-        BetweenRule => ValueTask.FromResult(true), // NULL skips it, like every rule but NOT NULL
-        _ => ValueTask.FromResult(RulePassesSynchronously(rule, value, projected))
-    };
+        switch (rule)
+        {
+            case AndRule andRule:
+                for (int i = 0; i < andRule.Operands.Count; i++)
+                {
+                    if (!await RulePassesAsync(andRule.Operands[i], value, projected, ruleSet, rowOrdinal))
+                        return false;
+                }
+                return true;
+
+            case OrRule orRule:
+                for (int i = 0; i < orRule.Operands.Count; i++)
+                {
+                    if (await RulePassesAsync(orRule.Operands[i], value, projected, ruleSet, rowOrdinal))
+                        return true;
+                }
+                return false;
+
+            case UniqueRule unique when ruleSet != null:
+                return !ViolatesUnique(unique, ruleSet, projected, rowOrdinal);
+
+            case ExprRule expr:
+                return await _context.EvaluateCondition(expr.Predicate, projected);
+
+            case BetweenRule between when value is not null and not DBNull:
+                return await BetweenPassesAsync(between, value, projected);
+
+            case BetweenRule:
+                return true; // NULL skips it, like every rule but NOT NULL
+
+            default:
+                return RulePassesSynchronously(rule, value, projected, ruleSet, rowOrdinal);
+        }
+    }
 
     /// <summary>
     /// Evaluates both bounds against the projected row and compares with the engine's type-aware
@@ -835,7 +839,6 @@ public sealed class ColumnQualityValidator
         _ => false
     };
 
-
     // ── CASTABLE AS ────────────────────────────────────────────────────────
 
     /// <summary>
@@ -898,6 +901,7 @@ public sealed class ColumnQualityValidator
         var references = _ruleSets
             .SelectMany(rs => rs.Bindings)
             .SelectMany(b => b.Rules)
+            .FlattenAll()
             .OfType<ExistsInRule>()
             .GroupBy(ExistsInKey)
             .Select(g => g.First())

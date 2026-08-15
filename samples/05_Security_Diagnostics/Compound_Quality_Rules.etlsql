@@ -1,0 +1,43 @@
+-- Compound Data Quality Rules: logical AND, OR, and parenthesized rules
+--
+-- Demonstrates evaluating multi-condition validation rules on columns:
+--   - Compound AND: NOT NULL AND > 0
+--   - Compound OR: IN ('NA', 'EMEA') OR IN ('APAC', 'LATAM')
+--   - Nested expressions: NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES ^LEGACY-)
+--
+-- Run: dotnet run --project src/ETL-SQL.App -- run samples/05_Security_Diagnostics/Compound_Quality_Rules.etlsql
+
+-- 1. Ingest raw transactions
+CREATE TABLE #raw_transactions (
+    TxId        INT,
+    AccountCode VARCHAR(50),
+    Amount      DECIMAL(10,2),
+    Status      VARCHAR(20)
+);
+
+INSERT INTO #raw_transactions (TxId, AccountCode, Amount, Status) VALUES
+    (101, 'ACC-98421', 150.00,  'APPROVED'),   -- Valid: matches length 5-10 and approved
+    (102, 'LEGACY-001', 45.50,   'PENDING'),    -- Valid: matches legacy prefix and pending
+    (103, 'BAD',        250.00,  'APPROVED'),   -- Bad AccountCode: too short, not legacy
+    (104, 'ACC-12345',  -10.00,  'APPROVED'),   -- Bad Amount: <= 0
+    (105, NULL,         50.00,   'REJECTED'),   -- Bad TxId & AccountCode: null
+    (106, 'LEGACY-999', 1000.00, 'DISPUTED');   -- Bad Status: not approved or pending
+
+-- 2. Stage and apply compound quality rules
+validate_transactions:
+SELECT
+    TxId        /* @expect: 'NOT NULL AND > 0'; @fail: 'QUARANTINE'; */,
+    AccountCode /* @expect: 'NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES ^LEGACY-)'; @fail: 'QUARANTINE'; */,
+    Amount      /* @expect: 'NOT NULL AND > 0'; @fail: 'QUARANTINE'; */,
+    Status      /* @expect: 'NOT NULL AND (MATCHES ^APP OR MATCHES ^PEND)'; @fail: 'WARN'; */
+INTO #clean_transactions
+FROM #raw_transactions
+ON FAILURE QUARANTINE TO #quarantined_transactions
+ON FAILURE WARN;
+
+-- 3. Output clean and quarantined sets
+PRINT '=== Clean Transactions (Passed) ===';
+SELECT TxId, AccountCode, Amount, Status FROM #clean_transactions;
+
+PRINT '=== Quarantined Transactions (Failed @fail: QUARANTINE) ===';
+SELECT TxId, AccountCode, Amount, Status, __dq_column, __dq_rule, __dq_reason FROM #quarantined_transactions;

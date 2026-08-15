@@ -9,6 +9,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Planning;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
 using ETL_SQL.Engine.Services;
@@ -36,6 +37,14 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
     {
         _logger.Info($"[SELECT] Executing SelectStatement. Session: {context.SessionId}");
 
+        WatermarkConfig? wmConfig = null;
+        if (statement is SelectStatement selInitial && selInitial.FromTable != null && WatermarkManager.HasWatermark(selInitial.FromTable))
+        {
+            wmConfig = WatermarkManager.ParseConfig(selInitial.FromTable, context);
+            var currentWm = await WatermarkManager.GetCurrentWatermarkAsync(wmConfig, context);
+            statement = WatermarkManager.InjectWatermarkFilter(selInitial, wmConfig, currentWm);
+        }
+
         // 1. Handle Pushdown (Optimization: Push simple queries to DB)
         // GROUP BY ALL / ORDER BY ALL / star modifiers are resolved locally in EvaluateSelect;
         // skip the early raw-statement pushdown for them.
@@ -48,6 +57,12 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             {
                 RecordSqlPushdownAccepted(context, "select.sql-pushdown", connName!);
                 var result = await _pushdownEngine.ExecutePushdown(selPush, connName!, context);
+                if (wmConfig != null)
+                {
+                    static async IAsyncEnumerable<DataTable> AsStream(DataTable dt) { yield return dt; }
+                    var wmStream = WatermarkManager.TrackWatermarkStream(AsStream(result), wmConfig, context, _logger);
+                    await foreach (var _ in wmStream) { }
+                }
                 context.LastResult = result;
                 context.LastResultSets.Add(result);
                 context.OnResultSet?.Invoke(result);
@@ -87,6 +102,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             {
                 RecordSqlPushdownAccepted(context, "select-into.sql-pushdown", connName!);
                 batches = _pushdownEngine.ExecuteStreamingPushdown(selectQuery with { IntoTable = null }, connName!, context);
+                if (wmConfig != null)
+                    batches = WatermarkManager.TrackWatermarkStream(batches, wmConfig, context, _logger);
             }
             else
             {
@@ -178,6 +195,24 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
     /// Evaluates a SELECT statement, choosing between streaming or heavy multi-pass execution.
     /// </summary>
     public async IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt, IExecutionContext context)
+    {
+        WatermarkConfig? wmConfig = null;
+        if (stmt.FromTable != null && WatermarkManager.HasWatermark(stmt.FromTable))
+        {
+            wmConfig = WatermarkManager.ParseConfig(stmt.FromTable, context);
+            var currentWm = await WatermarkManager.GetCurrentWatermarkAsync(wmConfig, context);
+            stmt = WatermarkManager.InjectWatermarkFilter(stmt, wmConfig, currentWm);
+        }
+
+        var stream = EvaluateSelectCore(stmt, context);
+        if (wmConfig != null)
+            stream = WatermarkManager.TrackWatermarkStream(stream, wmConfig, context, _logger);
+
+        await foreach (var batch in stream)
+            yield return batch;
+    }
+
+    private async IAsyncEnumerable<DataTable> EvaluateSelectCore(SelectStatement stmt, IExecutionContext context)
     {
         var aggregateEngine = new AggregateEngine(context, _logger);
         var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
@@ -918,7 +953,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             try
             {
                 if (ETL_SQL.Core.Quality.ColumnRuleParser.ParseBindings(column.Metadata!)
-                    .Any(b => b.Rules.Any(r => r is ETL_SQL.Core.Quality.UniqueRule)))
+                    .Any(b => b.Rules.FlattenAll().Any(r => r is ETL_SQL.Core.Quality.UniqueRule)))
                     return true;
             }
             catch (ETL_SQL.Core.Quality.ColumnRuleParseException) { /* reported elsewhere */ }

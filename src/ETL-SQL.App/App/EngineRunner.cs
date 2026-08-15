@@ -109,9 +109,7 @@ namespace ETL_SQL.App
 
             if (ctx.Command == "test")
             {
-                // Placeholder for internal test runner if needed
-                logger.WriteLine($"Running {ctx.TestVal} tests...", ConsoleColor.Yellow);
-                return 0;
+                return await TestRunnerService.RunAsync(ctx, logger);
             }
 
             if (ctx.Command == "doctor")

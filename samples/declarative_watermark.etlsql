@@ -1,0 +1,69 @@
+-- Declarative Incremental Watermarking Sample
+--
+-- Demonstrates automatic stateful change-data extraction without boilerplate.
+-- 1. Sets up a source table (#transactions_source)
+-- 2. Executes initial load with WITH (WATERMARK = 'UpdatedAt', INITIAL = '2024-01-01', KEY = 'daily_tx')
+-- 3. Ingests new records into the source
+-- 4. Re-executes the exact same query; only newer records are extracted
+--
+-- Run with:
+--   etl-sql run samples/declarative_watermark.etlsql
+
+-- Step 1: Initialize source dataset
+CREATE TABLE #transactions_source (
+    TxId        INT,
+    Customer    VARCHAR(50),
+    Amount      DECIMAL(10,2),
+    UpdatedAt   VARCHAR(30)
+);
+
+INSERT INTO #transactions_source VALUES
+    (101, 'Alice Corp',   150.00, '2023-12-15 10:00:00'), -- Before initial watermark (skipped)
+    (102, 'Bob LLC',      450.50, '2024-01-10 14:30:00'), -- In initial load
+    (103, 'Charlie Inc',  890.00, '2024-02-20 09:15:00'); -- In initial load (becomes current watermark)
+
+PRINT '=== Initial Ingestion Phase ===';
+
+-- Step 2: Initial extraction using declarative watermark
+SELECT
+    TxId,
+    Customer,
+    Amount,
+    UpdatedAt
+INTO #initial_batch
+FROM #transactions_source WITH (
+    WATERMARK = 'UpdatedAt',
+    INITIAL = '2024-01-01',
+    KEY = 'daily_tx'
+);
+
+SELECT COUNT(*) AS InitialRowsLoaded FROM #initial_batch;
+SELECT * FROM #initial_batch;
+
+PRINT '=== New Inbound Data Arrives ===';
+
+-- Step 3: Insert new data after initial watermark
+INSERT INTO #transactions_source VALUES
+    (104, 'Delta Co',     320.00, '2024-02-20 09:15:00'), -- At previous watermark (skipped by strict >)
+    (105, 'Echo Ltd',     710.00, '2024-03-01 11:45:00'), -- New delta record
+    (106, 'Foxtrot SA',  1200.00, '2024-03-15 16:20:00'); -- New delta record
+
+PRINT '=== Incremental Extraction Phase (Same Query) ===';
+
+-- Step 4: Re-run identical query — automatically picks up previous watermark from state
+SELECT
+    TxId,
+    Customer,
+    Amount,
+    UpdatedAt
+INTO #delta_batch
+FROM #transactions_source WITH (
+    WATERMARK = 'UpdatedAt',
+    INITIAL = '2024-01-01',
+    KEY = 'daily_tx'
+);
+
+SELECT COUNT(*) AS DeltaRowsLoaded FROM #delta_batch;
+SELECT * FROM #delta_batch;
+
+PRINT 'Declarative incremental watermarking completed successfully!';

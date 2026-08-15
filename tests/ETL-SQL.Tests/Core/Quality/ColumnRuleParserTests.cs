@@ -504,6 +504,89 @@ namespace ETL_SQL.Tests.Core.Quality
             Assert.IsType<NotNullRule>(binding.Rules[1]);
         }
 
+        // ── Compound rules (AND / OR / parentheses) ─────────────────────────
+
+        [Fact]
+        public void Parse_CompoundAndRule_ReturnsAndRuleWithOperands()
+        {
+            var rules = ColumnRuleParser.Parse("'NOT NULL AND > 0'");
+            var rule = Assert.IsType<AndRule>(Assert.Single(rules));
+            Assert.Equal(2, rule.Operands.Count);
+            Assert.IsType<NotNullRule>(rule.Operands[0]);
+            Assert.IsType<ComparisonRule>(rule.Operands[1]);
+            Assert.Equal("NOT NULL AND > 0", rule.Text);
+        }
+
+        [Fact]
+        public void Parse_CompoundOrRule_ReturnsOrRuleWithOperands()
+        {
+            var rules = ColumnRuleParser.Parse("'> 100 OR < 10'");
+            var rule = Assert.IsType<OrRule>(Assert.Single(rules));
+            Assert.Equal(2, rule.Operands.Count);
+            Assert.IsType<ComparisonRule>(rule.Operands[0]);
+            Assert.IsType<ComparisonRule>(rule.Operands[1]);
+        }
+
+        [Fact]
+        public void Parse_Precedence_AndBindsTighterThanOr()
+        {
+            var rules = ColumnRuleParser.Parse("'> 0 AND < 10 OR > 100 AND < 200'");
+            var orRule = Assert.IsType<OrRule>(Assert.Single(rules));
+            Assert.Equal(2, orRule.Operands.Count);
+
+            var and1 = Assert.IsType<AndRule>(orRule.Operands[0]);
+            Assert.Equal(2, and1.Operands.Count);
+            Assert.Equal(CompareOp.Greater, Assert.IsType<ComparisonRule>(and1.Operands[0]).Op);
+            Assert.Equal(CompareOp.Less, Assert.IsType<ComparisonRule>(and1.Operands[1]).Op);
+
+            var and2 = Assert.IsType<AndRule>(orRule.Operands[1]);
+            Assert.Equal(2, and2.Operands.Count);
+            Assert.Equal(CompareOp.Greater, Assert.IsType<ComparisonRule>(and2.Operands[0]).Op);
+            Assert.Equal(CompareOp.Less, Assert.IsType<ComparisonRule>(and2.Operands[1]).Op);
+        }
+
+        [Fact]
+        public void Parse_Parentheses_OverridePrecedence()
+        {
+            var rules = ColumnRuleParser.Parse("'NOT NULL AND (= 1 OR = 2)'");
+            var andRule = Assert.IsType<AndRule>(Assert.Single(rules));
+            Assert.Equal(2, andRule.Operands.Count);
+            Assert.IsType<NotNullRule>(andRule.Operands[0]);
+
+            var orRule = Assert.IsType<OrRule>(andRule.Operands[1]);
+            Assert.Equal(2, orRule.Operands.Count);
+            Assert.IsType<ComparisonRule>(orRule.Operands[0]);
+            Assert.IsType<ComparisonRule>(orRule.Operands[1]);
+        }
+
+        [Fact]
+        public void Parse_BetweenAndLengthBetween_PreserveInternalAndKeyword()
+        {
+            var rules = ColumnRuleParser.Parse("'BETWEEN 1 AND 10 OR BETWEEN 20 AND 30'");
+            var orRule = Assert.IsType<OrRule>(Assert.Single(rules));
+            Assert.Equal(2, orRule.Operands.Count);
+            Assert.IsType<BetweenRule>(orRule.Operands[0]);
+            Assert.IsType<BetweenRule>(orRule.Operands[1]);
+
+            var lengthRules = ColumnRuleParser.Parse("'LENGTH BETWEEN 5 AND 10 AND NOT NULL'");
+            var andRule = Assert.IsType<AndRule>(Assert.Single(lengthRules));
+            Assert.Equal(2, andRule.Operands.Count);
+            Assert.IsType<LengthRule>(andRule.Operands[0]);
+            Assert.IsType<NotNullRule>(andRule.Operands[1]);
+        }
+
+        [Fact]
+        public void Parse_FlattenAll_FlattensNestedTree()
+        {
+            var rules = ColumnRuleParser.Parse("'NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES ^LEGACY-)'");
+            var flattened = rules.FlattenAll().ToList();
+            // Root AndRule, NotNullRule, OrRule, LengthRule, MatchesRule
+            Assert.Equal(5, flattened.Count);
+            Assert.Contains(flattened, r => r is NotNullRule);
+            Assert.Contains(flattened, r => r is LengthRule);
+            Assert.Contains(flattened, r => r is MatchesRule);
+        }
+
         private static Dictionary<string, string> Metadata(params (string Key, string Value)[] entries)
         {
             var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

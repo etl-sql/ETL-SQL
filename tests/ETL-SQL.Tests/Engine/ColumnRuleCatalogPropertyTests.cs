@@ -50,6 +50,8 @@ namespace ETL_SQL.Tests.Engine
             [typeof(ExistsInRule)] = new(
                 "EXISTS IN #dim(Id)", "Id", "(99, 'a')",
                 Setup: "CREATE TABLE #dim (Id INT); INSERT INTO #dim (Id) VALUES (1);"),
+            [typeof(AndRule)] = new("NOT NULL AND > 0", "Id", "(-5, 'a')"),
+            [typeof(OrRule)] = new("= 1 OR = 2", "Id", "(3, 'a')"),
         };
 
         [Fact]

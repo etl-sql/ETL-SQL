@@ -18,3 +18,4 @@
 | [Set Operations](set-operations.md) | - Statement Reference |
 | [WINDOW](window.md) | WINDOW defines reusable named window specifications for analytic functions in a `SELECT` query. Named windows avoid repeating the same `PARTITION B... |
 | [WITH (CTE)](with.md) | Defines one or more Common Table Expressions (CTEs) scoped to the following SELECT statement. |
+| [WITH (WATERMARK)](watermark.md) | Declarative incremental watermarking syntax attached to table references in `SELECT` queries (`WITH (WATERMARK = ...)`). |

@@ -6,6 +6,7 @@
 | :--- | :--- |
 | [EXPLAIN ANALYZE](analyze.md) | Executes a query and returns its annotated execution plan with observed runtime metrics. |
 | [ASSERT JOB](assert-job.md) | Asserts on the **run's own metrics** — how many rows it processed, what fraction was quarantined, |
+| [ASSERT TABLE](assert-table.md) | Asserts that two tables or #temp datasets have matching schema, column structure, row counts, and data values. |
 | [ASSERT](assert.md) | Validates a condition at runtime and halts execution with an error if it is false. Used for data quality checks and script contracts. |
 | [CLEAR SESSION](clear.md) | Cleans up session state: temp files, recovery manifests, encrypted session data, and disk-spill artifacts. |
 | [CONFIG](config.md) | Retrieves a list of all configured options and values for the specified connection name. For security and compliance, sensitive credentials such as... |

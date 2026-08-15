@@ -53,6 +53,34 @@ inherited from v0.17.0.
 - [x] **P2: Reliability / SQL Dialect** — Parameter Placeholder Desync. Apply `ParameterUtility.ProcessParameters` in MySQL and ensure parameter prefix matches placeholder generation.
 - [x] **P2: Reliability / Resource Leaks** — Fix stream/handle disposal in `SmtpDataSource.cs` (MemoryStream attachments), `OdbcDataSource.cs` (OdbcCommand), `RestDataSource.cs` (SemaphoreSlim), and `DashboardServiceFactory.cs`.
 
+### Active Roadmap Delivery (Language, DX, Execution)
+
+#### Track 1: Language — Compound `@expect` Rules (AND / OR)
+- [x] **1.1 AST & Model**: Add `AndRule` and `OrRule` records to `ColumnRule.cs` for compound boolean rule composition.
+- [x] **1.2 Parser**: Implement recursive descent expression parser in `ColumnRuleParser.cs` supporting SQL operator precedence (`OR` < `AND` / `,`), nested parentheses `(...)`, and preserving `,` as top-level `AND`.
+- [x] **1.3 Runtime & Validation**: Update `ColumnQualityValidator.cs` with 3-valued SQL evaluation logic, NULL skipping semantics (except `NOT NULL`), and failure attribution for compound rules in `__dq_rule`.
+- [x] **1.4 Linter & Tooling**: Update `ColumnRuleValidationRule.cs`, `DefaultGrammar.cs`, and `LanguageService.cs` autocomplete/hover cards.
+- [x] **1.5 Tests**: Unit tests in `ColumnRuleParserTests.cs` and `ColumnQualityValidatorTests.cs` for precedence, parentheses, and failure metrics.
+- [x] **1.6 Documentation**: Update `docs/reference/statements/dml/data-quality-rules.md` and `docs/syntax-index.md`.
+- [x] **1.7 Sample & Verification**: Create and execute `samples/05_Security_Diagnostics/Compound_Quality_Rules.etlsql`.
+
+#### Track 2: Developer Experience & CI/CD — Native Unit Testing & Table Assertions
+- [x] **2.1 AST & Parser**: Define `AssertTableStatement` in `Ast.cs` and parse `ASSERT TABLE #actual MATCHES #expected [WITH (...)]` in `FlowParser.cs`.
+- [x] **2.2 Grammar & Serializer**: Update `AstSerializer.cs`, `grammar.ebnf`, and `DefaultGrammar.cs`.
+- [x] **2.3 Runtime Handler**: Implement `AssertTableStatementHandler.cs` comparing schema, row counts, and column values with visual mismatch diffs.
+- [x] **2.4 CLI Test Harness**: Add `etl-sql test <path>` CLI command in `CliOrchestrator.cs` for executing `.test.etlsql` test suites and reporting test summaries.
+- [x] **2.5 Tests**: Unit tests in `AssertTableStatementTests.cs` and CLI harness tests.
+- [x] **2.6 Documentation**: Update `docs/reference/statements/session-control/assert-table.md`, `docs/syntax-index.md`, and test guide.
+- [x] **2.7 Sample & Verification**: Create and execute `samples/unit_test_table_assertion.test.etlsql`.
+
+#### Track 3: Language & Execution — Declarative Incremental Watermarking Syntax
+- [x] **3.1 AST & Parser**: Extend table sources / `WITH` options in `TableSource` and parser to support `WITH (WATERMARK = 'col', INITIAL = 'val' [, KEY = 'key'])`.
+- [x] **3.2 Execution Engine**: Implement automatic high-water mark retrieval, filter predicate injection, and max value tracking into `ctx.PendingJobStateUpdates` in `StreamingQueryEngine.cs` and `SelectExecutionEngine.cs`.
+- [x] **3.3 Grammar & Tooling**: Update `grammar.ebnf`, `DefaultGrammar.cs`, and AST serializers.
+- [x] **3.4 Tests**: Unit tests in `WatermarkQueryTests.cs` verifying initial load, delta load, and state persistence.
+- [x] **3.5 Documentation**: Update `docs/reference/statements/queries/from.md` and standard library references.
+- [x] **3.6 Sample & Verification**: Create and execute `samples/declarative_watermark.etlsql`.
+
 
 **Sequencing.** The release-process RCI items are scheduled **last**, deliberately. The RCI changes
 touch the validation gate and CI itself, so landing them

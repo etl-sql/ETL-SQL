@@ -69,6 +69,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `GO` | Scripting | [Statement Reference](reference/statements/README.md) | [GO.md](reference/control-flow/go.md) |
 | `ASSERT` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT.md](reference/statements/session-control/assert.md) |
 | `ASSERT JOB` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT JOB](reference/statements/session-control/assert-job.md) |
+| `ASSERT TABLE` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT TABLE](reference/statements/session-control/assert-table.md) |
 | `CONFIG` | Session | [Statement Reference](reference/statements/README.md) | [CONFIG](reference/statements/session-control/config.md) |
 | `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](reference/statements/README.md) |
 | `LINT` | Validation | [Statement Reference](reference/statements/README.md) | [LINT.md](reference/statements/session-control/lint.md) |
@@ -174,6 +175,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `CASE` | Expressions | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
 | `WITH` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
 | `WITH RECURSIVE` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
+| `WITH (WATERMARK = ...)` | Query / Incremental ETL | [Statement Reference](reference/statements/README.md) | [WATERMARK.md](reference/statements/query-syntax/watermark.md) |
 | `PIVOT` / `UNPIVOT` | DML / Transform | [Statement Reference](reference/statements/README.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
 | `MATCH_RECOGNIZE` | DML / Pattern Matching | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](reference/statements/query-syntax/match-recognize.md) |
 | `EXPORT REPORT` | Orchestration | [Statement Reference](reference/statements/README.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |

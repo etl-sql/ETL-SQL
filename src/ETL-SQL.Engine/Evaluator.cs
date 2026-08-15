@@ -70,6 +70,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     private readonly Dictionary<string, IDataSource> _localSources = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IDataSource> _replaySourceOverrides = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _pendingJobStateUpdates = new();
+    private readonly Dictionary<string, string> _sessionJobState = new(StringComparer.OrdinalIgnoreCase);
 
     public IDictionary<string, IDataSource> Connections => _connections;
 
@@ -79,6 +80,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public IDictionary<string, IDataSource> LocalSources => _localSources;
     public IDictionary<string, IDataSource> ReplaySourceOverrides => _replaySourceOverrides;
     public Dictionary<string, string> PendingJobStateUpdates => _pendingJobStateUpdates;
+    public Dictionary<string, string> SessionJobState => _sessionJobState;
 
     private readonly VariableScopeManager _variableScopeManager;
     private readonly EvaluatorComponentRegistry _registry;
@@ -1269,6 +1271,11 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     private async Task CommitPendingJobStateAsync()
     {
         if (PendingJobStateUpdates.Count == 0) return;
+
+        foreach (var kv in PendingJobStateUpdates)
+        {
+            _sessionJobState[kv.Key] = kv.Value;
+        }
 
         if (!string.IsNullOrEmpty(JobName))
         {

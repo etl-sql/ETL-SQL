@@ -299,6 +299,7 @@ public static class AstSerializer
         CreateThemeStatement s => FormatCreateTheme(s),
         SetTemplatePathStatement s => s.ToSql(),
         AssertStatement s => $"ASSERT {s.Condition.ToSql()}{(s.Message != null ? $", {s.Message.ToSql()}" : "")};",
+        AssertTableStatement s => FormatAssertTable(s),
         AssertJobStatement s => $"ASSERT JOB {s.JobName} ({string.Join(", ", s.Predicates.Select(p => p.Describe()))})" + (s.FailOnWarn ? " WITH (FAIL_ON_WARN = TRUE)" : "") + (s.FailureNotification != null ? $" ON FAILURE NOTIFY {s.FailureNotification}" : "") + (s.ThrowOnCritical ? " ON CRITICAL_FAILURE THROW" : "") + ";",
         SetReportMetadataStatement s => $"SET REPORT {s.Key} = '{s.Value.Replace("'", "''")}';",
         UseDatasetStatement s => $"USE DATASET {s.DatasetName};",
@@ -1200,6 +1201,10 @@ public static class AstSerializer
             else if (op is UnpivotClause u) sql += " " + u.ToSql();
             else if (op is MatchRecognizeClause m) sql += " " + m.ToSql();
         }
+        if (n.Options != null && n.Options.Count > 0)
+        {
+            sql += $" WITH ({string.Join(", ", n.Options.Select(kv => $"{kv.Key} = {kv.Value.ToSql()}"))})";
+        }
         return sql;
     }
 
@@ -1700,5 +1705,19 @@ public static class AstSerializer
             return $"SET {name};";
         }
         return $"SET {name} {(s.Enabled ? "ON" : "OFF")};";
+    }
+
+    private static string FormatAssertTable(AssertTableStatement s)
+    {
+        var sb = new StringBuilder();
+        sb.Append($"ASSERT TABLE {s.ActualTable} MATCHES {s.ExpectedTable}");
+        var opts = new List<string>();
+        if (s.IgnoreOrder) opts.Add("IGNORE_ORDER = TRUE");
+        if (s.Tolerance.HasValue) opts.Add($"TOLERANCE = {s.Tolerance.Value}");
+        if (s.IgnoreColumns is { Count: > 0 }) opts.Add($"IGNORE_COLUMNS = '{string.Join(",", s.IgnoreColumns)}'");
+        if (s.Message != null) opts.Add($"MESSAGE = {s.Message.ToSql()}");
+        if (opts.Count > 0) sb.Append($" WITH ({string.Join(", ", opts)})");
+        sb.Append(';');
+        return sb.ToString();
     }
 }

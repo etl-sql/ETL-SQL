@@ -125,6 +125,214 @@ public static partial class ColumnRuleParser
 
     private static ColumnRule ParseRule(string text)
     {
+        return ParseOrExpression(text.Trim());
+    }
+
+    private static ColumnRule ParseOrExpression(string text)
+    {
+        var branches = SplitTopLevelOr(text);
+        if (branches.Count > 1)
+        {
+            var operands = new List<ColumnRule>();
+            foreach (var branch in branches)
+            {
+                if (string.IsNullOrWhiteSpace(branch))
+                    throw new ColumnRuleParseException($"@expect rule '{text}' contains an empty OR operand.");
+                operands.Add(ParseAndExpression(branch));
+            }
+            return new OrRule(operands) { Text = text };
+        }
+        return ParseAndExpression(text);
+    }
+
+    private static ColumnRule ParseAndExpression(string text)
+    {
+        var branches = SplitTopLevelAnd(text);
+        if (branches.Count > 1)
+        {
+            var operands = new List<ColumnRule>();
+            foreach (var branch in branches)
+            {
+                if (string.IsNullOrWhiteSpace(branch))
+                    throw new ColumnRuleParseException($"@expect rule '{text}' contains an empty AND operand.");
+                operands.Add(ParsePrimaryRule(branch));
+            }
+            return new AndRule(operands) { Text = text };
+        }
+        return ParsePrimaryRule(text);
+    }
+
+    private static ColumnRule ParsePrimaryRule(string text)
+    {
+        var trimmed = text.Trim();
+        if (IsEnclosedInMatchingParens(trimmed))
+        {
+            var inner = trimmed[1..^1].Trim();
+            if (string.IsNullOrWhiteSpace(inner))
+                throw new ColumnRuleParseException($"Empty parenthesized rule in '{text}'.");
+            return ParseOrExpression(inner);
+        }
+
+        return ParseAtomicRule(trimmed);
+    }
+
+    private static bool IsEnclosedInMatchingParens(string text)
+    {
+        if (text.Length < 2 || text[0] != '(' || text[^1] != ')')
+            return false;
+        int depth = 0;
+        char quote = '\0';
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (quote != '\0')
+            {
+                if (c == quote)
+                {
+                    if (i + 1 < text.Length && text[i + 1] == quote) i++;
+                    else quote = '\0';
+                }
+                continue;
+            }
+            if (c is '\'' or '"') quote = c;
+            else if (c is '(' or '[' or '{') depth++;
+            else if (c is ')' or ']' or '}')
+            {
+                depth--;
+                if (depth == 0 && i < text.Length - 1)
+                    return false;
+            }
+        }
+        return depth == 0;
+    }
+
+    private static List<string> SplitTopLevelOr(string text)
+    {
+        var list = new List<string>();
+        int depth = 0;
+        char quote = '\0';
+        int last = 0;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (quote != '\0')
+            {
+                if (c == quote)
+                {
+                    if (i + 1 < text.Length && text[i + 1] == quote) i++;
+                    else quote = '\0';
+                }
+                continue;
+            }
+
+            switch (c)
+            {
+                case '\\' when i + 1 < text.Length:
+                    i++;
+                    continue;
+                case '\'' or '"':
+                    quote = c;
+                    continue;
+                case '(' or '[' or '{':
+                    depth++;
+                    continue;
+                case ')' or ']' or '}':
+                    depth--;
+                    continue;
+            }
+
+            if (depth == 0)
+            {
+                if (i + 2 <= text.Length && text.AsSpan(i, 2).Equals("OR", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool prevBoundary = i == 0 || char.IsWhiteSpace(text[i - 1]) || text[i - 1] == ')';
+                    bool nextBoundary = i + 2 == text.Length || char.IsWhiteSpace(text[i + 2]) || text[i + 2] == '(';
+                    if (prevBoundary && nextBoundary)
+                    {
+                        list.Add(text[last..i].Trim());
+                        i += 1;
+                        last = i + 1;
+                    }
+                }
+            }
+        }
+        list.Add(text[last..].Trim());
+        return list;
+    }
+
+    private static List<string> SplitTopLevelAnd(string text)
+    {
+        var list = new List<string>();
+        int depth = 0;
+        char quote = '\0';
+        int last = 0;
+        bool betweenExpectsAnd = StartsWithBetween(text.TrimStart());
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (quote != '\0')
+            {
+                if (c == quote)
+                {
+                    if (i + 1 < text.Length && text[i + 1] == quote) i++;
+                    else quote = '\0';
+                }
+                continue;
+            }
+
+            switch (c)
+            {
+                case '\\' when i + 1 < text.Length:
+                    i++;
+                    continue;
+                case '\'' or '"':
+                    quote = c;
+                    continue;
+                case '(' or '[' or '{':
+                    depth++;
+                    continue;
+                case ')' or ']' or '}':
+                    depth--;
+                    continue;
+            }
+
+            if (depth == 0)
+            {
+                if (i + 3 <= text.Length && text.AsSpan(i, 3).Equals("AND", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool prevBoundary = i == 0 || char.IsWhiteSpace(text[i - 1]) || text[i - 1] == ')';
+                    bool nextBoundary = i + 3 == text.Length || char.IsWhiteSpace(text[i + 3]) || text[i + 3] == '(';
+                    if (prevBoundary && nextBoundary)
+                    {
+                        if (betweenExpectsAnd)
+                        {
+                            betweenExpectsAnd = false;
+                        }
+                        else
+                        {
+                            list.Add(text[last..i].Trim());
+                            i += 2;
+                            last = i + 1;
+                            betweenExpectsAnd = StartsWithBetween(text[last..].TrimStart());
+                        }
+                    }
+                }
+            }
+        }
+        list.Add(text[last..].Trim());
+        return list;
+    }
+
+    private static bool StartsWithBetween(string s)
+    {
+        return s.StartsWith("BETWEEN ", StringComparison.OrdinalIgnoreCase) ||
+               s.StartsWith("LENGTH BETWEEN ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ColumnRule ParseAtomicRule(string text)
+    {
         var upper = text.ToUpperInvariant();
 
         if (Regex.IsMatch(upper, @"^NOT\s+NULL$"))
