@@ -66,7 +66,7 @@ public sealed class DeploymentProfileUpgradeLifecycleTests : IDisposable
 
         // Fence scheduling before cutover.
         await source.SaveJobAsync(job with { IsEnabled = false, ModifiedBy = "upgrade-operator" });
-        Assert.False((await source.GetJobAsync(job.Name))!.IsEnabled);
+        Assert.False((await source.GetJobAsync(job.TenantId, job.Name))!.IsEnabled);
 
         // A release N+1 store imports the restore point with jobs fenced, then proves continuity.
         var upgraded = new SQLiteJobHistoryStore(Path.Combine(profileRoot, "release-n-plus-one.db"));

@@ -80,7 +80,7 @@ namespace ETL_SQL.Tests.Orchestration
                 "CREATE JOB Nightly FOR SCRIPT 'jobs/nightly.etlsql' " +
                 "WITH (MAX_RETRIES = 3, RETRY_DELAY = 60, DISPLAY_NAME = 'Nightly load');");
 
-            var job = await _store.GetJobAsync("Nightly");
+            var job = await _store.GetJobAsync((string?)null, "Nightly");
             Assert.NotNull(job);
             Assert.Equal(JobTargetKind.Script, job.JobType);
             Assert.Equal("jobs/nightly.etlsql", job.TargetPath);
@@ -100,7 +100,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             await RunAsync("CREATE OR ALTER JOB Nightly FOR SCRIPT 'jobs/v2.etlsql';");
 
-            var job = await _store.GetJobAsync("Nightly");
+            var job = await _store.GetJobAsync((string?)null, "Nightly");
             Assert.Equal("jobs/v2.etlsql", job!.TargetPath);
             Assert.Equal(4, job.MaxRetries);
             Assert.Single(await _store.GetJobSchedulesAsync("Nightly"));
@@ -117,7 +117,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             await RunAsync("CREATE OR REPLACE JOB Nightly FOR REPORT 'reports/Finance';");
 
-            var job = await _store.GetJobAsync("Nightly");
+            var job = await _store.GetJobAsync((string?)null, "Nightly");
             Assert.Equal(JobTargetKind.Report, job!.JobType);
             Assert.Equal(string.Empty, job.Script);
             Assert.Null(job.ScriptHash);
@@ -130,7 +130,7 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await RunAsync("CREATE SCHEDULE Nightly ON '0 2 * * *';");
 
-            var schedule = await _store.GetScheduleAsync("Nightly");
+            var schedule = await _store.GetScheduleAsync((string?)null, "Nightly");
             Assert.Equal("0 2 * * *", schedule!.Cron);
             // Resolved and stored at creation, so editing configuration later cannot move it.
             Assert.Equal("UTC", schedule.TimeZone);
@@ -155,7 +155,7 @@ namespace ETL_SQL.Tests.Orchestration
             await RunAsync("CREATE OR ALTER SCHEDULE Nightly ON '0 2 * * *';");
             await RunAsync("CREATE OR ALTER SCHEDULE Nightly ON '0 3 * * *';");
 
-            Assert.Equal("0 3 * * *", (await _store.GetScheduleAsync("Nightly"))!.Cron);
+            Assert.Equal("0 3 * * *", (await _store.GetScheduleAsync((string?)null, "Nightly"))!.Cron);
         }
 
         /// <summary>
@@ -177,7 +177,7 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await RunAsync("CREATE NOTIFICATION OpsAlert USING local_mail TO 'ops@example.com';");
 
-            var notification = await _store.GetNotificationAsync("OpsAlert");
+            var notification = await _store.GetNotificationAsync((string?)null, "OpsAlert");
             Assert.Equal("local_mail", notification!.ConnectionName);
             Assert.Equal("ops@example.com", notification.Recipient);
         }
@@ -202,7 +202,7 @@ namespace ETL_SQL.Tests.Orchestration
             await RunAsync("CREATE SCHEDULE Nightly ON '0 2 * * *' AT TIME ZONE 'America/New_York' WITH (DISPLAY_NAME = 'Overnight');");
             await RunAsync("ALTER SCHEDULE Nightly SET CRON = '0 4 * * *';");
 
-            var schedule = await _store.GetScheduleAsync("Nightly");
+            var schedule = await _store.GetScheduleAsync((string?)null, "Nightly");
             Assert.Equal("0 4 * * *", schedule!.Cron);
             Assert.Equal("America/New_York", schedule.TimeZone);
             Assert.Equal("Overnight", schedule.DisplayName);
@@ -216,7 +216,7 @@ namespace ETL_SQL.Tests.Orchestration
             await Assert.ThrowsAsync<ExecutionException>(
                 () => RunAsync("ALTER SCHEDULE Nightly SET TIME ZONE 'Mars/Olympus_Mons';"));
 
-            Assert.Equal("UTC", (await _store.GetScheduleAsync("Nightly"))!.TimeZone);
+            Assert.Equal("UTC", (await _store.GetScheduleAsync((string?)null, "Nightly"))!.TimeZone);
         }
 
         [Fact]
@@ -239,8 +239,8 @@ namespace ETL_SQL.Tests.Orchestration
                 "ALTER SCHEDULE T SET CRON = '0 3 * * *';" +
                 "ALTER NOTIFICATION N SET TO 'audit@example.com';");
 
-            Assert.Equal("0 2 * * *", (await _store.GetScheduleAsync("T"))!.Cron);
-            Assert.Equal("ops@example.com", (await _store.GetNotificationAsync("N"))!.Recipient);
+            Assert.Equal("0 2 * * *", (await _store.GetScheduleAsync((string?)null, "T"))!.Cron);
+            Assert.Equal("ops@example.com", (await _store.GetNotificationAsync((string?)null, "N"))!.Recipient);
         }
 
         // ── Attachments ───────────────────────────────────────────────────────────
@@ -380,7 +380,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             Assert.Contains("Nightly", ex.Message, StringComparison.Ordinal);
             Assert.Contains("REMOVE SCHEDULE", ex.Message, StringComparison.Ordinal);
-            Assert.NotNull(await _store.GetScheduleAsync("T"));
+            Assert.NotNull(await _store.GetScheduleAsync((string?)null, "T"));
         }
 
         [Fact]
@@ -396,10 +396,10 @@ namespace ETL_SQL.Tests.Orchestration
             await RunAsync("CREATE SCHEDULE Nightly ON '0 2 * * *';");
             await RunAsync("DISABLE SCHEDULE nightly;");
 
-            Assert.False((await _store.GetScheduleAsync("Nightly"))!.IsEnabled);
+            Assert.False((await _store.GetScheduleAsync((string?)null, "Nightly"))!.IsEnabled);
 
             await RunAsync("ENABLE SCHEDULE NIGHTLY;");
-            Assert.True((await _store.GetScheduleAsync("Nightly"))!.IsEnabled);
+            Assert.True((await _store.GetScheduleAsync((string?)null, "Nightly"))!.IsEnabled);
         }
 
         [Fact]
@@ -413,8 +413,8 @@ namespace ETL_SQL.Tests.Orchestration
                 "DISABLE SCHEDULE T;" +
                 "DROP NOTIFICATION N;");
 
-            Assert.True((await _store.GetScheduleAsync("T"))!.IsEnabled);
-            Assert.NotNull(await _store.GetNotificationAsync("N"));
+            Assert.True((await _store.GetScheduleAsync((string?)null, "T"))!.IsEnabled);
+            Assert.NotNull(await _store.GetNotificationAsync((string?)null, "N"));
         }
 
         /// <summary>
@@ -428,7 +428,7 @@ namespace ETL_SQL.Tests.Orchestration
             await RunAsync("DISABLE SCHEDULE Nightly;");
             await RunAsync("CREATE OR ALTER SCHEDULE Nightly ON '0 5 * * *';");
 
-            var schedule = await _store.GetScheduleAsync("Nightly");
+            var schedule = await _store.GetScheduleAsync((string?)null, "Nightly");
             Assert.Equal("0 5 * * *", schedule!.Cron);
             Assert.False(schedule.IsEnabled);
         }

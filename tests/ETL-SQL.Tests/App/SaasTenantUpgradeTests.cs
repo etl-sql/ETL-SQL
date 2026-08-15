@@ -45,7 +45,7 @@ public sealed class SaasTenantUpgradeTests : IDisposable
         Assert.Equal(1, result.CancelledQueuedAdmissions);
         Assert.Empty(result.BlockingAdmissions);
         Assert.Equal(SandboxAdmissionState.Cancelled, (await ledger.ReadAsync("queued-alpha"))!.State);
-        Assert.True((await store.GetJobAsync("daily"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync((string?)null, "daily"))!.IsEnabled);
 
         var config = await ReadConfigAsync(tenantRoot);
         Assert.Equal(Release, (string?)config["saasTenant"]?["deployment"]?["activeRelease"]);
@@ -90,7 +90,7 @@ public sealed class SaasTenantUpgradeTests : IDisposable
             now, execute: false);
 
         Assert.Equal("Preflight", preflight.Status);
-        Assert.True((await store.GetJobAsync("daily"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync((string?)null, "daily"))!.IsEnabled);
         Assert.Equal(SandboxAdmissionState.Queued, (await ledger.ReadAsync("queued-alpha"))!.State);
         Assert.Equal("unversioned", (string?)(await ReadConfigAsync(tenantRoot))["saasTenant"]?["deployment"]?["activeRelease"]);
         Assert.Empty(Directory.GetFiles(
@@ -118,7 +118,7 @@ public sealed class SaasTenantUpgradeTests : IDisposable
 
         Assert.Equal("Draining", draining.Status);
         Assert.Equal(["active-alpha"], draining.BlockingAdmissions);
-        Assert.False((await store.GetJobAsync("daily"))!.IsEnabled);
+        Assert.False((await store.GetJobAsync((string?)null, "daily"))!.IsEnabled);
         Assert.Equal("unversioned", (string?)(await ReadConfigAsync(tenantRoot))["saasTenant"]?["deployment"]?["activeRelease"]);
 
         Assert.True(await ledger.TryRetainAsync(
@@ -130,7 +130,7 @@ public sealed class SaasTenantUpgradeTests : IDisposable
         Assert.True(await ledger.ReleaseRetainedAsync("active-alpha", fence.Value));
         var completed = await SaasTenantUpgradeService.UpgradeAsync(context, authority, now);
         Assert.Equal("Completed", completed.Status);
-        Assert.True((await store.GetJobAsync("daily"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync((string?)null, "daily"))!.IsEnabled);
         Assert.Equal(Release, (string?)(await ReadConfigAsync(tenantRoot))["saasTenant"]?["deployment"]?["activeRelease"]);
     }
 
@@ -156,7 +156,7 @@ public sealed class SaasTenantUpgradeTests : IDisposable
 
         Assert.Equal(originalConfig, await File.ReadAllBytesAsync(configPath));
         Assert.Equal(originalManifest, await File.ReadAllBytesAsync(manifestPath));
-        Assert.True((await store.GetJobAsync("daily"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync((string?)null, "daily"))!.IsEnabled);
         var receipt = Assert.Single(Directory.GetFiles(
             Path.Combine(tenantRoot, "queues", "audit"), "tenant-upgrade-*.json"));
         Assert.Equal("Failed", (string?)JsonNode.Parse(await File.ReadAllTextAsync(receipt))?["status"]);

@@ -72,7 +72,7 @@ namespace ETL_SQL.Tests.Orchestration
             await store.SaveJobAsync(Job("CamelCaseJob"));
 
             // Proves the PostgreSQL nocase collation backs COLLATE NOCASE lookups.
-            var byLower = await store.GetJobAsync("camelcasejob");
+            var byLower = await store.GetJobAsync((string?)null, "camelcasejob");
             Assert.NotNull(byLower);
             Assert.Equal("CamelCaseJob", byLower!.Name);
         }
@@ -271,7 +271,7 @@ namespace ETL_SQL.Tests.Orchestration
             await store.InitializeAsync();
             await store.SaveJobAsync(Job("cc-job"));
 
-            var saved = await store.GetJobAsync("cc-job");
+            var saved = await store.GetJobAsync((string?)null, "cc-job");
             Assert.NotNull(saved);
 
             // Stale version is rejected; current version succeeds.
@@ -339,8 +339,8 @@ namespace ETL_SQL.Tests.Orchestration
                 "release-1", 3, 2048, 4, now.AddSeconds(1)));
 
             Assert.Equal("Deleted", deleted.State.State);
-            Assert.Null(await store.GetJobAsync("pg-alpha-job"));
-            Assert.NotNull(await store.GetJobAsync("pg-beta-job"));
+            Assert.Null(await store.GetJobAsync((string?)null, "pg-alpha-job"));
+            Assert.NotNull(await store.GetJobAsync((string?)null, "pg-beta-job"));
             Assert.Equal("Active", (await NewStore().GetSharedTenantStateAsync(beta))!.State);
         }
 

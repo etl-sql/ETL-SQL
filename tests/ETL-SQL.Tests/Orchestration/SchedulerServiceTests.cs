@@ -749,9 +749,9 @@ namespace ETL_SQL.Tests.Orchestration
 
             var store = new Mock<IJobHistoryStore>();
             store.Setup(s => s.GetHistoryEntryAsync(42)).ReturnsAsync(history);
-            store.Setup(s => s.GetJobAsync(job.Name)).ReturnsAsync(job);
-            store.Setup(s => s.LogJobStartAsync(job.Name)).ReturnsAsync(43L);
-            store.Setup(s => s.AcquireJobLeaseAsync(job.Name, It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            store.Setup(s => s.GetJobByIdAsync(job.Id!)).ReturnsAsync(job);
+            store.Setup(s => s.LogJobStartAsync(job.Id!)).ReturnsAsync(43L);
+            store.Setup(s => s.AcquireJobLeaseAsync(job.Id!, It.IsAny<string>(), It.IsAny<TimeSpan>()))
                 .ReturnsAsync(1L);
             store.Setup(s => s.TryRenewJobLeaseAsync(job.Name, It.IsAny<string>(), It.IsAny<TimeSpan>()))
                 .ReturnsAsync(true);

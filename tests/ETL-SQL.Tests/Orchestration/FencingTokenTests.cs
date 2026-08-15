@@ -86,7 +86,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             // The current owner's fenced write succeeds and is persisted.
             Assert.True(await _store.TryUpdateJobLastRunFencedAsync("j", DateTime.UtcNow, nextRun, freshToken!.Value));
-            var job = await _store.GetJobAsync("j");
+            var job = await _store.GetJobAsync((string?)null, "j");
             Assert.NotNull(job!.NextRun);
         }
     }

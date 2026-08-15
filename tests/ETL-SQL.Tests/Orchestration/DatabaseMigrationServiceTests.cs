@@ -169,7 +169,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             Assert.True(result.Success);
             Assert.Equal(1, result.RowsPerTable["Jobs"]);
-            Assert.NotNull(await target.GetJobAsync("nightly"));
+            Assert.NotNull(await target.GetJobAsync((string?)null, "nightly"));
             var history = Assert.Single(await target.GetHistoryAsync("nightly"));
             Assert.Equal(7, history.RowsProcessed);
         }

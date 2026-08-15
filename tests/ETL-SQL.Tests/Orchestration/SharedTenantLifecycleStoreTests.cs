@@ -48,9 +48,9 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
         var draining = await store.ApplySharedTenantLifecycleAsync(alpha, upgrade);
 
         Assert.Equal("Draining", draining.Status);
-        Assert.False((await store.GetJobAsync("alpha-on"))!.IsEnabled);
-        Assert.False((await store.GetJobAsync("alpha-off"))!.IsEnabled);
-        Assert.True((await store.GetJobAsync("beta-on"))!.IsEnabled);
+        Assert.False((await store.GetJobAsync((string?)null, "alpha-on"))!.IsEnabled);
+        Assert.False((await store.GetJobAsync((string?)null, "alpha-off"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync((string?)null, "beta-on"))!.IsEnabled);
 
         await store.ReleaseJobLeaseAsync("alpha-on", "node-a");
         Assert.Null(await store.AcquireJobLeaseAsync(
@@ -60,9 +60,9 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
         Assert.Equal("Completed", complete.Status);
         Assert.Equal("release-3", complete.State.ActiveRelease);
         Assert.Equal(7, complete.State.MaxConcurrentJobs);
-        Assert.True((await store.GetJobAsync("alpha-on"))!.IsEnabled);
-        Assert.False((await store.GetJobAsync("alpha-off"))!.IsEnabled);
-        Assert.True((await store.GetJobAsync("beta-on"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync((string?)null, "alpha-on"))!.IsEnabled);
+        Assert.False((await store.GetJobAsync((string?)null, "alpha-off"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync((string?)null, "beta-on"))!.IsEnabled);
     }
 
     [Fact]
@@ -89,11 +89,11 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
             Command("delete-alpha", SharedTenantLifecycleKind.Delete, "change-d"));
 
         Assert.Equal("Deleted", result.State.State);
-        Assert.Null(await store.GetJobAsync("alpha-job"));
+        Assert.Null(await store.GetJobAsync((string?)null, "alpha-job"));
         Assert.Empty(await store.GetHistoryAsync("alpha-job"));
         Assert.Null(await store.GetJobStateAsync("alpha-job", "dq:quarantine-manifest:same"));
         Assert.Empty(await store.GetJobHistoryDailyAsync("alpha-job", DateTime.UtcNow.AddDays(-1)));
-        Assert.NotNull(await store.GetJobAsync("beta-job"));
+        Assert.NotNull(await store.GetJobAsync((string?)null, "beta-job"));
         Assert.Single(await store.GetHistoryAsync("beta-job"));
         Assert.Equal("beta", await store.GetJobStateAsync(
             "beta-job", "dq:quarantine-manifest:same"));

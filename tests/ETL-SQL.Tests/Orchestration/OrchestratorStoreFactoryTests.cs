@@ -40,7 +40,7 @@ namespace ETL_SQL.Tests.Orchestration
                 await store.InitializeAsync();
                 await store.SaveJobAsync(new JobDefinition("j1", "RUN SCRIPT 'x.etlsql';", 1, "DAY", "06:00", null, null, true));
 
-                var job = await store.GetJobAsync("j1");
+                var job = await store.GetJobAsync((string?)null, "j1");
                 Assert.NotNull(job);
                 Assert.Equal("j1", job!.Name);
             }

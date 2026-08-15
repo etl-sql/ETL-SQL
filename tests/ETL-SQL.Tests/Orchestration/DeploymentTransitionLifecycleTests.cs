@@ -72,7 +72,7 @@ public sealed class DeploymentTransitionLifecycleTests : IDisposable
         Assert.True(packageBytes.Length > 0);
 
         await source.SaveJobAsync(job with { IsEnabled = false, ModifiedBy = "transition-operator" });
-        Assert.False((await source.GetJobAsync(job.Name))!.IsEnabled);
+        Assert.False((await source.GetJobAsync(job.TenantId, job.Name))!.IsEnabled);
 
         var target = new SQLiteJobHistoryStore(Path.Combine(root, "target.db"));
         await target.InitializeAsync();

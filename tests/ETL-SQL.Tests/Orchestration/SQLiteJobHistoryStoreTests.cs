@@ -375,31 +375,76 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("Block", result.HashPolicy);
         }
 
+        /// <summary>
+        /// Replaces an earlier test that asserted a second tenant saving the same name was rejected.
+        /// It no longer is, and does not need to be: a name is unique per tenant, so the second save
+        /// creates that tenant's own job instead of contending for one global row. The guarantee that
+        /// matters is unchanged and asserted here — neither tenant can observe or overwrite the other.
+        /// </summary>
         [Fact]
-        public async Task SaveJob_TenantBindingRoundTripsAndCannotBeReplaced()
+        public async Task SaveJob_SameNameInTwoTenantsAreSeparateObjects()
         {
             await _store.InitializeAsync();
-            var original = MakeJob("TenantBound") with { TenantId = "tenant-a" };
-            await _store.SaveJobAsync(original);
+            await _store.SaveJobAsync(MakeJob("TenantBound") with { TenantId = "tenant-a", Script = "SELECT 1;" });
+            await _store.SaveJobAsync(MakeJob("TenantBound") with { TenantId = "tenant-b", Script = "SELECT 2;" });
 
-            Assert.Equal("tenant-a", (await _store.GetJobAsync("TenantBound"))!.TenantId);
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _store.SaveJobAsync(original with { TenantId = "tenant-b" }));
-            Assert.False(await _store.TrySaveJobAsync(
-                original with { TenantId = "tenant-b" }, expectedVersion: 1));
-            Assert.Equal("tenant-a", (await _store.GetJobAsync("TenantBound"))!.TenantId);
+            var a = await _store.GetJobAsync("tenant-a", "TenantBound");
+            var b = await _store.GetJobAsync("tenant-b", "TenantBound");
+            Assert.NotNull(a);
+            Assert.NotNull(b);
+            Assert.Equal("tenant-a", a!.TenantId);
+            Assert.Equal("tenant-b", b!.TenantId);
+            Assert.NotEqual(a.Id, b.Id);
+            Assert.Equal("SELECT 1;", a.Script);
+            Assert.Equal("SELECT 2;", b.Script);
         }
 
         [Fact]
-        public async Task SaveJob_LegacyRowMayReceiveItsFirstAuthoritativeTenantBinding()
+        public async Task SaveJob_TenantCannotReachAnotherTenantsJobByName()
         {
             await _store.InitializeAsync();
-            var legacy = MakeJob("LegacyBinding");
-            await _store.SaveJobAsync(legacy);
-            Assert.Null((await _store.GetJobAsync("LegacyBinding"))!.TenantId);
+            await _store.SaveJobAsync(MakeJob("Private") with { TenantId = "tenant-a" });
 
-            await _store.SaveJobAsync(legacy with { TenantId = "tenant-a" });
-            Assert.Equal("tenant-a", (await _store.GetJobAsync("LegacyBinding"))!.TenantId);
+            Assert.Null(await _store.GetJobAsync("tenant-b", "Private"));
+            Assert.Null(await _store.GetJobAsync((string?)null, "Private"));
+        }
+
+        /// <summary>
+        /// Adoption into a tenant is explicit, not a side effect of a re-save. This replaces an earlier
+        /// test that asserted an unbound row silently took the first tenant that saved over it — which
+        /// would let a host attached to a Portal quietly hand a Solo deployment's jobs to whichever
+        /// tenant wrote next. The unbound scope is a scope of its own.
+        /// </summary>
+        [Fact]
+        public async Task SaveJob_UnboundJobIsNotAdoptedByAWriteThatCarriesATenant()
+        {
+            await _store.InitializeAsync();
+            await _store.SaveJobAsync(MakeJob("LegacyBinding"));
+            var unbound = await _store.GetJobAsync((string?)null, "LegacyBinding");
+            Assert.NotNull(unbound);
+            Assert.Null(unbound!.TenantId);
+
+            await _store.SaveJobAsync(MakeJob("LegacyBinding") with { TenantId = "tenant-a" });
+
+            var stillUnbound = await _store.GetJobAsync((string?)null, "LegacyBinding");
+            var tenantOwned = await _store.GetJobAsync("tenant-a", "LegacyBinding");
+            Assert.Null(stillUnbound!.TenantId);
+            Assert.Equal("tenant-a", tenantOwned!.TenantId);
+            Assert.NotEqual(unbound.Id, tenantOwned.Id);
+        }
+
+        [Fact]
+        public async Task SaveJob_ReSaveKeepsTheSameIdentity()
+        {
+            await _store.InitializeAsync();
+            await _store.SaveJobAsync(MakeJob("Stable"));
+            var first = await _store.GetJobAsync((string?)null, "Stable");
+
+            await _store.SaveJobAsync(MakeJob("Stable") with { Script = "SELECT 42;", Id = first!.Id });
+            var second = await _store.GetJobAsync((string?)null, "Stable");
+
+            Assert.Equal(first.Id, second!.Id);
+            Assert.Equal("SELECT 42;", second.Script);
         }
 
         [Fact]

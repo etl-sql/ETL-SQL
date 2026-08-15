@@ -44,8 +44,20 @@ namespace ETL_SQL.Tests.Orchestration
             var job = new JobDefinition(name, "reports/finance.rptsql", 0, "HOUR", null, null, null,
                 JobType: JobTargetKind.Report, TargetPath: "folders/Finance", DisplayName: "Finance nightly");
             await _store.SaveJobAsync(job);
-            return job;
+            return (await _store.GetJobAsync((string?)null, name))!;
         }
+
+        // These tests exercise the unbound (Solo) scope, where a name resolves to exactly one object.
+        // Links and mutations address that object by identity, so the helpers translate once here
+        // rather than in every assertion.
+        private async Task<string> JobId(string name) =>
+            (await _store.GetJobAsync((string?)null, name))!.Id!;
+
+        private async Task<string> ScheduleId(string name) =>
+            (await _store.GetScheduleAsync((string?)null, name))!.Id!;
+
+        private async Task<string> NotificationId(string name) =>
+            (await _store.GetNotificationAsync((string?)null, name))!.Id!;
 
         // ── Schedules ─────────────────────────────────────────────────────────────
 
@@ -54,7 +66,7 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await _store.SaveScheduleAsync(Nightly());
 
-            var loaded = await _store.GetScheduleAsync("NightlyTrigger");
+            var loaded = await _store.GetScheduleAsync((string?)null, "NightlyTrigger");
 
             Assert.NotNull(loaded);
             Assert.Equal("0 2 * * *", loaded!.Cron);
@@ -72,8 +84,8 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await _store.SaveScheduleAsync(Nightly("NightlyTrigger"));
 
-            Assert.NotNull(await _store.GetScheduleAsync("nightlytrigger"));
-            Assert.NotNull(await _store.GetScheduleAsync("NIGHTLYTRIGGER"));
+            Assert.NotNull(await _store.GetScheduleAsync((string?)null, "nightlytrigger"));
+            Assert.NotNull(await _store.GetScheduleAsync((string?)null, "NIGHTLYTRIGGER"));
 
             // A differently-cased save updates the same row rather than creating a second.
             await _store.SaveScheduleAsync(Nightly("nightlytrigger") with { Cron = "0 3 * * *" });
@@ -89,7 +101,7 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.SaveScheduleAsync(Nightly());
             await _store.SaveScheduleAsync(Nightly() with { Cron = "0 4 * * *" });
 
-            var loaded = await _store.GetScheduleAsync("NightlyTrigger");
+            var loaded = await _store.GetScheduleAsync((string?)null, "NightlyTrigger");
             Assert.Equal("0 4 * * *", loaded!.Cron);
             Assert.Equal(2, loaded.Version);
         }
@@ -101,7 +113,7 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.SaveScheduleAsync(Nightly() with { CreatedBy = "alice", ModifiedBy = "alice" });
             await _store.SaveScheduleAsync(Nightly() with { CreatedBy = "bob", ModifiedBy = "bob" });
 
-            var loaded = await _store.GetScheduleAsync("NightlyTrigger");
+            var loaded = await _store.GetScheduleAsync((string?)null, "NightlyTrigger");
             Assert.Equal("alice", loaded!.CreatedBy);
             Assert.Equal("bob", loaded.ModifiedBy);
         }
@@ -111,9 +123,9 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await _store.SaveScheduleAsync(Nightly());
 
-            Assert.True(await _store.SetScheduleEnabledAsync("nightlytrigger", false));
-            Assert.False((await _store.GetScheduleAsync("NightlyTrigger"))!.IsEnabled);
-            Assert.False(await _store.SetScheduleEnabledAsync("no_such_schedule", false));
+            Assert.True(await _store.SetScheduleEnabledAsync(await ScheduleId("nightlytrigger"), false));
+            Assert.False((await _store.GetScheduleAsync((string?)null, "NightlyTrigger"))!.IsEnabled);
+            Assert.False(await _store.SetScheduleEnabledAsync(await ScheduleId("no_such_schedule"), false));
         }
 
         // ── Restrict vs cascade ───────────────────────────────────────────────────
@@ -128,15 +140,15 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync("FinanceNightly");
             await SaveJobAsync("SalesNightly");
             await _store.SaveScheduleAsync(Nightly());
-            await _store.AddJobScheduleAsync("FinanceNightly", "NightlyTrigger", DateTime.UtcNow);
-            await _store.AddJobScheduleAsync("SalesNightly", "NightlyTrigger", DateTime.UtcNow);
+            await _store.AddJobScheduleAsync(await JobId("FinanceNightly"), await ScheduleId("NightlyTrigger"), DateTime.UtcNow);
+            await _store.AddJobScheduleAsync(await JobId("SalesNightly"), await ScheduleId("NightlyTrigger"), DateTime.UtcNow);
 
-            var blockers = await _store.DeleteScheduleAsync("NightlyTrigger");
+            var blockers = await _store.DeleteScheduleAsync(await ScheduleId("NightlyTrigger"));
 
             Assert.Equal(2, blockers.Count);
             Assert.Contains("FinanceNightly", blockers);
             Assert.Contains("SalesNightly", blockers);
-            Assert.NotNull(await _store.GetScheduleAsync("NightlyTrigger"));
+            Assert.NotNull(await _store.GetScheduleAsync((string?)null, "NightlyTrigger"));
         }
 
         [Fact]
@@ -144,8 +156,8 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await _store.SaveScheduleAsync(Nightly());
 
-            Assert.Empty(await _store.DeleteScheduleAsync("NightlyTrigger"));
-            Assert.Null(await _store.GetScheduleAsync("NightlyTrigger"));
+            Assert.Empty(await _store.DeleteScheduleAsync(await ScheduleId("NightlyTrigger")));
+            Assert.Null(await _store.GetScheduleAsync((string?)null, "NightlyTrigger"));
         }
 
         [Fact]
@@ -153,12 +165,12 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await SaveJobAsync();
             await _store.SaveNotificationAsync(OpsAlert());
-            await _store.AddJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Failure);
+            await _store.AddJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Failure);
 
-            var blockers = await _store.DeleteNotificationAsync("OpsAlert");
+            var blockers = await _store.DeleteNotificationAsync(await NotificationId("OpsAlert"));
 
             Assert.Equal("FinanceNightly", Assert.Single(blockers));
-            Assert.NotNull(await _store.GetNotificationAsync("OpsAlert"));
+            Assert.NotNull(await _store.GetNotificationAsync((string?)null, "OpsAlert"));
         }
 
         /// <summary>
@@ -171,18 +183,18 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync();
             await _store.SaveScheduleAsync(Nightly());
             await _store.SaveNotificationAsync(OpsAlert());
-            await _store.AddJobScheduleAsync("FinanceNightly", "NightlyTrigger", DateTime.UtcNow);
-            await _store.AddJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Failure);
+            await _store.AddJobScheduleAsync(await JobId("FinanceNightly"), await ScheduleId("NightlyTrigger"), DateTime.UtcNow);
+            await _store.AddJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Failure);
 
             await _store.DeleteJobAsync("FinanceNightly");
 
-            Assert.Empty(await _store.GetJobSchedulesAsync("FinanceNightly"));
-            Assert.Empty(await _store.GetJobNotificationsAsync("FinanceNightly"));
-            Assert.NotNull(await _store.GetScheduleAsync("NightlyTrigger"));
-            Assert.NotNull(await _store.GetNotificationAsync("OpsAlert"));
+            Assert.Empty(await _store.GetJobSchedulesAsync(await JobId("FinanceNightly")));
+            Assert.Empty(await _store.GetJobNotificationsAsync(await JobId("FinanceNightly")));
+            Assert.NotNull(await _store.GetScheduleAsync((string?)null, "NightlyTrigger"));
+            Assert.NotNull(await _store.GetNotificationAsync((string?)null, "OpsAlert"));
 
             // The shared objects are now unlinked, so they can be deleted.
-            Assert.Empty(await _store.DeleteScheduleAsync("NightlyTrigger"));
+            Assert.Empty(await _store.DeleteScheduleAsync(await ScheduleId("NightlyTrigger")));
         }
 
         // ── Attachments ───────────────────────────────────────────────────────────
@@ -198,10 +210,10 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.SaveScheduleAsync(Nightly());
             await _store.SaveScheduleAsync(new ScheduleDefinition("BusinessHours", "*/15 8-18 * * 1-5", "UTC"));
 
-            await _store.AddJobScheduleAsync("FinanceNightly", "NightlyTrigger", DateTime.UtcNow);
-            await _store.AddJobScheduleAsync("FinanceNightly", "BusinessHours", DateTime.UtcNow);
+            await _store.AddJobScheduleAsync(await JobId("FinanceNightly"), await ScheduleId("NightlyTrigger"), DateTime.UtcNow);
+            await _store.AddJobScheduleAsync(await JobId("FinanceNightly"), await ScheduleId("BusinessHours"), DateTime.UtcNow);
 
-            var links = await _store.GetJobSchedulesAsync("FinanceNightly");
+            var links = await _store.GetJobSchedulesAsync(await JobId("FinanceNightly"));
             Assert.Equal(2, links.Count);
             Assert.Contains(links, l => l.ScheduleName == "NightlyTrigger");
             Assert.Contains(links, l => l.ScheduleName == "BusinessHours");
@@ -218,16 +230,16 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.SaveScheduleAsync(Nightly());
             var armed = new DateTime(2026, 8, 1, 6, 0, 0, DateTimeKind.Utc);
 
-            Assert.True(await _store.AddJobScheduleAsync("FinanceNightly", "NightlyTrigger", armed));
+            Assert.True(await _store.AddJobScheduleAsync(await JobId("FinanceNightly"), await ScheduleId("NightlyTrigger"), armed));
 
             var fired = new DateTime(2026, 8, 1, 6, 0, 5, DateTimeKind.Utc);
             var next = new DateTime(2026, 8, 2, 6, 0, 0, DateTimeKind.Utc);
-            await _store.UpdateJobScheduleRunAsync("FinanceNightly", "NightlyTrigger", fired, next);
+            await _store.UpdateJobScheduleRunAsync(await JobId("FinanceNightly"), await ScheduleId("NightlyTrigger"), fired, next);
 
             // Replay: reports "already there", and leaves the armed state alone.
-            Assert.False(await _store.AddJobScheduleAsync("FinanceNightly", "NightlyTrigger", DateTime.UtcNow));
+            Assert.False(await _store.AddJobScheduleAsync(await JobId("FinanceNightly"), await ScheduleId("NightlyTrigger"), DateTime.UtcNow));
 
-            var link = Assert.Single(await _store.GetJobSchedulesAsync("FinanceNightly"));
+            var link = Assert.Single(await _store.GetJobSchedulesAsync(await JobId("FinanceNightly")));
             Assert.Equal(fired, link.LastRun);
             Assert.Equal(next, link.NextRun);
         }
@@ -237,11 +249,11 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await SaveJobAsync();
             await _store.SaveScheduleAsync(Nightly());
-            await _store.AddJobScheduleAsync("FinanceNightly", "NightlyTrigger", DateTime.UtcNow);
+            await _store.AddJobScheduleAsync(await JobId("FinanceNightly"), await ScheduleId("NightlyTrigger"), DateTime.UtcNow);
 
-            Assert.True(await _store.RemoveJobScheduleAsync("financenightly", "nightlytrigger"));
+            Assert.True(await _store.RemoveJobScheduleAsync(await JobId("financenightly"), await ScheduleId("nightlytrigger")));
             // Removing what is not there is a no-op, not an error — replay must converge.
-            Assert.False(await _store.RemoveJobScheduleAsync("FinanceNightly", "NightlyTrigger"));
+            Assert.False(await _store.RemoveJobScheduleAsync(await JobId("FinanceNightly"), await ScheduleId("NightlyTrigger")));
         }
 
         [Fact]
@@ -250,11 +262,11 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync();
             await _store.SaveNotificationAsync(OpsAlert());
 
-            Assert.True(await _store.AddJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Success));
-            Assert.True(await _store.AddJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Failure));
-            Assert.False(await _store.AddJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Success));
+            Assert.True(await _store.AddJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Success));
+            Assert.True(await _store.AddJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Failure));
+            Assert.False(await _store.AddJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Success));
 
-            var links = await _store.GetJobNotificationsAsync("FinanceNightly");
+            var links = await _store.GetJobNotificationsAsync(await JobId("FinanceNightly"));
             Assert.Equal(2, links.Count);
         }
 
@@ -272,13 +284,15 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await SaveJobAsync();
             await _store.SaveNotificationAsync(OpsAlert());
-            await _store.AddJobNotificationAsync("FinanceNightly", "OpsAlert", first);
+            await _store.AddJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), first);
 
+            var jobId = await JobId("FinanceNightly");
+            var notificationId = await NotificationId("OpsAlert");
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => _store.AddJobNotificationAsync("FinanceNightly", "OpsAlert", second));
+                () => _store.AddJobNotificationAsync(jobId, notificationId, second));
 
             Assert.Contains("COMPLETION covers both", ex.Message, StringComparison.Ordinal);
-            Assert.Single(await _store.GetJobNotificationsAsync("FinanceNightly"));
+            Assert.Single(await _store.GetJobNotificationsAsync(await JobId("FinanceNightly")));
         }
 
         [Fact]
@@ -286,12 +300,12 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await SaveJobAsync();
             await _store.SaveNotificationAsync(OpsAlert());
-            await _store.AddJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Failure);
+            await _store.AddJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Failure);
 
-            Assert.True(await _store.RemoveJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Failure));
-            Assert.False(await _store.RemoveJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Failure));
+            Assert.True(await _store.RemoveJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Failure));
+            Assert.False(await _store.RemoveJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Failure));
             // A different outcome was never attached, so removing it is also a no-op.
-            Assert.False(await _store.RemoveJobNotificationAsync("FinanceNightly", "OpsAlert", NotificationTrigger.Success));
+            Assert.False(await _store.RemoveJobNotificationAsync(await JobId("FinanceNightly"), await NotificationId("OpsAlert"), NotificationTrigger.Success));
         }
 
         // ── Job columns ───────────────────────────────────────────────────────────
@@ -307,7 +321,7 @@ namespace ETL_SQL.Tests.Orchestration
                 Description: "Rebuilds the sales dashboard cache",
                 CreatedBy: "alice"));
 
-            var loaded = await _store.GetJobAsync("salesrefresh");
+            var loaded = await _store.GetJobAsync((string?)null, "salesrefresh");
 
             Assert.NotNull(loaded);
             Assert.Equal(JobTargetKind.Report, loaded!.JobType);
@@ -322,7 +336,7 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await _store.SaveJobAsync(new JobDefinition("Legacy", "pipelines/sync.etlsql", 1, "HOUR", null, null, null));
 
-            var loaded = await _store.GetJobAsync("Legacy");
+            var loaded = await _store.GetJobAsync((string?)null, "Legacy");
 
             Assert.Equal(JobTargetKind.Script, loaded!.JobType);
             Assert.Null(loaded.TargetPath);
