@@ -78,12 +78,12 @@ public static class WatermarkManager
             return sessionVal;
 
         // 3. Check persistent store or local state
-        if (!string.IsNullOrEmpty(context.JobName))
+        if (context.JobId.IsAssigned)
         {
             var store = context.ServiceProvider.GetService(typeof(IJobHistoryStore)) as IJobHistoryStore;
             if (store != null)
             {
-                var val = await store.GetJobStateAsync(context.JobName, config.StateKey);
+                var val = await store.GetJobStateAsync(context.JobId, config.StateKey);
                 if (!string.IsNullOrEmpty(val)) return val;
             }
         }

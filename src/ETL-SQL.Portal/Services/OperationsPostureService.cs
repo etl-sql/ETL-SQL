@@ -24,8 +24,8 @@ public sealed class OperationsPostureService(
     IJobHistoryStore jobHistory,
     TimeProvider clock)
 {
-    internal const string BackupJobStateName = "admin-backup";
-    internal const string RestoreJobStateName = "admin-restore";
+    internal const string BackupStateScope = "backup";
+    internal const string RestoreStateScope = "restore";
 
     /// <summary>A drill older than this is reported as stale evidence.</summary>
     internal const int RestoreDrillMaxAgeDays = 90;
@@ -44,9 +44,9 @@ public sealed class OperationsPostureService(
 
     private async Task<BackupPostureDto> BuildBackupAsync(DateTime now)
     {
-        var status = await jobHistory.GetJobStateAsync(BackupJobStateName, "last_backup_status");
-        var atText = await jobHistory.GetJobStateAsync(BackupJobStateName, "last_backup_at");
-        var exitCode = await jobHistory.GetJobStateAsync(BackupJobStateName, "last_backup_exit_code");
+        var status = await jobHistory.GetHostStateAsync(BackupStateScope, "last_backup_status");
+        var atText = await jobHistory.GetHostStateAsync(BackupStateScope, "last_backup_at");
+        var exitCode = await jobHistory.GetHostStateAsync(BackupStateScope, "last_backup_exit_code");
         var lastBackup = ParseUtc(atText);
 
         var maxAgeHours = Math.Max(1, config.AdminServices.BackupReport.MaxBackupAgeHours);
@@ -76,10 +76,10 @@ public sealed class OperationsPostureService(
 
     private async Task<RestoreDrillPostureDto> BuildRestoreDrillAsync(DateTime now)
     {
-        var mode = await jobHistory.GetJobStateAsync(RestoreJobStateName, "last_restore_mode");
-        var status = await jobHistory.GetJobStateAsync(RestoreJobStateName, "last_restore_status");
-        var atText = await jobHistory.GetJobStateAsync(RestoreJobStateName, "last_restore_at");
-        var problemsText = await jobHistory.GetJobStateAsync(RestoreJobStateName, "last_restore_problems");
+        var mode = await jobHistory.GetHostStateAsync(RestoreStateScope, "last_restore_mode");
+        var status = await jobHistory.GetHostStateAsync(RestoreStateScope, "last_restore_status");
+        var atText = await jobHistory.GetHostStateAsync(RestoreStateScope, "last_restore_at");
+        var problemsText = await jobHistory.GetHostStateAsync(RestoreStateScope, "last_restore_problems");
         var lastDrill = ParseUtc(atText);
         var ageDays = lastDrill is DateTime drilled ? (int)Math.Max(0, (now - drilled).TotalDays) : (int?)null;
 

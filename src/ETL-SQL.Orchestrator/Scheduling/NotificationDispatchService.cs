@@ -28,7 +28,7 @@ public sealed class NotificationDispatchService(
         IReadOnlyList<JobNotificationLink> links;
         try
         {
-            links = await catalog.GetJobNotificationsAsync(job.Name);
+            links = await catalog.GetJobNotificationsAsync(job.Id);
         }
         catch (Exception ex)
         {
@@ -92,9 +92,9 @@ public sealed class NotificationDispatchService(
         NotificationDefinition? notification;
         try
         {
-            notification = string.IsNullOrWhiteSpace(payload.NotificationId)
-                ? await catalog.GetNotificationAsync(payload.TenantId, payload.NotificationName)
-                : await catalog.GetNotificationByIdAsync(payload.NotificationId);
+            notification = payload.NotificationId.IsAssigned
+                ? await catalog.GetNotificationByIdAsync(payload.NotificationId)
+                : await catalog.GetNotificationAsync(payload.TenantId, payload.NotificationName);
         }
         catch (Exception ex)
         {
@@ -269,7 +269,7 @@ public sealed record NotificationDispatchPayload
         string? ErrorMessage = null,
         string? Actor = null,
         IReadOnlyList<string>? AttachmentPaths = null,
-        string? NotificationId = null,
+        NotificationId NotificationId = default,
         string? TenantId = null)
     {
         this.NotificationName = NotificationName;
@@ -297,7 +297,7 @@ public sealed record NotificationDispatchPayload
     /// Preferred over <see cref="NotificationName"/> when the caller already holds the destination —
     /// a name resolves only within a tenant, so dispatching by id removes the ambiguity entirely.
     /// </summary>
-    public string? NotificationId { get; init; }
+    public NotificationId NotificationId { get; init; }
 
     /// <summary>Tenant the name is resolved in when no id is supplied; null is the unbound scope.</summary>
     public string? TenantId { get; init; }

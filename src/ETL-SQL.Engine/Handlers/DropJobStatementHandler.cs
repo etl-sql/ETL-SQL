@@ -42,12 +42,12 @@ public class DropJobStatementHandler : IStatementHandler
         try
         {
             // DeleteJobAsync deletes both the job and its history entries.
-            await _store.DeleteJobAsync(stmt.Name);
+            await _store.DeleteJobAsync(existing.Id);
             // Retire grants by the id captured before the delete: a later job of the same name must
             // start with none of them.
             if (context.ServiceProvider.GetService<IOrchestratorAuthorizationStore>() is { } grants
-                && existing.Id is { Length: > 0 } droppedId)
-                await grants.DeleteObjectGrantsAsync(droppedId, context.CancellationToken);
+                && existing.Id.IsAssigned)
+                await grants.DeleteObjectGrantsAsync(existing.Id.Value, context.CancellationToken);
             CatalogStatementSupport.AuditMutation(
                 context,
                 "DROP_JOB",

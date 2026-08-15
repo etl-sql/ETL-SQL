@@ -31,7 +31,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// <exception cref="InvalidOperationException">No such schedule.</exception>
         public static async Task<bool> AttachAsync(
             IJobCatalogStore catalog,
-            string jobId,
+            JobId jobId,
             string? tenantId,
             string scheduleName,
             DateTimeOffset? asOf = null)
@@ -41,7 +41,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             var schedule = await catalog.GetScheduleAsync(tenantId, scheduleName)
                 ?? throw new InvalidOperationException(
                     $"Schedule '{scheduleName}' does not exist. Create it before attaching it to a job.");
-            if (string.IsNullOrWhiteSpace(schedule.Id))
+            if (!schedule.Id.IsAssigned)
                 throw new InvalidOperationException(
                     $"Schedule '{scheduleName}' has no identity and cannot be attached.");
 

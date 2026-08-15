@@ -60,7 +60,25 @@ internal static class CatalogStatementSupport
     /// the ambiguity the surrogate id exists to remove. A definition with no id predates identity
     /// assignment and is refused rather than allowed.
     /// </summary>
-    public static async Task DemandAsync(
+    public static Task DemandAsync(
+        IExecutionContext context, Statement statement, OrchestratorObjectKind kind, string name,
+        JobId objectId, string? objectTenantId, OrchestratorObjectPermission permission, string? owner) =>
+        DemandCoreAsync(context, statement, kind, name, objectId.ToString(), objectTenantId, permission, owner);
+
+    public static Task DemandAsync(
+        IExecutionContext context, Statement statement, OrchestratorObjectKind kind, string name,
+        ScheduleId objectId, string? objectTenantId, OrchestratorObjectPermission permission, string? owner) =>
+        DemandCoreAsync(context, statement, kind, name, objectId.ToString(), objectTenantId, permission, owner);
+
+    public static Task DemandAsync(
+        IExecutionContext context, Statement statement, OrchestratorObjectKind kind, string name,
+        NotificationId objectId, string? objectTenantId, OrchestratorObjectPermission permission, string? owner) =>
+        DemandCoreAsync(context, statement, kind, name, objectId.ToString(), objectTenantId, permission, owner);
+
+    // Private, and reached only through the typed overloads above: the grant store keys heterogeneous
+    // object kinds in one column so it takes a string, but nothing may hand it one directly, or a
+    // name would once again be accepted where an identity belongs.
+    private static async Task DemandCoreAsync(
         IExecutionContext context,
         Statement statement,
         OrchestratorObjectKind kind,
@@ -366,14 +384,14 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
             }
             throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
         }
-        await CatalogStatementSupport.DemandAsync(
-            context, stmt,
-            stmt.Kind == CatalogObjectKind.Schedule ? OrchestratorObjectKind.Schedule : OrchestratorObjectKind.Notification,
-            stmt.Name,
-            schedule?.Id ?? notification?.Id,
-            schedule?.TenantId ?? notification?.TenantId,
-            OrchestratorObjectPermission.Manage,
-            schedule?.CreatedBy ?? notification?.CreatedBy);
+        if (schedule is not null)
+            await CatalogStatementSupport.DemandAsync(
+                context, stmt, OrchestratorObjectKind.Schedule, stmt.Name,
+                schedule.Id, schedule.TenantId, OrchestratorObjectPermission.Manage, schedule.CreatedBy);
+        else
+            await CatalogStatementSupport.DemandAsync(
+                context, stmt, OrchestratorObjectKind.Notification, stmt.Name,
+                notification!.Id, notification.TenantId, OrchestratorObjectPermission.Manage, notification.CreatedBy);
 
         if (context.IsWhatIf)
         {
@@ -381,9 +399,10 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
             return;
         }
 
-        var blockers = stmt.Kind == CatalogObjectKind.Schedule
-            ? await store.DeleteScheduleAsync(stmt.Name)
-            : await store.DeleteNotificationAsync(stmt.Name);
+        // Deleted by the identity the name resolved to a moment ago, not by the name again.
+        var blockers = schedule is not null
+            ? await store.DeleteScheduleAsync(schedule.Id)
+            : await store.DeleteNotificationAsync(notification!.Id);
 
         // Restrict, not cascade: dropping a shared object out from under the jobs that use it would
         // silently unschedule or silence them. Naming them is what makes the failure actionable.
@@ -396,8 +415,9 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
 
         // Grants are retired by the id captured before the delete, so nothing depends on the name
         // still resolving — and an object later created with the same name gets none of them.
+        var droppedId = schedule is not null ? schedule.Id.ToString() : notification!.Id.ToString();
         if (context.ServiceProvider.GetService<IOrchestratorAuthorizationStore>() is { } grants
-            && (schedule?.Id ?? notification?.Id) is { Length: > 0 } droppedId)
+            && droppedId.Length > 0)
             await grants.DeleteObjectGrantsAsync(droppedId, context.CancellationToken);
 
         CatalogStatementSupport.AuditMutation(
@@ -426,14 +446,14 @@ public class SetCatalogObjectEnabledStatementHandler(IJobCatalogStore? catalog =
         var exists = schedule is not null || notification is not null;
         if (!exists)
             throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
-        await CatalogStatementSupport.DemandAsync(
-            context, stmt,
-            stmt.Kind == CatalogObjectKind.Schedule ? OrchestratorObjectKind.Schedule : OrchestratorObjectKind.Notification,
-            stmt.Name,
-            schedule?.Id ?? notification?.Id,
-            schedule?.TenantId ?? notification?.TenantId,
-            OrchestratorObjectPermission.Manage,
-            schedule?.CreatedBy ?? notification?.CreatedBy);
+        if (schedule is not null)
+            await CatalogStatementSupport.DemandAsync(
+                context, stmt, OrchestratorObjectKind.Schedule, stmt.Name,
+                schedule.Id, schedule.TenantId, OrchestratorObjectPermission.Manage, schedule.CreatedBy);
+        else
+            await CatalogStatementSupport.DemandAsync(
+                context, stmt, OrchestratorObjectKind.Notification, stmt.Name,
+                notification!.Id, notification.TenantId, OrchestratorObjectPermission.Manage, notification.CreatedBy);
 
         if (context.IsWhatIf)
         {
@@ -443,9 +463,9 @@ public class SetCatalogObjectEnabledStatementHandler(IJobCatalogStore? catalog =
             return;
         }
 
-        var matched = stmt.Kind == CatalogObjectKind.Schedule
-            ? await store.SetScheduleEnabledAsync(stmt.Name, stmt.IsEnabled)
-            : await store.SetNotificationEnabledAsync(stmt.Name, stmt.IsEnabled);
+        var matched = schedule is not null
+            ? await store.SetScheduleEnabledAsync(schedule.Id, stmt.IsEnabled)
+            : await store.SetNotificationEnabledAsync(notification!.Id, stmt.IsEnabled);
 
         if (!matched)
             throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
@@ -475,15 +495,17 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         var kind = stmt.Kind.ToString().ToUpperInvariant();
         var verb = stmt.Action.ToString().ToUpperInvariant();
         var store = CatalogStatementSupport.Require(catalog, stmt, $"ALTER JOB … {verb} {kind}");
+
+        // The job is resolved once, here, whether or not an authorizer is configured: the link tables
+        // are keyed by identity, so a name that never resolved would previously have produced a
+        // successful-looking statement that attached nothing.
+        var jobs = context.ServiceProvider.GetService<IJobHistoryStore>() ?? store as IJobHistoryStore
+            ?? throw new ExecutionException("The shared Orchestrator job store is unavailable.", null, stmt.Line, stmt.Column);
+        var job = await jobs.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.JobName)
+            ?? throw new ExecutionException($"Job '{stmt.JobName}' does not exist.", null, stmt.Line, stmt.Column);
         if (context.ServiceProvider.GetService<IOrchestratorObjectAuthorizer>() is not null)
-        {
-            var jobs = context.ServiceProvider.GetService<IJobHistoryStore>() ?? store as IJobHistoryStore
-                ?? throw new ExecutionException("The shared Orchestrator job store is unavailable.", null, stmt.Line, stmt.Column);
-            var job = await jobs.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.JobName)
-                ?? throw new ExecutionException($"Job '{stmt.JobName}' does not exist.", null, stmt.Line, stmt.Column);
             await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
                 job.Name, job.Id, job.TenantId, OrchestratorObjectPermission.Manage, job.CreatedBy);
-        }
 
         if (context.IsWhatIf)
         {
@@ -495,17 +517,20 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         }
 
         if (stmt.Kind == CatalogObjectKind.Schedule)
-            await ApplyScheduleAsync(stmt, store, context);
+            await ApplyScheduleAsync(stmt, job.Id, store, context);
         else
-            await ApplyNotificationAsync(stmt, store, context);
+            await ApplyNotificationAsync(stmt, job.Id, store, context);
     }
 
     private static async Task ApplyScheduleAsync(
-        AlterJobAttachmentStatement stmt, IJobCatalogStore store, IExecutionContext context)
+        AlterJobAttachmentStatement stmt, JobId jobId, IJobCatalogStore store, IExecutionContext context)
     {
         if (stmt.Action == JobAttachmentAction.Remove)
         {
-            var removed = await store.RemoveJobScheduleAsync(stmt.JobName, stmt.TargetName);
+            // Detaching resolves the schedule too, but tolerates a name that does not: "remove what is
+            // not there" is a no-op in this model, not an error.
+            var attached = await store.GetScheduleAsync(CatalogStatementSupport.ActingTenant(context), stmt.TargetName);
+            var removed = attached is not null && await store.RemoveJobScheduleAsync(jobId, attached.Id);
             if (removed)
                 CatalogStatementSupport.AuditMutation(
                     context,
@@ -529,7 +554,7 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         // The link is armed at the schedule's next occurrence, never left empty: an unarmed link is
         // dormant in this model, so a job attached without one would silently never run.
         var nextRun = CronSchedule.GetNextOccurrence(schedule.Cron, schedule.TimeZone);
-        var added = await store.AddJobScheduleAsync(stmt.JobName, schedule.Name, nextRun);
+        var added = await store.AddJobScheduleAsync(jobId, schedule.Id, nextRun);
         if (added)
             CatalogStatementSupport.AuditMutation(
                 context,
@@ -546,7 +571,7 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
     }
 
     private static async Task ApplyNotificationAsync(
-        AlterJobAttachmentStatement stmt, IJobCatalogStore store, IExecutionContext context)
+        AlterJobAttachmentStatement stmt, JobId jobId, IJobCatalogStore store, IExecutionContext context)
     {
         if (!Enum.TryParse<NotificationTrigger>(stmt.Trigger, ignoreCase: true, out var trigger))
             throw new ExecutionException(
@@ -555,7 +580,9 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
 
         if (stmt.Action == JobAttachmentAction.Remove)
         {
-            var removed = await store.RemoveJobNotificationAsync(stmt.JobName, stmt.TargetName, trigger);
+            var attached = await store.GetNotificationAsync(CatalogStatementSupport.ActingTenant(context), stmt.TargetName);
+            var removed = attached is not null
+                && await store.RemoveJobNotificationAsync(jobId, attached.Id, trigger);
             if (removed)
                 CatalogStatementSupport.AuditMutation(
                     context,
@@ -578,7 +605,7 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
 
         try
         {
-            var added = await store.AddJobNotificationAsync(stmt.JobName, notification.Name, trigger);
+            var added = await store.AddJobNotificationAsync(jobId, notification.Id, trigger);
             if (added)
                 CatalogStatementSupport.AuditMutation(
                     context,

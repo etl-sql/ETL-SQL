@@ -88,9 +88,9 @@ namespace ETL_SQL.App
                 var store = Program.ServiceProvider?.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
                 if (store == null) return;
                 await store.InitializeAsync();
-                await store.SetJobStateAsync("admin-backup", "last_backup_status", exitCode == 0 ? "success" : "failed");
-                await store.SetJobStateAsync("admin-backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
-                await store.SetJobStateAsync("admin-backup", "last_backup_exit_code", exitCode.ToString());
+                await store.SetHostStateAsync("backup", "last_backup_status", exitCode == 0 ? "success" : "failed");
+                await store.SetHostStateAsync("backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
+                await store.SetHostStateAsync("backup", "last_backup_exit_code", exitCode.ToString());
             }
             catch (Exception ex)
             {
@@ -115,11 +115,11 @@ namespace ETL_SQL.App
                 var store = Program.ServiceProvider?.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
                 if (store == null) return;
                 await store.InitializeAsync();
-                await store.SetJobStateAsync("admin-restore", "last_restore_mode", validateOnly ? "validate" : "restore");
-                await store.SetJobStateAsync("admin-restore", "last_restore_status", exitCode == 0 ? "success" : "failed");
-                await store.SetJobStateAsync("admin-restore", "last_restore_at", DateTime.UtcNow.ToString("o"));
-                await store.SetJobStateAsync("admin-restore", "last_restore_exit_code", exitCode.ToString());
-                await store.SetJobStateAsync("admin-restore", "last_restore_problems", problemCount.ToString());
+                await store.SetHostStateAsync("restore", "last_restore_mode", validateOnly ? "validate" : "restore");
+                await store.SetHostStateAsync("restore", "last_restore_status", exitCode == 0 ? "success" : "failed");
+                await store.SetHostStateAsync("restore", "last_restore_at", DateTime.UtcNow.ToString("o"));
+                await store.SetHostStateAsync("restore", "last_restore_exit_code", exitCode.ToString());
+                await store.SetHostStateAsync("restore", "last_restore_problems", problemCount.ToString());
             }
             catch (Exception ex)
             {

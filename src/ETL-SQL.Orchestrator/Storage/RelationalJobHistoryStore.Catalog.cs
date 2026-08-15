@@ -76,8 +76,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return await reader.ReadAsync() ? ReadSchedule(reader) : null;
         }
 
-        public async Task<ScheduleDefinition?> GetScheduleByIdAsync(string scheduleId)
+        public async Task<ScheduleDefinition?> GetScheduleByIdAsync(ScheduleId scheduleIdRef)
         {
+            var scheduleId = scheduleIdRef.Require();
             if (string.IsNullOrWhiteSpace(scheduleId)) return null;
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -106,8 +107,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return results;
         }
 
-        public async Task<IReadOnlyList<string>> DeleteScheduleAsync(string scheduleId)
+        public async Task<IReadOnlyList<string>> DeleteScheduleAsync(ScheduleId scheduleIdRef)
         {
+            var scheduleId = scheduleIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -136,8 +138,8 @@ namespace ETL_SQL.Orchestrator.Storage
             return Array.Empty<string>();
         }
 
-        public Task<bool> SetScheduleEnabledAsync(string scheduleId, bool isEnabled) =>
-            SetEnabledAsync("Schedules", scheduleId, isEnabled);
+        public Task<bool> SetScheduleEnabledAsync(ScheduleId scheduleId, bool isEnabled) =>
+            SetEnabledAsync("Schedules", scheduleId.Require(), isEnabled);
 
         private static ScheduleDefinition ReadSchedule(DbDataReader reader) => new(
             reader.GetString(reader.GetOrdinal("Name")),
@@ -151,7 +153,7 @@ namespace ETL_SQL.Orchestrator.Storage
             ReadOptionalString(reader, "ModifiedBy"),
             reader.GetInt64(reader.GetOrdinal("Version")),
             TenantOrNull(ReadOptionalString(reader, "TenantId")),
-            ReadOptionalString(reader, "Id"));
+            ScheduleId.From(ReadOptionalString(reader, "Id")));
 
         // ── Notifications ─────────────────────────────────────────────────────────
 
@@ -204,8 +206,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return await reader.ReadAsync() ? ReadNotification(reader) : null;
         }
 
-        public async Task<NotificationDefinition?> GetNotificationByIdAsync(string notificationId)
+        public async Task<NotificationDefinition?> GetNotificationByIdAsync(NotificationId notificationIdRef)
         {
+            var notificationId = notificationIdRef.Require();
             if (string.IsNullOrWhiteSpace(notificationId)) return null;
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -234,8 +237,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return results;
         }
 
-        public async Task<IReadOnlyList<string>> DeleteNotificationAsync(string notificationId)
+        public async Task<IReadOnlyList<string>> DeleteNotificationAsync(NotificationId notificationIdRef)
         {
+            var notificationId = notificationIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -262,8 +266,8 @@ namespace ETL_SQL.Orchestrator.Storage
             return Array.Empty<string>();
         }
 
-        public Task<bool> SetNotificationEnabledAsync(string notificationId, bool isEnabled) =>
-            SetEnabledAsync("Notifications", notificationId, isEnabled);
+        public Task<bool> SetNotificationEnabledAsync(NotificationId notificationId, bool isEnabled) =>
+            SetEnabledAsync("Notifications", notificationId.Require(), isEnabled);
 
         private static NotificationDefinition ReadNotification(DbDataReader reader) => new(
             reader.GetString(reader.GetOrdinal("Name")),
@@ -277,12 +281,14 @@ namespace ETL_SQL.Orchestrator.Storage
             ReadOptionalString(reader, "ModifiedBy"),
             reader.GetInt64(reader.GetOrdinal("Version")),
             TenantOrNull(ReadOptionalString(reader, "TenantId")),
-            ReadOptionalString(reader, "Id"));
+            NotificationId.From(ReadOptionalString(reader, "Id")));
 
         // ── Job ↔ Schedule ────────────────────────────────────────────────────────
 
-        public async Task<bool> AddJobScheduleAsync(string jobId, string scheduleId, DateTime? nextRun)
+        public async Task<bool> AddJobScheduleAsync(JobId jobIdRef, ScheduleId scheduleIdRef, DateTime? nextRun)
         {
+            var jobId = jobIdRef.Require();
+            var scheduleId = scheduleIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -300,8 +306,10 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        public async Task<bool> RemoveJobScheduleAsync(string jobId, string scheduleId)
+        public async Task<bool> RemoveJobScheduleAsync(JobId jobIdRef, ScheduleId scheduleIdRef)
         {
+            var jobId = jobIdRef.Require();
+            var scheduleId = scheduleIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -314,8 +322,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync() > 0;
         }
 
-        public async Task<IReadOnlyList<JobScheduleLink>> GetJobSchedulesAsync(string? jobId = null)
+        public async Task<IReadOnlyList<JobScheduleLink>> GetJobSchedulesAsync(JobId jobIdRef = default)
         {
+            var jobId = jobIdRef.IsAssigned ? jobIdRef.Value : null;
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -339,8 +348,8 @@ namespace ETL_SQL.Orchestrator.Storage
             while (await reader.ReadAsync())
             {
                 results.Add(new JobScheduleLink(
-                    reader.GetString(reader.GetOrdinal("JobId")),
-                    reader.GetString(reader.GetOrdinal("ScheduleId")),
+                    JobId.From(reader.GetString(reader.GetOrdinal("JobId"))),
+                    ScheduleId.From(reader.GetString(reader.GetOrdinal("ScheduleId"))),
                     ParseOptionalTimestamp(reader, "LastRun"),
                     ParseOptionalTimestamp(reader, "NextRun"),
                     ReadOptionalString(reader, "JobName"),
@@ -349,8 +358,10 @@ namespace ETL_SQL.Orchestrator.Storage
             return results;
         }
 
-        public async Task UpdateJobScheduleRunAsync(string jobId, string scheduleId, DateTime lastRun, DateTime? nextRun)
+        public async Task UpdateJobScheduleRunAsync(JobId jobIdRef, ScheduleId scheduleIdRef, DateTime lastRun, DateTime? nextRun)
         {
+            var jobId = jobIdRef.Require();
+            var scheduleId = scheduleIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -366,8 +377,10 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task ArmJobScheduleAsync(string jobId, string scheduleId, DateTime? nextRun)
+        public async Task ArmJobScheduleAsync(JobId jobIdRef, ScheduleId scheduleIdRef, DateTime? nextRun)
         {
+            var jobId = jobIdRef.Require();
+            var scheduleId = scheduleIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -411,8 +424,10 @@ namespace ETL_SQL.Orchestrator.Storage
 
         // ── Job ↔ Notification ────────────────────────────────────────────────────
 
-        public async Task<bool> AddJobNotificationAsync(string jobId, string notificationId, NotificationTrigger trigger)
+        public async Task<bool> AddJobNotificationAsync(JobId jobIdRef, NotificationId notificationIdRef, NotificationTrigger trigger)
         {
+            var jobId = jobIdRef.Require();
+            var notificationId = notificationIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -435,8 +450,10 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        public async Task<bool> RemoveJobNotificationAsync(string jobId, string notificationId, NotificationTrigger trigger)
+        public async Task<bool> RemoveJobNotificationAsync(JobId jobIdRef, NotificationId notificationIdRef, NotificationTrigger trigger)
         {
+            var jobId = jobIdRef.Require();
+            var notificationId = notificationIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -452,8 +469,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync() > 0;
         }
 
-        public async Task<IReadOnlyList<JobNotificationLink>> GetJobNotificationsAsync(string? jobId = null)
+        public async Task<IReadOnlyList<JobNotificationLink>> GetJobNotificationsAsync(JobId jobIdRef = default)
         {
+            var jobId = jobIdRef.IsAssigned ? jobIdRef.Value : null;
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -478,8 +496,8 @@ namespace ETL_SQL.Orchestrator.Storage
                 if (!Enum.TryParse<NotificationTrigger>(raw, ignoreCase: true, out var trigger))
                     continue;
                 results.Add(new JobNotificationLink(
-                    reader.GetString(reader.GetOrdinal("JobId")),
-                    reader.GetString(reader.GetOrdinal("NotificationId")),
+                    JobId.From(reader.GetString(reader.GetOrdinal("JobId"))),
+                    NotificationId.From(reader.GetString(reader.GetOrdinal("NotificationId"))),
                     trigger,
                     ReadOptionalString(reader, "JobName"),
                     ReadOptionalString(reader, "NotificationName")));

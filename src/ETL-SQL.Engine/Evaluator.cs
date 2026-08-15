@@ -253,6 +253,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
     public string? LineageNamespace { get => _options.LineageNamespace; set => _options.LineageNamespace = value; }
     public string? JobName { get => _options.JobName; set => _options.JobName = value; }
+    public Core.Data.JobId JobId { get => _options.JobId; set => _options.JobId = value; }
     public bool LineageImportCatalog { get => _options.LineageImportCatalog; set => _options.LineageImportCatalog = value; }
     public bool TruncateString { get => _options.TruncateString; set => _options.TruncateString = value; }
     public bool SkipError { get => _options.SkipError; set => _options.SkipError = value; }
@@ -1277,14 +1278,14 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             _sessionJobState[kv.Key] = kv.Value;
         }
 
-        if (!string.IsNullOrEmpty(JobName))
+        if (JobId.IsAssigned)
         {
             var store = ServiceProvider.GetService(typeof(Core.Data.IJobHistoryStore)) as Core.Data.IJobHistoryStore;
             if (store != null)
             {
                 foreach (var kv in PendingJobStateUpdates)
                 {
-                    await store.SetJobStateAsync(JobName, kv.Key, kv.Value);
+                    await store.SetJobStateAsync(JobId, kv.Key, kv.Value);
                 }
             }
         }

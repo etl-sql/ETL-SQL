@@ -280,7 +280,8 @@ public class AssertJobStatementHandler(
     {
         var provider = context.JobMetrics;
         if (provider is null) return null;
-        return await provider.GetRecentRunMetricsAsync(jobName, limit, context.CancellationToken);
+        return await provider.GetRecentRunMetricsAsync(
+            CatalogStatementSupport.ActingTenant(context), jobName, limit, context.CancellationToken);
     }
 
     private static async Task<IReadOnlyList<Core.Data.ColumnRunMetrics>?> LoadColumnHistoryAsync(
@@ -289,6 +290,7 @@ public class AssertJobStatementHandler(
         var provider = context.JobMetrics;
         if (provider is null) return null;
         return await provider.GetRecentColumnMetricsAsync(
+            CatalogStatementSupport.ActingTenant(context),
             jobName, predicate.TargetName, predicate.ColumnName!, limit, context.CancellationToken);
     }
 
@@ -316,7 +318,8 @@ public class AssertJobStatementHandler(
 
         var now = DateTimeOffset.UtcNow;
         var key = BuildAssertionKey(stmt);
-        var prior = await provider.GetAssertJobAlertStateAsync(stmt.JobName, key, context.CancellationToken);
+        var prior = await provider.GetAssertJobAlertStateAsync(
+            CatalogStatementSupport.ActingTenant(context), stmt.JobName, key, context.CancellationToken);
 
         bool deliveredFailure = false;
         if (failed)
@@ -339,6 +342,7 @@ public class AssertJobStatementHandler(
             }
 
             await provider.SaveAssertJobAlertStateAsync(
+                CatalogStatementSupport.ActingTenant(context),
                 stmt.JobName,
                 key,
                 new AssertJobAlertState(
@@ -356,6 +360,7 @@ public class AssertJobStatementHandler(
         }
 
         await provider.SaveAssertJobAlertStateAsync(
+            CatalogStatementSupport.ActingTenant(context),
             stmt.JobName,
             key,
             new AssertJobAlertState(

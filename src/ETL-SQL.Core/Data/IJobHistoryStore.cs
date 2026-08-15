@@ -117,9 +117,9 @@ public record JobDefinition(
     /// Everything that references a job — grants, schedule and notification links, history, state,
     /// metrics — references this rather than <see cref="Name"/>, so a name may be re-used by another
     /// tenant, and a dropped-then-recreated name never inherits the previous object's grants or
-    /// watermarks. Null on a definition that has not been persisted yet.
+    /// watermarks. <see cref="JobId.None"/> on a definition that has not been persisted yet.
     /// </summary>
-    string? Id = null
+    JobId Id = default
 );
 
 public record JobHistoryEntry(
@@ -148,7 +148,7 @@ public record JobHistoryEntry(
     /// The job this run belongs to. <see cref="JobName"/> is the name it ran under, retained so the
     /// row stays readable after the job is dropped or the name is taken by a different object.
     /// </summary>
-    string? JobId = null,
+    JobId JobId = default,
     /// <summary>Tenant binding copied from the job at run time; null is the unbound (Solo) scope.</summary>
     string? TenantId = null
 )
@@ -294,34 +294,45 @@ public interface IJobHistoryStore
     Task SaveJobAsync(JobDefinition job);
     Task<bool> TrySaveJobAsync(JobDefinition job, long expectedVersion);
     Task<JobDefinition?> GetJobAsync(string? tenantId, string name);
-    Task<JobDefinition?> GetJobByIdAsync(string jobId);
+    Task<JobDefinition?> GetJobByIdAsync(JobId jobId);
     Task<IEnumerable<JobDefinition>> GetActiveJobsAsync();
     Task<IEnumerable<JobDefinition>> GetAllJobsAsync();
     /// <summary>Returns a stable name-ordered page of saved jobs for management APIs.</summary>
     Task<IEnumerable<JobDefinition>> GetJobsPageAsync(int limit = 100, int offset = 0);
-    Task DeleteJobAsync(string jobId);
-    Task<bool> TryDeleteJobAsync(string jobId, long expectedVersion);
-    Task UpdateJobLastRunAsync(string jobId, DateTime lastRun, DateTime? nextRun);
+    Task DeleteJobAsync(JobId jobId);
+    Task<bool> TryDeleteJobAsync(JobId jobId, long expectedVersion);
+    Task UpdateJobLastRunAsync(JobId jobId, DateTime lastRun, DateTime? nextRun);
 
     // Execution lease (P1.1). A scheduler instance must claim a job before running it so that
     // concurrent scheduler processes sharing one store produce exactly one execution per due
     // occurrence. A lease that is not renewed before it expires may be reclaimed by another
     // owner (crash recovery — the occurrence reruns, i.e. at-least-once semantics).
-    Task<bool> TryAcquireJobLeaseAsync(string jobId, string owner, TimeSpan duration);
-    Task<bool> TryRenewJobLeaseAsync(string jobId, string owner, TimeSpan duration);
-    Task ReleaseJobLeaseAsync(string jobId, string owner);
+    Task<bool> TryAcquireJobLeaseAsync(JobId jobId, string owner, TimeSpan duration);
+    Task<bool> TryRenewJobLeaseAsync(JobId jobId, string owner, TimeSpan duration);
+    Task ReleaseJobLeaseAsync(JobId jobId, string owner);
 
     // Fencing tokens (P1.8). Each successful lease acquisition stamps the job with a strictly
     // increasing fence token. A node that was paused/partitioned, lost its lease, and later resumes
     // still holds an old token; the durable completion write (TryUpdateJobLastRunFenced) carries the
     // token and the store rejects it because a newer owner has already advanced the token — so a
     // stale writer can never clobber a newer one's scheduling state (Gap #5).
-    Task<long?> AcquireJobLeaseAsync(string jobId, string owner, TimeSpan duration);
-    Task<bool> ValidateFenceTokenAsync(string jobId, long fenceToken);
-    Task<bool> TryUpdateJobLastRunFencedAsync(string jobId, DateTime lastRun, DateTime? nextRun, long fenceToken);
+    Task<long?> AcquireJobLeaseAsync(JobId jobId, string owner, TimeSpan duration);
+    Task<bool> ValidateFenceTokenAsync(JobId jobId, long fenceToken);
+    Task<bool> TryUpdateJobLastRunFencedAsync(JobId jobId, DateTime lastRun, DateTime? nextRun, long fenceToken);
 
     // History Management
-    Task<long> LogJobStartAsync(string jobId);
+    Task<long> LogJobStartAsync(JobId jobId);
+
+    /// <summary>
+    /// Records the start of a run that is <b>not</b> a job — an ad-hoc <c>run</c> of a script, audited
+    /// because <c>Engine:AuditAdHocRuns</c> is on.
+    ///
+    /// <para>Separate from <see cref="LogJobStartAsync"/> on purpose. Such a run has no job row and so
+    /// no identity, and the alternative — letting a caller pass a script filename as though it were an
+    /// identity — is precisely the confusion the typed <see cref="Data.JobId"/> exists to prevent. The
+    /// row is written with no job binding and carries <paramref name="label"/> for display.</para>
+    /// </summary>
+    Task<long> LogAdHocRunStartAsync(string label, string? tenantId = null);
     Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null, long rowsQuarantined = 0, long rowsWarned = 0, string? dataQualityFailures = null);
     /// <summary>Attaches opaque named-checkpoint resume metadata after an execution attempt.</summary>
     Task UpdateJobResumeMetadataAsync(long entryId, string? sessionId, string? checkpointLabel) => Task.CompletedTask;
@@ -394,12 +405,23 @@ public interface IJobHistoryStore
             .ToList();
     Task<IReadOnlyList<JobDataQualityStatus>> GetDataQualityStatusesAsync(int limit = 1000) =>
         Task.FromResult<IReadOnlyList<JobDataQualityStatus>>(Array.Empty<JobDataQualityStatus>());
-    Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(string jobId, string? targetTable, string columnName, int limit = 100) =>
+    Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(JobId jobId, string? targetTable, string columnName, int limit = 100) =>
         Task.FromResult<IReadOnlyList<ColumnRunMetrics>>(Array.Empty<ColumnRunMetrics>());
-    Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobId = null, int limit = 100);
+    Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(JobId jobId = default, int limit = 100);
+
+    /// <summary>
+    /// Runs recorded under one job <em>name</em> within a tenant, newest first.
+    ///
+    /// <para>Distinct from <see cref="GetHistoryAsync(JobId, int)"/>, and not a convenience wrapper
+    /// around it: history outlives the job it belongs to, so after a <c>DROP JOB</c> there is no
+    /// identity left to resolve the name to, and an id-addressed read would report that a job which
+    /// ran for a year had never run at all. The tenant predicate is what keeps a shared name from
+    /// reaching another tenant's runs.</para>
+    /// </summary>
+    Task<IEnumerable<JobHistoryEntry>> GetHistoryForNameAsync(string? tenantId, string jobName, int limit = 100);
     /// <summary>Reads one durable run by identity, or null when it has expired or never existed.</summary>
     async Task<JobHistoryEntry?> GetHistoryEntryAsync(long entryId) =>
-        (await GetHistoryAsync(null, 1000)).FirstOrDefault(row => row.Id == entryId);
+        (await GetHistoryAsync(JobId.None, 1000)).FirstOrDefault(row => row.Id == entryId);
     /// <summary>Returns a completion-time page for bounded incremental pollers.</summary>
     Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
         DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0);
@@ -427,14 +449,33 @@ public interface IJobHistoryStore
     Task<int> RollUpJobHistoryAsync();
 
     /// <summary>Returns daily job summaries on/after <paramref name="sinceDay"/>, newest first.</summary>
-    Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(string? jobId, DateTime sinceDay, int limit = 1000);
+    Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(JobId jobId, DateTime sinceDay, int limit = 1000);
 
     /// <summary>Deletes daily job summaries older than <paramref name="maxAge"/>; returns rows removed.</summary>
     Task<int> PruneJobHistoryDailyAsync(TimeSpan maxAge);
 
     // State Management
-    Task<string?> GetJobStateAsync(string jobId, string key);
-    Task SetJobStateAsync(string jobId, string key, string? value);
+    Task<string?> GetJobStateAsync(JobId jobId, string key);
+    Task SetJobStateAsync(JobId jobId, string key, string? value);
+
+    /// <summary>
+    /// Reads a host-scoped operational marker — the outcome of the last backup or restore drill, and
+    /// similar deployment-wide evidence the Portal reports on.
+    ///
+    /// <para>These share the job-state table but are not job state: there is no job called
+    /// <c>admin-backup</c>, and there never was. They previously reached the table by passing that
+    /// label where a job's name went, which worked only for as long as job state was name-addressed.
+    /// Giving them their own named surface says what they are, and keeps <see cref="Data.JobId"/>
+    /// meaning one thing.</para>
+    /// </summary>
+    /// <param name="scope">
+    /// Host-level area the marker belongs to (<c>backup</c>, <c>restore</c>). Stored under a reserved
+    /// namespace that cannot collide with any job identity.
+    /// </param>
+    Task<string?> GetHostStateAsync(string scope, string key);
+
+    /// <summary>Writes a host-scoped operational marker. See <see cref="GetHostStateAsync"/>.</summary>
+    Task SetHostStateAsync(string scope, string key, string? value);
 
     /// <summary>
     /// Enumerates saved job-state entries (watermarks, markers), optionally for a single job —
@@ -442,7 +483,7 @@ public interface IJobHistoryStore
     /// scoped to one known key, this lets an administrator inspect any job's state without knowing
     /// its keys in advance. Ordered by job then key; capped by <paramref name="limit"/>.
     /// </summary>
-    Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(string? jobId = null, int limit = 1000);
+    Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(JobId jobId = default, int limit = 1000);
 }
 
 /// <summary>One saved job-state key/value pair (see SET_JOB_STATE / GET_JOB_STATE).</summary>

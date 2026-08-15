@@ -18,7 +18,7 @@ public sealed class BackupReportAdminService(
     ILogger<BackupReportAdminService> log)
     : AdminDigestServiceBase(scopeFactory, config, lockStore, log)
 {
-    internal const string BackupJobStateName = "admin-backup";
+    internal const string BackupStateScope = "backup";
 
     public override string ServiceName => "backup-report";
 
@@ -29,9 +29,9 @@ public sealed class BackupReportAdminService(
         var cfg = Config.AdminServices.BackupReport;
         var jobHistory = scope.GetRequiredService<IJobHistoryStore>();
 
-        var status = await jobHistory.GetJobStateAsync(BackupJobStateName, "last_backup_status");
-        var atText = await jobHistory.GetJobStateAsync(BackupJobStateName, "last_backup_at");
-        var exitCode = await jobHistory.GetJobStateAsync(BackupJobStateName, "last_backup_exit_code");
+        var status = await jobHistory.GetHostStateAsync(BackupStateScope, "last_backup_status");
+        var atText = await jobHistory.GetHostStateAsync(BackupStateScope, "last_backup_at");
+        var exitCode = await jobHistory.GetHostStateAsync(BackupStateScope, "last_backup_exit_code");
 
         DateTime? lastBackupAt = DateTime.TryParse(
             atText, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed)

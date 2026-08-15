@@ -48,7 +48,10 @@ public class ShowJobHistoryStatementHandler : IStatementHandler
             return;
         }
 
-        var history = await _store.GetHistoryAsync(stmt.JobName);
+        var history = string.IsNullOrWhiteSpace(stmt.JobName)
+            ? await _store.GetHistoryAsync()
+            : await _store.GetHistoryForNameAsync(
+                CatalogStatementSupport.ActingTenant(context), stmt.JobName);
 
         var table = new DataTable();
         table.AddColumn("Id");

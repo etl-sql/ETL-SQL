@@ -780,8 +780,14 @@ namespace ETL_SQL.Orchestrator.Storage
         /// holds a definition round-trips its id so a re-save updates the same object rather than
         /// orphaning its grants, links, history, and watermarks behind a new one.
         /// </summary>
-        internal static string NewOrExistingId(string? existingId) =>
-            string.IsNullOrWhiteSpace(existingId) ? Guid.NewGuid().ToString("N") : existingId;
+        internal static string NewOrExistingId(JobId existing) =>
+            existing.IsAssigned ? existing.Value : JobId.New().Value;
+
+        internal static string NewOrExistingId(ScheduleId existing) =>
+            existing.IsAssigned ? existing.Value : ScheduleId.New().Value;
+
+        internal static string NewOrExistingId(NotificationId existing) =>
+            existing.IsAssigned ? existing.Value : NotificationId.New().Value;
 
         // ── Execution lease (P1.1) ────────────────────────────────────────────────
         // Lease times are UTC ISO-8601 ("O") strings: they compare correctly both lexically
@@ -790,11 +796,12 @@ namespace ETL_SQL.Orchestrator.Storage
         // entire claim mechanism — but it also means the lease only coordinates processes
         // that share this database file (see the P3.1 topology decision).
 
-        public async Task<bool> TryAcquireJobLeaseAsync(string jobId, string owner, TimeSpan duration)
+        public async Task<bool> TryAcquireJobLeaseAsync(JobId jobId, string owner, TimeSpan duration)
             => await AcquireJobLeaseAsync(jobId, owner, duration) is not null;
 
-        public async Task<long?> AcquireJobLeaseAsync(string jobId, string owner, TimeSpan duration)
+        public async Task<long?> AcquireJobLeaseAsync(JobId jobIdRef, string owner, TimeSpan duration)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -830,8 +837,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return token is null or DBNull ? null : Convert.ToInt64(token);
         }
 
-        public async Task<bool> ValidateFenceTokenAsync(string jobId, long fenceToken)
+        public async Task<bool> ValidateFenceTokenAsync(JobId jobIdRef, long fenceToken)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -845,8 +853,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return current is not (null or DBNull) && fenceToken >= Convert.ToInt64(current);
         }
 
-        public async Task<bool> TryUpdateJobLastRunFencedAsync(string jobId, DateTime lastRun, DateTime? nextRun, long fenceToken)
+        public async Task<bool> TryUpdateJobLastRunFencedAsync(JobId jobIdRef, DateTime lastRun, DateTime? nextRun, long fenceToken)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -866,8 +875,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        public async Task<bool> TryRenewJobLeaseAsync(string jobId, string owner, TimeSpan duration)
+        public async Task<bool> TryRenewJobLeaseAsync(JobId jobIdRef, string owner, TimeSpan duration)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -883,8 +893,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        public async Task ReleaseJobLeaseAsync(string jobId, string owner)
+        public async Task ReleaseJobLeaseAsync(JobId jobIdRef, string owner)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -1220,8 +1231,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return ReadJob(reader);
         }
 
-        public async Task<JobDefinition?> GetJobByIdAsync(string jobId)
+        public async Task<JobDefinition?> GetJobByIdAsync(JobId jobIdRef)
         {
+            var jobId = jobIdRef.Require();
             if (string.IsNullOrWhiteSpace(jobId)) return null;
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -1265,7 +1277,7 @@ namespace ETL_SQL.Orchestrator.Storage
                 ReadOptionalString(reader, "CreatedBy"),
                 ReadOptionalString(reader, "ModifiedBy"),
                 TenantOrNull(ReadOptionalString(reader, "TenantId")),
-                ReadOptionalString(reader, "Id"));
+                JobId.From(ReadOptionalString(reader, "Id")));
         }
 
         /// <summary>
@@ -1279,8 +1291,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return Enum.TryParse<JobTargetKind>(raw, ignoreCase: true, out var kind) ? kind : JobTargetKind.Script;
         }
 
-        public async Task DeleteJobAsync(string jobId)
+        public async Task DeleteJobAsync(JobId jobIdRef)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -1336,8 +1349,9 @@ namespace ETL_SQL.Orchestrator.Storage
             }
         }
 
-        public async Task<bool> TryDeleteJobAsync(string jobId, long expectedVersion)
+        public async Task<bool> TryDeleteJobAsync(JobId jobIdRef, long expectedVersion)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -1384,8 +1398,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return true;
         }
 
-        public async Task UpdateJobLastRunAsync(string jobId, DateTime lastRun, DateTime? nextRun)
+        public async Task UpdateJobLastRunAsync(JobId jobIdRef, DateTime lastRun, DateTime? nextRun)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -1399,8 +1414,9 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<long> LogJobStartAsync(string jobId)
+        public async Task<long> LogJobStartAsync(JobId jobIdRef)
         {
+            var jobId = jobIdRef.Require();
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -1417,6 +1433,31 @@ namespace ETL_SQL.Orchestrator.Storage
             command.AddParam("@start", DateTime.Now.ToString("O"));
 
             // SQLite's last_insert_rowid() returns long; Postgres RETURNING id returns int — normalize.
+            // A missing job produces no row and so no scalar: that means the caller asked to record a
+            // run of something that does not exist, which is worth saying out loud.
+            var inserted = await command.ExecuteScalarAsync();
+            if (inserted is null || inserted == DBNull.Value)
+                throw new InvalidOperationException(
+                    $"Cannot record a run for job '{jobId}': no such job. It may have been dropped.");
+            return Convert.ToInt64(inserted);
+        }
+
+        public async Task<long> LogAdHocRunStartAsync(string label, string? tenantId = null)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            // No job binding: this run is not a job. JobId stays the empty sentinel so the row can
+            // never be mistaken for — or joined to — a real job's history.
+            var sql = _dialect.InsertReturningId(
+                @"INSERT INTO JobHistory (JobId, TenantId, JobName, StartTime, Status)
+                  VALUES ('', @tenant, @label, @start, 'RUNNING')", "Id");
+            using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            command.AddParam("@tenant", TenantKey(tenantId));
+            command.AddParam("@label", label);
+            command.AddParam("@start", DateTime.Now.ToString("O"));
             return Convert.ToInt64((await command.ExecuteScalarAsync())!);
         }
 
@@ -2154,8 +2195,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return written;
         }
 
-        public async Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(string? jobId, DateTime sinceDay, int limit = 1000)
+        public async Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(JobId jobIdRef, DateTime sinceDay, int limit = 1000)
         {
+            var jobId = jobIdRef.IsAssigned ? jobIdRef.Value : null;
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -2254,8 +2296,9 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobId = null, int limit = 100)
+        public async Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(JobId jobIdRef = default, int limit = 100)
         {
+            var jobId = jobIdRef.IsAssigned ? jobIdRef.Value : null;
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
@@ -2267,6 +2310,31 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             if (jobId != null) command.AddParam("@jobId", jobId);
+            command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
+
+            var entries = new List<JobHistoryEntry>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) entries.Add(ReadHistoryEntry(reader));
+            return entries;
+        }
+
+        public async Task<IEnumerable<JobHistoryEntry>> GetHistoryForNameAsync(
+            string? tenantId, string jobName, int limit = 100)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            // Deliberately matched on the recorded name, not on a resolved identity: a run's history
+            // outlives the job, so this answers "what ran under this name here", which is the question
+            // SHOW JOB HISTORY asks and which an identity lookup could not answer after a DROP. The
+            // tenant predicate is what keeps it from reaching another tenant's job of the same name.
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                "SELECT * FROM JobHistory WHERE TenantId = @tenant AND JobName = @name COLLATE NOCASE " +
+                "ORDER BY StartTime DESC LIMIT @limit;";
+            command.AddParam("@tenant", TenantKey(tenantId));
+            command.AddParam("@name", jobName);
             command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
 
             var entries = new List<JobHistoryEntry>();
@@ -2353,7 +2421,32 @@ namespace ETL_SQL.Orchestrator.Storage
             return -1;
         }
 
-        public async Task<string?> GetJobStateAsync(string jobId, string key)
+        public Task<string?> GetJobStateAsync(JobId jobIdRef, string key) =>
+            ReadStateAsync(jobIdRef.Require(), key);
+
+        public async Task SetJobStateAsync(JobId jobIdRef, string key, string? value)
+        {
+            var jobId = jobIdRef.Require();
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            await WriteStateAsync(jobId, key, value);
+        }
+
+        /// <summary>
+        /// Reserved namespace for host-scoped markers in the job-state table. A job identity is a GUID
+        /// in "N" form, so a prefixed key can never collide with one.
+        /// </summary>
+        private static string HostStateKey(string scope) => "host:" + scope.Trim().ToLowerInvariant();
+
+        public Task<string?> GetHostStateAsync(string scope, string key) =>
+            ReadStateAsync(HostStateKey(scope), key);
+
+        public Task SetHostStateAsync(string scope, string key, string? value) =>
+            WriteStateAsync(HostStateKey(scope), key, value);
+
+        private async Task<string?> ReadStateAsync(string owner, string key)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2361,14 +2454,14 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT StateValue FROM JobState WHERE JobId = @jobId AND StateKey = @key;";
-            command.AddParam("@jobId", jobId);
+            command.AddParam("@jobId", owner);
             command.AddParam("@key", key);
 
             var result = await command.ExecuteScalarAsync();
             return result == null || result == DBNull.Value ? null : (string?)result;
         }
 
-        public async Task SetJobStateAsync(string jobId, string key, string? value)
+        private async Task WriteStateAsync(string owner, string key, string? value)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2377,20 +2470,21 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 INSERT INTO JobState (JobId, StateKey, StateValue, UpdatedAt)
-                VALUES (@jobName, @key, @value, @updatedAt)
-                ON CONFLICT (JobName, StateKey)
+                VALUES (@jobId, @key, @value, @updatedAt)
+                ON CONFLICT (JobId, StateKey)
                 DO UPDATE SET StateValue = EXCLUDED.StateValue, UpdatedAt = EXCLUDED.UpdatedAt;";
 
-            command.AddParam("@jobId", jobId);
+            command.AddParam("@jobId", owner);
             command.AddParam("@key", key);
-            command.AddParam("@value", value);
+            command.AddParam("@value", (object?)value ?? DBNull.Value);
             command.AddParam("@updatedAt", DateTime.UtcNow.ToString("o"));
 
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(string? jobId = null, int limit = 1000)
+        public async Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(JobId jobIdRef = default, int limit = 1000)
         {
+            var jobId = jobIdRef.IsAssigned ? jobIdRef.Value : null;
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();

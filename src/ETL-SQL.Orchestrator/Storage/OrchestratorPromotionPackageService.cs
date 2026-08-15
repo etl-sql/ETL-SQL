@@ -92,7 +92,7 @@ public static partial class OrchestratorPromotionPackageService
         foreach (var schedule in package.Schedules)
         {
             ct.ThrowIfCancellationRequested();
-            var desired = schedule with { Version = 1, Id = null };
+            var desired = schedule with { Version = 1, Id = ScheduleId.None };
             var existing = await catalog.GetScheduleAsync(schedule.TenantId, schedule.Name);
             if (existing is null)
                 await catalog.SaveScheduleAsync(desired);
@@ -101,7 +101,7 @@ public static partial class OrchestratorPromotionPackageService
         {
             var desired = notification with
             {
-                ConnectionName = Bind(notification.ConnectionName), Version = 1, Id = null
+                ConnectionName = Bind(notification.ConnectionName), Version = 1, Id = NotificationId.None
             };
             var existing = await catalog.GetNotificationAsync(notification.TenantId, notification.Name);
             if (existing is null)
@@ -116,7 +116,7 @@ public static partial class OrchestratorPromotionPackageService
                 NextRun = null,
                 IsEnabled = false,
                 Version = 1,
-                Id = null
+                Id = JobId.None
             };
             var existing = await history.GetJobAsync(job.TenantId, job.Name);
             if (existing is null)
@@ -133,9 +133,9 @@ public static partial class OrchestratorPromotionPackageService
             if (sourceJob is null || sourceSchedule is null) continue;
             var targetJob = await history.GetJobAsync(sourceJob.TenantId, sourceJob.Name);
             var targetSchedule = await catalog.GetScheduleAsync(sourceSchedule.TenantId, sourceSchedule.Name);
-            if (targetJob?.Id is not { Length: > 0 } linkJobId
-                || targetSchedule?.Id is not { Length: > 0 } linkScheduleId) continue;
-            await catalog.AddJobScheduleAsync(linkJobId, linkScheduleId, link.NextRun);
+            if (targetJob is null || !targetJob.Id.IsAssigned
+                || targetSchedule is null || !targetSchedule.Id.IsAssigned) continue;
+            await catalog.AddJobScheduleAsync(targetJob.Id, targetSchedule.Id, link.NextRun);
         }
         foreach (var link in package.JobNotifications)
         {
@@ -145,9 +145,9 @@ public static partial class OrchestratorPromotionPackageService
             var targetJob = await history.GetJobAsync(sourceJob.TenantId, sourceJob.Name);
             var targetNotification =
                 await catalog.GetNotificationAsync(sourceNotification.TenantId, sourceNotification.Name);
-            if (targetJob?.Id is not { Length: > 0 } linkJobId
-                || targetNotification?.Id is not { Length: > 0 } linkNotificationId) continue;
-            await catalog.AddJobNotificationAsync(linkJobId, linkNotificationId, link.Trigger);
+            if (targetJob is null || !targetJob.Id.IsAssigned
+                || targetNotification is null || !targetNotification.Id.IsAssigned) continue;
+            await catalog.AddJobNotificationAsync(targetJob.Id, targetNotification.Id, link.Trigger);
         }
 
         var runIds = new Dictionary<long, long>();
@@ -215,19 +215,19 @@ public static partial class OrchestratorPromotionPackageService
         foreach (var schedule in package.Schedules)
         {
             ct.ThrowIfCancellationRequested();
-            var desired = schedule with { Version = 1, Id = null };
+            var desired = schedule with { Version = 1, Id = ScheduleId.None };
             var existing = await catalog.GetScheduleAsync(schedule.TenantId, schedule.Name);
-            if (existing is not null && existing with { Version = 1, Id = null } != desired)
+            if (existing is not null && existing with { Version = 1, Id = ScheduleId.None } != desired)
                 findings.Add(new("OP003", "Error", $"schedule:{schedule.Name}", "A different target schedule already uses this name."));
         }
         foreach (var notification in package.Notifications)
         {
             var desired = notification with
             {
-                ConnectionName = Bind(notification.ConnectionName), Version = 1, Id = null
+                ConnectionName = Bind(notification.ConnectionName), Version = 1, Id = NotificationId.None
             };
             var existing = await catalog.GetNotificationAsync(notification.TenantId, notification.Name);
-            if (existing is not null && existing with { Version = 1, Id = null } != desired)
+            if (existing is not null && existing with { Version = 1, Id = NotificationId.None } != desired)
                 findings.Add(new("OP003", "Error", $"notification:{notification.Name}", "A different target notification already uses this name."));
         }
         foreach (var job in package.Jobs)
@@ -239,11 +239,11 @@ public static partial class OrchestratorPromotionPackageService
                 NextRun = null,
                 IsEnabled = false,
                 Version = 1,
-                Id = null
+                Id = JobId.None
             };
             var existing = await history.GetJobAsync(job.TenantId, job.Name);
             if (existing is not null
-                && existing with { LastRun = null, NextRun = null, Version = 1, Id = null } != desired)
+                && existing with { LastRun = null, NextRun = null, Version = 1, Id = JobId.None } != desired)
                 findings.Add(new("OP003", "Error", $"job:{job.Name}", "A different target job already uses this name."));
         }
 
@@ -262,7 +262,7 @@ public static partial class OrchestratorPromotionPackageService
         {
             var sourceJob = package.Jobs.FirstOrDefault(j => j.Id == link.JobId);
             var sourceSchedule = package.Schedules.FirstOrDefault(x => x.Id == link.ScheduleId);
-            var label = $"job-schedule:{link.JobName ?? link.JobId}/{link.ScheduleName ?? link.ScheduleId}";
+            var label = $"job-schedule:{link.JobName ?? link.JobId.ToString()}/{link.ScheduleName ?? link.ScheduleId.ToString()}";
             if (sourceJob is null || sourceSchedule is null)
             {
                 findings.Add(new("OP004", "Error", label, "The link does not reference objects carried in this package."));
@@ -276,7 +276,7 @@ public static partial class OrchestratorPromotionPackageService
         {
             var sourceJob = package.Jobs.FirstOrDefault(j => j.Id == link.JobId);
             var sourceNotification = package.Notifications.FirstOrDefault(n => n.Id == link.NotificationId);
-            var label = $"job-notification:{link.JobName ?? link.JobId}/{link.NotificationName ?? link.NotificationId}";
+            var label = $"job-notification:{link.JobName ?? link.JobId.ToString()}/{link.NotificationName ?? link.NotificationId.ToString()}";
             if (sourceJob is null || sourceNotification is null)
             {
                 findings.Add(new("OP004", "Error", label, "The link does not reference objects carried in this package."));

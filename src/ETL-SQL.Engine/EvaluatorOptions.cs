@@ -57,6 +57,9 @@ public class EvaluatorOptions
     public bool LineageEnabled { get; set; } = true;
     public string? LineageNamespace { get; set; } = "etl-sql";
     public string? JobName { get; set; }
+
+    /// <summary>See <see cref="ETL_SQL.Core.IExecutionContext.JobId"/>.</summary>
+    public ETL_SQL.Core.Data.JobId JobId { get; set; }
     public bool LineageImportCatalog { get; set; }
     public bool TruncateString { get; set; } = false;
     public bool SkipError { get; set; } = false;

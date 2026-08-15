@@ -48,7 +48,8 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
 
         var target = stmt.QuarantineTable.ToSql();
         var manifest = await provider.GetQuarantineReplayManifestAsync(
-            context.JobName,
+            CatalogStatementSupport.ActingTenant(context),
+            context.JobName!,
             stmt.QuarantineTable.TableName,
             context.CancellationToken);
         if (manifest == null)
@@ -68,6 +69,7 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
 
         var leaseOwner = BuildLeaseOwner(evaluator);
         var leaseAcquired = await provider.TryAcquireQuarantineReplayLeaseAsync(
+            CatalogStatementSupport.ActingTenant(context),
             context.JobName!,
             manifest.QuarantineTarget,
             leaseOwner,
@@ -103,6 +105,7 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
         finally
         {
             await provider.ReleaseQuarantineReplayLeaseAsync(
+                CatalogStatementSupport.ActingTenant(context),
                 context.JobName!,
                 manifest.QuarantineTarget,
                 leaseOwner,

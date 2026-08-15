@@ -459,6 +459,18 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     bool LineageEnabled { get; set; }
     string? LineageNamespace { get; set; }
     string? JobName { get; set; }
+    /// <summary>
+    /// Identity of the job this run belongs to, when it was launched by the orchestrator.
+    ///
+    /// <para><see cref="JobName"/> is what the run is <em>called</em> and is what appears in logs and
+    /// history; this is what it <em>is</em>. Durable per-job state — watermarks above all — is keyed on
+    /// this, because a name identifies a job only within one tenant, and a dropped-and-recreated name
+    /// must not inherit the previous job's watermarks.</para>
+    ///
+    /// <para><see cref="Data.JobId.None"/> for an ad-hoc script run that is not a job, in which case
+    /// job state falls back to the script-local store.</para>
+    /// </summary>
+    Data.JobId JobId { get; set; }
     bool LineageImportCatalog { get; set; }
     bool TruncateString { get; set; }
     bool SkipError { get; set; }

@@ -1080,7 +1080,8 @@ public sealed class ColumnQualityValidator
 
         try
         {
-            await provider.SaveQuarantineReplayManifestAsync(manifest, cancellationToken);
+            await provider.SaveQuarantineReplayManifestAsync(
+                _context.ExecutionIdentity?.TenantId, manifest, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -364,7 +364,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         }
 
         /// <summary>Enqueues an immediate out-of-schedule execution for an existing job.</summary>
-        public async Task<bool> TriggerJobAsync(string jobId) =>
+        public async Task<bool> TriggerJobAsync(JobId jobId) =>
             await TriggerJobWithOverridesAsync(jobId, null) != ManualTriggerResult.JobNotFound;
 
         /// <summary>
@@ -373,7 +373,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// its name here could land on a different tenant's job of the same name.
         /// </summary>
         public async Task<ManualTriggerResult> TriggerJobWithOverridesAsync(
-            string jobId,
+            JobId jobId,
             IReadOnlyDictionary<string, string>? variableOverrides)
         {
             var job = await _store.GetJobByIdAsync(jobId);
@@ -439,8 +439,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             // By id, not by the name the run recorded: a resume must return to the same job, never
             // to whatever object happens to hold that name now.
-            var job = history.JobId is { Length: > 0 } resumeJobId
-                ? await _store.GetJobByIdAsync(resumeJobId)
+            var job = history.JobId.IsAssigned
+                ? await _store.GetJobByIdAsync(history.JobId)
                 : null;
             if (job is null)
                 return new(ResumeTriggerStatus.JobNotFound,
@@ -529,7 +529,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             long? fenceToken;
             try
             {
-                fenceToken = await _store.AcquireJobLeaseAsync(job.Name, _leaseOwnerId, leaseDuration);
+                fenceToken = await _store.AcquireJobLeaseAsync(job.Id, _leaseOwnerId, leaseDuration);
             }
             catch (Exception ex)
             {
@@ -553,7 +553,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 try
                 {
-                    await _store.ReleaseJobLeaseAsync(job.Name, _leaseOwnerId);
+                    await _store.ReleaseJobLeaseAsync(job.Id, _leaseOwnerId);
                 }
                 catch (Exception ex)
                 {
@@ -587,7 +587,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     if (job.HashPolicy.Equals("Block", StringComparison.OrdinalIgnoreCase))
                     {
                         long blockedId = 0;
-                        try { blockedId = await _store.LogJobStartAsync(job.Name); } catch { }
+                        try { blockedId = await _store.LogJobStartAsync(job.Id); } catch { }
                         var blockedSw = System.Diagnostics.Stopwatch.StartNew();
                         using var blockedActivity = SchedulerObservability.StartScheduledJobActivity(blockedId, currentHash, attempt: 0);
                         if (blockedId > 0)
@@ -599,7 +599,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         // A blocked run still consumed its occurrence: advance the schedule so the job
                         // does not re-fire immediately and block again on every tick.
                         var blockedNextRun = await AdvanceScheduleLinksAsync(job, DateTime.UtcNow) ?? CalculateNextRun(job);
-                        try { await _store.TryUpdateJobLastRunFencedAsync(job.Name, DateTime.Now, blockedNextRun, fenceToken); } catch { }
+                        try { await _store.TryUpdateJobLastRunFencedAsync(job.Id, DateTime.Now, blockedNextRun, fenceToken); } catch { }
                         return;
                     }
                 }
@@ -617,7 +617,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             // Renew the lease while the job runs (retries with backoff can far outlive the lease
             // duration). Losing the lease cancels the run: another instance may now own the job.
-            var leaseHeartbeat = StartLeaseHeartbeat(job.Name, leaseDuration, cycleCts);
+            var leaseHeartbeat = StartLeaseHeartbeat(job.Id, job.Name, leaseDuration, cycleCts);
 
             try
             {
@@ -631,7 +631,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     long historyId = 0;
                     try
                     {
-                        historyId = await _store.LogJobStartAsync(job.Name);
+                        historyId = await _store.LogJobStartAsync(job.Id);
                         lastHistoryId = historyId;
                         if (historyId > 0) _runningJobs[historyId] = cycleCts;
                     }
@@ -870,7 +870,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 // Fenced write: if this node was paused past its lease and another instance took over the
                 // job (advancing the fence token), this update matches zero rows and we skip rescheduling
                 // rather than overwrite the new owner's state (P1.8).
-                if (!await _store.TryUpdateJobLastRunFencedAsync(job.Name, DateTime.Now, nextRun, fenceToken))
+                if (!await _store.TryUpdateJobLastRunFencedAsync(job.Id, DateTime.Now, nextRun, fenceToken))
                     _logger.LogWarning(
                         "Job {JobName}: skipped the last-run/next-run update — the execution lease was reclaimed " +
                         "by another instance (fenced out, token {Token}).", job.Name, fenceToken);
@@ -920,7 +920,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             IReadOnlyList<JobHistoryEntry> recent;
             try
             {
-                recent = (await _store.GetHistoryAsync(job.Name, threshold)).ToList();
+                recent = (await _store.GetHistoryAsync(job.Id, threshold)).ToList();
             }
             catch (Exception ex)
             {
@@ -936,7 +936,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             try
             {
                 await _store.SaveJobAsync(job with { IsEnabled = false, NextRun = null });
-                var quarantineId = await _store.LogJobStartAsync(job.Name);
+                var quarantineId = await _store.LogJobStartAsync(job.Id);
                 await _store.LogJobEndAsync(quarantineId, "QUARANTINED", reason);
                 _logger.LogError("Job {JobName}: {Reason}", job.Name, reason);
             }
@@ -950,7 +950,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             status.Equals("FAILURE", StringComparison.OrdinalIgnoreCase)
             || status.Equals("FAILED", StringComparison.OrdinalIgnoreCase);
 
-        private Task StartLeaseHeartbeat(string jobName, TimeSpan leaseDuration, CancellationTokenSource cycleCts)
+        private Task StartLeaseHeartbeat(JobId jobId, string jobName, TimeSpan leaseDuration, CancellationTokenSource cycleCts)
         {
             var interval = TimeSpan.FromSeconds(Math.Max(5, leaseDuration.TotalSeconds / 3));
             return Task.Run(async () =>
@@ -968,7 +968,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
                     try
                     {
-                        if (!await _store.TryRenewJobLeaseAsync(jobName, _leaseOwnerId, leaseDuration))
+                        if (!await _store.TryRenewJobLeaseAsync(jobId, _leaseOwnerId, leaseDuration))
                         {
                             _logger.LogWarning(
                                 "Job {JobName}: execution lease was lost (expired and reclaimed) — cancelling this run to avoid a duplicate execution.",
@@ -1045,7 +1045,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             IReadOnlyList<JobScheduleLink> links;
             try
             {
-                links = await catalog.GetJobSchedulesAsync(job.Name);
+                links = await catalog.GetJobSchedulesAsync(job.Id);
             }
             catch (Exception ex)
             {

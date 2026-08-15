@@ -628,7 +628,9 @@ public sealed class JobHistoryDataSource : IDataSource
         var rows = new List<Row>();
         if (_store != null)
         {
-            foreach (var entry in await _store.GetHistoryAsync(_jobNameFilter, Math.Max(batchSize, 1000)))
+            foreach (var entry in await (string.IsNullOrWhiteSpace(_jobNameFilter)
+                ? _store.GetHistoryAsync(limit: Math.Max(batchSize, 1000))
+                : _store.GetHistoryForNameAsync(null, _jobNameFilter, Math.Max(batchSize, 1000))))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 rows.Add(new Row
@@ -941,7 +943,7 @@ public sealed class JobStateDataSource : IDataSource
         var rows = new List<Row>();
         if (_store != null)
         {
-            foreach (var entry in await _store.GetJobStatesAsync(null, Math.Max(batchSize, 1000)))
+            foreach (var entry in await _store.GetJobStatesAsync(limit: Math.Max(batchSize, 1000)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 rows.Add(new Row

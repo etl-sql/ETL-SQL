@@ -79,13 +79,19 @@ public sealed record QuarantineReplayManifest(
 /// </summary>
 public interface IJobMetricsProvider
 {
+    // Every method here is addressed by job *name*, because that is what the script says:
+    // ASSERT JOB 'daily_load' names a job the author typed. A name identifies a job only within a
+    // tenant, so each call carries the tenant the script is running in, and the implementation
+    // resolves the pair to an identity exactly once. Nothing below this seam sees a name.
+
     /// <summary>
-    /// Returns the most recent successfully completed runs of <paramref name="jobName"/>, newest
-    /// first, capped at <paramref name="limit"/>. Runs that failed or are still in flight are
-    /// excluded — a failed run's metrics are not a baseline.
+    /// Returns the most recent successfully completed runs of <paramref name="jobName"/> in
+    /// <paramref name="tenantId"/> (null being the unbound Solo scope), newest first, capped at
+    /// <paramref name="limit"/>. Runs that failed or are still in flight are excluded — a failed
+    /// run's metrics are not a baseline.
     /// </summary>
     Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
-        string jobName, int limit, CancellationToken cancellationToken = default);
+        string? tenantId, string jobName, int limit, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Returns recent successfully completed per-column metrics for <paramref name="columnName"/>,
@@ -93,6 +99,7 @@ public interface IJobMetricsProvider
     /// empty list rather than failing a rolling upgrade.
     /// </summary>
     Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
+        string? tenantId,
         string jobName,
         string? targetTable,
         string columnName,
@@ -101,12 +108,14 @@ public interface IJobMetricsProvider
         Task.FromResult<IReadOnlyList<ColumnRunMetrics>>(Array.Empty<ColumnRunMetrics>());
 
     Task<AssertJobAlertState?> GetAssertJobAlertStateAsync(
+        string? tenantId,
         string jobName,
         string assertionKey,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<AssertJobAlertState?>(null);
 
     Task SaveAssertJobAlertStateAsync(
+        string? tenantId,
         string jobName,
         string assertionKey,
         AssertJobAlertState state,
@@ -114,17 +123,20 @@ public interface IJobMetricsProvider
         Task.CompletedTask;
 
     Task<QuarantineReplayManifest?> GetQuarantineReplayManifestAsync(
+        string? tenantId,
         string jobName,
         string quarantineTarget,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<QuarantineReplayManifest?>(null);
 
     Task SaveQuarantineReplayManifestAsync(
+        string? tenantId,
         QuarantineReplayManifest manifest,
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
     Task<bool> TryAcquireQuarantineReplayLeaseAsync(
+        string? tenantId,
         string jobName,
         string quarantineTarget,
         string owner,
@@ -133,6 +145,7 @@ public interface IJobMetricsProvider
         Task.FromResult(true);
 
     Task ReleaseQuarantineReplayLeaseAsync(
+        string? tenantId,
         string jobName,
         string quarantineTarget,
         string owner,

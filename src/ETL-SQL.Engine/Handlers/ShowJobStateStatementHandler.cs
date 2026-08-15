@@ -27,7 +27,16 @@ public class ShowJobStateStatementHandler : IStatementHandler
     {
         var stmt = (ShowJobStateStatement)statement;
 
-        var entries = await _store.GetJobStatesAsync(stmt.JobName);
+        var filter = JobId.None;
+        if (!string.IsNullOrWhiteSpace(stmt.JobName))
+        {
+            var job = await _store.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.JobName)
+                ?? throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
+                    $"Job '{stmt.JobName}' does not exist.", null, stmt.Line, stmt.Column);
+            filter = job.Id;
+        }
+
+        var entries = await _store.GetJobStatesAsync(filter);
 
         var table = new DataTable();
         table.AddColumn("JobName");

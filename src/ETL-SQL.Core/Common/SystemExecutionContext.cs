@@ -110,6 +110,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public bool LineageEnabled { get; set; } = true;
     public string? LineageNamespace { get; set; } = "etl-sql";
     public string? JobName { get; set; }
+    public Data.JobId JobId { get; set; }
     public Dictionary<string, string> PendingJobStateUpdates { get; } = new(StringComparer.OrdinalIgnoreCase);
     public bool LineageImportCatalog { get; set; }
     public bool TruncateString { get; set; }

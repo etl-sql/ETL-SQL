@@ -97,7 +97,7 @@ public class CreateJobStatementHandler : IStatementHandler
             TenantId: existing?.TenantId ?? context.ExecutionIdentity?.TenantId,
             // Round-trip the existing identity so an update keeps the same object; a create leaves it
             // null and the store assigns one.
-            Id: existing?.Id);
+            Id: existing?.Id ?? JobId.None);
 
         if (existing is not null
             && stmt.Mode == ObjectCreationMode.CreateOrReplace
@@ -109,8 +109,8 @@ public class CreateJobStatementHandler : IStatementHandler
         await _store.SaveJobAsync(job);
 
         if (existing is not null && stmt.Mode == ObjectCreationMode.CreateOrReplace
-            && existing.Id is { Length: > 0 } existingId)
-            await ResetAttachmentsAsync(existingId);
+            && existing.Id.IsAssigned)
+            await ResetAttachmentsAsync(existing.Id);
 
         CatalogStatementSupport.AuditMutation(
             context,
@@ -121,7 +121,7 @@ public class CreateJobStatementHandler : IStatementHandler
                     $"{stmt.TargetKind.ToString().ToUpperInvariant()} '{targetPath}'.", ConsoleColor.Green);
     }
 
-    private async Task ResetAttachmentsAsync(string jobId)
+    private async Task ResetAttachmentsAsync(JobId jobId)
     {
         if (_catalog is null) return;
         foreach (var link in await _catalog.GetJobSchedulesAsync(jobId))

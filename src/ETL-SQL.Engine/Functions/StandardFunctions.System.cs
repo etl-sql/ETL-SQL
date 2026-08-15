@@ -86,12 +86,12 @@ namespace ETL_SQL.Engine.Functions
                 string? key = args[0]?.ToString();
                 if (string.IsNullOrEmpty(key)) return null;
 
-                if (!string.IsNullOrEmpty(ctx.JobName))
+                if (ctx.JobId.IsAssigned)
                 {
                     var store = ctx.ServiceProvider.GetService(typeof(Core.Data.IJobHistoryStore)) as Core.Data.IJobHistoryStore;
                     if (store != null)
                     {
-                        return await store.GetJobStateAsync(ctx.JobName, key);
+                        return await store.GetJobStateAsync(ctx.JobId, key);
                     }
                 }
                 else
