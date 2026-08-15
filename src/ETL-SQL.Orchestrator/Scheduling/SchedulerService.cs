@@ -364,15 +364,19 @@ namespace ETL_SQL.Orchestrator.Scheduling
         }
 
         /// <summary>Enqueues an immediate out-of-schedule execution for an existing job.</summary>
-        public async Task<bool> TriggerJobAsync(string jobName) =>
-            await TriggerJobWithOverridesAsync(jobName, null) != ManualTriggerResult.JobNotFound;
+        public async Task<bool> TriggerJobAsync(string jobId) =>
+            await TriggerJobWithOverridesAsync(jobId, null) != ManualTriggerResult.JobNotFound;
 
-        /// <summary>Enqueues a one-run manual execution with optional input-variable overrides.</summary>
+        /// <summary>
+        /// Enqueues a one-run manual execution with optional input-variable overrides. Addressed by
+        /// identity: the caller has already resolved and authorized a specific job, and re-resolving
+        /// its name here could land on a different tenant's job of the same name.
+        /// </summary>
         public async Task<ManualTriggerResult> TriggerJobWithOverridesAsync(
-            string jobName,
+            string jobId,
             IReadOnlyDictionary<string, string>? variableOverrides)
         {
-            var job = await _store.GetJobAsync(jobName);
+            var job = await _store.GetJobByIdAsync(jobId);
             if (job == null) return ManualTriggerResult.JobNotFound;
 
             // The request object belongs to the HTTP scope. Copy it before the detached task so a
@@ -433,7 +437,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     history.CheckpointLabel,
                     "The saved session no longer contains the recorded checkpoint.");
 
-            var job = await _store.GetJobAsync(history.JobName);
+            // By id, not by the name the run recorded: a resume must return to the same job, never
+            // to whatever object happens to hold that name now.
+            var job = history.JobId is { Length: > 0 } resumeJobId
+                ? await _store.GetJobByIdAsync(resumeJobId)
+                : null;
             if (job is null)
                 return new(ResumeTriggerStatus.JobNotFound,
                     history.CheckpointLabel,
@@ -1050,7 +1058,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             DateTime? earliest = null;
             foreach (var link in links)
             {
-                var schedule = await catalog.GetScheduleAsync(link.ScheduleName);
+                var schedule = await catalog.GetScheduleByIdAsync(link.ScheduleId);
                 if (schedule is null)
                 {
                     _logger.LogWarning(
@@ -1082,13 +1090,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 DateTime? armed;
                 if (wasDue)
                 {
-                    await catalog.UpdateJobScheduleRunAsync(job.Name, link.ScheduleName, ranAtUtc, next);
+                    await catalog.UpdateJobScheduleRunAsync(link.JobId, link.ScheduleId, ranAtUtc, next);
                     armed = next;
                 }
                 else if (link.NextRun is null)
                 {
                     // Not due — it had nothing armed at all. Arm it without claiming it ran.
-                    await catalog.ArmJobScheduleAsync(job.Name, link.ScheduleName, next);
+                    await catalog.ArmJobScheduleAsync(link.JobId, link.ScheduleId, next);
                     armed = next;
                 }
                 else

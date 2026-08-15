@@ -533,7 +533,8 @@ public class SubscriptionDeliveryService(
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             return store is IJobCatalogStore catalog
-                ? await catalog.GetNotificationAsync(SubscriptionOrchestration.NotificationName(subscriptionId))
+                ? await catalog.GetNotificationAsync(
+                    config.TenantId, SubscriptionOrchestration.NotificationName(subscriptionId))
                 : null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -87,18 +87,23 @@ public static partial class OrchestratorPromotionPackageService
                 "Promotion import validation failed: " + string.Join("; ", validation.Findings
                     .Where(f => f.Severity == "Error").Select(f => $"{f.Resource}: {f.Message}")));
 
+        // Identity is deployment-local: the package's ids belong to the source and are used only to
+        // correlate its own links below. The target assigns its own on insert, so Id is cleared here.
         foreach (var schedule in package.Schedules)
         {
             ct.ThrowIfCancellationRequested();
-            var desired = schedule with { Version = 1 };
-            var existing = await catalog.GetScheduleAsync(schedule.Name);
+            var desired = schedule with { Version = 1, Id = null };
+            var existing = await catalog.GetScheduleAsync(schedule.TenantId, schedule.Name);
             if (existing is null)
                 await catalog.SaveScheduleAsync(desired);
         }
         foreach (var notification in package.Notifications)
         {
-            var desired = notification with { ConnectionName = Bind(notification.ConnectionName), Version = 1 };
-            var existing = await catalog.GetNotificationAsync(notification.Name);
+            var desired = notification with
+            {
+                ConnectionName = Bind(notification.ConnectionName), Version = 1, Id = null
+            };
+            var existing = await catalog.GetNotificationAsync(notification.TenantId, notification.Name);
             if (existing is null)
                 await catalog.SaveNotificationAsync(desired);
         }
@@ -110,16 +115,40 @@ public static partial class OrchestratorPromotionPackageService
                 LastRun = null,
                 NextRun = null,
                 IsEnabled = false,
-                Version = 1
+                Version = 1,
+                Id = null
             };
-            var existing = await history.GetJobAsync(job.Name);
+            var existing = await history.GetJobAsync(job.TenantId, job.Name);
             if (existing is null)
                 await history.SaveJobAsync(desired);
         }
+
+        // Links are re-resolved against the target. The package's link rows carry source ids, which
+        // are matched back to the package's own definitions — unambiguous, unlike a bare name — and
+        // each definition is then looked up in the target within its own tenant.
         foreach (var link in package.JobSchedules)
-            await catalog.AddJobScheduleAsync(link.JobName, link.ScheduleName, link.NextRun);
+        {
+            var sourceJob = package.Jobs.FirstOrDefault(j => j.Id == link.JobId);
+            var sourceSchedule = package.Schedules.FirstOrDefault(x => x.Id == link.ScheduleId);
+            if (sourceJob is null || sourceSchedule is null) continue;
+            var targetJob = await history.GetJobAsync(sourceJob.TenantId, sourceJob.Name);
+            var targetSchedule = await catalog.GetScheduleAsync(sourceSchedule.TenantId, sourceSchedule.Name);
+            if (targetJob?.Id is not { Length: > 0 } linkJobId
+                || targetSchedule?.Id is not { Length: > 0 } linkScheduleId) continue;
+            await catalog.AddJobScheduleAsync(linkJobId, linkScheduleId, link.NextRun);
+        }
         foreach (var link in package.JobNotifications)
-            await catalog.AddJobNotificationAsync(link.JobName, link.NotificationName, link.Trigger);
+        {
+            var sourceJob = package.Jobs.FirstOrDefault(j => j.Id == link.JobId);
+            var sourceNotification = package.Notifications.FirstOrDefault(n => n.Id == link.NotificationId);
+            if (sourceJob is null || sourceNotification is null) continue;
+            var targetJob = await history.GetJobAsync(sourceJob.TenantId, sourceJob.Name);
+            var targetNotification =
+                await catalog.GetNotificationAsync(sourceNotification.TenantId, sourceNotification.Name);
+            if (targetJob?.Id is not { Length: > 0 } linkJobId
+                || targetNotification?.Id is not { Length: > 0 } linkNotificationId) continue;
+            await catalog.AddJobNotificationAsync(linkJobId, linkNotificationId, link.Trigger);
+        }
 
         var runIds = new Dictionary<long, long>();
         foreach (var run in package.QualityHistory)
@@ -186,16 +215,19 @@ public static partial class OrchestratorPromotionPackageService
         foreach (var schedule in package.Schedules)
         {
             ct.ThrowIfCancellationRequested();
-            var desired = schedule with { Version = 1 };
-            var existing = await catalog.GetScheduleAsync(schedule.Name);
-            if (existing is not null && existing with { Version = 1 } != desired)
+            var desired = schedule with { Version = 1, Id = null };
+            var existing = await catalog.GetScheduleAsync(schedule.TenantId, schedule.Name);
+            if (existing is not null && existing with { Version = 1, Id = null } != desired)
                 findings.Add(new("OP003", "Error", $"schedule:{schedule.Name}", "A different target schedule already uses this name."));
         }
         foreach (var notification in package.Notifications)
         {
-            var desired = notification with { ConnectionName = Bind(notification.ConnectionName), Version = 1 };
-            var existing = await catalog.GetNotificationAsync(notification.Name);
-            if (existing is not null && existing with { Version = 1 } != desired)
+            var desired = notification with
+            {
+                ConnectionName = Bind(notification.ConnectionName), Version = 1, Id = null
+            };
+            var existing = await catalog.GetNotificationAsync(notification.TenantId, notification.Name);
+            if (existing is not null && existing with { Version = 1, Id = null } != desired)
                 findings.Add(new("OP003", "Error", $"notification:{notification.Name}", "A different target notification already uses this name."));
         }
         foreach (var job in package.Jobs)
@@ -206,28 +238,53 @@ public static partial class OrchestratorPromotionPackageService
                 LastRun = null,
                 NextRun = null,
                 IsEnabled = false,
-                Version = 1
+                Version = 1,
+                Id = null
             };
-            var existing = await history.GetJobAsync(job.Name);
-            if (existing is not null && existing with { LastRun = null, NextRun = null, Version = 1 } != desired)
+            var existing = await history.GetJobAsync(job.TenantId, job.Name);
+            if (existing is not null
+                && existing with { LastRun = null, NextRun = null, Version = 1, Id = null } != desired)
                 findings.Add(new("OP003", "Error", $"job:{job.Name}", "A different target job already uses this name."));
         }
 
-        var availableJobs = package.Jobs.Select(j => j.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        availableJobs.UnionWith((await history.GetAllJobsAsync()).Select(j => j.Name));
-        var availableSchedules = package.Schedules.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        availableSchedules.UnionWith((await catalog.GetSchedulesAsync()).Select(s => s.Name));
-        var availableNotifications = package.Notifications.Select(n => n.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        availableNotifications.UnionWith((await catalog.GetNotificationsAsync()).Select(n => n.Name));
+        // Availability is keyed by tenant and name together. A name alone would let one tenant's job
+        // satisfy another tenant's link and import a cross-tenant attachment.
+        static string Key(string? tenantId, string name) =>
+            (string.IsNullOrWhiteSpace(tenantId) ? string.Empty : tenantId) + "\u0000" + name.ToLowerInvariant();
+
+        var availableJobs = package.Jobs.Select(j => Key(j.TenantId, j.Name)).ToHashSet(StringComparer.Ordinal);
+        availableJobs.UnionWith((await history.GetAllJobsAsync()).Select(j => Key(j.TenantId, j.Name)));
+        var availableSchedules = package.Schedules.Select(x => Key(x.TenantId, x.Name)).ToHashSet(StringComparer.Ordinal);
+        availableSchedules.UnionWith((await catalog.GetSchedulesAsync()).Select(x => Key(x.TenantId, x.Name)));
+        var availableNotifications = package.Notifications.Select(n => Key(n.TenantId, n.Name)).ToHashSet(StringComparer.Ordinal);
+        availableNotifications.UnionWith((await catalog.GetNotificationsAsync()).Select(n => Key(n.TenantId, n.Name)));
         foreach (var link in package.JobSchedules)
         {
-            if (!availableJobs.Contains(link.JobName) || !availableSchedules.Contains(link.ScheduleName))
-                findings.Add(new("OP004", "Error", $"job-schedule:{link.JobName}/{link.ScheduleName}", "The referenced job or schedule is absent."));
+            var sourceJob = package.Jobs.FirstOrDefault(j => j.Id == link.JobId);
+            var sourceSchedule = package.Schedules.FirstOrDefault(x => x.Id == link.ScheduleId);
+            var label = $"job-schedule:{link.JobName ?? link.JobId}/{link.ScheduleName ?? link.ScheduleId}";
+            if (sourceJob is null || sourceSchedule is null)
+            {
+                findings.Add(new("OP004", "Error", label, "The link does not reference objects carried in this package."));
+                continue;
+            }
+            if (!availableJobs.Contains(Key(sourceJob.TenantId, sourceJob.Name))
+                || !availableSchedules.Contains(Key(sourceSchedule.TenantId, sourceSchedule.Name)))
+                findings.Add(new("OP004", "Error", label, "The referenced job or schedule is absent."));
         }
         foreach (var link in package.JobNotifications)
         {
-            if (!availableJobs.Contains(link.JobName) || !availableNotifications.Contains(link.NotificationName))
-                findings.Add(new("OP004", "Error", $"job-notification:{link.JobName}/{link.NotificationName}", "The referenced job or notification is absent."));
+            var sourceJob = package.Jobs.FirstOrDefault(j => j.Id == link.JobId);
+            var sourceNotification = package.Notifications.FirstOrDefault(n => n.Id == link.NotificationId);
+            var label = $"job-notification:{link.JobName ?? link.JobId}/{link.NotificationName ?? link.NotificationId}";
+            if (sourceJob is null || sourceNotification is null)
+            {
+                findings.Add(new("OP004", "Error", label, "The link does not reference objects carried in this package."));
+                continue;
+            }
+            if (!availableJobs.Contains(Key(sourceJob.TenantId, sourceJob.Name))
+                || !availableNotifications.Contains(Key(sourceNotification.TenantId, sourceNotification.Name)))
+                findings.Add(new("OP004", "Error", label, "The referenced job or notification is absent."));
         }
 
         var inspectable = package.Jobs.SelectMany(j => new[] { j.Script, j.TargetPath, j.Options })

@@ -216,11 +216,14 @@ public static class SubscriptionScriptMaintenance
             if (!SubscriptionOrchestration.TryParseSubscriptionId(job.Name, out var subId)
                 || !liveIds.Contains(subId))
             {
-                await TryDeleteJob(store, job.Name, logger, "orphaned subscription job");
+                await TryDeleteJob(store, job.Id!, logger, "orphaned subscription job");
                 if (subId > 0)
                 {
                     await TryDeleteSchedule(store, subId, logger, "orphaned subscription schedule");
-                    await TryDeleteNotification(store, subId, logger, "orphaned subscription notification");
+                    // Cleanup stays inside the orphaned job's own tenant: another tenant's
+                    // subscription notification of the same name is a different object.
+                    await TryDeleteNotification(
+                        store, subId, job.TenantId, logger, "orphaned subscription notification");
                 }
                 continue;
             }
@@ -269,8 +272,10 @@ public static class SubscriptionScriptMaintenance
                     var scriptChanged = !string.Equals(current.Script, desired.Script, StringComparison.Ordinal);
                     if (!scheduleChanged && !enabledChanged && !scriptChanged)
                     {
-                        await SubscriptionOrchestration.SaveScheduleLinkAsync(store, sub, desired.Name);
-                        await SubscriptionOrchestration.SaveNotificationLinkAsync(store, sub, desired.Name);
+                        await SubscriptionOrchestration.SaveScheduleLinkAsync(
+                            store, sub, current.Id!, current.TenantId);
+                        await SubscriptionOrchestration.SaveNotificationLinkAsync(
+                            store, sub, current.Id!, current.TenantId);
                         continue;
                     }
 
@@ -287,9 +292,11 @@ public static class SubscriptionScriptMaintenance
                     await SubscriptionOrchestration.SaveScheduleLinkAsync(
                         store,
                         sub,
-                        desired.Name,
+                        current.Id!,
+                        current.TenantId,
                         rearmExisting: scheduleChanged);
-                    await SubscriptionOrchestration.SaveNotificationLinkAsync(store, sub, desired.Name);
+                    await SubscriptionOrchestration.SaveNotificationLinkAsync(
+                        store, sub, current.Id!, current.TenantId);
                     logger.LogInformation(
                         "Realigned Orchestrator job for subscription {SubscriptionId} with the portal row.", sub.Id);
                 }
@@ -350,11 +357,11 @@ public static class SubscriptionScriptMaintenance
     }
 
     private static async Task TryDeleteNotification(
-        IJobHistoryStore store, int subscriptionId, ILogger logger, string description)
+        IJobHistoryStore store, int subscriptionId, string? tenantId, ILogger logger, string description)
     {
         try
         {
-            await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(store, subscriptionId);
+            await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(store, subscriptionId, tenantId);
             logger.LogWarning(
                 "Removed {Description}: {NotificationName}",
                 description,

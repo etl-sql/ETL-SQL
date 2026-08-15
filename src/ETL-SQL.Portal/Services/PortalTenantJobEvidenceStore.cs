@@ -17,7 +17,7 @@ public sealed class PortalTenantJobEvidenceStore(
 
     public Task<JobDefinition?> GetJobAsync(string name) => config.SharedTenancy.Enabled
         ? RequireTenantStore().GetJobAsync(scope.Context, name)
-        : store.GetJobAsync(name);
+        : store.GetJobAsync(scope.TenantId, name);
 
     public Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(
         string? jobName = null, int limit = 100) => config.SharedTenancy.Enabled

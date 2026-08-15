@@ -213,7 +213,9 @@ internal static class SaasTenantUpgradeService
             await WriteAtomicAsync(configPath, await File.ReadAllBytesAsync(configBackup, cancellationToken), cancellationToken);
             foreach (var name in existing.FencedJobs)
             {
-                var job = await history.GetJobAsync(name);
+                // Unfencing resolves the name inside the tenant being upgraded; a job of the same name
+                // belonging to another tenant is a different object and is not this operation's to touch.
+                var job = await history.GetJobAsync(tenant, name);
                 if (job is not null && !job.IsEnabled)
                     await history.SaveJobAsync(job with { IsEnabled = true, ModifiedBy = grant.OperatorPrincipal });
             }
@@ -338,7 +340,9 @@ internal static class SaasTenantUpgradeService
 
             foreach (var name in fencedJobs)
             {
-                var job = await history.GetJobAsync(name);
+                // Unfencing resolves the name inside the tenant being upgraded; a job of the same name
+                // belonging to another tenant is a different object and is not this operation's to touch.
+                var job = await history.GetJobAsync(tenant, name);
                 if (job is not null && !job.IsEnabled)
                     await history.SaveJobAsync(job with { IsEnabled = true, ModifiedBy = grant.OperatorPrincipal });
             }
@@ -359,7 +363,9 @@ internal static class SaasTenantUpgradeService
             await WriteAtomicAsync(manifestPath, originalManifest, CancellationToken.None);
             foreach (var name in fencedJobs)
             {
-                var job = await history.GetJobAsync(name);
+                // Unfencing resolves the name inside the tenant being upgraded; a job of the same name
+                // belonging to another tenant is a different object and is not this operation's to touch.
+                var job = await history.GetJobAsync(tenant, name);
                 if (job is not null && !job.IsEnabled)
                     await history.SaveJobAsync(job with { IsEnabled = true, ModifiedBy = grant.OperatorPrincipal });
             }

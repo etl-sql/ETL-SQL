@@ -234,7 +234,7 @@ namespace ETL_SQL.Orchestrator.Storage
             return results;
         }
 
-        public async Task<IReadOnlyList<string>> DeleteNotificationAsync(string name)
+        public async Task<IReadOnlyList<string>> DeleteNotificationAsync(string notificationId)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -559,18 +559,18 @@ namespace ETL_SQL.Orchestrator.Storage
         /// Removes a job's schedule and notification attachments. Called from job deletion, where the
         /// links cascade because they have no meaning without the job.
         /// </summary>
-        private static async Task DeleteJobLinksAsync(DbConnection connection, DbTransaction transaction, string jobName)
+        private static async Task DeleteJobLinksAsync(DbConnection connection, DbTransaction transaction, string jobId)
         {
             foreach (var sql in new[]
                      {
-                         "DELETE FROM JobSchedules WHERE JobName = @name COLLATE NOCASE;",
-                         "DELETE FROM JobNotifications WHERE JobName = @name COLLATE NOCASE;"
+                         "DELETE FROM JobSchedules WHERE JobId = @id;",
+                         "DELETE FROM JobNotifications WHERE JobId = @id;"
                      })
             {
                 using var command = connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = sql;
-                command.AddParam("@name", jobName);
+                command.AddParam("@id", jobId);
                 await command.ExecuteNonQueryAsync();
             }
         }

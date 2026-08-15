@@ -69,7 +69,9 @@ public sealed class NotificationDispatchService(
 
             await DispatchNotificationAsync(
                 new NotificationDispatchPayload(
-                    NotificationName: link.NotificationName,
+                    NotificationName: link.NotificationName ?? string.Empty,
+                    NotificationId: link.NotificationId,
+                    TenantId: job.TenantId,
                     SourceKind: "JOB",
                     Title: title,
                     Text: text,
@@ -90,7 +92,9 @@ public sealed class NotificationDispatchService(
         NotificationDefinition? notification;
         try
         {
-            notification = await catalog.GetNotificationAsync(payload.NotificationName);
+            notification = string.IsNullOrWhiteSpace(payload.NotificationId)
+                ? await catalog.GetNotificationAsync(payload.TenantId, payload.NotificationName)
+                : await catalog.GetNotificationByIdAsync(payload.NotificationId);
         }
         catch (Exception ex)
         {
@@ -264,9 +268,13 @@ public sealed record NotificationDispatchPayload
         string? RecipientOverride = null,
         string? ErrorMessage = null,
         string? Actor = null,
-        IReadOnlyList<string>? AttachmentPaths = null)
+        IReadOnlyList<string>? AttachmentPaths = null,
+        string? NotificationId = null,
+        string? TenantId = null)
     {
         this.NotificationName = NotificationName;
+        this.NotificationId = NotificationId;
+        this.TenantId = TenantId;
         this.SourceKind = SourceKind;
         this.Title = Title;
         this.Text = Text;
@@ -284,6 +292,16 @@ public sealed record NotificationDispatchPayload
     }
 
     public string NotificationName { get; init; }
+
+    /// <summary>
+    /// Preferred over <see cref="NotificationName"/> when the caller already holds the destination —
+    /// a name resolves only within a tenant, so dispatching by id removes the ambiguity entirely.
+    /// </summary>
+    public string? NotificationId { get; init; }
+
+    /// <summary>Tenant the name is resolved in when no id is supplied; null is the unbound scope.</summary>
+    public string? TenantId { get; init; }
+
     public string SourceKind { get; init; }
     public string Title { get; init; }
     public string Text { get; init; }

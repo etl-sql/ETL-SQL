@@ -791,7 +791,7 @@ namespace ETL_SQL.Orchestrator.Storage
         // that share this database file (see the P3.1 topology decision).
 
         public async Task<bool> TryAcquireJobLeaseAsync(string jobId, string owner, TimeSpan duration)
-            => await AcquireJobLeaseAsync(jobName, owner, duration) is not null;
+            => await AcquireJobLeaseAsync(jobId, owner, duration) is not null;
 
         public async Task<long?> AcquireJobLeaseAsync(string jobId, string owner, TimeSpan duration)
         {
@@ -1325,7 +1325,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
                 // Attachments cascade with the job: a link has no meaning without one side of it.
                 // The schedules and notifications themselves survive — they are shared objects.
-                await DeleteJobLinksAsync(connection, transaction, name);
+                await DeleteJobLinksAsync(connection, transaction, jobId);
 
                 await transaction.CommitAsync();
             }
@@ -1378,7 +1378,7 @@ namespace ETL_SQL.Orchestrator.Storage
             deleteHistory.AddParam("@id", jobId);
             await deleteHistory.ExecuteNonQueryAsync();
 
-            await DeleteJobLinksAsync(connection, transaction, name);
+            await DeleteJobLinksAsync(connection, transaction, jobId);
 
             await transaction.CommitAsync();
             return true;
@@ -2161,7 +2161,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
             var sql = "SELECT Day, JobName, RunCount, FailureCount, TotalRows, MaxPeakMemoryBytes FROM JobHistoryDaily WHERE Day >= @since ";
-            if (!string.IsNullOrEmpty(jobName)) { sql += "AND JobName = @job "; command.AddParam("@job", jobName); }
+            if (!string.IsNullOrEmpty(jobId)) { sql += "AND JobId = @job "; command.AddParam("@job", jobId); }
             sql += "ORDER BY Day DESC, JobName LIMIT @limit;";
             command.CommandText = sql;
             command.AddParam("@since", sinceDay.ToString("yyyy-MM-dd"));
@@ -2261,12 +2261,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             var sql = "SELECT * FROM JobHistory ";
-            if (jobName != null) sql += "WHERE JobName = @name ";
+            if (jobId != null) sql += "WHERE JobId = @jobId ";
             sql += "ORDER BY StartTime DESC LIMIT @limit;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            if (jobName != null) command.AddParam("@name", jobName);
+            if (jobId != null) command.AddParam("@jobId", jobId);
             command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
 
             var entries = new List<JobHistoryEntry>();
@@ -2397,8 +2397,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             var sql = "SELECT JobId, StateKey, StateValue, UpdatedAt FROM JobState ";
-            if (!string.IsNullOrEmpty(jobName)) { sql += "WHERE JobName = @job "; command.AddParam("@job", jobName); }
-            sql += "ORDER BY JobName, StateKey LIMIT @limit;";
+            if (!string.IsNullOrEmpty(jobId)) { sql += "WHERE JobId = @job "; command.AddParam("@job", jobId); }
+            sql += "ORDER BY JobId, StateKey LIMIT @limit;";
             command.CommandText = sql;
             command.AddParam("@limit", limit);
 

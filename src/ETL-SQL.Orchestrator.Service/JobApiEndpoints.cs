@@ -252,7 +252,7 @@ namespace ETL_SQL.Orchestrator.Service
                 JobDefinition job;
                 var normalized = !string.IsNullOrWhiteSpace(req.TargetPath)
                     || !string.IsNullOrWhiteSpace(req.JobType);
-                var existing = await store.GetJobAsync(req.Name);
+                var existing = await store.GetJobAsync(RequestTenant(ctx, cfg), req.Name);
                 if (existing is not null && !CanAccessJobTenant(existing, requestTenant))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var caller = RequestCaller(ctx);
@@ -318,10 +318,14 @@ namespace ETL_SQL.Orchestrator.Service
                     await store.SaveJobAsync(job);
                     if (existing is not null && mode == ObjectCreationMode.CreateOrReplace)
                     {
-                        foreach (var link in await catalog.GetJobSchedulesAsync(req.Name))
-                            await catalog.RemoveJobScheduleAsync(req.Name, link.ScheduleName);
-                        foreach (var link in await catalog.GetJobNotificationsAsync(req.Name))
-                            await catalog.RemoveJobNotificationAsync(req.Name, link.NotificationName, link.Trigger);
+                        var replacedId = (await store.GetJobAsync(RequestTenant(ctx, cfg), req.Name))?.Id;
+                        if (replacedId is { Length: > 0 })
+                        {
+                            foreach (var link in await catalog.GetJobSchedulesAsync(replacedId))
+                                await catalog.RemoveJobScheduleAsync(replacedId, link.ScheduleId);
+                            foreach (var link in await catalog.GetJobNotificationsAsync(replacedId))
+                                await catalog.RemoveJobNotificationAsync(replacedId, link.NotificationId, link.Trigger);
+                        }
                     }
                 }
                 else
@@ -362,7 +366,7 @@ namespace ETL_SQL.Orchestrator.Service
                         new { Error = "If-Match with the current job version is required." },
                         statusCode: StatusCodes.Status428PreconditionRequired);
 
-                var existing = await store.GetJobAsync(Uri.UnescapeDataString(name));
+                var existing = await store.GetJobAsync(RequestTenant(ctx, cfg), Uri.UnescapeDataString(name));
                 if (existing == null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (!CanAccessJobTenant(existing, requestTenant))
@@ -403,14 +407,14 @@ namespace ETL_SQL.Orchestrator.Service
 
                 if (!await store.TrySaveJobAsync(updated, expectedVersion.Value))
                 {
-                    var current = await store.GetJobAsync(existing.Name);
+                    var current = await store.GetJobAsync(RequestTenant(ctx, cfg), existing.Name);
                     return Results.Conflict(new
                     {
                         Error = "The job changed after it was read. Refresh it and retry.",
                         Current = current
                     });
                 }
-                return Results.Ok(await store.GetJobAsync(existing.Name));
+                return Results.Ok(await store.GetJobAsync(RequestTenant(ctx, cfg), existing.Name));
             }).WithName("updateScheduledJob");
 
             app.MapDelete("/api/scheduled-jobs/{name}", async (HttpContext ctx, string name,
@@ -425,7 +429,7 @@ namespace ETL_SQL.Orchestrator.Service
                         statusCode: StatusCodes.Status428PreconditionRequired);
 
                 var unescaped = Uri.UnescapeDataString(name);
-                var existing = await store.GetJobAsync(unescaped);
+                var existing = await store.GetJobAsync(RequestTenant(ctx, cfg), unescaped);
                 if (existing is null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (!await authorization.CanAsync(
@@ -435,7 +439,7 @@ namespace ETL_SQL.Orchestrator.Service
 
                 if (!await store.TryDeleteJobAsync(unescaped, expectedVersion.Value))
                 {
-                    var current = await store.GetJobAsync(unescaped);
+                    var current = await store.GetJobAsync(RequestTenant(ctx, cfg), unescaped);
                     return Results.Conflict(new
                     {
                         Error = "The job changed after it was read. Refresh it and retry.",
@@ -455,7 +459,7 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var unescaped = Uri.UnescapeDataString(name);
-                var job = await store.GetJobAsync(unescaped);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), unescaped);
                 if (job is null) return Results.NotFound();
                 if (!await authorization.CanAsync(
                         RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
@@ -473,7 +477,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var history = await store.GetHistoryEntryAsync(historyId);
                 if (history is null) return Results.NotFound(new { Error = $"Run '{historyId}' not found." });
-                var job = await store.GetJobAsync(history.JobName);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), history.JobName);
                 if (job is null) return Results.NotFound(new { Error = $"Job '{history.JobName}' not found." });
                 if (!await authorization.CanAsync(
                         RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
@@ -508,7 +512,8 @@ namespace ETL_SQL.Orchestrator.Service
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var history = (await store.GetHistoryAsync(jobName, Math.Clamp(limit, 1, 1000))).ToList();
                 return Results.Ok(await FilterReadableJobRowsAsync(
-                    history, row => row.JobName, RequestCaller(ctx), store, authorization, ctx.RequestAborted));
+                    history, row => row.JobName, RequestCaller(ctx), RequestTenant(ctx, cfg),
+                    store, authorization, ctx.RequestAborted));
             }).WithName("getAllJobHistory");
 
             app.MapGet("/api/data-quality/status", async (HttpContext ctx, IJobHistoryStore store,
@@ -519,7 +524,8 @@ namespace ETL_SQL.Orchestrator.Service
                 var rows = await store.GetDataQualityStatusesAsync(Math.Clamp(limit, 1, 10000));
                 return Results.Ok(await FilterReadableJobRowsAsync(
                     rows.Where(row => !string.IsNullOrWhiteSpace(row.JobName)).ToList(),
-                    row => row.JobName!, RequestCaller(ctx), store, authorization, ctx.RequestAborted));
+                    row => row.JobName!, RequestCaller(ctx), RequestTenant(ctx, cfg),
+                    store, authorization, ctx.RequestAborted));
             }).WithName("getDataQualityStatus");
 
             app.MapGet("/api/data-quality/failures", async (HttpContext ctx, IJobHistoryStore store,
@@ -529,7 +535,8 @@ namespace ETL_SQL.Orchestrator.Service
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var rows = await store.GetDataQualityFailuresAsync(Math.Clamp(limit, 1, 10000));
                 return Results.Ok(await FilterReadableJobRowsAsync(
-                    rows, row => row.JobName, RequestCaller(ctx), store, authorization, ctx.RequestAborted));
+                    rows, row => row.JobName, RequestCaller(ctx), RequestTenant(ctx, cfg),
+                    store, authorization, ctx.RequestAborted));
             }).WithName("getDataQualityFailures");
 
             app.MapGet("/api/stewardship/score", async (HttpContext ctx, ITenantLineageCatalogStore store,
@@ -569,7 +576,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var schedule = await catalog.GetScheduleAsync(Uri.UnescapeDataString(name));
+                var schedule = await catalog.GetScheduleAsync(RequestTenant(ctx, cfg), Uri.UnescapeDataString(name));
                 if (schedule is null) return Results.NotFound();
                 return await authorization.CanAsync(RequestCaller(ctx), OrchestratorObjectKind.Schedule,
                         schedule.Id, schedule.TenantId, OrchestratorObjectPermission.Read, schedule.CreatedBy, ctx.RequestAborted)
@@ -596,7 +603,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var notification = await catalog.GetNotificationAsync(Uri.UnescapeDataString(name));
+                var notification = await catalog.GetNotificationAsync(RequestTenant(ctx, cfg), Uri.UnescapeDataString(name));
                 if (notification is null) return Results.NotFound();
                 return await authorization.CanAsync(RequestCaller(ctx), OrchestratorObjectKind.Notification,
                         notification.Id, notification.TenantId, OrchestratorObjectPermission.Read, notification.CreatedBy, ctx.RequestAborted)
@@ -613,7 +620,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
                 var notificationName = Uri.UnescapeDataString(name);
-                var notification = await catalog.GetNotificationAsync(notificationName);
+                var notification = await catalog.GetNotificationAsync(RequestTenant(ctx, cfg), notificationName);
                 if (notification is null)
                     return Results.NotFound(new { Error = $"Notification '{notificationName}' was not found." });
                 if (!await authorization.CanAsync(
@@ -1044,7 +1051,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var unescaped = Uri.UnescapeDataString(name);
                 if (!TryNormalizeVariableOverrides(request?.Variables, out var overrides, out var validationError))
                     return Results.BadRequest(new { Error = validationError });
-                var job = await store.GetJobAsync(unescaped);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), unescaped);
                 if (job is null) return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 var required = overrides.Count == 0
                     ? OrchestratorObjectPermission.Execute
@@ -1080,7 +1087,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
                 var unescaped = Uri.UnescapeDataString(name);
-                var job = await store.GetJobAsync(unescaped);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), unescaped);
                 if (job is null) return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (!await authorization.CanAsync(
                         RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
@@ -1117,7 +1124,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (!TryParseObjectKind(kind, out var objectKind))
                     return Results.BadRequest(new { Error = "Kind must be JOB, SCHEDULE, or NOTIFICATION." });
                 var objectName = Uri.UnescapeDataString(name);
-                var owner = await ReadObjectOwnerAsync(objectKind, objectName, jobs, catalog);
+                var owner = await ReadObjectOwnerAsync(objectKind, objectName, RequestTenant(ctx, cfg), jobs, catalog);
                 if (owner.Exists == false) return Results.NotFound();
                 if (!await authorization.CanAsync(
                         RequestCaller(ctx), objectKind, owner.Id!, owner.TenantId,
@@ -1151,7 +1158,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var normalizedPrincipalId = Uri.UnescapeDataString(principalId).Trim();
                 if (normalizedPrincipalId.Length is 0 or > 128)
                     return Results.BadRequest(new { Error = "PrincipalId must contain 1 to 128 characters." });
-                var owner = await ReadObjectOwnerAsync(objectKind, objectName, jobs, catalog);
+                var owner = await ReadObjectOwnerAsync(objectKind, objectName, RequestTenant(ctx, cfg), jobs, catalog);
                 if (owner.Exists == false) return Results.NotFound();
                 var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
@@ -1185,7 +1192,7 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.BadRequest(new { Error = "Kind or principal kind is invalid." });
                 var objectName = Uri.UnescapeDataString(name);
                 var normalizedPrincipalId = Uri.UnescapeDataString(principalId).Trim();
-                var owner = await ReadObjectOwnerAsync(objectKind, objectName, jobs, catalog);
+                var owner = await ReadObjectOwnerAsync(objectKind, objectName, RequestTenant(ctx, cfg), jobs, catalog);
                 if (owner.Exists == false) return Results.NotFound();
                 var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
@@ -1393,6 +1400,14 @@ namespace ETL_SQL.Orchestrator.Service
                 ? caller
                 : new OrchestratorCaller("service", "unverified", "Unverified caller", [], []);
 
+        /// <summary>
+        /// The tenant this request's object names resolve in. Every name-addressed catalog lookup goes
+        /// through it: a name identifies an object only within a tenant, so resolving without one would
+        /// be the ambiguity the surrogate id exists to remove, reintroduced at the edge.
+        /// </summary>
+        internal static string? RequestTenant(HttpContext context, IConfiguration configuration) =>
+            TryResolveRequestTenant(context, configuration, out var tenantId) ? tenantId : null;
+
         internal static bool TryResolveRequestTenant(
             HttpContext context,
             IConfiguration configuration,
@@ -1456,6 +1471,7 @@ namespace ETL_SQL.Orchestrator.Service
             IReadOnlyList<T> rows,
             Func<T, string> jobName,
             OrchestratorCaller caller,
+            string? tenantId,
             IJobHistoryStore jobs,
             OrchestratorObjectAuthorizationService authorization,
             CancellationToken cancellationToken)
@@ -1467,7 +1483,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var name = jobName(row);
                 if (!access.TryGetValue(name, out var canRead))
                 {
-                    var job = await jobs.GetJobAsync(name);
+                    var job = await jobs.GetJobAsync(tenantId, name);
                     canRead = job is not null && await authorization.CanAsync(
                         caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Read, job.CreatedBy, cancellationToken);
@@ -1574,16 +1590,17 @@ namespace ETL_SQL.Orchestrator.Service
         private static async Task<(bool Exists, string? Owner, string? Id, string? TenantId)> ReadObjectOwnerAsync(
             OrchestratorObjectKind objectKind,
             string objectName,
+            string? tenantId,
             IJobHistoryStore jobs,
             IJobCatalogStore catalog) => objectKind switch
             {
-                OrchestratorObjectKind.Job => await jobs.GetJobAsync(objectName) is { } job
+                OrchestratorObjectKind.Job => await jobs.GetJobAsync(tenantId, objectName) is { } job
                     ? (true, job.CreatedBy, job.Id, job.TenantId)
                     : (false, null, null, null),
-                OrchestratorObjectKind.Schedule => await catalog.GetScheduleAsync(objectName) is { } schedule
+                OrchestratorObjectKind.Schedule => await catalog.GetScheduleAsync(tenantId, objectName) is { } schedule
                     ? (true, schedule.CreatedBy, schedule.Id, schedule.TenantId)
                     : (false, null, null, null),
-                OrchestratorObjectKind.Notification => await catalog.GetNotificationAsync(objectName) is { } notification
+                OrchestratorObjectKind.Notification => await catalog.GetNotificationAsync(tenantId, objectName) is { } notification
                     ? (true, notification.CreatedBy, notification.Id, notification.TenantId)
                     : (false, null, null, null),
                 _ => (false, null, null, null)

@@ -315,7 +315,7 @@ public class SubscriptionsController(
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
-            var job = await store.GetJobAsync(jobName);
+            var job = await store.GetJobAsync(_tenantScope.TenantId, jobName);
             if (job is not null)
             {
                 var (interval, unit) = SubscriptionOrchestration.ParseSchedule(sub.Schedule);
@@ -330,9 +330,11 @@ public class SubscriptionsController(
                 await SubscriptionOrchestration.SaveScheduleLinkAsync(
                     store,
                     sub,
-                    updated.Name,
+                    updated.Id!,
+                    _tenantScope.TenantId,
                     rearmExisting: scheduleChanged || atTimeChanged);
-                await SubscriptionOrchestration.SaveNotificationLinkAsync(store, sub, updated.Name);
+                await SubscriptionOrchestration.SaveNotificationLinkAsync(
+                    store, sub, updated.Id!, _tenantScope.TenantId);
             }
             else if (sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
             {
@@ -396,14 +398,16 @@ public class SubscriptionsController(
             if (store is not null)
             {
                 var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report.Name);
-                var job = await store.GetJobAsync(jobName);
+                var job = await store.GetJobAsync(_tenantScope.TenantId, jobName);
                 if (job is not null)
                 {
                     await store.SaveJobAsync(job with { IsEnabled = req.IsActive });
                     if (!string.IsNullOrWhiteSpace(sub.ScriptPath))
                     {
-                        await SubscriptionOrchestration.SaveScheduleLinkAsync(store, sub, jobName);
-                        await SubscriptionOrchestration.SaveNotificationLinkAsync(store, sub, jobName);
+                        await SubscriptionOrchestration.SaveScheduleLinkAsync(
+                            store, sub, job.Id!, _tenantScope.TenantId);
+                        await SubscriptionOrchestration.SaveNotificationLinkAsync(
+                            store, sub, job.Id!, _tenantScope.TenantId);
                     }
                 }
             }
@@ -452,7 +456,8 @@ public class SubscriptionsController(
             await store.InitializeAsync();
             await store.DeleteJobAsync(jobName);
             await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(store, sub.Id);
-            await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(store, sub.Id);
+            await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(
+                store, sub.Id, _tenantScope.TenantId);
         }
 
         if (!string.IsNullOrEmpty(resolvedScriptPath) && System.IO.File.Exists(resolvedScriptPath))
