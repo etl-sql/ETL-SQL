@@ -142,6 +142,11 @@ public static class AstSerializer
             + (s.Trigger != null ? $" ON {s.Trigger.ToUpperInvariant()}" : "") + ";",
 
         // ── Portal alerts ──
+        CreatePortalToolStatement s =>
+            $"{CreationVerb(s.Mode)} TOOL {s.ToolName} AS {s.ToolType}"
+            + (s.Options != null && s.Options.Count > 0 ? $"({string.Join(", ", s.Options.Select(kv => $"{kv.Key} = {kv.Value.ToSql()}"))})" : "")
+            + ";",
+        DropPortalToolStatement s => $"DROP TOOL {(s.IfExists ? "IF EXISTS " : "")}{s.ToolName};",
         CreatePortalAlertStatement s =>
             $"{CreationVerb(s.Mode)} ALERT {s.Name} FOR REPORT {Quote(s.ReportName)} "
             + $"WHEN VISUAL {s.VisualName} {s.Operator} {s.Threshold}"

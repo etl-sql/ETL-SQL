@@ -1,16 +1,12 @@
 # ETL-SQL Development TODO List
 
 Use this list as the execution ledger for open active-release and roadmap work. Once work is
-verified, record its notable outcome in `CHANGELOG.md` and remove the completed entry; Git and the
+verified, record its notable outcome in `CHANGELOG.md`.
+`ROADMAP.md` remains the high-level product-direction source, and its initiatives are decomposed into
+actionable tasks here.  Items will be double-checked to ensure they met all the previous goals and 
+then they should be removed from the `TODO.md` and `ROADMAP.md`. Git and the
 changelog retain completion history. If later evidence invalidates a completion claim, add a new
 open entry with a concrete correction path.
-`ROADMAP.md` remains the high-level product-direction source, and its initiatives are decomposed into
-actionable tasks here.
-
-**Closed-item review — 2026-08-13.** All 67 checked entries were revalidated against their
-implementation, focused regression evidence, and commit history, then removed. The remaining
-34 checklist entries are open work; partial implementation does not close a remaining
-certification or topology obligation.
 
 ---
 
@@ -652,5 +648,9 @@ the window partition-spill P0 did exactly that — it returned correct results b
 path, which would have made large partitioned queries exhaust memory instead. Correct-but-crashing
 is not a fix, it is a different defect.
 
-When one is found: file it as P0 with a reproducer that fails on the *behaviour*, not on a plan or
+When one is found: file it as P0 with a reproducer that fails on the *behavior*, not on a plan or
 threshold choice, so it cannot be mistaken for a configuration artifact later.
+
+## Bugs
+### VS Code
+- [ ] **ETL-SQL Results window stays open**  The ETL-SQL Results window is always shown can it be hidden unless the active file is an etlsql or rptsql file?

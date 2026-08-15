@@ -53,6 +53,7 @@ statement = select_statement
           | raiseerror_statement
           | assert_statement
           | assert_job_statement
+          | assert_table_statement
           | parallel_statement
           | throw_statement
           | return_statement
@@ -192,6 +193,12 @@ assert_statement = "ASSERT" expression [ "," expression ] ;
 assert_job_statement = "ASSERT" "JOB" ( identifier | string_literal ) "(" job_metric_predicate { "," job_metric_predicate } ")"
                        [ "WITH" "(" "FAIL_ON_WARN" "=" ( "TRUE" | "FALSE" ) ")" ]
                        [ "ON" "FAILURE" "NOTIFY" identifier ] [ "ON" "CRITICAL_FAILURE" "THROW" ] ;
+assert_table_statement = "ASSERT" "TABLE" ( temp_table_name | identifier ) "MATCHES" ( temp_table_name | identifier )
+                         [ "WITH" "(" assert_table_option { "," assert_table_option } ")" ] ;
+assert_table_option = ( ( "IGNORE_ORDER" | "ORDERED" ) "=" ( "TRUE" | "FALSE" ) )
+                    | ( "TOLERANCE" "=" number )
+                    | ( "IGNORE_COLUMNS" "=" string_literal )
+                    | ( "MESSAGE" "=" string_literal ) ;
 job_metric_predicate = "ROW_COUNT" ( job_comparison_operator number | "WITHIN" number [ "SIGMA" ] "OF" "HISTORICAL" )
                      | ( "QUARANTINE_PERCENT" | "WARN_PERCENT" ) ( job_comparison_operator number | "WITHIN" number [ "SIGMA" ] "OF" "HISTORICAL" )
                      | "NULL_PERCENT" "(" table_column_reference ")" ( job_comparison_operator number | "WITHIN" number [ "SIGMA" ] "OF" "HISTORICAL" )
@@ -305,7 +312,7 @@ goto_statement = "GOTO" identifier ;
 go_statement = "GO" [ number ] ;
 section_label_statement = identifier ":" ;
 bulk_insert_statement = "BULK" ( "INSERT" | "LOAD" ) [ "INTO" ] table_reference [ "(" column_list ")" ] "FROM" expression [ "WITH" object_options ] ;
-lineage_statement = "LINEAGE" [ "(" ] table_reference [ "," identifier ] [ ")" ] [ "TO" expression ] ;
+lineage_statement = "LINEAGE" [ "(" ] table_reference [ "," identifier ] [ ")" ] [ [ "EXPORT" "AS" "OPENLINEAGE" ] "TO" string_literal ] ;
 docker_statement = ( "START" | "STOP" | "PAUSE" | "CLOSE" ) ( "ALL" "DOCKER" | "DOCKER" [ identifier ] ) ;
 pivot_statement = "PIVOT" table_reference "ON" pivot_columns "USING" identifier "(" ( "*" | identifier ) ")" [ "GROUP" "BY" column_list ] ;
 pivot_columns = identifier [ "IN" "(" expression_list ")" ] | identifier "," column_list ;
@@ -389,7 +396,7 @@ create_share_link_statement = "CREATE" "SHARE" "LINK" string_literal "FOR" "REPO
 create_embed_token_statement = "CREATE" "EMBED" "TOKEN" string_literal "FOR" "REPORT" string_literal [ "EXPIRES" string_literal ] [ "INTO" temp_table_name ] ;
 create_saved_view_statement = "CREATE" "SAVED" "VIEW" string_literal "FOR" "REPORT" string_literal [ "DEFAULT" ]
                               [ "PARAMETERS" "(" subscription_parameter_assignments ")"
-                              | "WITH" "(" "PARAMETERS" "=" string_literal ")" ] [ "INTO" temp_table_name ] ;
+                              | "WITH" "(" "PARAMETERS" "=" ( string_literal | subscription_parameter_assignments ) ")" ] [ "INTO" temp_table_name ] ;
 create_alert_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "ALERT" identifier "FOR" "REPORT" string_literal
                          "WHEN" "VISUAL" identifier alert_comparison_operator number [ "WITH" metadata_options ] ;
 alert_comparison_operator = ">" | ">=" | "<" | "<=" | "=" | "!=" | "<>" ;
@@ -575,7 +582,7 @@ special_sql_expression = "SUBSTRING" "(" expression ( "FROM" expression [ "FOR" 
                        | "TRIM" "(" expression ")"
                        | "TRIM" "(" [ "LEADING" | "TRAILING" | "BOTH" ] [ expression ] "FROM" expression ")"
                        | "JSON_TABLE" "(" expression "," expression "COLUMNS" "(" json_table_column { "," json_table_column } ")" ")" ;
-json_table_column = identifier ( "FOR" identifier | data_type [ "EXISTS" ] "PATH" expression ) ;
+json_table_column = identifier ( "FOR" "ORDINALITY" | data_type [ "EXISTS" ] "PATH" expression ) ;
 
 function_call = identifier "(" [ [ "DISTINCT" | "ALL" ] ( "*" | expression_list ) ] ")"
                 [ "FILTER" "(" "WHERE" expression ")" ]

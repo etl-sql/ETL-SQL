@@ -720,9 +720,30 @@ public class PortalParser : ParserComponent
         Consume(TokenType.REPORT, "Expected REPORT");
         string report = ConsumeStringLiteral("Expected report name string literal");
         bool isDefault = Match(TokenType.DEFAULT);
-        var parameters = MatchIdentifier("PARAMETERS")
-            ? ParseSubscriptionParameterList()
-            : new List<SubscriptionParameter>();
+        IReadOnlyList<SubscriptionParameter> parameters = new List<SubscriptionParameter>();
+        if (Match(TokenType.WITH))
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after WITH");
+            var optName = ConsumeIdentifier("Expected option name in WITH clause");
+            if (optName.Value.Equals("PARAMETERS", StringComparison.OrdinalIgnoreCase))
+            {
+                Consume(TokenType.EQUALS, "Expected '=' after PARAMETERS");
+                var paramStr = ConsumeStringLiteral("Expected parameters string literal");
+                var parsedList = new List<SubscriptionParameter>();
+                foreach (var pair in paramStr.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var parts = pair.Split('=', 2);
+                    if (parts.Length == 2)
+                        parsedList.Add(new SubscriptionParameter(parts[0].Trim(), parts[1].Trim()));
+                }
+                parameters = parsedList;
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after WITH clause");
+        }
+        else if (MatchIdentifier("PARAMETERS"))
+        {
+            parameters = ParseSubscriptionParameterList();
+        }
         string? intoTable = null;
         if (Match(TokenType.INTO))
             intoTable = ConsumeTempTableName("CREATE SAVED VIEW ... INTO target must be a temporary table starting with '#'");
