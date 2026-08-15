@@ -10,7 +10,7 @@ using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core;
-/// <summary>Base class for all Abstract Syntax Tree nodes, tracking source locations.</summary>
+/// <summary>Base class for all Abstract Syntax Tree nodes, tracking source locations and trivia.</summary>
 public abstract record AstNode
 {
     /// <summary>Starting line number in the source script.</summary>
@@ -21,6 +21,14 @@ public abstract record AstNode
     public int EndLine { get; init; }
     /// <summary>Ending column position in the source script.</summary>
     public int EndColumn { get; init; }
+    /// <summary>Starting 0-based character offset in the source script.</summary>
+    public int StartOffset { get; init; }
+    /// <summary>Ending 0-based character offset in the source script.</summary>
+    public int EndOffset { get; init; }
+    /// <summary>Leading comments or whitespace trivia preceding this node.</summary>
+    public string? LeadingTrivia { get; init; }
+    /// <summary>Trailing comments or whitespace trivia following this node.</summary>
+    public string? TrailingTrivia { get; init; }
 
     /// <summary>Converts the node back to its SQL representation using the central serializer.</summary>
     public virtual string ToSql() => AstSerializer.Format(this);

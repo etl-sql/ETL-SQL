@@ -92,6 +92,7 @@ public class Parser : IParser
 
     public int LastTokenEndLine { get; private set; }
     public int LastTokenEndColumn { get; private set; }
+    public int LastTokenEndOffset { get; private set; }
 
     public void Backtrack()
     {
@@ -107,6 +108,7 @@ public class Parser : IParser
         {
             LastTokenEndLine = token.EndLine;
             LastTokenEndColumn = token.EndColumn;
+            LastTokenEndOffset = token.EndOffset;
             _position++;
         }
         return token;
@@ -284,7 +286,26 @@ public class Parser : IParser
     /// <summary>Parses a single statement from the current position.</summary>
     public Statement ParseStatement()
     {
-        return _statementParser.ParseStatement();
+        var startToken = Current;
+        var startOffset = startToken.Offset;
+        var startLine = startToken.Line;
+        var startColumn = startToken.Column;
+
+        var stmt = _statementParser.ParseStatement();
+
+        var endOffset = LastTokenEndOffset > 0 ? LastTokenEndOffset : (Previous.EndOffset > 0 ? Previous.EndOffset : startOffset);
+        var endLine = LastTokenEndLine > 0 ? LastTokenEndLine : (Previous.EndLine > 0 ? Previous.EndLine : startLine);
+        var endColumn = LastTokenEndColumn > 0 ? LastTokenEndColumn : (Previous.EndColumn > 0 ? Previous.EndColumn : startColumn);
+
+        return stmt with
+        {
+            StartOffset = stmt.StartOffset > 0 ? stmt.StartOffset : startOffset,
+            EndOffset = stmt.EndOffset > 0 ? stmt.EndOffset : endOffset,
+            Line = stmt.Line > 0 ? stmt.Line : startLine,
+            Column = stmt.Column > 0 ? stmt.Column : startColumn,
+            EndLine = stmt.EndLine > 0 ? stmt.EndLine : endLine,
+            EndColumn = stmt.EndColumn > 0 ? stmt.EndColumn : endColumn
+        };
     }
 
 

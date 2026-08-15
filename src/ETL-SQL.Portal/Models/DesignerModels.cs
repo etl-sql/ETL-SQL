@@ -87,9 +87,13 @@ public record SaveDesignerResponse(
     long Version,
     string? SourceRevision = null);
 
-public record GenerateDesignerRequest(DesignerStateDto DesignState);
+public record GenerateDesignerRequest(DesignerStateDto DesignState, string? Script = null);
 
 public record GenerateDesignerResponse(string Script);
+
+public record PatchDesignerRequest(string Script, DesignerStateDto DesignState);
+
+public record PatchDesignerResponse(string Script);
 
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,

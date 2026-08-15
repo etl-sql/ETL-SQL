@@ -77,6 +77,17 @@ inherited from v0.17.0.
 - [x] **3.5 Documentation**: Update `docs/reference/statements/queries/from.md` and standard library references.
 - [x] **3.6 Sample & Verification**: Create and execute `samples/declarative_watermark.etlsql`.
 
+#### Track 4: Tooling & Authoring — Visual Report Builder Round-Trip Fidelity & Trivia Preservation
+- [x] **4.1 AST Source Span & Trivia Capture (C# Engine)**: Enhance AST statement nodes (`Statement`, `CreateVisualStatement`, `CreatePageStatement`, etc.) in `Ast.cs` and `CoreParser` to record exact character `SourceSpan` (start index, end index, line/col) and leading/trailing comment/whitespace trivia.
+- [x] **4.2 Surgical Script Patching Engine (`DesignerScriptPatcher` in C#)**: Implement `DesignerScriptPatcher.cs` in `ETL-SQL.Portal` / `ETL-SQL.Core` providing `PatchVisual`, `PatchPageStructure`, `PatchDataset`, `PatchStyle`, `AddVisual`, and `DeleteVisual` methods that replace only target statement spans while leaving surrounding data prep SQL, CTEs, variables, and interleaved comments 100% untouched. Expose `/api/designer/patch` endpoint in `DesignerController.cs`.
+- [x] **4.3 Client-Side Trivia-Preserving Patcher & Event Engine (`designer.js`)**: Implement client-side AST statement boundary parser and surgical patcher in canonical `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js`. Sync drag/resize/property edits directly into script editor, preserving CodeMirror cursor position, scroll offsets, and active selections.
+- [x] **4.4 Fault-Tolerant Canvas State & Diagnostic Badging**: Decouple visual canvas state from syntax parse errors. In split-screen mode, maintain the last valid layout AST during syntax errors, rendering non-blocking inline warning badges and diagnostic overlays on affected canvas cards rather than resetting or wiping the canvas.
+- [x] **4.5 Bi-Directional Property & Outlier Normalization**: Complete bidirectional synchronization for all `STYLE` options (`WIDTH`, `HEIGHT`, `THEME`, `ACCENT`, `BACKGROUND`, `SURFACE`, `TEXT`), `OPTIONS`, and `MAPPINGS`. Handle outlier layout scenarios: 12-column grid overflow clamping, card collisions, non-rectangular slot layouts, empty grid gaps, and nested container detachment/nesting.
+- [x] **4.6 Vitest + JSDOM Automated Test Suite (DOM & Bi-Directional Simulation)**: Build comprehensive Vitest + JSDOM test suite in `src/etl-sql-vscode/ui/tests/report_builder_roundtrip.test.ts` simulating DOM card drag/resize events, properties panel updates, text edits in code editor, syntax error recovery, comment preservation, and outlier movements.
+- [x] **4.7 C# Unit & Round-Trip Fidelity Tests**: Implement `DesignerScriptPatcherTests.cs` in `ETL-SQL.Tests` verifying character-exact round-trips against complex scripts with CTEs, temp tables, nested containers, and diverse comment patterns (`--`, `/* ... */`).
+- [x] **4.8 Documentation & Asset Synchronization**: Update `docs/guides/tooling/report-builder.md`, `docs/architecture/PortalUI.md`, and synchronize canonical shared designer assets with `node scripts/sync-assets.js`.
+
+
 
 **Sequencing.** The release-process RCI items are scheduled **last**, deliberately. The RCI changes
 touch the validation gate and CI itself, so landing them

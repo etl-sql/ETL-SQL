@@ -121,12 +121,23 @@ When a card is nested inside a `TABS` or `ACCORDION` container, a **Tab / Sectio
 
 ---
 
-## Bi-Directional Split Script Authoring
+## Bi-Directional Split Script Authoring & Round-Trip Fidelity
 
 Click **Split Script** (`Ctrl+Shift+S`) to open the CodeMirror editor alongside the visual canvas:
 
-- **Grid → Script Sync:** Moving, resizing, adding, or deleting cards automatically updates the generated `.rptsql` script in real time.
-- **Script → Grid Sync:** Modifying raw ETL-SQL script clauses (`CREATE VISUAL`, `STRUCTURE = 'A B / C D'`) automatically parses and updates the visual grid upon applying script changes.
+- **Surgical Script Patching & Trivia Preservation:**
+  - When moving, resizing, styling, or deleting visual cards on the grid canvas, the engine uses **surgical AST span patching** (`DesignerScriptPatcher`).
+  - Preceding data prep statements (`CREATE CONNECTION`, `SELECT ... INTO #temp`, `DECLARE @var`, `RUN SCRIPT`, CTEs), interleaved comments (`-- comment` and `/* banner */`), and custom code formatting are preserved **100% character-for-character**.
+  - Only the exact statement spans for the modified visual, page layout, or dataset query are replaced.
+- **Grid → Script Sync:**
+  - Moving, resizing, adding, or deleting cards automatically updates the `.rptsql` script in real time without causing CodeMirror text cursor jumps or losing user scroll positions.
+- **Script → Grid Sync & Fault-Tolerant Canvas State:**
+  - Modifying raw ETL-SQL script clauses (`CREATE VISUAL`, `STRUCTURE = 'A B / C D'`, `STYLE (...)`) automatically parses and synchronizes to the visual grid.
+  - If a script contains a transient syntax error during live typing (e.g. unclosed parenthesis or incomplete keyword), the designer displays a non-intrusive warning badge (`⚠ Script syntax warning`) with full line diagnostics in the topbar, while **retaining all active canvas visual objects and interactions** without wiping state.
+  - When the syntax error is resolved on subsequent keystrokes, the warning badge clears and the canvas updates smoothly.
+- **12-Column Bounds Clamping & Outlier Normalization:**
+  - Card dragging and resizing operations are strictly bounded to the 12-column grid (`gridCol` in `1..12`, `gridColSpan` in `1..13-gridCol`).
+  - Negative, zero, or out-of-range heights/widths are automatically normalized to safe minimums (`gridRowSpan >= 1`), preventing corrupted script layout strings.
 - **Cursor Focus Tracking:**
   - Clicking a visual card on the canvas scrolls the CodeMirror editor directly to its `CREATE VISUAL` declaration.
   - Moving your text cursor inside a `CREATE VISUAL` block in CodeMirror selects that card on the canvas.

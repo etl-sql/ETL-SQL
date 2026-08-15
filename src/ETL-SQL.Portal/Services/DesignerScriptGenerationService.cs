@@ -90,7 +90,7 @@ public sealed class DesignerScriptGenerationService
         return sb.ToString();
     }
 
-    private static string GenerateElement(DesignerVisualDto v, IReadOnlyList<DesignerVisualDto> allVisuals)
+    internal static string GenerateElement(DesignerVisualDto v, IReadOnlyList<DesignerVisualDto> allVisuals)
     {
         var sb = new StringBuilder();
         var name = SanitizeName(v.Name, v.Id);
@@ -191,7 +191,7 @@ public sealed class DesignerScriptGenerationService
         return sb.ToString().TrimEnd();
     }
 
-    private static string GetSlotLetter(int index)
+    internal static string GetSlotLetter(int index)
     {
         string letter = "";
         int idx = index;
@@ -203,7 +203,7 @@ public sealed class DesignerScriptGenerationService
         return letter;
     }
 
-    private static string BuildStructure(IReadOnlyList<DesignerVisualDto> visuals)
+    internal static string BuildStructure(IReadOnlyList<DesignerVisualDto> visuals)
     {
         if (visuals.Count == 0) return ".";
         int maxRow = visuals.Max(v => v.GridRow + v.GridRowSpan - 1);
@@ -247,7 +247,7 @@ public sealed class DesignerScriptGenerationService
         return string.Join(" / ", dedupedRows);
     }
 
-    private static string SanitizeName(string name, string? fallback = null)
+    internal static string SanitizeName(string name, string? fallback = null)
     {
         var input = string.IsNullOrWhiteSpace(name) ? fallback : name;
         if (string.IsNullOrWhiteSpace(input)) return "visual1";
@@ -256,7 +256,7 @@ public sealed class DesignerScriptGenerationService
         return safe;
     }
 
-    private static string NormalizeDatasetName(string name)
+    internal static string NormalizeDatasetName(string name)
     {
         var trimmed = (name ?? "").Trim();
         if (trimmed.StartsWith("&", StringComparison.Ordinal) || trimmed.StartsWith("#", StringComparison.Ordinal))
@@ -264,11 +264,11 @@ public sealed class DesignerScriptGenerationService
         return "&" + SanitizeName(trimmed);
     }
 
-    private static string EscapeStr(string s) => s.Replace("'", "''");
+    internal static string EscapeStr(string s) => s.Replace("'", "''");
 
-    private static string EscapeStructure(string s) => s.Replace("'", "''");
+    internal static string EscapeStructure(string s) => s.Replace("'", "''");
 
-    private static string GetVisualTypeKeyword(string type)
+    internal static string GetVisualTypeKeyword(string type)
     {
         var upper = (type ?? "").ToUpperInvariant();
         return upper switch

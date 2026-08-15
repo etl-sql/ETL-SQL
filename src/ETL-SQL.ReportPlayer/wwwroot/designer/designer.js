@@ -3668,6 +3668,7 @@ export function createDesigner(container, opts = {}) {
         ${toolbarButton({ attr: 'id="dsgn-save"', icon: 'save', title: 'Save report', label: 'Save', primary: true })}
         ${toolbarButton({ attr: 'id="dsgn-commit" style="display:none"', icon: 'commit', title: 'Commit saved script to source control', label: 'Commit' })}
         <span id="dsgn-scm-status" role="status" aria-live="polite"></span>
+        <span id="dsgn-diagnostic-badge" class="etlsql-diagnostic-badge" style="display:none; margin-left:8px; font-size:12px; color:#d97706; background:#fef3c7; border:1px solid #fcd34d; border-radius:4px; padding:2px 6px; cursor:help;" role="status"></span>
         <span id="dsgn-lease-status" class="etlsql-lease-status" role="status" aria-live="polite"></span>
         ${toolbarButton({ attr: 'id="dsgn-cancel"', icon: 'close', title: 'Cancel editing', label: 'Cancel' })}
     `;
@@ -3675,6 +3676,20 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-name').value = reportName;
     topbar.querySelector('#dsgn-theme-select').value = localStorage.getItem('portal-theme') || 'light';
     if (sourceControlEnabled && reportId) topbar.querySelector('#dsgn-commit').style.display = '';
+
+    function setScriptDiagnosticBadge(errorText) {
+        const el = topbar.querySelector('#dsgn-diagnostic-badge');
+        if (!el) return;
+        if (errorText) {
+            el.style.display = 'inline-flex';
+            el.textContent = '⚠ Script syntax warning';
+            el.title = errorText;
+        } else {
+            el.style.display = 'none';
+            el.textContent = '';
+            el.title = '';
+        }
+    }
 
     function setScmStatus(text, kind) {
         const el = topbar.querySelector('#dsgn-scm-status');
@@ -5048,8 +5063,9 @@ export function createDesigner(container, opts = {}) {
     async function syncScriptFromGrid() {
         if (!isSplitActive || !scriptEditor) return;
         try {
-            const r = await apiJson('/api/designer/generate', 'POST', { designState: state });
-            if (r?.script) {
+            const currentScript = scriptEditor.getValue();
+            const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
+            if (r?.script && r.script !== currentScript) {
                 // Get scroll position and selection to restore them
                 const view = scriptEditor.editor.view;
                 const prevSel = view.state.selection.main;
@@ -5077,7 +5093,8 @@ export function createDesigner(container, opts = {}) {
     async function openScript() {
         let text = '';
         try {
-            const r = await apiJson('/api/designer/generate', 'POST', { designState: state });
+            const currentScript = opts.script || opts.initialScript || null;
+            const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             text = r?.script ?? '';
         } catch { text = '-- Failed to generate script\n'; }
         scriptOverlay.classList.add('active');
@@ -5188,6 +5205,7 @@ export function createDesigner(container, opts = {}) {
         try {
             const r = await apiJson('/api/designer/parse', 'POST', { script });
             if (r?.designState?.pages?.length) {
+                setScriptDiagnosticBadge(null);
                 Object.assign(state, r.designState);
                 if (!state.datasets) state.datasets = [];
                 if (pageIdx >= state.pages.length) {
@@ -5199,9 +5217,17 @@ export function createDesigner(container, opts = {}) {
                 }
                 renderAll();
             } else {
-                _feedback.notify(r?.error || 'Could not parse script.', { title: 'Script not parsed', tone: 'error' });
+                setScriptDiagnosticBadge(r?.error || 'Script syntax error');
+                if (!isSplitActive) {
+                    _feedback.notify(r?.error || 'Could not parse script.', { title: 'Script not parsed', tone: 'error' });
+                }
             }
-        } catch (e) { _feedback.notify(e.message, { title: 'Script not parsed', tone: 'error' }); }
+        } catch (e) {
+            setScriptDiagnosticBadge(e.message);
+            if (!isSplitActive) {
+                _feedback.notify(e.message, { title: 'Script not parsed', tone: 'error' });
+            }
+        }
     }
 
     // ── Save ──────────────────────────────────────────────────────────────────
@@ -5214,7 +5240,8 @@ export function createDesigner(container, opts = {}) {
         }
         reportName = topbar.querySelector('#dsgn-name').value.trim() || reportName;
         try {
-            const r = await apiJson('/api/designer/generate', 'POST', { designState: state });
+            const currentScript = scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || null);
+            const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             const script = r?.script ?? '';
             if (opts.onSaveScript) {
                 await opts.onSaveScript(script);

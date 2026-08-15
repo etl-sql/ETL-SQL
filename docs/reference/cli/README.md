@@ -109,7 +109,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql serve`](serve.md) | Start a live preview server for a Report-SQL script |
 | [`etl-sql session`](session.md) | Manage ad-hoc execution sessions |
 | [`etl-sql session clear`](session-clear.md) | Clear a session state |
-| [`etl-sql test`](test.md) | Run internal diagnostics or unit tests |
+| [`etl-sql test`](test.md) | Run native ETL-SQL test suites (*.test.etlsql) and table assertions |
 | [`etl-sql ui`](ui.md) | Interactive user interface commands |
 | [`etl-sql ui edit`](ui-edit.md) | Start the modern windowed Terminal IDE (default) |
 | [`etl-sql ui old`](ui-old.md) | Start the legacy Spectre-based console editor |

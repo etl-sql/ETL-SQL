@@ -1,18 +1,26 @@
 # etl-sql test
 
-Run internal diagnostics or unit tests
+Run native ETL-SQL test suites (*.test.etlsql) and table assertions
 
 ## Synopsis
 
 ```text
-etl-sql test [testVal]
+etl-sql test [target] [options]
 ```
 
 ## Arguments
 
 | Argument | Required | Description |
 | :--- | :--- | :--- |
-| `testVal` | no | Test category: unit, integration, etc. |
+| `target` | no | Test file, directory, or pattern to execute (e.g. tests/, *.test.etlsql). |
+
+## Options
+
+| Option | Description |
+| :--- | :--- |
+| `--json` | Output results and messages in structured JSON format. |
+| `--perf, -p` | Display performance metrics after execution. |
+| `--verbose, -v` | Print detailed execution tracking. |
 
 ## References
 

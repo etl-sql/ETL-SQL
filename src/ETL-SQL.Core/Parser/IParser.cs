@@ -11,6 +11,7 @@ public interface IParser
     Token Previous { get; }
     int LastTokenEndLine { get; }
     int LastTokenEndColumn { get; }
+    int LastTokenEndOffset { get; }
     Token LookAhead(int distance);
     Token Advance();
     bool Match(TokenType type);

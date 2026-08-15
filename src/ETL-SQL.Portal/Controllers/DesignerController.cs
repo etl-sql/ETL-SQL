@@ -31,6 +31,7 @@ public class DesignerController : ControllerBase
     private readonly ILanguageService? _languageService;
     private readonly DesignerAnalysisService _analysisService;
     private readonly DesignerScriptGenerationService _scriptGenerationService;
+    private readonly DesignerScriptPatcher _scriptPatcher;
     private readonly PortalConfig _portalConfig;
     private readonly PortalConnectionCatalogService? _connectionCatalog;
     private readonly IMetadataManager? _metadata;
@@ -44,6 +45,7 @@ public class DesignerController : ControllerBase
         ILanguageService? languageService = null,
         DesignerAnalysisService? analysisService = null,
         DesignerScriptGenerationService? scriptGenerationService = null,
+        DesignerScriptPatcher? scriptPatcher = null,
         PortalConfig? portalConfig = null,
         PortalDesignerPreviewService? previewService = null,
         PortalConnectionCatalogService? connectionCatalog = null,
@@ -60,6 +62,7 @@ public class DesignerController : ControllerBase
         _languageService = languageService;
         _analysisService = analysisService ?? new DesignerAnalysisService();
         _scriptGenerationService = scriptGenerationService ?? new DesignerScriptGenerationService();
+        _scriptPatcher = scriptPatcher ?? new DesignerScriptPatcher(_scriptGenerationService);
         _portalConfig = portalConfig ?? new PortalConfig();
         _connectionCatalog = connectionCatalog;
         _metadata = metadata;
@@ -652,10 +655,39 @@ public class DesignerController : ControllerBase
             return DesignerBusy();
         try
         {
-            var script = _scriptGenerationService.Generate(req.DesignState);
+            var script = !string.IsNullOrWhiteSpace(req.Script)
+                ? _scriptPatcher.Patch(req.Script, req.DesignState)
+                : _scriptGenerationService.Generate(req.DesignState);
+
             if (ValidateTextLimit(script, "generated script", MaxGeneratedScriptCharacters) is { } generatedLimit)
                 return generatedLimit;
             return Ok(new GenerateDesignerResponse(script));
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
+    // ── POST /api/designer/patch ──────────────────────────────────────────────
+
+    [HttpPost("patch")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult Patch([FromBody] PatchDesignerRequest req)
+    {
+        if (ValidateDesignerState(req.DesignState) is { } stateLimit)
+            return stateLimit;
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+        try
+        {
+            var script = _scriptPatcher.Patch(req.Script, req.DesignState);
+            if (ValidateTextLimit(script, "patched script", MaxGeneratedScriptCharacters) is { } generatedLimit)
+                return generatedLimit;
+            return Ok(new PatchDesignerResponse(script));
         }
         finally
         {
