@@ -81,45 +81,58 @@ claim from configuration or a weaker/different topology.
 
 **Origin (2026-07-27).** Surfaced while designing the unified job/schedule/notification model
 ([job_schedule_notification.md](docs/architecture/decisions/job_schedule_notification.md)). Making the
-Orchestrator the system of record for `JOB`, `SCHEDULE`, and `NOTIFICATION` moves durable, mutable,
-operationally significant objects into a store whose API authenticates with a **single shared key**
-(`X-Orchestrator-Key`). It has no user or group model at all.
+Orchestrator the system of record for `JOB`, `SCHEDULE`, and `NOTIFICATION` moved durable, mutable,
+operationally significant objects into a store whose API authenticated with a **single shared key**
+(`X-Orchestrator-Key`) and had no user or group model at all.
 
-The consequence: anyone who can reach the orchestrator connection can create, alter, disable, or drop
-**anyone's** job. The only boundary is the use-ACL on the orchestrator connection in the Portal's
-governed catalog, which is connection-level, not per-object. That is a real asymmetry with the
-Portal, which enforces per-object RBAC — and it is a deliberate deferral, not an oversight.
+The consequence at the time: anyone who could reach the orchestrator connection could create, alter,
+disable, or drop **anyone's** job. The only boundary was the use-ACL on the orchestrator connection in
+the Portal's governed catalog, which is connection-level, not per-object — a real asymmetry with the
+Portal's per-object RBAC, accepted then as a deliberate deferral rather than an oversight.
 
-**Why it is acceptable for now:** the Portal is the only client, and it authenticates as a single
-principal. Per-object ACLs against one subject would be authorization theatre.
+**Largely delivered (verified 2026-08-15).** The anticipated trigger — a second client — arrived,
+and the four numbered work items were built rather than deferred. Shipped: federated identity
+(`OrchestratorIdentityAssertion`, HMAC and audience-bound, with the caller-controlled
+`X-Orchestrator-Actor` header retired); per-object ACLs over `JOB`/`SCHEDULE`/`NOTIFICATION` reusing
+the Portal's `READ`/`EXECUTE`/`OVERRIDE`/`MANAGE` vocabulary for user, group, and service principals;
+ownership checks that stop `CREATE OR ALTER` silently taking over a shared name in both the HTTP and
+engine paths; and audit events naming the acting principal. The definition-of-done scenarios are
+proved by `OrchestratorPerObjectAuthorizationIntegrationTests` and gated in release certification as
+the `per-object-authorization` hosted prerequisite.
 
-**What ships in v0.18.0 instead — attribution, not authorization.** The Portal passes the acting
-user's identity through on every mutation, and the Orchestrator records `CreatedBy` / `ModifiedBy` on
-the job, schedule, and notification rows. One column each, purely additive, no identity model
-required. It makes "who scheduled this?" answerable — the question that will come up first — and it
-makes a silent takeover (see below) visible after the fact.
+**Remaining scope, decomposed in [TODO.md](TODO.md).** Four gaps keep the item open. A script-side
+`ORCHESTRATOR` connection still authenticates with the shared key alone, so it is either refused by a
+federated Orchestrator or granted blanket authority by a legacy one. Grants have no administration
+surface, so setting one means hand-crafting a signed assertion. There is no ownership transfer or
+adoption path, which a solo deployment needs the moment it attaches a Portal. And grants key on
+mutable numeric Portal identifiers rather than stable ones.
 
-**The trigger to build real authorization** is a second client, or one Orchestrator shared across
-teams or tenants. At that point the Orchestrator needs an identity model, which realistically means
-federating to the Portal's or directly to OIDC rather than inventing a third one. Sequence it with
-the enterprise identity work in `docs/guides/administration.md`.
-
-The work, when triggered:
-
-1. **Federate identity** rather than duplicating it — the caller's identity arrives as a verifiable
-   token, not a trusted header, which is the difference between authorization and attribution.
-2. **Per-object ACLs** on `JOB`, `SCHEDULE`, `NOTIFICATION`, reusing the Portal's grant vocabulary so
-   there is one permission model to reason about, not two.
-3. **Ownership on the shared-name hazard.** Names are unique per orchestrator and `CREATE OR ALTER`
-   is supported, so a second script importing an existing name silently takes the object over rather
-   than erroring. Until ACLs exist this is mitigated socially — naming conventions, a category in
-   `OPTIONS`, and the attribution columns above. Ownership makes it enforceable.
-4. **Audit parity** with the Portal: every mutation attributable to a real principal, not to "the
-   Portal".
+**The control-plane decision (2026-08-15).** Identity federates to the **Portal**, which is the single
+place users, groups, and audit live. The Orchestrator does not grow its own principal registry: that
+would be the second permission model this item exists to prevent, and it would have no path to
+Active Directory, whereas Portal groups already synchronise from OIDC/AD group claims on every login.
+Team and above therefore require a Portal; Solo may run without one and has no principals or grants at
+all. Clients exchange a Portal credential for a short-lived Orchestrator assertion and then call the
+Orchestrator directly, which keeps the two tokens' audiences separate and avoids a Portal proxy twin
+for every orchestrator endpoint.
 
 **Definition of done.** A user who can reach an orchestrator cannot mutate a job they do not own, the
 Orchestrator's audit records name a person rather than a service, and the permission vocabulary is
 the Portal's rather than a second one.
+
+### Orchestrator — Job Administration UI
+
+**Origin (2026-08-15).** Split out of Per-Object Authorization so the security boundary is not held
+hostage to a much larger UI build. The Portal's Orchestrator tab is already a working operations
+surface — status, stat filters, triage, a 24-hour timeline, the jobs table with run/enable/kill/delete,
+a detail panel with script flow and inline editing, run history, and resume-from-checkpoint. What it
+does not cover is everything added since it was written: the unified `SCHEDULE` and `NOTIFICATION`
+catalog, job metrics and data-quality results, bundle deployment, sandbox profiles, and watermark
+state.
+
+The intent is a SQL Agent-class administration surface for operators who would rather not script a
+change by hand, without displacing scripting as the primary authoring path. Decomposed in
+[TODO.md](TODO.md).
 
 ### SaaS Multi-Tenancy — Secure Outbound Data Gateway
 
