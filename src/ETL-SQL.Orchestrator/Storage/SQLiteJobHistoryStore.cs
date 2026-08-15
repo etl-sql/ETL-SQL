@@ -54,12 +54,26 @@ namespace ETL_SQL.Orchestrator.Storage
 
                 try
                 {
-                    // Name is the identity: unique per orchestrator, case-insensitive, never renamed
-                    // (an exported configuration script refers to it). COLLATE NOCASE is placed before
-                    // the constraints because PostgreSQL requires that order; SQLite accepts either.
+                    // Identity is the surrogate Id; Name is the addressable key and is unique *per
+                    // tenant*, case-insensitive. Two tenants may each own a job called 'daily_load',
+                    // and everything that references a job — ACLs, schedule and notification links,
+                    // history, state, metrics — references the Id, so a re-created name never inherits
+                    // the previous object's grants or state.
+                    //
+                    // TenantId is NOT NULL with an empty-string sentinel meaning "unbound": a Solo or
+                    // otherwise host-fixed deployment that never received a signed tenant. Empty is
+                    // never a valid TenantId (TenantId rejects it), so the sentinel cannot collide with
+                    // a real tenant, and it keeps unbound objects in one uniqueness namespace instead of
+                    // the "every NULL is distinct" behaviour a nullable column would give. The domain
+                    // record keeps TenantId nullable so the unbound state stays visible to callers —
+                    // notably sandbox policy resolution, which must refuse an unbound job.
+                    //
+                    // COLLATE NOCASE is placed before the constraints because PostgreSQL requires that
+                    // order; SQLite accepts either.
                     var createJobsTable = @"
                 CREATE TABLE IF NOT EXISTS Jobs (
-                    Name TEXT COLLATE NOCASE PRIMARY KEY,
+                    Id TEXT NOT NULL PRIMARY KEY,
+                    Name TEXT COLLATE NOCASE NOT NULL,
                     Script TEXT NOT NULL,
                     Interval INTEGER NOT NULL,
                     Unit TEXT NOT NULL,
@@ -78,7 +92,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     Options TEXT,
                     CreatedBy TEXT,
                     ModifiedBy TEXT,
-                    TenantId TEXT
+                    TenantId TEXT NOT NULL DEFAULT '',
+                    UNIQUE (TenantId, Name)
                 );";
 
                     // Schedules, notifications, and their attachments to jobs. The Orchestrator is the
@@ -86,7 +101,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     // computes the next run, and dispatches the outcome.
                     var createCatalogTables = @"
                 CREATE TABLE IF NOT EXISTS Schedules (
-                    Name TEXT COLLATE NOCASE PRIMARY KEY,
+                    Id TEXT NOT NULL PRIMARY KEY,
+                    Name TEXT COLLATE NOCASE NOT NULL,
                     Cron TEXT NOT NULL,
                     TimeZone TEXT NOT NULL DEFAULT 'UTC',
                     IsEnabled INTEGER NOT NULL DEFAULT 1,
@@ -95,10 +111,13 @@ namespace ETL_SQL.Orchestrator.Storage
                     Options TEXT,
                     CreatedBy TEXT,
                     ModifiedBy TEXT,
-                    Version INTEGER NOT NULL DEFAULT 1
+                    Version INTEGER NOT NULL DEFAULT 1,
+                    TenantId TEXT NOT NULL DEFAULT '',
+                    UNIQUE (TenantId, Name)
                 );
                 CREATE TABLE IF NOT EXISTS Notifications (
-                    Name TEXT COLLATE NOCASE PRIMARY KEY,
+                    Id TEXT NOT NULL PRIMARY KEY,
+                    Name TEXT COLLATE NOCASE NOT NULL,
                     ConnectionName TEXT NOT NULL,
                     Recipient TEXT,
                     IsEnabled INTEGER NOT NULL DEFAULT 1,
@@ -107,48 +126,62 @@ namespace ETL_SQL.Orchestrator.Storage
                     Options TEXT,
                     CreatedBy TEXT,
                     ModifiedBy TEXT,
-                    Version INTEGER NOT NULL DEFAULT 1
+                    Version INTEGER NOT NULL DEFAULT 1,
+                    TenantId TEXT NOT NULL DEFAULT '',
+                    UNIQUE (TenantId, Name)
                 );
                 CREATE TABLE IF NOT EXISTS JobSchedules (
-                    JobName TEXT COLLATE NOCASE NOT NULL,
-                    ScheduleName TEXT COLLATE NOCASE NOT NULL,
+                    JobId TEXT NOT NULL,
+                    ScheduleId TEXT NOT NULL,
                     LastRun TEXT,
                     NextRun TEXT,
-                    PRIMARY KEY (JobName, ScheduleName)
+                    PRIMARY KEY (JobId, ScheduleId)
                 );
-                CREATE INDEX IF NOT EXISTS idx_js_schedule ON JobSchedules(ScheduleName);
+                CREATE INDEX IF NOT EXISTS idx_js_schedule ON JobSchedules(ScheduleId);
                 CREATE TABLE IF NOT EXISTS JobNotifications (
-                    JobName TEXT COLLATE NOCASE NOT NULL,
-                    NotificationName TEXT COLLATE NOCASE NOT NULL,
+                    JobId TEXT NOT NULL,
+                    NotificationId TEXT NOT NULL,
                     TriggerCondition TEXT NOT NULL,
-                    PRIMARY KEY (JobName, NotificationName, TriggerCondition)
+                    PRIMARY KEY (JobId, NotificationId, TriggerCondition)
                 );
-                CREATE INDEX IF NOT EXISTS idx_jn_notification ON JobNotifications(NotificationName);";
+                CREATE INDEX IF NOT EXISTS idx_jn_notification ON JobNotifications(NotificationId);";
 
+                    // Grants hang off the object's surrogate Id, which is what makes them tenant-safe:
+                    // resolving a name to an Id already required the caller's tenant, so a grant can
+                    // never be read across a tenant boundary, and dropping an object retires its Id so
+                    // a later object of the same name starts with no grants at all. ObjectKind is
+                    // retained for audit and administration listings, not for lookup.
                     var createObjectAclTable = @"
                 CREATE TABLE IF NOT EXISTS OrchestratorObjectAcls (
+                    ObjectId TEXT NOT NULL,
                     ObjectKind TEXT NOT NULL,
-                    ObjectName TEXT COLLATE NOCASE NOT NULL,
                     PrincipalKind TEXT NOT NULL,
                     PrincipalId TEXT NOT NULL,
                     Permission TEXT NOT NULL,
                     GrantedBy TEXT NOT NULL,
                     Version INTEGER NOT NULL DEFAULT 1,
-                    PRIMARY KEY (ObjectKind, ObjectName, PrincipalKind, PrincipalId)
+                    PRIMARY KEY (ObjectId, PrincipalKind, PrincipalId)
                 );
                 CREATE INDEX IF NOT EXISTS idx_ooa_principal
                     ON OrchestratorObjectAcls(PrincipalKind, PrincipalId, ObjectKind);";
 
+                    // JobId scopes the row; JobName is retained denormalized so history stays readable
+                    // after its job is dropped, and so a run's name at the time it ran survives a later
+                    // object of the same name. TenantId is carried directly rather than joined through
+                    // Jobs because retention prunes history long after the job may be gone.
                     var createHistoryTable = @"
                 CREATE TABLE IF NOT EXISTS JobHistory (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    JobId TEXT NOT NULL DEFAULT '',
+                    TenantId TEXT NOT NULL DEFAULT '',
                     JobName TEXT NOT NULL,
                     StartTime TEXT NOT NULL,
                     EndTime TEXT,
                     Status TEXT NOT NULL,
                     ErrorMessage TEXT,
                     RowsProcessed INTEGER DEFAULT 0
-                );";
+                );
+                CREATE INDEX IF NOT EXISTS idx_jh_tenant_job ON JobHistory(TenantId, JobId, StartTime);";
 
                     var createColumnMetricsTable = @"
                 CREATE TABLE IF NOT EXISTS JobColumnMetrics (
@@ -255,8 +288,12 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (OperationId, JobName)
                 );";
 
+                    // Bundle identity is (TenantId, BundleName, Version). Without the tenant, one
+                    // tenant's publish becomes another tenant's `bundle://` resolution and its pinned
+                    // latest version — a supply-chain crossing, not merely a disclosure.
                     var createBundleTables = @"
                 CREATE TABLE IF NOT EXISTS BundleVersions (
+                    TenantId TEXT NOT NULL DEFAULT '',
                     BundleName TEXT NOT NULL,
                     Version INTEGER NOT NULL,
                     EntryPath TEXT NOT NULL,
@@ -266,10 +303,11 @@ namespace ETL_SQL.Orchestrator.Storage
                     Description TEXT,
                     EncryptionMode TEXT NOT NULL DEFAULT 'MACHINE',
                     EncryptionMetadata TEXT,
-                    PRIMARY KEY (BundleName, Version)
+                    PRIMARY KEY (TenantId, BundleName, Version)
                 );
 
                 CREATE TABLE IF NOT EXISTS BundleFiles (
+                    TenantId TEXT NOT NULL DEFAULT '',
                     BundleName TEXT NOT NULL,
                     Version INTEGER NOT NULL,
                     VirtualPath TEXT NOT NULL,
@@ -277,17 +315,18 @@ namespace ETL_SQL.Orchestrator.Storage
                     ContentHash TEXT NOT NULL,
                     SizeBytes INTEGER NOT NULL,
                     ContentType TEXT NOT NULL,
-                    PRIMARY KEY (BundleName, Version, VirtualPath),
-                    FOREIGN KEY (BundleName, Version) REFERENCES BundleVersions(BundleName, Version)
+                    PRIMARY KEY (TenantId, BundleName, Version, VirtualPath),
+                    FOREIGN KEY (TenantId, BundleName, Version) REFERENCES BundleVersions(TenantId, BundleName, Version)
                 );
 
                 CREATE TABLE IF NOT EXISTS BundleDependencies (
+                    TenantId TEXT NOT NULL DEFAULT '',
                     BundleName TEXT NOT NULL,
                     Version INTEGER NOT NULL,
                     FromPath TEXT NOT NULL,
                     ToPath TEXT NOT NULL,
-                    PRIMARY KEY (BundleName, Version, FromPath, ToPath),
-                    FOREIGN KEY (BundleName, Version) REFERENCES BundleVersions(BundleName, Version)
+                    PRIMARY KEY (TenantId, BundleName, Version, FromPath, ToPath),
+                    FOREIGN KEY (TenantId, BundleName, Version) REFERENCES BundleVersions(TenantId, BundleName, Version)
                 );";
 
                     var createLineageHistoryTable = @"
@@ -348,20 +387,33 @@ namespace ETL_SQL.Orchestrator.Storage
                     ExpiresAt TEXT NOT NULL
                 );";
 
+                    // Watermarks live here. Keyed on the job's surrogate Id rather than its name: two
+                    // tenants running a job of the same name sharing one high-water mark would silently
+                    // load the wrong rows, which nothing would report.
                     var createJobStateTable = @"
                 CREATE TABLE IF NOT EXISTS JobState (
-                    JobName TEXT NOT NULL,
+                    JobId TEXT NOT NULL,
                     StateKey TEXT NOT NULL,
                     StateValue TEXT,
                     UpdatedAt TEXT NOT NULL,
-                    PRIMARY KEY (JobName, StateKey)
+                    PRIMARY KEY (JobId, StateKey)
                 );";
 
                     // Host-utilization time series (capacity planning): one row per sample per node.
+                    //
+                    // These are host gauges, so they carry the node's tenant and capacity-pool *binding*
+                    // rather than a per-sample tenant: on a Shared node running several tenants' work,
+                    // MemoryLoadPercent does not decompose by tenant, and a TenantId column here would
+                    // be a number that looks meterable and is not. A Dedicated host is fixed to exactly
+                    // one tenant and pool, so its capacity attributes cleanly; a Shared host records the
+                    // unbound sentinel and is honestly marked shared. Per-tenant metering comes from
+                    // TenantUsageRecords, which measures the run rather than the host.
                     var createHostMetricsTable = @"
                 CREATE TABLE IF NOT EXISTS HostMetrics (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     NodeId TEXT NOT NULL,
+                    NodeTenantId TEXT NOT NULL DEFAULT '',
+                    CapacityPool TEXT NOT NULL DEFAULT '',
                     CapturedAt TEXT NOT NULL,
                     MemoryLoadPercent REAL NOT NULL DEFAULT 0,
                     ProcessCpuPercent REAL NOT NULL DEFAULT 0,
@@ -369,22 +421,27 @@ namespace ETL_SQL.Orchestrator.Storage
                     StateDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
                     SpillDiskFreeBytes INTEGER NOT NULL DEFAULT 0
                 );
-                CREATE INDEX IF NOT EXISTS idx_hm_node_time ON HostMetrics(NodeId, CapturedAt);";
+                CREATE INDEX IF NOT EXISTS idx_hm_node_time ON HostMetrics(NodeId, CapturedAt);
+                CREATE INDEX IF NOT EXISTS idx_hm_tenant_time ON HostMetrics(NodeTenantId, CapturedAt);";
 
                     // Daily roll-up tables (capacity trend that survives raw pruning). Day is 'yyyy-MM-dd'.
                     var createRollupTables = @"
                 CREATE TABLE IF NOT EXISTS JobHistoryDaily (
                     Day TEXT NOT NULL,
+                    JobId TEXT NOT NULL,
+                    TenantId TEXT NOT NULL DEFAULT '',
                     JobName TEXT NOT NULL,
                     RunCount INTEGER NOT NULL DEFAULT 0,
                     FailureCount INTEGER NOT NULL DEFAULT 0,
                     TotalRows INTEGER NOT NULL DEFAULT 0,
                     MaxPeakMemoryBytes INTEGER NOT NULL DEFAULT 0,
-                    PRIMARY KEY (Day, JobName)
+                    PRIMARY KEY (Day, JobId)
                 );
                 CREATE TABLE IF NOT EXISTS HostMetricsDaily (
                     Day TEXT NOT NULL,
                     NodeId TEXT NOT NULL,
+                    NodeTenantId TEXT NOT NULL DEFAULT '',
+                    CapacityPool TEXT NOT NULL DEFAULT '',
                     AvgMemoryLoadPercent REAL NOT NULL DEFAULT 0,
                     MaxMemoryLoadPercent REAL NOT NULL DEFAULT 0,
                     AvgCpuPercent REAL NOT NULL DEFAULT 0,

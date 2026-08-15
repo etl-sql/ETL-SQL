@@ -111,7 +111,15 @@ public record JobDefinition(
     /// Immutable server-derived tenant binding. Null identifies a legacy/unbound job, which is not
     /// eligible for tenant sandbox policy resolution.
     /// </summary>
-    string? TenantId = null
+    string? TenantId = null,
+    /// <summary>
+    /// Surrogate identity, assigned by the store on first insert and stable for the object's life.
+    /// Everything that references a job — grants, schedule and notification links, history, state,
+    /// metrics — references this rather than <see cref="Name"/>, so a name may be re-used by another
+    /// tenant, and a dropped-then-recreated name never inherits the previous object's grants or
+    /// watermarks. Null on a definition that has not been persisted yet.
+    /// </summary>
+    string? Id = null
 );
 
 public record JobHistoryEntry(

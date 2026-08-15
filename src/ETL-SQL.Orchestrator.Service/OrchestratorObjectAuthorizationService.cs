@@ -17,21 +17,33 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
     async Task<bool> IOrchestratorObjectAuthorizer.CanAsync(
         ExecutionIdentity? identity,
         OrchestratorObjectKind objectKind,
-        string objectName,
+        string? objectId,
+        string? objectTenantId,
         OrchestratorObjectPermission required,
         string? owner,
         CancellationToken cancellationToken) =>
         identity is not null && await CanAsync(
-            ToCaller(identity), objectKind, objectName, required, owner, cancellationToken);
+            ToCaller(identity), objectKind, objectId, objectTenantId, required, owner, cancellationToken);
 
     public async Task<bool> CanAsync(
         OrchestratorCaller caller,
         OrchestratorObjectKind objectKind,
-        string objectName,
+        string? objectId,
+        string? objectTenantId,
         OrchestratorObjectPermission required,
         string? owner,
         CancellationToken cancellationToken = default)
     {
+        // No identity, no authority: an object that has not been assigned a surrogate id cannot be
+        // the subject of a grant, and guessing from its name is exactly the ambiguity the id removes.
+        if (string.IsNullOrWhiteSpace(objectId)) return false;
+
+        // Tenant first, before ownership, roles, or grants — including before Admin. A grant, an
+        // ownership match, or an administrator role are all authority *within* a tenant; none of them
+        // is authority to reach across one. Checking here rather than only at the calling surface
+        // means a future endpoint that forgets to filter still cannot decide across the boundary.
+        if (!TenantsMatch(caller.TenantId, objectTenantId)) return false;
+
         // Explicit legacy mode historically grants the configured API key full catalog authority.
         // It is available only when federated identity is disabled at startup.
         if (caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase)
@@ -46,7 +58,7 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
             && required is OrchestratorObjectPermission.Read or OrchestratorObjectPermission.Execute)
             return true;
 
-        var grants = await store.GetObjectGrantsAsync(objectKind, objectName, cancellationToken);
+        var grants = await store.GetObjectGrantsAsync(objectId, cancellationToken);
         foreach (var grant in grants)
         {
             if (!Matches(caller, grant)) continue;
@@ -54,6 +66,18 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
         }
         return false;
     }
+
+    /// <summary>
+    /// An unbound object (Solo, no signed tenant) is reachable only by an equally unbound caller, and
+    /// a tenant-bound object only by that same tenant. Neither direction is permitted to fall back to
+    /// the other: an unbound caller must not inherit a tenant's objects when a host is later attached
+    /// to a Portal, and a tenant must not reach objects created before it existed.
+    /// </summary>
+    internal static bool TenantsMatch(string? callerTenantId, string? objectTenantId) =>
+        string.Equals(
+            string.IsNullOrWhiteSpace(callerTenantId) ? string.Empty : callerTenantId,
+            string.IsNullOrWhiteSpace(objectTenantId) ? string.Empty : objectTenantId,
+            StringComparison.OrdinalIgnoreCase);
 
     public static bool Includes(
         OrchestratorObjectPermission granted,
@@ -86,6 +110,7 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
             subjectId,
             identity.RealUser,
             identity.Roles.ToArray(),
-            identity.Groups.ToArray());
+            identity.Groups.ToArray(),
+            identity.TenantId);
     }
 }

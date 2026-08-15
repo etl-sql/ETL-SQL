@@ -46,17 +46,28 @@ internal static class CatalogStatementSupport
             null, statement.Line, statement.Column);
     }
 
+    /// <summary>
+    /// Demands one permission on an object the caller has already loaded. The object's surrogate id
+    /// and tenant binding come from that definition rather than being re-resolved from the name here:
+    /// a name identifies an object only within a tenant, so re-resolving would reintroduce exactly
+    /// the ambiguity the surrogate id exists to remove. A definition with no id predates identity
+    /// assignment and is refused rather than allowed.
+    /// </summary>
     public static async Task DemandAsync(
         IExecutionContext context,
         Statement statement,
         OrchestratorObjectKind kind,
         string name,
+        string? objectId,
+        string? objectTenantId,
         OrchestratorObjectPermission permission,
         string? owner)
     {
         var authorizer = context.ServiceProvider.GetService<IOrchestratorObjectAuthorizer>();
-        if (authorizer is null || await authorizer.CanAsync(
-                context.ExecutionIdentity, kind, name, permission, owner, context.CancellationToken))
+        if (authorizer is null) return;
+        if (!string.IsNullOrWhiteSpace(objectId) && await authorizer.CanAsync(
+                context.ExecutionIdentity, kind, objectId, objectTenantId, permission, owner,
+                context.CancellationToken))
             return;
         throw new ExecutionException(
             $"The authenticated principal lacks {permission.ToString().ToUpperInvariant()} authority on {kind.ToString().ToUpperInvariant()} '{name}'.",
@@ -143,7 +154,7 @@ public class CreateScheduleStatementHandler(IJobCatalogStore? catalog = null, IC
                 null, stmt.Line, stmt.Column);
         if (existing is null) CatalogStatementSupport.DemandCreate(context, stmt, "SCHEDULE");
         else await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Schedule, stmt.Name,
-            OrchestratorObjectPermission.Manage, existing.CreatedBy);
+            existing.Id, existing.TenantId, OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
         // The zone is resolved and stored now, not read at each fire: otherwise editing the
         // configured default would silently move every schedule that relied on it.
@@ -199,7 +210,7 @@ public class CreateNotificationStatementHandler(IJobCatalogStore? catalog = null
                 null, stmt.Line, stmt.Column);
         if (existing is null) CatalogStatementSupport.DemandCreate(context, stmt, "NOTIFICATION");
         else await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Notification, stmt.Name,
-            OrchestratorObjectPermission.Manage, existing.CreatedBy);
+            existing.Id, existing.TenantId, OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
         if (context.IsWhatIf)
         {
@@ -248,7 +259,8 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
             var existing = await store.GetScheduleAsync(stmt.Name)
                 ?? throw NotFound(stmt, kind);
             await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Schedule,
-                stmt.Name, OrchestratorObjectPermission.Manage, existing.CreatedBy);
+                stmt.Name, existing.Id, existing.TenantId,
+                OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
             var cron = stmt.Cron ?? existing.Cron;
             var timeZone = stmt.TimeZone ?? existing.TimeZone;
@@ -282,7 +294,8 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
             var existing = await store.GetNotificationAsync(stmt.Name)
                 ?? throw NotFound(stmt, kind);
             await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Notification,
-                stmt.Name, OrchestratorObjectPermission.Manage, existing.CreatedBy);
+                stmt.Name, existing.Id, existing.TenantId,
+                OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
             if (context.IsWhatIf)
             {
@@ -349,7 +362,10 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
         await CatalogStatementSupport.DemandAsync(
             context, stmt,
             stmt.Kind == CatalogObjectKind.Schedule ? OrchestratorObjectKind.Schedule : OrchestratorObjectKind.Notification,
-            stmt.Name, OrchestratorObjectPermission.Manage,
+            stmt.Name,
+            schedule?.Id ?? notification?.Id,
+            schedule?.TenantId ?? notification?.TenantId,
+            OrchestratorObjectPermission.Manage,
             schedule?.CreatedBy ?? notification?.CreatedBy);
 
         if (context.IsWhatIf)
@@ -371,13 +387,11 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
                 $"Detach it with ALTER JOB <job> REMOVE {kind} {stmt.Name} before dropping it.",
                 null, stmt.Line, stmt.Column);
 
-        if (context.ServiceProvider.GetService<IOrchestratorAuthorizationStore>() is { } grants)
-            await grants.DeleteObjectGrantsAsync(
-                stmt.Kind == CatalogObjectKind.Schedule
-                    ? OrchestratorObjectKind.Schedule
-                    : OrchestratorObjectKind.Notification,
-                stmt.Name,
-                context.CancellationToken);
+        // Grants are retired by the id captured before the delete, so nothing depends on the name
+        // still resolving — and an object later created with the same name gets none of them.
+        if (context.ServiceProvider.GetService<IOrchestratorAuthorizationStore>() is { } grants
+            && (schedule?.Id ?? notification?.Id) is { Length: > 0 } droppedId)
+            await grants.DeleteObjectGrantsAsync(droppedId, context.CancellationToken);
 
         CatalogStatementSupport.AuditMutation(
             context,
@@ -408,7 +422,10 @@ public class SetCatalogObjectEnabledStatementHandler(IJobCatalogStore? catalog =
         await CatalogStatementSupport.DemandAsync(
             context, stmt,
             stmt.Kind == CatalogObjectKind.Schedule ? OrchestratorObjectKind.Schedule : OrchestratorObjectKind.Notification,
-            stmt.Name, OrchestratorObjectPermission.Manage,
+            stmt.Name,
+            schedule?.Id ?? notification?.Id,
+            schedule?.TenantId ?? notification?.TenantId,
+            OrchestratorObjectPermission.Manage,
             schedule?.CreatedBy ?? notification?.CreatedBy);
 
         if (context.IsWhatIf)
@@ -458,7 +475,7 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
             var job = await jobs.GetJobAsync(stmt.JobName)
                 ?? throw new ExecutionException($"Job '{stmt.JobName}' does not exist.", null, stmt.Line, stmt.Column);
             await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
-                job.Name, OrchestratorObjectPermission.Manage, job.CreatedBy);
+                job.Name, job.Id, job.TenantId, OrchestratorObjectPermission.Manage, job.CreatedBy);
         }
 
         if (context.IsWhatIf)
@@ -499,7 +516,8 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
                 $"Schedule '{stmt.TargetName}' does not exist. Create it before attaching it to a job.",
                 null, stmt.Line, stmt.Column);
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Schedule,
-            schedule.Name, OrchestratorObjectPermission.Read, schedule.CreatedBy);
+            schedule.Name, schedule.Id, schedule.TenantId,
+            OrchestratorObjectPermission.Read, schedule.CreatedBy);
 
         // The link is armed at the schedule's next occurrence, never left empty: an unarmed link is
         // dormant in this model, so a job attached without one would silently never run.
@@ -548,7 +566,8 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
                 $"Notification '{stmt.TargetName}' does not exist. Create it before attaching it to a job.",
                 null, stmt.Line, stmt.Column);
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Notification,
-            notification.Name, OrchestratorObjectPermission.Read, notification.CreatedBy);
+            notification.Name, notification.Id, notification.TenantId,
+            OrchestratorObjectPermission.Read, notification.CreatedBy);
 
         try
         {

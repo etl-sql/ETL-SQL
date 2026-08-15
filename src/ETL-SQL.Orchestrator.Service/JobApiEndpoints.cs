@@ -232,7 +232,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var visible = new List<JobDefinition>();
                 foreach (var job in jobs)
                 {
-                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Name,
+                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
                             OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
                         visible.Add(job);
                 }
@@ -259,7 +259,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (existing is null && !OrchestratorObjectAuthorizationService.CanCreate(caller))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (existing is not null && !await authorization.CanAsync(
-                        caller, OrchestratorObjectKind.Job, existing.Name,
+                        caller, OrchestratorObjectKind.Job, existing.Id, existing.TenantId,
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -368,7 +368,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (!CanAccessJobTenant(existing, requestTenant))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Name,
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Id, existing.TenantId,
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -429,7 +429,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (existing is null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Name,
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Id, existing.TenantId,
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -442,8 +442,10 @@ namespace ETL_SQL.Orchestrator.Service
                         Current = current
                     });
                 }
-                await authorizationStore.DeleteObjectGrantsAsync(
-                    OrchestratorObjectKind.Job, unescaped, ctx.RequestAborted);
+                // By id, captured before the delete: a job later created with the same name must
+                // not inherit these grants.
+                if (existing.Id is { Length: > 0 } droppedId)
+                    await authorizationStore.DeleteObjectGrantsAsync(droppedId, ctx.RequestAborted);
                 return Results.Ok(new { Deleted = unescaped });
             }).WithName("deleteScheduledJob");
 
@@ -456,7 +458,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var job = await store.GetJobAsync(unescaped);
                 if (job is null) return Results.NotFound();
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Name,
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var history = await store.GetHistoryAsync(unescaped, Math.Clamp(limit, 1, 1000));
@@ -474,7 +476,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var job = await store.GetJobAsync(history.JobName);
                 if (job is null) return Results.NotFound(new { Error = $"Job '{history.JobName}' not found." });
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Name,
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Execute, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -556,7 +558,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var caller = RequestCaller(ctx);
                 var visible = new List<ScheduleDefinition>();
                 foreach (var schedule in await catalog.GetSchedulesAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset)))
-                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Schedule, schedule.Name,
+                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Schedule, schedule.Id, schedule.TenantId,
                             OrchestratorObjectPermission.Read, schedule.CreatedBy, ctx.RequestAborted))
                         visible.Add(schedule);
                 return Results.Ok(visible);
@@ -570,7 +572,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var schedule = await catalog.GetScheduleAsync(Uri.UnescapeDataString(name));
                 if (schedule is null) return Results.NotFound();
                 return await authorization.CanAsync(RequestCaller(ctx), OrchestratorObjectKind.Schedule,
-                        schedule.Name, OrchestratorObjectPermission.Read, schedule.CreatedBy, ctx.RequestAborted)
+                        schedule.Id, schedule.TenantId, OrchestratorObjectPermission.Read, schedule.CreatedBy, ctx.RequestAborted)
                     ? Results.Ok(schedule)
                     : Results.StatusCode(StatusCodes.Status403Forbidden);
             }).WithName("getSchedule");
@@ -583,7 +585,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var caller = RequestCaller(ctx);
                 var visible = new List<NotificationDefinition>();
                 foreach (var notification in await catalog.GetNotificationsAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset)))
-                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Notification, notification.Name,
+                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Notification, notification.Id, notification.TenantId,
                             OrchestratorObjectPermission.Read, notification.CreatedBy, ctx.RequestAborted))
                         visible.Add(notification);
                 return Results.Ok(visible);
@@ -597,7 +599,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var notification = await catalog.GetNotificationAsync(Uri.UnescapeDataString(name));
                 if (notification is null) return Results.NotFound();
                 return await authorization.CanAsync(RequestCaller(ctx), OrchestratorObjectKind.Notification,
-                        notification.Name, OrchestratorObjectPermission.Read, notification.CreatedBy, ctx.RequestAborted)
+                        notification.Id, notification.TenantId, OrchestratorObjectPermission.Read, notification.CreatedBy, ctx.RequestAborted)
                     ? Results.Ok(notification)
                     : Results.StatusCode(StatusCodes.Status403Forbidden);
             }).WithName("getNotification");
@@ -615,7 +617,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (notification is null)
                     return Results.NotFound(new { Error = $"Notification '{notificationName}' was not found." });
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Notification, notification.Name,
+                        RequestCaller(ctx), OrchestratorObjectKind.Notification, notification.Id, notification.TenantId,
                         OrchestratorObjectPermission.Execute, notification.CreatedBy, ct))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var sourceKind = string.IsNullOrWhiteSpace(req.SourceKind)
@@ -1048,7 +1050,7 @@ namespace ETL_SQL.Orchestrator.Service
                     ? OrchestratorObjectPermission.Execute
                     : OrchestratorObjectPermission.Override;
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Name,
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         required, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -1081,7 +1083,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var job = await store.GetJobAsync(unescaped);
                 if (job is null) return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Name,
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var history = await store.GetHistoryAsync(unescaped, 10);
@@ -1118,10 +1120,10 @@ namespace ETL_SQL.Orchestrator.Service
                 var owner = await ReadObjectOwnerAsync(objectKind, objectName, jobs, catalog);
                 if (owner.Exists == false) return Results.NotFound();
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), objectKind, objectName,
+                        RequestCaller(ctx), objectKind, owner.Id!, owner.TenantId,
                         OrchestratorObjectPermission.Manage, owner.Owner, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
-                return Results.Ok(await grants.GetObjectGrantsAsync(objectKind, objectName, ctx.RequestAborted));
+                return Results.Ok(await grants.GetObjectGrantsAsync(owner.Id!, ctx.RequestAborted));
             }).WithName("getOrchestratorObjectGrants");
 
             app.MapPut("/api/authorization/{kind}/{name}/{principalKind}/{principalId}", async (
@@ -1153,15 +1155,15 @@ namespace ETL_SQL.Orchestrator.Service
                 if (owner.Exists == false) return Results.NotFound();
                 var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
-                        caller, objectKind, objectName,
+                        caller, objectKind, owner.Id!, owner.TenantId,
                         OrchestratorObjectPermission.Manage, owner.Owner, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
                 var grant = new OrchestratorObjectGrant(
-                    objectKind, objectName, parsedPrincipalKind, normalizedPrincipalId,
+                    owner.Id!, objectKind, parsedPrincipalKind, normalizedPrincipalId,
                     permission, caller.PrincipalKey);
                 await grants.SaveObjectGrantAsync(grant, ctx.RequestAborted);
-                EmitObjectAuthorizationAudit(caller.AuditActor, grant, "GRANT", ctx.TraceIdentifier);
+                EmitObjectAuthorizationAudit(caller.AuditActor, grant, objectName, "GRANT", ctx.TraceIdentifier);
                 return Results.Ok(grant);
             }).WithName("setOrchestratorObjectGrant");
 
@@ -1187,19 +1189,20 @@ namespace ETL_SQL.Orchestrator.Service
                 if (owner.Exists == false) return Results.NotFound();
                 var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
-                        caller, objectKind, objectName,
+                        caller, objectKind, owner.Id!, owner.TenantId,
                         OrchestratorObjectPermission.Manage, owner.Owner, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
                 var deleted = await grants.DeleteObjectGrantAsync(
-                    objectKind, objectName, parsedPrincipalKind, normalizedPrincipalId, ctx.RequestAborted);
+                    owner.Id!, parsedPrincipalKind, normalizedPrincipalId, ctx.RequestAborted);
                 if (deleted)
                 {
                     EmitObjectAuthorizationAudit(
                         caller.AuditActor,
                         new OrchestratorObjectGrant(
-                            objectKind, objectName, parsedPrincipalKind, normalizedPrincipalId,
+                            owner.Id!, objectKind, parsedPrincipalKind, normalizedPrincipalId,
                             OrchestratorObjectPermission.Read, caller.PrincipalKey),
+                        objectName,
                         "REVOKE",
                         ctx.TraceIdentifier);
                 }
@@ -1466,7 +1469,7 @@ namespace ETL_SQL.Orchestrator.Service
                 {
                     var job = await jobs.GetJobAsync(name);
                     canRead = job is not null && await authorization.CanAsync(
-                        caller, OrchestratorObjectKind.Job, name,
+                        caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Read, job.CreatedBy, cancellationToken);
                     access[name] = canRead;
                 }
@@ -1562,27 +1565,34 @@ namespace ETL_SQL.Orchestrator.Service
         private static bool TryParseObjectKind(string raw, out OrchestratorObjectKind objectKind) =>
             Enum.TryParse(raw, ignoreCase: true, out objectKind);
 
-        private static async Task<(bool Exists, string? Owner)> ReadObjectOwnerAsync(
+        /// <summary>
+        /// Resolves an addressable object name to the identity, tenant binding, and owner the
+        /// authorization decision needs. Grant administration is the one surface that starts from a
+        /// name rather than a loaded definition, so the resolution happens here once instead of each
+        /// endpoint re-deriving it.
+        /// </summary>
+        private static async Task<(bool Exists, string? Owner, string? Id, string? TenantId)> ReadObjectOwnerAsync(
             OrchestratorObjectKind objectKind,
             string objectName,
             IJobHistoryStore jobs,
             IJobCatalogStore catalog) => objectKind switch
             {
                 OrchestratorObjectKind.Job => await jobs.GetJobAsync(objectName) is { } job
-                    ? (true, job.CreatedBy)
-                    : (false, null),
+                    ? (true, job.CreatedBy, job.Id, job.TenantId)
+                    : (false, null, null, null),
                 OrchestratorObjectKind.Schedule => await catalog.GetScheduleAsync(objectName) is { } schedule
-                    ? (true, schedule.CreatedBy)
-                    : (false, null),
+                    ? (true, schedule.CreatedBy, schedule.Id, schedule.TenantId)
+                    : (false, null, null, null),
                 OrchestratorObjectKind.Notification => await catalog.GetNotificationAsync(objectName) is { } notification
-                    ? (true, notification.CreatedBy)
-                    : (false, null),
-                _ => (false, null)
+                    ? (true, notification.CreatedBy, notification.Id, notification.TenantId)
+                    : (false, null, null, null),
+                _ => (false, null, null, null)
             };
 
         private static void EmitObjectAuthorizationAudit(
             string actor,
             OrchestratorObjectGrant grant,
+            string objectName,
             string action,
             string correlationId)
         {
@@ -1591,7 +1601,7 @@ namespace ETL_SQL.Orchestrator.Service
                 SecurityEventType.CatalogMutation,
                 actor,
                 actor,
-                $"{grant.ObjectKind.ToString().ToUpperInvariant()}:{grant.ObjectName}",
+                $"{grant.ObjectKind.ToString().ToUpperInvariant()}:{objectName}",
                 SecurityEventDecision.Allowed,
                 $"ACL_{action}: {grant.PrincipalKind}:{grant.PrincipalId}; Permission={grant.Permission}") with
             {

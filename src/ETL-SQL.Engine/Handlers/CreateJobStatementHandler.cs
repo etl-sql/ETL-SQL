@@ -42,7 +42,8 @@ public class CreateJobStatementHandler : IStatementHandler
                 null, stmt.Line, stmt.Column);
         if (existing is null) CatalogStatementSupport.DemandCreate(context, stmt, "JOB");
         else await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
-            stmt.JobName, OrchestratorObjectPermission.Manage, existing.CreatedBy);
+            stmt.JobName, existing.Id, existing.TenantId,
+            OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
         if (context.IsWhatIf)
         {

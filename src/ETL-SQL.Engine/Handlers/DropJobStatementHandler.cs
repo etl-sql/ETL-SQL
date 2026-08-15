@@ -30,7 +30,8 @@ public class DropJobStatementHandler : IStatementHandler
             throw new ExecutionException($"DROP JOB failed: job '{stmt.Name}' not found.", null, stmt.Line, stmt.Column);
         }
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
-            stmt.Name, OrchestratorObjectPermission.Manage, existing.CreatedBy);
+            stmt.Name, existing.Id, existing.TenantId,
+            OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
         if (context.IsWhatIf)
         {
@@ -42,9 +43,11 @@ public class DropJobStatementHandler : IStatementHandler
         {
             // DeleteJobAsync deletes both the job and its history entries.
             await _store.DeleteJobAsync(stmt.Name);
-            if (context.ServiceProvider.GetService<IOrchestratorAuthorizationStore>() is { } grants)
-                await grants.DeleteObjectGrantsAsync(
-                    OrchestratorObjectKind.Job, stmt.Name, context.CancellationToken);
+            // Retire grants by the id captured before the delete: a later job of the same name must
+            // start with none of them.
+            if (context.ServiceProvider.GetService<IOrchestratorAuthorizationStore>() is { } grants
+                && existing.Id is { Length: > 0 } droppedId)
+                await grants.DeleteObjectGrantsAsync(droppedId, context.CancellationToken);
             CatalogStatementSupport.AuditMutation(
                 context,
                 "DROP_JOB",

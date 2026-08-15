@@ -28,7 +28,9 @@ public enum NotificationTrigger
 /// A named trigger. Independent of any job — one schedule may drive many jobs, which is the whole
 /// point of separating it from the job in the first place.
 /// </summary>
-/// <param name="Name">Identity. Unique per orchestrator, case-insensitive, never renamed.</param>
+/// <param name="Name">
+/// The addressable key: unique per <em>tenant</em>, case-insensitive. Identity is <c>Id</c>.
+/// </param>
 /// <param name="Cron">Standard five-field cron. Minute granularity; see <c>CronSchedule</c>.</param>
 /// <param name="TimeZone">
 /// Resolved at creation and stored, so editing the configured default cannot silently move a
@@ -44,7 +46,11 @@ public sealed record ScheduleDefinition(
     string? Options = null,
     string? CreatedBy = null,
     string? ModifiedBy = null,
-    long Version = 1);
+    long Version = 1,
+    /// <summary>Server-derived tenant binding; null is the unbound (Solo/host-fixed) state.</summary>
+    string? TenantId = null,
+    /// <summary>Surrogate identity — see <see cref="JobDefinition.Id"/>.</summary>
+    string? Id = null);
 
 /// <summary>
 /// A named delivery destination. Holds a connection <em>alias</em> and never a credential: the alias
@@ -60,7 +66,11 @@ public sealed record NotificationDefinition(
     string? Options = null,
     string? CreatedBy = null,
     string? ModifiedBy = null,
-    long Version = 1);
+    long Version = 1,
+    /// <summary>Server-derived tenant binding; null is the unbound (Solo/host-fixed) state.</summary>
+    string? TenantId = null,
+    /// <summary>Surrogate identity — see <see cref="JobDefinition.Id"/>.</summary>
+    string? Id = null);
 
 /// <summary>
 /// One job↔schedule attachment. Run state lives here rather than on the job, so two schedules on one

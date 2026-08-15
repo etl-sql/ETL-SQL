@@ -38,7 +38,8 @@ public class KillJobStatementHandler : IStatementHandler
             var job = await historyStore.GetJobAsync(history.JobName);
             if (job is not null)
                 await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
-                    job.Name, OrchestratorObjectPermission.Manage, job.CreatedBy);
+                    job.Name, job.Id, job.TenantId,
+                    OrchestratorObjectPermission.Manage, job.CreatedBy);
         }
 
         _logger.Info("Attempting to kill job with HistoryId: {HistoryId}", historyId);

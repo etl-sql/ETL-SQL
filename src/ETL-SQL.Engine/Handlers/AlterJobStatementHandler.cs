@@ -31,7 +31,8 @@ public class AlterJobStatementHandler : IStatementHandler
         var existing = await _store.GetJobAsync(stmt.JobName)
             ?? throw new ExecutionException($"ALTER JOB failed: job '{stmt.JobName}' not found. Use CREATE JOB to create it.");
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
-            stmt.JobName, OrchestratorObjectPermission.Manage, existing.CreatedBy);
+            stmt.JobName, existing.Id, existing.TenantId,
+            OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
         if (context.IsWhatIf)
         {
