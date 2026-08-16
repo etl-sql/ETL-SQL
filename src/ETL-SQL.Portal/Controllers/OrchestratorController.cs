@@ -293,6 +293,63 @@ public class OrchestratorController(
         return Ok(new { Path = path, Content = content });
     }
 
+    // ── Per-object grants ─────────────────────────────────────────────────────
+    //
+    // Pure pass-through. Every one of these forwards the caller's own signed assertion and returns
+    // what the Orchestrator said, verbatim: it owns the grant store and already decides tenant,
+    // ownership and scope. Re-deciding here would be a second permission model — the thing this whole
+    // item exists to prevent — and a Portal-side cache of grants would be the copy that goes stale
+    // while looking authoritative.
+
+    public sealed record SetGrantRequest(string Permission);
+
+    [HttpGet("authorization/{kind}/{name}")]
+    public Task<IActionResult> ListGrants(string kind, string name, CancellationToken ct) =>
+        RelayAsync(() => proxy.GetObjectGrantsAsync(kind, name, ct));
+
+    [HttpPut("authorization/{kind}/{name}/{principalKind}/{principalId}")]
+    public async Task<IActionResult> SetGrant(
+        string kind, string name, string principalKind, string principalId,
+        [FromBody] SetGrantRequest request, CancellationToken ct)
+    {
+        // Audited on the Portal side as well as the Orchestrator's own security event: this is where
+        // a human clicked, and the two records answer different questions during an incident.
+        audit.Stage(CurrentUserId, "ORCHESTRATOR_GRANT", $"Orchestrator{kind}", name,
+            $"{principalKind}:{principalId}={request?.Permission}");
+        return await RelayAsync(() => proxy.SetObjectGrantAsync(
+            kind, name, principalKind, principalId, request?.Permission ?? "", ct));
+    }
+
+    [HttpDelete("authorization/{kind}/{name}/{principalKind}/{principalId}")]
+    public async Task<IActionResult> RevokeGrant(
+        string kind, string name, string principalKind, string principalId, CancellationToken ct)
+    {
+        audit.Stage(CurrentUserId, "ORCHESTRATOR_REVOKE", $"Orchestrator{kind}", name,
+            $"{principalKind}:{principalId}");
+        return await RelayAsync(() => proxy.DeleteObjectGrantAsync(kind, name, principalKind, principalId, ct));
+    }
+
+    /// <summary>
+    /// Forwards one grant call and returns the Orchestrator's own answer.
+    ///
+    /// <para>The status code is passed through rather than reinterpreted, because the distinctions it
+    /// draws are load-bearing: 403 means the caller may not manage this object, 404 means it does not
+    /// exist <em>in their tenant</em>, and collapsing either into a generic failure would lose the
+    /// only signal that tells an administrator which problem they have.</para>
+    /// </summary>
+    private async Task<IActionResult> RelayAsync(Func<Task<HttpResponseMessage?>> send)
+    {
+        using var response = await send();
+        if (response is null)
+            return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+
+        var body = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(body)) return StatusCode((int)response.StatusCode);
+
+        Response.StatusCode = (int)response.StatusCode;
+        return Content(body, "application/json");
+    }
+
     // ── Service control ───────────────────────────────────────────────────────
 
     [HttpPost("service/stop")]

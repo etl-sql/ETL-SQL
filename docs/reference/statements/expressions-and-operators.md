@@ -222,5 +222,5 @@ SELECT SYSDATE AT TIME ZONE @tz AS est_time;
 - [Statement Reference](README.md)
 - [CASE Expression](query-syntax/case.md)
 - [COALESCE Function](../functions/null-handler/coalesce.md)
-- [JSON Functions](../functions/json/README.md)
+- [JSON Functions](../functions/json-xml/README.md)
 - [Syntax Index](../../syntax-index.md)

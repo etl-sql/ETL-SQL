@@ -139,6 +139,72 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogWarning(ex, "Failed to kill job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
+    // ── Per-object grants ─────────────────────────────────────────────────────
+    //
+    // Proxied rather than reimplemented. The Orchestrator owns the grant store and already enforces
+    // the decision — tenant, ownership, scope ceiling — so a Portal-side copy would be a second
+    // answer to the same question, and the one that drifts. These pass the caller's own signed
+    // assertion through, so an administrator who may not manage an object is refused there rather
+    // than here, by the same rule that governs every other route.
+
+    public async Task<HttpResponseMessage?> GetObjectGrantsAsync(
+        string kind, string name, CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Get,
+                $"api/authorization/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}",
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to read grants for {Kind} {Name}.",
+                ETL_SQL.Core.Common.LogSanitizer.Clean(kind), ETL_SQL.Core.Common.LogSanitizer.Clean(name));
+            return null;
+        }
+    }
+
+    public async Task<HttpResponseMessage?> SetObjectGrantAsync(
+        string kind, string name, string principalKind, string principalId, string permission,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Put,
+                $"api/authorization/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}" +
+                $"/{Uri.EscapeDataString(principalKind)}/{Uri.EscapeDataString(principalId)}",
+                new { Permission = permission },
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to set a grant on {Kind} {Name}.",
+                ETL_SQL.Core.Common.LogSanitizer.Clean(kind), ETL_SQL.Core.Common.LogSanitizer.Clean(name));
+            return null;
+        }
+    }
+
+    public async Task<HttpResponseMessage?> DeleteObjectGrantAsync(
+        string kind, string name, string principalKind, string principalId, CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Delete,
+                $"api/authorization/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}" +
+                $"/{Uri.EscapeDataString(principalKind)}/{Uri.EscapeDataString(principalId)}",
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to revoke a grant on {Kind} {Name}.",
+                ETL_SQL.Core.Common.LogSanitizer.Clean(kind), ETL_SQL.Core.Common.LogSanitizer.Clean(name));
+            return null;
+        }
+    }
+
     public async Task<HttpResponseMessage?> DispatchNotificationAsync(
         string notificationName,
         OrchestratorNotificationDispatchRequest req,
