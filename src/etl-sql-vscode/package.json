@@ -107,7 +107,8 @@
         {
           "type": "webview",
           "id": "etlsql-results-view",
-          "name": "Pipeline & Results"
+          "name": "Pipeline & Results",
+          "when": "etlsql.activeEditor"
         }
       ]
     },

@@ -162,19 +162,32 @@ export async function activate(context: vscode.ExtensionContext) {
 
     let lastActiveUri: string | undefined = vscode.window.activeTextEditor?.document.uri.toString();
 
+    // Set the initial context so the Results panel is visible if a .etlsql/.rptsql file is
+    // already open when the extension activates.
+    const initialIsEtl = !!(vscode.window.activeTextEditor &&
+        (vscode.window.activeTextEditor.document.languageId === 'etlsql' ||
+         vscode.window.activeTextEditor.document.languageId === 'rptsql'));
+    void vscode.commands.executeCommand('setContext', 'etlsql.activeEditor', initialIsEtl);
+
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
+        const isEtlFile = !!(editor &&
+            (editor.document.languageId === 'etlsql' || editor.document.languageId === 'rptsql'));
+
+        // Show/hide the Results panel tab based on whether the active file is an ETL-SQL script.
+        void vscode.commands.executeCommand('setContext', 'etlsql.activeEditor', isEtlFile);
+
         if (editor && (editor.document.languageId === 'etlsql' || editor.document.languageId === 'rptsql')) {
             const currentUri = editor.document.uri.toString();
             if (currentUri !== lastActiveUri) {
                 // Clear UI on script switch — reset history so prior script's runs don't bleed in.
-                ResultsPanel.postMessage({ type: 'clear', resetHistory: true });
+                ResultsPanel.postMessagePassive({ type: 'clear', resetHistory: true });
                 connectionsProvider.clearVariables();
                 sidebarProvider.postMessage({ type: 'variables', variables: [] });
                 lastActiveUri = currentUri;
             }
 
-            // Notify webviews of context change
-            ResultsPanel.postMessage({ type: 'activeEditorChanged', uri: currentUri });
+            // Notify webviews of context change (passive — does not force the panel open)
+            ResultsPanel.postMessagePassive({ type: 'activeEditorChanged', uri: currentUri });
             sidebarProvider.postMessage({ type: 'activeEditorChanged', uri: currentUri });
 
             // Pre-warm the REPL process so first execution has no startup lag.

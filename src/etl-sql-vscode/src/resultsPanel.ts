@@ -77,6 +77,20 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         }
     }
 
+    /**
+     * Delivers a message to the webview if it is already open and ready, but does NOT
+     * force the panel open if the view has not been resolved yet.  Use this for passive
+     * notifications (e.g. activeEditorChanged, clear-on-switch) that should not steal
+     * focus or pop the panel when the user is working in a non-ETL-SQL file.
+     */
+    public static postMessagePassive(message: unknown) {
+        if (ResultsPanel.currentPanel?._isReady && ResultsPanel.currentPanel._view) {
+            ResultsPanel.currentPanel._view.webview.postMessage(message);
+        }
+        // If the view is not ready/visible, silently drop passive messages — they are
+        // informational and will be superseded by fresh state when the panel does open.
+    }
+
     private _flushQueue() {
         if (!this._view) {
             return;

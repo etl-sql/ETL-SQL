@@ -414,4 +414,4 @@ threshold choice, so it cannot be mistaken for a configuration artifact later.
 
 ## Bugs
 ### VS Code
-- [ ] **ETL-SQL Results window stays open**  The ETL-SQL Results window is always shown can it be hidden unless the active file is an etlsql or rptsql file?
+- [x] **ETL-SQL Results window stays open**  The `etlsql-results-view` now carries a `when: "etlsql.activeEditor"` clause in `package.json` so the panel tab only appears when an `.etlsql` or `.rptsql` file is active. A `setContext("etlsql.activeEditor", ...)` call in the `onDidChangeActiveTextEditor` handler (and on activation) keeps the flag in sync. Passive editor-change messages use the new `postMessagePassive` method so they never force the panel open when the user switches to a non-ETL-SQL file.
