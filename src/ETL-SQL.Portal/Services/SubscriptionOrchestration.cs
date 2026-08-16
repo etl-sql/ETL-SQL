@@ -18,6 +18,24 @@ public static class SubscriptionOrchestration
     public const string ScheduleNamePrefix = "SUBSCHED:";
     public const string NotificationNamePrefix = "SUBNOTIFY:";
 
+    /// <summary>
+    /// Resolves an orchestrator job by name for a Portal that owns its whole orchestrator database.
+    ///
+    /// <para>Two tenant keys reach the same rows on such a deployment: the Portal binds what it
+    /// creates to its configured tenant, while the scheduler and the CLI write to the same database
+    /// with no signed tenant and bind to the unbound scope. Both are this deployment. Resolving on the
+    /// Portal's key alone would leave the engine's own jobs unreachable — and an unreachable job is
+    /// not merely invisible here, it is one that cleanup walks past, so deleting a subscription or a
+    /// user would leave its job firing forever.</para>
+    ///
+    /// <para><b>Not for a shared control plane.</b> Where two tenants really can hold the same name,
+    /// the caller has a verified <c>TenantContext</c> and must resolve with it; falling back to the
+    /// unbound scope there would be the cross-tenant reach this design exists to prevent.</para>
+    /// </summary>
+    public static async Task<JobDefinition?> ResolveLocalJobAsync(
+        IJobHistoryStore store, string? tenantId, string jobName) =>
+        await store.GetJobAsync(tenantId, jobName) ?? await store.GetJobAsync(null, jobName);
+
     public static string JobName(int subscriptionId, string? reportName) =>
         $"{JobNamePrefix}{subscriptionId}:{reportName}";
 

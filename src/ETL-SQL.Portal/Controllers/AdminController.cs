@@ -583,8 +583,8 @@ public class AdminController(
                 // The deleted user's tenant, not a bare name: subscription job names repeat across
                 // tenants, so a name-addressed delete here would remove another tenant's job.
                 if (jobStore is not null
-                    && await jobStore.GetJobAsync(
-                        TenantId, SubscriptionOrchestration.JobName(sub.Id, sub.ReportName))
+                    && await SubscriptionOrchestration.ResolveLocalJobAsync(
+                        jobStore, TenantId, SubscriptionOrchestration.JobName(sub.Id, sub.ReportName))
                         is { } subscriptionJob
                     && subscriptionJob.Id.IsAssigned)
                     await jobStore.DeleteJobAsync(subscriptionJob.Id);

@@ -119,6 +119,10 @@ public class SubscriptionLifecycleRecoveryTests
 
         var jobs = (await store.GetAllJobsAsync()).ToList();
         var catalog = (IJobCatalogStore)store;
+        // Each object is resolved in its own job's tenant. A job reconciliation *creates* is bound to
+        // the subscription owner's tenant; a job that already existed keeps the binding it had, and
+        // realignment deliberately does not rebind it — so these two differ, and asserting through one
+        // shared tenant would quietly stop checking one of them.
 
         // Healed: a job recreated from row state, including the persisted delivery time.
         var recreated = Assert.Single(jobs, j =>
@@ -129,19 +133,19 @@ public class SubscriptionLifecycleRecoveryTests
         Assert.True(recreated.IsEnabled);
         Assert.Contains(missingEverything.ScriptPath!.Replace("\\", "\\\\"), recreated.Script);
         var recreatedSchedule = await catalog.GetScheduleAsync(
-            SubscriptionOrchestration.ScheduleName(missingEverything.Id));
+            recreated.TenantId, SubscriptionOrchestration.ScheduleName(missingEverything.Id));
         Assert.NotNull(recreatedSchedule);
         Assert.Equal("30 8 * * *", recreatedSchedule!.Cron);
         Assert.True(recreatedSchedule.IsEnabled);
-        Assert.Contains(await catalog.GetJobSchedulesAsync(recreated.Name),
+        Assert.Contains(await catalog.GetJobSchedulesAsync(recreated.Id),
             link => link.ScheduleName == recreatedSchedule.Name && link.NextRun is not null);
         var recreatedNotification = await catalog.GetNotificationAsync(
-            SubscriptionOrchestration.NotificationName(missingEverything.Id));
+            recreated.TenantId, SubscriptionOrchestration.NotificationName(missingEverything.Id));
         Assert.NotNull(recreatedNotification);
         Assert.Equal("alias", recreatedNotification!.ConnectionName);
         Assert.Equal("r@test.local", recreatedNotification.Recipient);
         Assert.False(recreatedNotification.IsEnabled);
-        Assert.Contains(await catalog.GetJobNotificationsAsync(recreated.Name),
+        Assert.Contains(await catalog.GetJobNotificationsAsync(recreated.Id),
             link => link.NotificationName == recreatedNotification.Name
                 && link.Trigger == NotificationTrigger.Success);
 
@@ -153,27 +157,27 @@ public class SubscriptionLifecycleRecoveryTests
         Assert.False(realigned.IsEnabled);
         Assert.Equal(lastRun, realigned.LastRun);
         var realignedSchedule = await catalog.GetScheduleAsync(
-            SubscriptionOrchestration.ScheduleName(drifted.Id));
+            realigned.TenantId, SubscriptionOrchestration.ScheduleName(drifted.Id));
         Assert.NotNull(realignedSchedule);
         Assert.Equal("0 0 * * 1", realignedSchedule!.Cron);
         Assert.False(realignedSchedule.IsEnabled);
-        Assert.Contains(await catalog.GetJobSchedulesAsync(realigned.Name),
+        Assert.Contains(await catalog.GetJobSchedulesAsync(realigned.Id),
             link => link.ScheduleName == realignedSchedule.Name && link.NextRun is not null);
         var realignedNotification = await catalog.GetNotificationAsync(
-            SubscriptionOrchestration.NotificationName(drifted.Id));
+            realigned.TenantId, SubscriptionOrchestration.NotificationName(drifted.Id));
         Assert.NotNull(realignedNotification);
         Assert.Equal("alias", realignedNotification!.ConnectionName);
         Assert.Equal("r@test.local", realignedNotification.Recipient);
         Assert.False(realignedNotification.IsEnabled);
-        Assert.Contains(await catalog.GetJobNotificationsAsync(realigned.Name),
+        Assert.Contains(await catalog.GetJobNotificationsAsync(realigned.Id),
             link => link.NotificationName == realignedNotification.Name
                 && link.Trigger == NotificationTrigger.Success);
 
         // Removed: the orphaned job, the stale-named duplicate, and the abandoned temp file.
         Assert.DoesNotContain(jobs, j => j.Name == orphanName);
         Assert.DoesNotContain(jobs, j => j.Name == staleName);
-        Assert.Null(await catalog.GetScheduleAsync(SubscriptionOrchestration.ScheduleName(999_999)));
-        Assert.Null(await catalog.GetNotificationAsync(SubscriptionOrchestration.NotificationName(999_999)));
+        Assert.Null(await catalog.GetScheduleAsync((string?)null, SubscriptionOrchestration.ScheduleName(999_999)));
+        Assert.Null(await catalog.GetNotificationAsync((string?)null, SubscriptionOrchestration.NotificationName(999_999)));
         Assert.False(File.Exists(abandonedTmp));
 
         // Idempotent: a second pass changes nothing.

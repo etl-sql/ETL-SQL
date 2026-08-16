@@ -1953,7 +1953,13 @@ namespace ETL_SQL.Orchestrator.Storage
             return results;
         }
 
-        public async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForJobAsync(string jobId, int limit = 1000)
+        /// <summary>
+        /// Failures recorded under a job <em>name</em>, which is what the interface member this
+        /// overrides is addressed by — and what the caller has: a name typed into a script or a
+        /// query string. It briefly filtered on <c>h.JobId</c> while keeping the interface's
+        /// parameter type, so it still overrode the member and simply matched nothing.
+        /// </summary>
+        public async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForJobAsync(string jobName, int limit = 1000)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -1964,10 +1970,10 @@ namespace ETL_SQL.Orchestrator.Storage
                        f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
                 FROM JobDataQualityFailures f
                 INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
-                WHERE h.JobId = @jobId
+                WHERE h.JobName = @jobName COLLATE NOCASE
                 ORDER BY h.StartTime DESC, h.Id DESC, f.TargetTable, f.ColumnName, f.RuleText, f.Action
                 LIMIT @limit;";
-            command.AddParam("@jobId", jobId);
+            command.AddParam("@jobName", jobName);
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
 
             var results = new List<JobDataQualityFailure>();

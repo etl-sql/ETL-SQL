@@ -315,7 +315,7 @@ public class SubscriptionsController(
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
-            var job = await store.GetJobAsync(_tenantScope.TenantId, jobName);
+            var job = await SubscriptionOrchestration.ResolveLocalJobAsync(store, _tenantScope.TenantId, jobName);
             if (job is not null)
             {
                 var (interval, unit) = SubscriptionOrchestration.ParseSchedule(sub.Schedule);
@@ -398,7 +398,7 @@ public class SubscriptionsController(
             if (store is not null)
             {
                 var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report.Name);
-                var job = await store.GetJobAsync(_tenantScope.TenantId, jobName);
+                var job = await SubscriptionOrchestration.ResolveLocalJobAsync(store, _tenantScope.TenantId, jobName);
                 if (job is not null)
                 {
                     await store.SaveJobAsync(job with { IsEnabled = req.IsActive });
@@ -456,7 +456,7 @@ public class SubscriptionsController(
             await store.InitializeAsync();
             // Resolved in this subscription's own tenant: the generated job name repeats across
             // tenants, so deleting by name alone would reach another tenant's job.
-            var job = await store.GetJobAsync(_tenantScope.TenantId, jobName);
+            var job = await SubscriptionOrchestration.ResolveLocalJobAsync(store, _tenantScope.TenantId, jobName);
             if (job is not null && job.Id.IsAssigned)
                 await store.DeleteJobAsync(job.Id);
             await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(
