@@ -172,8 +172,11 @@ public sealed class DedicatedTenantBackupRestoreTests : IDisposable
         await store.SaveJobAsync(new JobDefinition(
             "nightly", "SELECT 1;", 1, "DAY", null, null, DateTime.UtcNow,
             TenantId: tenant));
+        // Resolved in the job's own tenant — this fixture is about the tenant boundary, so a lookup
+        // in the unbound scope would be asking about a different object.
+        var nightly = (await store.GetJobAsync(tenant, "nightly"))!;
         Assert.True(await store.AcquireJobLeaseAsync(
-            "nightly", "source-node", TimeSpan.FromMinutes(5)) > 0);
+            nightly.Id, "source-node", TimeSpan.FromMinutes(5)) > 0);
         var factory = new OrchestratorStoreFactory(new ConfigurationBuilder().Build());
         var ledger = factory.CreateSandboxAdmissionLedger(
             Path.Combine(tenantRoot, "databases", "orchestrator.db"));

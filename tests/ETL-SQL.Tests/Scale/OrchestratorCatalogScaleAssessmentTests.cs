@@ -65,14 +65,20 @@ public sealed class OrchestratorCatalogScaleAssessmentTests
         {
             await using var job = connection.CreateCommand();
             job.Transaction = transaction;
-            job.CommandText = "INSERT INTO Jobs (Name, Script, Interval, Unit, NextRun, IsEnabled) VALUES ($name, 'SELECT 1;', 1, 'HOUR', $next, 1)";
+            // Seeded with the surrogate identity the scheduler and history queries index on — the
+            // point of this assessment is that those queries stay indexed, and a row with no identity
+            // would not be reachable by the query being measured.
+            var jobId = Guid.NewGuid().ToString("N");
+            job.CommandText = "INSERT INTO Jobs (Id, Name, Script, Interval, Unit, NextRun, IsEnabled) VALUES ($id, $name, 'SELECT 1;', 1, 'HOUR', $next, 1)";
+            job.Parameters.AddWithValue("$id", jobId);
             job.Parameters.AddWithValue("$name", $"job-{i:D4}");
             job.Parameters.AddWithValue("$next", now.AddMinutes(-1).ToString("O"));
             await job.ExecuteNonQueryAsync();
 
             await using var history = connection.CreateCommand();
             history.Transaction = transaction;
-            history.CommandText = "INSERT INTO JobHistory (JobName, StartTime, EndTime, Status) VALUES ($name, $start, $end, 'SUCCESS')";
+            history.CommandText = "INSERT INTO JobHistory (JobId, JobName, StartTime, EndTime, Status) VALUES ($id, $name, $start, $end, 'SUCCESS')";
+            history.Parameters.AddWithValue("$id", jobId);
             history.Parameters.AddWithValue("$name", $"job-{i:D4}");
             history.Parameters.AddWithValue("$start", now.AddMinutes(-2).AddTicks(i).ToString("O"));
             history.Parameters.AddWithValue("$end", now.AddMinutes(-1).AddTicks(i).ToString("O"));
