@@ -182,7 +182,11 @@ namespace ETL_SQL.App
                 || ctx.Command.StartsWith("admin-user-", StringComparison.Ordinal)
                 || ctx.Command.StartsWith("admin-group-", StringComparison.Ordinal)
                 || ctx.Command.StartsWith("admin-session-", StringComparison.Ordinal)
-                || ctx.Command.StartsWith("admin-service-account-", StringComparison.Ordinal))
+                || ctx.Command.StartsWith("admin-service-account-", StringComparison.Ordinal)
+                // Orchestrator grants are administered through the Portal like every other identity
+                // command, so they authenticate the same way and never need the Orchestrator's
+                // signing secret on the operator's machine.
+                || ctx.Command.StartsWith("admin-orchestrator-", StringComparison.Ordinal))
             {
                 return await Admin.IdentityAdminService.RunAsync(ctx, logger);
             }

@@ -344,12 +344,12 @@ different questions and carrying one silently breaks the other.
 
 #### Slice C — Grant administration surface
 
-- [ ] **C1 Portal ACL API.** Proxy routes for orchestrator object grants, gated by `orchestrator.admin`
+- [x] **C1 Portal ACL API.** Proxy routes for orchestrator object grants, gated by `orchestrator.admin`
       plus Portal RBAC. Follow the `{alias}/acl` pattern already in `ConnectionsAdminController`.
 - [ ] **C2 ACL panel** in the Orchestrator tab's detail panel, following `dataset-acl-ui.js`. Grants
       are unmanageable through the product today — setting one requires hand-crafting a signed
       assertion with the shared secret.
-- [ ] **C3 CLI.** `etl-sql admin orchestrator grant|revoke|show` against the HTTP API, for headless
+- [x] **C3 CLI.** `etl-sql admin orchestrator grant|revoke|show` against the HTTP API, for headless
       and scripted provisioning.
 - [ ] **C4 Surface attribution.** `CreatedBy`/`ModifiedBy` are persisted and currently invisible; show
       owner in the jobs table and detail panel.

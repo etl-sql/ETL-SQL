@@ -148,6 +148,43 @@ etl-sql admin group set-capabilities --name "Finance Analysts"
 Read the current grant first with `etl-sql admin group capabilities --name "…"`, which also lists
 what is available.
 
+## Orchestrator object grants
+
+`admin orchestrator` administers the per-object model — which principal may read, run, override, or
+manage one job, schedule, or notification. Before these verbs the grants existed but were unreachable:
+setting one meant hand-crafting a signed assertion with the Orchestrator's secret.
+
+They go through the Portal like every other identity verb, so an operator needs Portal credentials and
+never the Orchestrator's signing secret on their machine — which is the whole reason the Portal issues
+short-lived assertions rather than sharing that secret.
+
+```bash
+etl-sql admin orchestrator show --kind JOB --object nightly-load
+
+etl-sql admin orchestrator grant --kind JOB --object nightly-load \
+    --principal-kind GROUP --principal 3f2a9c1d84be47a0b6c25e7f9d031a48 \
+    --permission EXECUTE
+
+etl-sql admin orchestrator revoke --kind JOB --object nightly-load \
+    --principal-kind GROUP --principal 3f2a9c1d84be47a0b6c25e7f9d031a48
+```
+
+`--principal` is the principal's **stable key**, not a username or a group name. Names and numeric row
+ids can both be reassigned — by a rename, an OIDC re-provision, or a restore into a rebuilt Portal —
+and a grant that followed one would silently belong to whoever holds it now.
+
+`--object` is resolved in your own tenant. A name that belongs to another tenant reports "not found"
+rather than "forbidden": confirming it exists elsewhere would leak across the boundary.
+
+Permissions are a ladder: `MANAGE` includes everything, `OVERRIDE` includes `EXECUTE` and `READ`, and
+`EXECUTE` includes `READ`. A grant is also capped by the caller's scope — see
+[Service Accounts](service-accounts.md) — so an account scoped `orchestrator.read` cannot trigger a
+job however broad its grants.
+
+Only a principal who can `MANAGE` the object may change its grants: its owner, an administrator, or
+someone explicitly granted `MANAGE`. Being able to *reach* an object never confers the ability to
+widen your own access to it.
+
 ## Service-account lifecycle and one-time secrets
 
 The service-account verbs use the same Portal URL, client ID, environment-only client secret,
@@ -157,12 +194,12 @@ stable exit codes, and optimistic concurrency contract as the other identity ver
 etl-sql admin service-account list
 
 etl-sql admin service-account create --name nightly-loader --owner tenant-admin \
-    --scope orchestrator.execute --role Operator \
+    --scope orchestrator.read --scope orchestrator.execute --role Operator \
     --expires-at 2027-01-31T23:59:59Z \
     --secret-out /run/secrets/nightly-loader.secret
 
 etl-sql admin service-account update --name nightly-loader \
-    --scope orchestrator.execute --disable
+    --scope orchestrator.read --disable
 
 etl-sql admin service-account rotate-secret --name nightly-loader \
     --secret-out /run/secrets/nightly-loader.rotated.secret

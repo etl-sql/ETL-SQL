@@ -103,6 +103,18 @@ public class CliContext
 
     // ── admin service-account lifecycle ─────────────────────────────────────────
     public string? ServiceAccountName { get; set; }
+
+    // ── Orchestrator object grants ───────────────────────────────────────────
+    /// <summary>JOB, SCHEDULE, or NOTIFICATION.</summary>
+    public string? GrantObjectKind { get; set; }
+    /// <summary>The object's name, resolved in the caller's own tenant by the Orchestrator.</summary>
+    public string? GrantObjectName { get; set; }
+    /// <summary>USER, GROUP, or SERVICE.</summary>
+    public string? GrantPrincipalKind { get; set; }
+    /// <summary>The principal's stable key — not a username, which can be reassigned.</summary>
+    public string? GrantPrincipalId { get; set; }
+    /// <summary>READ, EXECUTE, OVERRIDE, or MANAGE.</summary>
+    public string? GrantPermission { get; set; }
     public string? ServiceAccountOwner { get; set; }
     public string? ServiceAccountDescription { get; set; }
     public List<string>? ServiceAccountScopes { get; set; }

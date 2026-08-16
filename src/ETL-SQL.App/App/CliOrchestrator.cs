@@ -164,6 +164,37 @@ namespace ETL_SQL.App
             Description = "Studio capability to grant. Repeatable. Replaces the group's whole grant.",
             AllowMultipleArgumentsPerToken = false
         };
+        // ── Orchestrator object grants ───────────────────────────────────────
+        private static readonly Option<string?> GrantKindOption = new("--kind", Array.Empty<string>())
+        {
+            Description = "Object kind: JOB, SCHEDULE, or NOTIFICATION.",
+            DefaultValueFactory = _ => null
+        };
+
+        private static readonly Option<string?> GrantObjectOption = new("--object", Array.Empty<string>())
+        {
+            Description = "Object name, resolved in your own tenant.",
+            DefaultValueFactory = _ => null
+        };
+
+        private static readonly Option<string?> GrantPrincipalKindOption = new("--principal-kind", Array.Empty<string>())
+        {
+            Description = "Principal kind: USER, GROUP, or SERVICE.",
+            DefaultValueFactory = _ => null
+        };
+
+        private static readonly Option<string?> GrantPrincipalOption = new("--principal", Array.Empty<string>())
+        {
+            Description = "Principal key. The stable identifier, not a username — a username can be reassigned.",
+            DefaultValueFactory = _ => null
+        };
+
+        private static readonly Option<string?> GrantPermissionOption = new("--permission", Array.Empty<string>())
+        {
+            Description = "READ, EXECUTE, OVERRIDE, or MANAGE.",
+            DefaultValueFactory = _ => null
+        };
+
         private static readonly Option<string?> ServiceAccountNameOption = new("--name", Array.Empty<string>())
         {
             Description = "Service-account name.",
@@ -1482,6 +1513,35 @@ namespace ETL_SQL.App
             serviceAccountCommand.Add(serviceAccountRevokeCommand);
             adminCommand.Add(serviceAccountCommand);
 
+            // Grants on orchestrator objects, for headless and scripted provisioning. Routed through
+            // the Portal like every other admin command, so the operator needs Portal credentials and
+            // never the Orchestrator's signing secret.
+            var orchestratorCommand = new Command("orchestrator", "Manage per-object Orchestrator grants");
+
+            var orchestratorShowCommand = new Command("show", "Show the grants on one Orchestrator object")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, GrantKindOption, GrantObjectOption
+            };
+            orchestratorShowCommand.SetAction(context => Dispatch(context, "admin-orchestrator-show", handler));
+            orchestratorCommand.Add(orchestratorShowCommand);
+
+            var orchestratorGrantCommand = new Command("grant", "Grant a principal a permission on an object")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, GrantKindOption, GrantObjectOption,
+                GrantPrincipalKindOption, GrantPrincipalOption, GrantPermissionOption
+            };
+            orchestratorGrantCommand.SetAction(context => Dispatch(context, "admin-orchestrator-grant", handler));
+            orchestratorCommand.Add(orchestratorGrantCommand);
+
+            var orchestratorRevokeCommand = new Command("revoke", "Revoke a principal's grant on an object")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, GrantKindOption, GrantObjectOption,
+                GrantPrincipalKindOption, GrantPrincipalOption
+            };
+            orchestratorRevokeCommand.SetAction(context => Dispatch(context, "admin-orchestrator-revoke", handler));
+            orchestratorCommand.Add(orchestratorRevokeCommand);
+            adminCommand.Add(orchestratorCommand);
+
             var accessSimulateCommand = new Command("access-simulate",
                 "Simulate what a user can reach — the access question, answered without a browser")
             {
@@ -1736,6 +1796,15 @@ namespace ETL_SQL.App
                 cliContext.AdminCapabilities = res.GetResult(AdminCapabilityOption) is null
                     ? null
                     : [.. res.GetValue(AdminCapabilityOption) ?? []];
+
+                if (commandName.StartsWith("admin-orchestrator-", StringComparison.Ordinal))
+                {
+                    cliContext.GrantObjectKind = TryGetString(res, GrantKindOption);
+                    cliContext.GrantObjectName = TryGetString(res, GrantObjectOption);
+                    cliContext.GrantPrincipalKind = TryGetString(res, GrantPrincipalKindOption);
+                    cliContext.GrantPrincipalId = TryGetString(res, GrantPrincipalOption);
+                    cliContext.GrantPermission = TryGetString(res, GrantPermissionOption);
+                }
 
                 if (commandName.StartsWith("admin-service-account-", StringComparison.Ordinal))
                 {

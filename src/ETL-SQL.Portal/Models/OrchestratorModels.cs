@@ -14,7 +14,14 @@ public record JobDefinitionDto(
     string? ScriptHash,
     string HashPolicy,
     long Version = 1,
-    string? TenantId = null
+    string? TenantId = null,
+    /// <summary>
+    /// Who created and last changed this job. Persisted since attribution shipped and never shown,
+    /// which made ownership invisible exactly where it decides access: the owner of an object can
+    /// manage it, so an administrator looking at a job they cannot change had no way to see why.
+    /// </summary>
+    string? CreatedBy = null,
+    string? ModifiedBy = null
 );
 
 public record JobHistoryEntryDto(

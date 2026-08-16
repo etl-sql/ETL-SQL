@@ -64,6 +64,9 @@ public static class IdentityAdminService
                 "admin-service-account-update" => await ServiceAccountUpdateAsync(client, ctx, logger),
                 "admin-service-account-rotate-secret" => await ServiceAccountRotateSecretAsync(client, ctx, logger),
                 "admin-service-account-revoke" => await ServiceAccountRevokeAsync(client, ctx, logger),
+                "admin-orchestrator-show" => await OrchestratorGrantShowAsync(client, ctx, logger),
+                "admin-orchestrator-grant" => await OrchestratorGrantSetAsync(client, ctx, logger),
+                "admin-orchestrator-revoke" => await OrchestratorGrantRevokeAsync(client, ctx, logger),
                 _ => Fail(logger, AdminExitCode.ValidationError, $"Unknown identity command '{ctx.Command}'.")
             };
         }
@@ -486,6 +489,111 @@ public static class IdentityAdminService
 
         logger.WriteLine($"Simulated access for {user["userName"]?.GetValue<string>()} (id {user["id"]}):");
         Render(logger, result, indent: "  ");
+        return 0;
+    }
+
+    // ── Orchestrator object grants ───────────────────────────────────────────────
+    //
+    // Headless provisioning of the per-object model. These go through the Portal's proxy rather than
+    // straight to the Orchestrator, so the CLI authenticates once, the same way it does for every
+    // other admin command, and the Orchestrator sees a Portal-signed identity like any other caller.
+    // A CLI that talked to the Orchestrator directly would need the shared signing secret on the
+    // operator's machine, which is the thing the exchange shape exists to avoid.
+
+    private static string GrantPath(CliContext ctx) =>
+        $"/api/orchestrator/authorization/{Uri.EscapeDataString(RequireKind(ctx))}" +
+        $"/{Uri.EscapeDataString(Required(ctx.GrantObjectName, "--object"))}";
+
+    private static string GrantPrincipalPath(CliContext ctx) =>
+        GrantPath(ctx) +
+        $"/{Uri.EscapeDataString(RequirePrincipalKind(ctx))}" +
+        $"/{Uri.EscapeDataString(Required(ctx.GrantPrincipalId, "--principal"))}";
+
+    private static string RequireKind(CliContext ctx) =>
+        Choice(ctx.GrantObjectKind, "--kind", "JOB", "SCHEDULE", "NOTIFICATION");
+
+    private static string RequirePrincipalKind(CliContext ctx) =>
+        Choice(ctx.GrantPrincipalKind, "--principal-kind", "USER", "GROUP", "SERVICE");
+
+    /// <summary>Reuses the existing <c>Require</c> guard and returns the trimmed value.</summary>
+    private static string Required(string? value, string option)
+    {
+        Require(value, option);
+        return value!.Trim();
+    }
+
+    /// <summary>
+    /// Validates a closed set locally so a typo is refused before it becomes an HTTP round trip that
+    /// answers 400 — and, more usefully, so the message names the allowed values.
+    /// </summary>
+    private static string Choice(string? value, string option, params string[] allowed)
+    {
+        var normalized = Required(value, option).ToUpperInvariant();
+        return allowed.Contains(normalized, StringComparer.OrdinalIgnoreCase)
+            ? normalized
+            : throw new AdminCliException(
+                AdminExitCode.ValidationError,
+                $"{option} must be one of {string.Join(", ", allowed)}.");
+    }
+
+    private static async Task<int> OrchestratorGrantShowAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var response = await client.GetAsync(GrantPath(ctx), CancellationToken.None);
+        var grants = AsArray(response);
+        if (ctx.IsJsonMode)
+        {
+            logger.WriteLine(response?.ToJsonString(Pretty) ?? "[]");
+            return 0;
+        }
+
+        if (grants.Count == 0)
+        {
+            // Said plainly, because "no grants" and "you cannot see the grants" look identical in an
+            // empty list, and only the first is normal. The route answers 403 for the second.
+            logger.WriteLine($"{RequireKind(ctx)} '{ctx.GrantObjectName}' has no grants; only its owner and administrators can reach it.");
+            return 0;
+        }
+
+        logger.WriteLine($"Grants on {RequireKind(ctx)} '{ctx.GrantObjectName}':");
+        foreach (var grant in grants)
+        {
+            logger.WriteLine(
+                $"  {grant?["principalKind"]}:{grant?["principalId"]} = {grant?["permission"]} " +
+                $"(granted by {grant?["grantedBy"]})");
+        }
+        return 0;
+    }
+
+    private static async Task<int> OrchestratorGrantSetAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var permission = Choice(ctx.GrantPermission, "--permission", "READ", "EXECUTE", "OVERRIDE", "MANAGE");
+        var result = await client.PutAsync(
+            GrantPrincipalPath(ctx), new { permission }, CancellationToken.None);
+
+        if (ctx.IsJsonMode)
+        {
+            logger.WriteLine(result?.ToJsonString(Pretty) ?? "null");
+            return 0;
+        }
+
+        logger.WriteLine(
+            $"Granted {permission} on {RequireKind(ctx)} '{ctx.GrantObjectName}' to " +
+            $"{RequirePrincipalKind(ctx)}:{ctx.GrantPrincipalId}.");
+        return 0;
+    }
+
+    private static async Task<int> OrchestratorGrantRevokeAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        await client.DeleteAsync(GrantPrincipalPath(ctx), CancellationToken.None);
+        if (!ctx.IsJsonMode)
+        {
+            logger.WriteLine(
+                $"Revoked {RequirePrincipalKind(ctx)}:{ctx.GrantPrincipalId} on " +
+                $"{RequireKind(ctx)} '{ctx.GrantObjectName}'.");
+        }
         return 0;
     }
 
