@@ -75,6 +75,33 @@
       margin-bottom: 6px;
     }
     .orch-script-header label { margin: 0; }
+
+    /* Access panel. Principal keys are opaque 32-character values, so they are given a monospace
+       face and allowed to truncate: the full value is in the cell's title, and a wrapped GUID makes
+       a three-row table unreadable without telling anyone anything. */
+    .orch-acl-key, .orch-owner-cell {
+      font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      font-size: 0.85em;
+      max-width: 22ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .orch-acl-owner { margin-bottom: 10px; }
+    .orch-acl-table { margin-bottom: 10px; }
+    .orch-acl-add {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .orch-acl-add input { flex: 1 1 16ch; min-width: 0; }
+    .orch-acl-hint {
+      margin: 6px 0 0;
+      font-size: 0.82em;
+      color: var(--portal-muted);
+    }
+    .orch-acl-error { padding: 10px; }
   </style>
 </head>
 <body>
@@ -208,6 +235,12 @@
         <div class="orch-detail-section" id="sparklineSection">
           <label>Duration trend (last 30 runs, seconds)</label>
           <div id="sparklineChart" style="height:80px;"></div>
+        </div>
+        <div class="orch-detail-section" id="accessSection">
+          <label>Access</label>
+          <div id="accessPanelWrap">
+            <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>
+          </div>
         </div>
         <div class="orch-detail-section">
           <label>Run History</label>
@@ -350,6 +383,7 @@ import { applyNavigationSafely } from '/js/portal-nav.js?v=0.18.0';
 import { renderTriageBoard, selectedJobNames } from '/js/triage-ui.js?v=0.18.0';
 import { renderPortalHeader } from '/js/portal-header.js?v=0.18.0';
 import { installDialogAccessibility } from '/js/dialog-a11y.js?v=0.18.0';
+import { accessPanelHtml, ownerLabel } from '/js/orchestrator-acl-ui.js?v=0.18.0';
 
 renderPortalHeader();
 installDialogAccessibility();
@@ -418,6 +452,16 @@ const api = {
   triage:   (lookbackHours = 24) => apiJson(`${BASE}/triage?lookbackHours=${encodeURIComponent(lookbackHours)}`),
   triageRun:(runId) => apiJson(`${BASE}/triage/runs/${encodeURIComponent(runId)}`),
   rerun:    (jobNames) => apiFetch(`${BASE}/jobs/rerun`, { method: 'POST', body: { jobNames } }),
+  // Grants are read straight from the Orchestrator through the Portal's proxy on every open; there is
+  // deliberately no client-side cache, because a stale permissions table is the one that looks
+  // authoritative while being wrong.
+  grants:      (kind, name) => apiFetch(`${BASE}/authorization/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`),
+  grantSet:    (kind, name, principalKind, principalId, permission) => apiFetch(
+                 `${BASE}/authorization/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/${encodeURIComponent(principalKind)}/${encodeURIComponent(principalId)}`,
+                 { method: 'PUT', body: { permission } }),
+  grantRevoke: (kind, name, principalKind, principalId) => apiFetch(
+                 `${BASE}/authorization/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/${encodeURIComponent(principalKind)}/${encodeURIComponent(principalId)}`,
+                 { method: 'DELETE' }),
 };
 
 // ── Operations triage ──────────────────────────────────────────────────────────
@@ -826,13 +870,14 @@ function renderJobsTable(jobs) {
     <div style="overflow-x:auto;">
     <table class="data-table">
       <thead><tr>
-        <th>Name</th><th>Schedule</th><th>Status</th>
+        <th>Name</th><th>Owner</th><th>Schedule</th><th>Status</th>
         <th>Last Run</th><th>Next Run</th><th>Actions</th>
       </tr></thead>
       <tbody>
       ${jobs.map(j => `
         <tr class="job-row${jobValue(selectedJob, 'Name') === jobValue(j, 'Name') ? ' selected' : ''}" data-name="${escHtml(jobValue(j, 'Name'))}">
           <td><strong>${escHtml(jobValue(j, 'Name'))}</strong></td>
+          <td class="orch-owner-cell" title="${escHtml(ownerLabel(jobValue(j, 'CreatedBy')))}">${escHtml(ownerLabel(jobValue(j, 'CreatedBy')))}</td>
           <td>${escHtml(fmtSchedule(j))}</td>
           <td>${statusBadge(jobBool(j, 'IsEnabled'))}</td>
           <td>${lastRunBadge(j)}</td>
@@ -1035,6 +1080,8 @@ async function openDetail(job, historyOverride = null) {
   document.querySelectorAll('tr.job-row').forEach(r => r.classList.remove('selected'));
   document.querySelector(`tr.job-row[data-name="${cssEscape(jobValue(job, 'Name'))}"]`)?.classList.add('selected');
 
+  renderAccessPanel(job);
+
   try {
     const hist = historyOverride ?? await api.history(jobValue(job, 'Name'), 30) ?? [];
     renderHistoryTable(hist);
@@ -1044,6 +1091,61 @@ async function openDetail(job, historyOverride = null) {
       renderSparkline(hist);
     }
   } catch { document.getElementById('historyTableWrap').innerHTML = '<p style="color:var(--portal-muted);padding:8px">Failed to load history.</p>'; }
+}
+
+// ── Access (per-object grants) ─────────────────────────────────────────────────
+// Re-read from the Orchestrator each time rather than cached: the Orchestrator owns the grants and
+// decides them, so a Portal-side copy would be a second answer that drifts.
+async function renderAccessPanel(job) {
+  const wrap = document.getElementById('accessPanelWrap');
+  const name = jobValue(job, 'Name');
+  // No client-side permission check: listing grants already requires MANAGE, so the Orchestrator's
+  // answer to this call *is* the answer to "may this caller administer this object".
+  const state = { job: { name, createdBy: jobValue(job, 'CreatedBy') }, grants: null };
+  try {
+    const res = await api.grants('JOB', name);
+    if (res.status === 403) {
+      state.error = 'You can reach this job but cannot administer its grants.';
+    } else if (res.status === 404) {
+      state.error = 'This job no longer exists in your tenant.';
+    } else if (!res.ok) {
+      state.error = 'Grants are unavailable right now.';
+    } else {
+      state.grants = await res.json();
+    }
+  } catch {
+    state.error = 'Grants are unavailable right now.';
+  }
+
+  if (selectedJob && jobValue(selectedJob, 'Name') !== name) return;  // a newer job was opened
+  wrap.innerHTML = accessPanelHtml(state, escHtml, escHtml);
+
+  wrap.querySelectorAll('[data-revoke-key]').forEach(button => {
+    button.addEventListener('click', () => changeGrant(job, () => api.grantRevoke(
+      'JOB', name, button.dataset.revokeKind, button.dataset.revokeKey)));
+  });
+  document.getElementById('aclGrantBtn')?.addEventListener('click', () => {
+    const key = document.getElementById('aclPrincipalKey')?.value?.trim();
+    if (!key) { toast('Enter the principal key to grant.', 'error'); return; }
+    changeGrant(job, () => api.grantSet(
+      'JOB', name,
+      document.getElementById('aclPrincipalKind').value,
+      key,
+      document.getElementById('aclPermission').value));
+  });
+}
+
+async function changeGrant(job, action) {
+  try {
+    const res = await action();
+    if (!res.ok && res.status !== 204) {
+      toast(res.status === 403 ? 'You cannot administer this job's grants.' : 'The change was refused.', 'error');
+    }
+  } catch {
+    toast('The change could not be sent.', 'error');
+  }
+  // Re-read either way: the Orchestrator's answer is the only authority on what the grants now are.
+  await renderAccessPanel(job);
 }
 
 function closeDetail() {

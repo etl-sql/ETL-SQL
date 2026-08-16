@@ -22,11 +22,13 @@ import feedback from './feedback.story.js';
 import triageBoard from './triage-board.story.js';
 import orchestratorRunOverrides from './orchestrator-run-overrides.story.js';
 import orchestratorCheckpointResume from './orchestrator-checkpoint-resume.story.js';
+import orchestratorAcl from './orchestrator-acl.story.js';
 
 export const stories = [
   triageBoard,
   orchestratorRunOverrides,
   orchestratorCheckpointResume,
+  orchestratorAcl,
   portalGovernance,
   dataQualityQueue,
   portalResponsiveShell,
