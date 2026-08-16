@@ -260,17 +260,26 @@
   <div class="app-body admin-body">
     <div class="main-content admin-content">
 
+      <!-- Page Header -->
+      <div class="admin-page-header">
+        <div>
+          <span class="library-kicker">Automation</span>
+          <h2 class="page-title">Job Orchestrator</h2>
+          <p class="admin-page-subtitle">Schedule, monitor, and triage automated data pipelines, shared schedules, notifications, and watermark state.</p>
+        </div>
+      </div>
+
       <!-- Top Primary View Switcher -->
-      <nav class="orch-view-nav" aria-label="Orchestrator Views">
-        <button class="orch-nav-btn active" id="orchNavJobs" type="button">
+      <nav class="orch-view-nav" role="tablist" aria-label="Orchestrator Views">
+        <button class="orch-nav-btn active" role="tab" aria-selected="true" aria-controls="viewJobsSection" id="orchNavJobs" type="button">
           <span>⚡ Jobs</span>
           <span class="orch-nav-badge" id="jobsNavCount">0</span>
         </button>
-        <button class="orch-nav-btn" id="orchNavSchedules" type="button">
+        <button class="orch-nav-btn" role="tab" aria-selected="false" aria-controls="viewSchedulesSection" id="orchNavSchedules" type="button">
           <span>🗓 Schedules</span>
           <span class="orch-nav-badge" id="schedulesNavCount">0</span>
         </button>
-        <button class="orch-nav-btn" id="orchNavNotifications" type="button">
+        <button class="orch-nav-btn" role="tab" aria-selected="false" aria-controls="viewNotificationsSection" id="orchNavNotifications" type="button">
           <span>🔔 Notifications</span>
           <span class="orch-nav-badge" id="notificationsNavCount">0</span>
         </button>
@@ -285,7 +294,7 @@
       <!-- ═══════════════════════════════════════════════════════════════════ -->
       <!-- VIEW 1: JOBS (DEFAULT)                                              -->
       <!-- ═══════════════════════════════════════════════════════════════════ -->
-      <div id="viewJobsSection">
+      <div id="viewJobsSection" role="tabpanel" aria-labelledby="orchNavJobs">
 
         <!-- Stats bar -->
         <div class="orch-stats-bar">
@@ -423,7 +432,7 @@
       <!-- ═══════════════════════════════════════════════════════════════════ -->
       <!-- VIEW 2: SCHEDULES CATALOG                                           -->
       <!-- ═══════════════════════════════════════════════════════════════════ -->
-      <div id="viewSchedulesSection" style="display:none">
+      <div id="viewSchedulesSection" role="tabpanel" aria-labelledby="orchNavSchedules" style="display:none">
         <div class="card">
           <div class="card-header">
             <div>
@@ -450,7 +459,7 @@
       <!-- ═══════════════════════════════════════════════════════════════════ -->
       <!-- VIEW 3: NOTIFICATIONS CATALOG                                       -->
       <!-- ═══════════════════════════════════════════════════════════════════ -->
-      <div id="viewNotificationsSection" style="display:none">
+      <div id="viewNotificationsSection" role="tabpanel" aria-labelledby="orchNavNotifications" style="display:none">
         <div class="card">
           <div class="card-header">
             <div>
@@ -1272,6 +1281,9 @@ function setActiveView(view) {
   document.getElementById('orchNavJobs').classList.toggle('active', view === 'jobs');
   document.getElementById('orchNavSchedules').classList.toggle('active', view === 'schedules');
   document.getElementById('orchNavNotifications').classList.toggle('active', view === 'notifications');
+  document.getElementById('orchNavJobs').setAttribute('aria-selected', view === 'jobs' ? 'true' : 'false');
+  document.getElementById('orchNavSchedules').setAttribute('aria-selected', view === 'schedules' ? 'true' : 'false');
+  document.getElementById('orchNavNotifications').setAttribute('aria-selected', view === 'notifications' ? 'true' : 'false');
 
   document.getElementById('viewJobsSection').style.display = view === 'jobs' ? '' : 'none';
   document.getElementById('viewSchedulesSection').style.display = view === 'schedules' ? '' : 'none';

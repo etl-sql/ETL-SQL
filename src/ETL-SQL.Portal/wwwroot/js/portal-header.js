@@ -16,11 +16,13 @@ export function renderPortalHeader(header = document.querySelector('[data-portal
   const active = header.dataset.active || '';
   const hideLogout = header.dataset.logoutHidden === 'true';
   const links = destinations.map(([key, id, href, label]) => {
-    const classes = key === active ? ' class="active"' : '';
+    const isCurrent = key === active;
+    const classes = isCurrent ? ' class="active"' : '';
+    const currentAttr = isCurrent ? ' aria-current="page"' : '';
     // The server owns these four visibility decisions. Hidden is the safe pre-response state,
     // including on the destination's own page; its route filter remains the real boundary.
     const gated = ['studio', 'docs', 'orchestrator', 'admin'].includes(key);
-    return `<a href="${href}" id="${id}"${classes}${gated ? ' style="display:none"' : ''}>${label}</a>`;
+    return `<a href="${href}" id="${id}"${classes}${currentAttr}${gated ? ' style="display:none"' : ''}>${label}</a>`;
   }).join('');
 
   header.classList.add('topbar');
