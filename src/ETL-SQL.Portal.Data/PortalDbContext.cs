@@ -503,11 +503,24 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Version).IsConcurrencyToken();
             e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
             e.Property(x => x.TenantId).HasMaxLength(128);
+            // Unique across the whole deployment, not per tenant: the key is what a grant resolves
+            // against, and a key that meant two different groups depending on who asked would be
+            // exactly the collision it exists to remove. Filtered so rows predating the column — which
+            // the migration backfills — cannot collide with each other on NULL.
+            e.Property(x => x.PrincipalKey).HasMaxLength(64);
+            e.HasIndex(x => x.PrincipalKey)
+                .IsUnique()
+                .HasFilter("\"PrincipalKey\" IS NOT NULL");
         });
 
         builder.Entity<PortalUser>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
+            // See the Group configuration above for why this is deployment-wide unique.
+            e.Property(x => x.PrincipalKey).HasMaxLength(64);
+            e.HasIndex(x => x.PrincipalKey)
+                .IsUnique()
+                .HasFilter("\"PrincipalKey\" IS NOT NULL");
             // ASP.NET Identity's default global username index is incompatible with a shared store.
             // Preserve its lookup index but move uniqueness to the tenant-qualified key.
             e.HasIndex(x => x.NormalizedUserName)

@@ -477,6 +477,10 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PrincipalKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Provider")
                         .IsRequired()
                         .HasColumnType("text");
@@ -491,6 +495,10 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PrincipalKey")
+                        .IsUnique()
+                        .HasFilter("\"PrincipalKey\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "Name")
                         .IsUnique();
@@ -942,6 +950,10 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PrincipalKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Provider")
                         .IsRequired()
                         .HasColumnType("text");
@@ -972,6 +984,10 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.HasIndex("NormalizedUserName")
                         .HasDatabaseName("UserNameIndex");
+
+                    b.HasIndex("PrincipalKey")
+                        .IsUnique()
+                        .HasFilter("\"PrincipalKey\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "NormalizedUserName")
                         .IsUnique()

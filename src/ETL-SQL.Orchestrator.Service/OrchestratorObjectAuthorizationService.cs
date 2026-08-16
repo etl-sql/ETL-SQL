@@ -164,6 +164,20 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
             _ => required == OrchestratorObjectPermission.Read
         };
 
+    /// <summary>
+    /// Whether one grant is about this caller.
+    ///
+    /// <para>Compared on the principal's stable key — the value the Portal minted once and never
+    /// reissues — rather than on a row id or a name. A grant written against a row id is inherited by
+    /// whoever holds that id after a re-provision or a restore; a grant written against a name moves
+    /// when the name does. Neither failure announces itself, which is why the key is the only form.
+    /// </para>
+    ///
+    /// <para>An unresolvable key simply matches nothing, which is the fail-closed direction: an
+    /// orphaned grant grants no access rather than widening to everyone. That the grant is orphaned is
+    /// worth an administrator's attention, and is reported by the grant administration surface rather
+    /// than inferred here, where a decision has no way to say anything.</para>
+    /// </summary>
     private static bool Matches(OrchestratorCaller caller, OrchestratorObjectGrant grant) =>
         grant.PrincipalKind switch
         {

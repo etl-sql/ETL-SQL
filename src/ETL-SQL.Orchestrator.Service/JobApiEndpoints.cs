@@ -1463,7 +1463,11 @@ namespace ETL_SQL.Orchestrator.Service
             IsAdmin = caller.IsInRole("Admin"),
             TenantId = caller.TenantId,
             Roles = caller.Roles,
-            Groups = caller.GroupIds
+            // Names, not principal keys. Row-level security asks HAS_GROUP('Finance') — the name a
+            // script author wrote — while a grant resolves against the opaque key. This carried the
+            // key's predecessor, the numeric group id, so HAS_GROUP could never match in a scheduled
+            // job even though it matched in the Portal's own execution path.
+            Groups = caller.EffectiveGroupNames
         };
 
         private static bool CanAccessAdHoc(OrchestratorCaller caller, JobEntry entry) =>

@@ -1,7 +1,9 @@
 using System.Net;
 using System.Security.Claims;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Tests;
 
@@ -22,9 +24,52 @@ namespace ETL_SQL.Portal.Tests;
 /// </summary>
 [Trait("Category", "Portal")]
 [Trait("Category", "Smoke.Security")]
-public sealed class OrchestratorAssertionExchangeTests
+public sealed class OrchestratorAssertionExchangeTests : IDisposable
 {
     private const string SigningSecret = "portal-test-orchestrator-identity-signing-secret";
+
+    private readonly string scratch = Path.Combine(
+        Path.GetTempPath(), $"portal_assertion_{Guid.NewGuid():N}");
+
+    /// <summary>
+    /// A Portal database holding one user with a known stable key, plus their groups. The issuer
+    /// reads both live rather than from the token, so an assertion for a person cannot be minted
+    /// without it — which is itself one of the properties under test.
+    /// </summary>
+    private async Task<(PortalDbContext Db, string UserKey)> SeedUserAsync(
+        int userId = 42, params (string Name, string Key)[] groups)
+    {
+        Directory.CreateDirectory(scratch);
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(scratch, $"portal_{Guid.NewGuid():N}.db")}")
+            .Options;
+        var db = new PortalDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var userKey = PortalPrincipalKey.New();
+        db.Users.Add(new PortalUser
+        {
+            Id = userId,
+            UserName = "alice",
+            NormalizedUserName = "ALICE",
+            PrincipalKey = userKey
+        });
+        var groupId = 1;
+        foreach (var (name, key) in groups)
+        {
+            db.Groups.Add(new Group { Id = groupId, Name = name, PrincipalKey = key });
+            db.UserGroups.Add(new UserGroup { UserId = userId, GroupId = groupId });
+            groupId++;
+        }
+        await db.SaveChangesAsync();
+        return (db, userKey);
+    }
+
+    public void Dispose()
+    {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        try { if (Directory.Exists(scratch)) Directory.Delete(scratch, recursive: true); } catch (IOException) { }
+    }
 
     private static PortalConfig FederatingConfig()
     {
@@ -50,7 +95,9 @@ public sealed class OrchestratorAssertionExchangeTests
     [Fact]
     public async Task AnAuthenticatedCallerGetsATokenTheOrchestratorAlreadyKnowsHowToValidate()
     {
-        var issuer = new OrchestratorAssertionIssuer(FederatingConfig());
+        var (db, userKey) = await SeedUserAsync();
+        await using var owned = db;
+        var issuer = new OrchestratorAssertionIssuer(FederatingConfig(), db);
 
         var issued = await issuer.IssueForAsync(User(
             new Claim(ClaimTypes.NameIdentifier, "42"),
@@ -64,7 +111,8 @@ public sealed class OrchestratorAssertionExchangeTests
         Assert.True(OrchestratorIdentityAssertion.TryValidate(
             issued!.Assertion, SigningSecret, out var caller, out var error), error);
         Assert.Equal("user", caller!.SubjectType);
-        Assert.Equal("42", caller.SubjectId);
+        // The stable key, not the row id: a grant follows the principal, not the row.
+        Assert.Equal(userKey, caller.SubjectId);
         Assert.Contains("Viewer", caller.Roles);
         Assert.Equal(OrchestratorIdentityAssertion.Audience, issued.Audience);
 
@@ -80,20 +128,24 @@ public sealed class OrchestratorAssertionExchangeTests
         // The Portal token carries `sub`; whether it arrives mapped to NameIdentifier depends on the
         // handler's inbound claim mapping. Reading only one spelling leaves the caller unidentifiable
         // and silently unable to obtain an assertion at all.
-        var issuer = new OrchestratorAssertionIssuer(FederatingConfig());
+        var (db, userKey) = await SeedUserAsync();
+        await using var owned = db;
+        var issuer = new OrchestratorAssertionIssuer(FederatingConfig(), db);
 
         var issued = await issuer.IssueForAsync(User(new Claim("sub", "42")));
 
         Assert.NotNull(issued);
         Assert.True(OrchestratorIdentityAssertion.TryValidate(
             issued!.Assertion, SigningSecret, out var caller, out _));
-        Assert.Equal("42", caller!.SubjectId);
+        Assert.Equal(userKey, caller!.SubjectId);
     }
 
     [Fact]
     public async Task AnInteractiveUserCarriesNoScopesHoweverManyTheirTokenHolds()
     {
-        var issuer = new OrchestratorAssertionIssuer(FederatingConfig());
+        var (db, _) = await SeedUserAsync();
+        await using var owned = db;
+        var issuer = new OrchestratorAssertionIssuer(FederatingConfig(), db);
 
         // Scopes cap a *service* caller. A person's authority is their roles and grants, and letting
         // them mint themselves orchestrator.admin here would make the ceiling decorative.
@@ -125,6 +177,48 @@ public sealed class OrchestratorAssertionExchangeTests
         Assert.Equal(
             ["orchestrator.execute", "orchestrator.read"],
             caller.EffectiveScopes.OrderBy(scope => scope, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public async Task APersonWithNoStableKeyCannotBeAsserted()
+    {
+        // A row from before the key column existed. Falling back to the numeric id would silently
+        // reintroduce the identifier the key replaces, so this refuses instead — the repair is the
+        // migration's backfill, not a guess at authorization time.
+        Directory.CreateDirectory(scratch);
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(scratch, $"portal_{Guid.NewGuid():N}.db")}")
+            .Options;
+        await using var db = new PortalDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        db.Users.Add(new PortalUser
+        {
+            Id = 42, UserName = "keyless", NormalizedUserName = "KEYLESS", PrincipalKey = null
+        });
+        await db.SaveChangesAsync();
+
+        var issuer = new OrchestratorAssertionIssuer(FederatingConfig(), db);
+
+        Assert.Null(await issuer.IssueForAsync(User(new Claim(ClaimTypes.NameIdentifier, "42"))));
+    }
+
+    [Fact]
+    public async Task GroupsAreCarriedAsKeysForGrantsAndAsNamesForRowLevelSecurity()
+    {
+        var financeKey = PortalPrincipalKey.New();
+        var (db, _) = await SeedUserAsync(42, ("Finance", financeKey));
+        await using var owned = db;
+        var issuer = new OrchestratorAssertionIssuer(FederatingConfig(), db);
+
+        var issued = await issuer.IssueForAsync(User(new Claim(ClaimTypes.NameIdentifier, "42")));
+
+        Assert.True(OrchestratorIdentityAssertion.TryValidate(
+            issued!.Assertion, SigningSecret, out var caller, out _));
+
+        // A grant resolves against the key, which survives a rename; HAS_GROUP('Finance') asks for the
+        // name a script author wrote. Carrying only one silently breaks the other.
+        Assert.Equal([financeKey], caller!.GroupIds);
+        Assert.Equal(["Finance"], caller.EffectiveGroupNames);
     }
 
     [Fact]

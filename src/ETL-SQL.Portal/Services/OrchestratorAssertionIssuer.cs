@@ -89,19 +89,44 @@ public sealed class OrchestratorAssertionIssuer(
             user.FindFirstValue(TokenService.IdentityTypeClaim),
             TokenService.ServiceIdentityType,
             StringComparison.Ordinal);
-        var subjectId = isService ? serviceAccountId : id;
-        if (string.IsNullOrWhiteSpace(subjectId)) return null;
+        if (string.IsNullOrWhiteSpace(isService ? serviceAccountId : id)) return null;
 
-        // Group membership is read live rather than taken from the token: a group removed since the
-        // session began must not still be assertable, and grants resolve against these.
+        // Group membership and the subject's own key are read live rather than taken from the token:
+        // a group removed since the session began must not still be assertable, and grants resolve
+        // against these.
         string[] groupIds = [];
-        if (!isService && int.TryParse(id, out var userId) && portalDb is not null)
+        string[] groupNames = [];
+        var subjectId = serviceAccountId;
+        if (!isService)
         {
-            groupIds = await portalDb.UserGroups.AsNoTracking()
+            if (portalDb is null || !int.TryParse(id, out var userId)) return null;
+
+            // The stable key, not the row id. A row id is only stable while the row is; a grant that
+            // followed one would be inherited by whoever held the id after a re-provision or a
+            // restore. A user with no key yet cannot be asserted at all — falling back to the numeric
+            // id would silently reintroduce exactly the identifier this replaces.
+            subjectId = await portalDb.Users.AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.PrincipalKey)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(subjectId)) return null;
+
+            var groups = await portalDb.UserGroups.AsNoTracking()
                 .Where(membership => membership.UserId == userId)
-                .Select(membership => membership.GroupId.ToString())
+                .Join(portalDb.Groups, membership => membership.GroupId, group => group.Id,
+                    (_, group) => new { group.PrincipalKey, group.Name })
                 .ToArrayAsync(cancellationToken);
+
+            // A group with no key is skipped rather than substituted: it can hold no grant, and
+            // inventing an identifier for it would create one that matches something.
+            groupIds = [.. groups
+                .Select(group => group.PrincipalKey)
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Select(key => key!)];
+            groupNames = [.. groups.Select(group => group.Name).Where(name => !string.IsNullOrWhiteSpace(name))];
         }
+
+        if (string.IsNullOrWhiteSpace(subjectId)) return null;
 
         var roles = user.FindAll(ClaimTypes.Role)
             .Select(claim => claim.Value)
@@ -126,7 +151,8 @@ public sealed class OrchestratorAssertionIssuer(
                 roles,
                 groupIds,
                 tenantId,
-                scopes),
+                scopes,
+                groupNames),
             secret,
             issuedAt);
 

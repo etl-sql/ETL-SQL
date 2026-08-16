@@ -28,6 +28,22 @@ public class PortalUser : IdentityUser<int>, IVersionedEntity
     /// <summary>Normalized HTTPS issuer that assigned <see cref="ExternalSubject"/>.</summary>
     public string? ExternalIssuer { get; set; }
 
+    /// <summary>
+    /// Immutable, opaque identifier for this account, minted once and never reused.
+    ///
+    /// <para>Orchestrator grants are keyed on this rather than on <see cref="IdentityUser{TKey}.Id"/>,
+    /// because a numeric row id is only stable for as long as the row is. Renaming an account,
+    /// re-provisioning it from OIDC, or restoring the Portal database into a rebuilt environment can
+    /// all produce a different row with the same id — and a grant that followed the id would then
+    /// belong to whoever now holds it. Keying on something that is never reissued makes that
+    /// impossible rather than unlikely.</para>
+    ///
+    /// <para>Nullable only so the column could be added to an existing database and backfilled; every
+    /// account created by this build has one. A principal whose key cannot be resolved is treated as
+    /// an orphan and denied, never widened.</para>
+    /// </summary>
+    public string? PrincipalKey { get; set; } = PortalPrincipalKey.New();
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public long Version { get; set; } = 1;
 
@@ -139,6 +155,14 @@ public class SharedTenantLifecycleOperation : IVersionedEntity
 public class Group : IVersionedEntity
 {
     public int Id { get; set; }
+
+    /// <summary>
+    /// Immutable, opaque identifier for this group. See <see cref="PortalUser.PrincipalKey"/> — the
+    /// reasoning is the same, and matters more here: an AD-backed group is re-provisioned on a
+    /// schedule, so its row id is among the least stable things about it.
+    /// </summary>
+    public string? PrincipalKey { get; set; } = PortalPrincipalKey.New();
+
     public string TenantId { get; set; } = "portal-host";
     public string Name { get; set; } = "";
     public string? Description { get; set; }

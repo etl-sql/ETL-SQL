@@ -321,17 +321,24 @@ another tenant's history once two tenants shared a job name.
 
 #### Slice B — Stable principal keys
 
-- [ ] **B1 Portal migration.** Add an immutable per-row key to Portal users and groups. Grants store
+**Shipped 2026-08-16.** `PortalUser` and `Group` carry an immutable `PrincipalKey`, minted once and
+never reissued, and grants resolve against it. Closing this also fixed a defect in the same code path:
+the assertion carried numeric group ids where row-level security expects group *names*, so
+`HAS_GROUP('Finance')` matched in the Portal's own execution path and could never match in a
+scheduled job. The assertion now carries both — keys for grants, names for RLS — because they answer
+different questions and carrying one silently breaks the other.
+
+- [x] **B1 Portal migration.** Add an immutable per-row key to Portal users and groups. Grants store
       numeric IDs today, which dangle on rename, OIDC re-provisioning, or a rebuilt Portal database.
       Portal migrations are dual-provider and reject `AlterColumn` — add sibling columns rather than
       widening, and review the scaffolded Postgres migration for snapshot drift.
-- [ ] **B2 Carry and resolve stable keys.** Assertion carries them; `OrchestratorObjectAuthorizationService.Matches`
+- [x] **B2 Carry and resolve stable keys.** Assertion carries them; `OrchestratorObjectAuthorizationService.Matches`
       resolves against them.
-- [ ] **B3 Stable keys are the only form.** No production data exists, so there is no numeric-ID
+- [x] **B3 Stable keys are the only form.** No production data exists, so there is no numeric-ID
       migration to write — ship the schema keyed on stable identifiers from the start. Still define the
       unresolvable-key behaviour, since re-provisioning and restore can produce one at runtime: fail
       closed and report the orphan, never silently widen.
-- [ ] **B4 Tests.** Renaming a group preserves its grants; an OIDC user re-provisioned under the same
+- [x] **B4 Tests.** Renaming a group preserves its grants; an OIDC user re-provisioned under the same
       `sub` keeps theirs; a rebuilt Portal database does not silently transfer a grant to whoever now
       holds the old numeric ID.
 

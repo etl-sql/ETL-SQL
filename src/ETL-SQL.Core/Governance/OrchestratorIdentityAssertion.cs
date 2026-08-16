@@ -49,7 +49,8 @@ public static class OrchestratorIdentityAssertion
             caller.Roles,
             caller.GroupIds,
             caller.TenantId,
-            caller.Scopes);
+            caller.Scopes,
+            caller.GroupNames);
         var encodedPayload = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions));
         var signature = Sign(encodedPayload, signingSecret);
         return encodedPayload + "." + Base64UrlEncode(signature);
@@ -127,7 +128,8 @@ public static class OrchestratorIdentityAssertion
                 NormalizeMany(payload.Roles, 64),
                 NormalizeMany(payload.GroupIds, 128),
                 tenantId,
-                NormalizeMany(payload.Scopes, 64));
+                NormalizeMany(payload.Scopes, 64),
+                NormalizeMany(payload.GroupNames, 128));
             return true;
         }
         catch (Exception ex) when (ex is FormatException or JsonException or ArgumentException)
@@ -197,7 +199,8 @@ public static class OrchestratorIdentityAssertion
         IReadOnlyList<string> Roles,
         IReadOnlyList<string> GroupIds,
         string? TenantId = null,
-        IReadOnlyList<string>? Scopes = null);
+        IReadOnlyList<string>? Scopes = null,
+        IReadOnlyList<string>? GroupNames = null);
 }
 
 public sealed record OrchestratorCaller(
@@ -205,6 +208,11 @@ public sealed record OrchestratorCaller(
     string SubjectId,
     string DisplayName,
     IReadOnlyList<string> Roles,
+    /// <summary>
+    /// The caller's group <b>principal keys</b> — stable, opaque, and what an object grant is written
+    /// against. Not the numeric row ids these once were: a row id is only stable while the row is, so
+    /// a grant that followed one could be inherited by whoever the id later belonged to.
+    /// </summary>
     IReadOnlyList<string> GroupIds,
     string? TenantId = null,
     /// <summary>
@@ -212,10 +220,20 @@ public sealed record OrchestratorCaller(
     /// what an object ACL can authorize and widens nothing. Empty for an interactive user, whose
     /// authority is their roles and grants; a service caller with no scopes can do nothing.
     /// </summary>
-    IReadOnlyList<string>? Scopes = null)
+    IReadOnlyList<string>? Scopes = null,
+    /// <summary>
+    /// The caller's group <em>names</em>, carried alongside <see cref="GroupIds"/> because the two
+    /// answer different questions. A grant resolves against the key, which is stable across renames
+    /// and re-provisioning; row-level security asks <c>HAS_GROUP('Finance')</c>, which is the name a
+    /// script author wrote. Carrying only one means one of those silently never matches.
+    /// </summary>
+    IReadOnlyList<string>? GroupNames = null)
 {
     /// <summary>Scopes as a non-null list, so callers need not repeat the empty check.</summary>
     public IReadOnlyList<string> EffectiveScopes => Scopes ?? [];
+
+    /// <summary>Group names as a non-null list. See <see cref="GroupNames"/>.</summary>
+    public IReadOnlyList<string> EffectiveGroupNames => GroupNames ?? [];
 
     public string PrincipalKey => $"{SubjectType}:{SubjectId}";
     public string AuditActor => string.IsNullOrWhiteSpace(DisplayName)
