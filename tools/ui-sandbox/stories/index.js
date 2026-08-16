@@ -23,9 +23,11 @@ import triageBoard from './triage-board.story.js';
 import orchestratorRunOverrides from './orchestrator-run-overrides.story.js';
 import orchestratorCheckpointResume from './orchestrator-checkpoint-resume.story.js';
 import orchestratorAcl from './orchestrator-acl.story.js';
+import orchestratorAdmin from './orchestrator-admin.story.js';
 
 export const stories = [
   triageBoard,
+  orchestratorAdmin,
   orchestratorRunOverrides,
   orchestratorCheckpointResume,
   orchestratorAcl,
