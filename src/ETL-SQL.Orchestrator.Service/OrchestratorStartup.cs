@@ -137,9 +137,7 @@ namespace ETL_SQL.Orchestrator.Service
                     "Portal:Orchestrator:ApiKey) or bind the service to loopback only.");
             }
 
-            var requiresFederatedIdentity = configuration.GetValue<bool?>("Orchestrator:RequireFederatedIdentity")
-                ?? BindsToNonLoopback(configuration);
-            if (requiresFederatedIdentity)
+            if (OrchestratorAuthorizationMode.RequiresFederatedIdentity(configuration))
             {
                 var identitySecret = configuration["Orchestrator:IdentitySigningSecret"];
                 try

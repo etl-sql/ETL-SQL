@@ -141,7 +141,7 @@ The job detail panel's history table includes per-execution performance data:
 | `Orchestrator:DatabasePath` | Orchestrator `appsettings.json` / env var | Path to the Orchestrator's SQLite database. Defaults to `%LocalAppData%/ETL-SQL/etlsql.db` if unset. |
 | `Orchestrator:ApiKey` | Orchestrator `appsettings.json` / env var | Key the Orchestrator validates against incoming `X-Orchestrator-Key` headers |
 | `Orchestrator:IdentitySigningSecret` | Orchestrator protected configuration / env var | Verifies Portal caller assertions; use a distinct value of at least 32 bytes |
-| `Orchestrator:RequireFederatedIdentity` | Orchestrator `appsettings.json` / env var | Requires a valid signed caller assertion; defaults on for non-loopback listeners |
+| `Orchestrator:RequireFederatedIdentity` | Orchestrator `appsettings.json` / env var | Requires a valid signed caller assertion; defaults on for non-loopback listeners. `false` is [Solo-only legacy mode](../orchestration/orchestrator-portal.md#legacy-mode-solo-only) |
 | `Orchestrator:ScriptRoot` | Orchestrator `appsettings.json` / env var | Root directory for the script file browser exposed to the portal |
 
 ---

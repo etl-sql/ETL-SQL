@@ -102,229 +102,38 @@ proxy shape (Portal forwards every call) was rejected because it needs a Portal 
 orchestrator endpoint, forever; presenting a Portal browser JWT to the Orchestrator was rejected
 because it undoes the deliberate audience separation between the two tokens.
 
-#### Slice 0 — Tenant scoping (sequence this first)
-
-**Why first.** These are primary-key changes, and every later slice inherits the object identity they
-establish.
-
-**No production data exists (confirmed 2026-08-15), so this is a greenfield schema change.** Recreate
-tables rather than writing data-preserving migrations, and do not build back-compatibility shims for
-grants, object identity, or assertion versions. This also settles the open question in A3: bump the
-assertion to v2 outright and require both sides current, rather than accepting v1 tokens for a rolling
-upgrade window that no deployment needs.
-
-**The state this slice started from — historical, all of it now fixed. Kept because it is the
-argument for the design, not a description of the code.** `Jobs` carried `TenantId`, bound from the
-signed assertion or fixed host authority, with rebinding by another tenant refused. But `Schedules`
-and `Notifications` keyed on `Name` alone; so did the `JobSchedules`/`JobNotifications` join tables,
-`JobHistory`, `JobState` (where watermarks live), `Bundle*`, `JobHistoryDaily` — and
-`OrchestratorObjectAcls`, whose key was `(ObjectKind, ObjectName, PrincipalKind, PrincipalId)` with
-every query filtering on name alone. In a shared Orchestrator two tenants with a schedule named
-`nightly` were one row, and a grant on `JOB:daily_load` reached every tenant's `daily_load`. Managed
-Dedicated is host-fixed to one tenant so nothing collided in practice; it was a latent gap that Shared
-SaaS would have turned into a cross-tenant authorization leak.
-
-**The target design already exists and the schema does not implement it.**
-`SharedBackupSurfaceInventory` declares a partition mode and authoritative root for every one of these
-surfaces: `Schedules`, `Notifications`, `JobHistory`, `JobColumnMetrics`, `JobDataQualityFailures`,
-`JobStatementMetrics`, `JobHistoryDaily`, `JobState`, `BundleVersions`, `BundleFiles`, and
-`BundleDependencies` are all declared `DirectTenantColumn` rooted on `TenantId`, while
-`OrchestratorObjectAcls` is declared `TenantRootJoin` rooted on `ObjectId` and
-`JobSchedules`/`JobNotifications` on `JobId`. None of those columns exist. `SharedBackupSurfaceInventoryTests`
-only checks the inventory's internal consistency — duplicates, classification, required surfaces — and
-never reconciles it against a real schema, which is why the contradiction has gone unnoticed. Treat the
-inventory as the specification for this slice, and close the gap that let it drift.
-
-**Slice 0 status (2026-08-16).** Everything except 0.11 is shipped, and 0.11's answer turned out to be
-a gap rather than a confirmation — see its entry; it needs a product decision before it can be built. The identity is a
-type (`JobId`/`ScheduleId`/`NotificationId`), not a string, because a job has both a name and an id,
-both are text, and passing one where the other belongs fails silently: the write matches zero rows and
-nothing throws. That one change surfaced 97 such faults the compiler had been accepting, plus six live
-defects that no test had caught — positional `SELECT *` reads shifted by the new columns, a
-`GetRecentColumnMetricsAsync` overload that no longer implemented its interface member so the empty
-default won, `JobStatementMetrics`/history/state reads joining tenants on name, a rollup writer that
-never populated the id its reader filtered on, and a tenant-deletion path that would have deleted
-another tenant's history once two tenants shared a job name.
-
-- [x] **0.1 Surrogate object identity — do this before anything else.** *Decided 2026-08-15: surrogate
-      IDs, matching the inventory's declared `TenantRootJoin` design and the `portal-datasetacls` /
-      `portal-reportacls` precedent.* `JOB`, `SCHEDULE`, and `NOTIFICATION` gain a stable surrogate ID;
-      name becomes unique *per tenant* rather than globally, and ACLs, join tables, history, state, and
-      metrics reference the ID rather than the name. This is also what makes rename and re-creation safe,
-      and it is what closes the shared-name takeover hazard at the root instead of by ownership check.
-      Every item below references this identity.
-- [x] **0.2 Tenant-key the ACL store.** Every read, write, and delete takes the request's verified
-      `TenantContext`; no lookup resolves on object name alone. Follow the composite tenant/kind/logical
-      identity proven by `SharedTenantResourceRegistry`.
-- [x] **0.3 Inherit the shared-surface contract.** The ACL store's test class inherits
-      `SharedTenantSurfaceContractTests` (`tests/ETL-SQL.Tests/Multitenancy/`), so all six cases —
-      including the `acme`/`acme-evil` prefix trap and cross-tenant enumeration — are answered by a
-      contract rather than by reviewer judgement. `OrchestratorObjectAclSharedSurfaceTests` presents
-      the grant store as a shared surface — a logical id is a job name, the value is the principal it
-      is granted to — and routes every access through the store's own tenant-qualified resolution
-      rather than scoping anything itself, so what the contract judges is the store.
-- [x] **0.4 Tenant-key `Schedules` and `Notifications`** to match `Jobs`, with the same signed-tenant
-      binding and refuse-to-rebind behaviour, plus the `JobSchedules`/`JobNotifications` join tables per
-      the fork in 0.1.
-- [x] **0.5 Defence in depth in the decision path.** `OrchestratorObjectAuthorizationService.CanAsync`
-      compares the caller's tenant to the object's tenant itself, rather than relying on endpoint-level
-      checks alone — a grant must never be evaluated across a tenant boundary even if a future endpoint
-      forgets its filter.
-- [x] **0.6 Run history and metrics.** `JobHistory` gains `TenantId`; `JobColumnMetrics`,
-      `JobDataQualityFailures`, and `JobStatementMetrics` follow it as the inventory already declares.
-      They key on `JobHistoryId` today, which is globally unique, so they are not currently *wrong* —
-      but the declared contract is a direct tenant column, and the `/api/history` and
-      `/api/data-quality/*` endpoints must filter on tenant, not only on the ACL decision.
-- [x] **0.7 Job state and watermarks.** `JobState` keys on `(JobName, StateKey)`. Two tenants running a
-      job of the same name would share one high-water mark, which is silent data corruption rather than
-      a disclosure — the worse failure of the two, since nothing would report it.
-- [x] **0.8 Bundles.** `BundleVersions`, `BundleFiles`, and `BundleDependencies` key on bundle name and
-      version. Include `bundle://` URI resolution and the latest-version pinning path, so one tenant's
-      publish cannot become another tenant's pinned dependency.
-- [x] **0.9 Rollups and tenant deletion.** `JobHistoryDaily` keys on `(Day, JobName)`. The rollup writer
-      in `SchedulerService` and the deletion path in `SharedTenantLifecycleStore` — which currently
-      resolves a tenant's rows via `WHERE JobName IN (SELECT Name FROM Jobs WHERE TenantId = @tenant)` —
-      both break once names repeat across tenants: deletion would remove another tenant's history. Both
-      paths move to the surrogate ID from 0.1.
-- [x] **0.10 Host metrics — bind the node, do not fake per-tenant gauges.** `HostMetrics` samples
-      `MemoryLoadPercent`, `ProcessCpuPercent`, `HostCpuPercent`, and free disk per node. On a Shared node
-      running several tenants' work those gauges do not decompose by tenant, so a `TenantId` column there
-      would be a number that looks meterable and is not. Instead give `HostMetrics` and `HostMetricsDaily`
-      the node's **tenant and capacity-pool binding** — the sandbox provider already fixes a Dedicated host
-      to exactly one tenant and pool and refuses foreign placement. Dedicated capacity then attributes
-      cleanly to a tenant, and Shared capacity is honestly marked shared rather than silently misattributed.
-- [ ] **0.11 Confirm the billing signal is the usage ledger, not the host gauges.** `TenantUsageRecords`
-      already carries what metering needs per run — `TenantId`, `JobHistoryId`, `WorkloadKind`, `Status`,
-      `RowsProcessed`, `PeakMemoryBytes`, `CpuTimeSeconds`, `DurationMs`, `RecordedAtUtc`, unique per
-      tenant/run and indexed by tenant and time. Verify it is written for **every** run path — scheduled,
-      ad-hoc, sandboxed, and failed — since a metering table with gaps is worse than none. Any future
-      billing work reads this, with 0.10 supplying Dedicated capacity attribution alongside it.
-      **Checked 2026-08-15 and the answer is a gap, not a confirmation.** The only writer is
-      `SchedulerService`, in the per-attempt `finally`, guarded by `job.TenantId` being non-empty — so
-      scheduled runs and failed attempts are covered, and **ad-hoc runs are not metered at all**. An
-      ad-hoc run now records history through `LogAdHocRunStartAsync`, which has no job and therefore no
-      tenant binding to meter against, so closing this needs the ad-hoc path to carry a tenant before it
-      can write a usage row. Decide whether unattended ad-hoc execution is billable before building it —
-      if it is not, say so here and the gap becomes the specification.
-- [x] **0.12 Close the drift gap.** Add a test that reconciles `SharedBackupSurfaceInventory` against the
-      actual orchestrator and Portal schemas, so a declared `DirectTenantColumn` must exist and a declared
-      `TenantRootJoin` must have a resolvable root. Without it the inventory can drift back the moment a
-      table changes, and backup, restore, portability, and tenant-deletion evidence all rest on it.
-
-#### Slice A — Portal-issued Orchestrator assertions
-
-- [x] **A1 Exchange endpoint.** Add `POST /api/auth/orchestrator-assertion` to the Portal: an
-      authenticated caller (local/LDAP session, OIDC session, or service account) receives a
-      short-lived audience-bound assertion plus its expiry. The Orchestrator needs **no new trust
-      code** — it already validates exactly this token, which is why this shape was chosen. Reuse
-      `OrchestratorProxyService.CurrentIdentityAssertionAsync` for principal/group/tenant resolution
-      rather than duplicating it.
-- [x] **A2 Split the scope ladder.** Replace the single `orchestrator.execute` scope in
-      `ServiceAccountScopes` with four scopes mirroring the permission vocabulary that already
-      exists, so there is one ladder and not two: `orchestrator.read` (view jobs, history, metrics,
-      DQ status, stewardship) → `READ`; `orchestrator.execute` (trigger, kill, resume, variable
-      overrides) → `EXECUTE`/`OVERRIDE`; `orchestrator.publish` (create objects, `MANAGE` what you
-      own) → create + owned `MANAGE`; `orchestrator.admin` (manage anyone's grants). Migrate existing
-      accounts: today's `orchestrator.execute` becomes `read`+`execute`, never `publish`. Update
-      `ServiceAccountScopeMiddleware` and the scope checkboxes in `operations-admin.js`.
-- [x] **A3 Enforce the ceiling.** Carry scopes in the assertion payload (bump
-      `OrchestratorIdentityAssertion.CurrentVersion` to 2 and reject v1 outright — see Slice 0) and cap
-      the ACL decision in `OrchestratorObjectAuthorizationService.CanAsync` by the token's scope. A
-      `publish` account still cannot touch a job it was not granted; a `read` account cannot trigger
-      one however broad its ACL.
-- [x] **A4 `ORCHESTRATOR` connector authentication.** Mirror `PortalDataSource.EnsureAuthenticatedAsync`
-      (`api/auth/login`, cached token, re-auth 5 minutes before expiry) — that connector is the
-      precedent and the shapes should match. Accept **both** credential forms, because an OIDC-federated
-      user has no Portal password to put in a connection: `USER`/`PASSWORD` for local and LDAP
-      accounts, `CLIENT_ID`/`CLIENT_SECRET` for a Portal service account. Passwords use the canonical
-      quoted `'SECRET:name'` form. Emit the assertion header on every request in
-      `OrchestratorDataSource`, which today sends only `X-Orchestrator-Key`.
-- [x] **A5 Negative tests.** A connector with no identity is denied against a federated Orchestrator;
-      a token cannot claim a role its owner does not currently hold; a token cannot assert a foreign
-      tenant; an expired assertion is refused and re-exchanged; scope ceiling is enforced independently
-      of the ACL.
-
-#### Slice B — Stable principal keys
-
-**Shipped 2026-08-16.** `PortalUser` and `Group` carry an immutable `PrincipalKey`, minted once and
-never reissued, and grants resolve against it. Closing this also fixed a defect in the same code path:
-the assertion carried numeric group ids where row-level security expects group *names*, so
-`HAS_GROUP('Finance')` matched in the Portal's own execution path and could never match in a
-scheduled job. The assertion now carries both — keys for grants, names for RLS — because they answer
-different questions and carrying one silently breaks the other.
-
-- [x] **B1 Portal migration.** Add an immutable per-row key to Portal users and groups. Grants store
-      numeric IDs today, which dangle on rename, OIDC re-provisioning, or a rebuilt Portal database.
-      Portal migrations are dual-provider and reject `AlterColumn` — add sibling columns rather than
-      widening, and review the scaffolded Postgres migration for snapshot drift.
-- [x] **B2 Carry and resolve stable keys.** Assertion carries them; `OrchestratorObjectAuthorizationService.Matches`
-      resolves against them.
-- [x] **B3 Stable keys are the only form.** No production data exists, so there is no numeric-ID
-      migration to write — ship the schema keyed on stable identifiers from the start. Still define the
-      unresolvable-key behaviour, since re-provisioning and restore can produce one at runtime: fail
-      closed and report the orphan, never silently widen.
-- [x] **B4 Tests.** Renaming a group preserves its grants; an OIDC user re-provisioned under the same
-      `sub` keeps theirs; a rebuilt Portal database does not silently transfer a grant to whoever now
-      holds the old numeric ID.
-
-#### Slice C — Grant administration surface
-
-**Closed 2026-08-16.** Testing the surface end to end — Portal RBAC, the minted assertion, the
-Orchestrator's decision, and its answer coming back — found two defects that reading the code did not:
-the Portal staged its grant audit row without ever saving it, so no accepted change was recorded; and
-the grant API returned its enums as ordinals, so the Access panel rendered an empty chip for a grant
-that existed and the CLI printed `1:key = 2`. Both were surfaces that looked implemented and were
-never asserted. The panel's own rules are now covered by `scripts/test-orchestrator-acl-ui.mjs` in the
-JS lane, alongside the sandbox story.
-
-- [x] **C1 Portal ACL API.** Proxy routes for orchestrator object grants, gated by `orchestrator.admin`
-      plus Portal RBAC. Follow the `{alias}/acl` pattern already in `ConnectionsAdminController`.
-- [x] **C2 ACL panel** in the Orchestrator tab's detail panel, following `dataset-acl-ui.js`. Grants
-      are unmanageable through the product today — setting one requires hand-crafting a signed
-      assertion with the shared secret.
-- [x] **C3 CLI.** `etl-sql admin orchestrator grant|revoke|show` against the HTTP API, for headless
-      and scripted provisioning.
-- [x] **C4 Surface attribution.** `CreatedBy`/`ModifiedBy` are persisted and currently invisible; show
-      owner in the jobs table and detail panel.
-- [x] **C5 Tests.** Only an authorized administrator can change grants; the panel reflects the
-      Orchestrator's state rather than a Portal-side copy.
-
-#### Slice D — Ownership lifecycle and solo → team promotion
-
-**Closed 2026-08-16.** Ownership is now writable exactly once by creation and thereafter only by an
-administrator, through `PUT /api/authorization/{kind}/{name}/owner` and `POST /api/authorization/adopt`
-(`GET /api/authorization/unowned` lists what needs one). Reassignment is administrator-only rather than
-owner-only because an owner may manage their own object: an owner who could hand ownership on could
-widen access to it without anyone administering it. Two silent-adoption paths were closed on the way —
-`TrySaveJobAsync` and both catalog upserts filled in a missing `CreatedBy` with whoever saved next, so
-an edit decided accountability quietly. Closing the slice also found a shipped defect that had killed
-the whole Orchestrator page: an unescaped apostrophe in `orchestrator.html`'s inline module, which is
-a parse error, so none of the page's JavaScript ran. `scripts/test-portal-inline-scripts.mjs` now
-parses every inline script in the Portal and Player pages in the JS lane.
-
-- [x] **D1 Owner reassignment.** Admin-only endpoint plus audit. `CreatedBy` is immutable by design,
-      so today an owner who leaves makes the object `Admin`-only forever.
-- [x] **D2 Unowned objects fail closed.** A pre-existing object with no owner is `Admin`-only until
-      adopted. Fail-open was rejected: it is an authorization hole that ages badly, and attaching a
-      Portal is an administered event, not a surprise.
-- [x] **D3 Bulk adoption** in both CLI and UI, so a solo box that attaches a Portal can assign owners
-      to everything it already has.
-- [x] **D4 Promotion preflight rule.** `DeploymentPromotionPreflightService` is artifact-oriented today
-      (`DP001`–`DP008` cover backward moves, inventory, reparse points, portable artifacts, and raw
-      credentials) and says nothing about orchestrator objects. Add a finding that reports unowned
-      objects before promotion completes.
-- [x] **D5 Grant-resurrection test.** Dropping an object deletes its grants; recreating the same name
-      must not inherit them.
-
 #### Slice E — Legacy mode and the solo boundary
 
-- [ ] **E1 Make the mode visible.** `RequireFederatedIdentity` defaults to "is the bind address
+**Closed 2026-08-16.** The mode is now resolved in exactly one place
+(`OrchestratorAuthorizationMode`) that the startup guard, the request path, and `/health` all ask, so
+the three cannot drift into disagreeing about which mode the service is in. Closing E2 found the hole
+the slice was written around: in legacy mode `CanAsync` returns true for the legacy caller, so the API
+key could *write grants* — principals that resolve to nothing, restricting a caller who already passes
+every check, while looking exactly like access control. The boundary is therefore held at the service
+rather than at the CLI: the whole `/api/authorization/*` surface answers `409 Conflict` in legacy
+mode, which holds however the request arrives. The CLI side was already correct by construction (every
+verb is addressed to the Portal) and is now pinned by a test rather than by inspection.
+
+- [x] **E1 Make the mode visible.** `RequireFederatedIdentity` defaults to "is the bind address
       non-loopback", so a shared Orchestrator behind a reverse proxy on loopback silently runs with
       one root key and no warning. Report the authorization mode on the health endpoint and warn at
-      startup when a multi-user deployment is running in legacy mode.
-- [ ] **E2 Hold the boundary.** The solo admin CLI path must never create orchestrator-local
+      startup when a multi-user deployment is running in legacy mode. *`GET /health` reports
+      `authorizationMode`, `requiresCallerIdentity`, and `legacyModeOnSharedDeployment` — named only,
+      since the endpoint is unauthenticated and the evidence names listen addresses. Startup reports
+      the mode either way and warns when the deployment contradicts Solo: a non-loopback bind, a
+      configured identity-signing secret, a configured tenant, or — the reverse-proxy case
+      configuration cannot see — requests arriving with `X-Forwarded-For`/`Forwarded`, latched on
+      first sight and logged once.*
+- [x] **E2 Hold the boundary.** The solo admin CLI path must never create orchestrator-local
       principals or grants — that is the second identity model this design rejected, wearing a CLI.
-- [ ] **E3 Document the escape hatch** as Solo-only, with the promotion path in D3.
+      *Held at the Orchestrator: grants, ownership, unowned, and adopt all answer `409` in legacy
+      mode. Reads are refused too — "no grants" and "grants do not apply here" are the same empty list
+      otherwise. The Portal UI and the admin CLI name the refusal rather than reporting an outage.*
+- [x] **E3 Document the escape hatch** as Solo-only, with the promotion path in D3. *New
+      "Legacy mode (Solo only)" section in `docs/administration/orchestration/orchestrator-portal.md`:
+      what it is, how to tell which mode you are in, what it refuses, and the four-step promotion to a
+      team ending in `admin orchestrator adopt` and the `DP009` preflight finding. Settings tables in
+      the appsettings reference and the Portal orchestrator-integration guide point at it.*
 
 #### Slice F — Audit parity, documentation, and evidence
 

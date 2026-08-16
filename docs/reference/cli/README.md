@@ -54,10 +54,13 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin machine tool list`](admin-machine-tool-list.md) | List machine-local tools |
 | [`etl-sql admin machine tool set`](admin-machine-tool-set.md) | Store a machine-local tool |
 | [`etl-sql admin migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
-| [`etl-sql admin orchestrator`](admin-orchestrator.md) | Manage per-object Orchestrator grants |
+| [`etl-sql admin orchestrator`](admin-orchestrator.md) | Manage per-object Orchestrator grants and ownership |
+| [`etl-sql admin orchestrator adopt`](admin-orchestrator-adopt.md) | Assign an owner to every unowned object (administrators only) |
 | [`etl-sql admin orchestrator grant`](admin-orchestrator-grant.md) | Grant a principal a permission on an object |
 | [`etl-sql admin orchestrator revoke`](admin-orchestrator-revoke.md) | Revoke a principal's grant on an object |
+| [`etl-sql admin orchestrator set-owner`](admin-orchestrator-set-owner.md) | Reassign an object's owner (administrators only) |
 | [`etl-sql admin orchestrator show`](admin-orchestrator-show.md) | Show the grants on one Orchestrator object |
+| [`etl-sql admin orchestrator unowned`](admin-orchestrator-unowned.md) | List objects with no recorded owner — reachable only by administrators |
 | [`etl-sql admin portal-whoami`](admin-portal-whoami.md) | Resolve Portal credentials and print the identity, roles, and scopes (never a secret) |
 | [`etl-sql admin promotion`](admin-promotion.md) | Inspect and prepare deployment-profile promotions |
 | [`etl-sql admin promotion export`](admin-promotion-export.md) | Export eligible Orchestrator catalog and governance state |

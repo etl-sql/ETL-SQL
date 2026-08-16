@@ -19,7 +19,7 @@ etl-sql admin <subcommand>
 | [`ha-soak`](admin-ha-soak.md) | Prepare and collect PostgreSQL HA soak certification artifacts |
 | [`machine`](admin-machine.md) | Manage machine-local governance stores |
 | [`migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
-| [`orchestrator`](admin-orchestrator.md) | Manage per-object Orchestrator grants |
+| [`orchestrator`](admin-orchestrator.md) | Manage per-object Orchestrator grants and ownership |
 | [`portal-whoami`](admin-portal-whoami.md) | Resolve Portal credentials and print the identity, roles, and scopes (never a secret) |
 | [`promotion`](admin-promotion.md) | Inspect and prepare deployment-profile promotions |
 | [`restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |

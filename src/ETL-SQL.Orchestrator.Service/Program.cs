@@ -153,6 +153,17 @@ try
     //    and the service is bound to a non-loopback endpoint.
     OrchestratorStartup.ValidateApiKeyBinding(cfg);
 
+    // ── Authorization mode, said out loud ────────────────────────────────
+    //    Legacy mode is a supported Solo configuration and not a startup failure, but it is normally
+    //    inferred from the bind address rather than chosen, so a shared deployment can land in it
+    //    without anyone deciding to. Reported either way; warned about when the deployment does not
+    //    look Solo.
+    var authorizationMode = OrchestratorAuthorizationMode.Resolve(cfg);
+    if (authorizationMode.RequiresOperatorAttention)
+        Log.Warning("{AuthorizationMode}", authorizationMode.Describe());
+    else
+        Log.Information("{AuthorizationMode}", authorizationMode.Describe());
+
     // ── Orphan PID cleanup on startup ────────────────────────────────────
     var tracker = app.Services.GetRequiredService<ETL_SQL.Orchestrator.Execution.ChildProcessTracker>();
     tracker.CleanupOrphans();

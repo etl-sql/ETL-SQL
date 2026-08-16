@@ -1160,6 +1160,12 @@ async function renderAccessPanel(job) {
       state.error = 'You can reach this job but cannot administer its grants.';
     } else if (res.status === 404) {
       state.error = 'This job no longer exists in your tenant.';
+    } else if (res.status === 409) {
+      // Legacy mode: the Orchestrator has no principals, so grants do not apply there at all. Named
+      // rather than folded into "unavailable", because this one is a configuration an administrator
+      // can change and the generic message would send them looking for an outage instead.
+      state.error = 'This Orchestrator runs in legacy mode, where the API key is the only identity '
+        + 'and per-object grants do not apply. Configure federated identity to use them.';
     } else if (!res.ok) {
       state.error = 'Grants are unavailable right now.';
     } else {
@@ -1201,9 +1207,11 @@ async function renderAccessPanel(job) {
         await renderAccessPanel(refreshed);
         return;
       }
-      showToast(res.status === 403
-        ? 'Only an administrator can reassign an owner.'
-        : res.status === 404 ? 'This job no longer exists in your tenant.' : 'The change was refused.',
+      showToast(
+        res.status === 403 ? 'Only an administrator can reassign an owner.'
+        : res.status === 404 ? 'This job no longer exists in your tenant.'
+        : res.status === 409 ? 'This Orchestrator runs in legacy mode; ownership does not apply.'
+        : 'The change was refused.',
         true);
     } catch {
       showToast('The change could not be sent.', true);
@@ -1223,8 +1231,9 @@ async function openUnownedDialog() {
   try {
     const res = await api.unowned();
     if (!res.ok) {
-      body.innerHTML = `<div class="empty-state">${escHtml(res.status === 403
-        ? 'Only an administrator can see which objects are unowned.'
+      body.innerHTML = `<div class="empty-state">${escHtml(
+        res.status === 403 ? 'Only an administrator can see which objects are unowned.'
+        : res.status === 409 ? 'This Orchestrator runs in legacy mode, where the API key is the only identity. Ownership applies once federated identity is configured.'
         : 'The unowned-object list is unavailable right now.')}</div>`;
       return;
     }
@@ -1243,7 +1252,10 @@ async function adoptUnowned() {
   try {
     const res = await api.adopt(kind, key);
     if (!res.ok) {
-      showToast(res.status === 403 ? 'Only an administrator can adopt objects.' : 'Adoption was refused.', true);
+      showToast(
+        res.status === 403 ? 'Only an administrator can adopt objects.'
+        : res.status === 409 ? 'This Orchestrator runs in legacy mode; ownership does not apply.'
+        : 'Adoption was refused.', true);
       return;
     }
     const result = await res.json();
@@ -1259,8 +1271,9 @@ async function changeGrant(job, action) {
   try {
     const res = await action();
     if (!res.ok && res.status !== 204) {
-      showToast(res.status === 403
-        ? 'You cannot administer the grants on this job.'
+      showToast(
+        res.status === 403 ? 'You cannot administer the grants on this job.'
+        : res.status === 409 ? 'This Orchestrator runs in legacy mode; per-object grants do not apply.'
         : 'The change was refused.', true);
     }
   } catch {

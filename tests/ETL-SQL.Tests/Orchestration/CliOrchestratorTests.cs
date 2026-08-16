@@ -827,6 +827,40 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.True(ctx.TenantDryRun);
         }
 
+        /// <summary>
+        /// The solo boundary, held at the CLI: every Orchestrator grant and ownership verb is addressed
+        /// to the <b>Portal</b>, which is the single control plane for principals.
+        ///
+        /// <para>An option that pointed one of these at an Orchestrator directly would be the beginning
+        /// of a second identity model — orchestrator-local principals administered from a box with no
+        /// Portal — which is the outcome routing identity through the Portal exists to prevent. It
+        /// would also hand the Orchestrator's signing secret to every operator's machine. The
+        /// Orchestrator refuses the same surface in legacy mode
+        /// (<c>OrchestratorLegacyModeTests</c>); this pins the client side, where the mistake would be
+        /// a plausible convenience.</para>
+        /// </summary>
+        [Fact]
+        public void CliOrchestrator_GrantAndOwnershipVerbsAreAddressedToThePortalOnly()
+        {
+            var root = CliOrchestrator.BuildRootCommand(_ => Task.FromResult(0));
+            var admin = root.Subcommands.Single(command => command.Name == "admin");
+            var orchestrator = admin.Subcommands.Single(command => command.Name == "orchestrator");
+
+            Assert.Equal(
+                ["show", "grant", "revoke", "set-owner", "unowned", "adopt"],
+                orchestrator.Subcommands.Select(command => command.Name).ToArray());
+
+            foreach (var verb in orchestrator.Subcommands)
+            {
+                var options = verb.Options.Select(option => option.Name).ToArray();
+                Assert.Contains("--portal-url", options);
+                Assert.DoesNotContain(options, option =>
+                    option.Contains("orchestrator-url", StringComparison.OrdinalIgnoreCase)
+                    || option.Contains("orchestrator-key", StringComparison.OrdinalIgnoreCase)
+                    || option.Contains("signing-secret", StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
         [Theory]
         [InlineData(false, false, false, 0)]
         [InlineData(false, false, true, 0)]

@@ -228,7 +228,7 @@ Configuration details for the background runner service.
 | :--- | :--- | :--- | :--- | :--- |
 | `Orchestrator:ApiKey` | string | `""` | — | Secret token used to authenticate request calls to the scheduler API. |
 | `Orchestrator:IdentitySigningSecret` | string | `""` | — | Dedicated 32+ byte secret used to verify short-lived Portal caller assertions. Required when federated identity is enabled. |
-| `Orchestrator:RequireFederatedIdentity` | boolean | network-dependent | — | Requires a signed caller assertion in addition to the API key. Defaults to `true` for non-loopback listeners. |
+| `Orchestrator:RequireFederatedIdentity` | boolean | network-dependent | — | Requires a signed caller assertion in addition to the API key. Defaults to `true` for non-loopback listeners. `false` is Solo-only legacy mode: no principals, no grants, and the API key is a root key over the catalog. The mode is reported at startup and on `GET /health`. |
 | `Orchestrator:PreviousApiKeys` | array | `[]` | — | Rolled api keys accepted temporarily during secret rotation phases. |
 | `Orchestrator:MaxPreviousApiKeys` | integer | `1` | — | Maximum number of previous API keys accepted during a temporary rotation overlap. |
 | `Orchestrator:ScriptRoot` | string | `""` | — | Path target folder for orchestrator scripts and scheduling plans. |

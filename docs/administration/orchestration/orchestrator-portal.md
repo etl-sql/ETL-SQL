@@ -8,7 +8,7 @@ The management portal is hosted inside the Portal (`ETL-SQL-Portal`). The Orches
 
 ## Configuring Service and Caller Authentication
 
-For production, generate two independent secrets: an API key and an identity-signing secret of at least 32 bytes. Configure the same value for each secret on both services. A network-reachable Orchestrator requires caller assertions by default; `RequireFederatedIdentity=false` is a loopback-only compatibility escape hatch and must not be used for a shared service.
+For production, generate two independent secrets: an API key and an identity-signing secret of at least 32 bytes. Configure the same value for each secret on both services. A network-reachable Orchestrator requires caller assertions by default; `RequireFederatedIdentity=false` is a Solo-only escape hatch, described under [Legacy mode](#legacy-mode-solo-only), and must not be used for a shared service.
 
 **On the Orchestrator Service** (`appsettings.json` or environment variable):
 
@@ -91,6 +91,41 @@ Names are re-usable and identity is not: dropping an object deletes its grants, 
 Owners and administrators can grant `READ`, `EXECUTE`, `OVERRIDE`, or `MANAGE` to a Portal user, group, or service account. `MANAGE` includes all lower permissions; `OVERRIDE` includes execute/read; `EXECUTE` includes read. Variable-overridden triggers require `OVERRIDE`, because an override may widen the job's data scope. Plain triggers and named-checkpoint resumes require `EXECUTE`.
 
 The management API uses `/api/authorization/{kind}/{name}` to list grants and `/api/authorization/{kind}/{name}/{principalKind}/{principalId}` to set or revoke them. Valid kinds are `JOB`, `SCHEDULE`, and `NOTIFICATION`; valid principal kinds are `USER`, `GROUP`, and `SERVICE`. Job history and data-quality APIs filter rows using the same `READ` decision. Ad-hoc run status and cancellation are visible only to that run's submitting principal or an administrator. Kinds, principal kinds, and permissions are named in responses exactly as they are accepted in requests. The Portal proxies the same routes under `/api/orchestrator/authorization/...` for the Access panel and for `etl-sql admin orchestrator show|grant|revoke`, so no operator needs the Orchestrator's signing secret on their machine.
+
+## Legacy mode (Solo only)
+
+`Orchestrator:RequireFederatedIdentity=false` runs the service in **legacy mode**: requests are authenticated by the shared API key and nothing else. There are no principals, so there are no grants and no ownership decisions — the API key is a root key over every job, schedule, and notification on the host. This is supported for a **Solo** deployment: one person, one box, no Portal. Team and above require a Portal, because the Portal is where principals, groups, and audit live.
+
+The setting is usually not set at all. When it is absent, the service infers it: a non-loopback listener requires caller assertions and a loopback listener does not. That guess is wrong in one common case — a shared Orchestrator behind a reverse proxy binds loopback and so looks exactly like a laptop.
+
+### Which mode am I in?
+
+Two places answer, without guessing from the configuration:
+
+- **The startup log** names the mode on every start. If the deployment does not look Solo — a non-loopback listener, a configured identity-signing secret, a configured tenant, or requests arriving with `X-Forwarded-For`/`Forwarded` — the line is a warning that names the specific contradiction and the way out.
+- **`GET /health`** reports `authorizationMode` (`federated` or `legacy`), `requiresCallerIdentity`, and `legacyModeOnSharedDeployment`. The endpoint is unauthenticated, so it names the mode and no more; the evidence behind the warning stays in the log.
+
+### What legacy mode refuses
+
+The entire per-object authorization surface — `/api/authorization/...` for grants, ownership, unowned objects, and adoption — answers `409 Conflict` while the service is in legacy mode, in the UI, the CLI, and direct API calls alike. A grant written there would name a principal that exists nowhere and restrict a caller that already passes every check, while looking exactly like access control. Everything else — creating, editing, running, killing, and inspecting jobs — works normally.
+
+### Promoting a Solo host to a team
+
+Legacy mode is reversible, and the objects the host already has do not carry an owner. Take them in this order:
+
+1. Stand up a Portal and pair it — same `ApiKey` and same `IdentitySigningSecret` on both services (see [Configuring Service and Caller Authentication](#configuring-service-and-caller-authentication)).
+2. Set `Orchestrator:RequireFederatedIdentity=true` on the Orchestrator and restart it. Confirm `GET /health` reports `federated`.
+3. Everything created before this point has no owner, so it is administrator-only until one is assigned. Assign one to all of it at once:
+
+   ```powershell
+   etl-sql admin orchestrator unowned --portal-url https://portal.example.com
+   etl-sql admin orchestrator adopt --portal-url https://portal.example.com --principal-kind USER --principal <stable-key>
+   ```
+
+   The Orchestrator tab's **Unowned objects** button does the same thing from the browser. Adoption is audited per object, not per batch, so "who became accountable for this, and when" is answerable afterwards.
+4. Grant the rest of the team what they need with `etl-sql admin orchestrator grant`, or from the job detail panel's **Access** tab.
+
+`etl-sql admin promotion preflight --to-profile Team` reports finding **DP009** for orchestrator objects that still have no owner, so a Solo → Team promotion catches step 3 before cutover rather than after — see [Deployment promotion](../platform/deployment-promotion.md).
 
 ## Dashboard Features
 
@@ -186,7 +221,7 @@ The Orchestrator Service exposes three unauthenticated operations endpoints:
 
 | Endpoint | Format | Purpose |
 | :--- | :--- | :--- |
-| `GET /health` | JSON | Liveness probe for supervisors and load balancers. |
+| `GET /health` | JSON | Liveness probe for supervisors and load balancers. Also reports `authorizationMode` (`federated` or `legacy`), `requiresCallerIdentity`, and `legacyModeOnSharedDeployment` — see [Legacy mode](#legacy-mode-solo-only). |
 | `GET /metrics` | JSON | Existing Portal/UI metrics payload with active jobs, queued jobs, maximum jobs, available slots, and active child processes. |
 | `GET /metrics/prometheus` | Prometheus text | Scrape-friendly gauges for the same non-secret scheduler and process counts. |
 

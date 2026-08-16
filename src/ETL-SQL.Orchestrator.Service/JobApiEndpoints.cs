@@ -69,8 +69,21 @@ namespace ETL_SQL.Orchestrator.Service
         public static void MapJobApi(this IEndpointRouteBuilder app)
         {
             // ── Health & Metrics (no auth required — liveness/readiness probes) ─
-            app.MapGet("/health", () => Results.Ok(new { Status = "Healthy" }))
-               .WithName("health");
+            // The authorization mode is reported here because it is otherwise invisible: it is usually
+            // inferred from the bind address rather than configured, and a service that guessed wrong
+            // still answers every request happily. Named only — the evidence behind the warning names
+            // listen addresses, which an unauthenticated probe has no business reading.
+            app.MapGet("/health", (IConfiguration cfg) =>
+            {
+                var authorization = OrchestratorAuthorizationMode.Resolve(cfg);
+                return Results.Ok(new
+                {
+                    Status = "Healthy",
+                    AuthorizationMode = authorization.Name,
+                    RequiresCallerIdentity = !authorization.IsLegacy,
+                    LegacyModeOnSharedDeployment = authorization.RequiresOperatorAttention
+                });
+            }).WithName("health");
 
             app.MapGet("/metrics", (SchedulerService scheduler, ChildProcessTracker tracker) =>
             {
@@ -1124,6 +1137,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (GrantModelUnavailable(cfg) is { } unavailable) return unavailable;
                 if (!TryParseObjectKind(kind, out var objectKind))
                     return Results.BadRequest(new { Error = "Kind must be JOB, SCHEDULE, or NOTIFICATION." });
                 var objectName = Uri.UnescapeDataString(name);
@@ -1151,6 +1165,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (GrantModelUnavailable(cfg) is { } unavailable) return unavailable;
                 if (!TryParseObjectKind(kind, out var objectKind)
                     || !Enum.TryParse<OrchestratorPrincipalKind>(principalKind, true, out var parsedPrincipalKind)
                     || !Enum.TryParse<OrchestratorObjectPermission>(request.Permission, true, out var permission))
@@ -1191,6 +1206,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (GrantModelUnavailable(cfg) is { } unavailable) return unavailable;
                 if (!TryParseObjectKind(kind, out var objectKind)
                     || !Enum.TryParse<OrchestratorPrincipalKind>(principalKind, true, out var parsedPrincipalKind))
                     return Results.BadRequest(new { Error = "Kind or principal kind is invalid." });
@@ -1235,6 +1251,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (GrantModelUnavailable(cfg) is { } unavailable) return unavailable;
                 if (!IsObjectAdministrator(RequestCaller(ctx)))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -1253,6 +1270,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (GrantModelUnavailable(cfg) is { } unavailable) return unavailable;
                 if (!TryParseObjectKind(kind, out var objectKind))
                     return Results.BadRequest(new { Error = "Kind must be JOB, SCHEDULE, or NOTIFICATION." });
                 if (!TryParseOwner(request?.PrincipalKind, request?.PrincipalId, out var ownerKey, out var error))
@@ -1287,6 +1305,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (GrantModelUnavailable(cfg) is { } unavailable) return unavailable;
                 if (!IsObjectAdministrator(RequestCaller(ctx)))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryParseOwner(request?.PrincipalKind, request?.PrincipalId, out var ownerKey, out var error))
@@ -1730,6 +1749,32 @@ namespace ETL_SQL.Orchestrator.Service
         }
 
         /// <summary>
+        /// Refuses the whole per-object authorization surface while the service runs in legacy mode,
+        /// where the API key is the only identity there is.
+        ///
+        /// <para>This is the solo boundary, held at the service rather than at any one client. In
+        /// legacy mode a grant names a principal that does not exist here and cannot be resolved by
+        /// anything — writing one would start a second identity model inside the Orchestrator, which is
+        /// the outcome the Portal-as-control-plane design exists to prevent. It would also be worse
+        /// than useless: the legacy caller already passes every object decision, so the grant would
+        /// restrict nothing while looking exactly like access control.</para>
+        ///
+        /// <para>Reads are refused too. "No grants" and "grants do not apply here" are the same empty
+        /// list to a reader, and only the first is a fact about the objects.</para>
+        /// </summary>
+        private static IResult? GrantModelUnavailable(IConfiguration cfg) =>
+            OrchestratorAuthorizationMode.IsLegacy(cfg)
+                ? Results.Conflict(new
+                {
+                    Error = "Per-object grants and ownership require federated identity. This "
+                        + "Orchestrator is running in legacy mode, where the API key is the only "
+                        + "identity and no principals exist. Pair a Portal, configure "
+                        + "Orchestrator:IdentitySigningSecret, and set "
+                        + "Orchestrator:RequireFederatedIdentity=true."
+                })
+                : null;
+
+        /// <summary>
         /// Builds the stored owner key from a principal kind and id.
         ///
         /// <para>Only <c>USER</c> and <c>SERVICE</c> may own. A group cannot: ownership answers "who is
@@ -1809,13 +1854,23 @@ namespace ETL_SQL.Orchestrator.Service
             return !FederatedIdentityAccepted(ctx, cfg);
         }
 
+        private static ILogger<Program>? LegacyModeProxyLogger(HttpContext ctx) =>
+            ctx.RequestServices?.GetService<ILogger<Program>>();
+
         internal static bool FederatedIdentityAccepted(HttpContext ctx, IConfiguration cfg)
         {
             var signingSecret = cfg["Orchestrator:IdentitySigningSecret"];
-            var required = cfg.GetValue<bool?>("Orchestrator:RequireFederatedIdentity")
-                ?? OrchestratorStartup.BindsToNonLoopback(cfg);
-            if (!required)
+            if (!OrchestratorAuthorizationMode.RequiresFederatedIdentity(cfg))
             {
+                // The one place a legacy-mode request is recognised as such, and so the place to notice
+                // that it came through a proxy — which is how a "loopback, therefore Solo" guess turns
+                // out to have a whole organization behind it.
+                if (OrchestratorAuthorizationMode.NoteProxiedRequest(ctx))
+                {
+                    LegacyModeProxyLogger(ctx)?.LogWarning(
+                        "{Message}", OrchestratorAuthorizationMode.Resolve(cfg).Describe());
+                }
+
                 ctx.Items[CallerItemKey] = new OrchestratorCaller(
                     "service", "legacy-api-key", "Legacy API-key client", [], []);
                 return true;

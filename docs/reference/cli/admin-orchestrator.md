@@ -1,6 +1,6 @@
 # etl-sql admin orchestrator
 
-Manage per-object Orchestrator grants
+Manage per-object Orchestrator grants and ownership
 
 ## Synopsis
 
@@ -12,9 +12,12 @@ etl-sql admin orchestrator <subcommand>
 
 | Subcommand | Description |
 | :--- | :--- |
+| [`adopt`](admin-orchestrator-adopt.md) | Assign an owner to every unowned object (administrators only) |
 | [`grant`](admin-orchestrator-grant.md) | Grant a principal a permission on an object |
 | [`revoke`](admin-orchestrator-revoke.md) | Revoke a principal's grant on an object |
+| [`set-owner`](admin-orchestrator-set-owner.md) | Reassign an object's owner (administrators only) |
 | [`show`](admin-orchestrator-show.md) | Show the grants on one Orchestrator object |
+| [`unowned`](admin-orchestrator-unowned.md) | List objects with no recorded owner — reachable only by administrators |
 
 ## References
 
