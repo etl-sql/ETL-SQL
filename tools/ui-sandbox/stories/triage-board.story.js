@@ -131,7 +131,7 @@ export default {
     { id: 'truncated', label: 'History clipped' }
   ],
   async mount(stage, fixtureId, ctx) {
-    const state = { expanded: new Set([0, 2]), selected: new Set(), openRuns: new Set([14355]), details: runDetails };
+    const state = { expanded: new Set(), selected: new Set(), openRuns: new Set(), details: runDetails };
     let current = { busy: board, quiet: quietBoard, truncated: truncatedBoard }[fixtureId] || board;
 
     stage.innerHTML = `

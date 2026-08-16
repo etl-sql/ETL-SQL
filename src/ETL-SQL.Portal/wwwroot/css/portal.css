@@ -1414,6 +1414,24 @@ body.theme-midnight select, body.theme-midnight .form-select, body.theme-midnigh
 .triage-incident-error {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .88em; font-weight: 550;
 }
+.triage-incident-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  color: var(--portal-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.15s ease;
+}
+.triage-incident-toggle:hover .triage-incident-chevron {
+  color: var(--portal-accent);
+}
+.triage-incident.expanded .triage-incident-chevron {
+  transform: rotate(90deg);
+  color: var(--portal-accent);
+}
 .triage-incident-when { flex-shrink: 0; font-size: .78em; color: var(--portal-muted); }
 .triage-incident-jobs { padding: 0 14px 10px 38px; display: flex; flex-wrap: wrap; gap: 6px; }
 .triage-job-chip {
