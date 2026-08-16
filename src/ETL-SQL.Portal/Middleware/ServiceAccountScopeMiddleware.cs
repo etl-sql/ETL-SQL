@@ -93,6 +93,16 @@ public sealed class ServiceAccountScopeMiddleware(RequestDelegate next)
         if (path.StartsWith("/api/orchestrator/service/", StringComparison.OrdinalIgnoreCase))
             return [ServiceAccountScopes.OrchestratorAdmin];
 
+        // Grants, in every direction including reading them: listing an object's grants requires
+        // MANAGE on it, so this is administration wearing a GET and does not belong on the read rung.
+        // Publish is accepted alongside admin because publish means "MANAGE what you own" — ownership
+        // is enforced beneath, in the Orchestrator, so a publish token reaches only its own objects.
+        // Named explicitly rather than left to fall through: PUT and DELETE would otherwise land on
+        // publish by way of the job-definition rule below, which would be the right rung for the wrong
+        // reason and would silently change if that rule ever did.
+        if (path.StartsWith("/api/orchestrator/authorization/", StringComparison.OrdinalIgnoreCase))
+            return [ServiceAccountScopes.OrchestratorPublish, ServiceAccountScopes.OrchestratorAdmin];
+
         if (HttpMethods.IsGet(method) || HttpMethods.IsHead(method))
             return [ServiceAccountScopes.OrchestratorRead];
 

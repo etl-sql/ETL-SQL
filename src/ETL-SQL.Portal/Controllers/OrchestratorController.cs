@@ -308,26 +308,24 @@ public class OrchestratorController(
         RelayAsync(() => proxy.GetObjectGrantsAsync(kind, name, ct));
 
     [HttpPut("authorization/{kind}/{name}/{principalKind}/{principalId}")]
-    public async Task<IActionResult> SetGrant(
+    public Task<IActionResult> SetGrant(
         string kind, string name, string principalKind, string principalId,
-        [FromBody] SetGrantRequest request, CancellationToken ct)
-    {
-        // Audited on the Portal side as well as the Orchestrator's own security event: this is where
-        // a human clicked, and the two records answer different questions during an incident.
-        audit.Stage(CurrentUserId, "ORCHESTRATOR_GRANT", $"Orchestrator{kind}", name,
-            $"{principalKind}:{principalId}={request?.Permission}");
-        return await RelayAsync(() => proxy.SetObjectGrantAsync(
-            kind, name, principalKind, principalId, request?.Permission ?? "", ct));
-    }
+        [FromBody] SetGrantRequest request, CancellationToken ct) =>
+        RelayAsync(
+            () => proxy.SetObjectGrantAsync(
+                kind, name, principalKind, principalId, request?.Permission ?? "", ct),
+            // Audited on the Portal side as well as the Orchestrator's own security event: this is
+            // where a human clicked, and the two records answer different questions during an incident.
+            () => audit.LogAsync(CurrentUserId, "ORCHESTRATOR_GRANT", $"Orchestrator{kind}", name,
+                $"{principalKind}:{principalId}={request?.Permission}"));
 
     [HttpDelete("authorization/{kind}/{name}/{principalKind}/{principalId}")]
-    public async Task<IActionResult> RevokeGrant(
-        string kind, string name, string principalKind, string principalId, CancellationToken ct)
-    {
-        audit.Stage(CurrentUserId, "ORCHESTRATOR_REVOKE", $"Orchestrator{kind}", name,
-            $"{principalKind}:{principalId}");
-        return await RelayAsync(() => proxy.DeleteObjectGrantAsync(kind, name, principalKind, principalId, ct));
-    }
+    public Task<IActionResult> RevokeGrant(
+        string kind, string name, string principalKind, string principalId, CancellationToken ct) =>
+        RelayAsync(
+            () => proxy.DeleteObjectGrantAsync(kind, name, principalKind, principalId, ct),
+            () => audit.LogAsync(CurrentUserId, "ORCHESTRATOR_REVOKE", $"Orchestrator{kind}", name,
+                $"{principalKind}:{principalId}"));
 
     /// <summary>
     /// Forwards one grant call and returns the Orchestrator's own answer.
@@ -336,14 +334,24 @@ public class OrchestratorController(
     /// draws are load-bearing: 403 means the caller may not manage this object, 404 means it does not
     /// exist <em>in their tenant</em>, and collapsing either into a generic failure would lose the
     /// only signal that tells an administrator which problem they have.</para>
+    ///
+    /// <para><paramref name="auditSuccess"/> runs only when the Orchestrator accepted the change, and
+    /// writes rather than stages it. Staging binds an audit row to the mutation's own unit of work,
+    /// which is the right shape when both live in the Portal's database — but the mutation here
+    /// happens in the Orchestrator's store over HTTP, so there is no shared transaction to commit
+    /// with, and a staged row that nothing saves is simply discarded when the request scope ends.
+    /// Recording only accepted changes follows the trigger and kill paths: a refused grant must not
+    /// leave a trail that reads as though access had been widened.</para>
     /// </summary>
-    private async Task<IActionResult> RelayAsync(Func<Task<HttpResponseMessage?>> send)
+    private async Task<IActionResult> RelayAsync(
+        Func<Task<HttpResponseMessage?>> send, Func<Task>? auditSuccess = null)
     {
         using var response = await send();
         if (response is null)
             return StatusCode(503, new { Error = "Orchestrator service unavailable." });
 
         var body = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode && auditSuccess is not null) await auditSuccess();
         if (string.IsNullOrWhiteSpace(body)) return StatusCode((int)response.StatusCode);
 
         Response.StatusCode = (int)response.StatusCode;

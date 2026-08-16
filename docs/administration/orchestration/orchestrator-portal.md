@@ -86,7 +86,7 @@ Assign the `OrchestratorManager` role to operations staff who need to manage job
 
 Owners and administrators can grant `READ`, `EXECUTE`, `OVERRIDE`, or `MANAGE` to a Portal user, group, or service account. `MANAGE` includes all lower permissions; `OVERRIDE` includes execute/read; `EXECUTE` includes read. Variable-overridden triggers require `OVERRIDE`, because an override may widen the job's data scope. Plain triggers and named-checkpoint resumes require `EXECUTE`.
 
-The management API uses `/api/authorization/{kind}/{name}` to list grants and `/api/authorization/{kind}/{name}/{principalKind}/{principalId}` to set or revoke them. Valid kinds are `JOB`, `SCHEDULE`, and `NOTIFICATION`; valid principal kinds are `USER`, `GROUP`, and `SERVICE`. Job history and data-quality APIs filter rows using the same `READ` decision. Ad-hoc run status and cancellation are visible only to that run's submitting principal or an administrator.
+The management API uses `/api/authorization/{kind}/{name}` to list grants and `/api/authorization/{kind}/{name}/{principalKind}/{principalId}` to set or revoke them. Valid kinds are `JOB`, `SCHEDULE`, and `NOTIFICATION`; valid principal kinds are `USER`, `GROUP`, and `SERVICE`. Job history and data-quality APIs filter rows using the same `READ` decision. Ad-hoc run status and cancellation are visible only to that run's submitting principal or an administrator. Kinds, principal kinds, and permissions are named in responses exactly as they are accepted in requests. The Portal proxies the same routes under `/api/orchestrator/authorization/...` for the Access panel and for `etl-sql admin orchestrator show|grant|revoke`, so no operator needs the Orchestrator's signing secret on their machine.
 
 ## Dashboard Features
 
@@ -96,7 +96,7 @@ Navigate to the Orchestrator tab in the portal after logging in with an eligible
 
 **24-hour Gantt chart** — a timeline from 00:00 to 23:59 showing each job as a horizontal bar at its scheduled firing time, sized by historical average duration. Blue bars are enabled jobs; grey bars are disabled. Click any bar to open the job detail panel.
 
-**Jobs table** — all jobs including disabled ones (disabled rows are visually dimmed). Columns: Name, Schedule, Status, Last Run, Next Run, Actions. Actions per row:
+**Jobs table** — all jobs including disabled ones (disabled rows are visually dimmed). Columns: Name, Owner, Schedule, Status, Last Run, Next Run, Actions. The owner is the principal that created the job; a job with no recorded owner is reachable only by an administrator until an owner is assigned. Actions per row:
 
 | Action | What it does |
 | :--- | :--- |
@@ -110,6 +110,7 @@ Navigate to the Orchestrator tab in the portal after logging in with an eligible
 - Script content as of the last save (read-only, monospace)
 - Duration trend sparkline (last 30 runs)
 - History table: last 20 executions with Status, Start Time, Duration, Rows Processed, Peak RAM, CPU Time, and any error message
+- **Access** — the job's owner and its grants, with add and revoke. Grants are read from the Orchestrator on every open and never cached. Listing them requires `MANAGE` on the job, so a job you can reach but not administer shows the refusal rather than an empty table. Principals are named by their stable key rather than a username, because a name can be reassigned and a grant that followed one would move with it.
 
 **Create Job modal** — opens via the **New Job** button. Fields:
 - Job name

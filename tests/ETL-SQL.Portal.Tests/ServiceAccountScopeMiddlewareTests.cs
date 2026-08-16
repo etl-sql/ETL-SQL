@@ -22,6 +22,12 @@ public sealed class ServiceAccountScopeMiddlewareTests
     [InlineData("POST", "/api/orchestrator/runs/42/resume", ServiceAccountScopes.OrchestratorExecute)]
     [InlineData("GET", "/api/orchestrator/jobs", ServiceAccountScopes.OrchestratorRead)]
     [InlineData("POST", "/api/orchestrator/service/stop", ServiceAccountScopes.OrchestratorAdmin)]
+    // Grants are administration whichever verb they arrive under — including GET, since listing an
+    // object's grants requires MANAGE on it. Publish reaches them for objects it owns; admin for any.
+    [InlineData("GET", "/api/orchestrator/authorization/JOB/nightly", ServiceAccountScopes.OrchestratorAdmin)]
+    [InlineData("GET", "/api/orchestrator/authorization/JOB/nightly", ServiceAccountScopes.OrchestratorPublish)]
+    [InlineData("PUT", "/api/orchestrator/authorization/JOB/nightly/GROUP/key", ServiceAccountScopes.OrchestratorAdmin)]
+    [InlineData("DELETE", "/api/orchestrator/authorization/JOB/nightly/GROUP/key", ServiceAccountScopes.OrchestratorAdmin)]
     [InlineData("GET", "/api/folders", ServiceAccountScopes.PortalRead)]
     public async Task RequiredScope_AllowsSupportedOperation(string method, string path, string scope)
     {
@@ -50,6 +56,27 @@ public sealed class ServiceAccountScopeMiddlewareTests
 
         Assert.Equal(StatusCodes.Status403Forbidden, read.Response.StatusCode);
         Assert.Equal(StatusCodes.Status403Forbidden, admin.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/orchestrator/authorization/JOB/nightly")]
+    [InlineData("PUT", "/api/orchestrator/authorization/JOB/nightly/GROUP/key")]
+    [InlineData("DELETE", "/api/orchestrator/authorization/JOB/nightly/GROUP/key")]
+    public async Task ReadOrExecuteScope_DoesNotReachGrantAdministration(string method, string path)
+    {
+        // A monitoring account is issued the read rung precisely so it can look without changing
+        // anything. Grants are the record of who may change things, and reading them requires MANAGE
+        // on the object — so the refusal belongs here, naming the scope actually needed, rather than
+        // arriving later as an unexplained 403 from the Orchestrator.
+        var middleware = new ServiceAccountScopeMiddleware(_ => Task.CompletedTask);
+        var read = Context(method, path, ServiceAccountScopes.OrchestratorRead);
+        var execute = Context(method, path, ServiceAccountScopes.OrchestratorExecute);
+
+        await middleware.InvokeAsync(read);
+        await middleware.InvokeAsync(execute);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, read.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status403Forbidden, execute.Response.StatusCode);
     }
 
     private static DefaultHttpContext Context(string method, string path, string scope)

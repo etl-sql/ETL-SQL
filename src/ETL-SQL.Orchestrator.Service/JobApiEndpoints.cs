@@ -1133,7 +1133,8 @@ namespace ETL_SQL.Orchestrator.Service
                         RequestCaller(ctx), objectKind, owner.Id!, owner.TenantId,
                         OrchestratorObjectPermission.Manage, owner.Owner, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
-                return Results.Ok(await grants.GetObjectGrantsAsync(owner.Id!, ctx.RequestAborted));
+                var stored = await grants.GetObjectGrantsAsync(owner.Id!, ctx.RequestAborted);
+                return Results.Ok(stored.Select(ObjectGrantResponse.From).ToList());
             }).WithName("getOrchestratorObjectGrants");
 
             app.MapPut("/api/authorization/{kind}/{name}/{principalKind}/{principalId}", async (
@@ -1174,7 +1175,7 @@ namespace ETL_SQL.Orchestrator.Service
                     permission, caller.PrincipalKey);
                 await grants.SaveObjectGrantAsync(grant, ctx.RequestAborted);
                 EmitObjectAuthorizationAudit(caller.AuditActor, grant, objectName, "GRANT", ctx.TraceIdentifier);
-                return Results.Ok(grant);
+                return Results.Ok(ObjectGrantResponse.From(grant));
             }).WithName("setOrchestratorObjectGrant");
 
             app.MapDelete("/api/authorization/{kind}/{name}/{principalKind}/{principalId}", async (
@@ -2010,6 +2011,35 @@ namespace ETL_SQL.Orchestrator.Service
         );
 
         private sealed record SetObjectGrantRequest(string Permission);
+
+        /// <summary>
+        /// One grant, in the vocabulary the API accepts on the way in.
+        ///
+        /// <para>The stored record carries enums, which serialize as their ordinals — so a caller who
+        /// sets <c>EXECUTE</c> reads back <c>1</c>, and every consumer has to know the declaration
+        /// order of an enum it cannot see to make sense of the answer. Both consumers assumed the
+        /// names: the CLI printed the numbers, and the Portal's Access panel called
+        /// <c>toUpperCase</c> on one and rendered nothing at all. Naming them here makes the response
+        /// round-trip into the request that produced it.</para>
+        /// </summary>
+        private sealed record ObjectGrantResponse(
+            string ObjectId,
+            string ObjectKind,
+            string PrincipalKind,
+            string PrincipalId,
+            string Permission,
+            string GrantedBy,
+            long Version)
+        {
+            public static ObjectGrantResponse From(OrchestratorObjectGrant grant) => new(
+                grant.ObjectId,
+                grant.ObjectKind.ToString().ToUpperInvariant(),
+                grant.PrincipalKind.ToString().ToUpperInvariant(),
+                grant.PrincipalId,
+                grant.Permission.ToString().ToUpperInvariant(),
+                grant.GrantedBy,
+                grant.Version);
+        }
 
         private sealed record DispatchNotificationApiRequest(
             string? SourceKind = null,

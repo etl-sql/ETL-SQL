@@ -344,6 +344,14 @@ different questions and carrying one silently breaks the other.
 
 #### Slice C — Grant administration surface
 
+**Closed 2026-08-16.** Testing the surface end to end — Portal RBAC, the minted assertion, the
+Orchestrator's decision, and its answer coming back — found two defects that reading the code did not:
+the Portal staged its grant audit row without ever saving it, so no accepted change was recorded; and
+the grant API returned its enums as ordinals, so the Access panel rendered an empty chip for a grant
+that existed and the CLI printed `1:key = 2`. Both were surfaces that looked implemented and were
+never asserted. The panel's own rules are now covered by `scripts/test-orchestrator-acl-ui.mjs` in the
+JS lane, alongside the sandbox story.
+
 - [x] **C1 Portal ACL API.** Proxy routes for orchestrator object grants, gated by `orchestrator.admin`
       plus Portal RBAC. Follow the `{alias}/acl` pattern already in `ConnectionsAdminController`.
 - [x] **C2 ACL panel** in the Orchestrator tab's detail panel, following `dataset-acl-ui.js`. Grants
