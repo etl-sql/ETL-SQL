@@ -188,15 +188,16 @@ grants, object identity, or assertion versions. This also settles the open quest
 assertion to v2 outright and require both sides current, rather than accepting v1 tokens for a rolling
 upgrade window that no deployment needs.
 
-**Current state, verified 2026-08-15.** `Jobs` carries `TenantId`, bound from the signed assertion or
-fixed host authority, and rebinding by another tenant is refused. But `Schedules` and `Notifications`
-key on `Name` alone; so do the `JobSchedules`/`JobNotifications` join tables, `JobHistory`, `JobState`
-(where watermarks live), `Bundle*`, `JobHistoryDaily` — and `OrchestratorObjectAcls`, whose key is
-`(ObjectKind, ObjectName, PrincipalKind, PrincipalId)` with every query filtering on name alone. In a
-shared Orchestrator two tenants with a schedule named `nightly` are one row, and a grant on
-`JOB:daily_load` reaches every tenant's `daily_load`. Managed Dedicated is host-fixed to one tenant so
-nothing collides today; this is a latent gap that Shared SaaS would turn into a cross-tenant
-authorization leak.
+**The state this slice started from — historical, all of it now fixed. Kept because it is the
+argument for the design, not a description of the code.** `Jobs` carried `TenantId`, bound from the
+signed assertion or fixed host authority, with rebinding by another tenant refused. But `Schedules`
+and `Notifications` keyed on `Name` alone; so did the `JobSchedules`/`JobNotifications` join tables,
+`JobHistory`, `JobState` (where watermarks live), `Bundle*`, `JobHistoryDaily` — and
+`OrchestratorObjectAcls`, whose key was `(ObjectKind, ObjectName, PrincipalKind, PrincipalId)` with
+every query filtering on name alone. In a shared Orchestrator two tenants with a schedule named
+`nightly` were one row, and a grant on `JOB:daily_load` reached every tenant's `daily_load`. Managed
+Dedicated is host-fixed to one tenant so nothing collided in practice; it was a latent gap that Shared
+SaaS would have turned into a cross-tenant authorization leak.
 
 **The target design already exists and the schema does not implement it.**
 `SharedBackupSurfaceInventory` declares a partition mode and authoritative root for every one of these
