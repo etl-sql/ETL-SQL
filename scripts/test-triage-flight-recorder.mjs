@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { renderRunEvidence, renderTriageBoard } from '../src/ETL-SQL.Portal/wwwroot/js/triage-ui.js';
+import { renderRunEvidence, renderTriageBoard, quarantineUrl } from '../src/ETL-SQL.Portal/wwwroot/js/triage-ui.js';
 
 const detail = {
   run: {
@@ -28,15 +28,19 @@ const detail = {
   }],
 };
 
-const evidence = renderRunEvidence(detail);
+const evidence = renderRunEvidence(detail, detail.run);
 assert.match(evidence, /Script integrity/);
 assert.match(evidence, /MISMATCH/);
 assert.match(evidence, /Statement timeline \(1\)/);
 assert.match(evidence, /Quality failures \(1\)/);
+assert.match(evidence, /Review rows →/);
+assert.match(evidence, /#governance\/quarantine/);
 assert.match(evidence, /SELECT \* FROM t WHERE value = \? &lt;unsafe&gt;/);
 assert.match(evidence, /&lt;email&gt;/);
 assert.match(evidence, /&lt;owner&gt;/);
 assert.doesNotMatch(evidence, /<unsafe>|<email>|<owner>|<hash>/);
+
+assert.match(quarantineUrl('nightly', 'warehouse.t'), /jobName=nightly.*q=warehouse\.t/);
 
 const board = {
   generatedAt: '2026-08-09T00:00:00Z', lookbackHours: 24,

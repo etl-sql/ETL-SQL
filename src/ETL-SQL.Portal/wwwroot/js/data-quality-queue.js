@@ -329,6 +329,33 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     state.trackedJobs.filter(job => !TERMINAL_JOB_STATUSES.has(job.status)).forEach(job => pollJob(job.jobId));
   }
 
+  function applyQueryParams() {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q') || params.get('target');
+    const jobName = params.get('jobName') || params.get('job');
+    if (q) {
+      state.q = q;
+    } else if (jobName) {
+      state.q = jobName;
+    }
+  }
+
+  function clearDeepLinkParams() {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    let cleaned = false;
+    for (const key of ['q', 'target', 'jobName', 'job']) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.delete(key);
+        cleaned = true;
+      }
+    }
+    if (cleaned) {
+      history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  }
+
   function schedulePoll(jobId) {
     if (disposed || pollTimers.has(jobId)) return;
     pollTimers.set(jobId, setTimeout(() => {
@@ -413,6 +440,12 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
       state.items = results[0];
       if (results[1]) {
         state.allJobs = results[1] || [];
+      }
+      if (state.q && state.items.length > 0 && !state.selectedItem) {
+        const exact = state.items.find(item => item.quarantineTarget === state.q || item.jobName === state.q) || state.items[0];
+        if (exact && rowsReadable(exact)) {
+          loadRows(exact);
+        }
       }
     } catch (err) {
       state.error = err.message || 'Unable to load quarantine queue.';
@@ -639,7 +672,12 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
   }
 
   return {
-    show() { disposed = false; restoreTrackedJobs(); load(); },
+    show() {
+      disposed = false;
+      applyQueryParams();
+      restoreTrackedJobs();
+      load().then(() => clearDeepLinkParams());
+    },
     dispose() { disposed = true; pollTimers.forEach(timer => clearTimeout(timer)); pollTimers.clear(); host.innerHTML = ''; }
   };
 }

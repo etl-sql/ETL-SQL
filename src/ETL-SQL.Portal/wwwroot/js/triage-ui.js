@@ -92,6 +92,13 @@ export function impactUrl(jobName) {
   return `/index.html?${params.toString()}#governance/impact`;
 }
 
+export function quarantineUrl(jobName, targetTable = '') {
+  const params = new URLSearchParams();
+  if (jobName) params.set('jobName', String(jobName));
+  if (targetTable) params.set('q', String(targetTable));
+  return `/index.html?${params.toString()}#governance/quarantine`;
+}
+
 export function renderRunEvidence(detailState) {
   if (detailState?.status === 'loading') {
     return '<div class="triage-evidence-state">Loading durable run evidence…</div>';
@@ -114,13 +121,19 @@ export function renderRunEvidence(detailState) {
   const qualityBody = quality.length > 0
     ? `<table class="data-table triage-evidence-table">
          <thead><tr><th>Target / column</th><th>Rule</th><th>Action</th><th>Failed</th><th>Owner</th></tr></thead>
-         <tbody>${quality.map(q => `<tr>
-           <td>${esc(q.targetTable || '#temp')} / ${esc(q.columnName)}</td>
-           <td><code>${esc(q.rule)}</code></td>
-           <td><span class="badge badge-warning">${esc(q.action)}</span></td>
-           <td>${Number(q.failureCount || 0).toLocaleString()}</td>
-           <td>${esc(q.owner || '—')}</td>
-         </tr>`).join('')}</tbody>
+         <tbody>${quality.map(q => {
+           const isQuarantine = String(q.action || '').toUpperCase() === 'QUARANTINE';
+           const link = isQuarantine
+             ? ` <a class="triage-impact-link" href="${esc(quarantineUrl(run.jobName, q.targetTable))}" title="Review quarantined rows for ${esc(q.targetTable || '')}" style="margin-left:6px;font-size:0.82em;">Review rows →</a>`
+             : '';
+           return `<tr>
+             <td>${esc(q.targetTable || '#temp')} / ${esc(q.columnName)}</td>
+             <td><code>${esc(q.rule)}</code></td>
+             <td><span class="badge badge-warning">${esc(q.action)}</span>${link}</td>
+             <td>${Number(q.failureCount || 0).toLocaleString()}</td>
+             <td>${esc(q.owner || '—')}</td>
+           </tr>`;
+         }).join('')}</tbody>
        </table>`
     : '<p class="triage-evidence-empty">No normalized quality-rule failures were recorded.</p>';
 
@@ -151,6 +164,9 @@ export function renderRunEvidence(detailState) {
 }
 
 function renderRunRow(run, { evidenceOpen = false, evidence } = {}) {
+  const qLink = (run.rowsQuarantined > 0 || run.dataQualityFailures)
+    ? `<a class="triage-impact-link" href="${esc(quarantineUrl(run.jobName))}" title="Review quarantined rows in Quarantine Queue">Quarantine →</a>`
+    : '';
   const dq = run.dataQualityFailures
     ? `<span class="badge badge-warning" title="Per-rule failure counts">${esc(run.dataQualityFailures)}</span>`
     : '';
@@ -166,7 +182,7 @@ function renderRunRow(run, { evidenceOpen = false, evidence } = {}) {
       <td>${fmtTime(run.startTime)}</td>
       <td>${fmtDuration(run.startTime, run.endTime)}</td>
       <td>${Number(run.rowsProcessed ?? 0).toLocaleString()}</td>
-      <td>${dq}${drift}</td>
+      <td><div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">${dq}${qLink}${drift}</div></td>
       <td>
         <a class="triage-impact-link" href="${esc(impactUrl(run.jobName))}"
            title="What is downstream of this job">Impact →</a>
