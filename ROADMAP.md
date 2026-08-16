@@ -339,3 +339,21 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
 - **Declarative Watermark Clause:** Direct support on source queries (e.g. `FROM src.Orders WITH (WATERMARK = 'OrderId', INITIAL = '0')`).
 - **Engine-Managed State Lifecycle:** The engine automatically retrieves the last recorded high-water mark, applies the filtering predicate, and stages the maximum observed key value to atomically update `eng.job_state` upon successful script completion.
 
+### Reporting & Presentation — Extensible Visual Runtimes (Data-Bound HTML/SVG & Vega-Lite)
+
+**Candidate, not scheduled.** While Apache ECharts provides exceptional performance and comprehensive chart-type coverage for the vast majority of analytical workloads, modern reporting often demands specialized escape hatches for bespoke infographic KPI cards, micro-visuals, and complex layered statistical graphics without sacrificing the script-first, Zero-Trust execution model.
+
+**Design principles and boundaries:**
+- **Zero-Trust rendering:** Custom visual extensions must remain declarative and safe across CLI Player, VS Code, and Portal runtimes. Untrusted, arbitrary JavaScript execution is prohibited.
+- **Diffable, script-first contracts:** Visual definitions remain standard `.rptsql` statements rather than compiled binary blobs or external web component dependencies.
+
+**Delivery stages:**
+- **Tier 2: Data-Bound HTML / SVG Visuals (`TYPE = HTML` / `TYPE = SVG`):**
+  - Enables embedding sanitized HTML and SVG templates directly into `CREATE VISUAL` definitions bound to engine `#dataset` queries.
+  - Solves the "Last 5%" presentation gap for multi-metric KPI cards, status indicators, badges, trend delta arrows, and inline sparkline grids using standard CSS and SVG markup.
+  - Renders through an AST-based HTML sanitizer to guarantee script isolation and prevent DOM/XSS injection.
+- **Tier 3: Declarative Grammar-of-Graphics (`TYPE = VEGALITE`):**
+  - Integrates the permissive BSD-3-Clause **Vega-Lite** runtime as an alternative declarative visual compiler for specialized domain visualizations.
+  - Allows embedding raw Vega-Lite JSON specifications (`SPEC = '{ ... }'`) directly within `.rptsql` scripts.
+  - Supports composite marks, faceted distributions, error bands, and layered statistical charts while preserving deterministic client-side rendering and headless PDF/image export.
+
