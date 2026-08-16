@@ -467,8 +467,13 @@ namespace ETL_SQL.Tests.Orchestration
 
             await tenantStore.SetJobStateAsync(alpha, "tenant-alpha--daily", "dq:quarantine-manifest:same", "alpha");
             await tenantStore.SetJobStateAsync(beta, "tenant-beta--daily", "dq:quarantine-manifest:same", "beta");
-            var alphaRun = await _store.LogJobStartAsync("tenant-alpha--daily");
-            var betaRun = await _store.LogJobStartAsync("tenant-beta--daily");
+            // Runs are recorded against each job's identity, resolved in its own tenant. The names
+            // here are deliberately distinct, but the lookup still has to be tenant-qualified: an
+            // unbound lookup would find neither, which is the isolation this test exists to prove.
+            var alphaRun = await _store.LogJobStartAsync(
+                (await _store.GetJobAsync("tenant-alpha", "tenant-alpha--daily"))!.Id);
+            var betaRun = await _store.LogJobStartAsync(
+                (await _store.GetJobAsync("tenant-beta", "tenant-beta--daily"))!.Id);
             await _store.LogJobEndAsync(alphaRun, "SUCCESS", rowsProcessed: 10, rowsQuarantined: 1);
             await _store.LogJobEndAsync(betaRun, "SUCCESS", rowsProcessed: 20, rowsQuarantined: 2);
             await _store.SaveJobDataQualityFailuresAsync(alphaRun,

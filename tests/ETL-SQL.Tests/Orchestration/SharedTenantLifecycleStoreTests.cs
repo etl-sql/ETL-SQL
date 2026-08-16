@@ -38,7 +38,10 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
         await store.SaveJobAsync(Job("alpha-on", "tenant-alpha", true));
         await store.SaveJobAsync(Job("alpha-off", "tenant-alpha", false));
         await store.SaveJobAsync(Job("beta-on", "tenant-beta", true));
-        Assert.NotNull(await store.AcquireJobLeaseAsync("alpha-on", "node-a", TimeSpan.FromMinutes(2)));
+        // Resolved in each job's own tenant: these names belong to tenants, so an unbound lookup is
+        // not merely inconvenient here, it would be asking about a different object.
+        var alphaOn = (await store.GetJobAsync("tenant-alpha", "alpha-on"))!;
+        Assert.NotNull(await store.AcquireJobLeaseAsync(alphaOn.Id, "node-a", TimeSpan.FromMinutes(2)));
 
         var upgrade = Command("upgrade-alpha", SharedTenantLifecycleKind.Upgrade, "change-u") with
         {
@@ -48,21 +51,21 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
         var draining = await store.ApplySharedTenantLifecycleAsync(alpha, upgrade);
 
         Assert.Equal("Draining", draining.Status);
-        Assert.False((await store.GetJobAsync((string?)null, "alpha-on"))!.IsEnabled);
-        Assert.False((await store.GetJobAsync((string?)null, "alpha-off"))!.IsEnabled);
-        Assert.True((await store.GetJobAsync((string?)null, "beta-on"))!.IsEnabled);
+        Assert.False((await store.GetJobAsync("tenant-alpha", "alpha-on"))!.IsEnabled);
+        Assert.False((await store.GetJobAsync("tenant-alpha", "alpha-off"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync("tenant-beta", "beta-on"))!.IsEnabled);
 
-        await store.ReleaseJobLeaseAsync("alpha-on", "node-a");
+        await store.ReleaseJobLeaseAsync(alphaOn.Id, "node-a");
         Assert.Null(await store.AcquireJobLeaseAsync(
-            "alpha-on", "stale-scheduler", TimeSpan.FromMinutes(2)));
+            alphaOn.Id, "stale-scheduler", TimeSpan.FromMinutes(2)));
         var complete = await store.ApplySharedTenantLifecycleAsync(alpha, upgrade);
 
         Assert.Equal("Completed", complete.Status);
         Assert.Equal("release-3", complete.State.ActiveRelease);
         Assert.Equal(7, complete.State.MaxConcurrentJobs);
-        Assert.True((await store.GetJobAsync((string?)null, "alpha-on"))!.IsEnabled);
-        Assert.False((await store.GetJobAsync((string?)null, "alpha-off"))!.IsEnabled);
-        Assert.True((await store.GetJobAsync((string?)null, "beta-on"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync("tenant-alpha", "alpha-on"))!.IsEnabled);
+        Assert.False((await store.GetJobAsync("tenant-alpha", "alpha-off"))!.IsEnabled);
+        Assert.True((await store.GetJobAsync("tenant-beta", "beta-on"))!.IsEnabled);
     }
 
     [Fact]

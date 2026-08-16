@@ -85,7 +85,12 @@ namespace ETL_SQL.Tests.Engine
             var store = provider.GetRequiredService<IJobHistoryStore>();
             await store.InitializeAsync();
 
+            // The run is bound to a real job: job state hangs off the job's identity, so a run with
+            // no job writes to the script-local .etlstate file instead of the orchestrator store.
+            await store.SaveJobAsync(new JobDefinition(
+                "BackupJobTest", "SELECT 1;", 1, "HOUR", null, null, null));
             eval.JobName = "BackupJobTest";
+            eval.JobId = (await store.GetJobAsync(null, "BackupJobTest"))!.Id;
 
             // Set state
             await eval.Evaluate(new Lexer(@"

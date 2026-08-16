@@ -131,6 +131,9 @@ namespace ETL_SQL.Tests.Orchestration
                     MaxRetries: 1,
                     RetryDelaySeconds: 1);
                 await store.SaveJobAsync(job);
+                // Re-read for the identity the store assigned: notification links hang off the id,
+                // and the definition built above still carries JobId.None.
+                job = (await store.GetJobAsync((string?)null, job.Name))!;
                 await store.SaveNotificationAsync(new NotificationDefinition(
                     "NotifyOps",
                     "notify_webhook",
@@ -244,6 +247,8 @@ namespace ETL_SQL.Tests.Orchestration
             {
                 var job = new JobDefinition("TriggerJob", "SELECT 1;", 1, "HOUR", null, null, null);
                 await store.SaveJobAsync(job);
+                // Re-read for the store-assigned identity — the links below hang off it.
+                job = (await store.GetJobAsync((string?)null, job.Name))!;
                 await store.SaveNotificationAsync(new NotificationDefinition("OnSuccess", "notify_webhook"));
                 await store.SaveNotificationAsync(new NotificationDefinition("OnFailure", "notify_webhook"));
                 await store.AddJobNotificationAsync(job.Name, "OnSuccess", NotificationTrigger.Success);
@@ -297,14 +302,27 @@ namespace ETL_SQL.Tests.Orchestration
             {
                 var job = new JobDefinition("SkipJob", "SELECT 1;", 1, "HOUR", null, null, null);
                 await store.SaveJobAsync(job);
+                job = (await store.GetJobAsync((string?)null, job.Name))!;
+
+                // "Missing" is now a dangling link rather than a link to a name that was never
+                // created: attachments are made against an identity, so the only way a job can point
+                // at a notification that is not there is for the row to have gone afterwards. Linking
+                // an unissued identity reproduces exactly that state, which is what dispatch must
+                // survive — a link the catalog cannot resolve.
+                NotificationId notificationId;
                 if (notificationName == "DisabledNotification")
                 {
                     await store.SaveNotificationAsync(new NotificationDefinition(
                         notificationName,
                         "notify_webhook",
                         IsEnabled: false));
+                    notificationId = (await store.GetNotificationAsync((string?)null, notificationName))!.Id;
                 }
-                await store.AddJobNotificationAsync(job.Name, notificationName, NotificationTrigger.Completion);
+                else
+                {
+                    notificationId = NotificationId.New();
+                }
+                await store.AddJobNotificationAsync(job.Id, notificationId, NotificationTrigger.Completion);
 
                 var connectionCatalog = await CreateNotificationConnectionCatalogAsync(catalogRoot);
                 var mockExecutor = new Mock<IScriptExecutor>();

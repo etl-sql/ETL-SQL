@@ -85,7 +85,13 @@ public sealed class JobHistoryMetricsProvider(IJobHistoryStore store, IClusterLo
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var jobId = await RequireAsync(tenantId, jobName);
+        // Best-effort, unlike the quarantine manifest. `ASSERT JOB 'import'` names a job the script
+        // author typed, and in an ad-hoc run that name may have no orchestrator row at all — there is
+        // simply nowhere to keep the memo. Alert state only suppresses a repeat notification, so
+        // losing it means the next failure alerts again: noisier, never wrong. Refusing here would
+        // instead fail a run over its own alert bookkeeping.
+        var jobId = await ResolveAsync(tenantId, jobName);
+        if (!jobId.IsAssigned) return;
         await store.SetJobStateAsync(
             jobId,
             AlertStatePrefix + assertionKey,

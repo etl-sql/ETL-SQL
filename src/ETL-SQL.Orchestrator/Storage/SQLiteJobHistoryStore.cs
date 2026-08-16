@@ -424,8 +424,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     StateDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
                     SpillDiskFreeBytes INTEGER NOT NULL DEFAULT 0
                 );
-                CREATE INDEX IF NOT EXISTS idx_hm_node_time ON HostMetrics(NodeId, CapturedAt);
-                CREATE INDEX IF NOT EXISTS idx_hm_tenant_time ON HostMetrics(NodeTenantId, CapturedAt);";
+                CREATE INDEX IF NOT EXISTS idx_hm_node_time ON HostMetrics(NodeId, CapturedAt);";
+                    // The tenant index waits for the migration that adds NodeTenantId — see the note
+                    // on the JobHistory index above.
 
                     // Daily roll-up tables (capacity trend that survives raw pruning). Day is 'yyyy-MM-dd'.
                     var createRollupTables = @"
@@ -501,11 +502,15 @@ namespace ETL_SQL.Orchestrator.Storage
                     await EnsureJobColumnsExist(connection);
                     await EnsureLineageHistoryColumnsExist(connection);
                     await EnsureHostMetricsDailyColumnsExist(connection);
+                    await EnsureHostMetricsColumnsExist(connection);
 
                     // Indexes over migrated columns, once those columns are guaranteed to exist.
                     await ExecuteOptionalSqlAsync(
                         connection,
                         "CREATE INDEX IF NOT EXISTS idx_jh_tenant_job ON JobHistory(TenantId, JobId, StartTime);");
+                    await ExecuteOptionalSqlAsync(
+                        connection,
+                        "CREATE INDEX IF NOT EXISTS idx_hm_tenant_time ON HostMetrics(NodeTenantId, CapturedAt);");
                 }
                 finally
                 {
@@ -599,6 +604,17 @@ namespace ETL_SQL.Orchestrator.Storage
         {
             var columns = await _dialect.GetColumnNamesAsync(connection, "Jobs");
 
+            // A Jobs table with no Id predates surrogate object identity, when a job's name was its
+            // primary key. That cannot be migrated by adding columns: the identity has to become the
+            // key and the name has to become unique per tenant instead of globally. Refuse here, with
+            // the remedy, rather than letting it surface later as "no such column: j.Id" from
+            // whichever query happened to run first.
+            if (columns.Count > 0 && !columns.Contains("Id"))
+                throw new InvalidOperationException(
+                    "This orchestrator database predates surrogate job identity and cannot be " +
+                    "upgraded in place. No release shipped with data in this schema, so the remedy " +
+                    "is to delete the database file and let it be recreated.");
+
             await AddColumnIfMissingAsync(connection, columns, "Jobs", "MaxRetries", "MaxRetries INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(connection, columns, "Jobs", "RetryDelaySeconds", "RetryDelaySeconds INTEGER NOT NULL DEFAULT 30");
             await AddColumnIfMissingAsync(connection, columns, "Jobs", "ScriptHash", "ScriptHash TEXT");
@@ -615,6 +631,19 @@ namespace ETL_SQL.Orchestrator.Storage
 
             foreach (var column in new[] { "TargetPath", "DisplayName", "Description", "Options", "CreatedBy", "ModifiedBy", "TenantId" })
                 await AddColumnIfMissingAsync(connection, columns, "Jobs", column, $"{column} TEXT");
+        }
+
+        private async Task EnsureHostMetricsColumnsExist(DbConnection connection)
+        {
+            // The node's tenant and capacity-pool binding, added after the table first shipped. These
+            // describe which tenant a *node* is dedicated to, not which tenant a sample belongs to —
+            // a Shared node's gauges do not decompose by tenant, and an empty binding says exactly
+            // that rather than misattributing capacity.
+            var columns = await _dialect.GetColumnNamesAsync(connection, "HostMetrics");
+            await AddColumnIfMissingAsync(
+                connection, columns, "HostMetrics", "NodeTenantId", "NodeTenantId TEXT NOT NULL DEFAULT ''");
+            await AddColumnIfMissingAsync(
+                connection, columns, "HostMetrics", "CapacityPool", "CapacityPool TEXT NOT NULL DEFAULT ''");
         }
 
         private async Task EnsureHostMetricsDailyColumnsExist(DbConnection connection)

@@ -742,10 +742,14 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task ResumeJob_UsesRecordedSessionAndNamedCheckpoint()
         {
             const string script = "SET PERSIST ON; resume_here: SELECT 1;";
-            var job = new JobDefinition("ResumeJob", script, 1, "HOUR", null, null, DateTime.Now.AddHours(1));
+            // A real identity, and the history row carries it: resume reads the run and then reaches
+            // its job by id, so a run whose JobId was left unassigned would resolve to no job at all.
+            var jobId = JobId.New();
+            var job = new JobDefinition(
+                "ResumeJob", script, 1, "HOUR", null, null, DateTime.Now.AddHours(1), Id: jobId);
             var history = new JobHistoryEntry(
                 42, job.Name, DateTime.Now.AddMinutes(-1), DateTime.Now, "FAILURE", "boom",
-                SessionId: "session-42", CheckpointLabel: "resume_here");
+                SessionId: "session-42", CheckpointLabel: "resume_here", JobId: jobId);
 
             var store = new Mock<IJobHistoryStore>();
             store.Setup(s => s.GetHistoryEntryAsync(42)).ReturnsAsync(history);
