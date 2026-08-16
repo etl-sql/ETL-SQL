@@ -125,7 +125,10 @@ namespace ETL_SQL.Tests.Orchestration
 
             Assert.True(await _store.SetScheduleEnabledAsync(await ScheduleIdOf("nightlytrigger"), false));
             Assert.False((await _store.GetScheduleAsync((string?)null, "NightlyTrigger"))!.IsEnabled);
-            Assert.False(await _store.SetScheduleEnabledAsync(await ScheduleIdOf("no_such_schedule"), false));
+            // An identity that was never issued matches nothing and says so. A *name* that resolves
+            // to nothing cannot reach this call at all any more — resolution fails first — which is
+            // the point of addressing the toggle by identity.
+            Assert.False(await _store.SetScheduleEnabledAsync(ScheduleId.New(), false));
         }
 
         // ── Restrict vs cascade ───────────────────────────────────────────────────
@@ -180,16 +183,18 @@ namespace ETL_SQL.Tests.Orchestration
         [Fact]
         public async Task DeleteJob_CascadesItsLinks_ButKeepsTheSharedObjects()
         {
-            await SaveJobAsync();
+            var job = await SaveJobAsync();
             await _store.SaveScheduleAsync(Nightly());
             await _store.SaveNotificationAsync(OpsAlert());
-            await _store.AddJobScheduleAsync(await JobIdOf("FinanceNightly"), await ScheduleIdOf("NightlyTrigger"), DateTime.UtcNow);
-            await _store.AddJobNotificationAsync(await JobIdOf("FinanceNightly"), await NotificationIdOf("OpsAlert"), NotificationTrigger.Failure);
+            await _store.AddJobScheduleAsync(job.Id, await ScheduleIdOf("NightlyTrigger"), DateTime.UtcNow);
+            await _store.AddJobNotificationAsync(job.Id, await NotificationIdOf("OpsAlert"), NotificationTrigger.Failure);
 
-            await _store.DeleteJobAsync("FinanceNightly");
+            await _store.DeleteJobAsync(job.Id);
 
-            Assert.Empty(await _store.GetJobSchedulesAsync(await JobIdOf("FinanceNightly")));
-            Assert.Empty(await _store.GetJobNotificationsAsync(await JobIdOf("FinanceNightly")));
+            // Held from before the delete: once the job is gone its name resolves to nothing, and the
+            // links have to be checked against the identity they were actually made against.
+            Assert.Empty(await _store.GetJobSchedulesAsync(job.Id));
+            Assert.Empty(await _store.GetJobNotificationsAsync(job.Id));
             Assert.NotNull(await _store.GetScheduleAsync((string?)null, "NightlyTrigger"));
             Assert.NotNull(await _store.GetNotificationAsync((string?)null, "OpsAlert"));
 

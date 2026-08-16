@@ -126,6 +126,8 @@ namespace ETL_SQL.Tests.Orchestration
         {
             var store = new SQLiteJobHistoryStore(_dbPath);
             await store.InitializeAsync();
+            // Alert state and replay manifests hang off the job's identity, so the job exists first.
+            await store.SaveJobAsync(new JobDefinition("nightly", "SELECT 1;", 1, "HOUR", null, null, null));
             var provider = new JobHistoryMetricsProvider(store);
 
             var state = new AssertJobAlertState(
@@ -145,6 +147,8 @@ namespace ETL_SQL.Tests.Orchestration
         {
             var store = new SQLiteJobHistoryStore(_dbPath);
             await store.InitializeAsync();
+            // Alert state and replay manifests hang off the job's identity, so the job exists first.
+            await store.SaveJobAsync(new JobDefinition("nightly", "SELECT 1;", 1, "HOUR", null, null, null));
             var provider = new JobHistoryMetricsProvider(store);
 
             var manifest = new QuarantineReplayManifest(

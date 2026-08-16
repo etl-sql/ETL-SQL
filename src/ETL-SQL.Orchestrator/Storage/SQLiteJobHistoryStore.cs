@@ -180,8 +180,11 @@ namespace ETL_SQL.Orchestrator.Storage
                     Status TEXT NOT NULL,
                     ErrorMessage TEXT,
                     RowsProcessed INTEGER DEFAULT 0
-                );
-                CREATE INDEX IF NOT EXISTS idx_jh_tenant_job ON JobHistory(TenantId, JobId, StartTime);";
+                );";
+                    // The index over (TenantId, JobId) is created after the column migrations rather
+                    // than here: CREATE TABLE IF NOT EXISTS leaves an existing table alone, so on a
+                    // database written by an earlier build those two columns do not exist yet and
+                    // indexing them fails before the migration that adds them has run.
 
                     var createColumnMetricsTable = @"
                 CREATE TABLE IF NOT EXISTS JobColumnMetrics (
@@ -498,6 +501,11 @@ namespace ETL_SQL.Orchestrator.Storage
                     await EnsureJobColumnsExist(connection);
                     await EnsureLineageHistoryColumnsExist(connection);
                     await EnsureHostMetricsDailyColumnsExist(connection);
+
+                    // Indexes over migrated columns, once those columns are guaranteed to exist.
+                    await ExecuteOptionalSqlAsync(
+                        connection,
+                        "CREATE INDEX IF NOT EXISTS idx_jh_tenant_job ON JobHistory(TenantId, JobId, StartTime);");
                 }
                 finally
                 {
@@ -622,6 +630,13 @@ namespace ETL_SQL.Orchestrator.Storage
         private async Task EnsureHistoryColumnsExist(DbConnection connection)
         {
             var columns = await _dialect.GetColumnNamesAsync(connection, "JobHistory");
+
+            // Identity and tenant, matching the CREATE defaults. The empty default is meaningful in
+            // both: '' is an ad-hoc run with no job, and '' is the unbound (Solo) tenant. Rows in a
+            // table written by an earlier build of this schema are exactly that — unbound runs whose
+            // job binding was never recorded — so the default states the truth rather than guessing.
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "JobId", "JobId TEXT NOT NULL DEFAULT ''");
+            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "TenantId", "TenantId TEXT NOT NULL DEFAULT ''");
 
             await AddColumnIfMissingAsync(connection, columns, "JobHistory", "PeakMemoryBytes", "PeakMemoryBytes INTEGER DEFAULT 0");
             await AddColumnIfMissingAsync(connection, columns, "JobHistory", "CpuTimeSeconds", "CpuTimeSeconds REAL DEFAULT 0");
@@ -1990,7 +2005,7 @@ namespace ETL_SQL.Orchestrator.Storage
             reader.IsDBNull(ordinal) ? 0 : Convert.ToInt64(reader.GetValue(ordinal));
 
         public async Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
-            string jobName, string? targetTable, string columnName, int limit = 100)
+            JobId jobIdRef, string? targetTable, string columnName, int limit = 100)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2001,14 +2016,14 @@ namespace ETL_SQL.Orchestrator.Storage
                 SELECT m.TargetTable, m.ColumnName, m.TotalRows, m.NullRows, m.MaxTimestampUtc
                 FROM JobColumnMetrics m
                 INNER JOIN JobHistory h ON h.Id = m.JobHistoryId
-                WHERE h.JobName = @job
+                WHERE h.JobId = @job
                   AND h.EndTime IS NOT NULL
                   AND (UPPER(h.Status) = 'SUCCESS' OR UPPER(h.Status) = 'COMPLETED')
                   AND m.ColumnName = @column COLLATE NOCASE
                   AND (@target IS NULL OR m.TargetTable = @target COLLATE NOCASE)
                 ORDER BY h.EndTime DESC, h.StartTime DESC, h.Id DESC
                 LIMIT @limit;";
-            command.AddParam("@job", jobName);
+            command.AddParam("@job", jobIdRef.Require());
             command.AddParam("@column", columnName);
             command.AddParam("@target", string.IsNullOrWhiteSpace(targetTable) ? DBNull.Value : targetTable.Trim().TrimStart('#'));
             command.AddParam("@limit", limit);
@@ -2386,25 +2401,50 @@ namespace ETL_SQL.Orchestrator.Storage
             return entries;
         }
 
+        // Read by name, never by ordinal. These rows come back from `SELECT *`, so every position
+        // depends on the column order of the table as created — and JobId and TenantId were inserted
+        // near the front, while an additively migrated database appends them at the end instead.
+        // Positional reads had silently shifted: JobName returned the job's id, and StartTime
+        // returned the tenant, which surfaced only because an empty string will not parse as a date.
         private static JobHistoryEntry ReadHistoryEntry(DbDataReader reader) => new(
-            reader.GetInt64(0),
-            reader.GetString(1),
-            DateTime.Parse(reader.GetString(2)),
-            reader.IsDBNull(3) ? null : DateTime.Parse(reader.GetString(3)),
-            reader.GetString(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5),
-            reader.GetInt64(6),
-            reader.IsDBNull(7) ? 0 : reader.GetInt64(7),
-            reader.IsDBNull(8) ? 0 : reader.GetDouble(8),
-            reader.IsDBNull(9) ? null : reader.GetString(9),
-            reader.IsDBNull(10) ? null : (bool?)(reader.GetInt32(10) != 0),
-            // Data-quality columns are additive migrations, so read them by name — a store
-            // upgraded mid-rollout may not have them yet.
+            reader.GetInt64(reader.GetOrdinal("Id")),
+            reader.GetString(reader.GetOrdinal("JobName")),
+            DateTime.Parse(reader.GetString(reader.GetOrdinal("StartTime"))),
+            ReadOptionalDateTime(reader, "EndTime"),
+            reader.GetString(reader.GetOrdinal("Status")),
+            ReadOptionalString(reader, "ErrorMessage"),
+            ReadOptionalInt64(reader, "RowsProcessed"),
+            ReadOptionalInt64(reader, "PeakMemoryBytes"),
+            ReadOptionalDouble(reader, "CpuTimeSeconds"),
+            ReadOptionalString(reader, "ScriptHashAtRunTime"),
+            ReadOptionalBool(reader, "HashMatched"),
             ReadOptionalInt64(reader, "RowsQuarantined"),
             ReadOptionalInt64(reader, "RowsWarned"),
             ReadOptionalString(reader, "DataQualityFailures"),
             ReadOptionalString(reader, "SessionId"),
-            ReadOptionalString(reader, "CheckpointLabel"));
+            ReadOptionalString(reader, "CheckpointLabel"),
+            JobId.From(ReadOptionalString(reader, "JobId")),
+            ReadOptionalString(reader, "TenantId") is { Length: > 0 } tenant ? tenant : null);
+
+        private static DateTime? ReadOptionalDateTime(DbDataReader reader, string columnName)
+        {
+            var text = ReadOptionalString(reader, columnName);
+            return string.IsNullOrEmpty(text) ? null : DateTime.Parse(text);
+        }
+
+        private static double ReadOptionalDouble(DbDataReader reader, string columnName)
+        {
+            int ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal < 0 || reader.IsDBNull(ordinal) ? 0 : Convert.ToDouble(reader.GetValue(ordinal));
+        }
+
+        private static bool? ReadOptionalBool(DbDataReader reader, string columnName)
+        {
+            int ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal < 0 || reader.IsDBNull(ordinal)
+                ? null
+                : Convert.ToInt64(reader.GetValue(ordinal)) != 0;
+        }
 
         private static long ReadOptionalInt64(DbDataReader reader, string columnName)
         {
@@ -2496,9 +2536,16 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            var sql = "SELECT JobId, StateKey, StateValue, UpdatedAt FROM JobState ";
-            if (!string.IsNullOrEmpty(jobId)) { sql += "WHERE JobId = @job "; command.AddParam("@job", jobId); }
-            sql += "ORDER BY JobId, StateKey LIMIT @limit;";
+            // The row is keyed by identity but this read model is what an operator sees, so it joins
+            // back to the job for the name they typed. Returning the id in the name's place would put
+            // an opaque GUID in front of every `SHOW JOB STATE` reader. The join is inner: state whose
+            // job is gone is not addressable state, and state is deleted with its job in any case.
+            var sql = @"
+                SELECT j.Name, s.StateKey, s.StateValue, s.UpdatedAt
+                FROM JobState s
+                INNER JOIN Jobs j ON j.Id = s.JobId ";
+            if (!string.IsNullOrEmpty(jobId)) { sql += "WHERE s.JobId = @job "; command.AddParam("@job", jobId); }
+            sql += "ORDER BY j.Name, s.StateKey LIMIT @limit;";
             command.CommandText = sql;
             command.AddParam("@limit", limit);
 

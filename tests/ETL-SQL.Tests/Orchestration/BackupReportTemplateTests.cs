@@ -55,15 +55,20 @@ DECLARE @body = CONCAT('The backup ', @label, ' did not complete successfully.',
         {
             // The template's whole point is a durable marker a later monitoring script can read.
             // Prove the persistence round-trip, not just that SET_JOB_STATE executed: run under the
-            // orchestrator job-state path (JobName → IJobHistoryStore), then read the markers back
-            // from the store directly and via GET_JOB_STATE in a separate execution.
+            // orchestrator job-state path (job identity → IJobHistoryStore), then read the markers
+            // back from the store directly and via GET_JOB_STATE in a separate execution.
             var provider = DependencyInjectionSetup.BuildServiceProvider();
             var eval = provider.GetRequiredService<Evaluator>();
             var store = provider.GetRequiredService<ETL_SQL.Core.Data.IJobHistoryStore>();
             await store.InitializeAsync();
 
+            // The run is bound to a real job, which is what puts state in the store rather than in
+            // the script-local .etlstate file: state belongs to a job, and a run with no job has none.
             var jobName = $"backup_marker_{Guid.NewGuid():N}";
+            await store.SaveJobAsync(new ETL_SQL.Core.Data.JobDefinition(
+                jobName, "SELECT 1;", 1, "HOUR", null, null, null));
             eval.JobName = jobName;
+            eval.JobId = (await store.GetJobAsync(null, jobName))!.Id;
 
             await TestHelpers.Execute(eval, @"
 DECLARE @backup_exit_code = 3;

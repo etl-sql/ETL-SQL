@@ -77,32 +77,36 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
             Command("provision-beta", SharedTenantLifecycleKind.Provision, "change-pb"));
         await store.SaveJobAsync(Job("alpha-job", "tenant-alpha", true));
         await store.SaveJobAsync(Job("beta-job", "tenant-beta", true));
-        var alphaHistory = await store.LogJobStartAsync("alpha-job");
-        var betaHistory = await store.LogJobStartAsync("beta-job");
+        // Resolved in each job's own tenant. These two are the whole point of the test — two tenants'
+        // objects that would collide on name — so nothing here may go through an unbound lookup.
+        var alphaJob = (await store.GetJobAsync("tenant-alpha", "alpha-job"))!;
+        var betaJob = (await store.GetJobAsync("tenant-beta", "beta-job"))!;
+        var alphaHistory = await store.LogJobStartAsync(alphaJob.Id);
+        var betaHistory = await store.LogJobStartAsync(betaJob.Id);
         await store.LogJobEndAsync(alphaHistory, "SUCCESS");
         await store.LogJobEndAsync(betaHistory, "SUCCESS");
-        await store.SetJobStateAsync("alpha-job", "dq:quarantine-manifest:same", "alpha");
-        await store.SetJobStateAsync("beta-job", "dq:quarantine-manifest:same", "beta");
+        await store.SetJobStateAsync(alphaJob.Id, "dq:quarantine-manifest:same", "alpha");
+        await store.SetJobStateAsync(betaJob.Id, "dq:quarantine-manifest:same", "beta");
         await store.RollUpJobHistoryAsync();
 
         var result = await store.ApplySharedTenantLifecycleAsync(alpha,
             Command("delete-alpha", SharedTenantLifecycleKind.Delete, "change-d"));
 
         Assert.Equal("Deleted", result.State.State);
-        Assert.Null(await store.GetJobAsync((string?)null, "alpha-job"));
-        Assert.Empty(await store.GetHistoryAsync("alpha-job"));
-        Assert.Null(await store.GetJobStateAsync("alpha-job", "dq:quarantine-manifest:same"));
+        Assert.Null(await store.GetJobAsync("tenant-alpha", "alpha-job"));
+        Assert.Empty(await store.GetHistoryForNameAsync("tenant-alpha", "alpha-job"));
+        Assert.Null(await store.GetJobStateAsync(alphaJob.Id, "dq:quarantine-manifest:same"));
         // Asked across every tenant, because the deleted job has no identity left to address it by —
         // and asking the whole table is the stronger assertion anyway: the rollup row is gone, not
         // merely unreachable through its own job.
         Assert.DoesNotContain(
             await store.GetJobHistoryDailyAsync(JobId.None, DateTime.UtcNow.AddDays(-1)),
             row => row.JobName == "alpha-job");
-        Assert.NotNull(await store.GetJobAsync((string?)null, "beta-job"));
-        Assert.Single(await store.GetHistoryAsync("beta-job"));
+        Assert.NotNull(await store.GetJobAsync("tenant-beta", "beta-job"));
+        Assert.Single(await store.GetHistoryForNameAsync("tenant-beta", "beta-job"));
         Assert.Equal("beta", await store.GetJobStateAsync(
-            "beta-job", "dq:quarantine-manifest:same"));
-        Assert.Single(await store.GetJobHistoryDailyAsync("beta-job", DateTime.UtcNow.AddDays(-1)));
+            betaJob.Id, "dq:quarantine-manifest:same"));
+        Assert.Single(await store.GetJobHistoryDailyAsync(betaJob.Id, DateTime.UtcNow.AddDays(-1)));
         Assert.Equal("Active", (await store.GetSharedTenantStateAsync(beta))!.State);
     }
 

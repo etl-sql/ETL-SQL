@@ -28,6 +28,9 @@ namespace ETL_SQL.Tests.Orchestration
 
             var jobA = "state_" + Guid.NewGuid().ToString("N")[..8];
             var jobB = "state_" + Guid.NewGuid().ToString("N")[..8];
+            // State hangs off a job's identity, so the jobs exist before they have any.
+            foreach (var name in new[] { jobA, jobB })
+                await store.SaveJobAsync(new JobDefinition(name, "SELECT 1;", 1, "HOUR", null, null, null));
             await store.SetJobStateAsync(jobA, "last_backup_status", "SUCCESS");
             await store.SetJobStateAsync(jobA, "last_backup_exit_code", "0");
             await store.SetJobStateAsync(jobB, "Watermark", "2026-07-01");
@@ -50,6 +53,10 @@ DECLARE @status STRING = (SELECT state_value FROM #st WHERE state_key = 'last_ba
             await store.InitializeAsync();
 
             var suffix = Guid.NewGuid().ToString("N")[..8];
+            // State hangs off a job's identity, so the jobs exist before they have any.
+            foreach (var prefix in new[] { "zjob", "ajob" })
+                await store.SaveJobAsync(new JobDefinition(
+                    $"{prefix}_{suffix}", "SELECT 1;", 1, "HOUR", null, null, null));
             await store.SetJobStateAsync($"zjob_{suffix}", "k2", "v2");
             await store.SetJobStateAsync($"ajob_{suffix}", "k1", "v1");
 

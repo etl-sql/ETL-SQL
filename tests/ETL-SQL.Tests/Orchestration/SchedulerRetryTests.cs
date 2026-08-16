@@ -44,14 +44,14 @@ namespace ETL_SQL.Tests.Orchestration
                 .Build();
             var throttle = new JobThrottle(throttleOptions, new Mock<ILogger<JobThrottle>>().Object, throttleConfig);
 
-            mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<string>())).ReturnsAsync(1L);
-            mockStore.Setup(s => s.TryAcquireJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
-            mockStore.Setup(s => s.AcquireJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(1L);
-            mockStore.Setup(s => s.TryUpdateJobLastRunFencedAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<long>())).ReturnsAsync(true);
-            mockStore.Setup(s => s.TryRenewJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
-            mockStore.Setup(s => s.ReleaseJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
+            mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<JobId>())).ReturnsAsync(1L);
+            mockStore.Setup(s => s.TryAcquireJobLeaseAsync(It.IsAny<JobId>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.AcquireJobLeaseAsync(It.IsAny<JobId>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(1L);
+            mockStore.Setup(s => s.TryUpdateJobLastRunFencedAsync(It.IsAny<JobId>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<long>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.TryRenewJobLeaseAsync(It.IsAny<JobId>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.ReleaseJobLeaseAsync(It.IsAny<JobId>(), It.IsAny<string>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>())).Returns(Task.CompletedTask);
-            mockStore.Setup(s => s.UpdateJobLastRunAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
+            mockStore.Setup(s => s.UpdateJobLastRunAsync(It.IsAny<JobId>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
             mockConfig.Setup(c => c.GetSection(It.IsAny<string>())).Returns(new Mock<IConfigurationSection>().Object);
 
             var services = new ServiceCollection();
@@ -107,7 +107,7 @@ namespace ETL_SQL.Tests.Orchestration
             mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, "sess_123", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()), Times.Exactly(2));
 
             // Verify history was logged for each attempt
-            mockStore.Verify(s => s.LogJobStartAsync(job.Name), Times.Exactly(3));
+            mockStore.Verify(s => s.LogJobStartAsync(job.Id), Times.Exactly(3));
             mockStore.Verify(s => s.LogJobEndAsync(It.IsAny<long>(), "FAILURE", "Fake Failure", 0, It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.Exactly(2));
             mockStore.Verify(s => s.LogJobEndAsync(It.IsAny<long>(), "SUCCESS", null, 10, It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.Once());
 

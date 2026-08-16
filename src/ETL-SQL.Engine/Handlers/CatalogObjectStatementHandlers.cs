@@ -499,7 +499,11 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         // The job is resolved once, here, whether or not an authorizer is configured: the link tables
         // are keyed by identity, so a name that never resolved would previously have produced a
         // successful-looking statement that attached nothing.
-        var jobs = context.ServiceProvider.GetService<IJobHistoryStore>() ?? store as IJobHistoryStore
+        // The injected store wins over the ambient one. This handler resolves a name here and then
+        // mutates link tables through `store`, so taking the name from a different store than the one
+        // it writes to is a split brain: the resolution and the mutation would be about two different
+        // databases. The service provider is the fallback for a host that injects a catalog-only store.
+        var jobs = store as IJobHistoryStore ?? context.ServiceProvider.GetService<IJobHistoryStore>()
             ?? throw new ExecutionException("The shared Orchestrator job store is unavailable.", null, stmt.Line, stmt.Column);
         var job = await jobs.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.JobName)
             ?? throw new ExecutionException($"Job '{stmt.JobName}' does not exist.", null, stmt.Line, stmt.Column);

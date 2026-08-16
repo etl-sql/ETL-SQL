@@ -369,7 +369,7 @@ WHERE connection_name = 'cfg_conn';";
             };
 
             var mockStore = new Mock<IJobHistoryStore>();
-            mockStore.Setup(s => s.GetHistoryAsync("Job1", It.IsAny<int>())).ReturnsAsync(entries);
+            mockStore.Setup(s => s.GetHistoryForNameAsync(null, "Job1", It.IsAny<int>())).ReturnsAsync(entries);
 
             var eval = NewEval(mockStore.Object);
             await eval.Evaluate(TestHelpers.Parse("SELECT * FROM eng.job_history('Job1');"));
@@ -384,7 +384,7 @@ WHERE connection_name = 'cfg_conn';";
         public async Task EngJobHistory_EmptyStore_ReturnsNoRows()
         {
             var mockStore = new Mock<IJobHistoryStore>();
-            mockStore.Setup(s => s.GetHistoryAsync(null, It.IsAny<int>()))
+            mockStore.Setup(s => s.GetHistoryAsync(It.IsAny<JobId>(), It.IsAny<int>()))
                      .ReturnsAsync(Array.Empty<JobHistoryEntry>());
 
             var eval = NewEval(mockStore.Object);
@@ -398,7 +398,7 @@ WHERE connection_name = 'cfg_conn';";
         public async Task EngJobHistory_ColumnsAreCorrect()
         {
             var mockStore = new Mock<IJobHistoryStore>();
-            mockStore.Setup(s => s.GetHistoryAsync(null, It.IsAny<int>()))
+            mockStore.Setup(s => s.GetHistoryAsync(It.IsAny<JobId>(), It.IsAny<int>()))
                      .ReturnsAsync(Array.Empty<JobHistoryEntry>());
 
             var eval = NewEval(mockStore.Object);

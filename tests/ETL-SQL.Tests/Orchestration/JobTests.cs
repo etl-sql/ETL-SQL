@@ -107,8 +107,10 @@ namespace ETL_SQL.Tests.Orchestration
             var store = provider.GetRequiredService<IJobHistoryStore>();
             await store.InitializeAsync();
 
-            // Clear existing data for test isolation if needed
-            await store.DeleteJobAsync("TestJob");
+            // Clear existing data for test isolation — the store is shared, so a previous run's job
+            // of this name may still be there. Resolved first, because a name is not addressable.
+            if (await store.GetJobAsync(null, "TestJob") is { } stale)
+                await store.DeleteJobAsync(stale.Id);
 
             var sql = "CREATE JOB TestJob FOR SCRIPT 'jobs/test-job.etlsql';";
             var lexer = new Lexer(sql);

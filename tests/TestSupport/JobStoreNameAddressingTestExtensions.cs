@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 
@@ -50,8 +51,35 @@ internal static class JobStoreNameAddressingTestExtensions
 
     // ── History and state ─────────────────────────────────────────────────────
 
-    public static async Task<long> LogJobStartAsync(this IJobHistoryStore store, string jobName) =>
-        await store.LogJobStartAsync(await store.JobIdOfAsync(jobName));
+    /// <summary>
+    /// Records a run of <paramref name="jobName"/>, registering a placeholder definition first when
+    /// the test has not saved one. Recording a run <em>is</em> the assertion that the job exists, and
+    /// most callers here care about the run's history, metrics, or retention rather than the job's
+    /// shape; a test that cares about the definition saves its own, and this finds it.
+    ///
+    /// <para>This is the one helper that creates rather than resolves. It is confined to test setup
+    /// because production has no such case: a run always originates from a job the scheduler already
+    /// loaded, and a script run with no job goes to <see cref="IJobHistoryStore.LogAdHocRunStartAsync"/>.</para>
+    /// </summary>
+    public static async Task<long> LogJobStartAsync(this IJobHistoryStore store, string jobName)
+    {
+        if (await store.GetJobAsync(null, jobName) is null)
+        {
+            // Refuse when the name already belongs to a tenant. Creating an unbound twin would give
+            // the test two objects of one name and quietly answer every later question about the
+            // wrong one — which is the confusion this whole change exists to end. A tenant-scoped
+            // test resolves its own job and passes the identity.
+            if ((await store.GetAllJobsAsync()).Any(
+                    job => job.Name.Equals(jobName, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    $"A job named '{jobName}' exists in a tenant, so this unbound helper will not " +
+                    "create another. Resolve it with GetJobAsync(tenantId, name) and pass its Id.");
+
+            await store.SaveJobAsync(new JobDefinition(
+                jobName, "SELECT 1;", 1, "HOUR", null, null, null));
+        }
+        return await store.LogJobStartAsync(await store.JobIdOfAsync(jobName));
+    }
 
     /// <summary>
     /// Runs recorded under a job <em>name</em>. Deliberately maps to

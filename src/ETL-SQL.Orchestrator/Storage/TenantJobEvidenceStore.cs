@@ -48,11 +48,14 @@ public partial class RelationalJobHistoryStore
         using var connection = _dialect.CreateConnection();
         await connection.OpenAsync();
         using var command = connection.CreateCommand();
+        // Partitioned by the history row's own tenant column rather than by a join to Jobs on name.
+        // The join was wrong twice over: it matched any tenant's job that happened to share the name,
+        // and it dropped the runs of a job that had since been deleted — history the tenant still
+        // owns. The name filter stays on the history row for the same reason.
         var sql = @"
             SELECT h.*
             FROM JobHistory h
-            INNER JOIN Jobs j ON j.Name = h.JobName COLLATE NOCASE
-            WHERE j.TenantId = @tenant ";
+            WHERE h.TenantId = @tenant ";
         if (!string.IsNullOrWhiteSpace(jobName))
         {
             sql += "AND h.JobName = @job COLLATE NOCASE ";
@@ -79,8 +82,7 @@ public partial class RelationalJobHistoryStore
         command.CommandText = @"
             SELECT h.*
             FROM JobHistory h
-            INNER JOIN Jobs j ON j.Name = h.JobName COLLATE NOCASE
-            WHERE j.TenantId = @tenant AND h.Id = @historyId
+            WHERE h.TenantId = @tenant AND h.Id = @historyId
             LIMIT 1;";
         command.AddParam("@tenant", tenantId);
         command.AddParam("@historyId", entryId);
@@ -103,8 +105,7 @@ public partial class RelationalJobHistoryStore
                    m.Failed
             FROM JobStatementMetrics m
             INNER JOIN JobHistory h ON h.Id = m.JobHistoryId
-            INNER JOIN Jobs j ON j.Name = h.JobName COLLATE NOCASE
-            WHERE j.TenantId = @tenant AND h.Id = @historyId
+            WHERE h.TenantId = @tenant AND h.Id = @historyId
             ORDER BY m.Ordinal;";
         command.AddParam("@tenant", tenantId);
         command.AddParam("@historyId", entryId);
@@ -148,8 +149,7 @@ public partial class RelationalJobHistoryStore
                    f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
             FROM JobDataQualityFailures f
             INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
-            INNER JOIN Jobs j ON j.Name = h.JobName COLLATE NOCASE
-            WHERE j.TenantId = @tenant AND h.JobName = @jobName COLLATE NOCASE
+            WHERE h.TenantId = @tenant AND h.JobName = @jobName COLLATE NOCASE
             ORDER BY h.StartTime DESC, h.Id DESC, f.TargetTable, f.ColumnName, f.RuleText, f.Action
             LIMIT @limit;";
         command.AddParam("@tenant", tenantId);
@@ -183,8 +183,7 @@ public partial class RelationalJobHistoryStore
                    f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
             FROM JobDataQualityFailures f
             INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
-            INNER JOIN Jobs j ON j.Name = h.JobName COLLATE NOCASE
-            WHERE j.TenantId = @tenant AND h.Id = @historyId
+            WHERE h.TenantId = @tenant AND h.Id = @historyId
             ORDER BY f.TargetTable, f.ColumnName, f.RuleText, f.Action
             LIMIT @limit;";
         command.AddParam("@tenant", tenantId);
@@ -213,12 +212,15 @@ public partial class RelationalJobHistoryStore
         using var connection = _dialect.CreateConnection();
         await connection.OpenAsync();
         using var command = connection.CreateCommand();
+        // Joined on identity, and the name is resolved only on the Jobs side where it is unique per
+        // tenant. Job state, unlike history, belongs to a live job and is deleted with it, so there
+        // is always an identity to resolve.
         command.CommandText = @"
             SELECT s.StateValue
             FROM JobState s
-            INNER JOIN Jobs j ON j.Name = s.JobName COLLATE NOCASE
+            INNER JOIN Jobs j ON j.Id = s.JobId
             WHERE j.TenantId = @tenant
-              AND s.JobName = @job COLLATE NOCASE
+              AND j.Name = @job COLLATE NOCASE
               AND s.StateKey = @key;";
         command.AddParam("@tenant", tenantId);
         command.AddParam("@job", jobName);
@@ -236,11 +238,11 @@ public partial class RelationalJobHistoryStore
         await connection.OpenAsync();
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            INSERT INTO JobState (JobName, StateKey, StateValue, UpdatedAt)
-            SELECT j.Name, @key, @value, @updatedAt
+            INSERT INTO JobState (JobId, StateKey, StateValue, UpdatedAt)
+            SELECT j.Id, @key, @value, @updatedAt
             FROM Jobs j
             WHERE j.TenantId = @tenant AND j.Name = @job COLLATE NOCASE
-            ON CONFLICT (JobName, StateKey)
+            ON CONFLICT (JobId, StateKey)
             DO UPDATE SET StateValue = EXCLUDED.StateValue, UpdatedAt = EXCLUDED.UpdatedAt;";
         command.AddParam("@tenant", tenantId);
         command.AddParam("@job", jobName);
@@ -260,16 +262,16 @@ public partial class RelationalJobHistoryStore
         await connection.OpenAsync();
         using var command = connection.CreateCommand();
         var sql = @"
-            SELECT s.JobName, s.StateKey, s.StateValue, s.UpdatedAt
+            SELECT j.Name, s.StateKey, s.StateValue, s.UpdatedAt
             FROM JobState s
-            INNER JOIN Jobs j ON j.Name = s.JobName COLLATE NOCASE
+            INNER JOIN Jobs j ON j.Id = s.JobId
             WHERE j.TenantId = @tenant ";
         if (!string.IsNullOrWhiteSpace(jobName))
         {
-            sql += "AND s.JobName = @job COLLATE NOCASE ";
+            sql += "AND j.Name = @job COLLATE NOCASE ";
             command.AddParam("@job", jobName);
         }
-        command.CommandText = sql + "ORDER BY s.JobName, s.StateKey LIMIT @limit;";
+        command.CommandText = sql + "ORDER BY j.Name, s.StateKey LIMIT @limit;";
         command.AddParam("@tenant", tenantId);
         command.AddParam("@limit", Math.Clamp(limit, 1, 5000));
 

@@ -577,10 +577,13 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
-        public async Task DeleteJob_NonExistentName_DoesNotThrow()
+        public async Task DeleteJob_UnknownIdentity_DoesNotThrow()
         {
             await _store.InitializeAsync();
-            await _store.DeleteJobAsync("DoesNotExist");
+            // Deleting an identity that was never issued removes nothing and reports nothing wrong —
+            // an exported configuration script replaying a DROP must converge, not fail on the second
+            // run. There is no name-addressed delete to test any more; a name has to resolve first.
+            await _store.DeleteJobAsync(JobId.New());
         }
 
         // ── UpdateJobLastRunAsync ────────────────────────────────────────────────
@@ -754,8 +757,11 @@ namespace ETL_SQL.Tests.Orchestration
         [Fact]
         public async Task InitializeAsync_OnExistingDbMissingColumns_MigratesSuccessfully()
         {
-            // Build a DB schema without the newer columns to test migration path.
-            // We do this by directly manipulating the DB before calling InitializeAsync.
+            // A database written by an earlier build of *this* schema: the tables and their keys are
+            // current, but the additively-migrated columns (MaxRetries, the resource counters, the
+            // data-quality outcomes) are absent. That is the shape InitializeAsync promises to heal.
+            // It does not promise to convert a pre-surrogate-identity database, which would mean
+            // minting identities and rebuilding primary keys — no such database exists.
             var legacyStore = new SQLiteJobHistoryStore(_dbPath);
             using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_dbPath}"))
             {
@@ -764,14 +770,17 @@ namespace ETL_SQL.Tests.Orchestration
                 // Minimal schema that lacks MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy
                 cmd.CommandText = @"
                     CREATE TABLE IF NOT EXISTS Jobs (
-                        Name TEXT PRIMARY KEY,
+                        Id TEXT NOT NULL PRIMARY KEY,
+                        Name TEXT COLLATE NOCASE NOT NULL,
                         Script TEXT NOT NULL,
                         Interval INTEGER NOT NULL,
                         Unit TEXT NOT NULL,
                         AtTime TEXT,
                         LastRun TEXT,
                         NextRun TEXT,
-                        IsEnabled INTEGER NOT NULL DEFAULT 1
+                        IsEnabled INTEGER NOT NULL DEFAULT 1,
+                        TenantId TEXT NOT NULL DEFAULT """",
+                        UNIQUE (TenantId, Name)
                     );
                     CREATE TABLE IF NOT EXISTS JobHistory (
                         Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -803,14 +812,17 @@ namespace ETL_SQL.Tests.Orchestration
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = @"
                     CREATE TABLE Jobs (
-                        Name TEXT PRIMARY KEY,
+                        Id TEXT NOT NULL PRIMARY KEY,
+                        Name TEXT COLLATE NOCASE NOT NULL,
                         Script TEXT NOT NULL,
                         Interval INTEGER NOT NULL,
                         Unit TEXT NOT NULL,
                         AtTime TEXT,
                         LastRun TEXT,
                         NextRun TEXT,
-                        IsEnabled INTEGER NOT NULL DEFAULT 1
+                        IsEnabled INTEGER NOT NULL DEFAULT 1,
+                        TenantId TEXT NOT NULL DEFAULT """",
+                        UNIQUE (TenantId, Name)
                     );
                     CREATE TABLE JobHistory (
                         Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -896,6 +908,8 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task JobState_GetAndSet_SavesCorrectly()
         {
             await _store.InitializeAsync();
+            // State hangs off the job's identity, so the job has to exist to have any.
+            await _store.SaveJobAsync(MakeJob("TestJob"));
 
             // Set state
             await _store.SetJobStateAsync("TestJob", "Watermark", "2026-06-19");
