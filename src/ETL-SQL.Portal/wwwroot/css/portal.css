@@ -1453,7 +1453,17 @@ body.theme-midnight select, body.theme-midnight .form-select, body.theme-midnigh
   padding: 0 14px 14px;
   border-top: 1px solid var(--portal-border-soft);
   background: var(--portal-surface);
+  max-height: 420px;
+  overflow-y: auto;
   overflow-x: auto;
+  scrollbar-width: thin;
+}
+.triage-incident-runs .data-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--portal-surface-subtle);
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--portal-border-soft);
 }
 .triage-actions-cell {
   white-space: nowrap;

@@ -191,7 +191,12 @@ export function renderIncident(incident, {
   expanded = false, selected = false, index = 0, openRuns = new Set(), details = new Map()
 } = {}) {
   const jobs = incident.jobNames || [];
-  const shown = jobs.slice(0, 6).map(j => `<span class="triage-job-chip">${esc(j)}</span>`).join(' ');
+  const shown = jobs.slice(0, 6).map(j => `
+    <span class="triage-job-chip">
+      <span>${esc(j)}</span>
+      <button class="triage-chip-play triage-rerun-one" type="button" data-job="${esc(j)}"
+              title="Run '${esc(j)}' individually" aria-label="Run '${esc(j)}' individually">▶</button>
+    </span>`).join(' ');
   const more = jobs.length > 6 ? ` <span class="triage-more">+${jobs.length - 6} more</span>` : '';
   const span = incident.firstSeen === incident.lastSeen
     ? fmtTime(incident.lastSeen)
@@ -211,7 +216,7 @@ export function renderIncident(incident, {
         </button>
         <span class="triage-incident-when">${span}</span>
       </div>
-      <div class="triage-incident-jobs">${shown}${more}</div>
+      ${!expanded ? `<div class="triage-incident-jobs">${shown}${more}</div>` : ''}
       ${expanded ? `
       <div class="triage-incident-runs">
         <table class="data-table">
