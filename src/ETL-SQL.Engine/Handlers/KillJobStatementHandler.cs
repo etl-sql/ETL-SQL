@@ -33,13 +33,17 @@ public class KillJobStatementHandler : IStatementHandler
         }
 
         var historyStore = context.ServiceProvider.GetService<IJobHistoryStore>();
+        string? killedJobName = null;
         if (historyStore is not null && await historyStore.GetHistoryEntryAsync(historyId) is { } history)
         {
             var job = await historyStore.GetJobAsync(CatalogStatementSupport.ActingTenant(context), history.JobName);
             if (job is not null)
+            {
                 await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
                     job.Name, job.Id, job.TenantId,
                     OrchestratorObjectPermission.Manage, job.CreatedBy);
+                killedJobName = job.Name;
+            }
         }
 
         _logger.Info("Attempting to kill job with HistoryId: {HistoryId}", historyId);
@@ -55,6 +59,16 @@ public class KillJobStatementHandler : IStatementHandler
         if (killed)
         {
             _logger.Info("Successfully sent cancellation request for job {HistoryId}.", historyId);
+            // Targeted at the run, matching the HTTP resume audit, because a KILL names a run rather
+            // than a definition. The job name rides in the reason when the run resolved to one; a
+            // history id that resolves to nothing is still worth recording as an attempt that landed.
+            CatalogStatementSupport.AuditMutation(
+                context,
+                "KILL_JOB",
+                $"JOB_RUN:{historyId}",
+                killedJobName is null
+                    ? $"Run {historyId} cancelled."
+                    : $"Run {historyId} of job '{killedJobName}' cancelled.");
         }
         else
         {

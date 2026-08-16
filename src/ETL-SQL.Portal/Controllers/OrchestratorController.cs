@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -273,6 +274,416 @@ public class OrchestratorController(
             ? Ok(projection.Dag)
             : UnprocessableEntity(new { Error = projection.Error });
     }
+
+    // ── Schedules ─────────────────────────────────────────────────────────────
+
+    [HttpGet("schedules")]
+    public async Task<IActionResult> GetSchedules([FromQuery] int limit = 1000, [FromQuery] int offset = 0)
+    {
+        var schedules = await proxy.GetSchedulesAsync(limit, offset);
+        return Ok(schedules);
+    }
+
+    [HttpGet("schedules/{name}")]
+    public async Task<IActionResult> GetSchedule(string name)
+    {
+        var schedule = await proxy.GetScheduleAsync(name);
+        return schedule is null ? NotFound(new { Error = $"Schedule '{name}' not found." }) : Ok(schedule);
+    }
+
+    [HttpPost("schedules")]
+    public async Task<IActionResult> CreateSchedule([FromBody] CreateScheduleRequest req)
+    {
+        using var resp = await proxy.CreateScheduleAsync(req);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "ScheduleCreated", "Schedule", req.Name, null);
+        return StatusCode(201);
+    }
+
+    [HttpPut("schedules/{name}")]
+    public async Task<IActionResult> UpdateSchedule(string name, [FromBody] UpdateScheduleRequest req)
+    {
+        using var resp = await proxy.UpdateScheduleAsync(name, req);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "ScheduleUpdated", "Schedule", name, null);
+        return Ok();
+    }
+
+    [HttpDelete("schedules/{name}")]
+    public async Task<IActionResult> DeleteSchedule(string name)
+    {
+        using var resp = await proxy.DeleteScheduleAsync(name);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "ScheduleDeleted", "Schedule", name, null);
+        return Ok();
+    }
+
+    [HttpGet("jobs/{name}/schedules")]
+    public async Task<IActionResult> GetJobSchedules(string name)
+    {
+        var links = await proxy.GetJobSchedulesAsync(name);
+        return Ok(links);
+    }
+
+    [HttpPost("jobs/{name}/schedules/{scheduleName}")]
+    public async Task<IActionResult> AttachJobSchedule(string name, string scheduleName)
+    {
+        using var resp = await proxy.AttachJobScheduleAsync(name, scheduleName);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "JobScheduleAttached", "Job", name, $"Schedule={scheduleName}");
+        return Ok();
+    }
+
+    [HttpDelete("jobs/{name}/schedules/{scheduleName}")]
+    public async Task<IActionResult> DetachJobSchedule(string name, string scheduleName)
+    {
+        using var resp = await proxy.DetachJobScheduleAsync(name, scheduleName);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "JobScheduleDetached", "Job", name, $"Schedule={scheduleName}");
+        return Ok();
+    }
+
+    // ── Notifications ─────────────────────────────────────────────────────────
+
+    [HttpGet("notifications")]
+    public async Task<IActionResult> GetNotifications([FromQuery] int limit = 1000, [FromQuery] int offset = 0)
+    {
+        var notifications = await proxy.GetNotificationsAsync(limit, offset);
+        return Ok(notifications);
+    }
+
+    [HttpGet("notifications/{name}")]
+    public async Task<IActionResult> GetNotification(string name)
+    {
+        var notification = await proxy.GetNotificationAsync(name);
+        return notification is null ? NotFound(new { Error = $"Notification '{name}' not found." }) : Ok(notification);
+    }
+
+    [HttpPost("notifications")]
+    public async Task<IActionResult> CreateNotification([FromBody] CreateNotificationRequest req)
+    {
+        using var resp = await proxy.CreateNotificationAsync(req);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "NotificationCreated", "Notification", req.Name, null);
+        return StatusCode(201);
+    }
+
+    [HttpPut("notifications/{name}")]
+    public async Task<IActionResult> UpdateNotification(string name, [FromBody] UpdateNotificationRequest req)
+    {
+        using var resp = await proxy.UpdateNotificationAsync(name, req);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "NotificationUpdated", "Notification", name, null);
+        return Ok();
+    }
+
+    [HttpDelete("notifications/{name}")]
+    public async Task<IActionResult> DeleteNotification(string name)
+    {
+        using var resp = await proxy.DeleteNotificationAsync(name);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "NotificationDeleted", "Notification", name, null);
+        return Ok();
+    }
+
+    [HttpGet("jobs/{name}/notifications")]
+    public async Task<IActionResult> GetJobNotifications(string name)
+    {
+        var links = await proxy.GetJobNotificationsAsync(name);
+        return Ok(links);
+    }
+
+    [HttpPost("jobs/{name}/notifications/{notificationName}")]
+    public async Task<IActionResult> AttachJobNotification(string name, string notificationName, [FromBody] LinkJobNotificationRequest? req)
+    {
+        using var resp = await proxy.AttachJobNotificationAsync(name, notificationName, req?.Trigger ?? "Completion");
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "JobNotificationAttached", "Job", name, $"Notification={notificationName}; Trigger={req?.Trigger ?? "Completion"}");
+        return Ok();
+    }
+
+    [HttpDelete("jobs/{name}/notifications/{notificationName}")]
+    public async Task<IActionResult> DetachJobNotification(string name, string notificationName, [FromQuery] string? trigger = null)
+    {
+        using var resp = await proxy.DetachJobNotificationAsync(name, notificationName, trigger);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "JobNotificationDetached", "Job", name, $"Notification={notificationName}");
+        return Ok();
+    }
+
+    [HttpPost("notifications/{name}/dispatch")]
+    public Task<IActionResult> DispatchNotification(string name, [FromBody] OrchestratorNotificationDispatchRequest req, CancellationToken ct) =>
+        RelayAsync(
+            () => proxy.DispatchNotificationAsync(name, req, ct),
+            () => audit.LogAsync(CurrentUserId, "NotificationDispatched", "Notification", name, $"SourceKind={req.SourceKind}; Title={req.Title}"));
+
+    // ── Watermarks & Job State ──────────────────────────────────────────────────
+
+    [HttpGet("jobs/{name}/state")]
+    public async Task<IActionResult> GetJobStates(string name)
+    {
+        var states = await proxy.GetJobStatesAsync(name);
+        return Ok(states);
+    }
+
+    [HttpPut("jobs/{name}/state/{key}")]
+    public async Task<IActionResult> SetJobState(string name, string key, [FromBody] SetJobStateRequest req)
+    {
+        using var resp = await proxy.SetJobStateAsync(name, key, req?.Value);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "JobStateUpdated", "Job", name, $"Key={key}; Value={req?.Value}");
+        return Ok();
+    }
+
+    [HttpDelete("jobs/{name}/state/{key}")]
+    public async Task<IActionResult> DeleteJobState(string name, string key)
+    {
+        using var resp = await proxy.DeleteJobStateAsync(name, key);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, body);
+        }
+        await audit.LogAsync(CurrentUserId, "JobStateReset", "Job", name, $"Key={key}");
+        return Ok();
+    }
+
+    // ── Job Audit Trail ────────────────────────────────────────────────────────
+
+    [HttpGet("jobs/{name}/audit")]
+    public async Task<IActionResult> GetJobAuditTrail(
+        string name,
+        [FromServices] PortalDbContext db,
+        [FromServices] DatasetTenantScope? tenantScope,
+        [FromQuery] int limit = 50)
+    {
+        var tenantId = tenantScope?.TenantId ?? "portal-host";
+        var unescaped = Uri.UnescapeDataString(name);
+        var entries = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+            db.AuditLogs
+                .Where(a => a.TenantId == tenantId &&
+                    (a.ResourceId == unescaped || a.ResourceId == name) &&
+                    (a.ResourceType == "Job" || a.ResourceType == "JobRun" || a.ResourceType == "OrchestratorJob" || a.ResourceType == "JobScript" || a.Action.StartsWith("Job")))
+                .OrderByDescending(a => a.Timestamp)
+                .Take(Math.Clamp(limit, 1, 200)));
+        return Ok(entries);
+    }
+
+    // ── Cross-Job Dependencies ─────────────────────────────────────────────────
+
+    [HttpGet("jobs/{name}/dependencies")]
+    public async Task<IActionResult> GetJobDependencies(string name)
+    {
+        var allJobs = await proxy.GetJobsAsync();
+        var currentJob = allJobs.FirstOrDefault(j => j.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (currentJob == null) return NotFound(new { Error = $"Job '{name}' not found." });
+
+        var jobOutputs = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var jobInputs = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var jobTriggers = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var job in allJobs)
+        {
+            var outs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var trigs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(job.Script))
+            {
+                var projection = scriptDag.Project(job.Script);
+                if (projection.Parsed && projection.Dag != null)
+                {
+                    foreach (var edge in projection.Dag.Edges)
+                    {
+                        if (edge.Label != null && edge.Label.Contains("writes", StringComparison.OrdinalIgnoreCase))
+                            outs.Add(edge.Target);
+                        else if (edge.Label != null && edge.Label.Contains("reads", StringComparison.OrdinalIgnoreCase))
+                            ins.Add(edge.Source);
+                    }
+                    foreach (var node in projection.Dag.Nodes)
+                    {
+                        if (node.Type == "table" || node.Type == "io")
+                        {
+                            if (node.Label.StartsWith("INTO", StringComparison.OrdinalIgnoreCase) ||
+                                node.Label.StartsWith("MERGE", StringComparison.OrdinalIgnoreCase))
+                                outs.Add(node.Label);
+                            else if (node.Label.StartsWith("FROM", StringComparison.OrdinalIgnoreCase))
+                                ins.Add(node.Label);
+                        }
+                    }
+                }
+
+                // Look for direct trigger statements or script references
+                foreach (var other in allJobs)
+                {
+                    if (other.Name.Equals(job.Name, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (job.Script.Contains(other.Name, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrWhiteSpace(other.TargetPath) && job.Script.Contains(other.TargetPath, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        trigs.Add(other.Name);
+                    }
+                }
+            }
+
+            jobOutputs[job.Name] = outs;
+            jobInputs[job.Name] = ins;
+            jobTriggers[job.Name] = trigs;
+        }
+
+        var upstreamJobs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var downstreamJobs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var edges = new List<JobDependencyEdgeDto>();
+
+        // Find upstreams (jobs that produce data currentJob consumes or trigger currentJob)
+        var myInputs = jobInputs.GetValueOrDefault(currentJob.Name, []);
+        foreach (var other in allJobs)
+        {
+            if (other.Name.Equals(currentJob.Name, StringComparison.OrdinalIgnoreCase)) continue;
+            var otherOuts = jobOutputs.GetValueOrDefault(other.Name, []);
+            var matching = otherOuts.Intersect(myInputs, StringComparer.OrdinalIgnoreCase).ToList();
+            if (matching.Count > 0)
+            {
+                upstreamJobs.Add(other.Name);
+                edges.Add(new JobDependencyEdgeDto(other.Name, currentJob.Name, "Data", $"Writes {string.Join(", ", matching)}"));
+            }
+            if (jobTriggers.GetValueOrDefault(other.Name, []).Contains(currentJob.Name))
+            {
+                upstreamJobs.Add(other.Name);
+                edges.Add(new JobDependencyEdgeDto(other.Name, currentJob.Name, "Trigger", "Direct execution trigger"));
+            }
+        }
+
+        // Find downstreams (jobs that consume data currentJob produces or that currentJob triggers)
+        var myOuts = jobOutputs.GetValueOrDefault(currentJob.Name, []);
+        foreach (var other in allJobs)
+        {
+            if (other.Name.Equals(currentJob.Name, StringComparison.OrdinalIgnoreCase)) continue;
+            var otherIns = jobInputs.GetValueOrDefault(other.Name, []);
+            var matching = myOuts.Intersect(otherIns, StringComparer.OrdinalIgnoreCase).ToList();
+            if (matching.Count > 0)
+            {
+                downstreamJobs.Add(other.Name);
+                edges.Add(new JobDependencyEdgeDto(currentJob.Name, other.Name, "Data", $"Reads {string.Join(", ", matching)}"));
+            }
+            if (jobTriggers.GetValueOrDefault(currentJob.Name, []).Contains(other.Name))
+            {
+                downstreamJobs.Add(other.Name);
+                edges.Add(new JobDependencyEdgeDto(currentJob.Name, other.Name, "Trigger", "Direct execution trigger"));
+            }
+        }
+
+        var neighborNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { currentJob.Name };
+        foreach (var u in upstreamJobs) neighborNames.Add(u);
+        foreach (var d in downstreamJobs) neighborNames.Add(d);
+
+        var nodes = allJobs
+            .Where(j => neighborNames.Contains(j.Name))
+            .Select(j => new JobDependencyNodeDto(
+                j.Name,
+                j.Name,
+                j.DisplayName,
+                j.IsEnabled,
+                j.LastRun,
+                j.NextRun,
+                j.Name.Equals(currentJob.Name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var chain = new JobDependencyChainDto(
+            currentJob.Name,
+            nodes,
+            edges,
+            upstreamJobs.ToList(),
+            downstreamJobs.ToList(),
+            []);
+
+        return Ok(chain);
+    }
+
+    // ── Bundles, Data Quality & Stewardship ────────────────────────────────────
+
+    [HttpGet("data-quality/status")]
+    public Task<IActionResult> GetDataQualityStatus([FromQuery] int limit = 1000, CancellationToken ct = default) =>
+        RelayAsync(() => proxy.GetDataQualityStatusResponseAsync(limit, ct));
+
+    [HttpGet("data-quality/failures")]
+    public Task<IActionResult> GetDataQualityFailures([FromQuery] int limit = 1000, CancellationToken ct = default) =>
+        RelayAsync(() => proxy.GetDataQualityFailuresResponseAsync(limit, ct));
+
+    [HttpGet("stewardship/score")]
+    public Task<IActionResult> GetStewardshipScore([FromQuery] int limit = 1000, CancellationToken ct = default) =>
+        RelayAsync(() => proxy.GetStewardshipScoreResponseAsync(limit, ct));
+
+    [HttpGet("stewardship/gaps")]
+    public Task<IActionResult> GetStewardshipGaps([FromQuery] int limit = 1000, CancellationToken ct = default) =>
+        RelayAsync(() => proxy.GetStewardshipGapsResponseAsync(limit, ct));
+
+    [HttpGet("bundles")]
+    public Task<IActionResult> GetBundles(CancellationToken ct) =>
+        RelayAsync(() => proxy.GetBundlesResponseAsync(ct));
+
+    [HttpGet("bundles/{name}/versions")]
+    public Task<IActionResult> GetBundleVersions(string name, CancellationToken ct) =>
+        RelayAsync(() => proxy.GetBundleVersionsResponseAsync(name, ct));
+
+    [HttpGet("bundles/{name}/versions/{version:int}/dependencies")]
+    public Task<IActionResult> GetBundleDependencies(string name, int version, CancellationToken ct) =>
+        RelayAsync(() => proxy.GetBundleDependenciesResponseAsync(name, version, ct));
 
     // ── Script browser ────────────────────────────────────────────────────────
 

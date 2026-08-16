@@ -64,6 +64,8 @@ public class EnableJobStatementHandler : IStatementHandler
             IsEnabled = true,
             ModifiedBy = CatalogStatementSupport.ActingIdentity(context)
         });
+        CatalogStatementSupport.AuditMutation(
+            context, "ENABLE_JOB", $"JOB:{stmt.Name}", $"Job '{stmt.Name}' enabled.");
         context.Log($"Job '{stmt.Name}' enabled.", ConsoleColor.Green);
     }
 }
@@ -94,6 +96,8 @@ public class DisableJobStatementHandler : IStatementHandler
             IsEnabled = false,
             ModifiedBy = CatalogStatementSupport.ActingIdentity(context)
         });
+        CatalogStatementSupport.AuditMutation(
+            context, "DISABLE_JOB", $"JOB:{stmt.Name}", $"Job '{stmt.Name}' disabled.");
         context.Log($"Job '{stmt.Name}' disabled.", ConsoleColor.Yellow);
     }
 }
@@ -124,6 +128,10 @@ public class TriggerJobStatementHandler : IStatementHandler
         // TRIGGER JOB against the local store is informational — the scheduler loop
         // is responsible for polling and immediate triggering requires an Orchestrator
         // connection. This validates the job exists and advises the user.
+        //
+        // Deliberately not audited: nothing ran. The routed form above reaches the Orchestrator's
+        // trigger endpoint, which emits TRIGGER_JOB there, where the run actually happens. Emitting
+        // one here as well would put a run in the audit trail that never existed.
         context.Log(
             $"TRIGGER JOB: job '{stmt.Name}' found locally. " +
             "To trigger it immediately on a remote Orchestrator, use: " +

@@ -68,6 +68,11 @@ public class AlterJobStatementHandler : IStatementHandler
         };
 
         await _store.SaveJobAsync(updated);
+        CatalogStatementSupport.AuditMutation(
+            context,
+            "ALTER_JOB",
+            $"JOB:{stmt.JobName}",
+            $"Job '{stmt.JobName}' altered.");
         context.Log($"Job '{stmt.JobName}' altered successfully.", ConsoleColor.Green);
     }
 

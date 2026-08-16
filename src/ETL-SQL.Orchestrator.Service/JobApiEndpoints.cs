@@ -18,6 +18,7 @@ using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Engine.Scheduling;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
@@ -363,6 +364,16 @@ namespace ETL_SQL.Orchestrator.Service
                     await store.SaveJobAsync(job);
                 }
 
+                EmitObjectMutationAudit(
+                    caller,
+                    $"JOB:{req.Name}",
+                    existing is null
+                        ? "CREATE_JOB"
+                        : string.Equals(req.Mode, nameof(ObjectCreationMode.CreateOrReplace), StringComparison.OrdinalIgnoreCase)
+                            ? "REPLACE_JOB"
+                            : "ALTER_JOB",
+                    $"Job '{req.Name}' {(existing is null ? "created" : "updated")}.",
+                    ctx.TraceIdentifier);
                 return Results.Created($"/api/scheduled-jobs/{Uri.EscapeDataString(req.Name)}", job);
             }).WithName("createScheduledJob");
 
@@ -384,8 +395,9 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (!CanAccessJobTenant(existing, requestTenant))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Id, existing.TenantId,
+                        caller, OrchestratorObjectKind.Job, existing.Id, existing.TenantId,
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -427,6 +439,21 @@ namespace ETL_SQL.Orchestrator.Service
                         Current = current
                     });
                 }
+
+                EmitObjectMutationAudit(
+                    caller, $"JOB:{existing.Name}", "ALTER_JOB",
+                    $"Job '{existing.Name}' updated.", ctx.TraceIdentifier);
+                // A second event, not a different verb for the same one. This endpoint is both the
+                // definition editor and the enable/disable switch, and an auditor asking "who turned
+                // this job off" searches for the verb — folding the state change into ALTER_JOB would
+                // hide it, while renaming ALTER_JOB to DISABLE_JOB would hide the definition change.
+                if (updated.IsEnabled != existing.IsEnabled)
+                    EmitObjectMutationAudit(
+                        caller,
+                        $"JOB:{existing.Name}",
+                        updated.IsEnabled ? "ENABLE_JOB" : "DISABLE_JOB",
+                        $"Job '{existing.Name}' {(updated.IsEnabled ? "enabled" : "disabled")}.",
+                        ctx.TraceIdentifier);
                 return Results.Ok(await store.GetJobAsync(RequestTenant(ctx, cfg), existing.Name));
             }).WithName("updateScheduledJob");
 
@@ -445,8 +472,9 @@ namespace ETL_SQL.Orchestrator.Service
                 var existing = await store.GetJobAsync(RequestTenant(ctx, cfg), unescaped);
                 if (existing is null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Id, existing.TenantId,
+                        caller, OrchestratorObjectKind.Job, existing.Id, existing.TenantId,
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -463,6 +491,9 @@ namespace ETL_SQL.Orchestrator.Service
                 // not inherit these grants.
                 if (existing.Id.IsAssigned)
                     await authorizationStore.DeleteObjectGrantsAsync(existing.Id.Value, ctx.RequestAborted);
+                EmitObjectMutationAudit(
+                    caller, $"JOB:{unescaped}", "DROP_JOB",
+                    $"Job '{unescaped}' dropped.", ctx.TraceIdentifier);
                 return Results.Ok(new { Deleted = unescaped });
             }).WithName("deleteScheduledJob");
 
@@ -492,8 +523,9 @@ namespace ETL_SQL.Orchestrator.Service
                 if (history is null) return Results.NotFound(new { Error = $"Run '{historyId}' not found." });
                 var job = await store.GetJobAsync(RequestTenant(ctx, cfg), history.JobName);
                 if (job is null) return Results.NotFound(new { Error = $"Job '{history.JobName}' not found." });
+                var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Execute, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -505,12 +537,11 @@ namespace ETL_SQL.Orchestrator.Service
                 if (result.Status is ResumeTriggerStatus.NotResumable or ResumeTriggerStatus.AlreadyRunning)
                     return Results.Conflict(new { Error = result.Reason, result.CheckpointLabel });
 
-                var actor = RequestActor(ctx);
                 logger.LogWarning(
                     "Run {HistoryId} resumed from named checkpoint {CheckpointLabel} by {Actor}.",
-                    historyId, result.CheckpointLabel, actor);
+                    historyId, result.CheckpointLabel, RequestActor(ctx));
                 EmitNamedCheckpointResumeAudit(
-                    actor, historyId, result.CheckpointLabel!, ctx.TraceIdentifier);
+                    caller, historyId, job.Name, result.CheckpointLabel!, ctx.TraceIdentifier);
                 return Results.Accepted(value: new
                 {
                     Message = $"Run {historyId} queued to resume from checkpoint '{result.CheckpointLabel}'.",
@@ -600,6 +631,213 @@ namespace ETL_SQL.Orchestrator.Service
                     : Results.StatusCode(StatusCodes.Status403Forbidden);
             }).WithName("getSchedule");
 
+            app.MapPost("/api/schedules", async (HttpContext ctx, CreateScheduleApiRequest req,
+                IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (string.IsNullOrWhiteSpace(req.Name))
+                    return Results.BadRequest(new { Error = "Name is required." });
+                if (string.IsNullOrWhiteSpace(req.Cron))
+                    return Results.BadRequest(new { Error = "Cron expression is required." });
+
+                var timeZone = string.IsNullOrWhiteSpace(req.TimeZone) ? CronSchedule.DefaultTimeZone : req.TimeZone.Trim();
+                try
+                {
+                    CronSchedule.Validate(req.Cron, timeZone);
+                }
+                catch (Exception ex)
+                {
+                    return Results.BadRequest(new { Error = $"Invalid cron schedule or timezone: {ex.Message}" });
+                }
+
+                var caller = RequestCaller(ctx);
+                if (!OrchestratorObjectAuthorizationService.CanCreate(caller))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var existing = await catalog.GetScheduleAsync(RequestTenant(ctx, cfg), req.Name.Trim());
+                if (existing is not null)
+                    return Results.Conflict(new { Error = $"Schedule '{req.Name}' already exists." });
+
+                var schedule = new ScheduleDefinition(
+                    Name: req.Name.Trim(),
+                    Cron: req.Cron.Trim(),
+                    TimeZone: timeZone,
+                    IsEnabled: req.IsEnabled,
+                    DisplayName: req.DisplayName ?? req.Name.Trim(),
+                    Description: req.Description,
+                    Options: req.Options is null ? null : JsonSerializer.Serialize(req.Options),
+                    CreatedBy: caller.PrincipalKey,
+                    ModifiedBy: ReadActor(ctx),
+                    TenantId: RequestTenant(ctx, cfg));
+
+                await catalog.SaveScheduleAsync(schedule);
+                EmitObjectMutationAudit(caller, $"SCHEDULE:{schedule.Name}", "CREATE_SCHEDULE", $"Schedule '{schedule.Name}' created.", ctx.TraceIdentifier);
+                var created = await catalog.GetScheduleAsync(RequestTenant(ctx, cfg), schedule.Name);
+                return Results.Created($"/api/schedules/{Uri.EscapeDataString(schedule.Name)}", created ?? schedule);
+            }).WithName("createSchedule");
+
+            app.MapPut("/api/schedules/{name}", async (HttpContext ctx, string name,
+                UpdateScheduleApiRequest req, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var scheduleName = Uri.UnescapeDataString(name);
+                var existing = await catalog.GetScheduleAsync(RequestTenant(ctx, cfg), scheduleName);
+                if (existing is null) return Results.NotFound(new { Error = $"Schedule '{scheduleName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Schedule, existing.Id, existing.TenantId,
+                        OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var cron = string.IsNullOrWhiteSpace(req.Cron) ? existing.Cron : req.Cron.Trim();
+                var timeZone = string.IsNullOrWhiteSpace(req.TimeZone) ? existing.TimeZone : req.TimeZone.Trim();
+                try
+                {
+                    CronSchedule.Validate(cron, timeZone);
+                }
+                catch (Exception ex)
+                {
+                    return Results.BadRequest(new { Error = $"Invalid cron schedule or timezone: {ex.Message}" });
+                }
+
+                var updated = existing with
+                {
+                    Cron = cron,
+                    TimeZone = timeZone,
+                    IsEnabled = req.IsEnabled ?? existing.IsEnabled,
+                    DisplayName = req.DisplayName ?? existing.DisplayName,
+                    Description = req.Description ?? existing.Description,
+                    Options = req.Options is null ? existing.Options : JsonSerializer.Serialize(req.Options),
+                    ModifiedBy = ReadActor(ctx)
+                };
+
+                await catalog.SaveScheduleAsync(updated);
+                EmitObjectMutationAudit(caller, $"SCHEDULE:{existing.Name}", "ALTER_SCHEDULE", $"Schedule '{existing.Name}' updated.", ctx.TraceIdentifier);
+                if (updated.IsEnabled != existing.IsEnabled)
+                {
+                    EmitObjectMutationAudit(caller, $"SCHEDULE:{existing.Name}",
+                        updated.IsEnabled ? "ENABLE_SCHEDULE" : "DISABLE_SCHEDULE",
+                        $"Schedule '{existing.Name}' {(updated.IsEnabled ? "enabled" : "disabled")}.",
+                        ctx.TraceIdentifier);
+                }
+                var saved = await catalog.GetScheduleAsync(RequestTenant(ctx, cfg), existing.Name);
+                return Results.Ok(saved ?? updated);
+            }).WithName("updateSchedule");
+
+            app.MapDelete("/api/schedules/{name}", async (HttpContext ctx, string name,
+                IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var scheduleName = Uri.UnescapeDataString(name);
+                var existing = await catalog.GetScheduleAsync(RequestTenant(ctx, cfg), scheduleName);
+                if (existing is null) return Results.NotFound(new { Error = $"Schedule '{scheduleName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Schedule, existing.Id, existing.TenantId,
+                        OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var blockingJobs = await catalog.DeleteScheduleAsync(existing.Id);
+                if (blockingJobs.Count > 0)
+                {
+                    return Results.Conflict(new
+                    {
+                        Error = $"Cannot delete schedule '{scheduleName}' because it is attached to {blockingJobs.Count} job(s).",
+                        BlockingJobs = blockingJobs
+                    });
+                }
+
+                EmitObjectMutationAudit(caller, $"SCHEDULE:{existing.Name}", "DROP_SCHEDULE", $"Schedule '{existing.Name}' deleted.", ctx.TraceIdentifier);
+                return Results.Ok(new { Message = $"Schedule '{scheduleName}' deleted." });
+            }).WithName("deleteSchedule");
+
+            app.MapGet("/api/scheduled-jobs/{name}/schedules", async (HttpContext ctx, string name,
+                IJobHistoryStore store, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var jobName = Uri.UnescapeDataString(name);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), jobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{jobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var links = await catalog.GetJobSchedulesAsync(job.Id);
+                var schedules = await catalog.GetSchedulesAsync(1000);
+                var scheduleMap = schedules.ToDictionary(s => s.Id, s => s.Name);
+                var enriched = links.Select(l => new
+                {
+                    JobId = l.JobId,
+                    ScheduleId = l.ScheduleId,
+                    LastRun = l.LastRun,
+                    NextRun = l.NextRun,
+                    JobName = job.Name,
+                    ScheduleName = scheduleMap.TryGetValue(l.ScheduleId, out var sName) ? sName : l.ScheduleId.Value
+                });
+                return Results.Ok(enriched);
+            }).WithName("getJobSchedules");
+
+            app.MapPost("/api/scheduled-jobs/{name}/schedules/{scheduleName}", async (HttpContext ctx,
+                string name, string scheduleName,
+                IJobHistoryStore store, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var unescapedJobName = Uri.UnescapeDataString(name);
+                var unescapedScheduleName = Uri.UnescapeDataString(scheduleName);
+
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), unescapedJobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{unescapedJobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var schedule = await catalog.GetScheduleAsync(job.TenantId, unescapedScheduleName);
+                if (schedule is null)
+                    return Results.NotFound(new { Error = $"Schedule '{unescapedScheduleName}' not found." });
+
+                var created = await JobScheduleAttachment.AttachAsync(catalog, job.Id, job.TenantId, schedule.Name);
+                EmitObjectMutationAudit(caller, $"JOB:{job.Name}", "ATTACH_SCHEDULE",
+                    $"Attached schedule '{schedule.Name}' to job '{job.Name}'.", ctx.TraceIdentifier);
+                return Results.Ok(new { Attached = true, IsNew = created });
+            }).WithName("attachJobSchedule");
+
+            app.MapDelete("/api/scheduled-jobs/{name}/schedules/{scheduleName}", async (HttpContext ctx,
+                string name, string scheduleName,
+                IJobHistoryStore store, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var unescapedJobName = Uri.UnescapeDataString(name);
+                var unescapedScheduleName = Uri.UnescapeDataString(scheduleName);
+
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), unescapedJobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{unescapedJobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var schedule = await catalog.GetScheduleAsync(job.TenantId, unescapedScheduleName);
+                if (schedule is not null)
+                {
+                    await catalog.RemoveJobScheduleAsync(job.Id, schedule.Id);
+                }
+
+                EmitObjectMutationAudit(caller, $"JOB:{job.Name}", "DETACH_SCHEDULE",
+                    $"Detached schedule '{unescapedScheduleName}' from job '{job.Name}'.", ctx.TraceIdentifier);
+                return Results.Ok(new { Detached = true });
+            }).WithName("detachJobSchedule");
+
             app.MapGet("/api/notifications", async (HttpContext ctx, IJobCatalogStore catalog,
                 OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
                 int limit = 100, int offset = 0) =>
@@ -627,6 +865,269 @@ namespace ETL_SQL.Orchestrator.Service
                     : Results.StatusCode(StatusCodes.Status403Forbidden);
             }).WithName("getNotification");
 
+            app.MapPost("/api/notifications", async (HttpContext ctx, CreateNotificationApiRequest req,
+                IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (string.IsNullOrWhiteSpace(req.Name))
+                    return Results.BadRequest(new { Error = "Name is required." });
+                if (string.IsNullOrWhiteSpace(req.ConnectionName))
+                    return Results.BadRequest(new { Error = "ConnectionName is required." });
+
+                var caller = RequestCaller(ctx);
+                if (!OrchestratorObjectAuthorizationService.CanCreate(caller))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var existing = await catalog.GetNotificationAsync(RequestTenant(ctx, cfg), req.Name.Trim());
+                if (existing is not null)
+                    return Results.Conflict(new { Error = $"Notification '{req.Name}' already exists." });
+
+                var notification = new NotificationDefinition(
+                    Name: req.Name.Trim(),
+                    ConnectionName: req.ConnectionName.Trim(),
+                    Recipient: string.IsNullOrWhiteSpace(req.Recipient) ? null : req.Recipient.Trim(),
+                    IsEnabled: req.IsEnabled,
+                    DisplayName: req.DisplayName ?? req.Name.Trim(),
+                    Description: req.Description,
+                    Options: req.Options is null ? null : JsonSerializer.Serialize(req.Options),
+                    CreatedBy: caller.PrincipalKey,
+                    ModifiedBy: ReadActor(ctx),
+                    TenantId: RequestTenant(ctx, cfg));
+
+                await catalog.SaveNotificationAsync(notification);
+                EmitObjectMutationAudit(caller, $"NOTIFICATION:{notification.Name}", "CREATE_NOTIFICATION", $"Notification '{notification.Name}' created.", ctx.TraceIdentifier);
+                var created = await catalog.GetNotificationAsync(RequestTenant(ctx, cfg), notification.Name);
+                return Results.Created($"/api/notifications/{Uri.EscapeDataString(notification.Name)}", created ?? notification);
+            }).WithName("createNotification");
+
+            app.MapPut("/api/notifications/{name}", async (HttpContext ctx, string name,
+                UpdateNotificationApiRequest req, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var notificationName = Uri.UnescapeDataString(name);
+                var existing = await catalog.GetNotificationAsync(RequestTenant(ctx, cfg), notificationName);
+                if (existing is null) return Results.NotFound(new { Error = $"Notification '{notificationName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Notification, existing.Id, existing.TenantId,
+                        OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var updated = existing with
+                {
+                    ConnectionName = string.IsNullOrWhiteSpace(req.ConnectionName) ? existing.ConnectionName : req.ConnectionName.Trim(),
+                    Recipient = req.Recipient ?? existing.Recipient,
+                    IsEnabled = req.IsEnabled ?? existing.IsEnabled,
+                    DisplayName = req.DisplayName ?? existing.DisplayName,
+                    Description = req.Description ?? existing.Description,
+                    Options = req.Options is null ? existing.Options : JsonSerializer.Serialize(req.Options),
+                    ModifiedBy = ReadActor(ctx)
+                };
+
+                await catalog.SaveNotificationAsync(updated);
+                EmitObjectMutationAudit(caller, $"NOTIFICATION:{existing.Name}", "ALTER_NOTIFICATION", $"Notification '{existing.Name}' updated.", ctx.TraceIdentifier);
+                if (updated.IsEnabled != existing.IsEnabled)
+                {
+                    EmitObjectMutationAudit(caller, $"NOTIFICATION:{existing.Name}",
+                        updated.IsEnabled ? "ENABLE_NOTIFICATION" : "DISABLE_NOTIFICATION",
+                        $"Notification '{existing.Name}' {(updated.IsEnabled ? "enabled" : "disabled")}.",
+                        ctx.TraceIdentifier);
+                }
+                var saved = await catalog.GetNotificationAsync(RequestTenant(ctx, cfg), existing.Name);
+                return Results.Ok(saved ?? updated);
+            }).WithName("updateNotification");
+
+            app.MapDelete("/api/notifications/{name}", async (HttpContext ctx, string name,
+                IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var notificationName = Uri.UnescapeDataString(name);
+                var existing = await catalog.GetNotificationAsync(RequestTenant(ctx, cfg), notificationName);
+                if (existing is null) return Results.NotFound(new { Error = $"Notification '{notificationName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Notification, existing.Id, existing.TenantId,
+                        OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var blockingJobs = await catalog.DeleteNotificationAsync(existing.Id);
+                if (blockingJobs.Count > 0)
+                {
+                    return Results.Conflict(new
+                    {
+                        Error = $"Cannot delete notification '{notificationName}' because it is attached to {blockingJobs.Count} job(s).",
+                        BlockingJobs = blockingJobs
+                    });
+                }
+
+                EmitObjectMutationAudit(caller, $"NOTIFICATION:{existing.Name}", "DROP_NOTIFICATION", $"Notification '{existing.Name}' deleted.", ctx.TraceIdentifier);
+                return Results.Ok(new { Message = $"Notification '{notificationName}' deleted." });
+            }).WithName("deleteNotification");
+
+            app.MapGet("/api/scheduled-jobs/{name}/notifications", async (HttpContext ctx, string name,
+                IJobHistoryStore store, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var jobName = Uri.UnescapeDataString(name);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), jobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{jobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var links = await catalog.GetJobNotificationsAsync(job.Id);
+                var notifs = await catalog.GetNotificationsAsync(1000);
+                var notifMap = notifs.ToDictionary(n => n.Id, n => n.Name);
+                var enriched = links.Select(l => new
+                {
+                    JobId = l.JobId,
+                    NotificationId = l.NotificationId,
+                    Trigger = l.Trigger.ToString(),
+                    JobName = job.Name,
+                    NotificationName = notifMap.TryGetValue(l.NotificationId, out var nName) ? nName : l.NotificationId.Value
+                });
+                return Results.Ok(enriched);
+            }).WithName("getJobNotifications");
+
+            app.MapPost("/api/scheduled-jobs/{name}/notifications/{notificationName}", async (HttpContext ctx,
+                string name, string notificationName, LinkJobNotificationApiRequest? req,
+                IJobHistoryStore store, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var unescapedJobName = Uri.UnescapeDataString(name);
+                var unescapedNotificationName = Uri.UnescapeDataString(notificationName);
+
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), unescapedJobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{unescapedJobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var notification = await catalog.GetNotificationAsync(job.TenantId, unescapedNotificationName);
+                if (notification is null)
+                    return Results.NotFound(new { Error = $"Notification '{unescapedNotificationName}' not found." });
+
+                var trigger = NotificationTrigger.Completion;
+                if (!string.IsNullOrWhiteSpace(req?.Trigger))
+                {
+                    if (Enum.TryParse<NotificationTrigger>(req.Trigger, ignoreCase: true, out var parsedTrigger))
+                        trigger = parsedTrigger;
+                }
+
+                var created = await catalog.AddJobNotificationAsync(job.Id, notification.Id, trigger);
+                EmitObjectMutationAudit(caller, $"JOB:{job.Name}", "ATTACH_NOTIFICATION",
+                    $"Attached notification '{notification.Name}' ({trigger}) to job '{job.Name}'.", ctx.TraceIdentifier);
+                return Results.Ok(new { Attached = true, IsNew = created, Trigger = trigger.ToString() });
+            }).WithName("attachJobNotification");
+
+            app.MapDelete("/api/scheduled-jobs/{name}/notifications/{notificationName}", async (HttpContext ctx,
+                string name, string notificationName, [Microsoft.AspNetCore.Mvc.FromQuery] string? trigger,
+                IJobHistoryStore store, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var unescapedJobName = Uri.UnescapeDataString(name);
+                var unescapedNotificationName = Uri.UnescapeDataString(notificationName);
+
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), unescapedJobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{unescapedJobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var notification = await catalog.GetNotificationAsync(job.TenantId, unescapedNotificationName);
+                if (notification is not null)
+                {
+                    if (!string.IsNullOrWhiteSpace(trigger) && Enum.TryParse<NotificationTrigger>(trigger, ignoreCase: true, out var parsedTrigger))
+                    {
+                        await catalog.RemoveJobNotificationAsync(job.Id, notification.Id, parsedTrigger);
+                    }
+                    else
+                    {
+                        await catalog.RemoveJobNotificationAsync(job.Id, notification.Id, NotificationTrigger.Success);
+                        await catalog.RemoveJobNotificationAsync(job.Id, notification.Id, NotificationTrigger.Failure);
+                        await catalog.RemoveJobNotificationAsync(job.Id, notification.Id, NotificationTrigger.Completion);
+                    }
+                }
+
+                EmitObjectMutationAudit(caller, $"JOB:{job.Name}", "DETACH_NOTIFICATION",
+                    $"Detached notification '{unescapedNotificationName}' from job '{job.Name}'.", ctx.TraceIdentifier);
+                return Results.Ok(new { Detached = true });
+            }).WithName("detachJobNotification");
+
+            // ── Watermarks & Job State ──────────────────────────────────────────
+
+            app.MapGet("/api/scheduled-jobs/{name}/state", async (HttpContext ctx, string name,
+                IJobHistoryStore store, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var jobName = Uri.UnescapeDataString(name);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), jobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{jobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var states = await store.GetJobStatesAsync(job.Id);
+                return Results.Ok(states);
+            }).WithName("getJobStates");
+
+            app.MapPut("/api/scheduled-jobs/{name}/state/{key}", async (HttpContext ctx, string name, string key,
+                SetJobStateApiRequest req, IJobHistoryStore store,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var jobName = Uri.UnescapeDataString(name);
+                var stateKey = Uri.UnescapeDataString(key);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), jobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{jobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                await store.SetJobStateAsync(job.Id, stateKey, req?.Value);
+                EmitObjectMutationAudit(caller, $"JOB:{job.Name}", "SET_JOB_STATE",
+                    $"Job '{job.Name}' state key '{stateKey}' updated to '{req?.Value}'.", ctx.TraceIdentifier);
+                return Results.Ok(new { Key = stateKey, Value = req?.Value });
+            }).WithName("setJobState");
+
+            app.MapDelete("/api/scheduled-jobs/{name}/state/{key}", async (HttpContext ctx, string name, string key,
+                IJobHistoryStore store, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var jobName = Uri.UnescapeDataString(name);
+                var stateKey = Uri.UnescapeDataString(key);
+                var job = await store.GetJobAsync(RequestTenant(ctx, cfg), jobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{jobName}' not found." });
+
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                await store.SetJobStateAsync(job.Id, stateKey, null);
+                EmitObjectMutationAudit(caller, $"JOB:{job.Name}", "RESET_JOB_STATE",
+                    $"Job '{job.Name}' state key '{stateKey}' cleared.", ctx.TraceIdentifier);
+                return Results.Ok(new { Key = stateKey, Cleared = true });
+            }).WithName("deleteJobState");
+
             app.MapPost("/api/notifications/{name}/dispatch", async (HttpContext ctx, string name,
                 DispatchNotificationApiRequest req, NotificationDispatchService dispatch,
                 IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
@@ -639,8 +1140,9 @@ namespace ETL_SQL.Orchestrator.Service
                 var notification = await catalog.GetNotificationAsync(RequestTenant(ctx, cfg), notificationName);
                 if (notification is null)
                     return Results.NotFound(new { Error = $"Notification '{notificationName}' was not found." });
+                var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Notification, notification.Id, notification.TenantId,
+                        caller, OrchestratorObjectKind.Notification, notification.Id, notification.TenantId,
                         OrchestratorObjectPermission.Execute, notification.CreatedBy, ct))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var sourceKind = string.IsNullOrWhiteSpace(req.SourceKind)
@@ -680,6 +1182,16 @@ namespace ETL_SQL.Orchestrator.Service
 
                 var result = await dispatch.DispatchNotificationAsync(payload, ct);
 
+                // Audited on the attempt rather than only on delivery: a message that left the
+                // building and one that was refused downstream are both facts about who asked for it,
+                // and only the first is recoverable from the transport's own logs.
+                EmitObjectMutationAudit(
+                    caller,
+                    $"NOTIFICATION:{notificationName}",
+                    "DISPATCH_NOTIFICATION",
+                    $"Notification '{notificationName}' dispatched from {sourceKind}; "
+                        + $"Delivered={result.Delivered}; Skipped={result.Skipped}.",
+                    ctx.TraceIdentifier);
                 return result.Delivered
                     ? Results.Ok(result)
                     : Results.Json(result, statusCode: result.Skipped
@@ -1072,8 +1584,9 @@ namespace ETL_SQL.Orchestrator.Service
                 var required = overrides.Count == 0
                     ? OrchestratorObjectPermission.Execute
                     : OrchestratorObjectPermission.Override;
+                var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         required, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -1090,8 +1603,14 @@ namespace ETL_SQL.Orchestrator.Service
                 logger.LogInformation(
                     "Job {JobName} triggered out of schedule by {Actor} with {OverrideCount} variable overrides ({OverrideNames}).",
                     unescaped, actor, overrides.Count, string.Join(',', overrides.Keys));
+                // Warning, not Information: a manual trigger is a run that the schedule did not ask
+                // for, which is the thing an operator is looking for when a job ran at an odd hour.
+                EmitObjectMutationAudit(
+                    caller, $"JOB:{unescaped}", "TRIGGER_JOB",
+                    $"Job '{unescaped}' queued for immediate execution out of schedule.",
+                    ctx.TraceIdentifier, SecurityEventSeverity.Warning);
                 if (overrides.Count > 0)
-                    EmitVariableOverrideAudit(actor, unescaped, overrides.Keys, ctx.TraceIdentifier);
+                    EmitVariableOverrideAudit(caller, unescaped, overrides.Keys, ctx.TraceIdentifier);
                 return Results.Accepted(uri: (string?)null, value: new { Message = $"Job '{unescaped}' queued for immediate execution." });
             }).WithName("triggerScheduledJob");
 
@@ -1105,8 +1624,9 @@ namespace ETL_SQL.Orchestrator.Service
                 var unescaped = Uri.UnescapeDataString(name);
                 var job = await store.GetJobAsync(RequestTenant(ctx, cfg), unescaped);
                 if (job is null) return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                var caller = RequestCaller(ctx);
                 if (!await authorization.CanAsync(
-                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                        caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var history = await store.GetHistoryAsync(job.Id, 10);
@@ -1116,9 +1636,15 @@ namespace ETL_SQL.Orchestrator.Service
 
                 var killed = jobManager.KillJob(running.Id);
                 if (killed)
+                {
                     logger.LogWarning(
                         "Job {JobName} (historyId={HistoryId}) killed by {Actor}.",
                         unescaped, running.Id, RequestActor(ctx));
+                    EmitObjectMutationAudit(
+                        caller, $"JOB:{unescaped}", "KILL_JOB",
+                        $"Run {running.Id} of job '{unescaped}' cancelled.",
+                        ctx.TraceIdentifier, SecurityEventSeverity.Warning);
+                }
                 return killed
                     ? Results.Ok(new { Message = $"Job '{unescaped}' (historyId={running.Id}) kill signal sent." })
                     : Results.Problem($"Kill signal for history entry {running.Id} did not match a running job.");
@@ -1189,7 +1715,7 @@ namespace ETL_SQL.Orchestrator.Service
                     owner.Id!, objectKind, parsedPrincipalKind, normalizedPrincipalId,
                     permission, caller.PrincipalKey);
                 await grants.SaveObjectGrantAsync(grant, ctx.RequestAborted);
-                EmitObjectAuthorizationAudit(caller.AuditActor, grant, objectName, "GRANT", ctx.TraceIdentifier);
+                EmitObjectAuthorizationAudit(caller, grant, objectName, "GRANT", ctx.TraceIdentifier);
                 return Results.Ok(ObjectGrantResponse.From(grant));
             }).WithName("setOrchestratorObjectGrant");
 
@@ -1225,7 +1751,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (deleted)
                 {
                     EmitObjectAuthorizationAudit(
-                        caller.AuditActor,
+                        caller,
                         new OrchestratorObjectGrant(
                             owner.Id!, objectKind, parsedPrincipalKind, normalizedPrincipalId,
                             OrchestratorObjectPermission.Read, caller.PrincipalKey),
@@ -1287,7 +1813,7 @@ namespace ETL_SQL.Orchestrator.Service
 
                 if (!await grants.SetObjectOwnerAsync(owner.Id!, objectKind, ownerKey, ctx.RequestAborted))
                     return Results.NotFound();
-                EmitOwnershipAudit(caller.AuditActor, objectKind, objectName, owner.Owner, ownerKey, ctx.TraceIdentifier);
+                EmitOwnershipAudit(caller, objectKind, objectName, owner.Owner, ownerKey, ctx.TraceIdentifier);
                 return Results.Ok(new
                 {
                     ObjectId = owner.Id,
@@ -1332,7 +1858,7 @@ namespace ETL_SQL.Orchestrator.Service
                             candidate.ObjectId, candidate.ObjectKind, ownerKey, ctx.RequestAborted))
                         continue;
                     EmitOwnershipAudit(
-                        caller.AuditActor, candidate.ObjectKind, candidate.Name, null, ownerKey, ctx.TraceIdentifier);
+                        caller, candidate.ObjectKind, candidate.Name, null, ownerKey, ctx.TraceIdentifier);
                     adopted.Add(UnownedObjectResponse.From(candidate));
                 }
                 return Results.Ok(new { Owner = ownerKey, Count = adopted.Count, Adopted = adopted });
@@ -1663,7 +2189,7 @@ namespace ETL_SQL.Orchestrator.Service
             && name.Skip(1).All(c => char.IsLetterOrDigit(c) || c == '_');
 
         private static void EmitVariableOverrideAudit(
-            string actor,
+            OrchestratorCaller caller,
             string jobName,
             IEnumerable<string> variableNames,
             string correlationId)
@@ -1672,34 +2198,38 @@ namespace ETL_SQL.Orchestrator.Service
             SecurityEventRuntime.Emit(SecurityEventContract.Create(
                 SecurityEventSeverity.Warning,
                 SecurityEventType.OverrideAttempt,
-                actor,
-                actor,
+                caller.AuditActor,
+                caller.PrincipalKey,
                 $"JOB:{jobName}",
                 SecurityEventDecision.Allowed,
                 $"MANUAL_TRIGGER_VARIABLE_OVERRIDE: Count={names.Length}; Names={string.Join(',', names)}") with
             {
                 HostName = Environment.MachineName,
+                TenantId = caller.TenantId,
                 JobId = jobName,
                 CorrelationId = correlationId
             });
         }
 
         private static void EmitNamedCheckpointResumeAudit(
-            string actor,
+            OrchestratorCaller caller,
             long historyId,
+            string jobName,
             string checkpointLabel,
             string correlationId)
         {
             SecurityEventRuntime.Emit(SecurityEventContract.Create(
                 SecurityEventSeverity.Warning,
                 SecurityEventType.CatalogMutation,
-                actor,
-                actor,
+                caller.AuditActor,
+                caller.PrincipalKey,
                 $"JOB_RUN:{historyId}",
                 SecurityEventDecision.Allowed,
-                $"NAMED_CHECKPOINT_RESUME: Label={checkpointLabel}") with
+                $"RESUME_JOB: Job={jobName}; Label={checkpointLabel}") with
             {
                 HostName = Environment.MachineName,
+                TenantId = caller.TenantId,
+                JobId = jobName,
                 CorrelationId = correlationId
             });
         }
@@ -1804,7 +2334,7 @@ namespace ETL_SQL.Orchestrator.Service
         }
 
         private static void EmitOwnershipAudit(
-            string actor,
+            OrchestratorCaller caller,
             OrchestratorObjectKind objectKind,
             string objectName,
             string? previousOwner,
@@ -1814,19 +2344,57 @@ namespace ETL_SQL.Orchestrator.Service
             SecurityEventRuntime.Emit(SecurityEventContract.Create(
                 SecurityEventSeverity.Warning,
                 SecurityEventType.CatalogMutation,
-                actor,
-                actor,
+                caller.AuditActor,
+                caller.PrincipalKey,
                 $"{objectKind.ToString().ToUpperInvariant()}:{objectName}",
                 SecurityEventDecision.Allowed,
                 $"OWNER_SET: From={previousOwner ?? "(unowned)"}; To={newOwner}") with
             {
                 HostName = Environment.MachineName,
+                TenantId = caller.TenantId,
+                CorrelationId = correlationId
+            });
+        }
+
+        /// <summary>
+        /// One audit event for a catalog-object mutation reached over HTTP.
+        ///
+        /// <para>Deliberately the same shape the engine handlers emit through
+        /// <c>CatalogStatementSupport.AuditMutation</c>: <see cref="SecurityEventType.CatalogMutation"/>,
+        /// a <c>KIND:name</c> target, an <c>ACTION: reason</c> line, the display-qualified actor and
+        /// the bare principal key as the effective identity. The same act performed from script and
+        /// over the API has to read as one kind of event, or answering "who changed this job" first
+        /// requires knowing which door they came through.</para>
+        ///
+        /// <para>Severity carries the difference that matters to a reader: definition changes are
+        /// <see cref="SecurityEventSeverity.Information"/>, while acts that interrupt or step outside
+        /// the schedule are raised by their call site.</para>
+        /// </summary>
+        private static void EmitObjectMutationAudit(
+            OrchestratorCaller caller,
+            string target,
+            string action,
+            string reason,
+            string correlationId,
+            SecurityEventSeverity severity = SecurityEventSeverity.Information)
+        {
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                severity,
+                SecurityEventType.CatalogMutation,
+                caller.AuditActor,
+                caller.PrincipalKey,
+                target,
+                SecurityEventDecision.Allowed,
+                $"{action}: {reason}") with
+            {
+                HostName = Environment.MachineName,
+                TenantId = caller.TenantId,
                 CorrelationId = correlationId
             });
         }
 
         private static void EmitObjectAuthorizationAudit(
-            string actor,
+            OrchestratorCaller caller,
             OrchestratorObjectGrant grant,
             string objectName,
             string action,
@@ -1835,13 +2403,14 @@ namespace ETL_SQL.Orchestrator.Service
             SecurityEventRuntime.Emit(SecurityEventContract.Create(
                 SecurityEventSeverity.Warning,
                 SecurityEventType.CatalogMutation,
-                actor,
-                actor,
+                caller.AuditActor,
+                caller.PrincipalKey,
                 $"{grant.ObjectKind.ToString().ToUpperInvariant()}:{objectName}",
                 SecurityEventDecision.Allowed,
                 $"ACL_{action}: {grant.PrincipalKind}:{grant.PrincipalId}; Permission={grant.Permission}") with
             {
                 HostName = Environment.MachineName,
+                TenantId = caller.TenantId,
                 CorrelationId = correlationId
             });
         }
@@ -2237,6 +2806,52 @@ namespace ETL_SQL.Orchestrator.Service
 
         private sealed record AdoptUnownedObjectsRequest(
             string? PrincipalKind, string? PrincipalId, string? Kind = null);
+
+        private sealed record CreateScheduleApiRequest(
+            string Name,
+            string Cron,
+            string? TimeZone = null,
+            bool IsEnabled = true,
+            string? DisplayName = null,
+            string? Description = null,
+            Dictionary<string, string>? Options = null
+        );
+
+        private sealed record UpdateScheduleApiRequest(
+            string? Cron = null,
+            string? TimeZone = null,
+            bool? IsEnabled = null,
+            string? DisplayName = null,
+            string? Description = null,
+            Dictionary<string, string>? Options = null
+        );
+
+        private sealed record CreateNotificationApiRequest(
+            string Name,
+            string ConnectionName,
+            string? Recipient = null,
+            bool IsEnabled = true,
+            string? DisplayName = null,
+            string? Description = null,
+            Dictionary<string, string>? Options = null
+        );
+
+        private sealed record UpdateNotificationApiRequest(
+            string? ConnectionName = null,
+            string? Recipient = null,
+            bool? IsEnabled = null,
+            string? DisplayName = null,
+            string? Description = null,
+            Dictionary<string, string>? Options = null
+        );
+
+        private sealed record LinkJobNotificationApiRequest(
+            string? Trigger = null
+        );
+
+        private sealed record SetJobStateApiRequest(
+            string? Value = null
+        );
 
         /// <summary>One object an administrator has to make someone accountable for.</summary>
         private sealed record UnownedObjectResponse(string ObjectId, string Kind, string Name)

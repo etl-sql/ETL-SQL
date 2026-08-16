@@ -312,6 +312,10 @@ function Invoke-LineageUiSmoke {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+    & node (Join-Path $repoRoot "scripts\test-orchestrator-admin-ui.mjs")
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
 }
 
 switch ($Lane) {

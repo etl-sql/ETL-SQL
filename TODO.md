@@ -102,39 +102,6 @@ proxy shape (Portal forwards every call) was rejected because it needs a Portal 
 orchestrator endpoint, forever; presenting a Portal browser JWT to the Orchestrator was rejected
 because it undoes the deliberate audience separation between the two tokens.
 
-#### Slice E — Legacy mode and the solo boundary
-
-**Closed 2026-08-16.** The mode is now resolved in exactly one place
-(`OrchestratorAuthorizationMode`) that the startup guard, the request path, and `/health` all ask, so
-the three cannot drift into disagreeing about which mode the service is in. Closing E2 found the hole
-the slice was written around: in legacy mode `CanAsync` returns true for the legacy caller, so the API
-key could *write grants* — principals that resolve to nothing, restricting a caller who already passes
-every check, while looking exactly like access control. The boundary is therefore held at the service
-rather than at the CLI: the whole `/api/authorization/*` surface answers `409 Conflict` in legacy
-mode, which holds however the request arrives. The CLI side was already correct by construction (every
-verb is addressed to the Portal) and is now pinned by a test rather than by inspection.
-
-- [x] **E1 Make the mode visible.** `RequireFederatedIdentity` defaults to "is the bind address
-      non-loopback", so a shared Orchestrator behind a reverse proxy on loopback silently runs with
-      one root key and no warning. Report the authorization mode on the health endpoint and warn at
-      startup when a multi-user deployment is running in legacy mode. *`GET /health` reports
-      `authorizationMode`, `requiresCallerIdentity`, and `legacyModeOnSharedDeployment` — named only,
-      since the endpoint is unauthenticated and the evidence names listen addresses. Startup reports
-      the mode either way and warns when the deployment contradicts Solo: a non-loopback bind, a
-      configured identity-signing secret, a configured tenant, or — the reverse-proxy case
-      configuration cannot see — requests arriving with `X-Forwarded-For`/`Forwarded`, latched on
-      first sight and logged once.*
-- [x] **E2 Hold the boundary.** The solo admin CLI path must never create orchestrator-local
-      principals or grants — that is the second identity model this design rejected, wearing a CLI.
-      *Held at the Orchestrator: grants, ownership, unowned, and adopt all answer `409` in legacy
-      mode. Reads are refused too — "no grants" and "grants do not apply here" are the same empty list
-      otherwise. The Portal UI and the admin CLI name the refusal rather than reporting an outage.*
-- [x] **E3 Document the escape hatch** as Solo-only, with the promotion path in D3. *New
-      "Legacy mode (Solo only)" section in `docs/administration/orchestration/orchestrator-portal.md`:
-      what it is, how to tell which mode you are in, what it refuses, and the four-step promotion to a
-      team ending in `admin orchestrator adopt` and the `DP009` preflight finding. Settings tables in
-      the appsettings reference and the Portal orchestrator-integration guide point at it.*
-
 #### Slice F — Audit parity, documentation, and evidence
 
 - [ ] **F1 Audit parity.** ACL mutations emit `SecurityEventContract` naming the real principal;
@@ -162,20 +129,17 @@ run history with resume-from-named-checkpoint behind an impact-confirm dialog, a
 a run-with-variable-overrides modal. This item extends that to the objects and metrics added since it
 was written; it is not a rebuild.
 
-- [ ] **Schedule and notification objects.** `/api/schedules` and `/api/notifications` — the unified
-      catalog — have no UI at all. Create-job offers only interval/unit/at-time: no cron, no named
-      shared schedules, no notification wiring or dispatch.
-- [ ] **Job metrics.** The sparkline is duration-only. Rows processed, `/api/data-quality/status`,
-      `/api/data-quality/failures`, and `/api/stewardship/*` are live endpoints with no surface here.
-- [ ] **Bundles.** `jobType`/`targetPath` (`bundle://`) is supported by the API but the modal only
-      accepts script paths. No version pinning, dependency, or deployment view.
-- [ ] **`DisplayName`, `Description`, and `Options`** — including the `SandboxProfile` that admission
-      control now reads out of `Options`.
-- [ ] **Watermark state.** Declarative incremental watermarking shipped without any way to inspect or
-      reset a high-water mark, which is what an operator needs at 2am.
-- [ ] **Definition change log** — attribution columns exist; there is no view of who changed what.
-- [ ] **Table ergonomics** — search, pagination, and a calendar beyond the 24-hour Gantt.
-- [ ] **Job-to-job dependency view.** Script flow is per-job; there is no chain view.
+- [x] **Schedule and notification objects.** `/api/schedules` and `/api/notifications` — the unified
+      catalog — have full UI catalog tables with create/edit/delete/toggle and dispatch tests.
+- [x] **Job metrics.** The sparkline toggles between duration and rows processed. Data quality failure
+      breakdowns, quarantine counters, and stewardship coverage scores are surfaced in the job details panel.
+- [x] **Bundles.** `jobType`/`targetPath` (`bundle://`) selector and pinning surfaced in create modal and details.
+- [x] **`DisplayName`, `Description`, and `Options`** — including `SandboxProfile` admission options in job forms,
+      table badges, and search filtering.
+- [x] **Watermark state.** High-water mark inspector with key editing and 1-click backfill reset.
+- [x] **Definition change log** — Chronological audit trail showing mutations, triggers, and access changes.
+- [x] **Table ergonomics** — Instant search, status filters, configurable pagination, and 7-day multi-day run calendar.
+- [x] **Job-to-job dependency view.** Interactive force-directed cross-job DAG showing upstream providers and downstream consumers.
 
 ### Installer — component rework
 

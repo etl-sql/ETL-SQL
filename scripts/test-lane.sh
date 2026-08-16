@@ -83,6 +83,7 @@ invoke_lineage_ui_smoke() {
     node "$REPO_ROOT/scripts/test-admin-catalog-ui.mjs"
     node "$REPO_ROOT/scripts/test-dataset-acl-ui.mjs"
     node "$REPO_ROOT/scripts/test-orchestrator-acl-ui.mjs"
+    node "$REPO_ROOT/scripts/test-orchestrator-admin-ui.mjs"
 }
 
 invoke_fuzz_lane() {

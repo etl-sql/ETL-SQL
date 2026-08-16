@@ -100,11 +100,11 @@ namespace ETL_SQL.Portal.Tests
             return await client.SendAsync(req);
         }
 
-        private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(SQLiteJobHistoryStore store, string jobName, int expectedCount, int timeoutSeconds = 15)
+        private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(SQLiteJobHistoryStore store, string jobName, int expectedCount, int timeoutSeconds = 15, string? tenantId = "portal-host")
         {
             return await LoadAwareWait.UntilAsync(
                 $"{expectedCount} completed history entries for job '{jobName}'",
-                async _ => (await store.GetHistoryAsync(jobName, 10)).ToList(),
+                async _ => (await store.GetHistoryForNameAsync(tenantId, jobName, 10)).ToList(),
                 history => history.Count >= expectedCount
                            && history.Take(expectedCount).All(h => h.EndTime != null),
                 TimeSpan.FromSeconds(timeoutSeconds),
@@ -112,11 +112,11 @@ namespace ETL_SQL.Portal.Tests
                 history => $"count={history.Count}; statuses=[{string.Join(',', history.Select(h => h.Status))}]");
         }
 
-        private async Task PollHistoryUntilStatusAsync(SQLiteJobHistoryStore store, string jobName, string status, int timeoutSeconds = 15)
+        private async Task PollHistoryUntilStatusAsync(SQLiteJobHistoryStore store, string jobName, string status, int timeoutSeconds = 15, string? tenantId = "portal-host")
         {
             await LoadAwareWait.UntilAsync(
                 $"job '{jobName}' to reach status '{status}'",
-                async _ => (await store.GetHistoryAsync(jobName, 10)).ToList(),
+                async _ => (await store.GetHistoryForNameAsync(tenantId, jobName, 10)).ToList(),
                 history => history.Any(h => string.Equals(h.Status, status, StringComparison.OrdinalIgnoreCase)),
                 TimeSpan.FromSeconds(timeoutSeconds),
                 TimeSpan.FromMilliseconds(200),
@@ -136,14 +136,14 @@ namespace ETL_SQL.Portal.Tests
                 count => $"message count={count}");
         }
 
-        private static async Task TriggerJobAsync(HttpClient orchClient, string jobName)
+        private static async Task TriggerJobAsync(HttpClient orchClient, string jobName, string? tenantId = "portal-host")
         {
             using var triggerReq = new HttpRequestMessage(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger");
             triggerReq.Headers.Add("X-Orchestrator-Key", "test-orch-key-12345");
             triggerReq.Headers.Add(
                 OrchestratorIdentityAssertion.HeaderName,
                 OrchestratorIdentityAssertion.Create(
-                    new OrchestratorCaller("user", "1", "admin", ["Admin"], []),
+                    new OrchestratorCaller("user", "1", "admin", ["Admin"], [], tenantId),
                     OrchestratorWebFactory.IdentitySecret));
             var triggerRes = await orchClient.SendAsync(triggerReq);
             Assert.Equal(HttpStatusCode.Accepted, triggerRes.StatusCode);
@@ -519,7 +519,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             // 4. Verify changes in Orchestrator store
             var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
             Assert.NotNull(store);
-            var job = await store.GetJobAsync(jobName);
+            var job = await store.GetJobAsync("portal-host", jobName);
             Assert.NotNull(job);
             Assert.Equal(1, job.Interval); // Weekly parses to Interval 1, Unit WEEK
             Assert.Equal("WEEK", job.Unit);
@@ -527,19 +527,19 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.False(job.IsEnabled);
             var catalog = (IJobCatalogStore)store;
             var scheduleName = SubscriptionOrchestration.ScheduleName(subId);
-            var schedule = await catalog.GetScheduleAsync(scheduleName);
+            var schedule = await catalog.GetScheduleAsync("portal-host", scheduleName);
             Assert.NotNull(schedule);
             Assert.Equal("15 9 * * 1", schedule!.Cron);
             Assert.False(schedule.IsEnabled);
-            Assert.Contains(await catalog.GetJobSchedulesAsync(jobName),
+            Assert.Contains(await catalog.GetJobSchedulesAsync(job.Id),
                 link => link.ScheduleName == scheduleName && link.NextRun is not null);
             var notificationName = SubscriptionOrchestration.NotificationName(subId);
-            var notification = await catalog.GetNotificationAsync(notificationName);
+            var notification = await catalog.GetNotificationAsync("portal-host", notificationName);
             Assert.NotNull(notification);
             Assert.Equal(secondSmtpAlias, notification!.ConnectionName);
             Assert.Equal("new-recipient@test.local", notification.Recipient);
             Assert.False(notification.IsEnabled);
-            Assert.Contains(await catalog.GetJobNotificationsAsync(jobName),
+            Assert.Contains(await catalog.GetJobNotificationsAsync(job.Id),
                 link => link.NotificationName == notificationName
                     && link.Trigger == NotificationTrigger.Success);
 
@@ -558,13 +558,13 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             });
             Assert.Equal(HttpStatusCode.OK, reenableRes.StatusCode);
 
-            var reenabledJob = await store.GetJobAsync(jobName);
+            var reenabledJob = await store.GetJobAsync("portal-host", jobName);
             Assert.NotNull(reenabledJob);
             Assert.True(reenabledJob.IsEnabled);
-            var reenabledSchedule = await catalog.GetScheduleAsync(scheduleName);
+            var reenabledSchedule = await catalog.GetScheduleAsync("portal-host", scheduleName);
             Assert.NotNull(reenabledSchedule);
             Assert.True(reenabledSchedule!.IsEnabled);
-            var reenabledNotification = await catalog.GetNotificationAsync(notificationName);
+            var reenabledNotification = await catalog.GetNotificationAsync("portal-host", notificationName);
             Assert.NotNull(reenabledNotification);
             Assert.False(reenabledNotification!.IsEnabled);
         }
@@ -625,7 +625,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.Equal("Weekly", body!["schedule"]!.GetValue<string>());
             Assert.Equal("after-update@test.local", body["recipients"]!.GetValue<string>());
 
-            var job = await store.GetJobAsync(jobName);
+            var job = await store.GetJobAsync("portal-host", jobName);
             Assert.NotNull(job);
             Assert.Equal("WEEK", job.Unit);
             Assert.True(job.IsEnabled);
@@ -712,7 +712,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             foreach (var id in createdIds)
             {
                 var jobName = $"SUB:{id}:{reportName}";
-                Assert.NotNull(await store.GetJobAsync(jobName));
+                Assert.NotNull(await store.GetJobAsync("portal-host", jobName));
                 Assert.True(File.Exists(GeneratedSubscriptionScriptPath(portalFactory.TempDir, id, reportName)));
             }
         }
@@ -763,14 +763,14 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
 
             await LoadAwareWait.UntilAsync(
                 $"deleted subscription job '{jobName}' to stop running",
-                async _ => (await store.GetHistoryAsync(jobName, 10)).ToList(),
+                async _ => (await store.GetHistoryForNameAsync("portal-host", jobName, 10)).ToList(),
                 history => !history.Any(h => h.Status == "RUNNING" && h.EndTime == null),
                 TimeSpan.FromSeconds(10),
                 TimeSpan.FromMilliseconds(200),
                 history => $"running={history.Count(h => h.Status == "RUNNING" && h.EndTime == null)}");
 
-            Assert.Null(await store.GetJobAsync(jobName));
-            Assert.DoesNotContain(await store.GetHistoryAsync(jobName, 10), h => h.Status == "RUNNING" && h.EndTime == null);
+            Assert.Null(await store.GetJobAsync("portal-host", jobName));
+            Assert.DoesNotContain(await store.GetHistoryForNameAsync("portal-host", jobName, 10), h => h.Status == "RUNNING" && h.EndTime == null);
             Assert.False(File.Exists(generatedScriptPath));
 
             var getRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}");
@@ -815,7 +815,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
 
             var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
             Assert.NotNull(store);
-            Assert.NotNull(await store.GetJobAsync(jobName));
+            Assert.NotNull(await store.GetJobAsync("portal-host", jobName));
 
             await TriggerJobAsync(orchClient, jobName);
             var beforeDeleteHistory = await PollHistoryUntilCountAsync(store, jobName, 1);
@@ -833,8 +833,8 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.False(File.Exists(generatedScriptPath));
 
             // 5. Assert Orchestrator job definition deleted
-            Assert.Null(await store.GetJobAsync(jobName));
-            Assert.Empty(await store.GetHistoryAsync(jobName, 10));
+            Assert.Null(await store.GetJobAsync("portal-host", jobName));
+            Assert.Empty(await store.GetHistoryForNameAsync("portal-host", jobName, 10));
         }
 
         [Fact]
@@ -1088,14 +1088,14 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
 
             var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
             Assert.NotNull(store);
-            var job = await store.GetJobAsync(jobName);
+            var job = await store.GetJobAsync("portal-host", jobName);
             Assert.NotNull(job);
             Assert.False(job.IsEnabled);
 
             var start = DateTime.UtcNow; // flaky-wait-budget-ok: deliberate stability window proving the disabled job never fires
             while ((DateTime.UtcNow - start).TotalSeconds < 3)
             {
-                Assert.Empty(await store.GetHistoryAsync(jobName, 10));
+                Assert.Empty(await store.GetHistoryForNameAsync("portal-host", jobName, 10));
                 await Task.Delay(500);
             }
         }

@@ -272,6 +272,175 @@ public class OrchestratorProxyService(
         }
     }
 
+    // ── Schedules ─────────────────────────────────────────────────────────────
+
+    public async Task<List<ScheduleDefinitionDto>> GetSchedulesAsync(int limit = 1000, int offset = 0)
+    {
+        try { return await GetJsonAsync<List<ScheduleDefinitionDto>>($"api/schedules?limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}") ?? []; }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to list schedules."); return []; }
+    }
+
+    public async Task<ScheduleDefinitionDto?> GetScheduleAsync(string name)
+    {
+        try { return await GetJsonAsync<ScheduleDefinitionDto>($"api/schedules/{Uri.EscapeDataString(name)}"); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get schedule {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> CreateScheduleAsync(CreateScheduleRequest req)
+    {
+        try { return await SendAsync(HttpMethod.Post, "api/schedules", req); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to create schedule {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(req.Name)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> UpdateScheduleAsync(string name, UpdateScheduleRequest req)
+    {
+        try { return await SendAsync(HttpMethod.Put, $"api/schedules/{Uri.EscapeDataString(name)}", req); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to update schedule {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> DeleteScheduleAsync(string name)
+    {
+        try { return await SendAsync(HttpMethod.Delete, $"api/schedules/{Uri.EscapeDataString(name)}"); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to delete schedule {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+    }
+
+    public async Task<List<JobScheduleLinkDto>> GetJobSchedulesAsync(string jobName)
+    {
+        try { return await GetJsonAsync<List<JobScheduleLinkDto>>($"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/schedules") ?? []; }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get schedules for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
+    }
+
+    public async Task<HttpResponseMessage?> AttachJobScheduleAsync(string jobName, string scheduleName)
+    {
+        try { return await SendAsync(HttpMethod.Post, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/schedules/{Uri.EscapeDataString(scheduleName)}"); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to attach schedule {Schedule} to job {Job}.", ETL_SQL.Core.Common.LogSanitizer.Clean(scheduleName), ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> DetachJobScheduleAsync(string jobName, string scheduleName)
+    {
+        try { return await SendAsync(HttpMethod.Delete, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/schedules/{Uri.EscapeDataString(scheduleName)}"); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to detach schedule {Schedule} from job {Job}.", ETL_SQL.Core.Common.LogSanitizer.Clean(scheduleName), ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return null; }
+    }
+
+    // ── Notifications ─────────────────────────────────────────────────────────
+
+    public async Task<List<NotificationDefinitionDto>> GetNotificationsAsync(int limit = 1000, int offset = 0)
+    {
+        try { return await GetJsonAsync<List<NotificationDefinitionDto>>($"api/notifications?limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}") ?? []; }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to list notifications."); return []; }
+    }
+
+    public async Task<NotificationDefinitionDto?> GetNotificationAsync(string name)
+    {
+        try { return await GetJsonAsync<NotificationDefinitionDto>($"api/notifications/{Uri.EscapeDataString(name)}"); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get notification {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> CreateNotificationAsync(CreateNotificationRequest req)
+    {
+        try { return await SendAsync(HttpMethod.Post, "api/notifications", req); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to create notification {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(req.Name)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> UpdateNotificationAsync(string name, UpdateNotificationRequest req)
+    {
+        try { return await SendAsync(HttpMethod.Put, $"api/notifications/{Uri.EscapeDataString(name)}", req); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to update notification {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> DeleteNotificationAsync(string name)
+    {
+        try { return await SendAsync(HttpMethod.Delete, $"api/notifications/{Uri.EscapeDataString(name)}"); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to delete notification {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+    }
+
+    public async Task<List<JobNotificationLinkDto>> GetJobNotificationsAsync(string jobName)
+    {
+        try { return await GetJsonAsync<List<JobNotificationLinkDto>>($"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/notifications") ?? []; }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get notifications for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
+    }
+
+    public async Task<HttpResponseMessage?> AttachJobNotificationAsync(string jobName, string notificationName, string trigger = "Completion")
+    {
+        try { return await SendAsync(HttpMethod.Post, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/notifications/{Uri.EscapeDataString(notificationName)}", new { Trigger = trigger }); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to attach notification {Notification} to job {Job}.", ETL_SQL.Core.Common.LogSanitizer.Clean(notificationName), ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> DetachJobNotificationAsync(string jobName, string notificationName, string? trigger = null)
+    {
+        try
+        {
+            var path = $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/notifications/{Uri.EscapeDataString(notificationName)}";
+            if (!string.IsNullOrWhiteSpace(trigger)) path += $"?trigger={Uri.EscapeDataString(trigger)}";
+            return await SendAsync(HttpMethod.Delete, path);
+        }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to detach notification {Notification} from job {Job}.", ETL_SQL.Core.Common.LogSanitizer.Clean(notificationName), ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return null; }
+    }
+
+    // ── Watermarks & Job State ──────────────────────────────────────────────────
+
+    public async Task<List<JobStateEntryDto>> GetJobStatesAsync(string jobName)
+    {
+        try { return await GetJsonAsync<List<JobStateEntryDto>>($"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/state") ?? []; }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get states for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
+    }
+
+    public async Task<HttpResponseMessage?> SetJobStateAsync(string jobName, string key, string? value)
+    {
+        try { return await SendAsync(HttpMethod.Put, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/state/{Uri.EscapeDataString(key)}", new { Value = value }); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to set state {Key} on job {Job}.", ETL_SQL.Core.Common.LogSanitizer.Clean(key), ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> DeleteJobStateAsync(string jobName, string key)
+    {
+        try { return await SendAsync(HttpMethod.Delete, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/state/{Uri.EscapeDataString(key)}"); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to delete state {Key} on job {Job}.", ETL_SQL.Core.Common.LogSanitizer.Clean(key), ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return null; }
+    }
+
+    // ── Data Quality & Stewardship & Bundles ────────────────────────────────────
+
+    public async Task<HttpResponseMessage?> GetDataQualityStatusResponseAsync(int limit = 1000, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, $"api/data-quality/status?limit={limit}", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get data quality status."); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> GetDataQualityFailuresResponseAsync(int limit = 1000, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, $"api/data-quality/failures?limit={limit}", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get data quality failures."); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> GetStewardshipScoreResponseAsync(int limit = 1000, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, $"api/stewardship/score?limit={limit}", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get stewardship score."); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> GetStewardshipGapsResponseAsync(int limit = 1000, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, $"api/stewardship/gaps?limit={limit}", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get stewardship gaps."); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> GetBundlesResponseAsync(CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, "api/bundles", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to list bundles."); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> GetBundleVersionsResponseAsync(string name, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, $"api/bundles/{Uri.EscapeDataString(name)}/versions", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to list versions for bundle {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> GetBundleDependenciesResponseAsync(string name, int version, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, $"api/bundles/{Uri.EscapeDataString(name)}/versions/{version}/dependencies", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to list dependencies for bundle {Name} v{Version}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name), version); return null; }
+    }
+
     public async Task<OrchestratorScriptsDto?> GetScriptsAsync()
     {
         try { return await GetJsonAsync<OrchestratorScriptsDto>("api/scripts"); }
