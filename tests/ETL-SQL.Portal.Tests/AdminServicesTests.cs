@@ -108,21 +108,21 @@ public class AdminServicesTests
         Assert.Contains("ALERT", factory.Sender.Sent[^1].Subject);
 
         // Fresh successful backup → alert-only skips.
-        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_status", "success");
-        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
-        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_exit_code", "0");
+        await jobHistory.SetHostStateAsync("backup", "last_backup_status", "success");
+        await jobHistory.SetHostStateAsync("backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
+        await jobHistory.SetHostStateAsync("backup", "last_backup_exit_code", "0");
         var healthy = await service.RunOnceAsync(CancellationToken.None);
         Assert.Equal("Skipped", healthy.Outcome);
 
         // Stale backup → alert.
-        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_at", DateTime.UtcNow.AddDays(-3).ToString("o"));
+        await jobHistory.SetHostStateAsync("backup", "last_backup_at", DateTime.UtcNow.AddDays(-3).ToString("o"));
         var stale = await service.RunOnceAsync(CancellationToken.None);
         Assert.Equal("Sent", stale.Outcome);
         Assert.Contains("STALE", factory.Sender.Sent[^1].Body);
 
         // Failed backup → alert.
-        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_status", "failed");
-        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
+        await jobHistory.SetHostStateAsync("backup", "last_backup_status", "failed");
+        await jobHistory.SetHostStateAsync("backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
         var failedBackup = await service.RunOnceAsync(CancellationToken.None);
         Assert.Equal("Sent", failedBackup.Outcome);
         Assert.Contains("FAILED", factory.Sender.Sent[^1].Body);

@@ -142,9 +142,11 @@ public sealed class OperationsPostureTests
     {
         using var scope = factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
-        await store.SetJobStateAsync(OperationsPostureService.BackupJobStateName, "last_backup_status", status);
-        await store.SetJobStateAsync(OperationsPostureService.BackupJobStateName, "last_backup_at", at.ToString("o"));
-        await store.SetJobStateAsync(OperationsPostureService.BackupJobStateName, "last_backup_exit_code", exitCode);
+        // Host-scoped markers, not job state: there is no job called "backup", and the posture
+        // service reads them through the host-state surface.
+        await store.SetHostStateAsync(OperationsPostureService.BackupStateScope, "last_backup_status", status);
+        await store.SetHostStateAsync(OperationsPostureService.BackupStateScope, "last_backup_at", at.ToString("o"));
+        await store.SetHostStateAsync(OperationsPostureService.BackupStateScope, "last_backup_exit_code", exitCode);
     }
 
     private static async Task RecordRestoreAsync(
@@ -152,12 +154,12 @@ public sealed class OperationsPostureTests
     {
         using var scope = factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
-        var job = OperationsPostureService.RestoreJobStateName;
-        await store.SetJobStateAsync(job, "last_restore_mode", mode);
-        await store.SetJobStateAsync(job, "last_restore_status", status);
-        await store.SetJobStateAsync(job, "last_restore_at", at.ToString("o"));
-        await store.SetJobStateAsync(job, "last_restore_exit_code", status == "success" ? "0" : "1");
-        await store.SetJobStateAsync(job, "last_restore_problems", problems.ToString());
+        var scopeName = OperationsPostureService.RestoreStateScope;
+        await store.SetHostStateAsync(scopeName, "last_restore_mode", mode);
+        await store.SetHostStateAsync(scopeName, "last_restore_status", status);
+        await store.SetHostStateAsync(scopeName, "last_restore_at", at.ToString("o"));
+        await store.SetHostStateAsync(scopeName, "last_restore_exit_code", status == "success" ? "0" : "1");
+        await store.SetHostStateAsync(scopeName, "last_restore_problems", problems.ToString());
     }
 
     private static async Task<JsonObject> PostureAsync(HttpClient client, string adminToken)

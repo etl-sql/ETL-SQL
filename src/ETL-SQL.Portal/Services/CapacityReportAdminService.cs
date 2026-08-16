@@ -141,7 +141,7 @@ public sealed class CapacityReportAdminService(
             .Take(8)
             .ToList();
 
-        var jobTrend = await jobHistory.GetJobHistoryDailyAsync(null, trendSince, limit: 10000);
+        var jobTrend = await jobHistory.GetJobHistoryDailyAsync(JobId.None, trendSince, limit: 10000);
         var hostTrend = await hostMetrics.GetHostMetricsDailyAsync(null, trendSince, limit: 10000);
 
         var sb = new StringBuilder();

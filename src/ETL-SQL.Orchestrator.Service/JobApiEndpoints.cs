@@ -318,8 +318,8 @@ namespace ETL_SQL.Orchestrator.Service
                     await store.SaveJobAsync(job);
                     if (existing is not null && mode == ObjectCreationMode.CreateOrReplace)
                     {
-                        var replacedId = (await store.GetJobAsync(RequestTenant(ctx, cfg), req.Name))?.Id;
-                        if (replacedId is { Length: > 0 })
+                        var replacedId = (await store.GetJobAsync(RequestTenant(ctx, cfg), req.Name))?.Id ?? JobId.None;
+                        if (replacedId.IsAssigned)
                         {
                             foreach (var link in await catalog.GetJobSchedulesAsync(replacedId))
                                 await catalog.RemoveJobScheduleAsync(replacedId, link.ScheduleId);
@@ -437,7 +437,7 @@ namespace ETL_SQL.Orchestrator.Service
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-                if (!await store.TryDeleteJobAsync(unescaped, expectedVersion.Value))
+                if (!await store.TryDeleteJobAsync(existing.Id, expectedVersion.Value))
                 {
                     var current = await store.GetJobAsync(RequestTenant(ctx, cfg), unescaped);
                     return Results.Conflict(new
@@ -448,8 +448,8 @@ namespace ETL_SQL.Orchestrator.Service
                 }
                 // By id, captured before the delete: a job later created with the same name must
                 // not inherit these grants.
-                if (existing.Id is { Length: > 0 } droppedId)
-                    await authorizationStore.DeleteObjectGrantsAsync(droppedId, ctx.RequestAborted);
+                if (existing.Id.IsAssigned)
+                    await authorizationStore.DeleteObjectGrantsAsync(existing.Id.Value, ctx.RequestAborted);
                 return Results.Ok(new { Deleted = unescaped });
             }).WithName("deleteScheduledJob");
 
@@ -465,7 +465,7 @@ namespace ETL_SQL.Orchestrator.Service
                         RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
-                var history = await store.GetHistoryAsync(unescaped, Math.Clamp(limit, 1, 1000));
+                var history = await store.GetHistoryAsync(job.Id, Math.Clamp(limit, 1, 1000));
                 return Results.Ok(history);
             }).WithName("getScheduledJobHistory");
 
@@ -510,7 +510,10 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg, string? jobName = null, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var history = (await store.GetHistoryAsync(jobName, Math.Clamp(limit, 1, 1000))).ToList();
+                var history = (string.IsNullOrWhiteSpace(jobName)
+                    ? await store.GetHistoryAsync(limit: Math.Clamp(limit, 1, 1000))
+                    : await store.GetHistoryForNameAsync(
+                        RequestTenant(ctx, cfg), jobName, Math.Clamp(limit, 1, 1000))).ToList();
                 return Results.Ok(await FilterReadableJobRowsAsync(
                     history, row => row.JobName, RequestCaller(ctx), RequestTenant(ctx, cfg),
                     store, authorization, ctx.RequestAborted));
@@ -1061,7 +1064,7 @@ namespace ETL_SQL.Orchestrator.Service
                         required, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-                var triggerResult = await scheduler.TriggerJobWithOverridesAsync(unescaped, overrides);
+                var triggerResult = await scheduler.TriggerJobWithOverridesAsync(job.Id, overrides);
                 if (triggerResult == ManualTriggerResult.JobNotFound)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (triggerResult == ManualTriggerResult.AlreadyRunning)
@@ -1093,7 +1096,7 @@ namespace ETL_SQL.Orchestrator.Service
                         RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
                         OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
-                var history = await store.GetHistoryAsync(unescaped, 10);
+                var history = await store.GetHistoryAsync(job.Id, 10);
                 var running = history.FirstOrDefault(h => h.Status == "RUNNING" && h.EndTime == null);
                 if (running == null)
                     return Results.NotFound(new { Error = $"No running instance of job '{name}' found." });
@@ -1595,13 +1598,13 @@ namespace ETL_SQL.Orchestrator.Service
             IJobCatalogStore catalog) => objectKind switch
             {
                 OrchestratorObjectKind.Job => await jobs.GetJobAsync(tenantId, objectName) is { } job
-                    ? (true, job.CreatedBy, job.Id, job.TenantId)
+                    ? (true, job.CreatedBy, job.Id.ToString(), job.TenantId)
                     : (false, null, null, null),
                 OrchestratorObjectKind.Schedule => await catalog.GetScheduleAsync(tenantId, objectName) is { } schedule
-                    ? (true, schedule.CreatedBy, schedule.Id, schedule.TenantId)
+                    ? (true, schedule.CreatedBy, schedule.Id.ToString(), schedule.TenantId)
                     : (false, null, null, null),
                 OrchestratorObjectKind.Notification => await catalog.GetNotificationAsync(tenantId, objectName) is { } notification
-                    ? (true, notification.CreatedBy, notification.Id, notification.TenantId)
+                    ? (true, notification.CreatedBy, notification.Id.ToString(), notification.TenantId)
                     : (false, null, null, null),
                 _ => (false, null, null, null)
             };

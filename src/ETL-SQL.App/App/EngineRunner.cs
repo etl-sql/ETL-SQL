@@ -419,10 +419,27 @@ namespace ETL_SQL.App
                         {
                             try
                             {
-                                // --job-name gives a scheduled run a stable identity; without it two
-                                // schedules of the same script share one history identity.
-                                var jobName = ctx.JobName ?? Path.GetFileName(ctx.ScriptFile.FullName);
-                                auditHistoryId = await historyStore.LogJobStartAsync(jobName);
+                                // --job-name labels the run so two schedules of the same script stay
+                                // distinguishable in history. When it names a real job the run is
+                                // bound to it and shares that job's history; otherwise this is an
+                                // ad-hoc script run, which has no job identity and says so rather
+                                // than inventing one from a filename.
+                                var jobLabel = ctx.JobName ?? Path.GetFileName(ctx.ScriptFile.FullName);
+                                var boundJob = ctx.JobName is null
+                                    ? null
+                                    : await historyStore.GetJobAsync(null, ctx.JobName);
+                                if (boundJob is not null)
+                                {
+                                    // The engine keys durable job state (watermarks above all) on
+                                    // this, so a run launched by name still reads and writes the
+                                    // same state the scheduler would.
+                                    evaluator.JobId = boundJob.Id;
+                                    auditHistoryId = await historyStore.LogJobStartAsync(boundJob.Id);
+                                }
+                                else
+                                {
+                                    auditHistoryId = await historyStore.LogAdHocRunStartAsync(jobLabel);
+                                }
                             }
                             catch (Exception ex)
                             {

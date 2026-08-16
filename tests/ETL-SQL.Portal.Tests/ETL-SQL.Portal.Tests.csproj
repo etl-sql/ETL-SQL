@@ -7,6 +7,10 @@
 
   <ItemGroup>
     <Compile Include="..\TestSupport\LoadAwareWait.cs" Link="TestSupport\LoadAwareWait.cs" Condition="'$(EnterpriseHardeningCertification)' == 'true'" />
+    <!-- Linked rather than reached through the ETL-SQL.Tests reference, because that reference is
+         absent in the certification lane. The class is internal, so each assembly sees its own copy
+         and the two never collide. -->
+    <Compile Include="..\TestSupport\JobStoreNameAddressingTestExtensions.cs" Link="TestSupport\JobStoreNameAddressingTestExtensions.cs" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
@@ -39,6 +43,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="ETL_SQL.Tests" />
   </ItemGroup>
 
 </Project>

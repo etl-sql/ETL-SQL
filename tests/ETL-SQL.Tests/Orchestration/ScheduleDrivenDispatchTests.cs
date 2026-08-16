@@ -47,11 +47,11 @@ namespace ETL_SQL.Tests.Orchestration
                 JobType: JobTargetKind.Report, TargetPath: "folders/X"));
 
         // These tests run in the unbound (Solo) scope, where a name resolves to one object.
-        private async Task<string> JobId(string name) =>
-            (await _store.GetJobAsync((string?)null, name))!.Id!;
+        private async Task<JobId> JobIdOf(string name) =>
+            (await _store.GetJobAsync((string?)null, name))!.Id;
 
-        private async Task<string> ScheduleId(string name) =>
-            (await _store.GetScheduleAsync((string?)null, name))!.Id!;
+        private async Task<ScheduleId> ScheduleIdOf(string name) =>
+            (await _store.GetScheduleAsync((string?)null, name))!.Id;
 
         private static readonly DateTime Now = new(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc);
 
@@ -62,7 +62,7 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await SaveJobAsync("Nightly");
             await _store.SaveScheduleAsync(new ScheduleDefinition("T", "0 2 * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("T"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("T"), Now.AddMinutes(-1));
 
             var due = await _store.GetJobsDueByScheduleAsync(Now);
 
@@ -74,7 +74,7 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await SaveJobAsync("Nightly");
             await _store.SaveScheduleAsync(new ScheduleDefinition("T", "0 2 * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("T"), Now.AddHours(1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("T"), Now.AddHours(1));
 
             Assert.Empty(await _store.GetJobsDueByScheduleAsync(Now));
         }
@@ -89,8 +89,8 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync("Nightly");
             await _store.SaveScheduleAsync(new ScheduleDefinition("A", "0 2 * * *", "UTC"));
             await _store.SaveScheduleAsync(new ScheduleDefinition("B", "*/15 * * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("A"), Now.AddMinutes(-1));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("B"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("A"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("B"), Now.AddMinutes(-1));
 
             var due = await _store.GetJobsDueByScheduleAsync(Now);
 
@@ -106,7 +106,7 @@ namespace ETL_SQL.Tests.Orchestration
         {
             await SaveJobAsync("Nightly");
             await _store.SaveScheduleAsync(new ScheduleDefinition("T", "0 2 * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("T"), nextRun: null);
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("T"), nextRun: null);
 
             Assert.Empty(await _store.GetJobsDueByScheduleAsync(Now));
         }
@@ -117,8 +117,8 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync("Nightly");
             await SaveJobAsync("Paused", enabled: false);
             await _store.SaveScheduleAsync(new ScheduleDefinition("T", "0 2 * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("T"), Now.AddMinutes(-1));
-            await _store.AddJobScheduleAsync(await JobId("Paused"), await ScheduleId("T"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("T"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Paused"), await ScheduleIdOf("T"), Now.AddMinutes(-1));
 
             Assert.Equal("Nightly", Assert.Single(await _store.GetJobsDueByScheduleAsync(Now)).Name);
 
@@ -137,7 +137,7 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync("Linked");
             await SaveJobAsync("Interval");
             await _store.SaveScheduleAsync(new ScheduleDefinition("T", "0 2 * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Linked"), await ScheduleId("T"), Now.AddHours(1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Linked"), await ScheduleIdOf("T"), Now.AddHours(1));
 
             var legacyDue = await _store.GetDueJobsAsync(DateTime.Now);
 
@@ -155,9 +155,9 @@ namespace ETL_SQL.Tests.Orchestration
             // 15:00 UTC — the next 02:00 is the following day, not now.
             var asOf = new DateTimeOffset(2026, 8, 1, 15, 0, 0, TimeSpan.Zero);
             Assert.True(await JobScheduleAttachment.AttachAsync(
-                _store, await JobId("Nightly"), null, "T", asOf));
+                _store, await JobIdOf("Nightly"), null, "T", asOf));
 
-            var link = Assert.Single(await _store.GetJobSchedulesAsync(await JobId("Nightly")));
+            var link = Assert.Single(await _store.GetJobSchedulesAsync(await JobIdOf("Nightly")));
             Assert.Equal(new DateTime(2026, 8, 2, 2, 0, 0, DateTimeKind.Utc), link.NextRun);
             Assert.Null(link.LastRun);
 
@@ -172,7 +172,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await JobScheduleAttachment.AttachAsync(
-                    _store, await JobId("Nightly"), null, "NoSuchSchedule"));
+                    _store, await JobIdOf("Nightly"), null, "NoSuchSchedule"));
 
             Assert.Contains("does not exist", ex.Message, StringComparison.Ordinal);
         }
@@ -184,10 +184,10 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.SaveScheduleAsync(new ScheduleDefinition("NightlyTrigger", "0 2 * * *", "UTC"));
 
             await JobScheduleAttachment.AttachAsync(
-                _store, await JobId("Nightly"), null, "nightlytrigger");
+                _store, await JobIdOf("Nightly"), null, "nightlytrigger");
 
             // The link stores the schedule's canonical name, not the caller's casing.
-            var link = Assert.Single(await _store.GetJobSchedulesAsync(await JobId("Nightly")));
+            var link = Assert.Single(await _store.GetJobSchedulesAsync(await JobIdOf("Nightly")));
             Assert.Equal("NightlyTrigger", link.ScheduleName);
         }
 
@@ -217,13 +217,13 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync("Nightly");
             await _store.SaveScheduleAsync(new ScheduleDefinition("A", "0 2 * * *", "UTC"));
             await _store.SaveScheduleAsync(new ScheduleDefinition("B", "0 3 * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("A"), Now.AddMinutes(-2));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("B"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("A"), Now.AddMinutes(-2));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("B"), Now.AddMinutes(-1));
             var job = (await _store.GetJobAsync((string?)null, "Nightly"))!;
 
             var earliest = await Scheduler().AdvanceScheduleLinksAsync(job, Now);
 
-            var links = (await _store.GetJobSchedulesAsync(await JobId("Nightly"))).ToDictionary(l => l.ScheduleName);
+            var links = (await _store.GetJobSchedulesAsync(await JobIdOf("Nightly"))).ToDictionary(l => l.ScheduleName);
             Assert.Equal(Now, links["A"].LastRun);
             Assert.Equal(Now, links["B"].LastRun);
             Assert.Equal(new DateTime(2026, 8, 2, 2, 0, 0, DateTimeKind.Utc), links["A"].NextRun);
@@ -245,13 +245,13 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.SaveScheduleAsync(new ScheduleDefinition("Due", "0 2 * * *", "UTC"));
             await _store.SaveScheduleAsync(new ScheduleDefinition("Later", "0 2 * * *", "UTC"));
             var later = Now.AddHours(5);
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("Due"), Now.AddMinutes(-1));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("Later"), later);
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("Due"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("Later"), later);
             var job = (await _store.GetJobAsync((string?)null, "Nightly"))!;
 
             await Scheduler().AdvanceScheduleLinksAsync(job, Now);
 
-            var links = (await _store.GetJobSchedulesAsync(await JobId("Nightly"))).ToDictionary(l => l.ScheduleName);
+            var links = (await _store.GetJobSchedulesAsync(await JobIdOf("Nightly"))).ToDictionary(l => l.ScheduleName);
             Assert.Equal(Now, links["Due"].LastRun);
             Assert.Null(links["Later"].LastRun);
             Assert.Equal(later, links["Later"].NextRun);
@@ -264,13 +264,13 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync("Nightly");
             await _store.SaveScheduleAsync(new ScheduleDefinition("A", "0 2 * * *", "UTC"));
             await _store.SaveScheduleAsync(new ScheduleDefinition("Unarmed", "0 6 * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("A"), Now.AddMinutes(-1));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("Unarmed"), nextRun: null);
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("A"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("Unarmed"), nextRun: null);
             var job = (await _store.GetJobAsync((string?)null, "Nightly"))!;
 
             await Scheduler().AdvanceScheduleLinksAsync(job, Now);
 
-            var unarmed = (await _store.GetJobSchedulesAsync(await JobId("Nightly"))).Single(l => l.ScheduleName == "Unarmed");
+            var unarmed = (await _store.GetJobSchedulesAsync(await JobIdOf("Nightly"))).Single(l => l.ScheduleName == "Unarmed");
             Assert.Equal(new DateTime(2026, 8, 2, 6, 0, 0, DateTimeKind.Utc), unarmed.NextRun);
             Assert.Null(unarmed.LastRun);
         }
@@ -285,15 +285,15 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync("Nightly");
             await _store.SaveScheduleAsync(new ScheduleDefinition("Early", "0 1 * * *", "UTC", IsEnabled: false));
             await _store.SaveScheduleAsync(new ScheduleDefinition("Late", "0 9 * * *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("Early"), Now.AddMinutes(-1));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("Late"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("Early"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("Late"), Now.AddMinutes(-1));
             var job = (await _store.GetJobAsync((string?)null, "Nightly"))!;
 
             var earliest = await Scheduler().AdvanceScheduleLinksAsync(job, Now);
 
             // 01:00 is sooner, but that schedule is disabled — the reported next run is 09:00.
             Assert.Equal(new DateTime(2026, 8, 2, 9, 0, 0, DateTimeKind.Utc), earliest);
-            var early = (await _store.GetJobSchedulesAsync(await JobId("Nightly"))).Single(l => l.ScheduleName == "Early");
+            var early = (await _store.GetJobSchedulesAsync(await JobIdOf("Nightly"))).Single(l => l.ScheduleName == "Early");
             Assert.Equal(new DateTime(2026, 8, 2, 1, 0, 0, DateTimeKind.Utc), early.NextRun);
         }
 
@@ -317,13 +317,13 @@ namespace ETL_SQL.Tests.Orchestration
             await SaveJobAsync("Nightly");
             // 30 February never occurs.
             await _store.SaveScheduleAsync(new ScheduleDefinition("Never", "0 0 30 2 *", "UTC"));
-            await _store.AddJobScheduleAsync(await JobId("Nightly"), await ScheduleId("Never"), Now.AddMinutes(-1));
+            await _store.AddJobScheduleAsync(await JobIdOf("Nightly"), await ScheduleIdOf("Never"), Now.AddMinutes(-1));
             var job = (await _store.GetJobAsync((string?)null, "Nightly"))!;
 
             var earliest = await Scheduler().AdvanceScheduleLinksAsync(job, Now);
 
             Assert.Null(earliest);
-            var link = Assert.Single(await _store.GetJobSchedulesAsync(await JobId("Nightly")));
+            var link = Assert.Single(await _store.GetJobSchedulesAsync(await JobIdOf("Nightly")));
             Assert.Null(link.NextRun);
             Assert.Equal(Now, link.LastRun);
             Assert.Empty(await _store.GetJobsDueByScheduleAsync(Now));

@@ -37,7 +37,7 @@ namespace ETL_SQL.Tests.Orchestration
             }
 
             var provider = new JobHistoryMetricsProvider(store);
-            var runs = await provider.GetRecentRunMetricsAsync("nightly", limit: 3);
+            var runs = await provider.GetRecentRunMetricsAsync(null, "nightly", limit: 3);
 
             Assert.Equal(3, runs.Count);
             Assert.Equal(500, runs[0].RowsProcessed); // newest first
@@ -60,7 +60,8 @@ namespace ETL_SQL.Tests.Orchestration
 
             await store.LogJobStartAsync("nightly"); // still RUNNING — no EndTime
 
-            var runs = await new JobHistoryMetricsProvider(store).GetRecentRunMetricsAsync("nightly", limit: 10);
+            var runs = await new JobHistoryMetricsProvider(store).GetRecentRunMetricsAsync(
+                null, "nightly", limit: 10);
 
             Assert.Equal(1000, Assert.Single(runs).RowsProcessed);
         }
@@ -71,7 +72,7 @@ namespace ETL_SQL.Tests.Orchestration
             var store = new SQLiteJobHistoryStore(_dbPath);
             await store.InitializeAsync();
 
-            Assert.Empty(await new JobHistoryMetricsProvider(store).GetRecentRunMetricsAsync("never_ran", 5));
+            Assert.Empty(await new JobHistoryMetricsProvider(store).GetRecentRunMetricsAsync(null, "never_ran", 5));
         }
 
         [Fact]
@@ -105,7 +106,7 @@ namespace ETL_SQL.Tests.Orchestration
             ]);
 
             var provider = new JobHistoryMetricsProvider(store);
-            var runs = await provider.GetRecentColumnMetricsAsync("nightly", "clean", "EMAIL", limit: 10);
+            var runs = await provider.GetRecentColumnMetricsAsync(null, "nightly", "clean", "EMAIL", limit: 10);
 
             Assert.Collection(runs,
                 r =>
@@ -132,11 +133,11 @@ namespace ETL_SQL.Tests.Orchestration
                 LastFailureAlertedAtUtc: DateTimeOffset.Parse("2026-07-25T12:00:00Z"),
                 UpdatedAtUtc: DateTimeOffset.Parse("2026-07-25T12:01:00Z"));
 
-            await provider.SaveAssertJobAlertStateAsync("nightly", "abc123", state);
-            var read = await provider.GetAssertJobAlertStateAsync("nightly", "abc123");
+            await provider.SaveAssertJobAlertStateAsync(null, "nightly", "abc123", state);
+            var read = await provider.GetAssertJobAlertStateAsync(null, "nightly", "abc123");
 
             Assert.Equal(state, read);
-            Assert.Null(await provider.GetAssertJobAlertStateAsync("nightly", "missing"));
+            Assert.Null(await provider.GetAssertJobAlertStateAsync(null, "nightly", "missing"));
         }
 
         [Fact]
@@ -163,9 +164,9 @@ namespace ETL_SQL.Tests.Orchestration
                 JoinObservedN1: true,
                 JoinNonReplayableReason: null);
 
-            await provider.SaveQuarantineReplayManifestAsync(manifest);
+            await provider.SaveQuarantineReplayManifestAsync(null, manifest);
 
-            var read = await provider.GetQuarantineReplayManifestAsync("nightly", "#q");
+            var read = await provider.GetQuarantineReplayManifestAsync(null, "nightly", "#q");
             Assert.NotNull(read);
             Assert.Equal(manifest.JobName, read.JobName);
             Assert.Equal(manifest.ScriptPath, read.ScriptPath);
@@ -183,8 +184,8 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(manifest.JoinObservedN1, read.JoinObservedN1);
             Assert.Equal(manifest.JoinNonReplayableReason, read.JoinNonReplayableReason);
 
-            Assert.Equal("#q", (await provider.GetQuarantineReplayManifestAsync("nightly", "q"))?.QuarantineTarget);
-            Assert.Null(await provider.GetQuarantineReplayManifestAsync("nightly", "#missing"));
+            Assert.Equal("#q", (await provider.GetQuarantineReplayManifestAsync(null, "nightly", "q"))?.QuarantineTarget);
+            Assert.Null(await provider.GetQuarantineReplayManifestAsync(null, "nightly", "#missing"));
         }
 
         [Fact]

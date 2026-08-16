@@ -14,6 +14,7 @@
   <ItemGroup>
     <Compile Include="..\TestSupport\LoadAwareWait.cs" Link="TestSupport\LoadAwareWait.cs" />
     <Compile Include="..\TestSupport\DeploymentCertificationEvidenceWriter.cs" Link="TestSupport\DeploymentCertificationEvidenceWriter.cs" />
+    <Compile Include="..\TestSupport\JobStoreNameAddressingTestExtensions.cs" Link="TestSupport\JobStoreNameAddressingTestExtensions.cs" />
     <PackageReference Include="Moq" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.File" />

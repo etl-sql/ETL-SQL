@@ -2184,11 +2184,17 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var ins = connection.CreateCommand())
             {
                 ins.Transaction = tx;
+                // Grouped by identity, not name: two tenants may both have a job called 'nightly',
+                // and summing them into one row would report each tenant the other's volume. The
+                // name and tenant are carried along for display and for tenant-scoped deletion.
+                // Ad-hoc script runs (JobId '') are excluded — they are not jobs, so they have no
+                // per-job trend, and the table's key could not hold them anyway.
                 ins.CommandText =
-                    "INSERT INTO JobHistoryDaily (Day, JobName, RunCount, FailureCount, TotalRows, MaxPeakMemoryBytes) " +
-                    "SELECT substr(StartTime,1,10), JobName, COUNT(*), " +
+                    "INSERT INTO JobHistoryDaily (Day, JobId, TenantId, JobName, RunCount, FailureCount, TotalRows, MaxPeakMemoryBytes) " +
+                    "SELECT substr(StartTime,1,10), JobId, MAX(TenantId), MAX(JobName), COUNT(*), " +
                     "SUM(CASE WHEN Status <> 'SUCCESS' THEN 1 ELSE 0 END), SUM(RowsProcessed), MAX(PeakMemoryBytes) " +
-                    "FROM JobHistory WHERE Status <> 'RUNNING' GROUP BY substr(StartTime,1,10), JobName;";
+                    "FROM JobHistory WHERE Status <> 'RUNNING' AND JobId <> '' " +
+                    "GROUP BY substr(StartTime,1,10), JobId;";
                 written = await ins.ExecuteNonQueryAsync();
             }
             tx.Commit();

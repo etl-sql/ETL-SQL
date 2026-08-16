@@ -382,17 +382,28 @@ public partial class RelationalJobHistoryStore
     private static async Task DeleteTenantJobsAsync(
         DbConnection connection, DbTransaction transaction, string tenantId, CancellationToken ct)
     {
+        // Every predicate here is a tenant column or a surrogate id, never a job *name*. Names repeat
+        // across tenants, so the name-resolved form these statements used to take would delete another
+        // tenant's history, state, and links the moment two tenants shared a job name — a silent,
+        // unrecoverable loss in the one operation that must not overreach.
         foreach (var sql in new[]
         {
-            "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT h.Id FROM JobHistory h JOIN Jobs j ON j.Name = h.JobName WHERE j.TenantId = @tenant);",
-            "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT h.Id FROM JobHistory h JOIN Jobs j ON j.Name = h.JobName WHERE j.TenantId = @tenant);",
-            "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT h.Id FROM JobHistory h JOIN Jobs j ON j.Name = h.JobName WHERE j.TenantId = @tenant);",
-            "DELETE FROM JobHistoryDaily WHERE JobName IN (SELECT Name FROM Jobs WHERE TenantId = @tenant);",
-            "DELETE FROM JobHistory WHERE JobName IN (SELECT Name FROM Jobs WHERE TenantId = @tenant);",
-            "DELETE FROM JobState WHERE JobName IN (SELECT Name FROM Jobs WHERE TenantId = @tenant);",
-            "DELETE FROM JobSchedules WHERE JobName IN (SELECT Name FROM Jobs WHERE TenantId = @tenant);",
-            "DELETE FROM JobNotifications WHERE JobName IN (SELECT Name FROM Jobs WHERE TenantId = @tenant);",
+            "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE TenantId = @tenant);",
+            "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE TenantId = @tenant);",
+            "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE TenantId = @tenant);",
+            // History and its rollup carry the tenant directly: they outlive the job, so a join
+            // through Jobs would strand the rows of an already-dropped job in the tenant's partition.
+            "DELETE FROM JobHistoryDaily WHERE TenantId = @tenant;",
+            "DELETE FROM JobHistory WHERE TenantId = @tenant;",
+            "DELETE FROM OrchestratorObjectAcls WHERE ObjectId IN (SELECT Id FROM Jobs WHERE TenantId = @tenant);",
+            "DELETE FROM OrchestratorObjectAcls WHERE ObjectId IN (SELECT Id FROM Schedules WHERE TenantId = @tenant);",
+            "DELETE FROM OrchestratorObjectAcls WHERE ObjectId IN (SELECT Id FROM Notifications WHERE TenantId = @tenant);",
+            "DELETE FROM JobState WHERE JobId IN (SELECT Id FROM Jobs WHERE TenantId = @tenant);",
+            "DELETE FROM JobSchedules WHERE JobId IN (SELECT Id FROM Jobs WHERE TenantId = @tenant);",
+            "DELETE FROM JobNotifications WHERE JobId IN (SELECT Id FROM Jobs WHERE TenantId = @tenant);",
             "DELETE FROM TenantUsageRecords WHERE TenantId = @tenant;",
+            "DELETE FROM Schedules WHERE TenantId = @tenant;",
+            "DELETE FROM Notifications WHERE TenantId = @tenant;",
             "DELETE FROM Jobs WHERE TenantId = @tenant;"
         })
         {

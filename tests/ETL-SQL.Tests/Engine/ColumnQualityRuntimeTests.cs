@@ -2016,12 +2016,14 @@ namespace ETL_SQL.Tests.Engine
                 new(StringComparer.OrdinalIgnoreCase);
 
             public Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
+                string? tenantId,
                 string jobName,
                 int limit,
                 CancellationToken cancellationToken = default) =>
                 Task.FromResult<IReadOnlyList<JobRunMetrics>>(Array.Empty<JobRunMetrics>());
 
             public Task<QuarantineReplayManifest?> GetQuarantineReplayManifestAsync(
+                string? tenantId,
                 string jobName,
                 string quarantineTarget,
                 CancellationToken cancellationToken = default)
@@ -2031,6 +2033,7 @@ namespace ETL_SQL.Tests.Engine
             }
 
             public Task SaveQuarantineReplayManifestAsync(
+                string? tenantId,
                 QuarantineReplayManifest manifest,
                 CancellationToken cancellationToken = default)
             {
@@ -2040,6 +2043,7 @@ namespace ETL_SQL.Tests.Engine
             }
 
             public Task<bool> TryAcquireQuarantineReplayLeaseAsync(
+                string? tenantId,
                 string jobName,
                 string quarantineTarget,
                 string owner,
@@ -2051,6 +2055,7 @@ namespace ETL_SQL.Tests.Engine
             }
 
             public Task ReleaseQuarantineReplayLeaseAsync(
+                string? tenantId,
                 string jobName,
                 string quarantineTarget,
                 string owner,

@@ -216,12 +216,13 @@ public static class SubscriptionScriptMaintenance
             if (!SubscriptionOrchestration.TryParseSubscriptionId(job.Name, out var subId)
                 || !liveIds.Contains(subId))
             {
-                await TryDeleteJob(store, job.Id!, logger, "orphaned subscription job");
+                await TryDeleteJob(store, job.Id, job.Name, logger, "orphaned subscription job");
                 if (subId > 0)
                 {
-                    await TryDeleteSchedule(store, subId, logger, "orphaned subscription schedule");
                     // Cleanup stays inside the orphaned job's own tenant: another tenant's
-                    // subscription notification of the same name is a different object.
+                    // subscription schedule or notification of the same name is a different object.
+                    await TryDeleteSchedule(
+                        store, subId, job.TenantId, logger, "orphaned subscription schedule");
                     await TryDeleteNotification(
                         store, subId, job.TenantId, logger, "orphaned subscription notification");
                 }
@@ -248,7 +249,7 @@ public static class SubscriptionScriptMaintenance
             foreach (var stale in existing ?? [])
             {
                 if (!ReferenceEquals(stale, current))
-                    await TryDeleteJob(store, stale.Name, logger, "stale-named subscription job");
+                    await TryDeleteJob(store, stale.Id, stale.Name, logger, "stale-named subscription job");
             }
 
             try
@@ -273,9 +274,9 @@ public static class SubscriptionScriptMaintenance
                     if (!scheduleChanged && !enabledChanged && !scriptChanged)
                     {
                         await SubscriptionOrchestration.SaveScheduleLinkAsync(
-                            store, sub, current.Id!, current.TenantId);
+                            store, sub, current.Id, current.TenantId);
                         await SubscriptionOrchestration.SaveNotificationLinkAsync(
-                            store, sub, current.Id!, current.TenantId);
+                            store, sub, current.Id, current.TenantId);
                         continue;
                     }
 
@@ -292,11 +293,11 @@ public static class SubscriptionScriptMaintenance
                     await SubscriptionOrchestration.SaveScheduleLinkAsync(
                         store,
                         sub,
-                        current.Id!,
+                        current.Id,
                         current.TenantId,
                         rearmExisting: scheduleChanged);
                     await SubscriptionOrchestration.SaveNotificationLinkAsync(
-                        store, sub, current.Id!, current.TenantId);
+                        store, sub, current.Id, current.TenantId);
                     logger.LogInformation(
                         "Realigned Orchestrator job for subscription {SubscriptionId} with the portal row.", sub.Id);
                 }
@@ -323,11 +324,11 @@ public static class SubscriptionScriptMaintenance
     }
 
     private static async Task TryDeleteJob(
-        IJobHistoryStore store, string jobName, ILogger logger, string description)
+        IJobHistoryStore store, JobId jobId, string jobName, ILogger logger, string description)
     {
         try
         {
-            await store.DeleteJobAsync(jobName);
+            await store.DeleteJobAsync(jobId);
             logger.LogWarning("Removed {Description}: {JobName}", description, jobName);
         }
         catch (Exception ex)
@@ -337,11 +338,11 @@ public static class SubscriptionScriptMaintenance
     }
 
     private static async Task TryDeleteSchedule(
-        IJobHistoryStore store, int subscriptionId, ILogger logger, string description)
+        IJobHistoryStore store, int subscriptionId, string? tenantId, ILogger logger, string description)
     {
         try
         {
-            await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(store, subscriptionId);
+            await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(store, subscriptionId, tenantId);
             logger.LogWarning(
                 "Removed {Description}: {ScheduleName}",
                 description,

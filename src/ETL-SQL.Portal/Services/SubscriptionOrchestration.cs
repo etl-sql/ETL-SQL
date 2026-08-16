@@ -132,7 +132,7 @@ public static class SubscriptionOrchestration
         await store.SaveJobAsync(job);
         // Re-read to pick up the identity the store assigned: links hang off the id, not the name.
         var saved = await store.GetJobAsync(tenantId, job.Name);
-        if (saved?.Id is not { Length: > 0 }) return;
+        if (saved is null || !saved.Id.IsAssigned) return;
         await SaveScheduleLinkAsync(store, sub, saved.Id, tenantId);
         await SaveNotificationLinkAsync(store, sub, saved.Id, tenantId);
     }
@@ -140,7 +140,7 @@ public static class SubscriptionOrchestration
     public static async Task SaveScheduleLinkAsync(
         IJobHistoryStore store,
         Subscription sub,
-        string jobId,
+        JobId jobId,
         string? tenantId,
         bool rearmExisting = false,
         DateTimeOffset? asOf = null)
@@ -158,23 +158,31 @@ public static class SubscriptionOrchestration
                 schedule.TimeZone,
                 asOf ?? DateTimeOffset.UtcNow);
             var saved = await catalog.GetScheduleAsync(tenantId, schedule.Name);
-            if (saved?.Id is { Length: > 0 } savedScheduleId)
-                await catalog.ArmJobScheduleAsync(jobId, savedScheduleId, nextRun);
+            if (saved is not null && saved.Id.IsAssigned)
+                await catalog.ArmJobScheduleAsync(jobId, saved.Id, nextRun);
         }
     }
 
-    public static async Task DeleteScheduleIfUnusedAsync(IJobHistoryStore store, int subscriptionId)
+    /// <summary>
+    /// Drops the schedule this subscription owns, resolved in the subscription's own tenant: the
+    /// generated name repeats across tenants, so deleting by name alone would reach another
+    /// tenant's schedule of the same name.
+    /// </summary>
+    public static async Task DeleteScheduleIfUnusedAsync(
+        IJobHistoryStore store, int subscriptionId, string? tenantId)
     {
         if (store is not IJobCatalogStore catalog)
             return;
 
-        _ = await catalog.DeleteScheduleAsync(ScheduleName(subscriptionId));
+        var schedule = await catalog.GetScheduleAsync(tenantId, ScheduleName(subscriptionId));
+        if (schedule is not null && schedule.Id.IsAssigned)
+            _ = await catalog.DeleteScheduleAsync(schedule.Id);
     }
 
     public static async Task SaveNotificationLinkAsync(
         IJobHistoryStore store,
         Subscription sub,
-        string jobId,
+        JobId jobId,
         string? tenantId)
     {
         if (store is not IJobCatalogStore catalog)
@@ -187,18 +195,18 @@ public static class SubscriptionOrchestration
             // Detach and drop the destination this subscription owns — resolved in its own tenant, so
             // another tenant's subscription notification of the same name is untouched.
             var stale = await catalog.GetNotificationAsync(tenantId, notificationName);
-            if (stale?.Id is { Length: > 0 } staleId)
+            if (stale is not null && stale.Id.IsAssigned)
             {
-                _ = await catalog.RemoveJobNotificationAsync(jobId, staleId, NotificationTrigger.Success);
-                _ = await catalog.DeleteNotificationAsync(staleId);
+                _ = await catalog.RemoveJobNotificationAsync(jobId, stale.Id, NotificationTrigger.Success);
+                _ = await catalog.DeleteNotificationAsync(stale.Id);
             }
             return;
         }
 
         await catalog.SaveNotificationAsync(notification with { TenantId = tenantId });
         var saved = await catalog.GetNotificationAsync(tenantId, notification.Name);
-        if (saved?.Id is { Length: > 0 } savedId)
-            await catalog.AddJobNotificationAsync(jobId, savedId, NotificationTrigger.Success);
+        if (saved is not null && saved.Id.IsAssigned)
+            await catalog.AddJobNotificationAsync(jobId, saved.Id, NotificationTrigger.Success);
     }
 
     public static async Task DeleteNotificationIfUnusedAsync(
@@ -208,8 +216,8 @@ public static class SubscriptionOrchestration
             return;
 
         var notification = await catalog.GetNotificationAsync(tenantId, NotificationName(subscriptionId));
-        if (notification?.Id is { Length: > 0 } notificationId)
-            _ = await catalog.DeleteNotificationAsync(notificationId);
+        if (notification is not null && notification.Id.IsAssigned)
+            _ = await catalog.DeleteNotificationAsync(notification.Id);
     }
 
     public static string SanitizeName(string name) =>

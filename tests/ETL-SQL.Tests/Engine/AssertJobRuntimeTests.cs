@@ -647,10 +647,11 @@ namespace ETL_SQL.Tests.Engine
             }
 
             public Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
-                string jobName, int limit, CancellationToken cancellationToken = default) =>
+                string? tenantId, string jobName, int limit, CancellationToken cancellationToken = default) =>
                 Task.FromResult<IReadOnlyList<JobRunMetrics>>(_runs.Take(limit).ToList());
 
             public Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
+                string? tenantId,
                 string jobName,
                 string? targetTable,
                 string columnName,
@@ -663,6 +664,7 @@ namespace ETL_SQL.Tests.Engine
                     .ToList());
 
             public Task<AssertJobAlertState?> GetAssertJobAlertStateAsync(
+                string? tenantId,
                 string jobName,
                 string assertionKey,
                 CancellationToken cancellationToken = default)
@@ -672,6 +674,7 @@ namespace ETL_SQL.Tests.Engine
             }
 
             public Task SaveAssertJobAlertStateAsync(
+                string? tenantId,
                 string jobName,
                 string assertionKey,
                 AssertJobAlertState state,

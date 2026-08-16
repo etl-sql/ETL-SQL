@@ -92,7 +92,12 @@ public sealed class SharedTenantLifecycleStoreTests : IDisposable
         Assert.Null(await store.GetJobAsync((string?)null, "alpha-job"));
         Assert.Empty(await store.GetHistoryAsync("alpha-job"));
         Assert.Null(await store.GetJobStateAsync("alpha-job", "dq:quarantine-manifest:same"));
-        Assert.Empty(await store.GetJobHistoryDailyAsync("alpha-job", DateTime.UtcNow.AddDays(-1)));
+        // Asked across every tenant, because the deleted job has no identity left to address it by —
+        // and asking the whole table is the stronger assertion anyway: the rollup row is gone, not
+        // merely unreachable through its own job.
+        Assert.DoesNotContain(
+            await store.GetJobHistoryDailyAsync(JobId.None, DateTime.UtcNow.AddDays(-1)),
+            row => row.JobName == "alpha-job");
         Assert.NotNull(await store.GetJobAsync((string?)null, "beta-job"));
         Assert.Single(await store.GetHistoryAsync("beta-job"));
         Assert.Equal("beta", await store.GetJobStateAsync(

@@ -25,6 +25,28 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
         identity is not null && await CanAsync(
             ToCaller(identity), objectKind, objectId, objectTenantId, required, owner, cancellationToken);
 
+    // Typed entry points. The grant store keys every object kind in one column and so takes a
+    // string, but callers hold a typed identity and must not be able to hand a *name* to an
+    // authorization decision — a name resolves only within a tenant, so a decision made about one
+    // object could otherwise be applied to another.
+    public Task<bool> CanAsync(
+        OrchestratorCaller caller, OrchestratorObjectKind objectKind, JobId objectId,
+        string? objectTenantId, OrchestratorObjectPermission required, string? owner,
+        CancellationToken cancellationToken = default) =>
+        CanAsync(caller, objectKind, objectId.ToString(), objectTenantId, required, owner, cancellationToken);
+
+    public Task<bool> CanAsync(
+        OrchestratorCaller caller, OrchestratorObjectKind objectKind, ScheduleId objectId,
+        string? objectTenantId, OrchestratorObjectPermission required, string? owner,
+        CancellationToken cancellationToken = default) =>
+        CanAsync(caller, objectKind, objectId.ToString(), objectTenantId, required, owner, cancellationToken);
+
+    public Task<bool> CanAsync(
+        OrchestratorCaller caller, OrchestratorObjectKind objectKind, NotificationId objectId,
+        string? objectTenantId, OrchestratorObjectPermission required, string? owner,
+        CancellationToken cancellationToken = default) =>
+        CanAsync(caller, objectKind, objectId.ToString(), objectTenantId, required, owner, cancellationToken);
+
     public async Task<bool> CanAsync(
         OrchestratorCaller caller,
         OrchestratorObjectKind objectKind,

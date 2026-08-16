@@ -330,11 +330,11 @@ public class SubscriptionsController(
                 await SubscriptionOrchestration.SaveScheduleLinkAsync(
                     store,
                     sub,
-                    updated.Id!,
+                    updated.Id,
                     _tenantScope.TenantId,
                     rearmExisting: scheduleChanged || atTimeChanged);
                 await SubscriptionOrchestration.SaveNotificationLinkAsync(
-                    store, sub, updated.Id!, _tenantScope.TenantId);
+                    store, sub, updated.Id, _tenantScope.TenantId);
             }
             else if (sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
             {
@@ -405,9 +405,9 @@ public class SubscriptionsController(
                     if (!string.IsNullOrWhiteSpace(sub.ScriptPath))
                     {
                         await SubscriptionOrchestration.SaveScheduleLinkAsync(
-                            store, sub, job.Id!, _tenantScope.TenantId);
+                            store, sub, job.Id, _tenantScope.TenantId);
                         await SubscriptionOrchestration.SaveNotificationLinkAsync(
-                            store, sub, job.Id!, _tenantScope.TenantId);
+                            store, sub, job.Id, _tenantScope.TenantId);
                     }
                 }
             }
@@ -454,8 +454,13 @@ public class SubscriptionsController(
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
-            await store.DeleteJobAsync(jobName);
-            await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(store, sub.Id);
+            // Resolved in this subscription's own tenant: the generated job name repeats across
+            // tenants, so deleting by name alone would reach another tenant's job.
+            var job = await store.GetJobAsync(_tenantScope.TenantId, jobName);
+            if (job is not null && job.Id.IsAssigned)
+                await store.DeleteJobAsync(job.Id);
+            await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(
+                store, sub.Id, _tenantScope.TenantId);
             await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(
                 store, sub.Id, _tenantScope.TenantId);
         }
