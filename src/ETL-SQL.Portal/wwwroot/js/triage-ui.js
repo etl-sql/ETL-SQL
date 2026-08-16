@@ -171,10 +171,10 @@ function renderRunRow(run, { evidenceOpen = false, evidence } = {}) {
         <a class="triage-impact-link" href="${esc(impactUrl(run.jobName))}"
            title="What is downstream of this job">Impact →</a>
       </td>
-      <td>
-        <button class="btn-link triage-rerun-one" type="button" data-job="${esc(run.jobName)}"
+      <td class="triage-actions-cell">
+        <button class="btn btn-outline btn-xs triage-rerun-one" type="button" data-job="${esc(run.jobName)}"
                 title="Run '${esc(run.jobName)}' individually">Run now</button>
-        <button class="btn-link triage-run-evidence" type="button" data-run="${Number(run.id)}"
+        <button class="btn btn-outline btn-xs triage-run-evidence" type="button" data-run="${Number(run.id)}"
                 aria-expanded="${evidenceOpen ? 'true' : 'false'}">${evidenceOpen ? 'Close evidence' : 'Evidence'}</button>
       </td>
     </tr>`;
@@ -192,11 +192,10 @@ export function renderIncident(incident, {
 } = {}) {
   const jobs = incident.jobNames || [];
   const shown = jobs.slice(0, 6).map(j => `
-    <span class="badge badge-neutral" style="display:inline-flex;align-items:center;gap:4px;">
-      ${esc(j)}
-      <button class="btn-link triage-rerun-one" type="button" data-job="${esc(j)}"
-              style="padding:0 2px;font-size:0.7em;line-height:1;text-decoration:none;cursor:pointer;"
-              title="Run '${esc(j)}' individually">▶</button>
+    <span class="triage-job-chip">
+      <span>${esc(j)}</span>
+      <button class="triage-chip-play triage-rerun-one" type="button" data-job="${esc(j)}"
+              title="Run '${esc(j)}' individually" aria-label="Run '${esc(j)}' individually">▶</button>
     </span>`).join(' ');
   const more = jobs.length > 6 ? ` <span class="triage-more">+${jobs.length - 6} more</span>` : '';
   const span = incident.firstSeen === incident.lastSeen
@@ -239,8 +238,8 @@ export function renderMissed(missed) {
       <td>${fmtDateTime(m.dueAt)}</td>
       <td><span class="badge badge-warning">${formatOverdue(m.overdueMinutes)} late</span></td>
       <td>${m.lastRun ? fmtDateTime(m.lastRun) : 'never'}</td>
-      <td>
-        <button class="btn-link triage-rerun-one" type="button" data-job="${esc(m.jobName)}">Run now</button>
+      <td class="triage-actions-cell">
+        <button class="btn btn-outline btn-xs triage-rerun-one" type="button" data-job="${esc(m.jobName)}">Run now</button>
         <a class="triage-impact-link" href="${esc(impactUrl(m.jobName))}"
            title="What is downstream of this job">Impact →</a>
       </td>
@@ -313,7 +312,7 @@ export function renderTriageBoard(board, state = {}) {
       <section class="triage-section">
         <div class="triage-section-head">
           <h3>Failures (${Number(board.failureCount) || 0} across ${incidents.length} incident${incidents.length === 1 ? '' : 's'})</h3>
-          <button class="btn-secondary triage-rerun-selected" type="button" ${selected.size === 0 ? 'disabled' : ''}>
+          <button class="btn ${selected.size > 0 ? 'btn-primary' : 'btn-outline'} btn-sm triage-rerun-selected" type="button" ${selected.size === 0 ? 'disabled' : ''}>
             Re-run selected${selected.size > 0 ? ` (${selected.size})` : ''}
           </button>
         </div>
