@@ -73,14 +73,43 @@ try {
         }
     }
 
-    # Portal surface flag — written by the installer so the runtime binary activates
-    # only the surfaces that were selected at install time.
-    # Values: "All" (Admin + Report), "AdminOnly", "ReportOnly".
-    # Computed from SURFACE= in CustomActionData rather than from individual feature flags
-    # so the installer WXS is the single place where the feature-to-surface mapping is decided.
-    if ($moduleOpts.ContainsKey('SURFACE') -and $null -ne $json.Portal) {
-        $surface = $moduleOpts['SURFACE']
-        if ([string]::IsNullOrWhiteSpace($surface)) { $surface = 'All' }
+    # Portal:Surface — derived from the four granular selectors passed by the installer.
+    # This is the single place the feature selections are translated into a surface name
+    # so the runtime binary knows which nav sections and routes to activate.
+    #
+    #   ORCH_SURFACE    (1/0) — Orchestrator job management tab
+    #   STEWARD_SURFACE (1/0) — Data Steward / quality queue tab
+    #   REPORT_PORTAL   (1/0) — Report catalog and designer tab
+    #
+    # Truth table (7 meaningful combinations; 0/0/0 = Portal not installed, skipped):
+    #   Orch  Steward  Report  → Surface
+    #   1     1        1       → All
+    #   1     1        0       → OrchestratorAndSteward
+    #   1     0        1       → OrchestratorAndReports
+    #   0     1        1       → StewardAndReports
+    #   1     0        0       → OrchestratorOnly
+    #   0     1        0       → DataStewardOnly
+    #   0     0        1       → ReportOnly
+    if ($null -ne $json.Portal -and
+        ($moduleOpts.ContainsKey('ORCH_SURFACE') -or
+         $moduleOpts.ContainsKey('STEWARD_SURFACE') -or
+         $moduleOpts.ContainsKey('REPORT_PORTAL'))) {
+
+        $hasOrch    = ($moduleOpts['ORCH_SURFACE']    -eq '1')
+        $hasSteward = ($moduleOpts['STEWARD_SURFACE'] -eq '1')
+        $hasReport  = ($moduleOpts['REPORT_PORTAL']   -eq '1')
+
+        $surface = switch ($true) {
+            ($hasOrch -and $hasSteward -and $hasReport)  { 'All';                      break }
+            ($hasOrch -and $hasSteward -and !$hasReport) { 'OrchestratorAndSteward';   break }
+            ($hasOrch -and !$hasSteward -and $hasReport) { 'OrchestratorAndReports';   break }
+            (!$hasOrch -and $hasSteward -and $hasReport) { 'StewardAndReports';         break }
+            ($hasOrch -and !$hasSteward -and !$hasReport){ 'OrchestratorOnly';          break }
+            (!$hasOrch -and $hasSteward -and !$hasReport){ 'DataStewardOnly';           break }
+            (!$hasOrch -and !$hasSteward -and $hasReport){ 'ReportOnly';                break }
+            default                                       { 'All' }
+        }
+
         $json.Portal | Add-Member -MemberType NoteProperty -Name 'Surface' -Value $surface -Force
         $changed = $true
     }

@@ -58,7 +58,32 @@
         <Property Id="INSTALL_ORCHESTRATOR"  Value="1" Secure="yes" />
         <Property Id="INSTALL_ADMIN_PORTAL"  Value="1" Secure="yes" />
         <Property Id="INSTALL_REPORT_PORTAL" Value="1" Secure="yes" />
-        <Property Id="PORTAL_SURFACE"        Value="All" Secure="yes" />
+
+        <!-- Admin Portal sub-surface selectors (both default on when Admin Portal is selected).
+             These let an operator install only the Orchestrator job-management UI, only the
+             Data Steward / governance UI, or both — without changing which binary is installed.
+             The PORTAL_SURFACE value is derived from these in configure-portal-jwt.ps1.
+
+             INSTALL_PORTAL_ORCH_SURFACE    — Orchestrator tab: job table, triage board, DAG,
+                                              run history, schedule management, watermarks.
+             INSTALL_PORTAL_STEWARD_SURFACE — Data Steward tab: data-quality queue, quarantine,
+                                              lineage, governance policies.
+        -->
+        <Property Id="INSTALL_PORTAL_ORCH_SURFACE"   Value="1" Secure="yes" />
+        <Property Id="INSTALL_PORTAL_STEWARD_SURFACE" Value="1" Secure="yes" />
+
+        <!-- PORTAL_SURFACE — written to Portal:Surface in appsettings.json.
+             Derived from the four selectors above; set by configure-portal-jwt.ps1.
+             Valid values (all combinations):
+               "All"                    — Report + Orchestrator + DataSteward
+               "OrchestratorOnly"       — Orchestrator job UI only, no reports or steward
+               "DataStewardOnly"        — Data Steward / governance only, no reports or orch
+               "OrchestratorAndSteward" — Both admin surfaces; no reports  (= former AdminOnly)
+               "ReportOnly"             — Report catalog and designer only
+               "OrchestratorAndReports" — Orchestrator + Reports; no steward
+               "StewardAndReports"      — Data Steward + Reports; no orchestrator
+        -->
+        <Property Id="PORTAL_SURFACE" Value="All" Secure="yes" />
 
         <!-- Legacy aliases for the JWT custom action — kept so configure-portal-jwt.ps1
              continues to receive familiar flag names in its CustomActionData string. -->
@@ -260,7 +285,7 @@
              Portal:Surface value in appsettings.json. -->
         <Binary Id="InstallerActionsJs" SourceFile="installer-actions.js" />
         <CustomAction Id="SetWriteJwtData" Property="WriteJwt"
-                      Value="[INSTALLFOLDER]|INSTALL_PORTAL=[INSTALL_ADMIN_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]|SURFACE=[PORTAL_SURFACE]|REPORT_PORTAL=[INSTALL_REPORT_PORTAL]"
+                      Value="[INSTALLFOLDER]|INSTALL_PORTAL=[INSTALL_ADMIN_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]|ORCH_SURFACE=[INSTALL_PORTAL_ORCH_SURFACE]|STEWARD_SURFACE=[INSTALL_PORTAL_STEWARD_SURFACE]|REPORT_PORTAL=[INSTALL_REPORT_PORTAL]"
                       Execute="immediate" />
         <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="ignore" />
         <CustomAction Id="PromptCleanData" BinaryKey="InstallerActionsJs" JScriptCall="PromptCleanData" Execute="immediate" Return="ignore" />
@@ -390,17 +415,36 @@
                     <Condition Action="disable"><![CDATA[INSTALL_ORCHESTRATOR <> "1"]]></Condition>
                     <Condition Action="enable"><![CDATA[INSTALL_ORCHESTRATOR = "1"]]></Condition>
                 </Control>
-                <Control Id="AdminPortalDesc" Type="Text" X="50" Y="132" Width="300" Height="12" Transparent="yes" NoPrefix="yes" Text="Orchestration UI, job triage, data-steward, and governance — http://localhost:5002">
+                <Control Id="AdminPortalDesc" Type="Text" X="50" Y="132" Width="300" Height="10" Transparent="yes" NoPrefix="yes" Text="Identity, governance, and admin surfaces — http://localhost:5002">
                     <Condition Action="disable"><![CDATA[INSTALL_ORCHESTRATOR <> "1"]]></Condition>
                     <Condition Action="enable"><![CDATA[INSTALL_ORCHESTRATOR = "1"]]></Condition>
                 </Control>
 
-                <!-- Report Portal (independent) -->
-                <Control Id="ReportPortalCheckBox" Type="CheckBox" X="20" Y="150" Width="335" Height="15" Property="INSTALL_REPORT_PORTAL" CheckBoxValue="1" Text="Report Portal" />
-                <Control Id="ReportPortalDesc" Type="Text" X="34" Y="164" Width="325" Height="20" Transparent="yes" NoPrefix="yes" Text="Report catalog, visual designer, and end-user surfaces — http://localhost:5002. Can be installed on a separate server." />
+                <!-- Admin Portal sub-surface selectors (indented under Admin Portal) -->
+                <Control Id="OrchSurfaceCheckBox" Type="CheckBox" X="52" Y="145" Width="140" Height="13" Property="INSTALL_PORTAL_ORCH_SURFACE" CheckBoxValue="1" Text="Orchestrator UI">
+                    <Condition Action="disable"><![CDATA[INSTALL_ADMIN_PORTAL <> "1" OR INSTALL_ORCHESTRATOR <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_ADMIN_PORTAL = "1" AND INSTALL_ORCHESTRATOR = "1"]]></Condition>
+                </Control>
+                <Control Id="OrchSurfaceDesc" Type="Text" X="68" Y="158" Width="130" Height="10" Transparent="yes" NoPrefix="yes" Text="Jobs, triage, DAG, history">
+                    <Condition Action="disable"><![CDATA[INSTALL_ADMIN_PORTAL <> "1" OR INSTALL_ORCHESTRATOR <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_ADMIN_PORTAL = "1" AND INSTALL_ORCHESTRATOR = "1"]]></Condition>
+                </Control>
 
-                <!-- Portal Surface flag note (informational) -->
-                <Control Id="SurfaceNote" Type="Text" X="20" Y="192" Width="335" Height="20" Transparent="yes" NoPrefix="yes" Text="Portal surface mode is set automatically: Both selected = All surfaces; Admin only = Admin surfaces; Report only = Report surfaces." />
+                <Control Id="StewardSurfaceCheckBox" Type="CheckBox" X="200" Y="145" Width="145" Height="13" Property="INSTALL_PORTAL_STEWARD_SURFACE" CheckBoxValue="1" Text="Data Steward UI">
+                    <Condition Action="disable"><![CDATA[INSTALL_ADMIN_PORTAL <> "1" OR INSTALL_ORCHESTRATOR <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_ADMIN_PORTAL = "1" AND INSTALL_ORCHESTRATOR = "1"]]></Condition>
+                </Control>
+                <Control Id="StewardSurfaceDesc" Type="Text" X="216" Y="158" Width="130" Height="10" Transparent="yes" NoPrefix="yes" Text="Quality queue, quarantine">
+                    <Condition Action="disable"><![CDATA[INSTALL_ADMIN_PORTAL <> "1" OR INSTALL_ORCHESTRATOR <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_ADMIN_PORTAL = "1" AND INSTALL_ORCHESTRATOR = "1"]]></Condition>
+                </Control>
+
+                <!-- Report Portal (independent) -->
+                <Control Id="ReportPortalCheckBox" Type="CheckBox" X="20" Y="175" Width="335" Height="15" Property="INSTALL_REPORT_PORTAL" CheckBoxValue="1" Text="Report Portal" />
+                <Control Id="ReportPortalDesc" Type="Text" X="34" Y="189" Width="325" Height="10" Transparent="yes" NoPrefix="yes" Text="Report catalog, visual designer, and end-user surfaces — http://localhost:5002. Can be on a separate server." />
+
+                <!-- Informational: surface flag summary -->
+                <Control Id="SurfaceNote" Type="Text" X="20" Y="206" Width="335" Height="28" Transparent="yes" NoPrefix="yes" Text="Portal:Surface is computed automatically from your selections (e.g. Orchestrator + Steward + Reports = All; Orchestrator only = OrchestratorOnly; Steward + Reports = StewardAndReports)." />
 
                 <Control Id="BottomLine" Type="Line" X="0" Y="270" Width="370" Height="0" />
                 <Control Id="Back" Type="PushButton" X="180" Y="279" Width="56" Height="17" Text="!(loc.WixUIBack)">
