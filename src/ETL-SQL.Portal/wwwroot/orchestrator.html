@@ -1186,7 +1186,7 @@ const api = {
   dependencies: (name) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/dependencies`),
   audit:        (name) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/audit`),
   triage:       (lookbackHours = 24) => apiJson(`${BASE}/triage?lookbackHours=${encodeURIComponent(lookbackHours)}`),
-  triageRun:    (runId) => apiJson(`${BASE}/triage/runs/${encodeURIComponent(runId)}`),
+  triageRun:(runId) => apiJson(`${BASE}/triage/runs/${encodeURIComponent(runId)}`),
   rerun:        (jobNames) => apiFetch(`${BASE}/jobs/rerun`, { method: 'POST', body: { jobNames } }),
 
   // Schedules

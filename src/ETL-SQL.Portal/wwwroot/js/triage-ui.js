@@ -171,8 +171,12 @@ function renderRunRow(run, { evidenceOpen = false, evidence } = {}) {
         <a class="triage-impact-link" href="${esc(impactUrl(run.jobName))}"
            title="What is downstream of this job">Impact →</a>
       </td>
-      <td><button class="btn-link triage-run-evidence" type="button" data-run="${Number(run.id)}"
-                  aria-expanded="${evidenceOpen ? 'true' : 'false'}">${evidenceOpen ? 'Close evidence' : 'Evidence'}</button></td>
+      <td>
+        <button class="btn-link triage-rerun-one" type="button" data-job="${esc(run.jobName)}"
+                title="Run '${esc(run.jobName)}' individually">Run now</button>
+        <button class="btn-link triage-run-evidence" type="button" data-run="${Number(run.id)}"
+                aria-expanded="${evidenceOpen ? 'true' : 'false'}">${evidenceOpen ? 'Close evidence' : 'Evidence'}</button>
+      </td>
     </tr>`;
   return evidenceOpen
     ? `${row}<tr class="triage-evidence-row"><td colspan="8">${renderRunEvidence(evidence)}</td></tr>`
@@ -187,7 +191,13 @@ export function renderIncident(incident, {
   expanded = false, selected = false, index = 0, openRuns = new Set(), details = new Map()
 } = {}) {
   const jobs = incident.jobNames || [];
-  const shown = jobs.slice(0, 6).map(j => `<span class="badge badge-neutral">${esc(j)}</span>`).join(' ');
+  const shown = jobs.slice(0, 6).map(j => `
+    <span class="badge badge-neutral" style="display:inline-flex;align-items:center;gap:4px;">
+      ${esc(j)}
+      <button class="btn-link triage-rerun-one" type="button" data-job="${esc(j)}"
+              style="padding:0 2px;font-size:0.7em;line-height:1;text-decoration:none;cursor:pointer;"
+              title="Run '${esc(j)}' individually">▶</button>
+    </span>`).join(' ');
   const more = jobs.length > 6 ? ` <span class="triage-more">+${jobs.length - 6} more</span>` : '';
   const span = incident.firstSeen === incident.lastSeen
     ? fmtTime(incident.lastSeen)
