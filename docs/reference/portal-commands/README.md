@@ -1,9 +1,10 @@
-# PORTAL-ADMIN Reference
+# PORTAL-COMMANDS Reference
 
 [« Back to parent](../README.md)
 
 | Page | Description |
 | :--- | :--- |
+| [Admin Identity CLI](admin-identity-cli.md) | scriptable and reviewable in a diff rather than a sequence of clicks. |
 | [favorite](favorite.md) | FAVORITE marks portal reports as favorites. |
 | [Portal Service Administration](portal-admin.md) | Issue service-level control commands to the portal process inside an `EXECUTE portal` block. |
 | [Portal Report Alerts](portal-alert.md) | Create portal alert definitions through a `PORTAL` connection. |

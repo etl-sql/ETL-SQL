@@ -9,4 +9,5 @@
 | [FLATFILE](flatfile.md) | General-purpose connector for delimited (CSV/TSV) and fixed-width text files — the most flexible |
 | [JSON](json.md) | Document extraction with JSONPath addressing for nested data. When querying a `JSON` connection via |
 | [PARQUET](parquet.md) | Apache Parquet columnar format. Ideal for high-throughput analytics and interoperability with Spark, |
+| [TRANSACTIONAL FILE WRITES](transactional-writes.md) | target when serialization, encryption, compression, cancellation, or publication fails. |
 | [XML](xml.md) | Document extraction with XPath addressing for nested elements. When querying an `XML` connection via |

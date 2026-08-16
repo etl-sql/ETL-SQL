@@ -5,7 +5,7 @@
 | Page | Description |
 | :--- | :--- |
 | [Advanced File Operations](advanced-file-operations.md) | Advanced filesystem statements that replace custom script or program implementations in data |
-| [bulk-insert](bulk-insert.md) | BULK INSERT loads a flat file directly into a connection table in high-throughput batches, bypassing the #temp table staging step. |
+| [BULK INSERT](bulk-insert.md) | BULK INSERT streams a flat file into a table in bounded batches. It validates values at the target |
 | [COMPRESS / DECOMPRESS](compress-file.md) | Compresses or decompresses files and directories using ZIP or GZIP format. |
 | [CONVERT FILE ENCODING](convert-file-encoding.md) | Performs stream-based transcoding from one encoding standard to another. |
 | [COPY](copy-file.md) | Copies a local file or directory from one sandboxed location to another. |

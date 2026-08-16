@@ -16,6 +16,6 @@
 | [QUALIFY](qualify.md) | Filters the results of window functions. Evaluated after window functions have been computed. |
 | [SELECT conveniences (star modifiers, ORDER BY ALL, count(), separators, trailing commas)](select-modifiers.md) | Modern, DuckDB/Snowflake-style ergonomics for the SELECT statement. |
 | [Set Operations](set-operations.md) | - Statement Reference |
+| [WATERMARK](watermark.md) | Declarative incremental watermarking syntax attached to table references in `SELECT` queries (`WITH (WATERMARK = ...)`). Automatically retrieves th... |
 | [WINDOW](window.md) | WINDOW defines reusable named window specifications for analytic functions in a `SELECT` query. Named windows avoid repeating the same `PARTITION B... |
 | [WITH (CTE)](with.md) | Defines one or more Common Table Expressions (CTEs) scoped to the following SELECT statement. |
-| [WITH (WATERMARK)](watermark.md) | Declarative incremental watermarking syntax attached to table references in `SELECT` queries (`WITH (WATERMARK = ...)`). |

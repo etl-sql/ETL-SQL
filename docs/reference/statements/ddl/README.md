@@ -1,14 +1,15 @@
-# Data Definition Language (DDL)
+# DDL Reference
 
-This directory contains reference documentation for Data Definition Language (DDL) statements in ETL-SQL, which are used to define the structure of the data and presentation layers.
+[« Back to parent](../README.md)
 
-## Statements
-
-- **[ALTER](alter.md)** — Modifies an existing database object, table schema, or report visual.
-- **[CREATE](create.md)** — Creates a new object, table, connection, or report structure.
-- **[CREATE BINDING](create-binding.md)** — Declares a validation-only logical binding placeholder for the governed tool-runner work.
-- **[DROP](drop.md)** — Removes an existing object or connection.
-- **[EXPECT SCHEMA](expect-schema.md)** — Validates that a target table meets a specific schema contract before execution continues.
-- **[PAGE_LAYOUT](page_layout.md)** — Configures physical page constraints and sizing for paginated report output.
-- **[PRINT_LAYOUT](print_layout.md)** — Overrides how specific visual elements are rendered during PDF export or printing.
-- **[TEST CONNECTION](test-connection.md)** — Validates connectivity and credentials for a declared data source.
+| Page | Description |
+| :--- | :--- |
+| [ALTER](alter.md) | Modifies an existing object. |
+| [CREATE BINDING](create-binding.md) | Declares logical binding metadata for governed tool execution. The current engine parses, |
+| [CREATE TOOL](create-tool.md) | Registers a custom executable tool within the session for subsequent execution via `EXECUTE TOOL`. This allows arbitrary scripts (Python, PowerShel... |
+| [CREATE](create.md) | Creates connections, temporary tables, indexes, or named sets. |
+| [DROP](drop.md) | Removes a table, connection, index, or named set from the current session. |
+| [EXPECT SCHEMA](expect-schema.md) | Validates that a table or result set has the expected columns and types, halting with a descriptive error if columns are missing or mistyped. |
+| [PAGE_LAYOUT](page_layout.md) | Defines the physical page layout (size, margins, orientation, scale) for a `CREATE PAGE` statement. |
+| [PRINT_LAYOUT](print_layout.md) | Defines print layout overrides (page breaks, keep-together, exclusions) on individual visuals within a paginated report. |
+| [TEST CONNECTION](test-connection.md) | Actively diagnoses a catalog connection and prints a plain-English troubleshooting report. Layers are checked in order: DNS resolution, TCP reachab... |

@@ -1,7 +1,5 @@
 # CREATE THEME
 
-## CREATE THEME
-
 Defines a custom ECharts color theme that can be applied to any visual or page with `STYLE (THEME = themeName)`. Themes are saved as JSON files to `{TemplatePath}/Themes/` and embedded in the report manifest so the web player can register them at render time.
 
 ```sql

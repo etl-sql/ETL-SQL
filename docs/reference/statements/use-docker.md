@@ -1,8 +1,12 @@
 # Containerized Test Databases (USE DOCKER)
 <!-- DockerActionStatement -->
 
+Spawns, manages, and connects to ephemeral database containers during test runs or migration workflows.
 
-### 18.1 Spawning a Container
+---
+
+## Spawning a Container
+
 ```sql
 USE DOCKER('<image>') [AS <alias>];
 
@@ -11,13 +15,16 @@ USE DOCKER('postgres:15-alpine')                         AS pg_db;
 USE DOCKER('gvenzl/oracle-free:latest')                  AS ora_db;
 ```
 
-After startup the connection string is available via the alias:
+After startup, the connection string is available dynamically via the `<alias>.CONNECTION_STRING` property:
+
 ```sql
 DECLARE @conn VARCHAR(500) = mssql_db.CONNECTION_STRING;
 CREATE CONNECTION stage_db AS MSSQL(@conn);
 ```
 
-### 18.2 Supported Images
+---
+
+## Supported Images
 
 | Database | Image pattern | Default credentials | Port |
 | :--- | :--- | :--- | :--- |
@@ -25,7 +32,9 @@ CREATE CONNECTION stage_db AS MSSQL(@conn);
 | PostgreSQL | contains `postgres` | `postgres` / `postgres` | 5432 |
 | Oracle | contains `oracle` | `system` / `oracle` | 1521 |
 
-### 18.3 Lifecycle Commands
+---
+
+## Lifecycle Commands
 
 | Command | Effect |
 | :--- | :--- |
@@ -37,7 +46,10 @@ CREATE CONNECTION stage_db AS MSSQL(@conn);
 
 > Containers are **not** automatically closed when a script ends. Always include an explicit `CLOSE DOCKER` or wrap in `TRY...CATCH`.
 
-### 18.4 Multiple Containers
+---
+
+## Multiple Containers
+
 ```sql
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS src;
 USE DOCKER('postgres:15-alpine')                         AS dst;
@@ -51,7 +63,10 @@ INSERT INTO target_db.public.customers SELECT * FROM #tmp;
 CLOSE DOCKER;
 ```
 
+---
+
 ## References
 
 - [Statement Reference](README.md)
+- [CREATE CONNECTION](ddl/create.md)
 - [Syntax Index](../../syntax-index.md)
