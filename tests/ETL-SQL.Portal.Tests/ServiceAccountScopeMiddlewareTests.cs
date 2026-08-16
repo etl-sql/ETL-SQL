@@ -28,6 +28,11 @@ public sealed class ServiceAccountScopeMiddlewareTests
     [InlineData("GET", "/api/orchestrator/authorization/JOB/nightly", ServiceAccountScopes.OrchestratorPublish)]
     [InlineData("PUT", "/api/orchestrator/authorization/JOB/nightly/GROUP/key", ServiceAccountScopes.OrchestratorAdmin)]
     [InlineData("DELETE", "/api/orchestrator/authorization/JOB/nightly/GROUP/key", ServiceAccountScopes.OrchestratorAdmin)]
+    // Ownership is narrower still: an owner may manage their own object, so handing ownership on is
+    // an administrator's act and publish does not reach it.
+    [InlineData("GET", "/api/orchestrator/authorization/unowned", ServiceAccountScopes.OrchestratorAdmin)]
+    [InlineData("PUT", "/api/orchestrator/authorization/JOB/nightly/owner", ServiceAccountScopes.OrchestratorAdmin)]
+    [InlineData("POST", "/api/orchestrator/authorization/adopt", ServiceAccountScopes.OrchestratorAdmin)]
     [InlineData("GET", "/api/folders", ServiceAccountScopes.PortalRead)]
     public async Task RequiredScope_AllowsSupportedOperation(string method, string path, string scope)
     {
@@ -77,6 +82,22 @@ public sealed class ServiceAccountScopeMiddlewareTests
 
         Assert.Equal(StatusCodes.Status403Forbidden, read.Response.StatusCode);
         Assert.Equal(StatusCodes.Status403Forbidden, execute.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/orchestrator/authorization/unowned")]
+    [InlineData("PUT", "/api/orchestrator/authorization/JOB/nightly/owner")]
+    [InlineData("POST", "/api/orchestrator/authorization/adopt")]
+    public async Task PublishScope_DoesNotReachOwnership(string method, string path)
+    {
+        // Publish means "MANAGE what you own". Ownership is the authority that comes from, so a token
+        // that could reassign it could give itself an object — the escalation the split exists to stop.
+        var middleware = new ServiceAccountScopeMiddleware(_ => Task.CompletedTask);
+        var publish = Context(method, path, ServiceAccountScopes.OrchestratorPublish);
+
+        await middleware.InvokeAsync(publish);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, publish.Response.StatusCode);
     }
 
     private static DefaultHttpContext Context(string method, string path, string scope)

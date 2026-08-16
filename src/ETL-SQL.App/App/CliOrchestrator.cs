@@ -1516,7 +1516,8 @@ namespace ETL_SQL.App
             // Grants on orchestrator objects, for headless and scripted provisioning. Routed through
             // the Portal like every other admin command, so the operator needs Portal credentials and
             // never the Orchestrator's signing secret.
-            var orchestratorCommand = new Command("orchestrator", "Manage per-object Orchestrator grants");
+            var orchestratorCommand = new Command(
+                "orchestrator", "Manage per-object Orchestrator grants and ownership");
 
             var orchestratorShowCommand = new Command("show", "Show the grants on one Orchestrator object")
             {
@@ -1540,6 +1541,37 @@ namespace ETL_SQL.App
             };
             orchestratorRevokeCommand.SetAction(context => Dispatch(context, "admin-orchestrator-revoke", handler));
             orchestratorCommand.Add(orchestratorRevokeCommand);
+
+            // Ownership. Administrator-only in the Orchestrator, because an owner may manage their own
+            // object — so handing ownership on would let an owner widen access without anyone
+            // administering it.
+            var orchestratorSetOwnerCommand = new Command(
+                "set-owner", "Reassign an object's owner (administrators only)")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, GrantKindOption, GrantObjectOption,
+                GrantPrincipalKindOption, GrantPrincipalOption
+            };
+            orchestratorSetOwnerCommand.SetAction(context => Dispatch(context, "admin-orchestrator-set-owner", handler));
+            orchestratorCommand.Add(orchestratorSetOwnerCommand);
+
+            var orchestratorUnownedCommand = new Command(
+                "unowned", "List objects with no recorded owner — reachable only by administrators")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption
+            };
+            orchestratorUnownedCommand.SetAction(context => Dispatch(context, "admin-orchestrator-unowned", handler));
+            orchestratorCommand.Add(orchestratorUnownedCommand);
+
+            // --kind is optional here on purpose: the case this exists for is a solo box that has just
+            // attached a Portal and needs an owner for everything it already had.
+            var orchestratorAdoptCommand = new Command(
+                "adopt", "Assign an owner to every unowned object (administrators only)")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, GrantKindOption,
+                GrantPrincipalKindOption, GrantPrincipalOption
+            };
+            orchestratorAdoptCommand.SetAction(context => Dispatch(context, "admin-orchestrator-adopt", handler));
+            orchestratorCommand.Add(orchestratorAdoptCommand);
             adminCommand.Add(orchestratorCommand);
 
             var accessSimulateCommand = new Command("access-simulate",

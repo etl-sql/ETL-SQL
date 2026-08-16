@@ -147,4 +147,61 @@ public partial class RelationalJobHistoryStore
         command.AddParam("@objectId", objectId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<OrchestratorObjectOwnership>> GetUnownedObjectsAsync(
+        string? tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync();
+        using var connection = _dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        var unowned = new List<OrchestratorObjectOwnership>();
+        foreach (var objectKind in new[]
+        {
+            OrchestratorObjectKind.Job, OrchestratorObjectKind.Schedule, OrchestratorObjectKind.Notification
+        })
+        {
+            using var command = connection.CreateCommand();
+            // Empty and NULL are both "no owner": a column added by migration arrives NULL, while a
+            // definition saved with a blank attribution writes an empty string. Treating only one of
+            // them as unowned would leave a class of objects that no adoption pass ever reaches.
+            command.CommandText = $@"
+                SELECT Id, Name, TenantId FROM {ObjectTable(objectKind)}
+                WHERE TenantId = @tenant AND (CreatedBy IS NULL OR TRIM(CreatedBy) = '')
+                ORDER BY Name;";
+            command.AddParam("@tenant", TenantKey(tenantId));
+
+            using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                unowned.Add(new OrchestratorObjectOwnership(
+                    reader.GetString(0), objectKind, reader.GetString(1), null, TenantOrNull(reader.GetString(2))));
+            }
+        }
+        return unowned;
+    }
+
+    public async Task<bool> SetObjectOwnerAsync(
+        string objectId,
+        OrchestratorObjectKind objectKind,
+        string ownerPrincipalKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(objectId)) return false;
+        if (string.IsNullOrWhiteSpace(ownerPrincipalKey))
+            throw new ArgumentException("An owner requires a principal key.", nameof(ownerPrincipalKey));
+        await EnsureInitializedAsync();
+        using var connection = _dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        using var command = connection.CreateCommand();
+        // Addressed by id, so this cannot reach another tenant's object of the same name — the caller
+        // resolved the id within its own tenant. Version is deliberately left alone: it is the
+        // definition's optimistic-concurrency token, and reassigning an owner does not invalidate an
+        // edit that someone is part-way through composing.
+        command.CommandText = $"UPDATE {ObjectTable(objectKind)} SET CreatedBy = @owner WHERE Id = @id;";
+        command.AddParam("@owner", ownerPrincipalKey);
+        command.AddParam("@id", objectId);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
 }

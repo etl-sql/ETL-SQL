@@ -327,6 +327,37 @@ public class OrchestratorController(
             () => audit.LogAsync(CurrentUserId, "ORCHESTRATOR_REVOKE", $"Orchestrator{kind}", name,
                 $"{principalKind}:{principalId}"));
 
+    // ── Ownership ─────────────────────────────────────────────────────────────
+    //
+    // Reassignment and adoption are administrator acts in the Orchestrator, and relayed here on the
+    // same pass-through terms as grants. Both are audited on the Portal side too: an owner change is
+    // the one act that can hand someone authority over an object indefinitely, so the record of which
+    // human asked for it matters as much as the record of what the store did.
+
+    public sealed record SetOwnerRequest(string PrincipalKind, string PrincipalId);
+    public sealed record AdoptRequest(string PrincipalKind, string PrincipalId, string? Kind = null);
+
+    [HttpGet("authorization/unowned")]
+    public Task<IActionResult> GetUnownedObjects(CancellationToken ct) =>
+        RelayAsync(() => proxy.GetUnownedObjectsAsync(ct));
+
+    [HttpPut("authorization/{kind}/{name}/owner")]
+    public Task<IActionResult> SetOwner(
+        string kind, string name, [FromBody] SetOwnerRequest request, CancellationToken ct) =>
+        RelayAsync(
+            () => proxy.SetObjectOwnerAsync(
+                kind, name, request?.PrincipalKind ?? "", request?.PrincipalId ?? "", ct),
+            () => audit.LogAsync(CurrentUserId, "ORCHESTRATOR_SET_OWNER", $"Orchestrator{kind}", name,
+                $"{request?.PrincipalKind}:{request?.PrincipalId}"));
+
+    [HttpPost("authorization/adopt")]
+    public Task<IActionResult> AdoptUnownedObjects([FromBody] AdoptRequest request, CancellationToken ct) =>
+        RelayAsync(
+            () => proxy.AdoptUnownedObjectsAsync(
+                request?.PrincipalKind ?? "", request?.PrincipalId ?? "", request?.Kind, ct),
+            () => audit.LogAsync(CurrentUserId, "ORCHESTRATOR_ADOPT", "Orchestrator", request?.Kind ?? "ALL",
+                $"{request?.PrincipalKind}:{request?.PrincipalId}"));
+
     /// <summary>
     /// Forwards one grant call and returns the Orchestrator's own answer.
     ///

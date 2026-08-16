@@ -136,6 +136,7 @@ Node test files covering extracted Portal UI modules without a browser or a runn
 | **[`test-dataset-acl-ui.mjs`](./test-dataset-acl-ui.mjs)** | JavaScript | Cross-platform | Dataset permissions table — user and group grants, and the revoke route each one carries. |
 | **[`test-lineage-ui.mjs`](./test-lineage-ui.mjs)** | JavaScript | Cross-platform | Lineage row and dependency rendering from the canonical `designer.js`. |
 | **[`test-orchestrator-acl-ui.mjs`](./test-orchestrator-acl-ui.mjs)** | JavaScript | Cross-platform | Orchestrator Access panel — owner, per-object grants, and the refusal states a table alone would render as empty. |
+| **[`test-portal-inline-scripts.mjs`](./test-portal-inline-scripts.mjs)** | JavaScript | Cross-platform | Parses every inline `<script>` in the Portal and Player pages plus their browser modules — a syntax error in a page's inline module takes the whole page down. |
 | **[`test-publish-folders.mjs`](./test-publish-folders.mjs)** | JavaScript | Cross-platform | Admin publish-form folder helpers — nested folder selection and newly created folders appearing without a reload. |
 | **[`test-result-grid-ui.mjs`](./test-result-grid-ui.mjs)** | JavaScript | Cross-platform | Script workbench result grid — what the filter matches, how a value becomes display text, and what CSV export writes. |
 | **[`test-subscription-history-ui.mjs`](./test-subscription-history-ui.mjs)** | JavaScript | Cross-platform | Subscription delivery-history rendering. |

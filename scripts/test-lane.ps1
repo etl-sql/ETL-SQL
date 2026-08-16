@@ -278,6 +278,12 @@ function Invoke-FuzzLane {
 }
 
 function Invoke-LineageUiSmoke {
+    # First, because a page whose inline module does not parse renders nothing at all, and every other
+    # browser-side assertion below is about code that would never have run.
+    & node (Join-Path $repoRoot "scripts\test-portal-inline-scripts.mjs")
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
     & node (Join-Path $repoRoot "scripts\test-lineage-ui.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE

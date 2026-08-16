@@ -73,4 +73,53 @@ public sealed class DeploymentPromotionPreflightTests : IDisposable
         Assert.False(inventory.Ready);
         Assert.Contains(inventory.Findings, finding => finding.Code == "DP001");
     }
+
+    [Fact]
+    public async Task Build_BlocksPromotionThatWouldCarryUnownedOrchestratorObjects()
+    {
+        // Ownership is what lets anyone but an administrator reach an object from Team upward, so a
+        // promotion that carried unowned jobs across would hand the new deployment work only an
+        // administrator can run — and the symptom arrives much later, as "the schedule fires and
+        // nobody can touch it".
+        await File.WriteAllTextAsync(Path.Combine(_root, "pipeline.etlsql"), "SELECT 1;");
+
+        var inventory = await DeploymentPromotionPreflightService.BuildAsync(
+            _root, "Solo", "Team", default,
+            [new("JOB", "nightly_load"), new("SCHEDULE", "hourly")]);
+
+        Assert.False(inventory.Ready);
+        var finding = Assert.Single(inventory.Findings, entry => entry.Code == "DP009");
+        Assert.Equal("Error", finding.Severity);
+        Assert.Contains("nightly_load", finding.Message);
+        Assert.Contains("hourly", finding.Message);
+        // The remedy is named, because "2 objects have no owner" tells an operator what is wrong and
+        // not what to do about it.
+        Assert.Contains("admin orchestrator adopt", finding.Message);
+    }
+
+    [Fact]
+    public async Task Build_DoesNotReportUnownedObjectsWhenTheTargetIsSolo()
+    {
+        // Solo has no principals, so nothing decides on ownership there and reporting it would be a
+        // blocking finding about a property that cannot matter yet.
+        await File.WriteAllTextAsync(Path.Combine(_root, "pipeline.etlsql"), "SELECT 1;");
+
+        var inventory = await DeploymentPromotionPreflightService.BuildAsync(
+            _root, "Solo", "Solo", default, [new("JOB", "nightly_load")]);
+
+        Assert.DoesNotContain(inventory.Findings, finding => finding.Code == "DP009");
+        Assert.True(inventory.Ready);
+    }
+
+    [Fact]
+    public async Task Build_IsReadyWhenEveryOrchestratorObjectHasAnOwner()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_root, "pipeline.etlsql"), "SELECT 1;");
+
+        var inventory = await DeploymentPromotionPreflightService.BuildAsync(
+            _root, "Solo", "Enterprise", default, []);
+
+        Assert.DoesNotContain(inventory.Findings, finding => finding.Code == "DP009");
+        Assert.True(inventory.Ready);
+    }
 }

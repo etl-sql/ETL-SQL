@@ -1220,6 +1220,105 @@ namespace ETL_SQL.Orchestrator.Service
                 return deleted ? Results.NoContent() : Results.NotFound();
             }).WithName("deleteOrchestratorObjectGrant");
 
+            // ── Ownership ─────────────────────────────────────────────────────
+            //
+            // Administrator-only, and deliberately not merely MANAGE. Ownership is the authority that
+            // grants are administered *from* — an owner may manage their object, including who else
+            // reaches it — so an owner who could hand ownership on would be able to widen access
+            // without anyone administering it. Reassignment is therefore an administrative act, which
+            // also gives the departure case an answer: an owner who leaves no longer strands the
+            // object, because someone can be made accountable for it.
+
+            app.MapGet("/api/authorization/unowned", async (
+                HttpContext ctx,
+                IOrchestratorAuthorizationStore grants,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!IsObjectAdministrator(RequestCaller(ctx)))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var unowned = await grants.GetUnownedObjectsAsync(RequestTenant(ctx, cfg), ctx.RequestAborted);
+                return Results.Ok(unowned.Select(UnownedObjectResponse.From).ToList());
+            }).WithName("getUnownedOrchestratorObjects");
+
+            app.MapPut("/api/authorization/{kind}/{name}/owner", async (
+                HttpContext ctx,
+                string kind,
+                string name,
+                SetObjectOwnerRequest request,
+                IJobHistoryStore jobs,
+                IJobCatalogStore catalog,
+                IOrchestratorAuthorizationStore grants,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryParseObjectKind(kind, out var objectKind))
+                    return Results.BadRequest(new { Error = "Kind must be JOB, SCHEDULE, or NOTIFICATION." });
+                if (!TryParseOwner(request?.PrincipalKind, request?.PrincipalId, out var ownerKey, out var error))
+                    return Results.BadRequest(new { Error = error });
+
+                var caller = RequestCaller(ctx);
+                // Resolved within the caller's tenant before the role is checked, so an administrator
+                // of one tenant learns nothing about another tenant's names.
+                var objectName = Uri.UnescapeDataString(name);
+                var owner = await ReadObjectOwnerAsync(objectKind, objectName, RequestTenant(ctx, cfg), jobs, catalog);
+                if (owner.Exists == false) return Results.NotFound();
+                if (!IsObjectAdministrator(caller))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                if (!await grants.SetObjectOwnerAsync(owner.Id!, objectKind, ownerKey, ctx.RequestAborted))
+                    return Results.NotFound();
+                EmitOwnershipAudit(caller.AuditActor, objectKind, objectName, owner.Owner, ownerKey, ctx.TraceIdentifier);
+                return Results.Ok(new
+                {
+                    ObjectId = owner.Id,
+                    Kind = objectKind.ToString().ToUpperInvariant(),
+                    Name = objectName,
+                    PreviousOwner = owner.Owner,
+                    Owner = ownerKey
+                });
+            }).WithName("setOrchestratorObjectOwner");
+
+            app.MapPost("/api/authorization/adopt", async (
+                HttpContext ctx,
+                AdoptUnownedObjectsRequest request,
+                IOrchestratorAuthorizationStore grants,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!IsObjectAdministrator(RequestCaller(ctx)))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryParseOwner(request?.PrincipalKind, request?.PrincipalId, out var ownerKey, out var error))
+                    return Results.BadRequest(new { Error = error });
+                OrchestratorObjectKind? onlyKind = null;
+                if (!string.IsNullOrWhiteSpace(request!.Kind))
+                {
+                    if (!TryParseObjectKind(request.Kind, out var parsedKind))
+                        return Results.BadRequest(new { Error = "Kind must be JOB, SCHEDULE, or NOTIFICATION." });
+                    onlyKind = parsedKind;
+                }
+
+                var caller = RequestCaller(ctx);
+                var unowned = await grants.GetUnownedObjectsAsync(RequestTenant(ctx, cfg), ctx.RequestAborted);
+                var adopted = new List<UnownedObjectResponse>();
+                foreach (var candidate in unowned)
+                {
+                    if (onlyKind is { } wanted && candidate.ObjectKind != wanted) continue;
+                    // Audited one object at a time rather than once for the batch: adoption is how a
+                    // box that has just attached a Portal assigns accountability for everything it
+                    // already had, and "who became responsible for this object, and when" has to be
+                    // answerable per object rather than by reading a count.
+                    if (!await grants.SetObjectOwnerAsync(
+                            candidate.ObjectId, candidate.ObjectKind, ownerKey, ctx.RequestAborted))
+                        continue;
+                    EmitOwnershipAudit(
+                        caller.AuditActor, candidate.ObjectKind, candidate.Name, null, ownerKey, ctx.TraceIdentifier);
+                    adopted.Add(UnownedObjectResponse.From(candidate));
+                }
+                return Results.Ok(new { Owner = ownerKey, Count = adopted.Count, Adopted = adopted });
+            }).WithName("adoptUnownedOrchestratorObjects");
+
             // ── Script browser ────────────────────────────────────────────────
 
             app.MapGet("/api/scripts", (HttpContext ctx, IConfiguration cfg) =>
@@ -1613,6 +1712,73 @@ namespace ETL_SQL.Orchestrator.Service
                     : (false, null, null, null),
                 _ => (false, null, null, null)
             };
+
+        /// <summary>
+        /// Whether this caller may reassign ownership.
+        ///
+        /// <para>The <c>Admin</c> role, and — for a token issued to an automation — the
+        /// <c>orchestrator.admin</c> scope as well. A scope never substitutes for the role and the
+        /// role never bypasses the scope: a narrow token held by an administrator is narrow, which is
+        /// the entire reason for issuing one.</para>
+        /// </summary>
+        private static bool IsObjectAdministrator(OrchestratorCaller caller)
+        {
+            if (!caller.IsInRole("Admin")) return false;
+            if (!caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase)) return true;
+            return caller.EffectiveScopes.Contains(
+                OrchestratorObjectAuthorizationService.ScopeAdmin, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Builds the stored owner key from a principal kind and id.
+        ///
+        /// <para>Only <c>USER</c> and <c>SERVICE</c> may own. A group cannot: ownership answers "who is
+        /// accountable for this object", the decision path compares it against one caller's key, and a
+        /// group key would match nobody — an object owned by a group would read as owned and behave as
+        /// unowned. Groups remain grantable, which is the mechanism for team-wide access.</para>
+        /// </summary>
+        private static bool TryParseOwner(
+            string? principalKind, string? principalId, out string ownerKey, out string error)
+        {
+            ownerKey = "";
+            error = "";
+            var id = (principalId ?? "").Trim();
+            if (!Enum.TryParse<OrchestratorPrincipalKind>(principalKind, true, out var kind)
+                || kind == OrchestratorPrincipalKind.Group)
+            {
+                error = "Owner principal kind must be USER or SERVICE; a group cannot own an object.";
+                return false;
+            }
+            if (id.Length is 0 or > 128)
+            {
+                error = "PrincipalId must contain 1 to 128 characters.";
+                return false;
+            }
+            ownerKey = $"{kind.ToString().ToLowerInvariant()}:{id}";
+            return true;
+        }
+
+        private static void EmitOwnershipAudit(
+            string actor,
+            OrchestratorObjectKind objectKind,
+            string objectName,
+            string? previousOwner,
+            string newOwner,
+            string correlationId)
+        {
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                SecurityEventSeverity.Warning,
+                SecurityEventType.CatalogMutation,
+                actor,
+                actor,
+                $"{objectKind.ToString().ToUpperInvariant()}:{objectName}",
+                SecurityEventDecision.Allowed,
+                $"OWNER_SET: From={previousOwner ?? "(unowned)"}; To={newOwner}") with
+            {
+                HostName = Environment.MachineName,
+                CorrelationId = correlationId
+            });
+        }
 
         private static void EmitObjectAuthorizationAudit(
             string actor,
@@ -2011,6 +2177,18 @@ namespace ETL_SQL.Orchestrator.Service
         );
 
         private sealed record SetObjectGrantRequest(string Permission);
+
+        private sealed record SetObjectOwnerRequest(string? PrincipalKind, string? PrincipalId);
+
+        private sealed record AdoptUnownedObjectsRequest(
+            string? PrincipalKind, string? PrincipalId, string? Kind = null);
+
+        /// <summary>One object an administrator has to make someone accountable for.</summary>
+        private sealed record UnownedObjectResponse(string ObjectId, string Kind, string Name)
+        {
+            public static UnownedObjectResponse From(OrchestratorObjectOwnership ownership) => new(
+                ownership.ObjectId, ownership.ObjectKind.ToString().ToUpperInvariant(), ownership.Name);
+        }
 
         /// <summary>
         /// One grant, in the vocabulary the API accepts on the way in.

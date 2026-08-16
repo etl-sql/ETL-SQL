@@ -96,6 +96,16 @@
       align-items: center;
     }
     .orch-acl-add input { flex: 1 1 16ch; min-width: 0; }
+    /* Reassignment sits with the owner it changes, not with the grants: they are different acts and
+       only one of them is administrator-only. */
+    .orch-acl-owner-set {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-top: 6px;
+    }
+    .orch-acl-owner-set input { flex: 1 1 16ch; min-width: 0; }
     .orch-acl-hint {
       margin: 6px 0 0;
       font-size: 0.82em;
@@ -140,6 +150,8 @@
           <span class="orch-stat-label">Failed Today</span>
         </button>
         <span class="topbar-spacer"></span>
+        <button class="btn btn-outline btn-sm" id="unownedBtn" style="display:none" type="button"
+                title="Objects with no recorded owner are reachable only by an administrator">Unowned objects</button>
         <button class="btn btn-primary btn-sm" id="newJobBtn">+ New Job</button>
       </div>
 
@@ -372,6 +384,35 @@
   </div>
 </div>
 
+<!-- ── Unowned objects / bulk adoption modal ───────────────────────────── -->
+<div id="unownedModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="unownedTitle">
+  <div class="modal-card modal-md">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Ownership</span>
+        <h3 class="modal-title" id="unownedTitle">Objects with no owner</h3>
+        <p class="modal-subtitle">An object nobody owns is reachable only by an administrator. Assign an owner so the people who run it can.</p>
+      </div>
+      <button class="btn-icon" id="unownedCloseBtn" data-dialog-close title="Close" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="unownedList"></div>
+      <div class="orch-acl-add" style="margin-top:12px">
+        <select id="unownedOwnerKind" aria-label="Owner kind">
+          <option value="USER">User</option>
+          <option value="SERVICE">Service</option>
+        </select>
+        <input id="unownedOwnerKey" type="text" placeholder="Principal key" aria-label="Owner principal key">
+      </div>
+      <p class="orch-acl-hint">The principal <em>key</em>, not a username — a name can be reassigned, and ownership that followed one would move with it.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="unownedAdoptBtn" type="button">Assign owner to all</button>
+      <button class="btn btn-outline" id="unownedCancelBtn" data-dialog-close type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/echarts.min.js?v=0.18.0"></script>
 <script src="/js/feedback.js?v=0.18.0"></script>
 <script type="module">
@@ -383,7 +424,7 @@ import { applyNavigationSafely } from '/js/portal-nav.js?v=0.18.0';
 import { renderTriageBoard, selectedJobNames } from '/js/triage-ui.js?v=0.18.0';
 import { renderPortalHeader } from '/js/portal-header.js?v=0.18.0';
 import { installDialogAccessibility } from '/js/dialog-a11y.js?v=0.18.0';
-import { accessPanelHtml, ownerLabel } from '/js/orchestrator-acl-ui.js?v=0.18.0';
+import { accessPanelHtml, ownerLabel, unownedListHtml } from '/js/orchestrator-acl-ui.js?v=0.18.0';
 
 renderPortalHeader();
 installDialogAccessibility();
@@ -462,6 +503,14 @@ const api = {
   grantRevoke: (kind, name, principalKind, principalId) => apiFetch(
                  `${BASE}/authorization/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/${encodeURIComponent(principalKind)}/${encodeURIComponent(principalId)}`,
                  { method: 'DELETE' }),
+  // Ownership. Administrator-only in the Orchestrator: an owner may manage their own object, so
+  // handing ownership on is not something an owner may do to themselves.
+  setOwner:    (kind, name, principalKind, principalId) => apiFetch(
+                 `${BASE}/authorization/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/owner`,
+                 { method: 'PUT', body: { principalKind, principalId } }),
+  unowned:     () => apiFetch(`${BASE}/authorization/unowned`),
+  adopt:       (principalKind, principalId, kind = null) => apiFetch(
+                 `${BASE}/authorization/adopt`, { method: 'POST', body: { principalKind, principalId, kind } }),
 };
 
 // ── Operations triage ──────────────────────────────────────────────────────────
@@ -665,6 +714,7 @@ let dagJobName   = null;
 let scriptEditor = null;
 let scriptOriginalValue = '';
 let lastSparklineEntries = [];
+let unownedObjects = [];
 
 document.addEventListener('portal-theme-change', () => {
   if (ganttChart && allJobs && allJobs.length > 0) {
@@ -1101,7 +1151,9 @@ async function renderAccessPanel(job) {
   const name = jobValue(job, 'Name');
   // No client-side permission check: listing grants already requires MANAGE, so the Orchestrator's
   // answer to this call *is* the answer to "may this caller administer this object".
-  const state = { job: { name, createdBy: jobValue(job, 'CreatedBy') }, grants: null };
+  // isAdmin decides what is *drawn*, not what is permitted: owner reassignment is administrator-only
+  // in the Orchestrator, which refuses anyone else regardless of what this page offered.
+  const state = { job: { name, createdBy: jobValue(job, 'CreatedBy') }, grants: null, isAdmin };
   try {
     const res = await api.grants('JOB', name);
     if (res.status === 403) {
@@ -1126,23 +1178,93 @@ async function renderAccessPanel(job) {
   });
   document.getElementById('aclGrantBtn')?.addEventListener('click', () => {
     const key = document.getElementById('aclPrincipalKey')?.value?.trim();
-    if (!key) { toast('Enter the principal key to grant.', 'error'); return; }
+    if (!key) { showToast('Enter the principal key to grant.', true); return; }
     changeGrant(job, () => api.grantSet(
       'JOB', name,
       document.getElementById('aclPrincipalKind').value,
       key,
       document.getElementById('aclPermission').value));
   });
+  document.getElementById('aclOwnerBtn')?.addEventListener('click', async () => {
+    const key = document.getElementById('aclOwnerKey')?.value?.trim();
+    if (!key) { showToast('Enter the principal key of the new owner.', true); return; }
+    const kind = document.getElementById('aclOwnerKind').value;
+    try {
+      const res = await api.setOwner('JOB', name, kind, key);
+      if (res.ok) {
+        showToast('Owner updated.');
+        // The jobs table shows the owner, so it is now stale — and this is the one field a stale row
+        // would misreport as an access decision rather than as old data.
+        await loadJobs();
+        const refreshed = allJobs.find(entry => jobValue(entry, 'Name') === name) || job;
+        selectedJob = refreshed;
+        await renderAccessPanel(refreshed);
+        return;
+      }
+      showToast(res.status === 403
+        ? 'Only an administrator can reassign an owner.'
+        : res.status === 404 ? 'This job no longer exists in your tenant.' : 'The change was refused.',
+        true);
+    } catch {
+      showToast('The change could not be sent.', true);
+    }
+  });
+}
+
+// ── Unowned objects (bulk adoption) ───────────────────────────────────────────
+// The solo → team case: a box that has just attached a Portal has objects nobody is accountable for,
+// and an unowned object is reachable only by an administrator. This is how they get an owner without
+// touching each one.
+async function openUnownedDialog() {
+  const dialog = document.getElementById('unownedModal');
+  const body = document.getElementById('unownedList');
+  body.innerHTML = '<div class="empty-state">Loading…</div>';
+  dialog.style.display = 'flex';
+  try {
+    const res = await api.unowned();
+    if (!res.ok) {
+      body.innerHTML = `<div class="empty-state">${escHtml(res.status === 403
+        ? 'Only an administrator can see which objects are unowned.'
+        : 'The unowned-object list is unavailable right now.')}</div>`;
+      return;
+    }
+    unownedObjects = await res.json();
+    body.innerHTML = unownedListHtml(unownedObjects, escHtml);
+    document.getElementById('unownedAdoptBtn').disabled = unownedObjects.length === 0;
+  } catch {
+    body.innerHTML = '<div class="empty-state">The unowned-object list is unavailable right now.</div>';
+  }
+}
+
+async function adoptUnowned() {
+  const key = document.getElementById('unownedOwnerKey')?.value?.trim();
+  if (!key) { showToast('Enter the principal key of the new owner.', true); return; }
+  const kind = document.getElementById('unownedOwnerKind').value;
+  try {
+    const res = await api.adopt(kind, key);
+    if (!res.ok) {
+      showToast(res.status === 403 ? 'Only an administrator can adopt objects.' : 'Adoption was refused.', true);
+      return;
+    }
+    const result = await res.json();
+    showToast(`${result.count} object(s) adopted.`);
+    await loadJobs();
+    await openUnownedDialog();
+  } catch {
+    showToast('Adoption could not be sent.', true);
+  }
 }
 
 async function changeGrant(job, action) {
   try {
     const res = await action();
     if (!res.ok && res.status !== 204) {
-      toast(res.status === 403 ? 'You cannot administer this job's grants.' : 'The change was refused.', 'error');
+      showToast(res.status === 403
+        ? 'You cannot administer the grants on this job.'
+        : 'The change was refused.', true);
     }
   } catch {
-    toast('The change could not be sent.', 'error');
+    showToast('The change could not be sent.', true);
   }
   // Re-read either way: the Orchestrator's answer is the only authority on what the grants now are.
   await renderAccessPanel(job);
@@ -1374,6 +1496,14 @@ async function openCreateModal() {
 }
 
 document.getElementById('newJobBtn').addEventListener('click', openCreateModal);
+
+// Adoption is administrator-only in the Orchestrator, so the entry point is shown to administrators
+// rather than offered to everyone and refused on click.
+if (isAdmin) document.getElementById('unownedBtn').style.display = '';
+document.getElementById('unownedBtn').addEventListener('click', openUnownedDialog);
+document.getElementById('unownedAdoptBtn').addEventListener('click', adoptUnowned);
+document.querySelectorAll('#unownedModal [data-dialog-close]').forEach(button =>
+  button.addEventListener('click', () => { document.getElementById('unownedModal').style.display = 'none'; }));
 document.getElementById('closeCreateBtn').addEventListener('click', () => {
   document.getElementById('createJobModal').style.display = 'none';
 });

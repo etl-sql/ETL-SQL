@@ -51,6 +51,24 @@ const FIXTURES = {
         },
         note: 'Unowned reads as administrators-only, never as "open".',
     },
+    administrator: {
+        label: 'Administrator — can reassign the owner',
+        state: {
+            job: ownedJob,
+            grants,
+            isAdmin: true,
+        },
+        note: 'Reassignment is administrator-only; adopting an orphan and transferring an owned object are the same act, so they are the same control.',
+    },
+    orphanAdmin: {
+        label: 'No owner, seen by an administrator',
+        state: {
+            job: { name: 'orphaned-load', createdBy: null },
+            grants: [],
+            isAdmin: true,
+        },
+        note: 'The adoption path: the object states that it is administrators-only and offers the control that fixes it.',
+    },
     refused: {
         label: 'Not found in your tenant',
         state: {

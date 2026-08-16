@@ -67,6 +67,9 @@ public static class IdentityAdminService
                 "admin-orchestrator-show" => await OrchestratorGrantShowAsync(client, ctx, logger),
                 "admin-orchestrator-grant" => await OrchestratorGrantSetAsync(client, ctx, logger),
                 "admin-orchestrator-revoke" => await OrchestratorGrantRevokeAsync(client, ctx, logger),
+                "admin-orchestrator-set-owner" => await OrchestratorSetOwnerAsync(client, ctx, logger),
+                "admin-orchestrator-unowned" => await OrchestratorUnownedAsync(client, ctx, logger),
+                "admin-orchestrator-adopt" => await OrchestratorAdoptAsync(client, ctx, logger),
                 _ => Fail(logger, AdminExitCode.ValidationError, $"Unknown identity command '{ctx.Command}'.")
             };
         }
@@ -594,6 +597,104 @@ public static class IdentityAdminService
                 $"Revoked {RequirePrincipalKind(ctx)}:{ctx.GrantPrincipalId} on " +
                 $"{RequireKind(ctx)} '{ctx.GrantObjectName}'.");
         }
+        return 0;
+    }
+
+    // ── Orchestrator object ownership ────────────────────────────────────────────
+    //
+    // An owner may manage their own object, so ownership is the authority grants are administered
+    // from; reassigning it is an administrator's act and the Orchestrator refuses anyone else. The
+    // headless path exists for the two cases a UI is bad at: an owner who has left the organization,
+    // and a box that has just attached a Portal and needs someone made accountable for everything it
+    // already had.
+
+    /// <summary>
+    /// Owner principal kind. A group cannot own an object — ownership names who is accountable, and
+    /// the decision path compares it against one caller's key, so a group owner would read as owned
+    /// and behave as unowned.
+    /// </summary>
+    private static string RequireOwnerKind(CliContext ctx) =>
+        Choice(ctx.GrantPrincipalKind, "--principal-kind", "USER", "SERVICE");
+
+    private static async Task<int> OrchestratorSetOwnerAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var principalKind = RequireOwnerKind(ctx);
+        var principalId = Required(ctx.GrantPrincipalId, "--principal");
+        var result = await client.PutAsync(
+            GrantPath(ctx) + "/owner", new { principalKind, principalId }, CancellationToken.None);
+
+        if (ctx.IsJsonMode)
+        {
+            logger.WriteLine(result?.ToJsonString(Pretty) ?? "null");
+            return 0;
+        }
+
+        // The previous owner is named because reassignment is not always a repair: on an object that
+        // already had one, this is a transfer, and an operator who meant to adopt an orphan should see
+        // that they moved someone else's object instead.
+        var previous = result?["previousOwner"]?.GetValue<string>();
+        logger.WriteLine(
+            $"{RequireKind(ctx)} '{ctx.GrantObjectName}' is now owned by {principalKind.ToLowerInvariant()}:{principalId} " +
+            $"(previously {previous ?? "unowned"}).");
+        return 0;
+    }
+
+    private static async Task<int> OrchestratorUnownedAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var response = await client.GetAsync("/api/orchestrator/authorization/unowned", CancellationToken.None);
+        var objects = AsArray(response);
+        if (ctx.IsJsonMode)
+        {
+            logger.WriteLine(response?.ToJsonString(Pretty) ?? "[]");
+            return 0;
+        }
+
+        if (objects.Count == 0)
+        {
+            logger.WriteLine("Every job, schedule, and notification has a recorded owner.");
+            return 0;
+        }
+
+        logger.WriteLine($"{objects.Count} object(s) with no recorded owner — reachable only by administrators:");
+        foreach (var entry in objects)
+            logger.WriteLine($"  {entry?["kind"]} {entry?["name"]}");
+        logger.WriteLine("Assign an owner with 'admin orchestrator adopt' or 'admin orchestrator set-owner'.");
+        return 0;
+    }
+
+    private static async Task<int> OrchestratorAdoptAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var principalKind = RequireOwnerKind(ctx);
+        var principalId = Required(ctx.GrantPrincipalId, "--principal");
+        // --kind is optional here, unlike every other orchestrator verb: adoption's normal case is
+        // "everything this box already had", and requiring a kind would make the normal case three
+        // commands that each look complete on their own.
+        var kind = string.IsNullOrWhiteSpace(ctx.GrantObjectKind) ? null : RequireKind(ctx);
+        var result = await client.PostAsync(
+            "/api/orchestrator/authorization/adopt",
+            new { principalKind, principalId, kind },
+            CancellationToken.None);
+
+        if (ctx.IsJsonMode)
+        {
+            logger.WriteLine(result?.ToJsonString(Pretty) ?? "null");
+            return 0;
+        }
+
+        var count = result?["count"]?.GetValue<int>() ?? 0;
+        if (count == 0)
+        {
+            logger.WriteLine("No unowned objects to adopt.");
+            return 0;
+        }
+
+        logger.WriteLine(
+            $"{count} object(s) adopted by {principalKind.ToLowerInvariant()}:{principalId}:");
+        foreach (var entry in AsArray(result?["adopted"]))
+            logger.WriteLine($"  {entry?["kind"]} {entry?["name"]}");
         return 0;
     }
 

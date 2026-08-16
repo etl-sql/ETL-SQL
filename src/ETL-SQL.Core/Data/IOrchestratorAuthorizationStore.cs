@@ -46,6 +46,21 @@ public sealed record OrchestratorObjectGrant(
     string GrantedBy,
     long Version = 1);
 
+/// <summary>
+/// One object's ownership state.
+///
+/// <para>Carries the name as well as the id because this is what an administrator reads when deciding
+/// who should adopt an object: an id identifies it, a name is what anyone recognises it by. A null
+/// <see cref="Owner"/> is an object nobody is accountable for — reachable only by an administrator
+/// until it is adopted, never open.</para>
+/// </summary>
+public sealed record OrchestratorObjectOwnership(
+    string ObjectId,
+    OrchestratorObjectKind ObjectKind,
+    string Name,
+    string? Owner,
+    string? TenantId);
+
 public interface IOrchestratorAuthorizationStore
 {
     /// <summary>
@@ -75,6 +90,31 @@ public interface IOrchestratorAuthorizationStore
 
     Task DeleteObjectGrantsAsync(
         string objectId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Every object in one tenant that has no recorded owner, across all three kinds.
+    ///
+    /// <para>These are the objects an administrator has to act on: an owner may manage what they own,
+    /// so an object with none can be reached by nobody but an administrator, and no ordinary
+    /// administrative act creates one — attribution is written when an object is created and never
+    /// again. Reading them is how adoption becomes a decision instead of a discovery at 2am.</para>
+    /// </summary>
+    Task<IReadOnlyList<OrchestratorObjectOwnership>> GetUnownedObjectsAsync(
+        string? tenantId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Assigns an object's owner, returning false when no such object exists.
+    ///
+    /// <para>The only writer of ownership after creation. It is deliberately not part of any
+    /// definition save: an edit must never confer ownership as a side effect, because that would make
+    /// "who is accountable for this" a consequence of who touched it last.</para>
+    /// </summary>
+    Task<bool> SetObjectOwnerAsync(
+        string objectId,
+        OrchestratorObjectKind objectKind,
+        string ownerPrincipalKey,
         CancellationToken cancellationToken = default);
 }
 

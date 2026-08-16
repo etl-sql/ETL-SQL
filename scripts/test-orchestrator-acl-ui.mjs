@@ -11,7 +11,10 @@ import { pathToFileURL } from 'node:url';
 
 const mod = await import(
     pathToFileURL(path.resolve('src/ETL-SQL.Portal/wwwroot/js/orchestrator-acl-ui.js')).href);
-const { PERMISSIONS, PRINCIPAL_KINDS, splitPrincipal, ownerLabel, canAdminister, grantRowsHtml, accessPanelHtml } = mod;
+const {
+    PERMISSIONS, PRINCIPAL_KINDS, OWNER_KINDS, splitPrincipal, ownerLabel, canAdminister,
+    canReassignOwner, ownerFormHtml, unownedListHtml, grantRowsHtml, accessPanelHtml,
+} = mod;
 
 function assert(cond, msg) { if (!cond) throw new Error('FAIL: ' + msg); }
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
@@ -98,5 +101,40 @@ assert(PERMISSIONS.join(',') === 'READ,EXECUTE,OVERRIDE,MANAGE', 'the permission
 assert(PRINCIPAL_KINDS.join(',') === 'USER,GROUP,SERVICE', 'the principal kinds match the API');
 for (const permission of PERMISSIONS) assert(panel.includes(`value="${permission}"`), `${permission} is offerable`);
 for (const kind of PRINCIPAL_KINDS) assert(panel.includes(`value="${kind}"`), `${kind} is offerable`);
+
+// 10. Ownership is administrator-only, so the reassignment control follows the viewer's role rather
+//     than the grants read. It still decides only what is drawn: the Orchestrator refuses anyone else.
+assert(canReassignOwner({ job, grants, isAdmin: true }), 'an administrator may reassign');
+assert(!canReassignOwner({ job, grants }), 'a non-administrator is not offered reassignment');
+assert(!canReassignOwner({ job, grants, isAdmin: true, error: 'Not found.' }),
+    'a refused panel offers no reassignment');
+assert(ownerFormHtml({ job, grants }) === '', 'no control for a non-administrator');
+assert(ownerFormHtml({ job, grants, isAdmin: true }).includes('aclOwnerBtn'), 'the control is rendered');
+
+// 11. A group can be granted but cannot own — the decision compares ownership against one caller's
+//     key, so a group owner would read as owned and behave as unowned. Offering it would be a form
+//     whose only outcome is a 400.
+assert(OWNER_KINDS.join(',') === 'USER,SERVICE', 'only users and services may own');
+assert(!ownerFormHtml({ job, grants, isAdmin: true }).includes('value="GROUP"'),
+    'GROUP is never offered as an owner');
+assert(PRINCIPAL_KINDS.includes('GROUP'), 'a group is still grantable');
+
+// 12. An unowned object still offers reassignment — that is the adoption path, and the same act as a
+//     transfer. Both appear on the panel of an administrator.
+const orphan = { job: { name: 'orphaned', createdBy: null }, grants: [], isAdmin: true };
+const orphanPanel = accessPanelHtml(orphan, esc, escAttr);
+assert(/administrator/i.test(orphanPanel), 'the unowned state is still stated');
+assert(orphanPanel.includes('aclOwnerBtn'), 'an unowned object can be adopted from the panel');
+
+// 13. The unowned list names what it found, and says so plainly when it found nothing — "no unowned
+//     objects" is the good news here, so rendering blank would read as reassurance not yet earned.
+const unownedList = unownedListHtml(
+    [{ kind: 'JOB', name: 'nightly-load' }, { kind: 'SCHEDULE', name: 'hourly' }], esc);
+assert(unownedList.includes('nightly-load') && unownedList.includes('hourly'), 'every unowned object is listed');
+assert(unownedList.includes('JOB') && unownedList.includes('SCHEDULE'), 'each is named by kind');
+assert(/has a recorded owner/.test(unownedListHtml([], esc)), 'the empty case is stated');
+assert(/has a recorded owner/.test(unownedListHtml(null, esc)), 'null is tolerated');
+assert(!unownedListHtml([{ kind: 'JOB', name: '<img src=x>' }], esc).includes('<img'),
+    'object names are escaped');
 
 console.log('orchestrator-acl-ui tests passed');

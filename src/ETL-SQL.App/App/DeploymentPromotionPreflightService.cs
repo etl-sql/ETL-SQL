@@ -64,7 +64,8 @@ internal static partial class DeploymentPromotionPreflightService
         {
             var root = Path.GetFullPath(ctx.PromotionSource ?? Directory.GetCurrentDirectory());
             var output = Path.GetFullPath(ctx.PromotionOutput ?? Path.Combine(Directory.GetCurrentDirectory(), "deployment-preflight.json"));
-            var inventory = await BuildAsync(root, ctx.PromotionFromProfile, ctx.PromotionToProfile, ct);
+            var inventory = await BuildAsync(
+                root, ctx.PromotionFromProfile, ctx.PromotionToProfile, ct, await ReadUnownedObjectsAsync(ct));
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             await using var stream = new FileStream(output, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true);
             await JsonSerializer.SerializeAsync(stream, inventory, JsonOptions, ct);
@@ -84,11 +85,44 @@ internal static partial class DeploymentPromotionPreflightService
         }
     }
 
+    /// <summary>
+    /// One orchestrator object nobody is accountable for, as the preflight sees it. Supplied by the
+    /// caller rather than read here, so the inventory stays a pure function of what it is given.
+    /// </summary>
+    internal sealed record UnownedObject(string Kind, string Name);
+
+    /// <summary>
+    /// Reads the local orchestrator catalog's unowned objects, or nothing when there is no catalog.
+    ///
+    /// <para>The preflight is a read-only inventory of a machine that may not be running anything, so
+    /// an unreachable or absent store is an ordinary state rather than a failure — it means there is
+    /// no orchestrator work here to be accountable for. A promotion is not blocked by the absence of
+    /// the thing being checked.</para>
+    /// </summary>
+    private static async Task<IReadOnlyList<UnownedObject>> ReadUnownedObjectsAsync(CancellationToken ct)
+    {
+        try
+        {
+            if (Program.ServiceProvider?.GetService(typeof(ETL_SQL.Core.Data.IOrchestratorAuthorizationStore))
+                is not ETL_SQL.Core.Data.IOrchestratorAuthorizationStore store) return [];
+            // The local catalog is unbound: a machine being promoted has no signed tenant yet, which
+            // is the same scope its own scheduler and CLI write under.
+            var unowned = await store.GetUnownedObjectsAsync(null, ct);
+            return [.. unowned.Select(entry => new UnownedObject(
+                entry.ObjectKind.ToString().ToUpperInvariant(), entry.Name))];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
     internal static async Task<PreflightInventory> BuildAsync(
         string sourceRoot,
         string? sourceProfile,
         string? targetProfile,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<UnownedObject>? unownedObjects = null)
     {
         var root = Path.GetFullPath(sourceRoot);
         if (!Directory.Exists(root))
@@ -207,6 +241,7 @@ internal static partial class DeploymentPromotionPreflightService
             findings.Add(new("DP006", "Warning", ".", "No portable .etlsql, .rptsql, or policy artifacts were found."));
         if (protectedMaterial.Count > 0)
             findings.Add(new("DP007", "Warning", ".", $"{protectedMaterial.Count} protected item(s) require out-of-band target provisioning; their contents and hashes were not collected."));
+        AddUnownedObjectFinding(findings, to, unownedObjects);
 
         return new(
             SchemaVersion, DateTimeOffset.UtcNow, from, to, root, false,
@@ -217,6 +252,37 @@ internal static partial class DeploymentPromotionPreflightService
             evidence.OrderBy(e => e.Path, StringComparer.OrdinalIgnoreCase).ToArray(),
             ephemeral.OrderBy(e => e.Path, StringComparer.OrdinalIgnoreCase).ToArray(),
             findings.OrderBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Path, StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    /// <summary>
+    /// Reports orchestrator objects that nobody owns, before a promotion makes that matter.
+    ///
+    /// <para>On Solo there are no principals and ownership decides nothing, so this is silent. From
+    /// Team upward an owner is what lets anyone but an administrator reach an object — so a promotion
+    /// that carried unowned jobs across would hand the new deployment work that only an administrator
+    /// can run, and the symptom arrives later as "the schedule fires but nobody can touch it".</para>
+    ///
+    /// <para>One finding rather than one per object: the remedy is a single bulk adoption, so three
+    /// hundred blocking findings would describe one decision three hundred times. Enough names are
+    /// listed to recognise the estate, and the count is exact.</para>
+    /// </summary>
+    private static void AddUnownedObjectFinding(
+        List<InventoryFinding> findings, string targetProfile, IReadOnlyList<UnownedObject>? unownedObjects)
+    {
+        if (unownedObjects is not { Count: > 0 }) return;
+        if (string.Equals(targetProfile, "Solo", StringComparison.OrdinalIgnoreCase)) return;
+
+        const int NamedLimit = 10;
+        var named = unownedObjects
+            .Take(NamedLimit)
+            .Select(entry => $"{entry.Kind} {entry.Name}")
+            .ToArray();
+        var remainder = unownedObjects.Count - named.Length;
+        findings.Add(new("DP009", "Error", ".",
+            $"{unownedObjects.Count} orchestrator object(s) have no recorded owner and would be reachable " +
+            $"only by an administrator on {targetProfile}: {string.Join(", ", named)}" +
+            (remainder > 0 ? $", and {remainder} more" : "") +
+            ". Assign owners with 'etl-sql admin orchestrator adopt' before promoting."));
     }
 
     private static async Task DiscoverBindingsAsync(

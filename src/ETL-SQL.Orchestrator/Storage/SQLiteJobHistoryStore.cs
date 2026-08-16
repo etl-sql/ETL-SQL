@@ -773,6 +773,15 @@ namespace ETL_SQL.Orchestrator.Storage
                 throw new InvalidOperationException("The scheduled job could not be saved.");
         }
 
+        /// <summary>
+        /// Optimistic-concurrency update of one job definition.
+        ///
+        /// <para><c>CreatedBy</c> is not in the update set, and is not filled in when it is missing
+        /// either. An object with no owner is administrators-only until it is adopted, and adoption is
+        /// an explicit, audited act — letting an edit confer ownership would mean the answer to "who is
+        /// accountable for this job" was decided by whoever happened to touch it, quietly, with no
+        /// record. Reassignment goes through <see cref="SetObjectOwnerAsync"/>.</para>
+        /// </summary>
         public async Task<bool> TrySaveJobAsync(JobDefinition job, long expectedVersion)
         {
             await EnsureInitializedAsync();
@@ -799,7 +808,6 @@ namespace ETL_SQL.Orchestrator.Storage
                     Description = @description,
                     Options = @options,
                     ModifiedBy = @modifiedBy,
-                    CreatedBy = COALESCE(CreatedBy, @createdBy),
                     Version = Version + 1
                 WHERE Id = @id AND Version = @expectedVersion;";
             AddJobParameters(command, job);

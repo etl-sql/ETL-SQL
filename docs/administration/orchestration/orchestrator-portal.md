@@ -84,6 +84,10 @@ Assign the `OrchestratorManager` role to operations staff who need to manage job
 
 `JOB`, `SCHEDULE`, and `NOTIFICATION` names are shared catalog identities. The principal that creates an object owns it; `CREATE OR ALTER` and `CREATE OR REPLACE` preserve that owner and cannot be used to take over another principal's name. This is enforced in both HTTP endpoints and ETL-SQL statement handlers.
 
+An object with no recorded owner is reachable only by an administrator until an owner is assigned. Editing it does not assign one — ownership decides who may manage the object, so it changes only by an explicit, audited reassignment. Administrators can list unowned objects, assign an owner to one, or assign one to all of them at once, from the Orchestrator tab's **Unowned objects** button or with `etl-sql admin orchestrator unowned | set-owner | adopt`. Reassignment is administrator-only: an owner may manage their own object, so an owner who could hand ownership on could widen access to it without anyone administering it. A user or a service account may own an object; a group may be granted permissions but cannot own one, because ownership names a single accountable principal.
+
+Names are re-usable and identity is not: dropping an object deletes its grants, and an object later created under the same name starts with none.
+
 Owners and administrators can grant `READ`, `EXECUTE`, `OVERRIDE`, or `MANAGE` to a Portal user, group, or service account. `MANAGE` includes all lower permissions; `OVERRIDE` includes execute/read; `EXECUTE` includes read. Variable-overridden triggers require `OVERRIDE`, because an override may widen the job's data scope. Plain triggers and named-checkpoint resumes require `EXECUTE`.
 
 The management API uses `/api/authorization/{kind}/{name}` to list grants and `/api/authorization/{kind}/{name}/{principalKind}/{principalId}` to set or revoke them. Valid kinds are `JOB`, `SCHEDULE`, and `NOTIFICATION`; valid principal kinds are `USER`, `GROUP`, and `SERVICE`. Job history and data-quality APIs filter rows using the same `READ` decision. Ad-hoc run status and cancellation are visible only to that run's submitting principal or an administrator. Kinds, principal kinds, and permissions are named in responses exactly as they are accepted in requests. The Portal proxies the same routes under `/api/orchestrator/authorization/...` for the Access panel and for `etl-sql admin orchestrator show|grant|revoke`, so no operator needs the Orchestrator's signing secret on their machine.
@@ -110,7 +114,7 @@ Navigate to the Orchestrator tab in the portal after logging in with an eligible
 - Script content as of the last save (read-only, monospace)
 - Duration trend sparkline (last 30 runs)
 - History table: last 20 executions with Status, Start Time, Duration, Rows Processed, Peak RAM, CPU Time, and any error message
-- **Access** — the job's owner and its grants, with add and revoke. Grants are read from the Orchestrator on every open and never cached. Listing them requires `MANAGE` on the job, so a job you can reach but not administer shows the refusal rather than an empty table. Principals are named by their stable key rather than a username, because a name can be reassigned and a grant that followed one would move with it.
+- **Access** — the job's owner and its grants, with add and revoke, plus owner reassignment for administrators. Grants are read from the Orchestrator on every open and never cached. Listing them requires `MANAGE` on the job, so a job you can reach but not administer shows the refusal rather than an empty table. Principals are named by their stable key rather than a username, because a name can be reassigned and a grant that followed one would move with it.
 
 **Create Job modal** — opens via the **New Job** button. Fields:
 - Job name

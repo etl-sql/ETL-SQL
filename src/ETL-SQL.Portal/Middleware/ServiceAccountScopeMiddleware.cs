@@ -93,6 +93,14 @@ public sealed class ServiceAccountScopeMiddleware(RequestDelegate next)
         if (path.StartsWith("/api/orchestrator/service/", StringComparison.OrdinalIgnoreCase))
             return [ServiceAccountScopes.OrchestratorAdmin];
 
+        // Ownership is narrower than the rest of grant administration. An owner may manage their own
+        // object, so ownership is the authority grants are administered *from*, and handing it on is
+        // therefore an administrator's act rather than an owner's — publish must not reach it.
+        if (path.StartsWith("/api/orchestrator/authorization/unowned", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/api/orchestrator/authorization/adopt", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith("/owner", StringComparison.OrdinalIgnoreCase))
+            return [ServiceAccountScopes.OrchestratorAdmin];
+
         // Grants, in every direction including reading them: listing an object's grants requires
         // MANAGE on it, so this is administration wearing a GET and does not belong on the read rung.
         // Publish is accepted alongside admin because publish means "MANAGE what you own" — ownership

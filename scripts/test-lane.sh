@@ -74,6 +74,8 @@ invoke_dotnet_test() {
 }
 
 invoke_lineage_ui_smoke() {
+    # First, because a page whose inline module does not parse renders nothing at all.
+    node "$REPO_ROOT/scripts/test-portal-inline-scripts.mjs"
     node "$REPO_ROOT/scripts/test-lineage-ui.mjs"
     node "$REPO_ROOT/scripts/test-publish-folders.mjs"
     node "$REPO_ROOT/scripts/test-subscription-history-ui.mjs"

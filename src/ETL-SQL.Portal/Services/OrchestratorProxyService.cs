@@ -205,6 +205,51 @@ public class OrchestratorProxyService(
         }
     }
 
+    // ── Ownership ─────────────────────────────────────────────────────────────
+    //
+    // Proxied on the same terms as grants. The Orchestrator decides whether the caller may reassign
+    // ownership; the Portal's job is to present the caller it already authenticated, not to form a
+    // second opinion about what that caller may do.
+
+    public async Task<HttpResponseMessage?> GetUnownedObjectsAsync(CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, "api/authorization/unowned", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to read unowned orchestrator objects."); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> SetObjectOwnerAsync(
+        string kind, string name, string principalKind, string principalId, CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Put,
+                $"api/authorization/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}/owner",
+                new { PrincipalKind = principalKind, PrincipalId = principalId },
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to set the owner of {Kind} {Name}.",
+                ETL_SQL.Core.Common.LogSanitizer.Clean(kind), ETL_SQL.Core.Common.LogSanitizer.Clean(name));
+            return null;
+        }
+    }
+
+    public async Task<HttpResponseMessage?> AdoptUnownedObjectsAsync(
+        string principalKind, string principalId, string? kind, CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Post,
+                "api/authorization/adopt",
+                new { PrincipalKind = principalKind, PrincipalId = principalId, Kind = kind },
+                cancellationToken: ct);
+        }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to adopt unowned orchestrator objects."); return null; }
+    }
+
     public async Task<HttpResponseMessage?> DispatchNotificationAsync(
         string notificationName,
         OrchestratorNotificationDispatchRequest req,

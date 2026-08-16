@@ -324,6 +324,71 @@ public sealed class OrchestratorGrantAdministrationTests(OrchestratorGrantAdmini
             Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
     }
 
+    [Fact]
+    public async Task OwnershipChangedThroughThePortalIsTheOrchestratorsOwnState()
+    {
+        const string job = "portal_owner_reassigned";
+        await fixture.CreateJobAsync(job, fixture.AdminToken);
+
+        using (var reassign = await fixture.SendAsync(
+            HttpMethod.Put, $"/api/orchestrator/authorization/JOB/{job}/owner", fixture.AdminToken,
+            new { principalKind = "USER", principalId = GroupKey }))
+        {
+            Assert.Equal(HttpStatusCode.OK, reassign.StatusCode);
+            var body = await reassign.Content.ReadFromJsonAsync<JsonObject>();
+            Assert.Equal($"user:{GroupKey}", body!["owner"]!.GetValue<string>());
+        }
+
+        // Read back from the jobs list the operator actually sees, because the owner column is what
+        // makes ownership legible — a change the store accepted and the list does not show is the
+        // shape that reads as "the page is broken".
+        using (var jobs = await fixture.SendAsync(
+            HttpMethod.Get, "/api/orchestrator/jobs", fixture.AdminToken))
+        {
+            var listed = (await jobs.Content.ReadFromJsonAsync<JsonArray>())!
+                .Single(entry => entry!["name"]!.GetValue<string>() == job);
+            Assert.Equal($"user:{GroupKey}", listed!["createdBy"]!.GetValue<string>());
+        }
+
+        using var scope = fixture.Portal.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var audited = Assert.Single(
+            await db.AuditLogs.Where(entry => entry.ResourceId == job).ToListAsync(),
+            entry => entry.Action == "ORCHESTRATOR_SET_OWNER");
+        Assert.Contains(GroupKey, audited.Detail);
+        Assert.NotNull(audited.UserId);
+    }
+
+    [Fact]
+    public async Task OwnershipIsAdministratorOnlyThroughThePortalToo()
+    {
+        const string job = "portal_owner_guarded";
+        await fixture.CreateJobAsync(job, fixture.AdminToken);
+
+        // The manager passes Portal RBAC — they may operate the Orchestrator — and is refused by the
+        // Orchestrator, which is the only place that decides this. The refusal is relayed, not
+        // flattened into a generic failure.
+        using (var reassign = await fixture.SendAsync(
+            HttpMethod.Put, $"/api/orchestrator/authorization/JOB/{job}/owner", fixture.ManagerToken,
+            new { principalKind = "USER", principalId = GroupKey }))
+            Assert.Equal(HttpStatusCode.Forbidden, reassign.StatusCode);
+
+        using (var listed = await fixture.SendAsync(
+            HttpMethod.Get, "/api/orchestrator/authorization/unowned", fixture.ManagerToken))
+            Assert.Equal(HttpStatusCode.Forbidden, listed.StatusCode);
+
+        using (var adopt = await fixture.SendAsync(
+            HttpMethod.Post, "/api/orchestrator/authorization/adopt", fixture.ManagerToken,
+            new { principalKind = "USER", principalId = GroupKey }))
+            Assert.Equal(HttpStatusCode.Forbidden, adopt.StatusCode);
+
+        using var scope = fixture.Portal.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(
+            await db.AuditLogs.AnyAsync(entry => entry.Action == "ORCHESTRATOR_SET_OWNER" && entry.ResourceId == job),
+            "a refused reassignment must not be recorded as though ownership had moved");
+    }
+
     private Task<HttpResponseMessage> Put(string job, string permission, string token) =>
         fixture.SendAsync(
             HttpMethod.Put,

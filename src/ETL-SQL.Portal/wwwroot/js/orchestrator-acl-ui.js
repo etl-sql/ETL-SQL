@@ -19,6 +19,15 @@ export const PERMISSIONS = ['READ', 'EXECUTE', 'OVERRIDE', 'MANAGE'];
 export const PRINCIPAL_KINDS = ['USER', 'GROUP', 'SERVICE'];
 
 /**
+ * The principal kinds that can *own* an object — one fewer than can be granted on it.
+ *
+ * A group cannot own: ownership names who is accountable, and the decision compares it against one
+ * caller's key, so a group owner would read as owned and behave as unowned. Offering it here would
+ * produce a form whose only outcome is a 400.
+ */
+export const OWNER_KINDS = ['USER', 'SERVICE'];
+
+/**
  * Splits a stored principal reference like `user:3f2a…` into its kind and key.
  * Attribution is written as `kind:key`, and the two halves mean different things: the kind selects
  * how a grant matches, the key is what it matches on.
@@ -83,6 +92,56 @@ export function grantRowsHtml(grants, esc, escAttr, editable) {
 }
 
 /**
+ * The objects nobody is accountable for, as a list an administrator can act on.
+ *
+ * The empty case is stated rather than left blank, because "no unowned objects" and "the list failed
+ * to load" look identical otherwise — and here the first is the good news, so silence would read as
+ * reassurance the page has not earned.
+ */
+export function unownedListHtml(objects, esc) {
+    const rows = (objects || []).map(entry => `
+        <tr>
+          <td><span class="chip">${esc((entry.kind || '').toUpperCase())}</span></td>
+          <td>${esc(entry.name)}</td>
+        </tr>`).join('');
+    return rows
+        ? `<table class="data-table"><tbody>${rows}</tbody></table>`
+        : `<div class="empty-state">${esc('Every job, schedule, and notification has a recorded owner.')}</div>`;
+}
+
+/**
+ * Whether to offer owner reassignment.
+ *
+ * Unlike {@link canAdminister}, this one *is* read from the viewer's own session, because ownership
+ * is administrator-only and the role is in the token the browser already holds. It decides what to
+ * draw, never what is permitted: the Orchestrator refuses a caller who is not an administrator
+ * whatever this returns, and a refusal is rendered rather than swallowed.
+ */
+export function canReassignOwner(state) {
+    return !!state && !state.error && state.isAdmin === true;
+}
+
+/**
+ * The owner-reassignment control.
+ *
+ * Present for an administrator whether or not the object already has an owner: an unowned object
+ * needs adopting, and an owned one whose owner has left the organization needs transferring. Those
+ * are the same act, so they are the same control — a separate "adopt" button would imply that
+ * transferring was something else.
+ */
+export function ownerFormHtml(state) {
+    if (!canReassignOwner(state)) return '';
+    return `
+        <div class="orch-acl-owner-set">
+          <select id="aclOwnerKind" aria-label="Owner kind">
+            ${OWNER_KINDS.map(kind => `<option value="${kind}">${kind.charAt(0)}${kind.slice(1).toLowerCase()}</option>`).join('')}
+          </select>
+          <input id="aclOwnerKey" type="text" placeholder="Principal key" aria-label="Owner principal key">
+          <button class="btn btn-sm btn-outline" id="aclOwnerBtn">Set owner</button>
+        </div>`;
+}
+
+/**
  * The whole panel: owner, grants, and — for someone who may administer them — the add form.
  *
  * `error` is rendered rather than swallowed. The two failures an operator hits here mean different
@@ -122,6 +181,7 @@ export function accessPanelHtml(state, esc, escAttr) {
         <div class="orch-acl-owner">
           <label>Owner</label>
           <div class="orch-detail-meta"><span>${esc(ownerLabel(job?.createdBy))}</span></div>
+          ${ownerFormHtml(state)}
         </div>
         <table class="data-table orch-acl-table">
           <thead><tr><th>Principal</th><th>Type</th><th>Permission</th><th></th></tr></thead>

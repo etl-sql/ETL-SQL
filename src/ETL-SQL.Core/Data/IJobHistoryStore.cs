@@ -82,9 +82,11 @@ public interface ILineageCatalogStore
 /// two disagreeing sources of truth to reconcile.
 /// </param>
 /// <param name="CreatedBy">
-/// Attribution passed through by the Portal, not authorization — the Orchestrator's API
-/// authenticates with a single shared key and has no identity model. See
-/// <c>ROADMAP.md → Orchestrator — Per-Object Authorization</c>.
+/// The owning principal's key, as carried in the signed identity assertion (<c>user:…</c> or
+/// <c>service:…</c>). This is authorization, not just attribution: an owner may manage what they own,
+/// and an object with no recorded owner is reachable only by an administrator until it is adopted.
+/// Written when the object is created and changed only by an explicit, audited reassignment — never by
+/// an edit.
 /// </param>
 public record JobDefinition(
     string Name,

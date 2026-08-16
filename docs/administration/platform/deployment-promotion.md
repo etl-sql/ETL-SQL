@@ -24,6 +24,13 @@ that must be provisioned out of band. The output path must not already exist, pr
 inventory run from overwriting prior evidence. A successful inventory is an input to promotion planning; it
 does not itself back up, import, fence schedulers, or perform a cutover.
 
+Preflight also reports orchestrator objects with no recorded owner (`DP009`) when the target profile
+is `Team` or above. From `Team` upward an owner is what lets anyone but an administrator reach a job,
+schedule, or notification, so promoting unowned objects hands the new deployment work that only an
+administrator can run — and the symptom surfaces much later, as a schedule that fires while nobody
+can touch it. Assign owners with `etl-sql admin orchestrator adopt` before promoting. Ownership
+decides nothing on `Solo`, where there are no principals, so the finding is not raised there.
+
 Supported profile names are `Solo`, `Team`, `Enterprise`, and `SaaS`. SaaS remains a distinct tenant
 trust boundary; a clean preflight does not substitute for tenant-isolation certification.
 

@@ -34,6 +34,9 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             // CreatedBy is set on insert only — the point of the column is that it does not move.
+            // That includes filling in a missing one: an object with no owner is administrators-only
+            // until it is adopted, and adoption is an explicit audited act rather than a side effect
+            // of whoever edited it next.
             command.CommandText = @"
                 INSERT INTO Schedules (Id, Name, Cron, TimeZone, IsEnabled, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
                 VALUES (@id, @name, @cron, @timeZone, @isEnabled, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
@@ -44,7 +47,6 @@ namespace ETL_SQL.Orchestrator.Storage
                     DisplayName = excluded.DisplayName,
                     Description = excluded.Description,
                     Options     = excluded.Options,
-                    CreatedBy   = COALESCE(Schedules.CreatedBy, excluded.CreatedBy),
                     ModifiedBy  = excluded.ModifiedBy,
                     Version     = Schedules.Version + 1;";
             command.AddParam("@id", NewOrExistingId(schedule.Id));
@@ -174,7 +176,6 @@ namespace ETL_SQL.Orchestrator.Storage
                     DisplayName    = excluded.DisplayName,
                     Description    = excluded.Description,
                     Options        = excluded.Options,
-                    CreatedBy      = COALESCE(Notifications.CreatedBy, excluded.CreatedBy),
                     ModifiedBy     = excluded.ModifiedBy,
                     Version        = Notifications.Version + 1;";
             command.AddParam("@id", NewOrExistingId(notification.Id));

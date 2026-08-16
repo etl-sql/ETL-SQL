@@ -185,6 +185,41 @@ Only a principal who can `MANAGE` the object may change its grants: its owner, a
 someone explicitly granted `MANAGE`. Being able to *reach* an object never confers the ability to
 widen your own access to it.
 
+## Object ownership
+
+The principal that creates an object owns it, and an owner may manage what they own. Ownership is
+therefore the authority grants are administered *from*, which is why reassigning it is an
+administrator's act and not an owner's — an owner who could hand ownership on could widen access to
+their object without anyone administering it.
+
+```bash
+etl-sql admin orchestrator unowned
+
+etl-sql admin orchestrator set-owner --kind JOB --object nightly-load \
+    --principal-kind USER --principal 9b1c77d2f4e84a1e8c0d6b3a5f27e410
+
+etl-sql admin orchestrator adopt \
+    --principal-kind USER --principal 9b1c77d2f4e84a1e8c0d6b3a5f27e410
+```
+
+`--principal-kind` accepts `USER` or `SERVICE`. A group can be *granted* a permission but cannot own
+an object: ownership names who is accountable, and the decision compares it against one caller's key,
+so a group owner would read as owned and behave as unowned.
+
+An object with **no recorded owner** — one created before attribution was written, or restored from a
+deployment that had none — is reachable only by an administrator until it is adopted. Nothing else
+assigns an owner: an edit does not, because that would make "who is accountable for this" a
+consequence of who touched it last, decided quietly and recorded nowhere.
+
+`adopt` assigns an owner to every unowned object at once and is the path a standalone installation
+takes when it attaches a Portal. Pass `--kind` to limit it to one kind of object; omit it for
+everything. Each object is recorded separately in the audit trail, so "who became responsible for
+this, and when" is answerable per object rather than as a count.
+
+`set-owner` reports the previous owner, because reassignment is not always a repair: on an object that
+already had an owner this is a transfer, and an operator who meant to adopt an orphan should see that
+they moved someone else's object instead.
+
 ## Service-account lifecycle and one-time secrets
 
 The service-account verbs use the same Portal URL, client ID, environment-only client secret,

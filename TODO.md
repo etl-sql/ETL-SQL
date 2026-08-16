@@ -31,63 +31,6 @@ inherited from v0.17.0.
 - [ ] Recovery drill — `etl-sql admin restore --validate --report`
 - [ ] HA fault injection — `etl-sql admin ha-soak validate` (run `fault-plan` before `fault-run`,
       and `evidence` before `validate` — see the RCI item below)
-### Code Review Remediation (2026-08-14 Audit)
-
-- [x] **P0: Multi-Tenancy / Security** — Cross-Tenant User Impersonation in `ExecuteAs`. Scope user lookups by `TenantId == _datasetScope.TenantId` in `ExecutionController.cs` and `ExecutionJobService.cs`.
-- [x] **P0: Multi-Tenancy / Security** — Cross-Tenant Dataset Re-parenting. Verify `destination.TenantId == dataset.TenantId` in `DatasetMoveService.cs`.
-- [x] **P0: Concurrency / HA** — Distributed Lease Loss Split-Brain in `ClusterLock`. Link cancellation token to lease renewal failure in `ClusterLock.RunExclusiveAsync` to cancel critical section on lost ownership.
-- [x] **P1: Security / Path Traversal** — FlatFile `HEADER` Option Safe-Zone Bypass. Enforce `ResolvePath`, `ValidatePath`, `ValidateFileType`, and `AuthorizeRead` on `_headerFile` in `FlatFileDataSource.cs`.
-- [x] **P1: Security / Path Traversal** — Unvalidated `PGP_KEY` / `KEYFILE` Paths. Enforce `pathAuthorizer.Authorize` on key paths in `FileOperationStatementHandler.cs`.
-- [x] **P1: Security / Multi-Tenancy** — Cross-Tenant Script Draft Disclosure. Enforce folder permissions and tenant scoping before opening drafts in `ReportDraftsController.cs` and `ReportDraftWorkflowService.cs`.
-- [x] **P1: Security / Injection** — Variable Override Argument Injection. Validate variable identifier names in `ProcessJobExecutor.BuildArguments`.
-- [x] **P1: Security / Tenant Isolation** — Shared State and Predictable Passwords in `DockerContainerManager`. Scope container mappings to tenant sessions and use cryptographic random passwords.
-- [x] **P1: Supply Chain / Security** — Upgrade `SSH.NET` package in `Directory.Packages.props` to resolve `GHSA-q939-rpr3-3284` (`NU1903`).
-- [x] **P1: Concurrency / Reliability** — Thread-Safety in `DashboardService._parameters`. Prevent `InvalidOperationException` and dictionary corruption from concurrent parameter mutation/rendering.
-- [x] **P1: Reliability / Telemetry** — Stdout Truncation Dropping JSON Envelopes. Preserve tail output in `ProcessSandboxCommandRunner.cs` so trailing `ETL_SQL_RESULT` envelopes are not lost.
-- [x] **P2: Performance / ReDoS** — Missing Regex Timeouts. Add timeouts to binary regex matches (`=~`, `!~`) in `ExpressionEvaluator.cs` and cache regexes in `EvaluationUtils.EvaluateLike`.
-- [x] **P2: Performance** — Lock Contention in `SecretRedactor`. Maintain pre-sorted immutable snapshots for lock-free redaction in `SecretRedactor.cs`.
-- [x] **P2: Reliability / SQL Dialect** — Parameter Placeholder Desync. Apply `ParameterUtility.ProcessParameters` in MySQL and ensure parameter prefix matches placeholder generation.
-- [x] **P2: Reliability / Resource Leaks** — Fix stream/handle disposal in `SmtpDataSource.cs` (MemoryStream attachments), `OdbcDataSource.cs` (OdbcCommand), `RestDataSource.cs` (SemaphoreSlim), and `DashboardServiceFactory.cs`.
-
-### Active Roadmap Delivery (Language, DX, Execution)
-
-#### Track 1: Language — Compound `@expect` Rules (AND / OR)
-- [x] **1.1 AST & Model**: Add `AndRule` and `OrRule` records to `ColumnRule.cs` for compound boolean rule composition.
-- [x] **1.2 Parser**: Implement recursive descent expression parser in `ColumnRuleParser.cs` supporting SQL operator precedence (`OR` < `AND` / `,`), nested parentheses `(...)`, and preserving `,` as top-level `AND`.
-- [x] **1.3 Runtime & Validation**: Update `ColumnQualityValidator.cs` with 3-valued SQL evaluation logic, NULL skipping semantics (except `NOT NULL`), and failure attribution for compound rules in `__dq_rule`.
-- [x] **1.4 Linter & Tooling**: Update `ColumnRuleValidationRule.cs`, `DefaultGrammar.cs`, and `LanguageService.cs` autocomplete/hover cards.
-- [x] **1.5 Tests**: Unit tests in `ColumnRuleParserTests.cs` and `ColumnQualityValidatorTests.cs` for precedence, parentheses, and failure metrics.
-- [x] **1.6 Documentation**: Update `docs/reference/statements/dml/data-quality-rules.md` and `docs/syntax-index.md`.
-- [x] **1.7 Sample & Verification**: Create and execute `samples/05_Security_Diagnostics/Compound_Quality_Rules.etlsql`.
-
-#### Track 2: Developer Experience & CI/CD — Native Unit Testing & Table Assertions
-- [x] **2.1 AST & Parser**: Define `AssertTableStatement` in `Ast.cs` and parse `ASSERT TABLE #actual MATCHES #expected [WITH (...)]` in `FlowParser.cs`.
-- [x] **2.2 Grammar & Serializer**: Update `AstSerializer.cs`, `grammar.ebnf`, and `DefaultGrammar.cs`.
-- [x] **2.3 Runtime Handler**: Implement `AssertTableStatementHandler.cs` comparing schema, row counts, and column values with visual mismatch diffs.
-- [x] **2.4 CLI Test Harness**: Add `etl-sql test <path>` CLI command in `CliOrchestrator.cs` for executing `.test.etlsql` test suites and reporting test summaries.
-- [x] **2.5 Tests**: Unit tests in `AssertTableStatementTests.cs` and CLI harness tests.
-- [x] **2.6 Documentation**: Update `docs/reference/statements/session-control/assert-table.md`, `docs/syntax-index.md`, and test guide.
-- [x] **2.7 Sample & Verification**: Create and execute `samples/unit_test_table_assertion.test.etlsql`.
-
-#### Track 3: Language & Execution — Declarative Incremental Watermarking Syntax
-- [x] **3.1 AST & Parser**: Extend table sources / `WITH` options in `TableSource` and parser to support `WITH (WATERMARK = 'col', INITIAL = 'val' [, KEY = 'key'])`.
-- [x] **3.2 Execution Engine**: Implement automatic high-water mark retrieval, filter predicate injection, and max value tracking into `ctx.PendingJobStateUpdates` in `StreamingQueryEngine.cs` and `SelectExecutionEngine.cs`.
-- [x] **3.3 Grammar & Tooling**: Update `grammar.ebnf`, `DefaultGrammar.cs`, and AST serializers.
-- [x] **3.4 Tests**: Unit tests in `WatermarkQueryTests.cs` verifying initial load, delta load, and state persistence.
-- [x] **3.5 Documentation**: Update `docs/reference/statements/queries/from.md` and standard library references.
-- [x] **3.6 Sample & Verification**: Create and execute `samples/declarative_watermark.etlsql`.
-
-#### Track 4: Tooling & Authoring — Visual Report Builder Round-Trip Fidelity & Trivia Preservation
-- [x] **4.1 AST Source Span & Trivia Capture (C# Engine)**: Enhance AST statement nodes (`Statement`, `CreateVisualStatement`, `CreatePageStatement`, etc.) in `Ast.cs` and `CoreParser` to record exact character `SourceSpan` (start index, end index, line/col) and leading/trailing comment/whitespace trivia.
-- [x] **4.2 Surgical Script Patching Engine (`DesignerScriptPatcher` in C#)**: Implement `DesignerScriptPatcher.cs` in `ETL-SQL.Portal` / `ETL-SQL.Core` providing `PatchVisual`, `PatchPageStructure`, `PatchDataset`, `PatchStyle`, `AddVisual`, and `DeleteVisual` methods that replace only target statement spans while leaving surrounding data prep SQL, CTEs, variables, and interleaved comments 100% untouched. Expose `/api/designer/patch` endpoint in `DesignerController.cs`.
-- [x] **4.3 Client-Side Trivia-Preserving Patcher & Event Engine (`designer.js`)**: Implement client-side AST statement boundary parser and surgical patcher in canonical `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js`. Sync drag/resize/property edits directly into script editor, preserving CodeMirror cursor position, scroll offsets, and active selections.
-- [x] **4.4 Fault-Tolerant Canvas State & Diagnostic Badging**: Decouple visual canvas state from syntax parse errors. In split-screen mode, maintain the last valid layout AST during syntax errors, rendering non-blocking inline warning badges and diagnostic overlays on affected canvas cards rather than resetting or wiping the canvas.
-- [x] **4.5 Bi-Directional Property & Outlier Normalization**: Complete bidirectional synchronization for all `STYLE` options (`WIDTH`, `HEIGHT`, `THEME`, `ACCENT`, `BACKGROUND`, `SURFACE`, `TEXT`), `OPTIONS`, and `MAPPINGS`. Handle outlier layout scenarios: 12-column grid overflow clamping, card collisions, non-rectangular slot layouts, empty grid gaps, and nested container detachment/nesting.
-- [x] **4.6 Vitest + JSDOM Automated Test Suite (DOM & Bi-Directional Simulation)**: Build comprehensive Vitest + JSDOM test suite in `src/etl-sql-vscode/ui/tests/report_builder_roundtrip.test.ts` simulating DOM card drag/resize events, properties panel updates, text edits in code editor, syntax error recovery, comment preservation, and outlier movements.
-- [x] **4.7 C# Unit & Round-Trip Fidelity Tests**: Implement `DesignerScriptPatcherTests.cs` in `ETL-SQL.Tests` verifying character-exact round-trips against complex scripts with CTEs, temp tables, nested containers, and diverse comment patterns (`--`, `/* ... */`).
-- [x] **4.8 Documentation & Asset Synchronization**: Update `docs/guides/tooling/report-builder.md`, `docs/architecture/PortalUI.md`, and synchronize canonical shared designer assets with `node scripts/sync-assets.js`.
-
-
 
 **Sequencing.** The release-process RCI items are scheduled **last**, deliberately. The RCI changes
 touch the validation gate and CI itself, so landing them
@@ -125,24 +68,6 @@ remaining work requires the next CodeQL run on `main`.
 These tasks decompose the future tracks in [ROADMAP.md](ROADMAP.md). Their presence here makes work
 reviewable; it does not assign them to v0.18.0 or turn candidate phases into release commitments.
 Keep the roadmap's P0/P1/P2 ordering unless a release plan explicitly changes it.
-
-### Platform — Deployment Profiles and Upgrade Certification
-
-#### P2 — Deployment-profile certification
-
-- [x] Add current per-profile and per-transition evidence to release claims. Report Managed Dedicated
-      and Shared SaaS separately; neither inherits the other's claim status.
-
-### Orchestrator — Operations Triage and Run Flight Recorder
-
-#### Deployment-profile portability review
-
-Required by [Deployment_Profile_Standards.md](docs/architecture/standards/Deployment_Profile_Standards.md#feature-design-portability-review).
-Smallest safe profile is **Solo**, and the capability must not become Portal-only.
-
-- [x] Confirm no matrix cell moves backward, record Dedicated and Shared SaaS status separately, and
-      record the review outcome the way
-      [v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) did.
 
 ### Orchestrator — Per-Object Authorization
 
@@ -366,18 +291,29 @@ JS lane, alongside the sandbox story.
 
 #### Slice D — Ownership lifecycle and solo → team promotion
 
-- [ ] **D1 Owner reassignment.** Admin-only endpoint plus audit. `CreatedBy` is immutable by design,
+**Closed 2026-08-16.** Ownership is now writable exactly once by creation and thereafter only by an
+administrator, through `PUT /api/authorization/{kind}/{name}/owner` and `POST /api/authorization/adopt`
+(`GET /api/authorization/unowned` lists what needs one). Reassignment is administrator-only rather than
+owner-only because an owner may manage their own object: an owner who could hand ownership on could
+widen access to it without anyone administering it. Two silent-adoption paths were closed on the way —
+`TrySaveJobAsync` and both catalog upserts filled in a missing `CreatedBy` with whoever saved next, so
+an edit decided accountability quietly. Closing the slice also found a shipped defect that had killed
+the whole Orchestrator page: an unescaped apostrophe in `orchestrator.html`'s inline module, which is
+a parse error, so none of the page's JavaScript ran. `scripts/test-portal-inline-scripts.mjs` now
+parses every inline script in the Portal and Player pages in the JS lane.
+
+- [x] **D1 Owner reassignment.** Admin-only endpoint plus audit. `CreatedBy` is immutable by design,
       so today an owner who leaves makes the object `Admin`-only forever.
-- [ ] **D2 Unowned objects fail closed.** A pre-existing object with no owner is `Admin`-only until
+- [x] **D2 Unowned objects fail closed.** A pre-existing object with no owner is `Admin`-only until
       adopted. Fail-open was rejected: it is an authorization hole that ages badly, and attaching a
       Portal is an administered event, not a surprise.
-- [ ] **D3 Bulk adoption** in both CLI and UI, so a solo box that attaches a Portal can assign owners
+- [x] **D3 Bulk adoption** in both CLI and UI, so a solo box that attaches a Portal can assign owners
       to everything it already has.
-- [ ] **D4 Promotion preflight rule.** `DeploymentPromotionPreflightService` is artifact-oriented today
+- [x] **D4 Promotion preflight rule.** `DeploymentPromotionPreflightService` is artifact-oriented today
       (`DP001`–`DP008` cover backward moves, inventory, reparse points, portable artifacts, and raw
       credentials) and says nothing about orchestrator objects. Add a finding that reports unowned
       objects before promotion completes.
-- [ ] **D5 Grant-resurrection test.** Dropping an object deletes its grants; recreating the same name
+- [x] **D5 Grant-resurrection test.** Dropping an object deletes its grants; recreating the same name
       must not inherit them.
 
 #### Slice E — Legacy mode and the solo boundary
@@ -490,54 +426,6 @@ they build on where one exists. An entry is complete only when the matching matr
 current linked evidence reference and the release review records the topology explicitly, the way
 [v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) recorded its review. Do not infer
 Dedicated support from an Enterprise happy path, or Shared support from Dedicated evidence.
-
-##### 1. Tenant context and authority
-
-- [x] **Shared.** Prove tenant context is server-derived at every shared entry point — a negative
-      test per surface that a caller-supplied tenant, alias, gateway, resource, run, object, or
-      storage identifier cannot widen scope, plus collision tests for equal numeric/logical IDs
-      across tenants.
-
-      **The guard exists; the surfaces do not (v0.18.0).** Checked before writing anything: the
-      product is host-fixed today — the only tenant runtime isolation test is
-      `HostFixedPortalInstances_IsolateAuditOutboxesAndSecurityCaches` — so there is no shared
-      control plane, store, queue, or index to point a negative test at. Writing "a negative test per
-      shared surface" would have meant inventing the surfaces first.
-
-      What ships instead is the thing that makes those tests unavoidable later:
-      `SharedTenantSurfaceContractTests`, an abstract contract following the
-      `ArtifactStorageContractTests` pattern already used here. The first shared surface's test class
-      inherits it and cannot ship without answering all six cases — a caller naming another tenant's
-      scoped id, an unscoped name resolving across tenants, equal logical ids colliding, a write
-      overwriting another tenant's row of the same name, enumeration leaking, and the
-      `acme`/`acme-evil` prefix trap. A reference in-memory implementation keeps the contract
-      executable rather than aspirational. Writing the guard *after* the first shared surface is how
-      a boundary ends up certified by whoever was in a hurry.
-
-      **The contract immediately earned its keep.** Its enumeration case failed on the first run
-      against `TenantContext` as shipped the day before: `ScopeKey` correctly rejects an empty
-      logical id, so there was no way to derive a tenant's key prefix for a scan — something every
-      shared store needs. `ScopePrefix` was added in response, delimited, with a test showing why it
-      is not `ScopeKey("")`: a range scan on the bare name `acme` also matches every `acme-evil/…`
-      key.
-
-      **Closed with durable adoption (2026-08-13).** `SharedTenantResourceRegistry` is a real
-      SQLite/PostgreSQL-backed Shared control-plane namespace for aliases, gateways, resources, runs,
-      objects, storage, queues, and indexes. It accepts only a verified request `TenantContext`,
-      persists composite tenant/kind/logical identity, and scopes lookup, enumeration, deletion, and
-      collision handling below that tenant. Provider and authenticated HTTP tests prove equal logical
-      IDs coexist, foreign numeric and scoped IDs are absent, caller tenant headers/query values do
-      not select scope, `acme` cannot enumerate `acme-evil`, and state remains partitioned after a
-      store restart. This closes tenant-context derivation only; it does not certify the separate
-      storage, scheduler, Gateway transport, data-evidence, or hardened-execution cells below.
-
-      **HTTP credential adoption started (2026-08-10).** Shared Portal JWTs now carry exactly one
-      canonical tenant claim minted only from a trusted `TenantContext`. After normal JWT validation,
-      middleware converts that signed claim into the request-scoped context consumed below controller
-      code; missing, duplicate, and malformed claims fail before controller activation. An HTTP
-      collision test proves spoofed tenant headers, tenant/issuer query values, and an equal shared
-      secret row cannot replace the signed tenant or widen enumeration. The durable registry above
-      now supplies equivalent concrete adoption evidence for the remaining identifier namespaces.
 
 ##### 4. Storage, paths, and artifacts
 
@@ -693,180 +581,11 @@ provider-neutral scheduler and lifecycle work.
 
 *Absorbs the retained discovery item **Internal Network Egress Fencing**.*
 
-##### 7. Data assets and evidence
-
-Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress.
-
-- [x] **Dedicated.** Prove disjoint lineage, scans, quality evidence, caches, outboxes, and
-      quarantine data using tenant-specific stores and artifact roots. Deliver controlled tenant
-      ingress and a certified tenant-admin/author boundary within the dedicated deployment. Reports
-      (currently Yellow): certify tenant catalog, dataset, snapshot, share/embed, export, and
-      subscription isolation.
-
-      **Closed with physical-store and equal-ID isolation evidence (2026-08-13).** Managed Dedicated
-      onboarding now provisions an explicit quarantine artifact root alongside disjoint Portal and
-      Orchestrator stores plus tenant-specific cache, security-outbox, key, queue, and report roots;
-      those stores retain tenant-specific lineage, quality, and PII-scan evidence.
-      Negative tests place foreign quarantine content in another tenant boundary and prove it is not
-      addressable from the provisioned tenant. Portal runtime tests seed the same numeric folder,
-      report, dataset, snapshot, subscription, share-link, and embed-token IDs into two independent
-      tenant databases, then prove catalog reads, token material, delivery recipients, artifact
-      paths, and configuration exports remain disjoint. `AdminIdentityScopeIntegrationTests` and
-      the onboarding policy tests retain the tenant-admin/author and controlled-ingress boundary.
-      Shared-store partitioning remains the separate open cell below.
-- [x] **Shared.** Prove tenant-isolated lineage/graph indexes, scans, quality evidence, quarantine,
-      caches, searches, and outboxes in shared services — partitioning metadata search, graph
-      traversal, exports, and support diagnostics so table names, schemas, tags, edges, and evidence
-      cannot leak across tenants. Re-certify tenant ingress, catalogs, datasets, embeds, snapshots,
-      exports, subscriptions, and interactive sessions against shared stores and worker fleets.
-      Dedicated-store evidence is explicitly not sufficient here.
-
-      **Lineage graph and stewardship slice completed (2026-08-13).** The provider-neutral
-      SQLite/PostgreSQL lineage history now stores `TenantId` on every edge and requires a
-      host-fixed or verified-credential `TenantContext` for Shared writes, table/batch graph reads,
-      tag and missing-metadata search, job/source/source-file lookup, and recent scans. Equal table,
-      source, job, script, and tag identifiers coexist across tenants; every SQL read carries the
-      tenant predicate. Scheduler execution uses its immutable signed tenant, queued Portal report
-      work uses its persisted owner binding, interactive/report/catalog/stewardship paths use the
-      request's verified tenant, and Orchestrator HTTP lineage endpoints derive scope only from the
-      signed caller (tenant query parameters are inert). Governance settings, scans, findings,
-      decisions, reviews, badges, categories, and glossary terms are likewise keyed and queried by
-      tenant, with equal logical keys supported by both provider migrations. SQLite restart,
-      hostile signed-HTTP, Portal foreign-ID, and real PostgreSQL tests pin the partition. This cell
-      remains open for quality/quarantine job state, report/catalog relational roots,
-      cache/search rebuilds, exports/subscriptions/tokens, and interactive-session fleet evidence.
-
-      **Audit/outbox slice completed (2026-08-13).** Durable audit rows and delivery events now carry
-      `TenantId`; event-id uniqueness, action/resource indexes, delivery-health diagnostics, fleet
-      counts, support-bundle counts, and fail-closed backlog evaluation are tenant-qualified. A
-      failed collector backlog in one tenant cannot block another tenant's mutations. The transport
-      retains host-wide draining authority but includes the immutable tenant in every remote event.
-      SQLite/PostgreSQL migrations backfill legacy rows into `portal-host`, while hostile equal
-      resource/event identifiers and the real PostgreSQL provider prove composite collision safety.
-      `SharedAuditTenantIsolationTests`, `AuditOutboxTransportTests`,
-      `AuditCollectorHealthTests`, and `PortalPostgresProviderTests` pin this slice. The parent cell
-      remains open for the surfaces listed above and non-audit support diagnostics.
-
-      **Quality/quarantine evidence slice completed (2026-08-13).** Shared Portal quality jobs,
-      run trends, normalized rule failures, statement detail, quarantine manifests, submissions,
-      queue search, and triage now use `ITenantJobEvidenceStore`. Its SQLite/PostgreSQL queries join
-      every row to the job's immutable `TenantId` inside the provider; a foreign job name or numeric
-      run id returns no evidence, caller tenant selectors are inert, and writes cannot attach state
-      to another tenant's job. Tenant deletion also removes that tenant's job state and rollups while
-      retaining foreign equal-purpose evidence. SQLite restart/provider tests, hostile signed HTTP,
-      the complete quarantine/quality Portal suite, and a real PostgreSQL test pin the boundary.
-      This parent cell remains open for report/catalog relational roots, cache/search rebuilds,
-      exports/subscriptions/tokens, interactive-session fleets, and remaining support diagnostics.
-
-      **Report/catalog relational slice completed (2026-08-13).** Folders and reports now carry
-      explicit `TenantId` roots with provider-side scoped queries; SQLite and PostgreSQL permit the
-      same folder path and report name in different tenants. Catalog, Studio, report authoring,
-      snapshots, exports, subscriptions, share/embed administration, saved views, alerts, access
-      requests, edit leases, configuration export, lineage/reference impact, access simulation,
-      lifecycle purge, and support/fleet diagnostics derive dependent rows from those roots. Signed
-      administrator requests cannot use a foreign numeric id, query/header tenant selector, export
-      route, or subscription id to reach another tenant. Migration convergence, hostile HTTP, and
-      the real PostgreSQL provider pin this slice. Anonymous share/embed capabilities remain
-      intentionally resolvable by their globally unguessable token and re-check their creator's
-      continuing authority within the report's own tenant. This parent cell remains open for
-      cache/search rebuilds and full queued/interactive worker-fleet certification.
-
-      **Cache and execution-worker slice completed (2026-08-13).** Durable Portal execution jobs
-      now persist their immutable `TenantId`; status, cancellation, active-refresh de-duplication,
-      recovery, snapshot/alert work, operational metrics, and tenant deletion all predicate on that
-      root. In-memory job access, per-user/group fairness gates, interactive report sessions,
-      schema-discovery coalescing, dataset previews, and PDF throttles include the tenant in their
-      cache key. A signed caller cannot inspect or cancel a foreign running job even with its exact
-      id and hostile tenant selectors, and equal report/user ids in two tenant session namespaces
-      produce distinct dashboard services. Shared configuration promotion and dataset registration
-      also refuse foreign catalog roots; identifier-bearing background admin digests fail closed in
-      Shared mode until invoked by a tenant-authorized scheduler. SQLite/PostgreSQL migrations,
-      hostile HTTP, cache-key tests, migration convergence, and the real PostgreSQL provider pin
-      this slice.
-
-      **Multi-node/shared-worker certification completed (2026-08-13).** Two real Portal OS
-      processes now run in Shared mode against one PostgreSQL catalog, shared artifact roots, and
-      tenant-specific key bindings. Hostile alpha credentials sent through either node cannot use
-      query/header tenant selectors or exact foreign report/job ids to enumerate, read, or cancel
-      beta resources; the beta running job remains unchanged. An alpha refresh admitted by node A
-      retains its durable server-owned tenant across fresh evaluator and lineage-notification
-      scopes, writes through the alpha artifact/key partition, and is observed completed through
-      node B. Host-level readiness probes the configured storage backend without weakening the
-      request-facing tenant facade. The complete 10-test multiprocess PostgreSQL suite and 51
-      affected execution, recovery, snapshot, storage-failure, cache, and hostile Shared-boundary
-      tests pass.
-
-*Absorbs the retained discovery item **Tenant-Isolated Lineage Graphs**.*
-
 ##### 9. Lifecycle — provisioning, backup, portability, deletion, metering
 
 The former `Managed operations` bullet was one checkbox covering nine deliverables and could not be
 checked off meaningfully. Split:
 
-- [x] **Dedicated — provisioning.** Automate tenant provisioning with no manual SaaS-platform
-      database edits.
-- [x] **Dedicated — upgrades and capacity.** Automate upgrades, drain/fence, and capacity assignment
-      for one tenant.
-
-      **Closed with signed two-pass tenant cutover (2026-08-13).** `admin promotion saas-upgrade`
-      accepts only the tenant, release, and three capacity values authorized by the active signed
-      organization policy. The release must also match the running upgrade binary or host-fixed
-      managed release identity. Preflight validates the provisioned manifest/config tenant and
-      canonical Dedicated pool. Execution exclusively locks the boundary, disables enabled jobs,
-      cancels queued admissions, and persists `Draining` until every active attempt completes and
-      every retained attempt is explicitly reconciled. Cutover updates job, storage, report-session,
-      and pool capacity together with the active release, then resumes only the jobs it fenced.
-      Before mutation it preserves exact manifest/config rollback files; injected failure and
-      interrupted-cutover tests prove restoration and scheduler-safe retry. Receipts are idempotent
-      by authorization reference and carry platform attribution without tenant impersonation.
-      `SaasTenantUpgradeTests`, `DeploymentProfileUpgradeLifecycleTests`, policy tests, and CLI tests
-      cover capacity, drain/fence, foreign-tenant refusal, concurrency, continuity, rollback, and
-      command wiring. Multi-tenant fleet rollout remains the separate HA cells in domain 5.
-- [x] **Dedicated — backup and recovery.** Tenant-scoped backup, export, restore, and key/artifact
-      recovery, including proof that a restore cannot introduce another tenant's rows or resume its
-      work.
-
-      **Closed with split-custody tenant recovery (2026-08-13).** `admin backup --tenant-root`
-      validates the provisioned boundary manifest against its host-fixed configuration, resolves the
-      actual Dedicated Orchestrator database and Portal key-ring paths, rejects explicit foreign
-      tenant rows, and stamps the canonical tenant into both custody archives. `admin restore`
-      requires the recovery environment's `--expected-tenant`, refuses unscoped, mismatched, or
-      cross-tenant pairs and non-empty targets, restores database/artifact/key material, disables all
-      restored jobs, advances lease fences, cancels queued admissions, and retains formerly active
-      admissions for environment reconciliation. `DedicatedTenantBackupRestoreTests` proves wrong or
-      absent tenant authority cannot validate, foreign rows cannot be backed up, scripts/datasets/keys
-      round-trip, and leased work cannot resume after recovery. Shared-store point-in-time recovery
-      remains a separate open cell.
-- [x] **Dedicated — support approval.** Add the approval workflow behind the shipped audited platform
-      support-access model.
-- [x] **Dedicated — metering.** Tenant-specific usage records for dedicated operations.
-
-      **Closed with scheduler-bound counts-only evidence (2026-08-13).** Every tenant-bound
-      scheduled attempt now writes one idempotent `TenantUsageRecord` keyed by the immutable
-      server-owned `JobDefinition.TenantId` and job-history identity. The provider-neutral
-      SQLite/PostgreSQL history store retains workload class, terminal status, rows, peak memory,
-      CPU seconds, duration, and timestamp without script text, parameters, connector targets, row
-      content, or secret material. Equal history identifiers remain disjoint across tenant-specific
-      stores/partitions, retries cannot double count a persisted attempt, and a metering outage is
-      logged but cannot turn evidence into execution authority or change a successful outcome.
-      `TenantUsageStoreTests` and `SchedulerServiceTests` cover durable partitioning, restart,
-      cutoff queries, invalid measures, immutable scheduler attribution, legacy-unbound refusal,
-      and failure independence. This closes Dedicated metering only; the broader Shared-fleet
-      attribution cell remains open.
-- [x] **Dedicated — deletion.** Legal/retention-aware tenant deletion with a completion record.
-
-      **Closed with signed erasure authority (2026-08-13).** `admin promotion saas-delete` derives
-      tenant authority from the active signed organization policy; the CLI tenant is a mismatch
-      assertion only. The typed policy names the platform actor, approval, reason, expiry, retention
-      boundary, and affirmative legal-hold clearance. Preflight is non-destructive unless `--execute`
-      is present. Execution verifies the provisioned manifest/config identity, refuses filesystem
-      roots, nested receipts, and reparse points, inventories and hashes the boundary without
-      recording payloads, atomically removes it from service, and persists a Started/Completed record
-      outside the erased boundary. Partial deletion retains the tombstone and Started receipt for
-      explicit reconciliation rather than re-authorizing damaged state. Tests prove completed
-      erasure, durable receipts, tenant mismatch refusal, external-receipt enforcement, expired/future
-      retention and legal-hold denial, and typed policy validation. Shared control-plane deletion
-      remains open.
 - [ ] **Shared — backup and recovery.** Tenant-scoped export/restore from shared stores, including
       proof that point-in-time recovery, retry, or cache rebuild cannot introduce another tenant's
       rows.
@@ -889,48 +608,6 @@ checked off meaningfully. Split:
       round trip prove durable partitioning. This cell remains open until the Shared Gateway and
       tenant storage providers feed their actual byte/storage/connector-class measures and hostile
       fleet evidence proves those producers cannot misattribute a tenant.
-- [x] **Shared — provisioning, upgrade, and deletion** against shared control planes.
-
-      **Closed with a signed, replay-safe two-control-plane saga (2026-08-13).** A separate
-      `LifecycleManagementKey` authenticates platform automation without granting tenant API access;
-      the active signed policy independently fixes tenant, operator, approval, reason, expiry, and
-      operation-specific values. Provisioning atomically creates the Portal lifecycle fence,
-      tenant storage/queue/index namespaces, and the signed host/domain/OIDC authority using only a
-      `SECRET:name` credential reference, then provisions the matching Orchestrator assignment.
-      Upgrade moves Portal and Orchestrator out of `Active`, blocks new authenticated requests and
-      stale scheduler leases, drains Portal executions, cancels queued admissions, retains active or
-      ambiguous sandbox work, and restores only jobs it fenced after applying the signed release and
-      capacities. Deletion reuses the drain, enforces signed retention/legal-hold clearance, purges
-      tenant-qualified Portal catalog/identity/policy rows plus Orchestrator jobs/history/usage and
-      terminal admissions, and retains attributed lifecycle/audit tombstones outside the erased
-      partition. Durable authorization-reference receipts make an unavailable or ambiguous remote
-      outcome retryable without reactivating partial state. SQLite restart/equal-ID tests, real
-      PostgreSQL lifecycle evidence, HTTP role/subject negative tests, cross-tenant deletion tests,
-      admission-drain tests, and Portal partial-failure replay tests cover both control planes.
-      Shared artifact-provider erasure, backup/PITR, and tenant data-service partitions remain their
-      separate open cells rather than being implied by this control-plane closure.
-- [x] **Portability bundle (both).** Unify the existing Portal configuration export, Orchestrator
-      promotion package, source artifacts, and optional evidence/content into the one open,
-      versioned, signed, tenant-encrypted format defined in
-      [`TenantPortability.md`](docs/architecture/TenantPortability.md). Deliver the minimum
-      configuration/artifact bundle and the SaaS → self-hosted Enterprise proof before Managed
-      Dedicated SaaS GA; add large resumable content and incremental deltas later.
-      Deliberately exclude resolved secrets, private keys, capabilities, checkpoints, leases, caches,
-      and in-flight work rather than making an indefensible "zero-loss" claim.
-
-      **Closed for the defined minimum bundle (2026-08-13).** The production `admin tenant` workflow
-      now composes Portal configuration, the Orchestrator promotion package, and exact portable
-      artifacts into the single documented `etl-sql.tenant-bundle/v1` format. Its manifest records
-      stable logical IDs, dependencies, plaintext/stored hashes, counts, exclusions with reasons,
-      required target bindings, source profile/tenant/consistency point, recipient encryption, and a
-      detached operator signature. SaaS export requires tenant-recipient OpenPGP encryption; import
-      verifies tenant identity, signature, hashes, paths, size/count ceilings, bindings, and collisions
-      before mutation and leaves imported jobs disabled. Sixty-three focused tests prove composition,
-      deterministic comparison, tamper/traversal/duplicate refusal, production CLI inspection/import,
-      concurrent-plan refusal, and a customer-held-key Managed Dedicated SaaS → self-hosted Enterprise
-      exit that remains readable after the source operator is gone. Large selected content, resumable
-      chunks, and incremental/final deltas remain intentionally unsupported future modes, as allowed
-      by this cell; they are not represented as working.
 
 *Absorbs the retained discovery items **Usage Metering & Billing Collector** and **Full-Fidelity
 Tenant Portability Bundle**.*
