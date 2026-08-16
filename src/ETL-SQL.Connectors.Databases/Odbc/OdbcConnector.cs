@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data.Odbc;
 using System.Threading.Tasks;
@@ -46,12 +46,18 @@ namespace ETL_SQL.Connectors.Odbc
             { "DSN", Array.Empty<string>() },
             { "DRIVER", Array.Empty<string>() },
             { "SERVER", Array.Empty<string>() },
+            { "PORT", Array.Empty<string>() },
             { "DATABASE", Array.Empty<string>() },
             { "UID", Array.Empty<string>() },
+            { "USER", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() },
             { "PWD", Array.Empty<string>() },
+            { "CONNECT_TIMEOUT", Array.Empty<string>() },
             { "TIMEOUT_SECONDS", Array.Empty<string>() },
-            { "TABLE", Array.Empty<string>() }
+            { "TABLE", Array.Empty<string>() },
+            { "HTTPPATH", Array.Empty<string>() },
+            { "AUTHMECH", Array.Empty<string>() },
+            { "SSL", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();

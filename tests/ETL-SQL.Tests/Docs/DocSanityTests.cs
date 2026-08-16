@@ -56,8 +56,8 @@ namespace ETL_SQL.Tests.Docs
         public void Grammar_SqlBlocks_ParseWithoutSyntaxError()
         {
             var refDir = RepoFile("docs/reference");
-            var statementFiles = Directory.GetFiles(Path.Combine(refDir, "statements"), "*.md")
-                .Concat(Directory.GetFiles(Path.Combine(refDir, "control-flow"), "*.md"))
+            var statementFiles = Directory.GetFiles(Path.Combine(refDir, "statements"), "*.md", SearchOption.AllDirectories)
+                .Concat(Directory.GetFiles(Path.Combine(refDir, "control-flow"), "*.md", SearchOption.AllDirectories))
                 .ToArray();
 
             Assert.NotEmpty(statementFiles);
@@ -569,16 +569,15 @@ namespace ETL_SQL.Tests.Docs
             // Skip template/placeholder snippets and unquoted ellipses. Quoted values
             // such as PASSWORD='...' remain valid examples and should still be checked.
             var withoutQuotedStrings = Regex.Replace(trimmed, @"'(?:''|[^'])*'", "''");
+            var withoutInterpolations = Regex.Replace(withoutQuotedStrings, @"\$\{@?[a-zA-Z0-9_]+\}", "");
             if (withoutQuotedStrings.Contains("...") ||
                 Regex.IsMatch(trimmed, @"<[a-zA-Z_][a-zA-Z0-9_\-\s]*>") ||
                 Regex.IsMatch(withoutQuotedStrings, @"\b(?:ON|OFF|TRUE|FALSE)\|(?:ON|OFF|TRUE|FALSE)\b", RegexOptions.IgnoreCase) ||
                 withoutQuotedStrings.Contains('|') ||
                 withoutQuotedStrings.Contains("[,", StringComparison.Ordinal) ||
-                trimmed.Contains("#target", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.Contains("#source", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.Contains("-- Wrong", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.Contains('{') ||
-                trimmed.Contains('}'))
+                withoutInterpolations.Contains('{') ||
+                withoutInterpolations.Contains('}'))
                 return true;
 
             // Skip HTML block structures (e.g. text visuals with raw HTML snippets)

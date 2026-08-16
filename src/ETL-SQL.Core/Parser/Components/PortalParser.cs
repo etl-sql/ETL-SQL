@@ -411,7 +411,9 @@ public class PortalParser : ParserComponent
                 options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
                 while (true)
                 {
-                    var optName = _parser.Current.Type == TokenType.IDENTIFIER ? Advance().Value : ConsumeStringLiteral("Expected option name");
+                    var optName = _parser.Current.Type == TokenType.STRING_LITERAL
+                        ? ConsumeStringLiteral("Expected option name")
+                        : Advance().Value;
                     Consume(TokenType.EQUALS, "Expected '=' after option name");
                     options[optName] = ParseExpression();
                     if (!Match(TokenType.COMMA)) break;

@@ -1,57 +1,109 @@
 # WATERMARK
 
-Declarative incremental watermarking syntax attached to table references in `SELECT` queries (`WITH (WATERMARK = ...)`). Automatically retrieves the previous high-water mark from persistent job state or local session state, injects a filtering predicate into the query execution pipeline, and updates the high-water mark upon successful completion.
+Declarative incremental change tracking attached directly to table references in `SELECT` queries via `WITH (WATERMARK = ...)`. The engine automatically retrieves the previous high-water mark from persistent state, injects a filtering predicate, and commits the new maximum boundary upon successful script completion.
+
+---
+
+## Syntax
 
 ```sql
-SELECT columns...
-[ INTO destination ]
-FROM table_reference WITH (
+SELECT <columns...>
+[ INTO #stage_table ]
+FROM <table_reference> WITH (
     WATERMARK = 'column_name'
     [, INITIAL = 'initial_value' | number ]
     [, KEY = 'custom_state_key' ]
     [, INCLUSIVE = TRUE | FALSE ]
     [, STRICT = TRUE | FALSE ]
 )
-[ WHERE additional_conditions... ];
+[ WHERE <additional_conditions...> ];
 ```
 
-- **WATERMARK = 'column_name'** — The column name (date, timestamp, integer ID, or string) on which to track change deltas.
-- **INITIAL = 'value'** — Optional initial watermark boundary used when no state entry exists yet (e.g., `'2024-01-01'` or `0`). If omitted, all rows are ingested on first run.
-- **KEY = 'state_key'** — Optional identifier key under which to persist and look up the watermark in the job history store or `.etlstate` file. Defaults to `"{TableName}:{ColumnName}"`.
-- **INCLUSIVE = TRUE | FALSE** — When `TRUE`, generates `>=` comparison against the watermark instead of `>`. Defaults to `FALSE`.
-- **STRICT = TRUE | FALSE** — When `TRUE`, enforces strict `>` comparison (opposite of `INCLUSIVE`). Defaults to `TRUE`.
+---
+
+## Options & Watermark Semantics
+
+- **WATERMARK = 'column_name'** — Column name (timestamp, datetime, integer sequence, or monotonic ID) used to track deltas.
+- **INITIAL = 'value'** — Initial boundary applied on the first run when no prior state exists (e.g., `'2025-01-01'` or `0`). If omitted, all existing rows are ingested on the first run.
+- **KEY = 'state_key'** — Unique identifier key for storing state in the local `.etlstate` file or Orchestrator database. Defaults to `"{TableName}:{ColumnName}"`.
+- **INCLUSIVE = TRUE | FALSE** — When `TRUE`, evaluates `>= [watermark]`. When `FALSE`, evaluates `> [watermark]` (default: `FALSE`).
+- **STRICT = TRUE | FALSE** — When `TRUE`, enforces strict `>` comparison (default: `TRUE`).
+
+---
 
 ## Examples
 
-### Initial & Incremental Table Extraction
+### 1. Simple Monotonic Sequence Extraction
+
+Ingest only new events based on an auto-incrementing integer key:
 
 ```sql
--- First execution loads records after 2024-01-01 and saves max UpdatedAt into state 'daily_orders'
--- Subsequent runs automatically filter by UpdatedAt > [last_saved_watermark]
-SELECT OrderId, CustomerId, Amount, UpdatedAt
-INTO #delta_orders
-FROM prod_db.Orders WITH (
-    WATERMARK = 'UpdatedAt',
-    INITIAL = '2024-01-01',
-    KEY = 'daily_orders'
-);
-```
-
-### Monotonic ID Watermark
-
-```sql
--- Extracts new events with EventId > initial or last processed ID
-SELECT EventId, EventName, Payload
+SELECT event_id, event_type, payload, created_at
 INTO #new_events
-FROM kafka_stream.Events WITH (
-    WATERMARK = 'EventId',
-    INITIAL = 1000,
+FROM source_db.events WITH (
+    WATERMARK = 'event_id',
+    INITIAL = 0,
     KEY = 'events_stream'
 );
 ```
 
-## References
+### 2. Production Pattern: End-to-End Incremental ETL with MERGE
 
-- [Statement Reference](../README.md)
+Extract updated customer records, validate against business rules, and merge into target data warehouse:
+
+```sql
+CREATE CONNECTION src AS POSTGRES(HOST='crm.internal', DATABASE='production');
+CREATE CONNECTION dw  AS MSSQL(SERVER='dw.internal', DATABASE='analytics');
+
+BEGIN TRY
+    -- 1. Extract only records updated since last run
+    SELECT id, email, first_name, last_name, status, updated_at
+    INTO #staging_customers
+    FROM src.customers WITH (
+        WATERMARK = 'updated_at',
+        INITIAL = '2026-01-01 00:00:00',
+        KEY = 'crm_customers_delta'
+    );
+
+    -- 2. Data cleansing and standardization
+    UPDATE #staging_customers 
+    SET email = LOWER(TRIM(email));
+
+    -- 3. Idempotent Upsert into Data Warehouse
+    MERGE INTO dw.dbo.DimCustomer AS T
+    USING #staging_customers AS S ON T.CustomerId = S.id
+    WHEN MATCHED AND S.updated_at > T.UpdatedAt THEN
+        UPDATE SET 
+            T.Email = S.email,
+            T.FirstName = S.first_name,
+            T.LastName = S.last_name,
+            T.Status = S.status,
+            T.UpdatedAt = S.updated_at
+    WHEN NOT MATCHED THEN
+        INSERT (CustomerId, Email, FirstName, LastName, Status, UpdatedAt)
+        VALUES (S.id, S.email, S.first_name, S.last_name, S.status, S.updated_at);
+
+    PRINT 'Incremental customer synchronization completed successfully.';
+END TRY
+BEGIN CATCH
+    PRINT 'Sync failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH
+```
+
+---
+
+## State Persistence & Failure Semantics
+
+- **Atomicity**: The new watermark value is only committed when the statement (or enclosing transaction) succeeds. If an error occurs downstream, the previous watermark remains active, ensuring zero data loss on retry.
+- **Environment Awareness**: In CLI/workstation mode, state is preserved in local `.etlstate` JSON caches. Under the Orchestrator, watermarks are persisted in shared relational storage with lease fencing.
+
+---
+
+## References & Related Recipes
+
 - [Query Syntax Reference](README.md)
+- [MERGE Statement](../dml/merge.md)
+- [ETL Cookbook: Incremental Load With High-Water Mark](../../../cookbooks/etl/incremental-load-with-high-water-mark.md)
+- [ETL Cookbook: SCD Type 2](../../../cookbooks/etl/scd-type-2.md)
 - [Job Orchestration](../../../administration/orchestration/README.md)

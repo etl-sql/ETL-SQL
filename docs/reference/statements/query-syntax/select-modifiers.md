@@ -1,74 +1,139 @@
-# SELECT conveniences (star modifiers, ORDER BY ALL, count(), separators, trailing commas)
-Modern, DuckDB/Snowflake-style ergonomics for the SELECT statement.
+# SELECT Modifiers & Ergonomic Conveniences
 
-## Star modifiers
-Adjust a `*` projection inline. Modifiers apply in this order: `EXCLUDE`, then `REPLACE`, then `RENAME`.
+Modern query ergonomics inspired by DuckDB and Snowflake. Includes inline wildcard projection modifiers (`EXCLUDE`, `REPLACE`, `RENAME`), left-to-right lateral column alias reuse, `ORDER BY ALL`, shorthand `count()`, numeric digit separators, and trailing commas.
+
+---
+
+## Wildcard Star Modifiers
+
+Modify a `*` wildcard projection without manually enumerating every unchanged column. Applied in order: `EXCLUDE`, then `REPLACE`, then `RENAME`.
 
 ```sql
--- Drop columns from the wildcard
-SELECT * EXCLUDE (internal_code, internal_notes) FROM users;
+-- 1. EXCLUDE: Drops specific sensitive or internal columns
+SELECT * EXCLUDE (internal_secret, ssn) FROM users;
 
--- Keep every column but substitute an expression for one of them
-SELECT * REPLACE (UPPER(name) AS name) FROM users;
+-- 2. REPLACE: Preserves all columns while transforming specific fields
+SELECT * REPLACE (LOWER(email) AS email, HASHBYTES('SHA256', ssn) AS ssn) FROM users;
 
--- Keep every column but rename one
-SELECT * RENAME (id AS user_id) FROM users;
+-- 3. RENAME: Preserves all columns while assigning new column aliases
+SELECT * RENAME (id AS user_id, created_at AS signup_date) FROM users;
 
--- Combined
-SELECT * EXCLUDE (internal_code) RENAME (id AS user_id) FROM users;
+-- 4. Combined: Drop, replace, and rename in a single declarative projection
+SELECT * 
+  EXCLUDE (internal_notes)
+  REPLACE (TRIM(full_name) AS full_name)
+  RENAME (id AS user_id)
+FROM users;
 ```
 
-## ORDER BY ALL
-Order by every output column, left to right. Add `DESC` to reverse all of them.
+---
+
+## Lateral Column Aliases (Left-to-Right Re-use)
+
+Columns declared earlier in a `SELECT` list can be referenced immediately by subsequent expressions in the same list, eliminating repeated formulas and nested subquery views:
+
 ```sql
-SELECT region, product, total FROM #sales ORDER BY ALL;
-SELECT region, product, total FROM #sales ORDER BY ALL DESC;
+SELECT 
+    quantity,
+    unit_price,
+    quantity * unit_price AS gross_amount,
+    gross_amount * 0.15 AS estimated_tax,
+    gross_amount + estimated_tax AS total_invoice,
+    -- Immediate conditional evaluation using lateral aliases:
+    total_invoice > 1000.0 => 'High Value' : 'Standard' AS priority_bucket
+FROM #line_items;
 ```
 
-## Lateral column aliases
-A SELECT item may reference an alias defined by an **earlier** item in the same SELECT list, so
-you don't have to repeat (or wrap in a subquery) an intermediate expression.
-```sql
--- 'total' is defined earlier in the list, then reused
-SELECT a + b AS total, total * 2 AS doubled FROM #t;
+---
 
--- chains and works inside functions, CASE, etc.
-SELECT qty * price AS gross,
-       gross * 0.9 AS net,
-       CASE WHEN net > 100 THEN 'big' ELSE 'small' END AS bucket
-FROM #orders;
-```
-`ORDER BY` may also reference an output alias:
-```sql
-SELECT a, a * -1 AS neg FROM #t ORDER BY neg;
-```
+## Ergonomic Dialect Conveniences
 
-## count() shorthand
-A zero-argument `COUNT()` is treated as `COUNT(*)`.
+### 1. `ORDER BY ALL` / `GROUP BY ALL`
+Orders or groups by all projected output columns from left to right:
 ```sql
-SELECT count() FROM #orders;          -- same as COUNT(*)
-```
-
-## Underscore digit separators
-`_` may separate digits inside a numeric literal for readability; it is ignored.
-```sql
-SELECT 1_000_000 AS one_million, 3_14 AS pi_ish;
-```
-
-## Trailing commas
-An optional trailing comma is tolerated at the end of `SELECT`, `GROUP BY`, and `ORDER BY` lists, and in function-argument lists.
-```sql
-SELECT region, total,
+SELECT region, product_category, fiscal_year, SUM(revenue) AS total
 FROM #sales
-GROUP BY region,
-ORDER BY region,;
+GROUP BY ALL
+ORDER BY ALL DESC;
 ```
 
-## Notes
-- Star modifiers and `ORDER BY ALL` are resolved locally and are not pushed down to remote sources.
-- Star modifiers currently apply to an unqualified `*` (and `t.*` parses, but modifiers target the unqualified form).
-- `EXCLUDE`/`REPLACE`/`RENAME` match column names case-insensitively, by base name.
-- Lateral column aliases resolve **left to right** and are inlined into the referencing expression. A real source column always wins over an alias of the same name, so existing queries are unaffected. A query with lateral aliases is resolved locally (not pushed down).
+### 2. Zero-Argument `count()`
+Shorthand equivalent to `COUNT(*)`:
+```sql
+SELECT department, count() AS employee_count
+FROM #employees
+GROUP BY department;
+```
 
-References:
-- [Statements](../README.md)
+### 3. Numeric Digit Separators (`_`)
+Underscores in numeric literals are ignored by the parser to improve readability of large figures:
+```sql
+DECLARE @max_threshold DECIMAL = 1_500_000.00;
+SELECT * FROM #transactions WHERE amount > 50_000;
+```
+
+### 4. Permissive Trailing Commas
+Trailing commas are permitted at the ends of `SELECT`, `GROUP BY`, `ORDER BY`, and argument lists:
+```sql
+SELECT 
+    customer_id,
+    account_status,
+    total_spend,
+FROM #accounts
+GROUP BY 
+    customer_id,
+    account_status,
+    total_spend,;
+```
+
+---
+
+## Production ETL Example: PII Masking & Sensitive Wide-Table Export
+
+Extract 50-column user profiles, drop internal debugging flags, mask sensitive identity attributes, and stage for compliance export:
+
+```sql
+CREATE CONNECTION prod_db  AS POSTGRES(HOST='pg01.internal', DATABASE='app_db');
+CREATE CONNECTION sftp_out AS SFTP(HOST='partner.vendor.com', USER='vendor_etl', KEYFILE='certs/id_rsa');
+
+-- 1. Ingest full record shape into engine memory
+SELECT * INTO #raw_profiles FROM prod_db.users;
+
+-- 2. Cleanse and mask using inline star modifiers and lateral aliases
+SELECT * 
+  EXCLUDE (password_hash, salt, internal_flags, debug_logs)
+  REPLACE (
+    LOWER(TRIM(email)) AS email,
+    LEFT(phone, 3) + '-XXX-' + RIGHT(phone, 4) AS phone,
+    HASHBYTES('SHA256', national_id) AS national_id
+  )
+  RENAME (
+    id AS external_user_id,
+    created_at AS member_since
+  )
+INTO #sanitized_profiles
+FROM #raw_profiles;
+
+-- 3. Export sanitized dataset directly to encrypted CSV destination
+SELECT * INTO #export_feed FROM #sanitized_profiles ORDER BY ALL;
+SEND FILE '#export_feed' TO 'outbound/users_sanitized.csv' AT sftp_out;
+```
+
+---
+
+## Remarks & Engine Evaluation
+
+- **Engine-Side Resolution**: Star modifiers, lateral column aliases, and `ORDER BY ALL` are evaluated in the ETL-SQL engine context on `#temp` tables and streamed records.
+- **Precedence**: Lateral aliases resolve left-to-right. If a source table already contains a column with the same name, the source column takes precedence.
+
+---
+
+## References & Related Recipes
+
+- [Query Syntax Reference](README.md)
+- [SELECT Statement](../dml/select.md)
+- [GROUP BY ALL](group-by-all.md)
+- [CASE Expression](case.md)
+- [ETL Cookbook: PII Masking & Hashing](../../../cookbooks/etl/pii-masking-and-hashing.md)
+- [ETL Cookbook: Staged Ingestion](../../../cookbooks/etl/staged-ingestion.md)
+- [Syntax Index](../../../syntax-index.md)

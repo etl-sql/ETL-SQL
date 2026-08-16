@@ -4,7 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
-| [COALESCE](coalesce.md) | Returns the first non-NULL value from a list of expressions. |
+| [COALESCE](coalesce.md) | Returns the first non-NULL value from an ordered list of expressions. Evaluates arguments sequentially and short-circuits upon encountering the fir... |
 | [IFNULL](ifnull.md) | Returns a replacement value when an expression is `NULL`. `IFNULL` is an alias for `ISNULL`. |
 | [IS_NOT_NULL](is_not_null.md) | Returns whether an expression is not `NULL`. |
 | [IS_NULL](is_null.md) | Returns whether an expression evaluates to `NULL`. |

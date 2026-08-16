@@ -1,53 +1,103 @@
 # PIVOT / UNPIVOT
-Rotates rows into columns (PIVOT) or columns into rows (UNPIVOT).
 
-## PIVOT Syntax
+Rotates rows into columns (`PIVOT`) for cross-tab analytical matrix reporting, or transposes columns into rows (`UNPIVOT`) to normalize wide datasets into tall relational structures. Supports both SQL-standard query clauses and dynamic statement forms.
+
+---
+
+## SQL-Standard Clause Syntax
+
+### PIVOT
 ```sql
-SELECT * FROM #sales
+SELECT <group_columns...>, <pivoted_columns...>
+FROM <source_table>
 PIVOT (
-  SUM(Amount)
-  FOR Month IN ('Jan', 'Feb', 'Mar', 'Apr')
-) AS pvt;
+  <aggregate_function>(<value_column>)
+  FOR <pivot_column> IN (<value_list...>)
+) AS <alias>;
 ```
 
-## UNPIVOT Syntax
+### UNPIVOT
 ```sql
-SELECT * FROM #wide
+SELECT <group_columns...>, <value_column>, <name_column>
+FROM <source_table>
 UNPIVOT (
-  Amount FOR Month IN (Jan, Feb, Mar, Apr)
-) AS unpvt;
+  <value_column> FOR <name_column> IN (<column_list...>)
+) AS <alias>;
 ```
 
-## DuckDB statement form
-A cleaner statement syntax sits alongside the SQL-standard clause above (the standard form keeps working unchanged).
+---
+
+## Dynamic Statement Syntax (DuckDB Dialect)
+
+ETL-SQL also supports concise standalone statements with automatic dynamic discovery of distinct values:
 
 ```sql
--- Dynamic: one output column per distinct quarter (no value list needed)
+-- Dynamic: Automatically pivots all distinct quarters into columns without a hardcoded list
 PIVOT #sales ON quarter USING SUM(amount);
 
--- Enumerated values + explicit row grouping
-PIVOT #sales ON quarter IN ('Q1','Q2') USING SUM(amount) GROUP BY region;
+-- Explicit enumeration with explicit row grouping
+PIVOT #sales ON quarter IN ('Q1', 'Q2', 'Q3', 'Q4') USING SUM(amount) GROUP BY region;
 
--- Multiple aggregates -> columns Q1_total, Q1_cnt, Q2_total, Q2_cnt, ...
+-- Multi-aggregate pivot (produces Q1_total, Q1_cnt, Q2_total, Q2_cnt...)
 PIVOT #sales ON quarter USING SUM(amount) AS total, COUNT(*) AS cnt;
 
--- UNPIVOT all columns except some, without listing them
-UNPIVOT #sales ON COLUMNS(* EXCLUDE (region, name)) INTO NAME quarter VALUE amount;
-
--- UNPIVOT an explicit list
-UNPIVOT #sales ON q1, q2, q3 INTO NAME quarter VALUE amount;
+-- UNPIVOT dynamically excluding dimension columns
+UNPIVOT #wide_metrics ON COLUMNS(* EXCLUDE (department, year)) INTO NAME metric_name VALUE metric_val;
 ```
 
-- Output column names: single unnamed aggregate -> the pivot value (`Q1`); multiple `ON` columns -> joined with `_` (`2000_Q1`); multiple aggregates -> suffixed with the aggregate name (`Q1_total`).
-- Omitting `GROUP BY` groups by every column not consumed by `ON` or the aggregates.
-- `IN (...)` applies to a single `ON` column; omit it for dynamic discovery (and for multiple `ON` columns).
+---
 
-## Notes
-- Static PIVOT column values must be quoted string literals.
-- The statement form discovers values dynamically when `IN (...)` is omitted.
-- NULL cells in a PIVOT result indicate no matching rows; wrap with `COALESCE(..., 0)` if needed.
-- UNPIVOT excludes NULL values by default.
-- See: SELECT, GROUP BY, WITH
+## Examples
 
-References:
-- [Statements](../README.md)
+### 1. Quarterly Sales Matrix (Standard PIVOT)
+
+Transform monthly transactional line items into a regional summary matrix:
+
+```sql
+SELECT Region, Jan, Feb, Mar, Apr
+FROM (
+    SELECT Region, Month, Revenue 
+    FROM #sales
+) AS src
+PIVOT (
+    SUM(Revenue)
+    FOR Month IN ('Jan', 'Feb', 'Mar', 'Apr')
+) AS pvt
+ORDER BY Region;
+```
+
+### 2. Normalizing Wide Excel Imports (UNPIVOT)
+
+Convert wide spreadsheet tables with multi-month column headers into normalized relational records:
+
+```sql
+-- #wide_budget schema: (Department VARCHAR, FY24_Q1 DECIMAL, FY24_Q2 DECIMAL, FY24_Q3 DECIMAL, FY24_Q4 DECIMAL)
+SELECT Department, FiscalQuarter, BudgetAmount
+INTO #normalized_budget
+FROM #wide_budget
+UNPIVOT (
+    BudgetAmount FOR FiscalQuarter IN (FY24_Q1, FY24_Q2, FY24_Q3, FY24_Q4)
+) AS unpvt;
+
+-- Load normalized rows into warehouse
+INSERT INTO dw.dbo.DepartmentBudgets (Department, Quarter, Amount)
+SELECT Department, FiscalQuarter, BudgetAmount FROM #normalized_budget;
+```
+
+---
+
+## Null Handling & Column Rules
+
+- **Unmatched Cells**: In a `PIVOT` matrix, cell coordinates with no underlying source rows evaluate to `NULL`. Use `COALESCE(Jan, 0)` or `Jan ?? 0` if default zero-fill is desired.
+- **Unpivot Filtering**: `UNPIVOT` excludes `NULL` values by default, producing only populated key-value pairs.
+- **Quoting**: Values in static `PIVOT ... IN ('val1', 'val2')` must be quoted string literals.
+
+---
+
+## References & Related Recipes
+
+- [Query Syntax Reference](README.md)
+- [SELECT Statement](../dml/select.md)
+- [GROUP BY ALL](group-by-all.md)
+- [ETL Cookbook: Financial Reporting Pivot](../../../cookbooks/etl/financial-reporting-pivot.md)
+- [Syntax Index](../../../syntax-index.md)
