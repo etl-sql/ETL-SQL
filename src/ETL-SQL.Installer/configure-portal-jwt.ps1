@@ -1,5 +1,5 @@
 # Post-install configuration applied to the appsettings.json next to this script (the install folder).
-# Runs as a deferred MSI custom action (LocalSystem) before the services start. Three jobs:
+# Runs as a deferred MSI custom action (LocalSystem) before the services start. Four jobs:
 #   1. Generate a plaintext base64 JWT signing secret for the Portal if one is not set, so
 #      JwtSecretValidationService passes on first start (idempotent: existing secret is preserved).
 #   2. Generate a base64 Orchestrator API key (and mirror it to Portal:Orchestrator:ApiKey) if not set.
@@ -8,6 +8,10 @@
 #   3. Approve the install folder as a Security safe zone so the engine's path-protection guard lets
 #      the services write their working data (datasets, snapshots, portal.db, logs) under the install
 #      folder, which lives in the otherwise-restricted Program Files tree.
+#   4. Write the Portal:Surface runtime flag from SURFACE= in CustomActionData.
+#      Values: "All" (both Admin and Report surfaces), "AdminOnly", or "ReportOnly".
+#      This is the installer feature decision made once here so the runtime binary
+#      activates only the surfaces that were selected during install.
 param(
     [string]$CustomData = ''
 )
@@ -67,6 +71,18 @@ try {
             $json.Portal.Modules | Add-Member -MemberType NoteProperty -Name "Operations" -Value ($moduleOpts['OPERATIONS'] -eq '1') -Force
             $changed = $true
         }
+    }
+
+    # Portal surface flag — written by the installer so the runtime binary activates
+    # only the surfaces that were selected at install time.
+    # Values: "All" (Admin + Report), "AdminOnly", "ReportOnly".
+    # Computed from SURFACE= in CustomActionData rather than from individual feature flags
+    # so the installer WXS is the single place where the feature-to-surface mapping is decided.
+    if ($moduleOpts.ContainsKey('SURFACE') -and $null -ne $json.Portal) {
+        $surface = $moduleOpts['SURFACE']
+        if ([string]::IsNullOrWhiteSpace($surface)) { $surface = 'All' }
+        $json.Portal | Add-Member -MemberType NoteProperty -Name 'Surface' -Value $surface -Force
+        $changed = $true
     }
 
     # Orchestrator API key — keep the service key and the Portal's client key in sync.

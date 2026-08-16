@@ -17,39 +17,148 @@
              operators can locate the installed binaries without assuming Program Files. -->
         <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" />
 
-        <!-- Component selection is driven by these checkbox-backed properties (default: all on). -->
-        <Property Id="INSTALL_SDK" Value="1" Secure="yes" />
-        <Property Id="INSTALL_ORCHESTRATOR" Value="1" Secure="yes" />
-        <Property Id="INSTALL_PORTAL" Value="1" Secure="yes" />
-        <Property Id="INSTALL_PORTAL_REPORTING" Value="1" Secure="yes" />
-        <Property Id="INSTALL_PORTAL_DESIGNER" Value="1" Secure="yes" />
+        <!-- ═══════════════════════════════════════════════════════════════
+             Deployment-profile presets.
+
+             DEPLOY_PROFILE drives the default checkbox values on the
+             ChooseFeaturesDlg when selected.  The values are written back
+             to the individual INSTALL_* properties so the feature-level
+             Condition logic is unchanged.
+
+             DEPLOY_PROFILE values:
+               "" (empty)   — Custom / manual selection (default)
+               "SOLO"       — Workstation authoring only (CLI + LSP + Player)
+               "TEAM"       — Orchestrator + Admin Portal + Workstation tools
+               "ENTERPRISE" — Full install: Orchestrator + Report Portal + Workstation tools
+
+             The preset only sets the checkboxes; the user can still
+             change individual selections before clicking Install.
+        ══════════════════════════════════════════════════════════════════ -->
+        <Property Id="DEPLOY_PROFILE" Value="" Secure="yes" />
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             Component-selection properties.
+             These are the authoritative on/off switches consumed by each
+             Feature's Condition element.  Default: everything on.
+
+             INSTALL_WORKSTATION    — CLI (etl-sql), LSP, Report CLI, Player
+             INSTALL_ORCHESTRATOR   — Job runner Windows Service (:5001)
+             INSTALL_ADMIN_PORTAL   — Admin & orchestration surfaces of the Portal
+                                      (default-on when Orchestrator is selected;
+                                       Team and above require a Portal for identity)
+             INSTALL_REPORT_PORTAL  — Reporting catalog, designer, and data-steward
+                                      surfaces; can be hosted on a separate server
+             PORTAL_SURFACE         — Runtime flag written to appsettings.json controlling
+                                      which surfaces the installed Portal binary activates.
+                                      Values: "All" | "AdminOnly" | "ReportOnly"
+                                      Decided here so the installer feature and the
+                                      runtime flag are one decision.
+        ══════════════════════════════════════════════════════════════════ -->
+        <Property Id="INSTALL_WORKSTATION"   Value="1" Secure="yes" />
+        <Property Id="INSTALL_ORCHESTRATOR"  Value="1" Secure="yes" />
+        <Property Id="INSTALL_ADMIN_PORTAL"  Value="1" Secure="yes" />
+        <Property Id="INSTALL_REPORT_PORTAL" Value="1" Secure="yes" />
+        <Property Id="PORTAL_SURFACE"        Value="All" Secure="yes" />
+
+        <!-- Legacy aliases for the JWT custom action — kept so configure-portal-jwt.ps1
+             continues to receive familiar flag names in its CustomActionData string. -->
+        <Property Id="INSTALL_PORTAL_REPORTING"  Value="1" Secure="yes" />
+        <Property Id="INSTALL_PORTAL_DESIGNER"   Value="1" Secure="yes" />
         <Property Id="INSTALL_PORTAL_SCHEDULING" Value="1" Secure="yes" />
         <Property Id="INSTALL_PORTAL_OPERATIONS" Value="1" Secure="yes" />
 
-        <!-- Everything installs into a single flat folder (the 5 executables + one appsettings.json).
-             Each sub-feature is turned off (Level 0) when its checkbox property is not "1". -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             Feature tree.
+
+             Everything installs into a single flat folder (the executables
+             + appsettings.json).  Sub-features set Level=0 when their
+             controlling property is not "1".
+
+             Hierarchy
+             ─────────
+             ProductFeature
+               Feature_Workstation   (was Feature_SDK)
+               Feature_Orchestrator
+                 Feature_AdminPortal   (default-on sub-feature; Team+ need Portal for identity)
+               Feature_ReportPortal  (independent; can go on its own server)
+        ══════════════════════════════════════════════════════════════════ -->
         <Feature Id="ProductFeature" Title="ETL-SQL" Level="1" ConfigurableDirectory="INSTALLFOLDER" Display="expand">
             <ComponentRef Id="LicenseDoc" />
             <ComponentRef Id="NoticeDoc" />
             <ComponentRef Id="ThirdPartyNoticesDoc" />
-            <Feature Id="Feature_SDK" Title="Client Tools" Level="1" Absent="allow" AllowAdvertise="no"
-                     Description="CLI, Language Server, and Report CLI for developers (adds the install folder to PATH).">
-                <Condition Level="0"><![CDATA[INSTALL_SDK <> "1"]]></Condition>
-                <ComponentGroupRef Id="SDKComponents" />
+
+            <!-- ── Workstation Authoring ──────────────────────────────────────
+                 The TUI (ETL-SQL.exe), Language Server (ETL-SQL-LSP.exe), Report
+                 CLI (ETL-SQL-Report.exe), and Desktop Player (ETL-SQL-Player.exe).
+                 Adds INSTALLFOLDER to the system PATH so scripts, VS Code, and
+                 notebooks can find the tools without a full path.
+
+                 Renamed from Feature_SDK: "SDK" only described one of the four
+                 binaries.  "Workstation" matches the Solo / Workstation deployment
+                 profile and is unambiguous on a machine that also runs services.
+            ──────────────────────────────────────────────────────────────── -->
+            <Feature Id="Feature_Workstation" Title="Workstation Authoring" Level="1" Absent="allow" AllowAdvertise="no"
+                     Description="Script editor (TUI), Language Server (LSP), Report CLI, and Desktop Player — the workstation authoring toolkit. Adds the install folder to the system PATH.">
+                <Condition Level="0"><![CDATA[INSTALL_WORKSTATION <> "1"]]></Condition>
+                <ComponentGroupRef Id="WorkstationComponents" />
                 <ComponentRef Id="PathEnvironment" />
                 <ComponentRef Id="AppSettings" />
             </Feature>
 
+            <!-- ── Orchestrator Service ───────────────────────────────────────
+                 Background job scheduler and engine coordinator.  Installed as a
+                 Windows Service on port 5001.
+
+                 The Admin Portal sub-feature is default-on: Team and above require
+                 a Portal for identity (the Orchestrator federates identity to the
+                 Portal and never grows its own principal registry).  A Solo install
+                 can deselect it; the Orchestrator then runs with
+                 RequireFederatedIdentity=false and no per-object grants.
+            ──────────────────────────────────────────────────────────────── -->
             <Feature Id="Feature_Orchestrator" Title="Orchestrator Service" Level="1" Absent="allow" AllowAdvertise="no"
-                     Description="Background job scheduler and engine coordinator, installed as a Windows Service (http://localhost:5001).">
+                     Description="Background job scheduler and engine coordinator, installed as a Windows Service (http://localhost:5001). The Admin Portal sub-feature is included by default — Team and above require a Portal for identity.">
                 <Condition Level="0"><![CDATA[INSTALL_ORCHESTRATOR <> "1"]]></Condition>
                 <ComponentRef Id="Orchestrator_EXE" />
                 <ComponentRef Id="AppSettings" />
+
+                <!-- ── Admin Portal (sub-feature of Orchestrator) ─────────────
+                     The orchestration, data-steward, and admin surfaces of the
+                     Portal — installed together with the Orchestrator so that
+                     the identity exchange path (Portal issues Orchestrator
+                     assertions) works out of the box on Team installs.
+
+                     A team can put the Report Portal on a separate server by
+                     deselecting Feature_ReportPortal here and installing
+                     Feature_ReportPortal separately on the report server.
+
+                     PORTAL_SURFACE is set to "AdminOnly" when only this
+                     sub-feature is selected (not Feature_ReportPortal).
+                ─────────────────────────────────────────────────────────── -->
+                <Feature Id="Feature_AdminPortal" Title="Admin Portal" Level="1" Absent="allow" AllowAdvertise="no"
+                         Description="Orchestrator administration, job triage, data-steward, and governance surfaces of the Portal, co-located with the Orchestrator for identity exchange. Installed as a Windows Service (http://localhost:5002).">
+                    <Condition Level="0"><![CDATA[INSTALL_ADMIN_PORTAL <> "1"]]></Condition>
+                    <ComponentRef Id="Portal_EXE" />
+                    <ComponentRef Id="PortalJwtScript" />
+                    <ComponentRef Id="AppSettings" />
+                    <ComponentGroupRef Id="PortalWwwroot" />
+                </Feature>
             </Feature>
 
-            <Feature Id="Feature_Portal" Title="Portal" Level="1" Absent="allow" AllowAdvertise="no"
-                     Description="Web-based dashboard and report management portal, installed as a Windows Service (http://localhost:5002).">
-                <Condition Level="0"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
+            <!-- ── Report Portal ─────────────────────────────────────────────
+                 The reporting catalog, visual designer, and end-user report
+                 surfaces of the Portal.  Independent of Feature_AdminPortal so
+                 a team can host reporting on a dedicated server, separate from
+                 the Orchestrator and admin surfaces.
+
+                 When both Feature_AdminPortal and Feature_ReportPortal are
+                 selected, PORTAL_SURFACE is set to "All".
+                 When only Feature_ReportPortal is selected (without
+                 Feature_AdminPortal), PORTAL_SURFACE is set to "ReportOnly".
+            ──────────────────────────────────────────────────────────────── -->
+            <Feature Id="Feature_ReportPortal" Title="Report Portal" Level="1" Absent="allow" AllowAdvertise="no"
+                     Description="Report catalog, visual designer, subscriptions, and end-user reporting surfaces, installed as a Windows Service (http://localhost:5002). Can be installed on a separate server from the Orchestrator and Admin Portal.">
+                <Condition Level="0"><![CDATA[INSTALL_REPORT_PORTAL <> "1"]]></Condition>
+                <!-- If AdminPortal is not selected, we still need the Portal binary and assets. -->
                 <ComponentRef Id="Portal_EXE" />
                 <ComponentRef Id="PortalJwtScript" />
                 <ComponentRef Id="AppSettings" />
@@ -63,8 +172,8 @@
             </Directory>
         </Directory>
 
-        <!-- Everything lives directly in INSTALLFOLDER -->
-        <ComponentGroup Id="SDKComponents" Directory="INSTALLFOLDER">
+        <!-- ── Workstation Authoring components (was SDKComponents) ────────── -->
+        <ComponentGroup Id="WorkstationComponents" Directory="INSTALLFOLDER">
             <Component Id="ETL_SQL_EXE" Guid="*" Win64="yes">
                 <File Source="$(var.PublishDir)\ETL-SQL.exe" KeyPath="yes" />
             </Component>
@@ -113,14 +222,15 @@
                 <ServiceControl Id="StartService_Orchestrator" Start="install" Stop="both" Remove="uninstall" Name="ETL-SQL-Orchestrator" Wait="yes" />
             </Component>
 
-            <!-- Portal service (pinned to port 5002 via the urls argument) -->
+            <!-- Portal service (pinned to port 5002 via the urls argument).
+                 Shared by both Feature_AdminPortal and Feature_ReportPortal. -->
             <Component Id="Portal_EXE" Guid="*" Win64="yes">
                 <File Source="$(var.PublishDir)\ETL-SQL-Portal.exe" KeyPath="yes" />
                 <ServiceInstall Id="ServiceInstaller_Portal"
                                 Type="ownProcess"
                                 Name="ETL-SQL-Portal"
                                 DisplayName="ETL-SQL Portal"
-                                Description="Web interface for ETL-SQL reports."
+                                Description="Web interface for ETL-SQL reports, orchestration, and administration."
                                 Start="auto"
                                 Account="LocalSystem"
                                 ErrorControl="normal"
@@ -133,7 +243,7 @@
                 <File Id="configure_portal_jwt_ps1" Source="configure-portal-jwt.ps1" KeyPath="yes" />
             </Component>
 
-            <!-- PATH entry for the client tools -->
+            <!-- PATH entry for the workstation authoring tools -->
             <Component Id="PathEnvironment" Guid="dc70ead1-c4db-42f1-a8e1-7a35cc06cf3f" Win64="yes">
                 <RegistryValue Root="HKLM" Key="Software\ETL-SQL" Name="PathConfigured" Value="1" Type="integer" KeyPath="yes" />
                 <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
@@ -144,18 +254,62 @@
         <Property Id="CLEANDATA" Value="0" Secure="yes" />
 
         <!-- Custom actions (JScript). Deferred actions only see CustomActionData, so the install
-             folder path is marshaled in via the matching type-51 SetWriteJwtData/SetCleanDataDir. -->
+             folder path is marshaled in via the matching type-51 SetWriteJwtData/SetCleanDataDir.
+
+             PORTAL_SURFACE is forwarded so configure-portal-jwt.ps1 can write the correct
+             Portal:Surface value in appsettings.json. -->
         <Binary Id="InstallerActionsJs" SourceFile="installer-actions.js" />
-        <CustomAction Id="SetWriteJwtData" Property="WriteJwt" Value="[INSTALLFOLDER]|INSTALL_PORTAL=[INSTALL_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]" Execute="immediate" />
+        <CustomAction Id="SetWriteJwtData" Property="WriteJwt"
+                      Value="[INSTALLFOLDER]|INSTALL_PORTAL=[INSTALL_ADMIN_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]|SURFACE=[PORTAL_SURFACE]|REPORT_PORTAL=[INSTALL_REPORT_PORTAL]"
+                      Execute="immediate" />
         <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="ignore" />
         <CustomAction Id="PromptCleanData" BinaryKey="InstallerActionsJs" JScriptCall="PromptCleanData" Execute="immediate" Return="ignore" />
         <CustomAction Id="SetCleanDataDir" Property="CleanData" Value="[INSTALLFOLDER]" Execute="immediate" />
         <CustomAction Id="CleanData" BinaryKey="InstallerActionsJs" JScriptCall="CleanData" Execute="deferred" Impersonate="no" Return="ignore" />
 
+        <!-- Apply Solo preset defaults: Workstation only -->
+        <CustomAction Id="ApplySoloPreset" Property="INSTALL_WORKSTATION"   Value="1"  Execute="immediate" />
+        <CustomAction Id="SoloNoOrch"      Property="INSTALL_ORCHESTRATOR"  Value="0"  Execute="immediate" />
+        <CustomAction Id="SoloNoAdmin"     Property="INSTALL_ADMIN_PORTAL"  Value="0"  Execute="immediate" />
+        <CustomAction Id="SoloNoReport"    Property="INSTALL_REPORT_PORTAL" Value="0"  Execute="immediate" />
+
+        <!-- Apply Team preset defaults: Workstation + Orchestrator + Admin Portal -->
+        <CustomAction Id="ApplyTeamPreset"    Property="INSTALL_WORKSTATION"   Value="1"  Execute="immediate" />
+        <CustomAction Id="TeamOrch"           Property="INSTALL_ORCHESTRATOR"  Value="1"  Execute="immediate" />
+        <CustomAction Id="TeamAdmin"          Property="INSTALL_ADMIN_PORTAL"  Value="1"  Execute="immediate" />
+        <CustomAction Id="TeamNoReport"       Property="INSTALL_REPORT_PORTAL" Value="0"  Execute="immediate" />
+        <CustomAction Id="TeamSurface"        Property="PORTAL_SURFACE"        Value="AdminOnly" Execute="immediate" />
+
+        <!-- Apply Enterprise preset defaults: everything on -->
+        <CustomAction Id="ApplyEnterprisePreset" Property="INSTALL_WORKSTATION"   Value="1"   Execute="immediate" />
+        <CustomAction Id="EntOrch"               Property="INSTALL_ORCHESTRATOR"  Value="1"   Execute="immediate" />
+        <CustomAction Id="EntAdmin"              Property="INSTALL_ADMIN_PORTAL"  Value="1"   Execute="immediate" />
+        <CustomAction Id="EntReport"             Property="INSTALL_REPORT_PORTAL" Value="1"   Execute="immediate" />
+        <CustomAction Id="EntSurface"            Property="PORTAL_SURFACE"        Value="All" Execute="immediate" />
+
         <InstallExecuteSequence>
+            <!-- Apply profile presets (immediate, before CostFinalize) so the checkbox
+                 dialog inherits the correct default selections when it opens. -->
+            <Custom Action="ApplySoloPreset" After="AppSearch"><![CDATA[DEPLOY_PROFILE = "SOLO"]]></Custom>
+            <Custom Action="SoloNoOrch"      After="ApplySoloPreset"><![CDATA[DEPLOY_PROFILE = "SOLO"]]></Custom>
+            <Custom Action="SoloNoAdmin"     After="SoloNoOrch"><![CDATA[DEPLOY_PROFILE = "SOLO"]]></Custom>
+            <Custom Action="SoloNoReport"    After="SoloNoAdmin"><![CDATA[DEPLOY_PROFILE = "SOLO"]]></Custom>
+
+            <Custom Action="ApplyTeamPreset" After="AppSearch"><![CDATA[DEPLOY_PROFILE = "TEAM"]]></Custom>
+            <Custom Action="TeamOrch"        After="ApplyTeamPreset"><![CDATA[DEPLOY_PROFILE = "TEAM"]]></Custom>
+            <Custom Action="TeamAdmin"       After="TeamOrch"><![CDATA[DEPLOY_PROFILE = "TEAM"]]></Custom>
+            <Custom Action="TeamNoReport"    After="TeamAdmin"><![CDATA[DEPLOY_PROFILE = "TEAM"]]></Custom>
+            <Custom Action="TeamSurface"     After="TeamNoReport"><![CDATA[DEPLOY_PROFILE = "TEAM"]]></Custom>
+
+            <Custom Action="ApplyEnterprisePreset" After="AppSearch"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
+            <Custom Action="EntOrch"               After="ApplyEnterprisePreset"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
+            <Custom Action="EntAdmin"              After="EntOrch"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
+            <Custom Action="EntReport"             After="EntAdmin"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
+            <Custom Action="EntSurface"            After="EntReport"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
+
             <!-- On install: generate the JWT secret + approve the install folder as a safe zone. -->
-            <Custom Action="SetWriteJwtData" After="CostFinalize"><![CDATA[&Feature_Portal=3 OR &Feature_Orchestrator=3]]></Custom>
-            <Custom Action="WriteJwt" After="InstallFiles"><![CDATA[&Feature_Portal=3 OR &Feature_Orchestrator=3]]></Custom>
+            <Custom Action="SetWriteJwtData" After="CostFinalize"><![CDATA[&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3]]></Custom>
+            <Custom Action="WriteJwt" After="InstallFiles"><![CDATA[&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3]]></Custom>
             <!-- On a real (non-upgrade), interactive uninstall: prompt, then remove data if the user
                  said yes. The OS-level Yes/No box works even when Settings > Apps runs basic UI;
                  UILevel >= 3 skips fully-silent (/qn) uninstalls so automation never hangs. -->
@@ -166,60 +320,102 @@
 
         <!-- Connection hint shown on the final installer page -->
         <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
-                  Value="Once the services start, the components are reachable at:&#13;&#10;&#13;&#10;Portal:        http://localhost:5002&#13;&#10;Orchestrator API:   http://localhost:5001" />
+                  Value="Once the services start, the components are reachable at:&#13;&#10;&#13;&#10;Portal (Admin &amp; Reports):  http://localhost:5002&#13;&#10;Orchestrator API:            http://localhost:5001" />
 
-        <!-- UI: standard WiX feature-tree flow, but the icon-tree CustomizeDlg is replaced with a
-             checkbox dialog (ChooseFeaturesDlg) inserted right after the license page. -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             UI: standard WiX feature-tree flow.  The icon-tree CustomizeDlg
+             is replaced with:
+               1. DeployProfileDlg  — preset selector (Solo / Team / Enterprise / Custom)
+               2. ChooseFeaturesDlg — checkbox fine-tuning after the preset is applied
+        ══════════════════════════════════════════════════════════════════ -->
         <UI>
             <UIRef Id="WixUI_FeatureTree" />
 
-            <Dialog Id="ChooseFeaturesDlg" Width="370" Height="270" Title="[ProductName] Setup">
+            <!-- ── Deployment-profile preset selector ────────────────────── -->
+            <Dialog Id="DeployProfileDlg" Width="370" Height="270" Title="[ProductName] Setup">
                 <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.CustomizeDlgBannerBitmap)" />
                 <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
-                <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Select components to install" />
-                <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes" Text="Check the components you want to install. All install into the same folder." />
+                <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Choose a deployment profile" />
+                <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes" Text="Select the profile that matches how you will use ETL-SQL, then click Next to review or adjust components." />
 
-                <Control Id="SdkCheckBox" Type="CheckBox" X="20" Y="52" Width="335" Height="15" Property="INSTALL_SDK" CheckBoxValue="1" Text="Client Tools" />
-                <Control Id="SdkDesc" Type="Text" X="34" Y="66" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="CLI, Language Server, and Report CLI (adds the install folder to PATH)" />
+                <!-- Solo -->
+                <Control Id="SoloRadio" Type="RadioButton" X="20" Y="60" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="SOLO" />
+                <Control Id="SoloLabel" Type="Text" X="36" Y="60" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Solo / Workstation" />
+                <Control Id="SoloDesc"  Type="Text" X="36" Y="74" Width="310" Height="20" Transparent="yes" NoPrefix="yes" Text="Script editor, Language Server, and Desktop Player. No services installed. Best for individual developers and analysts." />
 
-                <Control Id="OrchestratorCheckBox" Type="CheckBox" X="20" Y="82" Width="335" Height="15" Property="INSTALL_ORCHESTRATOR" CheckBoxValue="1" Text="Orchestrator Service" />
-                <Control Id="OrchestratorDesc" Type="Text" X="34" Y="96" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Job scheduler — Windows Service — http://localhost:5001" />
+                <!-- Team -->
+                <Control Id="TeamRadio" Type="RadioButton" X="20" Y="100" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="TEAM" />
+                <Control Id="TeamLabel" Type="Text" X="36" Y="100" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Team / SME" />
+                <Control Id="TeamDesc"  Type="Text" X="36" Y="114" Width="310" Height="20" Transparent="yes" NoPrefix="yes" Text="Workstation tools + Orchestrator Service + Admin Portal. Shared job scheduling, per-object security, and orchestration UI. No Report Portal." />
 
-                <Control Id="PortalCheckBox" Type="CheckBox" X="20" Y="112" Width="335" Height="15" Property="INSTALL_PORTAL" CheckBoxValue="1" Text="Portal" />
-                <Control Id="PortalDesc" Type="Text" X="34" Y="126" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Web dashboard — Windows Service — http://localhost:5002" />
+                <!-- Enterprise -->
+                <Control Id="EntRadio" Type="RadioButton" X="20" Y="140" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="ENTERPRISE" />
+                <Control Id="EntLabel" Type="Text" X="36" Y="140" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Enterprise / Full Install" />
+                <Control Id="EntDesc"  Type="Text" X="36" Y="154" Width="310" Height="20" Transparent="yes" NoPrefix="yes" Text="All components: Workstation tools + Orchestrator + Admin Portal + Report Portal. Use on a dedicated server or HA node." />
 
-                <!-- Portal Sub-choices (Module/Subject Enablement) -->
-                <Control Id="PortalReportingCheckBox" Type="CheckBox" X="35" Y="142" Width="145" Height="15" Property="INSTALL_PORTAL_REPORTING" CheckBoxValue="1" Text="Reporting &amp; Catalog">
-                    <Condition Action="disable"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
-                    <Condition Action="enable"><![CDATA[INSTALL_PORTAL = "1"]]></Condition>
-                </Control>
-                <Control Id="PortalDesignerCheckBox" Type="CheckBox" X="185" Y="142" Width="145" Height="15" Property="INSTALL_PORTAL_DESIGNER" CheckBoxValue="1" Text="Visual Designer">
-                    <Condition Action="disable"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
-                    <Condition Action="enable"><![CDATA[INSTALL_PORTAL = "1"]]></Condition>
-                </Control>
-                <Control Id="PortalSchedulingCheckBox" Type="CheckBox" X="35" Y="160" Width="145" Height="15" Property="INSTALL_PORTAL_SCHEDULING" CheckBoxValue="1" Text="Scheduling &amp; Refresh">
-                    <Condition Action="disable"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
-                    <Condition Action="enable"><![CDATA[INSTALL_PORTAL = "1"]]></Condition>
-                </Control>
-                <Control Id="PortalOperationsCheckBox" Type="CheckBox" X="185" Y="160" Width="145" Height="15" Property="INSTALL_PORTAL_OPERATIONS" CheckBoxValue="1" Text="Admin &amp; Operations">
-                    <Condition Action="disable"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
-                    <Condition Action="enable"><![CDATA[INSTALL_PORTAL = "1"]]></Condition>
-                </Control>
+                <!-- Custom -->
+                <Control Id="CustomRadio" Type="RadioButton" X="20" Y="180" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="" />
+                <Control Id="CustomLabel" Type="Text" X="36" Y="180" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Custom" />
+                <Control Id="CustomDesc"  Type="Text" X="36" Y="194" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="Select individual components on the next screen." />
 
                 <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
                 <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
                     <Publish Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
                 </Control>
                 <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
-                    <Publish Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+                    <Publish Event="NewDialog" Value="ChooseFeaturesDlg">1</Publish>
                 </Control>
                 <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
                     <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
                 </Control>
             </Dialog>
 
-            <!-- Route License -> ChooseFeaturesDlg -> VerifyReady (replacing the icon-tree CustomizeDlg). -->
-            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ChooseFeaturesDlg" Order="10">LicenseAccepted = "1"</Publish>
+            <!-- ── Component fine-tuning (always shown after preset selection) ── -->
+            <Dialog Id="ChooseFeaturesDlg" Width="370" Height="310" Title="[ProductName] Setup">
+                <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.CustomizeDlgBannerBitmap)" />
+                <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+                <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Select components to install" />
+                <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes" Text="Check the components you want. All install into the same folder." />
+
+                <!-- Workstation Authoring (was "Client Tools") -->
+                <Control Id="WorkstationCheckBox" Type="CheckBox" X="20" Y="55" Width="335" Height="15" Property="INSTALL_WORKSTATION" CheckBoxValue="1" Text="Workstation Authoring" />
+                <Control Id="WorkstationDesc" Type="Text" X="34" Y="69" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Script editor (TUI), Language Server, Report CLI, and Desktop Player — adds folder to PATH" />
+
+                <!-- Orchestrator Service -->
+                <Control Id="OrchestratorCheckBox" Type="CheckBox" X="20" Y="87" Width="335" Height="15" Property="INSTALL_ORCHESTRATOR" CheckBoxValue="1" Text="Orchestrator Service" />
+                <Control Id="OrchestratorDesc" Type="Text" X="34" Y="101" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Job scheduler — Windows Service — http://localhost:5001" />
+
+                <!-- Admin Portal (sub-option under Orchestrator, indented) -->
+                <Control Id="AdminPortalCheckBox" Type="CheckBox" X="35" Y="118" Width="310" Height="15" Property="INSTALL_ADMIN_PORTAL" CheckBoxValue="1" Text="Admin Portal (recommended with Orchestrator)">
+                    <Condition Action="disable"><![CDATA[INSTALL_ORCHESTRATOR <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_ORCHESTRATOR = "1"]]></Condition>
+                </Control>
+                <Control Id="AdminPortalDesc" Type="Text" X="50" Y="132" Width="300" Height="12" Transparent="yes" NoPrefix="yes" Text="Orchestration UI, job triage, data-steward, and governance — http://localhost:5002">
+                    <Condition Action="disable"><![CDATA[INSTALL_ORCHESTRATOR <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_ORCHESTRATOR = "1"]]></Condition>
+                </Control>
+
+                <!-- Report Portal (independent) -->
+                <Control Id="ReportPortalCheckBox" Type="CheckBox" X="20" Y="150" Width="335" Height="15" Property="INSTALL_REPORT_PORTAL" CheckBoxValue="1" Text="Report Portal" />
+                <Control Id="ReportPortalDesc" Type="Text" X="34" Y="164" Width="325" Height="20" Transparent="yes" NoPrefix="yes" Text="Report catalog, visual designer, and end-user surfaces — http://localhost:5002. Can be installed on a separate server." />
+
+                <!-- Portal Surface flag note (informational) -->
+                <Control Id="SurfaceNote" Type="Text" X="20" Y="192" Width="335" Height="20" Transparent="yes" NoPrefix="yes" Text="Portal surface mode is set automatically: Both selected = All surfaces; Admin only = Admin surfaces; Report only = Report surfaces." />
+
+                <Control Id="BottomLine" Type="Line" X="0" Y="270" Width="370" Height="0" />
+                <Control Id="Back" Type="PushButton" X="180" Y="279" Width="56" Height="17" Text="!(loc.WixUIBack)">
+                    <Publish Event="NewDialog" Value="DeployProfileDlg">1</Publish>
+                </Control>
+                <Control Id="Next" Type="PushButton" X="236" Y="279" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
+                    <Publish Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+                </Control>
+                <Control Id="Cancel" Type="PushButton" X="304" Y="279" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+                    <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+                </Control>
+            </Dialog>
+
+            <!-- Route: License → DeployProfileDlg → ChooseFeaturesDlg → VerifyReady -->
+            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="DeployProfileDlg" Order="10">LicenseAccepted = "1"</Publish>
             <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ChooseFeaturesDlg" Order="10">NOT Installed</Publish>
             <!-- The "delete all data on uninstall" choice is handled by the PromptCleanData custom
                  action (Yes/No message box) rather than an authored dialog, so it also works when

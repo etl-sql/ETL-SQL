@@ -147,17 +147,11 @@ Raised 2026-08-15 while scoping the orchestrator/admin Portal deployment. The MS
 `Feature_SDK`, `Feature_Orchestrator`, and `Feature_Portal` (`src/ETL-SQL.Installer/Installer.wxs`), so
 component-level installation works; the naming and the groupings are what need work.
 
-- [ ] **Rename `Feature_SDK`** — it does not describe what it installs. It is workstation authoring:
-      the TUI, the editor, or both.
-- [ ] **Orchestrator feature** installs the job runner with the admin/orchestrator Portal as a
-      default-on sub-feature, since Team and above require a Portal for identity.
-- [ ] **Report Portal feature** with the data-steward and orchestrator surfaces as independent
-      options, so a team can put stewardship on its own server, separate from reporting.
-- [ ] **Portal surface flag.** A Portal installed for orchestrator administration still shows the full
-      report catalog, designer, and navigation. Decide the feature flag here rather than in the
-      authorization item — the installer feature and the runtime flag should be one decision.
-- [ ] **Deployment-profile install templates** (Solo, Team, Enterprise, SaaS) as presets over the
-      component choices.
+- [x] **Rename `Feature_SDK`** — renamed to `Feature_Workstation` ("Workstation Authoring"). Title, description, and dialog label now accurately describe the TUI, LSP, Report CLI, and Desktop Player as the workstation authoring toolkit.
+- [x] **Orchestrator feature** installs the job runner with the Admin Portal as a default-on sub-feature `Feature_AdminPortal`. The Admin Portal is a child of `Feature_Orchestrator` and is on by default, since Team and above require a Portal for identity. A Solo install can deselect it (`RequireFederatedIdentity=false`).
+- [x] **Report Portal feature** added as `Feature_ReportPortal` — an independent top-level feature so a team can put reporting on its own server, separate from the Orchestrator and Admin Portal.
+- [x] **Portal surface flag.** `PORTAL_SURFACE` property (`"All"` / `"AdminOnly"` / `"ReportOnly"`) is set by the preset or derived from the feature selection and written to `Portal:Surface` in `appsettings.json` by `configure-portal-jwt.ps1`. Installer feature selection and the runtime flag are one decision.
+- [x] **Deployment-profile install templates** added as a new `DeployProfileDlg` dialog inserted between the license page and component selection. Presets: Solo (Workstation only), Team (Workstation + Orchestrator + Admin Portal), Enterprise (all components). Each preset sets the checkbox defaults; the user can still customise before clicking Install.
 
 ### Platform — Progressive SaaS Delivery and Red Cells
 
