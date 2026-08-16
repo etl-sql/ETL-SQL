@@ -209,8 +209,8 @@ only checks the inventory's internal consistency — duplicates, classification,
 never reconciles it against a real schema, which is why the contradiction has gone unnoticed. Treat the
 inventory as the specification for this slice, and close the gap that let it drift.
 
-**Slice 0 status (2026-08-15).** 0.1, 0.2, 0.4–0.10 and 0.12 are shipped; 0.3 and 0.11 remain, and
-0.11's answer turned out to be a gap rather than a confirmation — see its entry. The identity is a
+**Slice 0 status (2026-08-16).** Everything except 0.11 is shipped, and 0.11's answer turned out to be
+a gap rather than a confirmation — see its entry; it needs a product decision before it can be built. The identity is a
 type (`JobId`/`ScheduleId`/`NotificationId`), not a string, because a job has both a name and an id,
 both are text, and passing one where the other belongs fails silently: the write matches zero rows and
 nothing throws. That one change surfaced 97 such faults the compiler had been accepting, plus six live
@@ -230,12 +230,13 @@ another tenant's history once two tenants shared a job name.
 - [x] **0.2 Tenant-key the ACL store.** Every read, write, and delete takes the request's verified
       `TenantContext`; no lookup resolves on object name alone. Follow the composite tenant/kind/logical
       identity proven by `SharedTenantResourceRegistry`.
-- [ ] **0.3 Inherit the shared-surface contract.** The ACL store's test class inherits
+- [x] **0.3 Inherit the shared-surface contract.** The ACL store's test class inherits
       `SharedTenantSurfaceContractTests` (`tests/ETL-SQL.Tests/Multitenancy/`), so all six cases —
       including the `acme`/`acme-evil` prefix trap and cross-tenant enumeration — are answered by a
-      contract rather than by reviewer judgement. `OrchestratorObjectAuthorizationTests` now covers the
-      prefix trap and the tenant-boundary-outranks-ownership case by hand; the point of this item is
-      that they should not be by hand, so it stays open until the class inherits the contract.
+      contract rather than by reviewer judgement. `OrchestratorObjectAclSharedSurfaceTests` presents
+      the grant store as a shared surface — a logical id is a job name, the value is the principal it
+      is granted to — and routes every access through the store's own tenant-qualified resolution
+      rather than scoping anything itself, so what the contract judges is the store.
 - [x] **0.4 Tenant-key `Schedules` and `Notifications`** to match `Jobs`, with the same signed-tenant
       binding and refuse-to-rebind behaviour, plus the `JobSchedules`/`JobNotifications` join tables per
       the fork in 0.1.
