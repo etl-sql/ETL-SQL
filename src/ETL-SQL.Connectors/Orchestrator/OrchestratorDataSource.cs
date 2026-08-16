@@ -33,6 +33,14 @@ namespace ETL_SQL.Connectors.Orchestrator
         private readonly ILogger _logger;
         private readonly HttpClient _http;
 
+        /// <summary>
+        /// Present when the connection was given Portal credentials, absent when it was given only an
+        /// API key. Null is the Solo posture — a single shared key and no identity — which a
+        /// federated Orchestrator refuses.
+        /// </summary>
+        private readonly OrchestratorAssertionExchange? _exchange;
+        private readonly HttpClient? _portalHttp;
+
         private static readonly JsonSerializerOptions _json = new()
         {
             PropertyNameCaseInsensitive = true,
@@ -43,7 +51,11 @@ namespace ETL_SQL.Connectors.Orchestrator
         public string ConnectorType => "ORCHESTRATOR";
         public Dictionary<string, string>? Options { get; }
 
-        public OrchestratorDataSource(string baseUrl, string apiKey, ILogger logger)
+        public OrchestratorDataSource(
+            string baseUrl,
+            string apiKey,
+            ILogger logger,
+            OrchestratorPortalCredentials? portalCredentials = null)
         {
             _baseUrl = baseUrl.TrimEnd('/');
             _apiKey = apiKey;
@@ -56,6 +68,18 @@ namespace ETL_SQL.Connectors.Orchestrator
                 ["HOST"] = baseUrl,
                 ["API_KEY"] = "********"
             };
+
+            if (portalCredentials is { IsComplete: true })
+            {
+                // Policy-bound like the Orchestrator client: the Portal is a second network
+                // destination this connection reaches, and it carries the credential.
+                _portalHttp = PolicyBoundHttp.CreateClient(
+                    baseAddress: new Uri(portalCredentials.PortalHost.TrimEnd('/') + "/"));
+                _exchange = new OrchestratorAssertionExchange(_portalHttp, portalCredentials);
+                Options["PORTAL_HOST"] = portalCredentials.PortalHost;
+                if (portalCredentials.IsServiceAccount) Options["CLIENT_ID"] = portalCredentials.ClientId!;
+                else Options["USER"] = portalCredentials.User!;
+            }
         }
 
         /// <summary>
@@ -95,7 +119,12 @@ namespace ETL_SQL.Connectors.Orchestrator
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => new OrchestratorCatalogDataSource(_http, tableName);
-        public ValueTask DisposeAsync() { _http.Dispose(); return ValueTask.CompletedTask; }
+        public ValueTask DisposeAsync()
+        {
+            _http.Dispose();
+            _portalHttp?.Dispose();
+            return ValueTask.CompletedTask;
+        }
 
         // ── IPortalAdminConnection ────────────────────────────────────────────────
 
@@ -982,9 +1011,33 @@ namespace ETL_SQL.Connectors.Orchestrator
 
         private async Task<HttpResponseMessage> SendHttpAsync(Func<Task<HttpResponseMessage>> send)
         {
+            await EnsureIdentityAsync();
             try { return await send(); }
             catch (HttpRequestException ex)
             { throw new ExecutionException($"Orchestrator connection error: {ex.Message}", ex); }
+        }
+
+        /// <summary>
+        /// Refreshes the signed identity assertion this connection presents, when it has one.
+        ///
+        /// <para>Applied here rather than at each call site because every request in this class funnels
+        /// through <see cref="SendHttpAsync"/>: a request that forgot the header would not fail
+        /// visibly, it would simply be refused as anonymous, and one such call site would be enough.
+        /// A connection without Portal credentials attaches nothing and keeps the API-key posture —
+        /// which a federated Orchestrator will then refuse, as it should.</para>
+        ///
+        /// <para>The header is set on the client rather than the message because the callers hand in
+        /// prepared sends. A connection executes its statements one at a time, so there is no window
+        /// in which two requests disagree about the current assertion.</para>
+        /// </summary>
+        private async Task EnsureIdentityAsync()
+        {
+            if (_exchange is null) return;
+
+            var assertion = await _exchange.CurrentAssertionAsync();
+            _http.DefaultRequestHeaders.Remove(OrchestratorIdentityAssertion.HeaderName);
+            _http.DefaultRequestHeaders.TryAddWithoutValidation(
+                OrchestratorIdentityAssertion.HeaderName, assertion);
         }
 
         private static string SanitizeBody(string body)

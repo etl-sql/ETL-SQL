@@ -307,14 +307,14 @@ another tenant's history once two tenants shared a job name.
       the ACL decision in `OrchestratorObjectAuthorizationService.CanAsync` by the token's scope. A
       `publish` account still cannot touch a job it was not granted; a `read` account cannot trigger
       one however broad its ACL.
-- [ ] **A4 `ORCHESTRATOR` connector authentication.** Mirror `PortalDataSource.EnsureAuthenticatedAsync`
+- [x] **A4 `ORCHESTRATOR` connector authentication.** Mirror `PortalDataSource.EnsureAuthenticatedAsync`
       (`api/auth/login`, cached token, re-auth 5 minutes before expiry) — that connector is the
       precedent and the shapes should match. Accept **both** credential forms, because an OIDC-federated
       user has no Portal password to put in a connection: `USER`/`PASSWORD` for local and LDAP
       accounts, `CLIENT_ID`/`CLIENT_SECRET` for a Portal service account. Passwords use the canonical
       quoted `'SECRET:name'` form. Emit the assertion header on every request in
       `OrchestratorDataSource`, which today sends only `X-Orchestrator-Key`.
-- [ ] **A5 Negative tests.** A connector with no identity is denied against a federated Orchestrator;
+- [x] **A5 Negative tests.** A connector with no identity is denied against a federated Orchestrator;
       a token cannot claim a role its owner does not currently hold; a token cannot assert a foreign
       tenant; an expired assertion is refused and re-exchanged; scope ceiling is enforced independently
       of the ACL.

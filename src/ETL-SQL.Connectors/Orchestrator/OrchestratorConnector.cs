@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
@@ -45,7 +46,11 @@ namespace ETL_SQL.Connectors.Orchestrator
             ["PORT"] = [],
             ["USER"] = [],
             ["PASSWORD"] = [],
-            ["API_KEY"] = []
+            ["API_KEY"] = [],
+            // The Portal this connection federates through, and the two credential forms it accepts.
+            ["PORTAL_HOST"] = [],
+            ["CLIENT_ID"] = [],
+            ["CLIENT_SECRET"] = []
         };
         public Dictionary<string, string[]> GetOptionValues() => [];
         public string GetHelp() =>
@@ -61,10 +66,18 @@ namespace ETL_SQL.Connectors.Orchestrator
             options ??= [];
 
             string host = GetOption(options, "HOST", connectionString);
-            // API_KEY takes precedence; PASSWORD is accepted as a convenience alias matching
-            // the PORTAL connection syntax that users already know.
+            string user = GetOption(options, "USER", "");
+            string password = GetOption(options, "PASSWORD", "");
+            string portalHost = GetOption(options, "PORTAL_HOST", "");
+            string clientId = GetOption(options, "CLIENT_ID", "");
+            string clientSecret = GetOption(options, "CLIENT_SECRET", "");
+
+            // PASSWORD is overloaded, and USER is what disambiguates it. Alone it is the shared API
+            // key, which is the alias the PORTAL connection syntax established and existing scripts
+            // already use; paired with USER it is that user's Portal password. Reading it as the API
+            // key in the federated form would send a person's password as a shared key.
             string apiKey = GetOption(options, "API_KEY",
-                            GetOption(options, "PASSWORD", ""));
+                            string.IsNullOrWhiteSpace(user) ? password : "");
 
             if (options.TryGetValue("PORT", out var port) &&
                 !string.IsNullOrWhiteSpace(port) &&
@@ -76,7 +89,18 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!host.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 host = "http://" + host;
 
-            return new OrchestratorDataSource(host, apiKey, _logger);
+            OrchestratorPortalCredentials? credentials = null;
+            if (!string.IsNullOrWhiteSpace(portalHost))
+            {
+                credentials = new OrchestratorPortalCredentials(
+                    portalHost, user, password, clientId, clientSecret);
+                if (!credentials.IsComplete)
+                    throw new ExecutionException(
+                        "ORCHESTRATOR(PORTAL_HOST=...) needs a credential to exchange: either " +
+                        "USER and PASSWORD, or CLIENT_ID and CLIENT_SECRET.");
+            }
+
+            return new OrchestratorDataSource(host, apiKey, _logger, credentials);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) =>

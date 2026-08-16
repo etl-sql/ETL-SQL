@@ -78,7 +78,11 @@ public sealed class OrchestratorAssertionIssuer(
             return null;
 
         var tenantId = tenant?.Tenant.Value ?? "portal-host";
-        var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        // Either spelling of the subject: the token carries `sub`, and whether it arrives mapped to
+        // NameIdentifier depends on the handler's inbound claim mapping. Reading only one is how a
+        // caller ends up unidentifiable and silently unable to obtain an assertion at all —
+        // ServiceAccountScopeMiddleware already checks both for the same reason.
+        var id = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
         var name = user.FindFirstValue(ClaimTypes.Name) ?? user.Identity.Name;
         var serviceAccountId = user.FindFirstValue(TokenService.ServiceAccountIdClaim);
         var isService = string.Equals(
