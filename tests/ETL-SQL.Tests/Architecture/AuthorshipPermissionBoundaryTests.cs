@@ -49,13 +49,13 @@ public sealed class AuthorshipPermissionBoundaryTests
             // ── Not permission decisions ──────────────────────────────────────────────
             ["AdminController.cs|var ownedFolders = await db.Folders.CountAsync(f => f.OwnerId == id);"] =
                 "Counts what a user being deleted owns, so the admin sees the impact. No access is granted.",
-            ["AdminController.cs|var ownedReports = await db.Reports.CountAsync(r => r.CreatedBy == id);"] =
+            ["AdminController.cs|var ownedReports = await catalogScope.Reports.CountAsync(r => r.CreatedBy == id);"] =
                 "Counts what a user being deleted owns. No access is granted.",
             ["AdminController.cs|d => d.TenantId == TenantId && d.CreatedBy == id);"] =
                 "Counts what a user being deleted owns. No access is granted.",
             ["AdminController.cs|await db.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s"] =
                 "Reassigns ownership away from a deleted user. Removes authority rather than granting it.",
-            ["AdminController.cs|await db.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s"] =
+            ["AdminController.cs|await catalogScope.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s"] =
                 "Reassigns ownership away from a deleted user.",
             ["AdminController.cs|await db.Datasets.Where(d => d.TenantId == TenantId && d.CreatedBy == id).ExecuteUpdateAsync(s => s"] =
                 "Reassigns ownership away from a deleted user, within the acting tenant.",
@@ -66,12 +66,12 @@ public sealed class AuthorshipPermissionBoundaryTests
                 "Scopes an alert listing down to the caller's own alerts. Narrows access, never widens it.",
 
             // ── Deliberate ownership rules ────────────────────────────────────────────
-            ["FolderPermissionService.cs|&& await db.Folders.AnyAsync(f => f.Id == folderId && f.OwnerId == userId))"] =
+            ["FolderPermissionService.cs|&& await Folders.AnyAsync(f => f.Id == folderId && f.OwnerId == userId))"] =
                 "Folder ownership implies Manage — documented at the call site, and the ownership "
                 + "fallback that system-published datasets depend on.",
             ["FolderPermissionService.cs|.Where(f => ids.Contains(f.Id) && f.OwnerId == userId)"] =
                 "Batch form of the folder-ownership rule above.",
-            ["CatalogController.cs|db.Folders.Any(f => f.Id == r.FolderId && f.OwnerId == userId)"] =
+            ["CatalogController.cs|catalogScope.Folders.Any(f => f.Id == r.FolderId && f.OwnerId == userId)"] =
                 "Catalog visibility follows the same folder-ownership rule.",
 
             // ── Guarded: authorship upgrades an existing grant ────────────────────────
