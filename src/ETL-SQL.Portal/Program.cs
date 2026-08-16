@@ -507,6 +507,8 @@ builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>(sp =>
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.DedicatedPolicyAuthorityGuard>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportPublishingPolicyService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionDeliveryStatusService>();
+// Scoped: it reads the current principal's live group membership, so it must not outlive a request.
+builder.Services.AddScoped<ETL_SQL.Portal.Services.OrchestratorAssertionIssuer>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionScriptService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionQueryService>();
 // Trusted subscription executor (P0.1/P0.2): delivery runs in-process with delivery-time

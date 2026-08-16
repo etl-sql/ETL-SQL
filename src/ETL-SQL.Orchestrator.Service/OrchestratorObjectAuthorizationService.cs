@@ -71,6 +71,13 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
         if (caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase)
             && caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase))
             return true;
+
+        // The token's scope ceiling, before roles, ownership, and grants — all three are authority
+        // *within* what the token may do, and none of them may exceed it. A read-scoped token held by
+        // an administrator still cannot trigger a job; that is the whole point of issuing a narrow
+        // token to an automation owned by a broad principal.
+        if (!WithinScopeCeiling(caller, required)) return false;
+
         if (caller.IsInRole("Admin")) return true;
         if (!string.IsNullOrWhiteSpace(owner)
             && string.Equals(owner, caller.PrincipalKey, StringComparison.OrdinalIgnoreCase))
@@ -88,6 +95,52 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
         }
         return false;
     }
+
+    // The orchestrator scope ladder, named here rather than referenced from the Portal because the
+    // Orchestrator does not depend on it — these arrive as opaque strings in a signed assertion, and
+    // this service is the only place that interprets them.
+    internal const string ScopeRead = "orchestrator.read";
+    internal const string ScopeExecute = "orchestrator.execute";
+    internal const string ScopePublish = "orchestrator.publish";
+    internal const string ScopeAdmin = "orchestrator.admin";
+
+    /// <summary>
+    /// Caps <paramref name="required"/> by the highest permission the caller's scopes allow.
+    ///
+    /// <para>An interactive user carries no scopes and is not capped here: their authority is their
+    /// roles and their grants, and the Portal session that produced the assertion is what bounded it.
+    /// A <b>service</b> caller is different — a token is issued to an automation for a stated purpose,
+    /// so one with no scopes at all can do nothing rather than everything. That asymmetry is the
+    /// reason this checks the subject type rather than simply "are there scopes".</para>
+    /// </summary>
+    internal static bool WithinScopeCeiling(OrchestratorCaller caller, OrchestratorObjectPermission required)
+    {
+        var isService = caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase);
+        var scopes = caller.EffectiveScopes;
+        if (scopes.Count == 0) return !isService;
+
+        foreach (var scope in scopes)
+        {
+            var ceiling = CeilingOf(scope);
+            if (ceiling is { } permission && Includes(permission, required)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The most a single scope may authorize, or null for a scope this service does not recognise —
+    /// including every non-orchestrator scope a token may also carry, which grants nothing here.
+    /// </summary>
+    private static OrchestratorObjectPermission? CeilingOf(string scope) => scope switch
+    {
+        _ when scope.Equals(ScopeAdmin, StringComparison.OrdinalIgnoreCase) => OrchestratorObjectPermission.Manage,
+        // Publish reaches MANAGE, but only over objects the caller owns or was granted — ownership is
+        // enforced below this ceiling, not by it.
+        _ when scope.Equals(ScopePublish, StringComparison.OrdinalIgnoreCase) => OrchestratorObjectPermission.Manage,
+        _ when scope.Equals(ScopeExecute, StringComparison.OrdinalIgnoreCase) => OrchestratorObjectPermission.Override,
+        _ when scope.Equals(ScopeRead, StringComparison.OrdinalIgnoreCase) => OrchestratorObjectPermission.Read,
+        _ => null
+    };
 
     /// <summary>
     /// An unbound object (Solo, no signed tenant) is reachable only by an equally unbound caller, and

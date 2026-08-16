@@ -28,12 +28,28 @@ resource permissions, while the account's stored role cap and explicit scopes ca
 | :--- | :--- |
 | `portal.read` | Authenticated read-only portal APIs, still subject to roles and resource ACLs |
 | `reports.execute` | Report execution and dataset refresh operations |
-| `orchestrator.execute` | Orchestrator API operations, still subject to the required portal role |
+| `orchestrator.read` | View jobs, run history, metrics, data-quality status and stewardship |
+| `orchestrator.execute` | Trigger, kill and resume jobs, and supply variable overrides |
+| `orchestrator.publish` | Create, redefine and drop jobs, and manage the ones this account owns |
+| `orchestrator.admin` | Administer any object's grants, and stop or restart the service |
 | `admin.identity` | Identity administration only — users, groups, group membership, sessions, service accounts under constrained delegation, and read-only introspection of one user's effective access |
 | `admin.portability` | Read-only access to the reviewed configuration-export plan and its hash-acknowledged download |
 
 Scopes do not grant a role or resource permission. A request must pass the scope check and every
 existing authorization check.
+
+The four `orchestrator.*` scopes mirror the per-object permission vocabulary the Orchestrator already
+enforces (`READ`/`EXECUTE`/`OVERRIDE`/`MANAGE`), so there is one ladder to reason about rather than
+two. They are **explicit, not implicative**: `orchestrator.execute` does not confer
+`orchestrator.read`, so grant both when an account needs to see what it is running. A scope is a
+*ceiling* — it caps what an object grant can authorize, and never widens one. An account scoped
+`orchestrator.read` cannot trigger a job however broad its grants or its owner's roles, and an account
+scoped `orchestrator.publish` still cannot touch a job it was not granted.
+
+An account created before the ladder existed holds the single `orchestrator.execute` scope, which then
+meant reads and executions alike; it is read back as `orchestrator.read` **and** `orchestrator.execute`
+so it keeps the access it had. It is never upgraded to `orchestrator.publish` — being able to trigger a
+job never implied being able to create one.
 
 ### `admin.identity`
 

@@ -411,6 +411,58 @@ public class AuthController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Exchanges the caller's Portal session for a short-lived Orchestrator identity assertion, so a
+    /// client can call the Orchestrator directly rather than through a Portal twin of every
+    /// orchestrator route.
+    ///
+    /// <para>The Orchestrator needs no new trust code for this: it already validates exactly this
+    /// token on every request, which is why the exchange shape was chosen over proxying. Presenting
+    /// the browser's Portal JWT to the Orchestrator was rejected for the opposite reason — it would
+    /// undo the deliberate audience separation that stops either token being replayed at the other
+    /// service.</para>
+    ///
+    /// <para>There is no request body, and there is nothing to ask for. The identity, its groups, its
+    /// tenant and its scopes are read from the server's own view of the caller; a caller presents an
+    /// identity and never requests one.</para>
+    /// </summary>
+    [HttpPost("orchestrator-assertion")]
+    [Authorize]
+    public async Task<IActionResult> IssueOrchestratorAssertion(
+        [FromServices] OrchestratorAssertionIssuer issuer, CancellationToken ct)
+    {
+        var issued = await issuer.IssueForAsync(User, ct);
+        if (issued is null)
+        {
+            // Either the deployment does not federate identity to an Orchestrator, or this principal
+            // cannot be resolved to one. Both are refusals to issue rather than failures, and neither
+            // says which — a caller learning that the signing secret is unset learns something about
+            // the deployment it is not authenticated to know.
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new { error = "orchestrator_assertion_unavailable" });
+        }
+
+        await auditService.LogAsync(
+            CurrentUserIdOrNull(),
+            "ISSUE_ORCHESTRATOR_ASSERTION",
+            "Orchestrator",
+            null,
+            issued.Scopes.Count == 0 ? "no scopes" : string.Join(' ', issued.Scopes));
+
+        return Ok(new
+        {
+            assertion = issued.Assertion,
+            headerName = ETL_SQL.Core.Governance.OrchestratorIdentityAssertion.HeaderName,
+            audience = issued.Audience,
+            expiresAt = issued.ExpiresAt,
+            scopes = issued.Scopes
+        });
+    }
+
+    private int? CurrentUserIdOrNull() =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
     private static string ParseCn(string dn)
     {
         if (string.IsNullOrEmpty(dn)) return "";

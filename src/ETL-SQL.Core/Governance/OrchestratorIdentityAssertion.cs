@@ -18,7 +18,17 @@ public static class OrchestratorIdentityAssertion
     public const string HeaderName = "X-Orchestrator-Identity";
     public const string Issuer = "etl-sql-portal";
     public const string Audience = "etl-sql-orchestrator-api";
-    public const int CurrentVersion = 1;
+
+    /// <summary>
+    /// Version 2 carries the caller's scopes, which cap what any object grant can authorize.
+    ///
+    /// <para>v1 is rejected outright rather than accepted for a rolling-upgrade window. A v1 token
+    /// carries no scopes, and a token with no scopes is indistinguishable from one whose scopes are
+    /// simply empty — so accepting it would mean choosing between refusing every legacy caller and
+    /// treating "unscoped" as "unlimited", and the second is a privilege escalation wearing a
+    /// compatibility shim. No release shipped a deployment that needs the window.</para>
+    /// </summary>
+    public const int CurrentVersion = 2;
     public static readonly TimeSpan DefaultLifetime = TimeSpan.FromMinutes(2);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -38,7 +48,8 @@ public static class OrchestratorIdentityAssertion
             caller.DisplayName,
             caller.Roles,
             caller.GroupIds,
-            caller.TenantId);
+            caller.TenantId,
+            caller.Scopes);
         var encodedPayload = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions));
         var signature = Sign(encodedPayload, signingSecret);
         return encodedPayload + "." + Base64UrlEncode(signature);
@@ -115,7 +126,8 @@ public static class OrchestratorIdentityAssertion
                 Normalize(payload.DisplayName, 128),
                 NormalizeMany(payload.Roles, 64),
                 NormalizeMany(payload.GroupIds, 128),
-                tenantId);
+                tenantId,
+                NormalizeMany(payload.Scopes, 64));
             return true;
         }
         catch (Exception ex) when (ex is FormatException or JsonException or ArgumentException)
@@ -184,7 +196,8 @@ public static class OrchestratorIdentityAssertion
         string DisplayName,
         IReadOnlyList<string> Roles,
         IReadOnlyList<string> GroupIds,
-        string? TenantId = null);
+        string? TenantId = null,
+        IReadOnlyList<string>? Scopes = null);
 }
 
 public sealed record OrchestratorCaller(
@@ -193,8 +206,17 @@ public sealed record OrchestratorCaller(
     string DisplayName,
     IReadOnlyList<string> Roles,
     IReadOnlyList<string> GroupIds,
-    string? TenantId = null)
+    string? TenantId = null,
+    /// <summary>
+    /// The scopes the issuing Portal attached to this caller. A <b>ceiling</b>, never a grant: it caps
+    /// what an object ACL can authorize and widens nothing. Empty for an interactive user, whose
+    /// authority is their roles and grants; a service caller with no scopes can do nothing.
+    /// </summary>
+    IReadOnlyList<string>? Scopes = null)
 {
+    /// <summary>Scopes as a non-null list, so callers need not repeat the empty check.</summary>
+    public IReadOnlyList<string> EffectiveScopes => Scopes ?? [];
+
     public string PrincipalKey => $"{SubjectType}:{SubjectId}";
     public string AuditActor => string.IsNullOrWhiteSpace(DisplayName)
         ? PrincipalKey

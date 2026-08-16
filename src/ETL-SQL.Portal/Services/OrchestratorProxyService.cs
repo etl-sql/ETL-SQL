@@ -31,7 +31,8 @@ public class OrchestratorProxyService(
     // therefore no human to attribute, which is a legitimate state rather than a missing dependency.
     IHttpContextAccessor? httpContext = null,
     PortalConfig? portalConfig = null,
-    PortalDbContext? portalDb = null) : ISharedTenantLifecycleOrchestratorClient
+    PortalDbContext? portalDb = null,
+    OrchestratorAssertionIssuer? assertionIssuer = null) : ISharedTenantLifecycleOrchestratorClient
 {
     /// <summary>
     /// Retired caller-controlled attribution header. Signed identity assertions now carry both
@@ -217,61 +218,18 @@ public class OrchestratorProxyService(
         return await http.SendAsync(req, cancellationToken);
     }
 
+    /// <summary>
+    /// The assertion attached to this call, or null when the deployment does not federate identity.
+    /// Delegates to <see cref="OrchestratorAssertionIssuer"/> rather than resolving the principal
+    /// here: the exchange endpoint hands the same token to clients that call the Orchestrator
+    /// directly, and two resolutions would eventually disagree about who someone is.
+    /// </summary>
     private async Task<string?> CurrentIdentityAssertionAsync(CancellationToken cancellationToken)
     {
-        var secret = portalConfig?.Orchestrator.IdentitySigningSecret;
-        if (string.IsNullOrWhiteSpace(secret)) return null;
-
+        var issuer = assertionIssuer ?? new OrchestratorAssertionIssuer(portalConfig, portalDb);
         var user = httpContext?.HttpContext?.User;
-        if (user?.Identity?.IsAuthenticated != true)
-        {
-            var backgroundTenant = portalConfig?.SharedTenancy.Enabled == true
-                ? null
-                : string.IsNullOrWhiteSpace(portalConfig?.TenantId) ? "portal-host" : portalConfig.TenantId;
-            return OrchestratorIdentityAssertion.Create(
-                new OrchestratorCaller(
-                    "service", "portal-background", "Portal background service", ["PortalSystem"], [],
-                    backgroundTenant),
-                secret);
-        }
-
-        if (portalConfig is null ||
-            !TenantCredentialBinding.TryResolve(user, portalConfig, out var tenant, out _))
-            return null;
-        var tenantId = tenant?.Tenant.Value ?? "portal-host";
-
-        var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
-        var name = user.FindFirstValue(ClaimTypes.Name) ?? user.Identity.Name;
-        var serviceAccountId = user.FindFirstValue(TokenService.ServiceAccountIdClaim);
-        var isService = string.Equals(
-            user.FindFirstValue(TokenService.IdentityTypeClaim),
-            TokenService.ServiceIdentityType,
-            StringComparison.Ordinal);
-        var subjectId = isService ? serviceAccountId : id;
-        if (string.IsNullOrWhiteSpace(subjectId)) return null;
-
-        string[] groupIds = [];
-        if (!isService && int.TryParse(id, out var userId) && portalDb is not null)
-        {
-            groupIds = await portalDb.UserGroups.AsNoTracking()
-                .Where(membership => membership.UserId == userId)
-                .Select(membership => membership.GroupId.ToString())
-                .ToArrayAsync(cancellationToken);
-        }
-
-        var roles = user.FindAll(ClaimTypes.Role)
-            .Select(claim => claim.Value)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return OrchestratorIdentityAssertion.Create(
-            new OrchestratorCaller(
-                isService ? "service" : "user",
-                subjectId,
-                name ?? subjectId,
-                roles,
-                groupIds,
-                tenantId),
-            secret);
+        if (user?.Identity?.IsAuthenticated != true) return issuer.IssueForBackground();
+        return (await issuer.IssueForAsync(user, cancellationToken))?.Assertion;
     }
 
     /// <summary>

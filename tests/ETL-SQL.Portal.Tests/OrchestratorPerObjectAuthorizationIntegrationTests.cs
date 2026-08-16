@@ -30,14 +30,23 @@ public sealed class OrchestratorPerObjectAuthorizationIntegrationTests
 
         using var scope = factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
-        Assert.Equal("tenant-a", (await store.GetJobAsync("tenant_bound_job"))!.TenantId);
+        // Resolved in tenant-a, which is the claim under test: looking the job up in the unbound
+        // scope would find nothing whether or not the binding worked, so it could only ever fail or
+        // pass for the wrong reason.
+        Assert.Equal("tenant-a", (await store.GetJobAsync("tenant-a", "tenant_bound_job"))!.TenantId);
 
         var tenantB = tenantA with { TenantId = "tenant-b" };
         using var update = Request(
             HttpMethod.Put, "/api/scheduled-jobs/tenant_bound_job", tenantB, new { isEnabled = false });
         update.Headers.TryAddWithoutValidation("If-Match", "\"1\"");
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(update)).StatusCode);
-        Assert.Equal("tenant-a", (await store.GetJobAsync("tenant_bound_job"))!.TenantId);
+        // Not Forbidden: the name is resolved in the caller's own tenant before anything is
+        // authorized, so to tenant-b this job does not exist. Answering 403 would confirm that some
+        // other tenant holds the name, which is a disclosure the boundary exists to prevent — the
+        // rebinding is refused *and* the attempt learns nothing.
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(update)).StatusCode);
+        Assert.Equal("tenant-a", (await store.GetJobAsync("tenant-a", "tenant_bound_job"))!.TenantId);
+        // And tenant-b did not acquire one of its own by trying.
+        Assert.Null(await store.GetJobAsync("tenant-b", "tenant_bound_job"));
     }
 
     [Fact]

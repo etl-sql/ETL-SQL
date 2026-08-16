@@ -12,7 +12,16 @@ public sealed class ServiceAccountScopeMiddlewareTests
     [InlineData("POST", "/api/reports/7/refresh", ServiceAccountScopes.ReportsExecute)]
     [InlineData("POST", "/api/datasets/4/refresh", ServiceAccountScopes.ReportsExecute)]
     [InlineData("DELETE", "/api/jobs/job-id", ServiceAccountScopes.ReportsExecute)]
-    [InlineData("POST", "/api/orchestrator/jobs", ServiceAccountScopes.OrchestratorExecute)]
+    // The orchestrator ladder: defining what runs is publication, running it is execution, looking is
+    // reading, and stopping the service sits with grant administration.
+    [InlineData("POST", "/api/orchestrator/jobs", ServiceAccountScopes.OrchestratorPublish)]
+    [InlineData("PUT", "/api/orchestrator/jobs/nightly", ServiceAccountScopes.OrchestratorPublish)]
+    [InlineData("DELETE", "/api/orchestrator/jobs/nightly", ServiceAccountScopes.OrchestratorPublish)]
+    [InlineData("POST", "/api/orchestrator/jobs/nightly/trigger", ServiceAccountScopes.OrchestratorExecute)]
+    [InlineData("POST", "/api/orchestrator/jobs/nightly/kill", ServiceAccountScopes.OrchestratorExecute)]
+    [InlineData("POST", "/api/orchestrator/runs/42/resume", ServiceAccountScopes.OrchestratorExecute)]
+    [InlineData("GET", "/api/orchestrator/jobs", ServiceAccountScopes.OrchestratorRead)]
+    [InlineData("POST", "/api/orchestrator/service/stop", ServiceAccountScopes.OrchestratorAdmin)]
     [InlineData("GET", "/api/folders", ServiceAccountScopes.PortalRead)]
     public async Task RequiredScope_AllowsSupportedOperation(string method, string path, string scope)
     {

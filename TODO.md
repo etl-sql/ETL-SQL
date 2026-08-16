@@ -288,13 +288,13 @@ another tenant's history once two tenants shared a job name.
 
 #### Slice A — Portal-issued Orchestrator assertions
 
-- [ ] **A1 Exchange endpoint.** Add `POST /api/auth/orchestrator-assertion` to the Portal: an
+- [x] **A1 Exchange endpoint.** Add `POST /api/auth/orchestrator-assertion` to the Portal: an
       authenticated caller (local/LDAP session, OIDC session, or service account) receives a
       short-lived audience-bound assertion plus its expiry. The Orchestrator needs **no new trust
       code** — it already validates exactly this token, which is why this shape was chosen. Reuse
       `OrchestratorProxyService.CurrentIdentityAssertionAsync` for principal/group/tenant resolution
       rather than duplicating it.
-- [ ] **A2 Split the scope ladder.** Replace the single `orchestrator.execute` scope in
+- [x] **A2 Split the scope ladder.** Replace the single `orchestrator.execute` scope in
       `ServiceAccountScopes` with four scopes mirroring the permission vocabulary that already
       exists, so there is one ladder and not two: `orchestrator.read` (view jobs, history, metrics,
       DQ status, stewardship) → `READ`; `orchestrator.execute` (trigger, kill, resume, variable
@@ -302,7 +302,7 @@ another tenant's history once two tenants shared a job name.
       own) → create + owned `MANAGE`; `orchestrator.admin` (manage anyone's grants). Migrate existing
       accounts: today's `orchestrator.execute` becomes `read`+`execute`, never `publish`. Update
       `ServiceAccountScopeMiddleware` and the scope checkboxes in `operations-admin.js`.
-- [ ] **A3 Enforce the ceiling.** Carry scopes in the assertion payload (bump
+- [x] **A3 Enforce the ceiling.** Carry scopes in the assertion payload (bump
       `OrchestratorIdentityAssertion.CurrentVersion` to 2 and reject v1 outright — see Slice 0) and cap
       the ACL decision in `OrchestratorObjectAuthorizationService.CanAsync` by the token's scope. A
       `publish` account still cannot touch a job it was not granted; a `read` account cannot trigger
