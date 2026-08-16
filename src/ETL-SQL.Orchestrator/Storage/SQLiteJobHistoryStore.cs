@@ -189,6 +189,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     var createColumnMetricsTable = @"
                 CREATE TABLE IF NOT EXISTS JobColumnMetrics (
                     JobHistoryId INTEGER NOT NULL,
+                    TenantId TEXT NOT NULL DEFAULT '',
                     TargetTable TEXT NOT NULL DEFAULT '',
                     ColumnName TEXT NOT NULL,
                     TotalRows INTEGER NOT NULL,
@@ -200,6 +201,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     var createDataQualityFailuresTable = @"
                 CREATE TABLE IF NOT EXISTS JobDataQualityFailures (
                     JobHistoryId INTEGER NOT NULL,
+                    TenantId TEXT NOT NULL DEFAULT '',
                     TargetTable TEXT NOT NULL DEFAULT '',
                     ColumnName TEXT NOT NULL,
                     RuleText TEXT NOT NULL,
@@ -213,6 +215,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     var createStatementMetricsTable = @"
                 CREATE TABLE IF NOT EXISTS JobStatementMetrics (
                     JobHistoryId INTEGER NOT NULL,
+                    TenantId TEXT NOT NULL DEFAULT '',
                     Ordinal INTEGER NOT NULL,
                     Statement TEXT NOT NULL,
                     DurationMs INTEGER NOT NULL,
@@ -686,6 +689,18 @@ namespace ETL_SQL.Orchestrator.Storage
         {
             var columns = await _dialect.GetColumnNamesAsync(connection, "JobColumnMetrics");
             await AddColumnIfMissingAsync(connection, columns, "JobColumnMetrics", "MaxTimestampUtc", "MaxTimestampUtc TEXT");
+
+            // The tenant of the run these measurements belong to, carried directly as
+            // SharedBackupSurfaceInventory declares. It is copied from JobHistory at insert rather
+            // than passed in by the caller, so it cannot disagree with the run it describes; the
+            // reason to hold it at all is that backup, restore and tenant deletion then take a
+            // predicate on this table instead of a join that a future query could forget.
+            foreach (var table in new[] { "JobColumnMetrics", "JobDataQualityFailures", "JobStatementMetrics" })
+            {
+                var tableColumns = await _dialect.GetColumnNamesAsync(connection, table);
+                await AddColumnIfMissingAsync(
+                    connection, tableColumns, table, "TenantId", "TenantId TEXT NOT NULL DEFAULT ''");
+            }
         }
 
         private async Task EnsureLineageHistoryColumnsExist(DbConnection connection)
@@ -1605,8 +1620,8 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    INSERT INTO JobColumnMetrics (JobHistoryId, TargetTable, ColumnName, TotalRows, NullRows, MaxTimestampUtc)
-                    VALUES (@historyId, @target, @column, @total, @nulls, @maxTimestamp)
+                    INSERT INTO JobColumnMetrics (JobHistoryId, TenantId, TargetTable, ColumnName, TotalRows, NullRows, MaxTimestampUtc)
+                    VALUES (@historyId, COALESCE((SELECT TenantId FROM JobHistory WHERE Id = @historyId), ''), @target, @column, @total, @nulls, @maxTimestamp)
                     ON CONFLICT (JobHistoryId, TargetTable, ColumnName) DO UPDATE SET
                         TotalRows = excluded.TotalRows,
                         NullRows = excluded.NullRows,
@@ -1642,11 +1657,12 @@ namespace ETL_SQL.Orchestrator.Storage
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
                     INSERT INTO JobStatementMetrics (
-                        JobHistoryId, Ordinal, Statement, DurationMs, RowsProcessed, CpuTimeMs,
+                        JobHistoryId, TenantId, Ordinal, Statement, DurationMs, RowsProcessed, CpuTimeMs,
                         SpilledBytes, SpillReadBytes, Partitions, QueueWaitMs, LockWaitMs, IndexUsed,
                         DqRowsValidated, DqRowsQuarantined, DqRowsWarned, DqValidationMs, Failed)
                     VALUES (
-                        @historyId, @ordinal, @statement, @duration, @rows, @cpu,
+                        @historyId, COALESCE((SELECT TenantId FROM JobHistory WHERE Id = @historyId), ''),
+                        @ordinal, @statement, @duration, @rows, @cpu,
                         @spilled, @spillRead, @partitions, @queueWait, @lockWait, @indexUsed,
                         @dqValidated, @dqQuarantined, @dqWarned, @dqMs, @failed)
                     ON CONFLICT (JobHistoryId, Ordinal) DO NOTHING;";
@@ -1840,8 +1856,8 @@ namespace ETL_SQL.Orchestrator.Storage
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
                     INSERT INTO JobDataQualityFailures
-                        (JobHistoryId, TargetTable, ColumnName, RuleText, Action, FailureCount, Owner)
-                    VALUES (@historyId, @target, @column, @rule, @action, @count, @owner)
+                        (JobHistoryId, TenantId, TargetTable, ColumnName, RuleText, Action, FailureCount, Owner)
+                    VALUES (@historyId, COALESCE((SELECT TenantId FROM JobHistory WHERE Id = @historyId), ''), @target, @column, @rule, @action, @count, @owner)
                     ON CONFLICT (JobHistoryId, TargetTable, ColumnName, RuleText, Action) DO UPDATE SET
                         FailureCount = excluded.FailureCount,
                         Owner = excluded.Owner;";

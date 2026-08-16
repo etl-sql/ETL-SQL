@@ -141,8 +141,12 @@ public sealed class UpgradePathDrillTests : IDisposable
     {
         var dbPath = Path.Combine(_scratch, "etlsql_legacy.db");
 
-        // ── A legacy Jobs table: only the original columns, no MaxRetries/RetryDelaySeconds/
-        //    ScriptHash/HashPolicy/LeaseOwner/LeaseExpiresAt/Version — then a job row. ───────
+        // ── A Jobs table from an earlier build of the current schema: the identity and the
+        //    (TenantId, Name) key are there, but none of the additively-migrated columns —
+        //    no MaxRetries/RetryDelaySeconds/ScriptHash/HashPolicy/LeaseOwner/LeaseExpiresAt/Version.
+        //    That is the upgrade InitializeAsync performs. It does not convert a pre-identity
+        //    database, where the name was the primary key: that needs identities minted and keys
+        //    rebuilt, and no release shipped with data in that schema. ───────────────────────────
         await using (var conn = new SqliteConnection($"Data Source={dbPath}"))
         {
             await conn.OpenAsync();
@@ -150,22 +154,25 @@ public sealed class UpgradePathDrillTests : IDisposable
             {
                 cmd.CommandText = @"
                     CREATE TABLE Jobs (
-                        Name TEXT PRIMARY KEY,
+                        Id TEXT NOT NULL PRIMARY KEY,
+                        Name TEXT COLLATE NOCASE NOT NULL,
                         Script TEXT NOT NULL,
                         Interval INTEGER NOT NULL,
                         Unit TEXT NOT NULL,
                         AtTime TEXT,
                         LastRun TEXT,
                         NextRun TEXT,
-                        IsEnabled INTEGER NOT NULL DEFAULT 1
+                        IsEnabled INTEGER NOT NULL DEFAULT 1,
+                        TenantId TEXT NOT NULL DEFAULT """",
+                        UNIQUE (TenantId, Name)
                     );";
                 await cmd.ExecuteNonQueryAsync();
             }
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText =
-                    "INSERT INTO Jobs (Name, Script, Interval, Unit, AtTime, IsEnabled) " +
-                    "VALUES ('legacy-job', 'RUN SCRIPT ''x.etlsql'';', 1, 'DAY', '06:00', 1);";
+                    "INSERT INTO Jobs (Id, Name, Script, Interval, Unit, AtTime, IsEnabled) " +
+                    "VALUES ('11111111111111111111111111111111', 'legacy-job', 'RUN SCRIPT ''x.etlsql'';', 1, 'DAY', '06:00', 1);";
                 await cmd.ExecuteNonQueryAsync();
             }
         }

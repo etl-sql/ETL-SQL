@@ -388,9 +388,9 @@ public partial class RelationalJobHistoryStore
         // unrecoverable loss in the one operation that must not overreach.
         foreach (var sql in new[]
         {
-            "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE TenantId = @tenant);",
-            "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE TenantId = @tenant);",
-            "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE TenantId = @tenant);",
+            "DELETE FROM JobColumnMetrics WHERE TenantId = @tenant;",
+            "DELETE FROM JobDataQualityFailures WHERE TenantId = @tenant;",
+            "DELETE FROM JobStatementMetrics WHERE TenantId = @tenant;",
             // History and its rollup carry the tenant directly: they outlive the job, so a join
             // through Jobs would strand the rows of an already-dropped job in the tenant's partition.
             "DELETE FROM JobHistoryDaily WHERE TenantId = @tenant;",

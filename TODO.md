@@ -209,44 +209,57 @@ only checks the inventory's internal consistency — duplicates, classification,
 never reconciles it against a real schema, which is why the contradiction has gone unnoticed. Treat the
 inventory as the specification for this slice, and close the gap that let it drift.
 
-- [ ] **0.1 Surrogate object identity — do this before anything else.** *Decided 2026-08-15: surrogate
+**Slice 0 status (2026-08-15).** 0.1, 0.2, 0.4–0.10 and 0.12 are shipped; 0.3 and 0.11 remain, and
+0.11's answer turned out to be a gap rather than a confirmation — see its entry. The identity is a
+type (`JobId`/`ScheduleId`/`NotificationId`), not a string, because a job has both a name and an id,
+both are text, and passing one where the other belongs fails silently: the write matches zero rows and
+nothing throws. That one change surfaced 97 such faults the compiler had been accepting, plus six live
+defects that no test had caught — positional `SELECT *` reads shifted by the new columns, a
+`GetRecentColumnMetricsAsync` overload that no longer implemented its interface member so the empty
+default won, `JobStatementMetrics`/history/state reads joining tenants on name, a rollup writer that
+never populated the id its reader filtered on, and a tenant-deletion path that would have deleted
+another tenant's history once two tenants shared a job name.
+
+- [x] **0.1 Surrogate object identity — do this before anything else.** *Decided 2026-08-15: surrogate
       IDs, matching the inventory's declared `TenantRootJoin` design and the `portal-datasetacls` /
       `portal-reportacls` precedent.* `JOB`, `SCHEDULE`, and `NOTIFICATION` gain a stable surrogate ID;
       name becomes unique *per tenant* rather than globally, and ACLs, join tables, history, state, and
       metrics reference the ID rather than the name. This is also what makes rename and re-creation safe,
       and it is what closes the shared-name takeover hazard at the root instead of by ownership check.
       Every item below references this identity.
-- [ ] **0.2 Tenant-key the ACL store.** Every read, write, and delete takes the request's verified
+- [x] **0.2 Tenant-key the ACL store.** Every read, write, and delete takes the request's verified
       `TenantContext`; no lookup resolves on object name alone. Follow the composite tenant/kind/logical
       identity proven by `SharedTenantResourceRegistry`.
 - [ ] **0.3 Inherit the shared-surface contract.** The ACL store's test class inherits
       `SharedTenantSurfaceContractTests` (`tests/ETL-SQL.Tests/Multitenancy/`), so all six cases —
       including the `acme`/`acme-evil` prefix trap and cross-tenant enumeration — are answered by a
-      contract rather than by reviewer judgement.
-- [ ] **0.4 Tenant-key `Schedules` and `Notifications`** to match `Jobs`, with the same signed-tenant
+      contract rather than by reviewer judgement. `OrchestratorObjectAuthorizationTests` now covers the
+      prefix trap and the tenant-boundary-outranks-ownership case by hand; the point of this item is
+      that they should not be by hand, so it stays open until the class inherits the contract.
+- [x] **0.4 Tenant-key `Schedules` and `Notifications`** to match `Jobs`, with the same signed-tenant
       binding and refuse-to-rebind behaviour, plus the `JobSchedules`/`JobNotifications` join tables per
       the fork in 0.1.
-- [ ] **0.5 Defence in depth in the decision path.** `OrchestratorObjectAuthorizationService.CanAsync`
+- [x] **0.5 Defence in depth in the decision path.** `OrchestratorObjectAuthorizationService.CanAsync`
       compares the caller's tenant to the object's tenant itself, rather than relying on endpoint-level
       checks alone — a grant must never be evaluated across a tenant boundary even if a future endpoint
       forgets its filter.
-- [ ] **0.6 Run history and metrics.** `JobHistory` gains `TenantId`; `JobColumnMetrics`,
+- [x] **0.6 Run history and metrics.** `JobHistory` gains `TenantId`; `JobColumnMetrics`,
       `JobDataQualityFailures`, and `JobStatementMetrics` follow it as the inventory already declares.
       They key on `JobHistoryId` today, which is globally unique, so they are not currently *wrong* —
       but the declared contract is a direct tenant column, and the `/api/history` and
       `/api/data-quality/*` endpoints must filter on tenant, not only on the ACL decision.
-- [ ] **0.7 Job state and watermarks.** `JobState` keys on `(JobName, StateKey)`. Two tenants running a
+- [x] **0.7 Job state and watermarks.** `JobState` keys on `(JobName, StateKey)`. Two tenants running a
       job of the same name would share one high-water mark, which is silent data corruption rather than
       a disclosure — the worse failure of the two, since nothing would report it.
-- [ ] **0.8 Bundles.** `BundleVersions`, `BundleFiles`, and `BundleDependencies` key on bundle name and
+- [x] **0.8 Bundles.** `BundleVersions`, `BundleFiles`, and `BundleDependencies` key on bundle name and
       version. Include `bundle://` URI resolution and the latest-version pinning path, so one tenant's
       publish cannot become another tenant's pinned dependency.
-- [ ] **0.9 Rollups and tenant deletion.** `JobHistoryDaily` keys on `(Day, JobName)`. The rollup writer
+- [x] **0.9 Rollups and tenant deletion.** `JobHistoryDaily` keys on `(Day, JobName)`. The rollup writer
       in `SchedulerService` and the deletion path in `SharedTenantLifecycleStore` — which currently
       resolves a tenant's rows via `WHERE JobName IN (SELECT Name FROM Jobs WHERE TenantId = @tenant)` —
       both break once names repeat across tenants: deletion would remove another tenant's history. Both
       paths move to the surrogate ID from 0.1.
-- [ ] **0.10 Host metrics — bind the node, do not fake per-tenant gauges.** `HostMetrics` samples
+- [x] **0.10 Host metrics — bind the node, do not fake per-tenant gauges.** `HostMetrics` samples
       `MemoryLoadPercent`, `ProcessCpuPercent`, `HostCpuPercent`, and free disk per node. On a Shared node
       running several tenants' work those gauges do not decompose by tenant, so a `TenantId` column there
       would be a number that looks meterable and is not. Instead give `HostMetrics` and `HostMetricsDaily`
@@ -259,7 +272,14 @@ inventory as the specification for this slice, and close the gap that let it dri
       tenant/run and indexed by tenant and time. Verify it is written for **every** run path — scheduled,
       ad-hoc, sandboxed, and failed — since a metering table with gaps is worse than none. Any future
       billing work reads this, with 0.10 supplying Dedicated capacity attribution alongside it.
-- [ ] **0.12 Close the drift gap.** Add a test that reconciles `SharedBackupSurfaceInventory` against the
+      **Checked 2026-08-15 and the answer is a gap, not a confirmation.** The only writer is
+      `SchedulerService`, in the per-attempt `finally`, guarded by `job.TenantId` being non-empty — so
+      scheduled runs and failed attempts are covered, and **ad-hoc runs are not metered at all**. An
+      ad-hoc run now records history through `LogAdHocRunStartAsync`, which has no job and therefore no
+      tenant binding to meter against, so closing this needs the ad-hoc path to carry a tenant before it
+      can write a usage row. Decide whether unattended ad-hoc execution is billable before building it —
+      if it is not, say so here and the gap becomes the specification.
+- [x] **0.12 Close the drift gap.** Add a test that reconciles `SharedBackupSurfaceInventory` against the
       actual orchestrator and Portal schemas, so a declared `DirectTenantColumn` must exist and a declared
       `TenantRootJoin` must have a resolvable root. Without it the inventory can drift back the moment a
       table changes, and backup, restore, portability, and tenant-deletion evidence all rest on it.

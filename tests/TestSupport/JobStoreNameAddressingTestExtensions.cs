@@ -63,22 +63,31 @@ internal static class JobStoreNameAddressingTestExtensions
     /// </summary>
     public static async Task<long> LogJobStartAsync(this IJobHistoryStore store, string jobName)
     {
-        if (await store.GetJobAsync(null, jobName) is null)
-        {
-            // Refuse when the name already belongs to a tenant. Creating an unbound twin would give
-            // the test two objects of one name and quietly answer every later question about the
-            // wrong one — which is the confusion this whole change exists to end. A tenant-scoped
-            // test resolves its own job and passes the identity.
-            if ((await store.GetAllJobsAsync()).Any(
-                    job => job.Name.Equals(jobName, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException(
-                    $"A job named '{jobName}' exists in a tenant, so this unbound helper will not " +
-                    "create another. Resolve it with GetJobAsync(tenantId, name) and pass its Id.");
-
-            await store.SaveJobAsync(new JobDefinition(
-                jobName, "SELECT 1;", 1, "HOUR", null, null, null));
-        }
+        await EnsureUnboundJobAsync(store, jobName);
         return await store.LogJobStartAsync(await store.JobIdOfAsync(jobName));
+    }
+
+    /// <summary>
+    /// Registers a placeholder job in the unbound scope when the test has not saved one, so a run or a
+    /// state write can be recorded against it. See <see cref="LogJobStartAsync(IJobHistoryStore, string)"/>
+    /// for why this is confined to test setup.
+    /// </summary>
+    private static async Task EnsureUnboundJobAsync(IJobHistoryStore store, string jobName)
+    {
+        if (await store.GetJobAsync(null, jobName) is not null) return;
+
+        // Refuse when the name already belongs to a tenant. Creating an unbound twin would give the
+        // test two objects of one name and quietly answer every later question about the wrong one —
+        // which is the confusion this whole change exists to end. A tenant-scoped test resolves its
+        // own job and passes the identity.
+        if ((await store.GetAllJobsAsync()).Any(
+                job => job.Name.Equals(jobName, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                $"A job named '{jobName}' exists in a tenant, so this unbound helper will not " +
+                "create another. Resolve it with GetJobAsync(tenantId, name) and pass its Id.");
+
+        await store.SaveJobAsync(new JobDefinition(
+            jobName, "SELECT 1;", 1, "HOUR", null, null, null));
     }
 
     /// <summary>
@@ -95,9 +104,18 @@ internal static class JobStoreNameAddressingTestExtensions
         this IJobHistoryStore store, string jobName, string key) =>
         await store.GetJobStateAsync(await store.JobIdOfAsync(jobName), key);
 
+    /// <summary>
+    /// Writes state for <paramref name="jobName"/>, registering a placeholder job first when the test
+    /// has not saved one — state hangs off a job's identity, and seeding a watermark or a quarantine
+    /// manifest is the same declaration that the job exists. Reads stay strict: a name that resolves
+    /// to nothing has no state, and saying so is the point.
+    /// </summary>
     public static async Task SetJobStateAsync(
-        this IJobHistoryStore store, string jobName, string key, string? value) =>
+        this IJobHistoryStore store, string jobName, string key, string? value)
+    {
+        await EnsureUnboundJobAsync(store, jobName);
         await store.SetJobStateAsync(await store.JobIdOfAsync(jobName), key, value);
+    }
 
     public static async Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(
         this IJobHistoryStore store, string jobName, int limit = 1000) =>

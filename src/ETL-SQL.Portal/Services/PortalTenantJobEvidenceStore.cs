@@ -15,9 +15,9 @@ public sealed class PortalTenantJobEvidenceStore(
         ? RequireTenantStore().GetAllJobsAsync(scope.Context)
         : store.GetAllJobsAsync();
 
-    public Task<JobDefinition?> GetJobAsync(string name) => config.SharedTenancy.Enabled
-        ? RequireTenantStore().GetJobAsync(scope.Context, name)
-        : store.GetJobAsync(scope.TenantId, name);
+    public async Task<JobDefinition?> GetJobAsync(string name) => config.SharedTenancy.Enabled
+        ? await RequireTenantStore().GetJobAsync(scope.Context, name)
+        : await store.GetJobAsync(scope.TenantId, name) ?? await store.GetJobAsync(null, name);
 
     // History stays name-addressed: it outlives the job it belongs to, so reading it by identity
     // would report a dropped job's runs as never having happened. The tenant predicate is what keeps
@@ -27,7 +27,7 @@ public sealed class PortalTenantJobEvidenceStore(
         ? RequireTenantStore().GetHistoryAsync(scope.Context, jobName, limit)
         : string.IsNullOrWhiteSpace(jobName)
             ? store.GetHistoryAsync(limit: limit)
-            : store.GetHistoryForNameAsync(scope.TenantId, jobName, limit);
+            : LocalHistoryForNameAsync(jobName, limit);
 
     public Task<JobHistoryEntry?> GetHistoryEntryAsync(long entryId) => config.SharedTenancy.Enabled
         ? RequireTenantStore().GetHistoryEntryAsync(scope.Context, entryId)
@@ -84,8 +84,33 @@ public sealed class PortalTenantJobEvidenceStore(
         return jobId.IsAssigned ? await store.GetJobStatesAsync(jobId, limit) : [];
     }
 
+    /// <summary>
+    /// Resolves a job name for a <b>non-shared</b> Portal, which spans two tenant keys rather than one.
+    ///
+    /// <para>The Portal binds its own objects to the configured tenant (<c>portal-host</c> by default),
+    /// but the same orchestrator database is written by the scheduler and the CLI, which have no signed
+    /// tenant and bind to the unbound scope. On a single-tenant deployment both are this deployment, so
+    /// filtering on the Portal's key alone would hide the engine's own jobs — and job state, quarantine
+    /// manifests and watermarks are mostly written by exactly those runs. There is no isolation lost:
+    /// where isolation is the point, <c>SharedTenancy.Enabled</c> is on and the tenant-qualified store
+    /// answers instead, on a verified <see cref="ETL_SQL.Core.Multitenancy.TenantContext"/>.</para>
+    /// </summary>
     private async Task<JobId> ResolveAsync(string jobName) =>
-        (await store.GetJobAsync(scope.TenantId, jobName))?.Id ?? JobId.None;
+        (await store.GetJobAsync(scope.TenantId, jobName)
+            ?? await store.GetJobAsync(null, jobName))?.Id ?? JobId.None;
+
+    /// <summary>Name-addressed history across the same two scopes. See <see cref="ResolveAsync"/>.</summary>
+    private async Task<IEnumerable<JobHistoryEntry>> LocalHistoryForNameAsync(string jobName, int limit)
+    {
+        var scoped = await store.GetHistoryForNameAsync(scope.TenantId, jobName, limit);
+        var unbound = string.IsNullOrWhiteSpace(scope.TenantId)
+            ? []
+            : await store.GetHistoryForNameAsync(null, jobName, limit);
+        return scoped.Concat(unbound)
+            .OrderByDescending(entry => entry.StartTime)
+            .ThenByDescending(entry => entry.Id)
+            .Take(limit);
+    }
 
     private ITenantJobEvidenceStore RequireTenantStore() => store as ITenantJobEvidenceStore
         ?? throw new InvalidOperationException(
