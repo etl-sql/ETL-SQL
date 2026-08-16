@@ -1,12 +1,11 @@
 # Execution Blocks
 <!-- ExecuteRemoteBlockStatement -->
 
-
-### 11.1 EXEC / EXECUTE - Execution & Pushdown
+## EXEC / EXECUTE - Execution & Pushdown
 
 `EXEC` and `EXECUTE` are functional synonyms in ETL-SQL. They are used for executing dynamic SQL strings, stored procedures, or pushing native SQL blocks directly to a remote connection.
 
-#### Native SQL Pushdown
+### Native SQL Pushdown
 Pushes a SQL block to a remote connection in its native dialect.
 
 ```sql
@@ -23,7 +22,7 @@ END
 
 Parameters: `?` = sequential, `?1`/`?2` = indexed.
 
-#### Dynamic SQL
+### Dynamic SQL
 Executes a string as SQL. If `AT` is specified, it executes on the remote connection; otherwise, it executes locally as an ETL-SQL script.
 
 ```sql
@@ -35,7 +34,7 @@ EXEC (@sql) INTO #results;
 EXECUTE ('SELECT TOP 10 * FROM Users ORDER BY LastLogin DESC') AT mssql_conn INTO #top_users;
 ```
 
-#### Stored Procedure Call
+### Stored Procedure Call
 ```sql
 DECLARE @Count INT;
 EXECUTE prod_db.dbo.sp_GetCustomerCount @Status = 'Active', @Count = @Count OUTPUT;
@@ -44,7 +43,7 @@ EXECUTE prod_db.dbo.sp_GetCustomerCount @Status = 'Active', @Count = @Count OUTP
 EXEC ArchiveSales '2025-01-01';
 ```
 
-#### Service Admin Blocks
+### Service Admin Blocks
 Sends a block of admin statements to a `PORTAL` or `ORCHESTRATOR` connection.
 
 ```sql
@@ -64,7 +63,7 @@ END
 
 > **Error behavior:** Stop-on-first-error within each block. The block is not transactional - a failure mid-block leaves prior statements applied.
 
-#### Security and behavior
+### Security and behavior
 
 - **`WHAT_IF` support** — When `SET WHAT_IF ON` is active, `EXEC`/`EXECUTE` against a remote connection
   logs the SQL that *would* be executed without actually transmitting it.
@@ -73,7 +72,10 @@ END
 - **Transaction scope** — Remote `EXEC`/`EXECUTE` statements participate in the ambient ETL-SQL
   transaction if `BEGIN TRANSACTION` has been called and the connector supports it.
 
-### 11.2 `PARALLEL`
+---
+
+## PARALLEL
+
 ```sql
 PARALLEL
 BEGIN
@@ -94,7 +96,10 @@ BEGIN
 END
 ```
 
-### 11.3 `RUN SCRIPT`
+---
+
+## RUN SCRIPT
+
 ```sql
 RUN SCRIPT 'sub_process.etlsql' WITH (@batchId = 1234, @env = 'PROD', @result = @out_var OUTPUT);
 ```
@@ -112,7 +117,10 @@ RUN SCRIPT 'calculate_totals.etlsql' WITH(@category = 'Finance', @total = @count
 PRINT 'Total: ' + CAST(@count AS STRING);
 ```
 
-### 11.4 `GO` - Batch Separator
+---
+
+## GO - Batch Separator
+
 The `GO` keyword is a batch separator. It is not an ETL-SQL statement but a signal to the parser to split the script into discrete execution batches. Each batch is compiled and executed completely before the next one begins.
 
 - **Scope**: Variables declared in a previous batch are available in subsequent batches.
@@ -130,8 +138,9 @@ SELECT * FROM #temp;
 GO
 ```
 
+---
+
 ## References
 
 - [Statement Reference](README.md)
 - [Syntax Index](../../syntax-index.md)
-

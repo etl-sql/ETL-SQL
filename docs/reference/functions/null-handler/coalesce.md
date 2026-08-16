@@ -26,6 +26,7 @@ Returns `NULL` when every argument is `NULL`.
 
 - Evaluation stops at the first non-NULL argument.
 - `COALESCE(a, b, c)` is equivalent to a searched `CASE` expression that tests each value for `IS NOT NULL`.
+- **Dialect Shorthand**: ETL-SQL provides the `??` operator as shorthand for `COALESCE`: `a ?? b ?? c` compiles to `COALESCE(a, b, c)` at parse time. See [Expressions and Operators](../../statements/expressions-and-operators.md).
 
 ## Examples
 
@@ -34,7 +35,8 @@ SELECT COALESCE(NULL, NULL, 'fallback') AS selected_value;
 ```
 
 ```sql
-SELECT user_id, COALESCE(nickname, first_name, 'Unknown') AS display_name
+-- Using the ?? shorthand equivalent
+SELECT user_id, nickname ?? first_name ?? 'Unknown' AS display_name
 FROM #users;
 ```
 
@@ -46,6 +48,7 @@ FROM #staging;
 ## References
 
 - [Functions](../README.md)
+- [Expressions and Operators](../../statements/expressions-and-operators.md)
 - [ISNULL](isnull.md)
 - [NULLIF](nullif.md)
 - [IIF](../conversion/iif.md)

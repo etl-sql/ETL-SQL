@@ -1268,6 +1268,9 @@ Standard clauses available within a `SELECT` statement.
 | `CASE` | Start of conditional expression | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
 | `WHEN / THEN` | Conditional branch | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
 | `ELSE / END` | Fallback and termination of CASE | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
+| `??` | Null-coalescing operator (lowers to `COALESCE`) | [Expressions and Operators](reference/statements/expressions-and-operators.md) | [Expressions and Operators](reference/statements/expressions-and-operators.md) |
+| `=>` ... `:` | Arrow conditional expression (lowers to `CASE`) | [Expressions and Operators](reference/statements/expressions-and-operators.md) | [Expressions and Operators](reference/statements/expressions-and-operators.md) |
+| `->` / `->>` | JSON access operators (lowers to `JSON_GET`/`JSON_GET_TEXT`) | [Expressions and Operators](reference/statements/expressions-and-operators.md) | [Expressions and Operators](reference/statements/expressions-and-operators.md) |
 
 ---
 
