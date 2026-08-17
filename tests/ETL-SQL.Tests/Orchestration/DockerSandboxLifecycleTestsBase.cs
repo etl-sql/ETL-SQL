@@ -309,6 +309,67 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         await secondWorkspace.DestroyAsync();
     }
 
+    /// <summary>
+    /// Reserved placement on a host fixed to one tenant: its own tenant's work actually runs there,
+    /// and foreign tenant or pool work is refused before any runtime exists. The refusal half is what
+    /// distinguishes a reserved host from an ordinary one that merely happens to be running a single
+    /// tenant's jobs today.
+    /// </summary>
+    protected async Task VerifyReservedPlacementRunsOnlyTheHostsOwnTenantAndPool(
+        DockerSandboxExecutionOptions? hostOptions = null)
+    {
+        var options = hostOptions ?? Options();
+        Assert.False(
+            string.IsNullOrWhiteSpace(options.DedicatedTenantId),
+            "This lane must be configured as a tenant-dedicated host.");
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync(HarmlessScript);
+        var provider = new DockerSandboxExecutionProvider(options, _docker, artifacts);
+        var ownTenant = options.DedicatedTenantId!;
+
+        // Positive: the reserved host runs its own tenant's work, on the runtime it claims.
+        var workspace = await Workspaces().AssignAsync(Identity(ownTenant));
+        var attempt = await provider.PrepareAsync(
+            Request(artifact, ownTenant) with { AdmissionId = "live-reserved-1" }, workspace, default);
+        var container = TrackContainer(workspace.AssignmentId);
+        Assert.Equal(Tier, attempt.Evidence.IsolationTier);
+        Assert.Equal(ExpectedRuntime, attempt.Evidence.Runtime);
+        var inspected = await InspectAsync(container);
+        Assert.Equal(
+            ownTenant,
+            inspected.GetProperty("Config").GetProperty("Labels")
+                .GetProperty(DockerSandboxExecutionProvider.TenantLabel).GetString());
+        AssertSucceeded(await attempt.RunAsync(default));
+        await attempt.DestroyAsync(default);
+        await workspace.DestroyAsync();
+
+        // Negative: another tenant's work is refused, and no runtime is created for it at all.
+        var foreignWorkspace = await Workspaces().AssignAsync(Identity("tenant-b"));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.PrepareAsync(
+            Request(artifact, "tenant-b") with { AdmissionId = "live-reserved-foreign" },
+            foreignWorkspace,
+            default));
+        Assert.Empty(await ListContainersAsync(
+            $"label={DockerSandboxExecutionProvider.AssignmentLabel}={foreignWorkspace.AssignmentId}"));
+        await foreignWorkspace.DestroyAsync();
+
+        // Negative: its own tenant placed in a different capacity pool is refused too, so a reserved
+        // host cannot be borrowed by pointing other capacity at it.
+        var foreignPoolWorkspace = await Workspaces().AssignAsync(Identity(ownTenant));
+        var foreignPool = Request(artifact, ownTenant);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.PrepareAsync(
+            foreignPool with
+            {
+                AdmissionId = "live-reserved-foreign-pool",
+                AdmissionPolicy = foreignPool.AdmissionPolicy with { PoolId = "shared-elsewhere" }
+            },
+            foreignPoolWorkspace,
+            default));
+        Assert.Empty(await ListContainersAsync(
+            $"label={DockerSandboxExecutionProvider.AssignmentLabel}={foreignPoolWorkspace.AssignmentId}"));
+        await foreignPoolWorkspace.DestroyAsync();
+    }
+
     protected async Task VerifyUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt()
     {
         var artifacts = ArtifactStore();
@@ -424,10 +485,13 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
     private FileSystemSandboxWorkspaceProvider Workspaces() => new(
         new FileSystemSandboxWorkspaceOptions { RootPath = Path.Combine(_root, "workspaces") });
 
+    /// <summary>The single capacity pool these lanes place work in.</summary>
+    protected const string ReservedPoolId = "sandbox-pool";
+
     private static ISandboxAdmissionController Admissions() => new FairShareSandboxAdmissionController(
         new SandboxAdmissionControllerOptions
         {
-            PoolCapacities = new Dictionary<string, int>(StringComparer.Ordinal) { ["sandbox-pool"] = 4 }
+            PoolCapacities = new Dictionary<string, int>(StringComparer.Ordinal) { [ReservedPoolId] = 4 }
         });
 
     private static SandboxAssignmentIdentity Identity(string tenant) => new(
@@ -468,7 +532,7 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         },
         AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
         {
-            PoolId = "sandbox-pool",
+            PoolId = ReservedPoolId,
             TenantWeight = 1,
             MaxConcurrentAttempts = 2,
             MaxQueuedAttempts = 2
