@@ -15,6 +15,13 @@ namespace ETL_SQL.Portal.Services;
 
 public enum JobStatus { Pending, Running, Completed, Failed, Cancelled }
 
+/// <summary>
+/// Raised when a node that is draining is asked to start new work. It is a routing signal, not a
+/// failure: the caller should place the execution on a node that is staying in rotation.
+/// </summary>
+public sealed class NodeDrainingException(string reason)
+    : InvalidOperationException($"This execution node is draining and is not accepting new work. {reason}");
+
 internal enum ExecutionWorkloadKind { Interactive, Refresh }
 
 public record ExecutionJob(
@@ -238,6 +245,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string actorType = "User", string? actorId = null, string? effectiveScopes = null,
         string? correlationId = null, int? impersonatedUserId = null)
     {
+        RefuseWhenDraining();
         EvictExpiredJobs();
         var keyScope = await ResolveKeyScopeAsync(reportId, userId);
         var jobId = Guid.NewGuid().ToString("N");
@@ -268,6 +276,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string actorType = "User", string? actorId = null, string? effectiveScopes = null,
         string? correlationId = null)
     {
+        RefuseWhenDraining();
         EvictExpiredJobs();
         var keyScope = await ResolveKeyScopeAsync(reportId, userId);
 
@@ -698,6 +707,41 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         _jobCancellationReasons[jobId] = stored.Error ?? "Execution was cancelled.";
         try { cts.Cancel(); } catch (ObjectDisposedException) { }
         return true;
+    }
+
+    /// <summary>
+    /// Takes this node out of rotation without dropping work: executions already running are allowed
+    /// to finish, and new ones are refused so they land on a node that is staying.
+    ///
+    /// <para>This is the graceful counterpart to <see cref="OnNodeLeaseLostAsync"/>, which fences an
+    /// abrupt loss of the node's claim by cancelling in-flight work. A rolling upgrade needs the
+    /// gentle path: killing every running report to install a release is an outage, not a rollout.</para>
+    /// </summary>
+    public void BeginDrain(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (Interlocked.Exchange(ref _draining, 1) == 1) return;
+        _drainReason = reason;
+        _log.LogWarning(
+            "Execution node draining: {Reason}. {InFlight} execution(s) will be allowed to finish; " +
+            "new executions are refused.", reason, InFlightExecutions);
+    }
+
+    /// <summary>Whether this node is draining, and how much work it is still waiting on.</summary>
+    public (bool Draining, string? Reason, int InFlight) DrainState =>
+        (Volatile.Read(ref _draining) == 1, _drainReason, InFlightExecutions);
+
+    /// <summary>Executions this node is still running. A drain is finished when this reaches zero.</summary>
+    public int InFlightExecutions => _jobs.Values.Count(
+        job => job.Status is JobStatus.Pending or JobStatus.Running);
+
+    private int _draining;
+    private string? _drainReason;
+
+    private void RefuseWhenDraining()
+    {
+        if (Volatile.Read(ref _draining) == 1)
+            throw new NodeDrainingException(_drainReason ?? "This node is draining.");
     }
 
     public Task OnNodeLeaseLostAsync(string nodeId, string role, string reason, CancellationToken ct)

@@ -1068,8 +1068,25 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 // and the node-registry/lease store.
 app.MapGet("/healthz", async (
     ETL_SQL.Portal.Services.PortalTopologyReadinessService readiness,
+    ETL_SQL.Portal.Services.ExecutionJobService executions,
     CancellationToken ct) =>
 {
+    // A draining node is not unhealthy; it is leaving. Reporting 503 is how it actually leaves
+    // rotation, because that is what the load balancer probes — a node that keeps answering 200
+    // while refusing work would have every new execution fail instead of landing elsewhere.
+    var (draining, drainReason, inFlight) = executions.DrainState;
+    if (draining)
+    {
+        return Results.Json(
+            new
+            {
+                status = "Draining",
+                reason = drainReason,
+                inFlightExecutions = inFlight
+            },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
     var result = await readiness.CheckAsync(ct);
     var healthy = string.Equals(result.Status, "Healthy", StringComparison.OrdinalIgnoreCase);
     return Results.Json(

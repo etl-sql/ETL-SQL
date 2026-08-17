@@ -466,8 +466,17 @@ runtime, which is what the storage cell below was blocked on.
       *still owed* rather than failed — work waiting for approval must not halt a rollout — so the
       run advances exactly as far as the grants an operator already holds, and never further.
 
-      **Still open:** drain behaviour observed across a real population under load, rather than
-      inferred from per-tenant receipts.
+      **Node drain completed (2026-08-17).** Draining a node was not implemented at all: a Portal node
+      either ran, or lost its lease and had every in-flight execution cancelled. That abrupt path is
+      right for lease *loss* — the node has lost its claim and another may already be running the
+      work — but using it to install a release is an outage, not a rollout. `BeginDrain` now takes a
+      node out of rotation gracefully: executions already running are left to finish, new ones are
+      refused with `NodeDrainingException` so they land on a node that is staying, and `DrainState`
+      reports when the last one has drained. `GET /healthz` answers 503 while draining, because that
+      is what a load balancer probes — a node that kept answering 200 while refusing work would fail
+      every new execution instead of shedding it. Tests hold an execution in flight, drain under that
+      load, and prove both halves: new work refused, running work untouched, and lease loss still
+      fencing rather than draining.
 - [ ] **High availability, Shared.** Tenant-aware fleet rollout, compatibility/drain behavior, and
       noisy-neighbour containment without silently falling back from Dedicated placement or Hardened
       isolation.
