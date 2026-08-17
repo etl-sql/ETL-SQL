@@ -175,6 +175,15 @@ public class TenantExecutionQuotaTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        // The quota source resolves one tenant at a time; enumerating the fleet is a rollout-planning
+        // concern and must never be reached from the execution admission path.
+        public Task<IReadOnlyList<SharedTenantControlPlaneState>> ListSharedTenantStatesAsync(
+            FleetInventoryAuthorization authorization,
+            DateTimeOffset now,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException(
+                "Execution admission must not enumerate the tenant population.");
+
         public Task<SharedTenantControlPlaneState?> GetSharedTenantStateAsync(
             TenantContext tenant,
             CancellationToken cancellationToken = default)
