@@ -13,9 +13,27 @@ public sealed class LedgerBackedSandboxAdmissionOptions
 }
 
 /// <summary>
+/// Raised when a durable admission this node was waiting on stopped being queued work — cancelled by a
+/// tenant lifecycle fence, swept as abandoned, or otherwise revoked by the cluster.
+/// </summary>
+public sealed class SandboxAdmissionRevokedException(
+    string admissionId,
+    SandboxAdmissionState? state,
+    string? reason)
+    : Exception(
+        $"Durable sandbox admission '{admissionId}' is no longer queued " +
+        $"({(state?.ToString() ?? "absent")}) and cannot be granted capacity." +
+        (string.IsNullOrWhiteSpace(reason) ? string.Empty : $" {reason}"))
+{
+    public string AdmissionId { get; } = admissionId;
+    public SandboxAdmissionState? State { get; } = state;
+}
+
+/// <summary>
 /// Connects process-local weighted fair ordering to the relational HA authority. Queue intent is
 /// durable before local waiting begins; a locally selected attempt runs only after the ledger
-/// transaction reserves pool and tenant capacity and returns a fence token.
+/// transaction reserves pool and tenant capacity and returns a fence token. The ledger, not this node,
+/// decides which tenant that capacity goes to — process-local ordering only proposes a candidate.
 /// </summary>
 public sealed class LedgerBackedSandboxAdmissionController : ISandboxAdmissionController
 {
@@ -141,6 +159,17 @@ public sealed class LedgerBackedSandboxAdmissionController : ISandboxAdmissionCo
 
                 await localLease.ReleaseAsync();
                 localLease = null;
+
+                // Waiting is only legitimate while the durable row is still queued. A tenant lifecycle
+                // fence or an abandoned-queue sweep can revoke it, and a node that kept polling a
+                // cancelled admission would wait for a slot no one will ever grant it.
+                var current = await _ledger.ReadAsync(admissionId, cancellationToken);
+                if (current is null || current.State != SandboxAdmissionState.Queued)
+                {
+                    throw new SandboxAdmissionRevokedException(
+                        admissionId, current?.State, current?.ReconciliationReason);
+                }
+
                 await Task.Delay(_options.ActivationPollInterval, cancellationToken);
             }
         }

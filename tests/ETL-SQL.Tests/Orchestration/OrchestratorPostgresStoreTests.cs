@@ -418,5 +418,44 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.NotNull(await restarted.TryActivateAsync(
                 queuedId, "pg-node-c", 1, TimeSpan.FromMinutes(5)));
         }
+
+        [Fact]
+        public async Task SandboxAdmissionLedger_KeepsFairShareClusterGlobal_OnPostgres()
+        {
+            // The HA provider is where "one node's ordering is not the cluster's ordering" actually
+            // bites: two orchestrator nodes share one authority and neither sees the other's queue.
+            var nodeA = NewAdmissionLedger();
+            var nodeB = NewAdmissionLedger();
+            var policy = new ResolvedSandboxAdmissionPolicy
+            {
+                PoolId = "pg-fair-share",
+                TenantWeight = 1,
+                MaxConcurrentAttempts = 4,
+                MaxQueuedAttempts = 8
+            };
+            foreach (var id in new[] { "pg-fair-a1", "pg-fair-a2", "pg-fair-a3" })
+            {
+                await nodeA.EnqueueAsync(
+                    id, TenantContext.FromVerifiedCredential("tenant-fair-a"), policy);
+            }
+            await nodeB.EnqueueAsync(
+                "pg-fair-b1", TenantContext.FromVerifiedCredential("tenant-fair-b"), policy);
+
+            var lease = TimeSpan.FromMinutes(5);
+            var firstToken = (await nodeA.TryActivateAsync("pg-fair-a1", "pg-node-a", 2, lease))!.Value;
+            Assert.NotNull(await nodeA.TryActivateAsync("pg-fair-a2", "pg-node-a", 2, lease));
+            Assert.Null(await nodeB.TryActivateAsync("pg-fair-b1", "pg-node-b", 2, lease));
+            Assert.Null(await nodeA.TryActivateAsync("pg-fair-a3", "pg-node-a", 2, lease));
+
+            Assert.True(await nodeA.TryCompleteAsync("pg-fair-a1", "pg-node-a", firstToken));
+
+            // The freed slot must go to the tenant that has had less of the pool, even though the node
+            // holding the busy tenant's backlog asks first.
+            Assert.Null(await nodeA.TryActivateAsync("pg-fair-a3", "pg-node-a", 2, lease));
+            Assert.NotNull(await nodeB.TryActivateAsync("pg-fair-b1", "pg-node-b", 2, lease));
+            Assert.Equal(
+                "pg-fair-a3",
+                (await nodeA.PeekEligibleAsync("pg-fair-share")).EligibleAdmissionId);
+        }
     }
 }

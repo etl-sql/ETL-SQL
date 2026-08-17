@@ -13,6 +13,9 @@ public sealed class SandboxAdmissionHostOptions
     public TimeSpan LeaseDuration { get; init; } = TimeSpan.FromMinutes(2);
     public TimeSpan ActivationPollInterval { get; init; } = TimeSpan.FromMilliseconds(100);
     public TimeSpan ReconciliationInterval { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>How long a queued admission may go unclaimed before the fleet reclaims it.</summary>
+    public TimeSpan AbandonedQueueHorizon { get; init; } =
+        SandboxAdmissionReconciliationService.DefaultAbandonedQueueHorizon;
 
     internal void Validate()
     {
@@ -34,8 +37,14 @@ public sealed class SandboxAdmissionHostOptions
                 throw new InvalidOperationException("Sandbox admission pool capacities must be positive.");
         }
         if (LeaseDuration <= TimeSpan.Zero || ActivationPollInterval <= TimeSpan.Zero ||
-            ReconciliationInterval <= TimeSpan.Zero)
+            ReconciliationInterval <= TimeSpan.Zero || AbandonedQueueHorizon <= TimeSpan.Zero)
             throw new InvalidOperationException("Sandbox admission host intervals must be positive.");
+        // Reclaiming a queue entry faster than a live node can re-poll it would cancel running work's
+        // place in line and call it recovery.
+        if (AbandonedQueueHorizon <= ActivationPollInterval)
+            throw new InvalidOperationException(
+                "The abandoned-queue horizon must be longer than the activation poll interval, " +
+                "otherwise a live waiter is reclaimed as abandoned.");
     }
 
     internal static SandboxAdmissionHostOptions FromConfiguration(IConfiguration configuration)
@@ -51,7 +60,10 @@ public sealed class SandboxAdmissionHostOptions
             PoolCapacities = pools,
             LeaseDuration = TimeSpan.FromSeconds(section.GetValue("LeaseSeconds", 120d)),
             ActivationPollInterval = TimeSpan.FromMilliseconds(section.GetValue("ActivationPollMilliseconds", 100d)),
-            ReconciliationInterval = TimeSpan.FromSeconds(section.GetValue("ReconciliationSeconds", 30d))
+            ReconciliationInterval = TimeSpan.FromSeconds(section.GetValue("ReconciliationSeconds", 30d)),
+            AbandonedQueueHorizon = TimeSpan.FromSeconds(section.GetValue(
+                "AbandonedQueueSeconds",
+                SandboxAdmissionReconciliationService.DefaultAbandonedQueueHorizon.TotalSeconds))
         };
     }
 }
@@ -71,9 +83,11 @@ public sealed class SandboxAdmissionReconciliationHostedService(
                 var result = await reconciliation.RunOnceAsync(DateTimeOffset.UtcNow, stoppingToken);
                 logger.LogInformation(
                     "Sandbox admission reconciliation completed: expired={Expired}, released={Released}, " +
-                    "running={Running}, unknown={Unknown}, failures={Failures}, conflicts={Conflicts}.",
+                    "running={Running}, unknown={Unknown}, failures={Failures}, conflicts={Conflicts}, " +
+                    "abandonedQueued={AbandonedQueued}.",
                     result.ExpiredRetained, result.DetachedReleased, result.StillRunning,
-                    result.Unknown, result.ProbeFailures, result.FenceConflicts);
+                    result.Unknown, result.ProbeFailures, result.FenceConflicts,
+                    result.AbandonedQueuedCancelled);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -131,7 +145,8 @@ public static class SandboxAdmissionServiceCollectionExtensions
         services.AddSingleton(sp => new SandboxAdmissionReconciliationService(
             sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.ISandboxAdmissionLedger>(),
             sp.GetRequiredService<ISandboxRuntimeReconciler>(),
-            options.PoolCapacities.Keys.ToArray()));
+            options.PoolCapacities.Keys.ToArray(),
+            options.AbandonedQueueHorizon));
         services.AddHostedService<SandboxAdmissionReconciliationHostedService>();
         return services;
     }

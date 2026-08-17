@@ -211,8 +211,139 @@ public sealed class RelationalSandboxAdmissionLedgerTests : IDisposable
             Assert.Single(await store.ListTenantOpenAsync(Tenant("tenant-a"))).State);
     }
 
-    private RelationalSandboxAdmissionLedger Store() => new(
-        new SqliteOrchestratorDialect($"Data Source={_databasePath};Pooling=False"));
+    [Fact]
+    public async Task FreedSlotGoesToTheWaitingTenantEvenWhenAnotherNodeAsksFirst()
+    {
+        // Two ledger instances are two orchestrator nodes on one shared authority.
+        var nodeA = Store();
+        var nodeB = Store();
+        var policy = Policy() with { MaxConcurrentAttempts = 4 };
+        foreach (var id in new[] { "a1", "a2", "a3" })
+            await nodeA.EnqueueAsync(id, Tenant("tenant-a"), policy);
+        await nodeB.EnqueueAsync("b1", Tenant("tenant-b"), policy);
+
+        var first = (await nodeA.TryActivateAsync("a1", "node-a", 2, Lease))!.Value;
+        Assert.NotNull(await nodeA.TryActivateAsync("a2", "node-a", 2, Lease));
+        // Both queued attempts advertise a live claim while the pool is full.
+        Assert.Null(await nodeB.TryActivateAsync("b1", "node-b", 2, Lease));
+        Assert.Null(await nodeA.TryActivateAsync("a3", "node-a", 2, Lease));
+
+        Assert.True(await nodeA.TryCompleteAsync("a1", "node-a", first));
+
+        // The slot is free and tenant-a is under its own maximum, so only cluster-global fairness can
+        // refuse it: tenant-b has been served less of this shared pool.
+        Assert.Null(await nodeA.TryActivateAsync("a3", "node-a", 2, Lease));
+        Assert.NotNull(await nodeB.TryActivateAsync("b1", "node-b", 2, Lease));
+
+        var selection = await nodeA.PeekEligibleAsync("shared-hardened");
+        Assert.Equal("a3", selection.EligibleAdmissionId);
+        Assert.Equal("tenant-a", selection.EligibleTenantId);
+    }
+
+    [Fact]
+    public async Task TenantWeightBuysProportionalGrantsInsteadOfUnconditionalPriority()
+    {
+        var store = Store();
+        var heavy = Policy() with { TenantWeight = 4, MaxConcurrentAttempts = 4 };
+        var light = Policy() with { TenantWeight = 1, MaxConcurrentAttempts = 4 };
+        // Both tenants stay backlogged for the whole run, so the split reflects weight and nothing else.
+        for (var index = 1; index <= 10; index++)
+            await store.EnqueueAsync($"heavy-{index}", Tenant("tenant-heavy"), heavy);
+        for (var index = 1; index <= 10; index++)
+            await store.EnqueueAsync($"light-{index}", Tenant("tenant-light"), light);
+
+        // One slot, handed out ten times: every attempt claims, the winner runs and completes.
+        var granted = new List<string>();
+        for (var round = 0; round < 10; round++)
+        {
+            var heavyId = $"heavy-{granted.Count(id => id.StartsWith("heavy", StringComparison.Ordinal)) + 1}";
+            var lightId = $"light-{granted.Count(id => id.StartsWith("light", StringComparison.Ordinal)) + 1}";
+            var heavyToken = await store.TryActivateAsync(heavyId, "node-a", 1, Lease);
+            var lightToken = await store.TryActivateAsync(lightId, "node-b", 1, Lease);
+            Assert.True(heavyToken.HasValue ^ lightToken.HasValue, "exactly one tenant may hold the only slot");
+            var (winner, owner, token) = heavyToken.HasValue
+                ? (heavyId, "node-a", heavyToken.Value)
+                : (lightId, "node-b", lightToken!.Value);
+            granted.Add(winner);
+            Assert.True(await store.TryCompleteAsync(winner, owner, token));
+        }
+
+        var heavyGrants = granted.Count(id => id.StartsWith("heavy", StringComparison.Ordinal));
+        // Weight 4 against weight 1 is a share, not a veto: the light tenant is never starved out.
+        Assert.Equal(8, heavyGrants);
+        Assert.Equal(2, granted.Count - heavyGrants);
+    }
+
+    [Fact]
+    public async Task AbandonedQueueClaimStopsBlockingThePoolOnceItGoesStale()
+    {
+        var live = Store(TimeSpan.FromMinutes(5));
+        var policy = Policy() with { MaxConcurrentAttempts = 4 };
+        await live.EnqueueAsync("gone-1", Tenant("tenant-gone"), policy);
+        await live.EnqueueAsync("busy-1", Tenant("tenant-busy"), policy);
+        await live.EnqueueAsync("busy-2", Tenant("tenant-busy"), policy);
+
+        var token = (await live.TryActivateAsync("busy-1", "node-b", 1, Lease))!.Value;
+        Assert.Null(await live.TryActivateAsync("gone-1", "node-gone", 1, Lease));
+        Assert.True(await live.TryCompleteAsync("busy-1", "node-b", token));
+
+        // While the departed node's claim is fresh it legitimately outranks the busy tenant.
+        Assert.Null(await live.TryActivateAsync("busy-2", "node-b", 1, Lease));
+
+        // The node never came back. Once its claim is stale the pool must not stay idle behind it.
+        var afterStaleness = Store(TimeSpan.FromMilliseconds(1));
+        await Task.Delay(20);
+        Assert.NotNull(await afterStaleness.TryActivateAsync("busy-2", "node-b", 1, Lease));
+        Assert.Equal(SandboxAdmissionState.Queued, (await live.ReadAsync("gone-1"))!.State);
+    }
+
+    [Fact]
+    public async Task TenantAtItsConcurrencyMaximumIsNoCandidateAndBlocksNobodyElse()
+    {
+        var store = Store();
+        var onePerTenant = Policy() with { MaxConcurrentAttempts = 1 };
+        await store.EnqueueAsync("capped-1", Tenant("tenant-capped"), onePerTenant);
+        await store.EnqueueAsync("capped-2", Tenant("tenant-capped"), onePerTenant);
+        await store.EnqueueAsync("other-1", Tenant("tenant-other"), onePerTenant);
+
+        Assert.NotNull(await store.TryActivateAsync("capped-1", "node-a", 3, Lease));
+        Assert.Null(await store.TryActivateAsync("capped-2", "node-a", 3, Lease));
+
+        // The capped tenant's claimed head sits at the front of the durable queue but is not a
+        // candidate, so it cannot hold the pool against a tenant behind it.
+        var selection = await store.PeekEligibleAsync("shared-hardened");
+        Assert.Null(selection.EligibleAdmissionId);
+        Assert.DoesNotContain("tenant-capped", selection.ContendingTenantIds);
+        Assert.NotNull(await store.TryActivateAsync("other-1", "node-b", 3, Lease));
+    }
+
+    [Fact]
+    public async Task PeekEligibleReportsSelectionWithoutGrantingOrChargingIt()
+    {
+        var store = Store();
+        await store.EnqueueAsync("peek-1", Tenant("tenant-a"), Policy());
+        await store.EnqueueAsync("peek-2", Tenant("tenant-b"), Policy());
+
+        // A never-polled admission is not a contender; only a live claim competes for capacity.
+        Assert.Null((await store.PeekEligibleAsync("shared-hardened")).EligibleAdmissionId);
+
+        var token = (await store.TryActivateAsync("peek-1", "node-a", 1, Lease))!.Value;
+        Assert.Null(await store.TryActivateAsync("peek-2", "node-b", 1, Lease));
+        var peeked = await store.PeekEligibleAsync("shared-hardened");
+        Assert.Equal("peek-2", peeked.EligibleAdmissionId);
+        Assert.Equal(new[] { "tenant-b" }, peeked.ContendingTenantIds);
+
+        // Peeking is diagnostic: it neither grants the slot nor charges the tenant's fair share.
+        Assert.Equal(SandboxAdmissionState.Queued, (await store.ReadAsync("peek-2"))!.State);
+        Assert.Equal("peek-2", (await store.PeekEligibleAsync("shared-hardened")).EligibleAdmissionId);
+        Assert.True(await store.TryCompleteAsync("peek-1", "node-a", token));
+        Assert.NotNull(await store.TryActivateAsync("peek-2", "node-b", 1, Lease));
+    }
+
+    private static readonly TimeSpan Lease = TimeSpan.FromMinutes(5);
+
+    private RelationalSandboxAdmissionLedger Store(TimeSpan? claimFreshness = null) => new(
+        new SqliteOrchestratorDialect($"Data Source={_databasePath};Pooling=False"), claimFreshness);
 
     private static TenantContext Tenant(string tenantId) =>
         TenantContext.FromVerifiedCredential(tenantId);
