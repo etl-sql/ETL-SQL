@@ -205,35 +205,10 @@ access is gone.
 
 ### Language — Compound `@expect` Rules (AND / OR)
 
-**Candidate, not scheduled.** A comma between `@expect` rules means AND, and there is no OR: a
-disjunction must be written as `EXPR a = 'A' OR a = 'B'`, which leaves the rule vocabulary for a
-raw predicate and gives up the diagnostics, autocomplete and policy legibility the named rules
-exist to provide. The parenthesised mixture — `NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES
-^LEGACY-)` — cannot be expressed at all.
-
-**The numbered variants do not cover this.** `@expect_1`, `@expect_2` are independent bindings that
-must *each* pass, so they compose as AND with a distinct `@fail` action per group. They solve
-"different consequences for different rules", not "either of these is acceptable".
-
-Design notes, recorded so the shape is not rediscovered when this is picked up:
-
-- **Precedence is ordinary SQL**, which is why `BETWEEN … AND …` needs no special case: its bound
-  parses at a level above the `AND` connective, so `BETWEEN 1 AND 10 AND NOT BLANK` resolves as it
-  would in a `WHERE` clause. Parentheses group. This retires `FindTopLevelAnd`, which takes the
-  first depth-zero `AND` and holds only while `AND` cannot also be a connective.
-- **Keep the comma** as a synonym for top-level AND; it is used throughout the samples and
-  reference pages, so removing it would break working scripts for no gain.
-- **The existing NULL rule already fixes the semantics.** "NULL skips every rule except NOT NULL,
-  and the row passes" is three-valued logic with UNKNOWN treated as passing — the SQL `CHECK`
-  convention the reference page cites. SQL's truth tables therefore apply unchanged, and a pure-AND
-  list keeps today's behaviour, which is the backward-compatibility argument.
-- **Failure reporting is the hard part, not the grammar.** Evaluation records a failure per failing
-  rule, and `__dq_rule`, the capped sample values, the per-rule counts on job history and
-  `eng.data_quality_rules` all assume a flat list of independent rules. Under an `OR` a false term
-  is not a failure — only the whole expression is. Settle what `__dq_rule` carries for a compound
-  expression before writing the parser, or the metrics surface will report sub-terms as failures
-  that never failed a row.
-- Language change, so the **Syntax Addition Checklist** in `CONTRIBUTING.md` applies.
+**Delivered.** Compound data quality rules (`AND`, `OR`, and parenthesized sub-expressions) are fully shipped, tested, and documented:
+- **Parser & Grammar:** `ColumnRuleParser.cs` parses full boolean expressions with standard SQL precedence (`NOT` > `AND` > `OR`), distinguishing connective `AND` from range boundaries in `BETWEEN` and `LENGTH BETWEEN`, while keeping top-level commas as synonyms for `AND`.
+- **Engine Evaluation:** `ColumnQualityValidator.cs` recursively evaluates `AndRule` and `OrRule` trees synchronously and asynchronously, honoring SQL three-valued logic for `NULL` handling.
+- **Reference & Tests:** Documented in [`data-quality-rules.md`](docs/reference/statements/dml/data-quality-rules.md#compound-rules-and--or) and verified in `ColumnRuleParserTests.cs`.
 
 ### Platform — Native Object Storage for HA Artifacts
 
