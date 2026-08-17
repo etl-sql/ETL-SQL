@@ -24,7 +24,7 @@ USE SETS !Production;
 - `SET SHOW_SECRETS = ON` controls display masking only; it does not permit plaintext master passwords to remain in saved source.
 - `USE SETS !name` replaces any previously active set of the same name.
 - Sets can be created inline with `CREATE SETS` or loaded from external `.sets` files.
-- See: CREATE SETS, ENCRYPT, DECLARE
+- See: [CREATE SETS](create-sets.md), ENCRYPT, DECLARE
 
 References:
 - [Variables and Parameters](README.md)
