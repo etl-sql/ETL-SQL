@@ -281,12 +281,18 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
 
 ### Tooling & Authoring — Visual Report Builder Round-Trip Fidelity & Trivia Preservation
 
-**Candidate, not scheduled.** The Visual Report Builder provides bi-directional synchronization between the 12-column visual grid and `.rptsql` scripts. To ensure zero loss of developer comments and formatting during visual editing, the authoring surface requires enhanced AST serialization controls.
+**In Progress.** The Visual Report Builder provides bi-directional synchronization between the 12-column visual grid and `.rptsql` scripts. To ensure zero loss of developer comments and formatting during visual editing, the authoring surface requires surgical AST serialization and span-patching controls.
 
-**Delivery stage.** This phase hardens round-trip fidelity in VS Code, Portal Studio, and Report Player:
-- **Surgical Statement Patching:** Modifying or moving a visual card replaces only the exact source character span of that specific `CREATE VISUAL` or `CREATE PAGE ... STRUCTURE` statement, leaving preceding data prep SQL, CTEs, and whitespace untouched.
-- **Comment & Trivia Preservation:** The AST parser and serializer retain all leading/trailing comments (`-- ...`, `/* ... */`) and formatting trivia when writing back changes.
-- **Fault-Tolerant Canvas State:** Syntax errors introduced during split-screen text editing trigger inline visual warning badges rather than destroying or resetting canvas layout state.
+**Delivered Foundation:**
+- **Surgical Statement Patcher (`DesignerScriptPatcher.cs`):** The core span-replacement algorithm is implemented in `ETL-SQL.Portal.Services` and integrated into the Portal Designer API (`/api/designer/patch`). It isolates modifications to the exact byte spans of `CREATE VISUAL`, `CREATE PAGE`, `CREATE DATASET`, and `SET REPORT STYLE` statements, leaving preceding data prep SQL, CTEs, `#temp` tables, and outer comments untouched.
+- **Baseline Test Suite (`DesignerScriptPatcherTests.cs`):** 5 unit tests covering preceding SQL preservation, visual insertion, visual deletion, theme patching, and empty scaffold generation.
+
+**Remaining Gaps & Risk Mitigations:**
+1. **LSP Host Parity (`DesignerLspHandler.cs`):** The VS Code Language Server handler currently uses legacy full-script regeneration (`StateToScript`), which risks overwriting data prep SQL if triggered directly. It must be refactored to delegate to `DesignerScriptPatcher`.
+2. **Multi-Page & CTE Regression Tests:** Expand test suites to cover scripts with multiple `CREATE PAGE` definitions (ensuring mutations on Page 2 do not shift Page 1 character spans) and complex CTE chains (`WITH cte1 AS (...), cte2 AS (...)`).
+3. **Sequential Mutation & Line-Ending Drift:** Implement fuzz/regression tests simulating 50+ consecutive visual card moves and property updates to prove that byte-offset calculations do not accumulate off-by-one errors across Windows CRLF and Linux LF environments.
+4. **Statement Body Trivia:** Harden parser preservation for comments written inside visual bodies (e.g. `-- comments inside MAPPINGS or OPTIONS blocks`).
+5. **Fault-Tolerant Canvas State:** Implement automated UI/LSP assertions verifying that transient syntax errors display inline warning badges without resetting or corrupting the WYSIWYG canvas state.
 
 ### Language & Execution — Declarative Incremental Watermarking Syntax
 
