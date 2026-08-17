@@ -280,8 +280,25 @@ runtime, which is what the storage cell below was blocked on.
       state. This is the shape the ledger keeps finding — a control that exists, looks implemented,
       and was never asserted end to end.
 
-      The cell stays open for **reserved placement proven on a real tenant-dedicated hardened host**
-      rather than through the host-fixed refusal tests alone.
+      **Reserved placement is now a lifecycle contract, and half of it is proven (2026-08-17).**
+      Placement was covered only by host-fixed refusal unit tests, which prove the argument checks
+      rather than that a reserved host behaves as one.
+      `VerifyReservedPlacementRunsOnlyTheHostsOwnTenantAndPool` asserts both halves against real
+      containers: the host runs its own tenant's work on the runtime it claims, with the tenant label
+      on the container, and creates **no runtime at all** for another tenant or for its own tenant
+      placed in a different capacity pool — absence of a container, not merely an exception, because
+      that is what distinguishes a reserved host from an ordinary one that happens to be running one
+      tenant's jobs today. `DockerDedicatedSandboxLifecycleTests` binds the whole lifecycle contract
+      to the Dedicated tier on a host fixed to one tenant and pool.
+
+      **The cell stays open because that lane has not been run.** It requires a daemon-registered
+      gVisor/Kata runtime and a digest-pinned image, and skips with a precise diagnostic without them;
+      the development workstation has `runsc` installed in WSL but no registered runtime, and
+      `scripts/enable-hardened-sandbox-lane.sh` needs privileges this session could not obtain. What
+      exists today is the same contract proven at **Standard** tier on an ordinary runtime, which is
+      not a hostile-tenant result. Closing the cell needs one run of
+      `dotnet test --filter FullyQualifiedName~DockerDedicatedSandboxLifecycleTests` on a host where
+      the hardened lane is prepared.
 - [ ] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
       tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
       ambiguous-outcome handling, and destructive cleanup. Tenant-partitioned queues and
