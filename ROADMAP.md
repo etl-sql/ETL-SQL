@@ -341,10 +341,42 @@ CREATE VISUAL StateSlicer AS SLICER (
 
 ### Reporting & Presentation — Bookmarks & In-Report Saved Visual States
 
-**Candidate, not scheduled.** While Portal administrators can save parameterized views at the catalog level via `CREATE SAVED VIEW`, report consumers and authors frequently need in-canvas bookmark buttons to switch between curated visual presets, toggled container visibility states, and specific filter/drill configurations during analytical storytelling or executive presentations.
+**Candidate, not scheduled.** While Portal administrators can save parameterized views at the catalog level via `CREATE SAVED VIEW`, report consumers and authors frequently need in-report bookmark presets to switch between curated analytical views, toggled container visibility states, and specific filter configurations during executive presentations or self-service exploration.
 
-**Delivery stage.** This work introduces declarative in-report bookmarks:
-- **`CREATE BOOKMARK` Syntax:** Declarative definition capturing a named snapshot of active parameters, container visibility states (`VISIBLE`/`COLLAPSED`), and visual drill depths.
-- **Action Binding:** Buttons and navigation items can trigger `ACTIONS (ON_CLICK = APPLY_BOOKMARK(BookmarkName))` to transition the dashboard state with zero server round-trips.
-- **URL Hash Synchronization:** Active bookmarks reflect in browser URL hash fragments, enabling deep-linking directly into specific visual analytical states.
+**Architecture Decision (Layered Composition):**
+Rather than building a redundant parameter-snapshot engine, Bookmarks layer cleanly on top of ETL-SQL's existing `CREATE SETS !SetName` primitive:
+- **Layer 1 (Data / Parameters):** `CREATE SETS !Name` encapsulates the raw parameter values in engine memory.
+- **Layer 2 (Presentation Entity):** `CREATE BOOKMARK Name AS (...)` binds parameter sets to presentation metadata (`TITLE`, `DESCRIPTION`, `ICON`), target `PAGE`, and container visibility (`UI_STATE`).
+- **Layer 3 (Triggers & Shell Integration):** Bookmarks automatically populate a dedicated "Bookmarks" dropdown menu in the Report Player / Portal navigation header without wasting 12-column grid canvas space, while in-canvas buttons can invoke `ACTIONS (ON_CLICK = APPLY_BOOKMARK(Name))` or compose multiple actions directly (`ON_CLICK = (Action1, Action2)`).
+
+**Target Syntax Specification:**
+```sql
+-- 1. Parameter State (Engine Tier)
+CREATE SETS !WestCoastRetail BEGIN
+  @region    = 'West',
+  @channel   = 'Retail',
+  @timeframe = 'M-1'
+END;
+
+-- 2. Bookmark Presentation Object (Report Tier)
+CREATE BOOKMARK WestCoastDeepDive AS (
+  TITLE       = 'West Coast Retail Analysis',
+  DESCRIPTION = 'Pre-filters for Q1 retail stores with anomaly drawer open.',
+  SET         = !WestCoastRetail,
+  PAGE        = StoreDetails,
+  UI_STATE    = ('AnomalyDrawer' = VISIBLE, 'SummaryCard' = COLLAPSED)
+);
+
+-- 3. Optional In-Canvas Button Binding
+CREATE BUTTON QuickSwitch AS (
+  LABEL   = 'Switch to West Coast',
+  ACTIONS (ON_CLICK = APPLY_BOOKMARK(WestCoastDeepDive))
+);
+```
+
+**Delivery Stages:**
+1. **Parser & AST Extension:** Implement `CreateBookmarkStatement`, `APPLY_BOOKMARK` action AST node, and multi-action composition tuples `(Action1, Action2, ...)` in `ReportParser.cs`.
+2. **Runtime Execution Engine (`report-runtime.js`):** Implement `APPLY_BOOKMARK` to atomically apply parameter sets, transition active pages, update container/visual visibility, and synchronize with slicer controls.
+3. **Portal & Shell Integration:** Automatically render a global "Bookmarks" menu in the Report Player / Portal header bar populated from the `ReportManifest.Bookmarks` catalog.
+4. **URL Hash Synchronization:** Synchronize active bookmarks with browser URL hash fragments (`#bookmark=WestCoastDeepDive`) to enable one-click deep linking into specific report states.
 
