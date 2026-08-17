@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Quality;
 using ETL_SQL.Core.Multitenancy;
+using ETL_SQL.Core.Quality;
 
 namespace ETL_SQL.Core.Data;
 

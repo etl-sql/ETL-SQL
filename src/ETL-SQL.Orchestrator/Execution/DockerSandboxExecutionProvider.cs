@@ -234,10 +234,10 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             if (!state.Trim().Equals("created", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Sandbox preparation did not leave tenant code stopped.");
 
-            var tier = _options.Mode == DockerSandboxMode.Standard 
+            var tier = _options.Mode == DockerSandboxMode.Standard
                 ? SandboxIsolationTier.Standard
-                : (request.RequiredIsolationTier == SandboxIsolationTier.Dedicated 
-                    ? SandboxIsolationTier.Dedicated 
+                : (request.RequiredIsolationTier == SandboxIsolationTier.Dedicated
+                    ? SandboxIsolationTier.Dedicated
                     : SandboxIsolationTier.Hardened);
             var evidence = new SandboxProviderEvidence(
                 "docker-oci", version.Trim(), _options.Runtime, tier, image, _options.HostPolicyVersion);
@@ -462,7 +462,7 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
                 throw new ArgumentException("Standard mode requires ImageDigest or LocalImageId.", nameof(options));
             if (!string.IsNullOrWhiteSpace(options.ImageDigest) && !string.IsNullOrWhiteSpace(options.LocalImageId))
                 throw new ArgumentException("Standard mode cannot specify both ImageDigest and LocalImageId.", nameof(options));
-            
+
             if (!string.IsNullOrWhiteSpace(options.LocalImageId))
             {
                 var id = options.LocalImageId.ToLowerInvariant();
@@ -479,7 +479,7 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
                 if (!options.Image.EndsWith("@" + digest, StringComparison.Ordinal))
                     throw new ArgumentException("The sandbox image reference must be pinned to ImageDigest.", nameof(options));
             }
-            
+
             if (HardenedRuntimes.Contains(options.Runtime))
                 throw new ArgumentException("Standard sandbox mode cannot use a Hardened runtime.", nameof(options));
         }

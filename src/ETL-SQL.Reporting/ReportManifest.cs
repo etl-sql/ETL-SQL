@@ -358,7 +358,7 @@ namespace ETL_SQL.Reporting
     {
         [JsonPropertyName("targetName")]
         public string TargetName { get; set; } = string.Empty;
-        
+
         [JsonPropertyName("limit")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? Limit { get; set; }

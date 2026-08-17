@@ -306,23 +306,35 @@ public sealed class SharedTenantHttpBoundaryTests
             Assert.True((await users.CreateAsync(beta, "Beta@Test99!")).Succeeded);
             var alphaFolder = new Folder
             {
-                TenantId = "tenant-alpha", Name = "Alpha marker", Path = "/shared", OwnerId = admin.Id
+                TenantId = "tenant-alpha",
+                Name = "Alpha marker",
+                Path = "/shared",
+                OwnerId = admin.Id
             };
             var betaFolder = new Folder
             {
-                TenantId = "tenant-beta", Name = "Beta secret", Path = "/shared", OwnerId = beta.Id
+                TenantId = "tenant-beta",
+                Name = "Beta secret",
+                Path = "/shared",
+                OwnerId = beta.Id
             };
             db.Folders.AddRange(alphaFolder, betaFolder);
             await db.SaveChangesAsync();
             var alphaReport = new Report
             {
-                TenantId = "tenant-alpha", FolderId = alphaFolder.Id, Name = "Alpha report",
-                ScriptPath = "alpha/report.rptsql", CreatedBy = admin.Id
+                TenantId = "tenant-alpha",
+                FolderId = alphaFolder.Id,
+                Name = "Alpha report",
+                ScriptPath = "alpha/report.rptsql",
+                CreatedBy = admin.Id
             };
             var betaReport = new Report
             {
-                TenantId = "tenant-beta", FolderId = betaFolder.Id, Name = "Beta report secret",
-                ScriptPath = "beta/report.rptsql", CreatedBy = beta.Id
+                TenantId = "tenant-beta",
+                FolderId = betaFolder.Id,
+                Name = "Beta report secret",
+                ScriptPath = "beta/report.rptsql",
+                CreatedBy = beta.Id
             };
             db.Reports.AddRange(alphaReport, betaReport);
             await db.SaveChangesAsync();

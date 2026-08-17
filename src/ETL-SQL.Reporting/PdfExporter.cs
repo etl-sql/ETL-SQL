@@ -174,7 +174,7 @@ namespace ETL_SQL.Reporting
                 paramPara.Format.Font.Color = _greyDark1;
                 paramPara.AddFormattedText("Export State / Active Filters:", TextFormat.Bold);
                 paramPara.AddLineBreak();
-                
+
                 foreach (var (key, value) in manifest.Parameters)
                 {
                     paramPara.AddText($"• {key} = {value}");
@@ -205,7 +205,7 @@ namespace ETL_SQL.Reporting
                             await RenderVisualAsync(pageSection, v, manifest, tempFiles, cancellationToken);
                     }
                 }
-                
+
                 // Any loose visuals
                 foreach (var v in manifest.Visuals)
                 {
@@ -262,7 +262,7 @@ namespace ETL_SQL.Reporting
             para.Format.Alignment = ParagraphAlignment.Center;
             para.Format.Font.Size = Unit.FromPoint(8);
             para.Format.Font.Color = _greyDark1;
-            
+
             para.AddText($"Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm} UTC   |   Page ");
             para.AddPageField();
             para.AddText(" of ");
@@ -399,10 +399,10 @@ namespace ETL_SQL.Reporting
             double totalWeight = weights.Sum();
 
             var table = section.AddTable();
-            
+
             if (v.PrintLayout?.KeepTogether == true)
                 table.KeepTogether = true;
-                
+
             for (int ci = 0; ci < v.Columns.Count; ci++)
                 table.AddColumn(Unit.FromPoint(ContentWidthPt * weights[ci] / totalWeight));
 

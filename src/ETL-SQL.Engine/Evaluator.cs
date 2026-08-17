@@ -578,7 +578,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         _procedureExecutor = _registry.ProcedureExecutor;
         _constraintValidator = new DataConstraintValidator(_expressionEvaluator, _connections);
         _spillCoordinator = new EvaluatorSpillCoordinator(this, _logger);
-        
+
         var ledgerFactory = _serviceProvider?.GetService(typeof(ETL_SQL.Core.Execution.IOperationLedgerFactory)) as ETL_SQL.Core.Execution.IOperationLedgerFactory;
         if (ledgerFactory != null)
         {

@@ -1,9 +1,8 @@
 using System;
 using System.Linq;
-using ETL_SQL.Core.Parser;
-
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
 using Xunit;
 
 namespace ETL_SQL.Tests.Core.Parsing
@@ -45,7 +44,7 @@ EXPECT SCHEMA (
 
             Assert.NotNull(stmt.Parameters);
             Assert.Equal(2, stmt.Parameters.Count);
-            
+
             var dateExpr = Assert.IsType<LiteralExpression>(stmt.Parameters["DATE"]);
             Assert.Equal("2024-01-01", dateExpr.Value);
 
@@ -70,7 +69,7 @@ EXPECT SCHEMA (
             var script = Parse(sql);
             var stmt = script.Statements.OfType<ExecuteToolStatement>().First();
             var serialized = stmt.ToSql();
-            
+
             Assert.Equal("EXECUTE TOOL 'myPythonScript' FROM #sourceData INTO #targetData WITH (DATE = '2024-01-01', REGION = 'US-EAST') EXPECT SCHEMA (id VARCHAR(50) NOT NULL, score INT)", serialized);
         }
 

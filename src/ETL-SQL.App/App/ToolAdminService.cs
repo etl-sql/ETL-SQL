@@ -141,7 +141,7 @@ internal static class ToolAdminService
                 Disabled: false);
 
             await writable.StoreAsync(def, ct);
-            
+
             SecurityEventRuntime.Emit(SecurityEventContract.Create(
                 SecurityEventSeverity.Information,
                 SecurityEventType.CatalogMutation,

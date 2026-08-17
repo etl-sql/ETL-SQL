@@ -37,9 +37,9 @@ namespace ETL_SQL.Tests.Reporting
                             Rows = new List<List<string?>> { new() { "A", "B" } } }
                 }
             };
-            
-            var options = new PdfExportOptions 
-            { 
+
+            var options = new PdfExportOptions
+            {
                 // Currently PdfExportOptions does not expose PageSize/Orientation directly 
                 // in the basic struct unless we inject it into the manifest or the exporter.
                 // Assuming defaults or basic testing here.
@@ -67,7 +67,7 @@ namespace ETL_SQL.Tests.Reporting
                             Options = new Dictionary<string, string> { ["CONTENT"] = "Content with header and footer" } }
                 }
             };
-            
+
             var bytes = new PdfExporter().Export(manifest);
             Assert.True(bytes.Length > 100);
             RetainEvidence("HeadersFooters", bytes);
@@ -84,10 +84,10 @@ namespace ETL_SQL.Tests.Reporting
                 {
                     new() { Name = "GroupData", VisualType = "TABLE",
                             Columns = new List<string> { "Region", "Sales" },
-                            Rows = new List<List<string?>> { 
-                                new() { "North", "100" }, 
-                                new() { "North", "150" }, 
-                                new() { "South", "200" } 
+                            Rows = new List<List<string?>> {
+                                new() { "North", "100" },
+                                new() { "North", "150" },
+                                new() { "South", "200" }
                             } }
                 }
             };

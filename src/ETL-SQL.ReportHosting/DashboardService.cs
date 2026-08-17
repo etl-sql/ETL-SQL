@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Reporting;
-using ETL_SQL.Core.Security;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.ReportHosting

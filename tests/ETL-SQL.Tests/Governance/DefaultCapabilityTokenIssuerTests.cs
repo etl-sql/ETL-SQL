@@ -1,9 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Engine.Governance;
+using Xunit;
 
 namespace ETL_SQL.Tests.Governance
 {
@@ -85,7 +85,7 @@ namespace ETL_SQL.Tests.Governance
         {
             // Arrange
             var issuer = new DefaultCapabilityTokenIssuer();
-            
+
             // Act
             var result = issuer.TryValidateToken("invalid-token-string", out var parsed);
 

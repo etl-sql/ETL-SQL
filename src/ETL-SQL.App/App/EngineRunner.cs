@@ -303,7 +303,9 @@ namespace ETL_SQL.App
                         }
                         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
                         {
-                            type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName,
+                            type = "done",
+                            exitCode = 1,
+                            uri = ctx.ScriptFile.FullName,
                             peakMemoryBytes = Process.GetCurrentProcess().PeakWorkingSet64,
                             cpuTimeSeconds = Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds
                         }));
@@ -363,7 +365,9 @@ namespace ETL_SQL.App
                         }
                         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
                         {
-                            type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName,
+                            type = "done",
+                            exitCode = 1,
+                            uri = ctx.ScriptFile.FullName,
                             peakMemoryBytes = Process.GetCurrentProcess().PeakWorkingSet64,
                             cpuTimeSeconds = Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds
                         }));

@@ -683,7 +683,7 @@ public class ExtensionParser : ParserComponent
             var toolAlias = Consume(TokenType.STRING_LITERAL, "Expected string literal for tool alias").Value;
             TableReference? sourceTable = null;
             if (Match(TokenType.FROM)) sourceTable = ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
-            
+
             TableReference? targetTable = null;
             if (Match(TokenType.INTO)) targetTable = ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
 

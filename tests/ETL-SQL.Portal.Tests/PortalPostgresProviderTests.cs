@@ -93,11 +93,17 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         await db.SaveChangesAsync();
         var alphaFolder = new Folder
         {
-            TenantId = "tenant-alpha", Name = "Shared", Path = "/shared", OwnerId = owner.Id
+            TenantId = "tenant-alpha",
+            Name = "Shared",
+            Path = "/shared",
+            OwnerId = owner.Id
         };
         var betaFolder = new Folder
         {
-            TenantId = "tenant-beta", Name = "Shared", Path = "/shared", OwnerId = betaOwner.Id
+            TenantId = "tenant-beta",
+            Name = "Shared",
+            Path = "/shared",
+            OwnerId = betaOwner.Id
         };
         db.Folders.AddRange(alphaFolder, betaFolder);
         await db.SaveChangesAsync();
@@ -105,13 +111,19 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         db.Reports.AddRange(
             new Report
             {
-                TenantId = "tenant-alpha", FolderId = alphaFolder.Id, Name = "Equal report",
-                ScriptPath = "alpha/equal.rptsql", CreatedBy = owner.Id
+                TenantId = "tenant-alpha",
+                FolderId = alphaFolder.Id,
+                Name = "Equal report",
+                ScriptPath = "alpha/equal.rptsql",
+                CreatedBy = owner.Id
             },
             new Report
             {
-                TenantId = "tenant-beta", FolderId = betaFolder.Id, Name = "Equal report",
-                ScriptPath = "beta/equal.rptsql", CreatedBy = betaOwner.Id
+                TenantId = "tenant-beta",
+                FolderId = betaFolder.Id,
+                Name = "Equal report",
+                ScriptPath = "beta/equal.rptsql",
+                CreatedBy = betaOwner.Id
             });
         await db.SaveChangesAsync();
         Assert.Equal(2, await db.Reports.CountAsync(report => report.Name == "Equal report"));
@@ -126,13 +138,19 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         db.PortalExecutionJobs.AddRange(
             new PortalExecutionJob
             {
-                Id = "alpha-equal-purpose", TenantId = "tenant-alpha", ReportId = alphaReportId,
-                UserId = owner.Id, Status = "Pending"
+                Id = "alpha-equal-purpose",
+                TenantId = "tenant-alpha",
+                ReportId = alphaReportId,
+                UserId = owner.Id,
+                Status = "Pending"
             },
             new PortalExecutionJob
             {
-                Id = "beta-equal-purpose", TenantId = "tenant-beta", ReportId = betaReportId,
-                UserId = betaOwner.Id, Status = "Pending"
+                Id = "beta-equal-purpose",
+                TenantId = "tenant-beta",
+                ReportId = betaReportId,
+                UserId = betaOwner.Id,
+                Status = "Pending"
             });
         await db.SaveChangesAsync();
         Assert.Equal(1, await db.PortalExecutionJobs.CountAsync(job => job.TenantId == "tenant-alpha"));
@@ -144,11 +162,15 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         db.StewardshipFindings.AddRange(
             new StewardshipFinding
             {
-                TenantId = "tenant-alpha", AssetKey = "same.table", RuleKey = "same-rule"
+                TenantId = "tenant-alpha",
+                AssetKey = "same.table",
+                RuleKey = "same-rule"
             },
             new StewardshipFinding
             {
-                TenantId = "tenant-beta", AssetKey = "same.table", RuleKey = "same-rule"
+                TenantId = "tenant-beta",
+                AssetKey = "same.table",
+                RuleKey = "same-rule"
             });
         await db.SaveChangesAsync();
         Assert.Equal(2, await db.StewardshipSettings.CountAsync());
@@ -165,16 +187,16 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
 
     private static AuditOutboxMessage AuditOutbox(
         string tenantId, string eventId, string status) => new()
-    {
-        TenantId = tenantId,
-        EventId = eventId,
-        Action = "POSTGRES_TENANT_COLLISION",
-        PayloadJson = "{}",
-        Status = status,
-        OccurredAt = DateTime.UtcNow,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow
-    };
+        {
+            TenantId = tenantId,
+            EventId = eventId,
+            Action = "POSTGRES_TENANT_COLLISION",
+            PayloadJson = "{}",
+            Status = status,
+            OccurredAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
     [Fact]
     public async Task PostgresProvider_MigrationLock_SerializesConcurrentMigrationWork()

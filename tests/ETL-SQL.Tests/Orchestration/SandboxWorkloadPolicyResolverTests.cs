@@ -86,17 +86,17 @@ public sealed class SandboxWorkloadPolicyResolverTests
         SandboxIsolationTier tier,
         long memory,
         int processes) => new()
-    {
-        PoolId = pool,
-        IsolationTier = tier,
-        Limits = new SandboxResourceLimits
         {
-            MaxDuration = TimeSpan.FromMinutes(5),
-            MaxMemoryBytes = memory,
-            MaxScratchBytes = 4096,
-            MaxProcesses = processes
-        }
-    };
+            PoolId = pool,
+            IsolationTier = tier,
+            Limits = new SandboxResourceLimits
+            {
+                MaxDuration = TimeSpan.FromMinutes(5),
+                MaxMemoryBytes = memory,
+                MaxScratchBytes = 4096,
+                MaxProcesses = processes
+            }
+        };
 
     private static SandboxTenantAdmissionPolicy TenantPolicy(
         string defaultProfile,
@@ -104,13 +104,13 @@ public sealed class SandboxWorkloadPolicyResolverTests
         int weight,
         int concurrent,
         int queued) => new()
-    {
-        DefaultProfile = defaultProfile,
-        AllowedProfiles = profiles,
-        Weight = weight,
-        MaxConcurrentAttempts = concurrent,
-        MaxQueuedAttempts = queued
-    };
+        {
+            DefaultProfile = defaultProfile,
+            AllowedProfiles = profiles,
+            Weight = weight,
+            MaxConcurrentAttempts = concurrent,
+            MaxQueuedAttempts = queued
+        };
 
     private static TenantContext Tenant(string tenantId) => TenantContext.FromVerifiedCredential(tenantId);
 

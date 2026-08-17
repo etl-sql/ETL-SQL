@@ -1,9 +1,9 @@
 using System;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Services;
 using Xunit;
 using Sev = ETL_SQL.Portal.Services.DatasetAtRestKeyValidator.Severity;
-using ETL_SQL.Core.Security;
 
 namespace ETL_SQL.Portal.Tests;
 

@@ -1,6 +1,6 @@
 using System.Security.Claims;
-using ETL_SQL.Portal.Data;
 using ETL_SQL.Core.Multitenancy;
+using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;

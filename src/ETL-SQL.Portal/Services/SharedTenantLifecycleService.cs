@@ -462,28 +462,28 @@ public sealed class SharedTenantLifecycleService(
     private static SharedTenantLifecycleOperation NewOperation(
         string id, SharedTenantLifecycleAuthority authority,
         (string Release, int Jobs, int Storage, int Reports) assignment, DateTimeOffset now) => new()
-    {
-        OperationId = id,
-        TenantId = authority.Tenant.Tenant.Value,
-        Kind = authority.Kind.ToString(),
-        Status = "Started",
-        Phase = "PortalFence",
-        PlatformOperator = authority.Operator,
-        AuthorizationReference = authority.AuthorizationReference,
-        Reason = authority.Reason,
-        AuthorizationExpiresUtc = authority.ExpiresUtc.UtcDateTime,
-        TargetRelease = assignment.Release,
-        TargetMaxConcurrentJobs = assignment.Jobs,
-        TargetMaxStorageMb = assignment.Storage,
-        TargetMaxReportSessions = assignment.Reports,
-        TargetPortalHost = authority.IdentityAuthority?.PortalHost,
-        TargetLoginDomain = authority.IdentityAuthority?.LoginDomain,
-        TargetIssuer = authority.IdentityAuthority?.Issuer,
-        TargetClientId = authority.IdentityAuthority?.ClientId,
-        TargetClientSecretReference = authority.IdentityAuthority?.ClientSecretReference,
-        StartedAtUtc = now.UtcDateTime,
-        UpdatedAtUtc = now.UtcDateTime
-    };
+        {
+            OperationId = id,
+            TenantId = authority.Tenant.Tenant.Value,
+            Kind = authority.Kind.ToString(),
+            Status = "Started",
+            Phase = "PortalFence",
+            PlatformOperator = authority.Operator,
+            AuthorizationReference = authority.AuthorizationReference,
+            Reason = authority.Reason,
+            AuthorizationExpiresUtc = authority.ExpiresUtc.UtcDateTime,
+            TargetRelease = assignment.Release,
+            TargetMaxConcurrentJobs = assignment.Jobs,
+            TargetMaxStorageMb = assignment.Storage,
+            TargetMaxReportSessions = assignment.Reports,
+            TargetPortalHost = authority.IdentityAuthority?.PortalHost,
+            TargetLoginDomain = authority.IdentityAuthority?.LoginDomain,
+            TargetIssuer = authority.IdentityAuthority?.Issuer,
+            TargetClientId = authority.IdentityAuthority?.ClientId,
+            TargetClientSecretReference = authority.IdentityAuthority?.ClientSecretReference,
+            StartedAtUtc = now.UtcDateTime,
+            UpdatedAtUtc = now.UtcDateTime
+        };
 
     private static void ValidateReplay(
         SharedTenantLifecycleOperation operation, SharedTenantLifecycleAuthority authority,

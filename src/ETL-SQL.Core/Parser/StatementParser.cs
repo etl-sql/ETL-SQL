@@ -792,24 +792,24 @@ public class StatementParser
             string perm = _parser.Advance().Value;
             _parser.Consume(TokenType.ON, "Expected ON");
             _parser.Consume(TokenType.BINDING, "Expected BINDING");
-            
+
             Token bindingToken = _parser.Advance();
             if (bindingToken.Type != TokenType.IDENTIFIER && bindingToken.Type != TokenType.VALUE)
                 throw new SyntaxException("Expected binding name", bindingToken.Line, bindingToken.Column);
             string bindingName = bindingToken.Value;
-            
+
             _parser.Consume(TokenType.TO, "Expected TO");
-            
+
             Token principalKindToken = _parser.Advance(); // USER or GROUP
             string principalKind = principalKindToken.Value;
-            
+
             Token principalNameToken = _parser.Advance();
             string principalName = principalNameToken.Value;
-            
+
             return new GrantBindingStatement(perm, bindingName, principalKind, principalName)
             { Line = t.Line, Column = t.Column };
         }
-        
+
         return PortalParser.ParseGrant(t);
     }
 
@@ -820,24 +820,24 @@ public class StatementParser
             string perm = _parser.Advance().Value;
             _parser.Consume(TokenType.ON, "Expected ON");
             _parser.Consume(TokenType.BINDING, "Expected BINDING");
-            
+
             Token bindingToken = _parser.Advance();
             if (bindingToken.Type != TokenType.IDENTIFIER && bindingToken.Type != TokenType.VALUE)
                 throw new SyntaxException("Expected binding name", bindingToken.Line, bindingToken.Column);
             string bindingName = bindingToken.Value;
-            
+
             _parser.Consume(TokenType.FROM, "Expected FROM");
-            
+
             Token principalKindToken = _parser.Advance(); // USER or GROUP
             string principalKind = principalKindToken.Value;
-            
+
             Token principalNameToken = _parser.Advance();
             string principalName = principalNameToken.Value;
-            
+
             return new RevokeBindingStatement(perm, bindingName, principalKind, principalName)
             { Line = t.Line, Column = t.Column };
         }
-        
+
         return PortalParser.ParseRevoke(t);
     }
 

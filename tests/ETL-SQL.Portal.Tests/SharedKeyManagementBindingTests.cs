@@ -69,18 +69,18 @@ public sealed class SharedKeyManagementBindingTests
             KeyManagement = new KeyManagementConfig { Enabled = true }
         };
         foreach (var tenant in new[] { "tenant-alpha", "tenant-beta" })
-        foreach (var purpose in Enum.GetNames<KeyPurpose>())
-        {
-            config.KeyManagement.Bindings.Add(new KeyManagementBindingConfig
+            foreach (var purpose in Enum.GetNames<KeyPurpose>())
             {
-                Scope = tenant,
-                Purpose = purpose,
-                Version = "v1",
-                KeyId = $"{tenant}-{purpose.ToLowerInvariant()}",
-                EnvironmentVariable = $"KEY_{tenant}_{purpose}",
-                IsCurrent = true
-            });
-        }
+                config.KeyManagement.Bindings.Add(new KeyManagementBindingConfig
+                {
+                    Scope = tenant,
+                    Purpose = purpose,
+                    Version = "v1",
+                    KeyId = $"{tenant}-{purpose.ToLowerInvariant()}",
+                    EnvironmentVariable = $"KEY_{tenant}_{purpose}",
+                    IsCurrent = true
+                });
+            }
         return config;
     }
 
@@ -89,15 +89,15 @@ public sealed class SharedKeyManagementBindingTests
         var entries = new List<(KeyMaterialDescriptor Descriptor, byte[] Bytes)>();
         byte marker = 1;
         foreach (var tenant in new[] { "tenant-alpha", "tenant-beta" })
-        foreach (var purpose in Enum.GetValues<KeyPurpose>())
-        {
-            if (!includeBetaCheckpoint && tenant == "tenant-beta" && purpose == KeyPurpose.Checkpoint)
-                continue;
-            entries.Add((
-                new KeyMaterialDescriptor(
-                    "test-vault", $"{tenant}-{purpose}", tenant, purpose, "v1"),
-                Enumerable.Repeat(marker++, 32).ToArray()));
-        }
+            foreach (var purpose in Enum.GetValues<KeyPurpose>())
+            {
+                if (!includeBetaCheckpoint && tenant == "tenant-beta" && purpose == KeyPurpose.Checkpoint)
+                    continue;
+                entries.Add((
+                    new KeyMaterialDescriptor(
+                        "test-vault", $"{tenant}-{purpose}", tenant, purpose, "v1"),
+                    Enumerable.Repeat(marker++, 32).ToArray()));
+            }
         return new ResolvedKeyMaterialProvider("test-vault", entries);
     }
 

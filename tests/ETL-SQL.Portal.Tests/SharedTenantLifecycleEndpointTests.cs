@@ -2,8 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Multitenancy;
-using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -58,11 +58,15 @@ public sealed class SharedTenantLifecycleEndpointTests
         var platform = new OrchestratorCaller(
             "platform", "operator", "operator", ["PlatformLifecycle"], [], "tenant-alpha");
         using (var provision = Request(platform, new
-               {
-                   operationId = "drain-provision-alpha", kind = "Provision",
-                   authorizationReference = "change-p", targetRelease = "release-1",
-                   maxConcurrentJobs = 3, maxStorageMb = 2048, maxReportSessions = 4
-               }))
+        {
+            operationId = "drain-provision-alpha",
+            kind = "Provision",
+            authorizationReference = "change-p",
+            targetRelease = "release-1",
+            maxConcurrentJobs = 3,
+            maxStorageMb = 2048,
+            maxReportSessions = 4
+        }))
             Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(provision)).StatusCode);
 
         using var scope = factory.Services.CreateScope();
@@ -81,9 +85,13 @@ public sealed class SharedTenantLifecycleEndpointTests
             "drain-active", "node-a", 3, TimeSpan.FromMinutes(5)))!.Value;
         var upgradeBody = new
         {
-            operationId = "drain-upgrade-alpha", kind = "Upgrade",
-            authorizationReference = "change-u", targetRelease = "release-2",
-            maxConcurrentJobs = 4, maxStorageMb = 4096, maxReportSessions = 5
+            operationId = "drain-upgrade-alpha",
+            kind = "Upgrade",
+            authorizationReference = "change-u",
+            targetRelease = "release-2",
+            maxConcurrentJobs = 4,
+            maxStorageMb = 4096,
+            maxReportSessions = 5
         };
 
         using (var upgrade = Request(platform, upgradeBody))

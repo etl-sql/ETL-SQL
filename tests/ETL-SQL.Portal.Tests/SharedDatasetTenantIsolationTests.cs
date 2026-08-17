@@ -119,12 +119,12 @@ public sealed class SharedDatasetTenantIsolationTests : IDisposable
         var entries = new List<(KeyMaterialDescriptor Descriptor, byte[] Bytes)>();
         byte marker = 1;
         foreach (var tenant in new[] { "tenant-alpha", "tenant-beta" })
-        foreach (var purpose in Enum.GetValues<KeyPurpose>())
-        {
-            entries.Add((new KeyMaterialDescriptor(
-                "test", $"{tenant}-{purpose}", tenant, purpose, "v1"),
-                Enumerable.Repeat(marker++, 32).ToArray()));
-        }
+            foreach (var purpose in Enum.GetValues<KeyPurpose>())
+            {
+                entries.Add((new KeyMaterialDescriptor(
+                    "test", $"{tenant}-{purpose}", tenant, purpose, "v1"),
+                    Enumerable.Repeat(marker++, 32).ToArray()));
+            }
         return new ResolvedKeyMaterialProvider("test", entries);
     }
 

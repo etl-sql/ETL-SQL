@@ -588,20 +588,20 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
             env["Portal__KeyManagement__Enabled"] = "true";
             var bindingIndex = 0;
             foreach (var tenant in new[] { "tenant-alpha", "tenant-beta" })
-            foreach (var purpose in Enum.GetValues<ETL_SQL.Core.Security.KeyPurpose>())
-            {
-                var prefix = $"Portal__KeyManagement__Bindings__{bindingIndex}";
-                var variable = $"ETLSQL_MULTIPROC_KEY_{bindingIndex}";
-                env[$"{prefix}__Scope"] = tenant;
-                env[$"{prefix}__Purpose"] = purpose.ToString();
-                env[$"{prefix}__Version"] = "v1";
-                env[$"{prefix}__KeyId"] = $"{tenant}-{purpose.ToString().ToLowerInvariant()}";
-                env[$"{prefix}__EnvironmentVariable"] = variable;
-                env[$"{prefix}__IsCurrent"] = "true";
-                env[variable] = Convert.ToBase64String(
-                    Enumerable.Repeat((byte)(bindingIndex + 1), 32).ToArray());
-                bindingIndex++;
-            }
+                foreach (var purpose in Enum.GetValues<ETL_SQL.Core.Security.KeyPurpose>())
+                {
+                    var prefix = $"Portal__KeyManagement__Bindings__{bindingIndex}";
+                    var variable = $"ETLSQL_MULTIPROC_KEY_{bindingIndex}";
+                    env[$"{prefix}__Scope"] = tenant;
+                    env[$"{prefix}__Purpose"] = purpose.ToString();
+                    env[$"{prefix}__Version"] = "v1";
+                    env[$"{prefix}__KeyId"] = $"{tenant}-{purpose.ToString().ToLowerInvariant()}";
+                    env[$"{prefix}__EnvironmentVariable"] = variable;
+                    env[$"{prefix}__IsCurrent"] = "true";
+                    env[variable] = Convert.ToBase64String(
+                        Enumerable.Repeat((byte)(bindingIndex + 1), 32).ToArray());
+                    bindingIndex++;
+                }
         }
         env["Portal__Dataset__AtRestKey"] = HostedPortalFactory.DefaultAtRestKey;
         env["Cluster__NodeHeartbeatSeconds"] = "2";

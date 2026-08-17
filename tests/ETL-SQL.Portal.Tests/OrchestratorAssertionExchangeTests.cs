@@ -193,7 +193,10 @@ public sealed class OrchestratorAssertionExchangeTests : IDisposable
         await db.Database.EnsureCreatedAsync();
         db.Users.Add(new PortalUser
         {
-            Id = 42, UserName = "keyless", NormalizedUserName = "KEYLESS", PrincipalKey = null
+            Id = 42,
+            UserName = "keyless",
+            NormalizedUserName = "KEYLESS",
+            PrincipalKey = null
         });
         await db.SaveChangesAsync();
 

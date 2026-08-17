@@ -1476,7 +1476,7 @@ public class AdminController(
             .Select(u => u.Id)
             .ToListAsync();
         db.UserGroups.AddRange(validIds.Select(userId => new UserGroup
-            { TenantId = TenantId, GroupId = id, UserId = userId }));
+        { TenantId = TenantId, GroupId = id, UserId = userId }));
         audit.Stage(CurrentUserId, "BULK_ADD_USERS_TO_GROUP", "Group", id.ToString(),
             $"{validIds.Count} users added");
         try { await db.SaveChangesAsync(); }

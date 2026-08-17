@@ -641,7 +641,7 @@ namespace ETL_SQL.Reporting
 
                 int limit = (parent.RowDetail.Limit.HasValue && parent.RowDetail.Limit.Value > 0) ? parent.RowDetail.Limit.Value : 10000;
                 var filteredTargetRows = new List<List<string?>>();
-                
+
                 var childColIndices = new int[bindings.Count];
                 for (int b = 0; b < bindings.Count; b++)
                 {
@@ -676,7 +676,7 @@ namespace ETL_SQL.Reporting
                         }
                     }
                 }
-                
+
                 // Replace target rows with the bounded, reachable set
                 target.Rows = filteredTargetRows.Distinct().ToList();
             }

@@ -339,7 +339,9 @@ public sealed class GovernanceController(
         {
             category = new StewardshipResolutionCategory
             {
-                TenantId = TenantId, Value = value, CreatedByUserId = CurrentUserId
+                TenantId = TenantId,
+                Value = value,
+                CreatedByUserId = CurrentUserId
             };
             db.StewardshipResolutionCategories.Add(category);
         }
@@ -401,7 +403,9 @@ public sealed class GovernanceController(
         {
             term = new StewardshipGlossaryTerm
             {
-                TenantId = TenantId, Term = name, CreatedByUserId = CurrentUserId
+                TenantId = TenantId,
+                Term = name,
+                CreatedByUserId = CurrentUserId
             };
             db.StewardshipGlossaryTerms.Add(term);
         }

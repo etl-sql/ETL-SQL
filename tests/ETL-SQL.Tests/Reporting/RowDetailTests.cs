@@ -2,8 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Reporting;
 using ETL_SQL.ReportHosting;
+using ETL_SQL.Reporting;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting

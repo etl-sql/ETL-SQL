@@ -1,6 +1,6 @@
 using System;
-using System.Text.Json;
 using System.Text;
+using System.Text.Json;
 using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Engine.Governance;
@@ -22,7 +22,7 @@ public class DefaultCapabilityTokenIssuer : ICapabilityTokenIssuer
         {
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(rawToken));
             var parsed = JsonSerializer.Deserialize<CapabilityToken>(json);
-            
+
             if (parsed == null || parsed.ExpiresAt < DateTimeOffset.UtcNow)
                 return false;
 

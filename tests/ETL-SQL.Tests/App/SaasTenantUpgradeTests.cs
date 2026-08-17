@@ -250,15 +250,15 @@ public sealed class SaasTenantUpgradeTests : IDisposable
 
     private static CliContext Context(
         string tenantRoot, string tenant, string release, int jobs, int storage, int reports) => new()
-    {
-        SaasTenantId = tenant,
-        SaasUpgradeTenantRoot = tenantRoot,
-        SaasUpgradeTargetRelease = release,
-        SaasUpgradeMaxConcurrentJobs = jobs,
-        SaasUpgradeMaxStorageMb = storage,
-        SaasUpgradeMaxReportSessions = reports,
-        SaasUpgradeExecute = true
-    };
+        {
+            SaasTenantId = tenant,
+            SaasUpgradeTenantRoot = tenantRoot,
+            SaasUpgradeTargetRelease = release,
+            SaasUpgradeMaxConcurrentJobs = jobs,
+            SaasUpgradeMaxStorageMb = storage,
+            SaasUpgradeMaxReportSessions = reports,
+            SaasUpgradeExecute = true
+        };
 
     private static SaasTenantUpgradeService.UpgradeAuthority Authority(
         string tenant, string reference, string release, int jobs, int storage, int reports,

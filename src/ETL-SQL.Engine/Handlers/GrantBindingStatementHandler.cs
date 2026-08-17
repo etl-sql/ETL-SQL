@@ -13,7 +13,7 @@ public class GrantBindingStatementHandler(ILogger logger) : IStatementHandler
     public Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (GrantBindingStatement)statement;
-        
+
         if (context.IsWhatIf)
         {
             logger.Info($"WHAT_IF: Granting {stmt.Permission} on binding '{stmt.BindingName}' to {stmt.PrincipalKind} '{stmt.PrincipalName}'...");

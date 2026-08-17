@@ -106,15 +106,15 @@ public sealed class SharedIdentityPartitionStoreTests : IDisposable
 
     private static ServiceAccount Service(
         string tenant, string clientId, PortalUser owner) => new()
-    {
-        TenantId = tenant,
-        ClientId = clientId,
-        Name = "equal-service",
-        NormalizedName = "EQUAL-SERVICE",
-        OwnerUser = owner,
-        OwnerUserId = owner.Id,
-        SecretHash = "hash"
-    };
+        {
+            TenantId = tenant,
+            ClientId = clientId,
+            Name = "equal-service",
+            NormalizedName = "EQUAL-SERVICE",
+            OwnerUser = owner,
+            OwnerUserId = owner.Id,
+            SecretHash = "hash"
+        };
 
     private static SharedIdentityPartitionStore Store(PortalDbContext db, string tenant) =>
         new(db, SharedConfig(), TenantContext.FromVerifiedCredential(tenant));

@@ -101,7 +101,9 @@ public static partial class OrchestratorPromotionPackageService
         {
             var desired = notification with
             {
-                ConnectionName = Bind(notification.ConnectionName), Version = 1, Id = NotificationId.None
+                ConnectionName = Bind(notification.ConnectionName),
+                Version = 1,
+                Id = NotificationId.None
             };
             var existing = await catalog.GetNotificationAsync(notification.TenantId, notification.Name);
             if (existing is null)
@@ -224,7 +226,9 @@ public static partial class OrchestratorPromotionPackageService
         {
             var desired = notification with
             {
-                ConnectionName = Bind(notification.ConnectionName), Version = 1, Id = NotificationId.None
+                ConnectionName = Bind(notification.ConnectionName),
+                Version = 1,
+                Id = NotificationId.None
             };
             var existing = await catalog.GetNotificationAsync(notification.TenantId, notification.Name);
             if (existing is not null && existing with { Version = 1, Id = NotificationId.None } != desired)

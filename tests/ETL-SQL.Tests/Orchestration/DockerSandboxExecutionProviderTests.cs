@@ -235,30 +235,30 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         ImmutableSandboxArtifact artifact,
         string tenant = "tenant-a",
         SandboxIsolationTier requiredIsolation = SandboxIsolationTier.Dedicated) => new()
-    {
-        Assignment = new SandboxAssignmentIdentity(
+        {
+            Assignment = new SandboxAssignmentIdentity(
             TenantContext.FromVerifiedCredential(tenant), "run-1", "attempt-1"),
-        ArtifactId = artifact.ArtifactId,
-        ArtifactHash = artifact.Hash,
-        PolicyVersion = "policy-v1",
-        BindingVersion = "binding-v1",
-        RequiredIsolationTier = requiredIsolation,
-        Limits = new SandboxResourceLimits
-        {
-            MaxDuration = TimeSpan.FromMinutes(5),
-            MaxMemoryBytes = 512 * 1024 * 1024,
-            MaxScratchBytes = 1024 * 1024,
-            MaxProcesses = 32
-        },
-        AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
-        {
-            PoolId = tenant == "tenant-a" ? "dedicated-tenant-a" : "dedicated-tenant-b",
-            TenantWeight = 1,
-            MaxConcurrentAttempts = 1,
-            MaxQueuedAttempts = 2
-        },
-        SessionId = "session-1"
-    };
+            ArtifactId = artifact.ArtifactId,
+            ArtifactHash = artifact.Hash,
+            PolicyVersion = "policy-v1",
+            BindingVersion = "binding-v1",
+            RequiredIsolationTier = requiredIsolation,
+            Limits = new SandboxResourceLimits
+            {
+                MaxDuration = TimeSpan.FromMinutes(5),
+                MaxMemoryBytes = 512 * 1024 * 1024,
+                MaxScratchBytes = 1024 * 1024,
+                MaxProcesses = 32
+            },
+            AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
+            {
+                PoolId = tenant == "tenant-a" ? "dedicated-tenant-a" : "dedicated-tenant-b",
+                TenantWeight = 1,
+                MaxConcurrentAttempts = 1,
+                MaxQueuedAttempts = 2
+            },
+            SessionId = "session-1"
+        };
 
     private static SandboxAdmissionLedgerEntry Admission(string id) => new(
         1, id, "tenant-a", "dedicated-tenant-a", 1, 1, 2,
@@ -309,57 +309,57 @@ internal static class DockerSandboxOptionsTestExtensions
     public static DockerSandboxExecutionOptions WithRuntime(
         this DockerSandboxExecutionOptions source,
         string runtime) => new()
-    {
-        Mode = source.Mode,
-        DockerExecutable = source.DockerExecutable,
-        Image = source.Image,
-        ImageDigest = source.ImageDigest,
-        LocalImageId = source.LocalImageId,
-        Runtime = runtime,
-        HostPolicyVersion = source.HostPolicyVersion,
-        SessionRoot = source.SessionRoot,
-        MachineKeyRoot = source.MachineKeyRoot,
-        Entrypoint = source.Entrypoint,
-        User = source.User,
-        DedicatedTenantId = source.DedicatedTenantId,
-        DedicatedPoolId = source.DedicatedPoolId
-    };
+        {
+            Mode = source.Mode,
+            DockerExecutable = source.DockerExecutable,
+            Image = source.Image,
+            ImageDigest = source.ImageDigest,
+            LocalImageId = source.LocalImageId,
+            Runtime = runtime,
+            HostPolicyVersion = source.HostPolicyVersion,
+            SessionRoot = source.SessionRoot,
+            MachineKeyRoot = source.MachineKeyRoot,
+            Entrypoint = source.Entrypoint,
+            User = source.User,
+            DedicatedTenantId = source.DedicatedTenantId,
+            DedicatedPoolId = source.DedicatedPoolId
+        };
 
     public static DockerSandboxExecutionOptions WithMode(
         this DockerSandboxExecutionOptions source,
         DockerSandboxMode mode) => new()
-    {
-        Mode = mode,
-        DockerExecutable = source.DockerExecutable,
-        Image = source.Image,
-        ImageDigest = source.ImageDigest,
-        LocalImageId = source.LocalImageId,
-        Runtime = source.Runtime,
-        HostPolicyVersion = source.HostPolicyVersion,
-        SessionRoot = source.SessionRoot,
-        MachineKeyRoot = source.MachineKeyRoot,
-        Entrypoint = source.Entrypoint,
-        User = source.User,
-        DedicatedTenantId = source.DedicatedTenantId,
-        DedicatedPoolId = source.DedicatedPoolId
-    };
+        {
+            Mode = mode,
+            DockerExecutable = source.DockerExecutable,
+            Image = source.Image,
+            ImageDigest = source.ImageDigest,
+            LocalImageId = source.LocalImageId,
+            Runtime = source.Runtime,
+            HostPolicyVersion = source.HostPolicyVersion,
+            SessionRoot = source.SessionRoot,
+            MachineKeyRoot = source.MachineKeyRoot,
+            Entrypoint = source.Entrypoint,
+            User = source.User,
+            DedicatedTenantId = source.DedicatedTenantId,
+            DedicatedPoolId = source.DedicatedPoolId
+        };
 
     public static DockerSandboxExecutionOptions WithImageDigest(
         this DockerSandboxExecutionOptions source,
         string? digest) => new()
-    {
-        Mode = source.Mode,
-        DockerExecutable = source.DockerExecutable,
-        Image = source.Image,
-        ImageDigest = digest,
-        LocalImageId = source.LocalImageId,
-        Runtime = source.Runtime,
-        HostPolicyVersion = source.HostPolicyVersion,
-        SessionRoot = source.SessionRoot,
-        MachineKeyRoot = source.MachineKeyRoot,
-        Entrypoint = source.Entrypoint,
-        User = source.User,
-        DedicatedTenantId = source.DedicatedTenantId,
-        DedicatedPoolId = source.DedicatedPoolId
-    };
+        {
+            Mode = source.Mode,
+            DockerExecutable = source.DockerExecutable,
+            Image = source.Image,
+            ImageDigest = digest,
+            LocalImageId = source.LocalImageId,
+            Runtime = source.Runtime,
+            HostPolicyVersion = source.HostPolicyVersion,
+            SessionRoot = source.SessionRoot,
+            MachineKeyRoot = source.MachineKeyRoot,
+            Entrypoint = source.Entrypoint,
+            User = source.User,
+            DedicatedTenantId = source.DedicatedTenantId,
+            DedicatedPoolId = source.DedicatedPoolId
+        };
 }

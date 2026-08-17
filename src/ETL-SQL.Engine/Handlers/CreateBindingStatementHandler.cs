@@ -13,7 +13,7 @@ public class CreateBindingStatementHandler(ILogger logger) : IStatementHandler
     public Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (CreateBindingStatement)statement;
-        
+
         if (context.IsWhatIf)
         {
             logger.Info($"WHAT_IF: Validating creation of {stmt.Type.ToUpperInvariant()} binding '{stmt.Name}'...");

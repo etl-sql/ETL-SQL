@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Xunit;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core;
 
@@ -28,13 +28,13 @@ public class EbnfConformanceTests
     public void GeneratedValidSequences_ParseWithoutExceptions()
     {
         if (!File.Exists(GrammarPath)) return;
-        
+
         var grammarText = File.ReadAllText(GrammarPath);
         var rules = EbnfParser.Parse(grammarText);
         Assert.True(rules.ContainsKey("script"), "Grammar must contain a 'script' root rule.");
 
         var rnd = new Random(42); // Deterministic seed for reproducible testing
-        
+
         var generated = 0;
         for (int i = 0; i < 200 && generated < 50; i++)
         {
@@ -546,16 +546,16 @@ public class EbnfRef : EbnfNode
             string[] acceptedExpressions = ["1 ", "@x ", "'x' ", "x + 1 ", "x IS NULL "];
             return acceptedExpressions[rnd.Next(acceptedExpressions.Length)];
         }
-        
+
         // Prevent infinite recursion on recursive rules (e.g. expressions)
         if (depth > 5)
         {
             if (Name == "statement") return "PRINT 1 ";
         }
-        
+
         if (rules.TryGetValue(Name, out var rule))
             return rule.Generate(rules, rnd, depth + 1);
-        
+
         return "";
     }
 
@@ -636,15 +636,15 @@ public static class EbnfParser
                 throw new FormatException($"Expected '=' after EBNF rule '{name}'.");
             if (rules.ContainsKey(name))
                 throw new FormatException($"Duplicate EBNF rule '{name}'.");
-            
+
             var node = ParseChoice(tokens, ref pos);
             rules[name] = new EbnfRule { Name = name, Node = node };
-            
+
             if (pos >= tokens.Count || tokens[pos] != ";")
                 throw new FormatException($"Expected ';' after EBNF rule '{name}'.");
             pos++;
         }
-        
+
         return rules;
     }
 
@@ -652,13 +652,13 @@ public static class EbnfParser
     {
         var seqs = new List<EbnfNode>();
         seqs.Add(ParseSequence(tokens, ref pos));
-        
+
         while (pos < tokens.Count && tokens[pos] == "|")
         {
             pos++;
             seqs.Add(ParseSequence(tokens, ref pos));
         }
-        
+
         return seqs.Count == 1 ? seqs[0] : new EbnfChoice(seqs);
     }
 
@@ -713,16 +713,16 @@ public static class EbnfParser
         {
             char c = input[i];
             if (char.IsWhiteSpace(c)) { i++; continue; }
-            if (c == '/' && i + 1 < input.Length && input[i+1] == '*')
+            if (c == '/' && i + 1 < input.Length && input[i + 1] == '*')
             {
                 i += 2;
-                while (i + 1 < input.Length && !(input[i] == '*' && input[i+1] == '/')) i++;
+                while (i + 1 < input.Length && !(input[i] == '*' && input[i + 1] == '/')) i++;
                 if (i + 1 >= input.Length)
                     throw new FormatException("Unterminated EBNF comment.");
                 i += 2;
                 continue;
             }
-            
+
             if ("=|[]{}();".Contains(c))
             {
                 tokens.Add(c.ToString());

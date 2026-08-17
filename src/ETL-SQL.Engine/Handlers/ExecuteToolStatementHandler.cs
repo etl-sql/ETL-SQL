@@ -30,7 +30,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
     public async Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (ExecuteToolStatement)statement;
-        
+
         ToolDefinition toolDef;
         if (catalog != null)
         {
@@ -75,7 +75,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
         }
 
         context.Log($"Executing tool '{stmt.ToolAlias}'...");
-        
+
         var startInfo = new ProcessStartInfo
         {
             UseShellExecute = false,
@@ -90,7 +90,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             var image = GetOptionString(toolDef.Options, "IMAGE");
             if (string.IsNullOrWhiteSpace(image))
                 throw new ExecutionException($"Tool '{stmt.ToolAlias}' of type CONTAINER is missing the IMAGE option.", null, stmt.Line, stmt.Column);
-            
+
             // 1. Pinned images
             if (!image.Contains("@sha256:"))
                 throw new ExecutionException($"Tool '{stmt.ToolAlias}' of type CONTAINER must use a pinned image digest (e.g. @sha256:...).", null, stmt.Line, stmt.Column);
@@ -102,7 +102,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             {
                 startInfo.ArgumentList.Add(arg);
             }
-            
+
             // 2. Non-root identity
             var runAsUser = GetOptionString(toolDef.Options, "RUN_AS_USER") ?? "65534:65534";
             startInfo.ArgumentList.Add("--user");
@@ -117,7 +117,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                 startInfo.ArgumentList.Add("--network");
                 startInfo.ArgumentList.Add("none");
             }
-            
+
             var mounts = GetOptionString(toolDef.Options, "CAPABILITY_MOUNTS");
             if (!string.IsNullOrWhiteSpace(mounts))
             {
@@ -127,7 +127,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                     startInfo.ArgumentList.Add(m.Trim());
                 }
             }
-            
+
             var secrets = GetOptionString(toolDef.Options, "CAPABILITY_SECRETS");
             if (!string.IsNullOrWhiteSpace(secrets) && stmt.Parameters != null)
             {
@@ -139,7 +139,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                     {
                         var val = await evaluator.ExpressionEvaluator.Evaluate(paramExpr, Row.Empty, decryptSensitive: true);
                         var strVal = val?.ToString() ?? string.Empty;
-                        
+
                         startInfo.ArgumentList.Add("-e");
                         startInfo.ArgumentList.Add($"{secretKey}={strVal}");
                     }
@@ -153,16 +153,16 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             }
 
             startInfo.ArgumentList.Add(image);
-            
+
             if (!string.IsNullOrWhiteSpace(command))
             {
                 startInfo.ArgumentList.Add(command);
             }
-            
+
             if (!string.IsNullOrWhiteSpace(args))
             {
                 var splitArgs = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                foreach(var arg in splitArgs) 
+                foreach (var arg in splitArgs)
                 {
                     startInfo.ArgumentList.Add(arg);
                 }
@@ -174,7 +174,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             if (!string.IsNullOrWhiteSpace(args))
             {
                 var splitArgs = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                foreach(var arg in splitArgs) 
+                foreach (var arg in splitArgs)
                 {
                     startInfo.ArgumentList.Add(arg);
                 }
@@ -194,7 +194,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
         try
         {
             using var process = new Process { StartInfo = startInfo };
-            
+
             // P2 - Immutable Logical Checkpoint Identities
             var argString = string.Join("|", startInfo.ArgumentList);
             var envKeys = startInfo.EnvironmentVariables.Keys.Cast<string>()
@@ -203,14 +203,14 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             var envString = string.Join("|", envKeys.Select(k => $"{k}={startInfo.EnvironmentVariables[k]}"));
             var policyHash = context.ExecutionPolicy?.PolicyHash ?? "no-policy";
             var identityMaterial = $"{context.SessionId ?? "temp"}_{stmt.ToolAlias}_{stmt.Line}_{toolDef.ToolType}_{policyHash}_{argString}_{envString}";
-            
+
             string operationId;
             using (var sha = System.Security.Cryptography.SHA256.Create())
             {
                 var hashBytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(identityMaterial));
                 operationId = Convert.ToHexString(hashBytes).ToLowerInvariant();
             }
-            
+
             if (context.Ledger != null && stmt.TargetTable == null)
             {
                 var existingOp = await context.Ledger.GetStateAsync(operationId);
@@ -219,7 +219,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                     _logger.Info("Tool '{ToolAlias}' already completed successfully in a previous run (Idempotency Key: {OpId}). Skipping.", stmt.ToolAlias, operationId);
                     return;
                 }
-                
+
                 await context.Ledger.RecordStartAsync(operationId, "ToolExecution", stmt.ToolAlias);
             }
 
@@ -267,10 +267,10 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             }
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSecs));
-            
+
             var inputTask = StreamInputAsync(stmt.SourceTable, process.StandardInput, context, cts.Token);
             var outputTask = StreamOutputAsync(stmt.TargetTable, process.StandardOutput, context, stmt.ExpectedSchema, cts.Token);
-            
+
             var errorOutput = new System.Text.StringBuilder();
             var errorTask = Task.Run(async () =>
             {
@@ -296,7 +296,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
 
                 var actor = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
                 var effective = context.ExecutionIdentity?.EffectiveUser ?? context.ExecutionPolicy?.Actor ?? actor;
-                
+
                 SecurityEventRuntime.Emit(SecurityEventContract.Create(
                     SecurityEventSeverity.Error,
                     SecurityEventType.ResourceLimitViolation,
@@ -345,7 +345,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
 
                 throw new ExecutionException($"Tool '{stmt.ToolAlias}' failed with exit code {process.ExitCode}. Error: {errStr}", null, stmt.Line, stmt.Column);
             }
-            
+
             if (context.Ledger != null && stmt.TargetTable == null)
             {
                 await context.Ledger.RecordCompletionAsync(operationId, process.ExitCode, null);
@@ -386,7 +386,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
 
             var actorSuccess = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
             var effectiveSuccess = context.ExecutionIdentity?.EffectiveUser ?? context.ExecutionPolicy?.Actor ?? actorSuccess;
-            
+
             SecurityEventRuntime.Emit(SecurityEventContract.Create(
                 SecurityEventSeverity.Information,
                 SecurityEventType.ExecutionCompleted,
@@ -486,7 +486,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
 
         var targetName = targetTable.TableName;
         var cols = expectedSchema?.Select(x => x.ColumnName).ToList() ?? new List<string>();
-        
+
         IDataSource? targetDs = null;
         var mem = new InMemoryDataSource();
         var evaluator = (Evaluator)context;
@@ -495,7 +495,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
         mem.MaxInMemoryBatches = evaluator.MaxInMemoryBatches;
         var colDefs = expectedSchema?.Select(x => new ColumnDefinition(x.ColumnName, x.DataType, false, null, null)).ToList() ?? new List<ColumnDefinition>();
         mem.SetSchema(colDefs);
-        
+
         targetDs = mem;
 
         var schema = new TableSchema(cols);
@@ -511,20 +511,20 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
         while ((line = await stdout.ReadLineAsync(token)) != null)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            
+
             totalBytes += System.Text.Encoding.UTF8.GetByteCount(line);
             if (totalBytes > MaxBytes)
                 throw new ExecutionException("Tool output exceeded the maximum allowed size of 100MB.", null, 0, 0);
-            
+
             rowCount++;
             if (rowCount > MaxRows)
                 throw new ExecutionException("Tool output exceeded the maximum allowed row count of 1,000,000.", null, 0, 0);
-            
+
             try
             {
                 var dict = JsonSerializer.Deserialize<Dictionary<string, object?>>(line);
                 var row = new Row(schema);
-                
+
                 if (dict != null)
                 {
                     for (int i = 0; i < cols.Count; i++)
@@ -549,7 +549,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                             {
                                 rawVal = val;
                             }
-                            
+
                             row[i] = rawVal != null && expectedSchema != null && expectedSchema.Count > i
                                 ? ETL_SQL.Core.Data.TypeConverter.Cast(rawVal, expectedSchema[i].DataType)
                                 : rawVal;

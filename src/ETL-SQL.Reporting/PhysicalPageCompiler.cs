@@ -9,34 +9,34 @@ public class PhysicalPageCompiler
     public List<PhysicalPageModel> Compile(PageManifest page, ReportManifest manifest)
     {
         var result = new List<PhysicalPageModel>();
-        var layout = page.PrintLayout ?? new PageLayoutDefinitionManifest 
-        { 
-            PageSize = "Letter", 
-            Orientation = "Portrait", 
-            MarginTop = 1.0m, 
-            MarginBottom = 1.0m, 
-            MarginLeft = 1.0m, 
-            MarginRight = 1.0m, 
-            Units = "in" 
+        var layout = page.PrintLayout ?? new PageLayoutDefinitionManifest
+        {
+            PageSize = "Letter",
+            Orientation = "Portrait",
+            MarginTop = 1.0m,
+            MarginBottom = 1.0m,
+            MarginLeft = 1.0m,
+            MarginRight = 1.0m,
+            Units = "in"
         };
-        
+
         var currentPhysicalPage = new PhysicalPageModel { PageNumber = 1, Layout = layout };
         result.Add(currentPhysicalPage);
-        
+
         double currentY = 0;
         double maxYForPage = 11.0 - (double)(layout.MarginTop ?? 1.0m) - (double)(layout.MarginBottom ?? 1.0m);
-        
+
         if (layout.Orientation?.Equals("Landscape", StringComparison.OrdinalIgnoreCase) == true)
         {
             maxYForPage = 8.5 - (double)(layout.MarginTop ?? 1.0m) - (double)(layout.MarginBottom ?? 1.0m);
         }
-        
+
         var rows = ParseStructureRows(page.Structure);
-        
+
         foreach (var row in rows)
         {
             double maxRowHeight = 0;
-            
+
             // First pass: compute height needed for this row
             var rowVisuals = new List<VisualManifest>();
             foreach (var slot in row.Slots)
@@ -57,7 +57,7 @@ public class PhysicalPageCompiler
 
             // Should we page break before?
             bool forceBreakBefore = rowVisuals.Any(v => v.PrintLayout?.PageBreakBefore == true);
-            
+
             if (forceBreakBefore || (currentY > 0 && currentY + maxRowHeight > maxYForPage && !CanSplit(rowVisuals)))
             {
                 currentPhysicalPage = new PhysicalPageModel { PageNumber = result.Count + 1, Layout = layout };
@@ -83,7 +83,7 @@ public class PhysicalPageCompiler
                 }
                 currentY += maxRowHeight;
             }
-            
+
             // Should we page break after?
             bool forceBreakAfter = rowVisuals.Any(v => v.PrintLayout?.PageBreakAfter == true);
             if (forceBreakAfter)
@@ -93,10 +93,10 @@ public class PhysicalPageCompiler
                 currentY = 0;
             }
         }
-        
+
         // Remove empty trailing pages
         result.RemoveAll(p => p.Visuals.Count == 0 && p.PageNumber > 1);
-        
+
         return result;
     }
 
@@ -104,13 +104,13 @@ public class PhysicalPageCompiler
     {
         // Headers and padding roughly 0.75 inches
         double baseHeight = 0.75;
-        
+
         if (vis.VisualType.Equals("TABLE", StringComparison.OrdinalIgnoreCase))
         {
             // Title + Column headers = ~0.75, each row ~0.25
             return baseHeight + (vis.Rows.Count * 0.25);
         }
-        
+
         // Default chart height
         return 4.0;
     }
@@ -187,12 +187,12 @@ public class PhysicalPageCompiler
             }
         }
     }
-    
+
     private List<StructureRow> ParseStructureRows(string structure)
     {
         var rows = new List<StructureRow>();
         if (string.IsNullOrWhiteSpace(structure)) return rows;
-        
+
         var lines = structure.Split(new[] { '/', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
@@ -201,7 +201,7 @@ public class PhysicalPageCompiler
         }
         return rows;
     }
-    
+
     private class StructureRow
     {
         public List<string> Slots { get; set; } = new();

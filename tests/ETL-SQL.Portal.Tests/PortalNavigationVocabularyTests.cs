@@ -55,11 +55,11 @@ public sealed class PortalNavigationVocabularyTests
     {
         var offenders = new List<string>();
         foreach (var (name, html) in ShellPages())
-        foreach (var id in ServerDestinations())
-        {
-            var pattern = $@"getElementById\(['""]{id}['""]\)(?:\s*\)?)?\s*\.style\.display\s*=";
-            if (Regex.IsMatch(html, pattern)) offenders.Add($"{name} sets {id}");
-        }
+            foreach (var id in ServerDestinations())
+            {
+                var pattern = $@"getElementById\(['""]{id}['""]\)(?:\s*\)?)?\s*\.style\.display\s*=";
+                if (Regex.IsMatch(html, pattern)) offenders.Add($"{name} sets {id}");
+            }
         Assert.Empty(offenders);
     }
 

@@ -106,7 +106,11 @@ public sealed class SharedTenantLifecycleServiceTests : IDisposable
         });
         db.Folders.Add(new Folder
         {
-            Id = 201, TenantId = "tenant-alpha", OwnerId = 101, Name = "root", Path = "/alpha"
+            Id = 201,
+            TenantId = "tenant-alpha",
+            OwnerId = 101,
+            Name = "root",
+            Path = "/alpha"
         });
         db.Reports.Add(new Report
         {

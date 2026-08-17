@@ -128,12 +128,16 @@ public sealed class SharedDelegatedIdentityAdminTests
         db.Groups.AddRange(alphaGroup, betaGroup);
         var alphaRefresh = new RefreshToken
         {
-            TenantId = "tenant-alpha", UserId = alpha.Id, Token = "alpha-refresh-hash",
+            TenantId = "tenant-alpha",
+            UserId = alpha.Id,
+            Token = "alpha-refresh-hash",
             ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var betaRefresh = new RefreshToken
         {
-            TenantId = "tenant-beta", UserId = beta.Id, Token = "beta-refresh-hash",
+            TenantId = "tenant-beta",
+            UserId = beta.Id,
+            Token = "beta-refresh-hash",
             ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         db.RefreshTokens.AddRange(alphaRefresh, betaRefresh);

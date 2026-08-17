@@ -6,8 +6,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,57 +77,57 @@ namespace ETL_SQL.Tests.EngineCorpus
                     return;
 
                 case EngineRecordKind.FileExists:
-                {
-                    var path = ResolveCorpusPath(directory, record.Name!, where);
-                    Assert.True(File.Exists(path), $"{where}: expected file to exist: {path}");
-                    return;
-                }
+                    {
+                        var path = ResolveCorpusPath(directory, record.Name!, where);
+                        Assert.True(File.Exists(path), $"{where}: expected file to exist: {path}");
+                        return;
+                    }
 
                 case EngineRecordKind.FileContains:
-                {
-                    var path = ResolveCorpusPath(directory, record.Name!, where);
-                    Assert.True(File.Exists(path), $"{where}: expected file to exist: {path}");
-                    var contents = await File.ReadAllTextAsync(path);
-                    Assert.Contains(record.Body, contents, StringComparison.Ordinal);
-                    return;
-                }
+                    {
+                        var path = ResolveCorpusPath(directory, record.Name!, where);
+                        Assert.True(File.Exists(path), $"{where}: expected file to exist: {path}");
+                        var contents = await File.ReadAllTextAsync(path);
+                        Assert.Contains(record.Body, contents, StringComparison.Ordinal);
+                        return;
+                    }
 
                 case EngineRecordKind.StatementOk:
-                {
-                    var error = await RunCatching(evaluator, record.Body, directory);
-                    Assert.True(error == null, $"{where}: expected success but got:\n  {error}\n\nSQL:\n{record.Body}");
-                    return;
-                }
+                    {
+                        var error = await RunCatching(evaluator, record.Body, directory);
+                        Assert.True(error == null, $"{where}: expected success but got:\n  {error}\n\nSQL:\n{record.Body}");
+                        return;
+                    }
 
                 case EngineRecordKind.StatementError:
-                {
-                    var error = await RunCatching(evaluator, record.Body, directory);
-                    Assert.True(error != null,
-                        $"{where}: expected an error but the statement succeeded.\n\nSQL:\n{record.Body}\n\n"
-                        + "A load that accepts what it should reject is the failure mode this corpus "
-                        + "exists to catch: it reports exactly what a clean load reports.");
-                    if (record.ExpectedError != null)
                     {
-                        Assert.True(error!.Contains(record.ExpectedError, StringComparison.OrdinalIgnoreCase),
-                            $"{where}: expected the error to mention '{record.ExpectedError}' but got:\n  {error}");
+                        var error = await RunCatching(evaluator, record.Body, directory);
+                        Assert.True(error != null,
+                            $"{where}: expected an error but the statement succeeded.\n\nSQL:\n{record.Body}\n\n"
+                            + "A load that accepts what it should reject is the failure mode this corpus "
+                            + "exists to catch: it reports exactly what a clean load reports.");
+                        if (record.ExpectedError != null)
+                        {
+                            Assert.True(error!.Contains(record.ExpectedError, StringComparison.OrdinalIgnoreCase),
+                                $"{where}: expected the error to mention '{record.ExpectedError}' but got:\n  {error}");
+                        }
+                        return;
                     }
-                    return;
-                }
 
                 case EngineRecordKind.Query:
-                {
-                    var error = await RunCatching(evaluator, record.Body, directory);
-                    Assert.True(error == null, $"{where}: query failed:\n  {error}\n\nSQL:\n{record.Body}");
+                    {
+                        var error = await RunCatching(evaluator, record.Body, directory);
+                        Assert.True(error == null, $"{where}: query failed:\n  {error}\n\nSQL:\n{record.Body}");
 
-                    var actual = RenderRows(evaluator.LastResult);
-                    var expected = record.ExpectedRows!;
+                        var actual = RenderRows(evaluator.LastResult);
+                        var expected = record.ExpectedRows!;
 
-                    Assert.True(actual.SequenceEqual(expected, StringComparer.Ordinal),
-                        $"{where}: result mismatch.\n\nSQL:\n{record.Body}\n\n"
-                        + $"expected ({expected.Count} rows):\n  {string.Join("\n  ", expected)}\n\n"
-                        + $"actual ({actual.Count} rows):\n  {string.Join("\n  ", actual)}");
-                    return;
-                }
+                        Assert.True(actual.SequenceEqual(expected, StringComparer.Ordinal),
+                            $"{where}: result mismatch.\n\nSQL:\n{record.Body}\n\n"
+                            + $"expected ({expected.Count} rows):\n  {string.Join("\n  ", expected)}\n\n"
+                            + $"actual ({actual.Count} rows):\n  {string.Join("\n  ", actual)}");
+                        return;
+                    }
             }
         }
 

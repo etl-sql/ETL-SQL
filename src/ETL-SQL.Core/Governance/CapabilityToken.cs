@@ -25,7 +25,7 @@ public sealed record CapabilityToken
     public bool AllowGatewayResources { get; init; }
     public IReadOnlyList<string> AllowedPaths { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> AllowedNamedSecrets { get; init; } = Array.Empty<string>();
-    
+
     // Limits
     public long? MaxMemoryBytes { get; init; }
     public long? MaxCpuTimeMs { get; init; }
