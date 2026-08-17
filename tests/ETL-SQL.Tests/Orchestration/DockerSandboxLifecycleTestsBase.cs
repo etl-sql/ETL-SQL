@@ -71,6 +71,13 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
             ',', host.GetProperty("SecurityOpt").EnumerateArray().Select(value => value.GetString())));
         Assert.Equal("65532:65532", inspected.GetProperty("Config").GetProperty("User").GetString());
 
+        // Containment ceilings are only real if the runtime actually received them. NanoCpus is
+        // Docker's own encoding of --cpus, so this is the host's view rather than the request's.
+        Assert.Equal(512L * 1024 * 1024, host.GetProperty("Memory").GetInt64());
+        Assert.Equal(512L * 1024 * 1024, host.GetProperty("MemorySwap").GetInt64());
+        Assert.Equal(2_000_000_000L, host.GetProperty("NanoCpus").GetInt64());
+        Assert.Equal(64L, host.GetProperty("PidsLimit").GetInt64());
+
         // Nothing reusable is mounted: no named or anonymous volume, and every bind source belongs to
         // this assignment or to this tenant's server-owned session and key roots.
         var mounts = inspected.GetProperty("Mounts").EnumerateArray().ToArray();
@@ -358,7 +365,8 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
             MaxDuration = TimeSpan.FromMinutes(5),
             MaxMemoryBytes = 512 * 1024 * 1024,
             MaxScratchBytes = 32 * 1024 * 1024,
-            MaxProcesses = 64
+            MaxProcesses = 64,
+            MaxCpuCores = 2
         },
         AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
         {

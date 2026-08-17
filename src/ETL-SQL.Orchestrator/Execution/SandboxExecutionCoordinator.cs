@@ -25,6 +25,18 @@ public sealed record SandboxResourceLimits
     public required long MaxMemoryBytes { get; init; }
     public required long MaxScratchBytes { get; init; }
     public required int MaxProcesses { get; init; }
+    /// <summary>
+    /// CPU time the attempt may consume per wall-clock second, in cores. It is required rather than
+    /// optional: an unbounded workload starves every co-tenant on the host, and a limit a provider is
+    /// free to ignore is worse than none because the fleet believes the ceiling exists.
+    /// </summary>
+    public required double MaxCpuCores { get; init; }
+    /// <summary>
+    /// Optional block-I/O ceiling in operations per second, applied to reads and writes alike. Null
+    /// means this profile makes no I/O promise; a positive value a host cannot actually enforce is a
+    /// startup failure rather than a quietly dropped control.
+    /// </summary>
+    public int? MaxIops { get; init; }
 
     internal void Validate()
     {
@@ -32,6 +44,12 @@ public sealed record SandboxResourceLimits
             throw new ArgumentOutOfRangeException(
                 nameof(SandboxResourceLimits),
                 "Sandbox duration, memory, scratch, and process limits must all be positive.");
+        if (MaxCpuCores <= 0 || double.IsNaN(MaxCpuCores) || double.IsInfinity(MaxCpuCores))
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxCpuCores), "The sandbox CPU limit must be a positive number of cores.");
+        if (MaxIops is <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxIops), "A declared sandbox IOPS limit must be positive.");
     }
 }
 

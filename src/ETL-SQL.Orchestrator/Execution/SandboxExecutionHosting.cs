@@ -27,7 +27,8 @@ public static class SandboxExecutionServiceCollectionExtensions
             Entrypoint = section["Entrypoint"] ?? "etl-sql",
             User = section["User"] ?? "65532:65532",
             DedicatedTenantId = section["DedicatedTenantId"],
-            DedicatedPoolId = section["DedicatedPoolId"]
+            DedicatedPoolId = section["DedicatedPoolId"],
+            IopsThrottleDevice = section["IopsThrottleDevice"]
         };
         var profiles = ReadProfiles(section.GetSection("Profiles"));
         var tenants = ReadTenants(section.GetSection("Tenants"));
@@ -90,7 +91,8 @@ public static class SandboxExecutionServiceCollectionExtensions
             Entrypoint = section["Entrypoint"] ?? "etl-sql",
             User = section["User"] ?? "65532:65532",
             DedicatedTenantId = section["DedicatedTenantId"],
-            DedicatedPoolId = section["DedicatedPoolId"]
+            DedicatedPoolId = section["DedicatedPoolId"],
+            IopsThrottleDevice = section["IopsThrottleDevice"]
         };
         var profiles = ReadProfiles(section.GetSection("Profiles"));
         var tenants = ReadTenants(section.GetSection("Tenants"));
@@ -184,7 +186,9 @@ public static class SandboxExecutionServiceCollectionExtensions
                     MaxDuration = TimeSpan.FromSeconds(RequirePositiveDouble(child, "MaxDurationSeconds")),
                     MaxMemoryBytes = RequirePositiveLong(child, "MaxMemoryBytes"),
                     MaxScratchBytes = RequirePositiveLong(child, "MaxScratchBytes"),
-                    MaxProcesses = checked((int)RequirePositiveLong(child, "MaxProcesses"))
+                    MaxProcesses = checked((int)RequirePositiveLong(child, "MaxProcesses")),
+                    MaxCpuCores = RequirePositiveDouble(child, "MaxCpuCores"),
+                    MaxIops = OptionalPositiveInt(child, "MaxIops")
                 }
             });
         }
@@ -230,6 +234,16 @@ public static class SandboxExecutionServiceCollectionExtensions
         long.TryParse(section[key], out var value) && value > 0
             ? value
             : throw new InvalidOperationException($"Sandbox execution configuration '{section.Path}:{key}' must be positive.");
+
+    private static int? OptionalPositiveInt(IConfigurationSection section, string key)
+    {
+        var raw = section[key];
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return int.TryParse(raw, out var value) && value > 0
+            ? value
+            : throw new InvalidOperationException(
+                $"Sandbox execution configuration '{section.Path}:{key}' must be a positive integer when present.");
+    }
 
     private static double RequirePositiveDouble(IConfigurationSection section, string key) =>
         double.TryParse(section[key], System.Globalization.NumberStyles.Float,

@@ -40,6 +40,20 @@ public sealed record SandboxAdmissionSelection(
     string? EligibleTenantId,
     IReadOnlyList<string> ContendingTenantIds);
 
+/// <summary>
+/// Raised when a tenant's durable queue for a pool is already at its configured depth. The ceiling is
+/// fleet-wide, so it holds however many orchestrator nodes the tenant's work arrives through.
+/// </summary>
+public sealed class SandboxQueueDepthExceededException(string tenantId, string poolId, int maxQueued)
+    : Exception(
+        $"The tenant sandbox queue for pool '{poolId}' is at its configured limit of {maxQueued} " +
+        "waiting attempts.")
+{
+    public string TenantId { get; } = tenantId;
+    public string PoolId { get; } = poolId;
+    public int MaxQueuedAttempts { get; } = maxQueued;
+}
+
 public interface ISandboxAdmissionLedger
 {
     Task<bool> EnqueueAsync(
@@ -176,7 +190,21 @@ public sealed class RelationalSandboxAdmissionLedger(
         var now = DateTimeOffset.UtcNow.ToString("O");
         await using var connection = dialect.CreateConnection();
         await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // Serialize enqueues for the pool so the depth check below cannot be raced. A per-node ceiling
+        // is not a ceiling: with N orchestrator nodes a tenant would otherwise queue N times its limit.
+        await LockPoolAsync(connection, transaction, policy.PoolId, cancellationToken);
+        if (await CountQueuedAsync(
+                connection, transaction, policy.PoolId, tenant.Tenant.Value, cancellationToken)
+            >= policy.MaxQueuedAttempts)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw new SandboxQueueDepthExceededException(
+                tenant.Tenant.Value, policy.PoolId, policy.MaxQueuedAttempts);
+        }
+
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO SandboxAdmissions
                 (AdmissionId, TenantId, PoolId, TenantWeight, MaxConcurrentAttempts,
@@ -193,7 +221,27 @@ public sealed class RelationalSandboxAdmissionLedger(
         command.AddParam("@maxActive", policy.MaxConcurrentAttempts);
         command.AddParam("@maxQueued", policy.MaxQueuedAttempts);
         command.AddParam("@now", now);
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        var inserted = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        await transaction.CommitAsync(cancellationToken);
+        return inserted;
+    }
+
+    private static async Task<int> CountQueuedAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string poolId,
+        string tenantId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT COUNT(*) FROM SandboxAdmissions
+             WHERE PoolId = @pool AND TenantId = @tenant AND State = 'Queued';
+            """;
+        command.AddParam("@pool", poolId);
+        command.AddParam("@tenant", tenantId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
 
     public async Task<long?> TryActivateAsync(

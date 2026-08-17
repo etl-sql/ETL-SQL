@@ -73,7 +73,8 @@ public sealed class SandboxScheduledJobExecutorTests : IDisposable
                         MaxDuration = TimeSpan.FromMinutes(5),
                         MaxMemoryBytes = 1024,
                         MaxScratchBytes = 1024,
-                        MaxProcesses = 2
+                        MaxProcesses = 2,
+                        MaxCpuCores = 1
                     }
                 }
             },

@@ -244,8 +244,8 @@ public sealed class RelationalSandboxAdmissionLedgerTests : IDisposable
     public async Task TenantWeightBuysProportionalGrantsInsteadOfUnconditionalPriority()
     {
         var store = Store();
-        var heavy = Policy() with { TenantWeight = 4, MaxConcurrentAttempts = 4 };
-        var light = Policy() with { TenantWeight = 1, MaxConcurrentAttempts = 4 };
+        var heavy = Policy() with { TenantWeight = 4, MaxConcurrentAttempts = 4, MaxQueuedAttempts = 12 };
+        var light = Policy() with { TenantWeight = 1, MaxConcurrentAttempts = 4, MaxQueuedAttempts = 12 };
         // Both tenants stay backlogged for the whole run, so the split reflects weight and nothing else.
         for (var index = 1; index <= 10; index++)
             await store.EnqueueAsync($"heavy-{index}", Tenant("tenant-heavy"), heavy);
@@ -338,6 +338,29 @@ public sealed class RelationalSandboxAdmissionLedgerTests : IDisposable
         Assert.Equal("peek-2", (await store.PeekEligibleAsync("shared-hardened")).EligibleAdmissionId);
         Assert.True(await store.TryCompleteAsync("peek-1", "node-a", token));
         Assert.NotNull(await store.TryActivateAsync("peek-2", "node-b", 1, Lease));
+    }
+
+    [Fact]
+    public async Task QueueDepthCeilingIsFleetWideNotPerNode()
+    {
+        var nodeA = Store();
+        var nodeB = Store();
+        var policy = Policy() with { MaxQueuedAttempts = 2 };
+
+        await nodeA.EnqueueAsync("depth-1", Tenant("tenant-a"), policy);
+        // A second node has no idea what the first one queued; only the shared authority does.
+        await nodeB.EnqueueAsync("depth-2", Tenant("tenant-a"), policy);
+        var refused = await Assert.ThrowsAsync<SandboxQueueDepthExceededException>(
+            async () => await nodeB.EnqueueAsync("depth-3", Tenant("tenant-a"), policy));
+
+        Assert.Equal("tenant-a", refused.TenantId);
+        Assert.Equal(2, refused.MaxQueuedAttempts);
+        Assert.Null(await nodeA.ReadAsync("depth-3"));
+        // Another tenant's depth is its own, and leaving the queue frees a place.
+        await nodeB.EnqueueAsync("other-1", Tenant("tenant-b"), policy);
+        Assert.True(await nodeA.TryCancelQueuedAsync("depth-1"));
+        await nodeB.EnqueueAsync("depth-3", Tenant("tenant-a"), policy);
+        Assert.Equal(SandboxAdmissionState.Queued, (await nodeA.ReadAsync("depth-3"))!.State);
     }
 
     private static readonly TimeSpan Lease = TimeSpan.FromMinutes(5);

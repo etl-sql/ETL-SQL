@@ -107,7 +107,7 @@ public enum DockerSandboxMode
     Standard
 }
 
-public sealed class DockerSandboxExecutionOptions
+public sealed record DockerSandboxExecutionOptions
 {
     public DockerSandboxMode Mode { get; init; } = DockerSandboxMode.Hardened;
     public string DockerExecutable { get; init; } = "docker";
@@ -122,6 +122,12 @@ public sealed class DockerSandboxExecutionOptions
     public string User { get; init; } = "65532:65532";
     public string? DedicatedTenantId { get; init; }
     public string? DedicatedPoolId { get; init; }
+    /// <summary>
+    /// Host block device that carries sandbox I/O (for example <c>/dev/sda</c>). Block-I/O throttling
+    /// is per-device, so a host that does not declare one cannot honour a profile's IOPS ceiling and
+    /// must refuse that work instead of running it unthrottled.
+    /// </summary>
+    public string? IopsThrottleDevice { get; init; }
 }
 
 /// <summary>
@@ -177,6 +183,10 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             throw new InvalidOperationException("The hardened Docker provider accepts only Hardened or Dedicated work.");
         if (request.RequiredIsolationTier >= SandboxIsolationTier.Hardened && _options.Mode == DockerSandboxMode.Standard)
             throw new InvalidOperationException("The Standard Docker provider accepts only Standard work.");
+        if (request.Limits.MaxIops is not null && string.IsNullOrWhiteSpace(_options.IopsThrottleDevice))
+            throw new InvalidOperationException(
+                "This sandbox host declares no block device for I/O throttling and cannot enforce the " +
+                "profile's IOPS limit; running the workload unthrottled would make the ceiling fictional.");
         if (request.CapabilityHandles.Count != 0)
             throw new NotSupportedException(
                 "Docker sandbox capability injection is not configured; raw capability handles will not be exposed.");
@@ -285,6 +295,7 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges",
             "--pids-limit", request.Limits.MaxProcesses.ToString(CultureInfo.InvariantCulture),
+            "--cpus", request.Limits.MaxCpuCores.ToString("0.###", CultureInfo.InvariantCulture),
             "--memory", request.Limits.MaxMemoryBytes.ToString(CultureInfo.InvariantCulture),
             "--memory-swap", request.Limits.MaxMemoryBytes.ToString(CultureInfo.InvariantCulture),
             "--tmpfs", $"/workspace/scratch:rw,noexec,nosuid,nodev,size={request.Limits.MaxScratchBytes}",
@@ -315,6 +326,15 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             // the read-only working directory.
             "run", "/workspace/input/job.etlsql", "--json", "--log", "/workspace/scratch/logs/scripts"
         };
+        if (request.Limits.MaxIops is { } iops)
+        {
+            var rate = iops.ToString(CultureInfo.InvariantCulture);
+            args.InsertRange(args.IndexOf("--workdir"),
+            [
+                "--device-read-iops", $"{_options.IopsThrottleDevice}:{rate}",
+                "--device-write-iops", $"{_options.IopsThrottleDevice}:{rate}"
+            ]);
+        }
         if (!string.IsNullOrWhiteSpace(request.SessionId))
         {
             args.Add("--session");
@@ -439,6 +459,16 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         ArgumentException.ThrowIfNullOrWhiteSpace(options.MachineKeyRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Entrypoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.User);
+
+        if (options.IopsThrottleDevice is { } device)
+        {
+            // The device is joined to the rate with ':', so a value carrying its own colon could
+            // rewrite the throttle argument instead of naming a device.
+            if (string.IsNullOrWhiteSpace(device) || !device.StartsWith('/') || device.Contains(':'))
+                throw new ArgumentException(
+                    "The sandbox IOPS throttle device must be an absolute host device path without a colon.",
+                    nameof(options));
+        }
 
         if (options.Mode == DockerSandboxMode.Hardened)
         {

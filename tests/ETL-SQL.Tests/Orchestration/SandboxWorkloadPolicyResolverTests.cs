@@ -94,7 +94,8 @@ public sealed class SandboxWorkloadPolicyResolverTests
                 MaxDuration = TimeSpan.FromMinutes(5),
                 MaxMemoryBytes = memory,
                 MaxScratchBytes = 4096,
-                MaxProcesses = processes
+                MaxProcesses = processes,
+                MaxCpuCores = 1
             }
         };
 

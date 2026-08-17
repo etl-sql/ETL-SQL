@@ -40,6 +40,8 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         AssertContainsPair(create, "--security-opt", "no-new-privileges");
         AssertContainsPair(create, "--memory", "536870912");
         AssertContainsPair(create, "--memory-swap", "536870912");
+        AssertContainsPair(create, "--cpus", "1.5");
+        AssertContainsPair(create, "--pids-limit", "32");
         Assert.Contains("--read-only", create);
         Assert.DoesNotContain("--privileged", create);
         Assert.Contains($"{DockerSandboxExecutionProvider.AdmissionLabel}=admission-1", create);
@@ -201,6 +203,59 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
             Options().WithRuntime(runtime), new RecordingCommands(), ArtifactStore()));
     }
 
+    [Fact]
+    public async Task DeclaredIopsLimitIsThrottledPerDeviceOnAHostThatCanEnforceIt()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var options = Options() with { IopsThrottleDevice = "/dev/sda" };
+        var provider = new DockerSandboxExecutionProvider(options, commands, artifacts);
+        var request = Request(artifact) with { AdmissionId = "admission-iops" };
+
+        await provider.PrepareAsync(
+            request with { Limits = request.Limits with { MaxIops = 500 } }, workspace, default);
+
+        var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
+        AssertContainsPair(create, "--device-read-iops", "/dev/sda:500");
+        AssertContainsPair(create, "--device-write-iops", "/dev/sda:500");
+        File.SetAttributes(Path.Combine(workspace.InputPath, "job.etlsql"), FileAttributes.Normal);
+        await workspace.DestroyAsync();
+    }
+
+    [Fact]
+    public async Task HostThatCannotThrottleIoRefusesWorkPromisingAnIopsCeiling()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        // No IopsThrottleDevice: the ceiling cannot be applied, so the run must not start at all
+        // rather than proceed with unthrottled I/O against every co-tenant on the host.
+        var provider = new DockerSandboxExecutionProvider(Options(), commands, artifacts);
+        var request = Request(artifact) with { AdmissionId = "admission-iops" };
+
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await provider.PrepareAsync(
+                request with { Limits = request.Limits with { MaxIops = 500 } }, workspace, default));
+
+        Assert.Contains("IOPS", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(commands.Calls, call => call.Arguments.FirstOrDefault() == "create");
+        await workspace.DestroyAsync();
+    }
+
+    [Theory]
+    [InlineData("relative/device")]
+    [InlineData("/dev/sda:99")]
+    public void ThrottleDeviceCannotRewriteTheRateArgument(string device)
+    {
+        Assert.Throws<ArgumentException>(() => new DockerSandboxExecutionProvider(
+            Options() with { IopsThrottleDevice = device }, new RecordingCommands(), ArtifactStore()));
+    }
+
     private FileSystemImmutableSandboxArtifactStore ArtifactStore() => new(
         new ImmutableSandboxArtifactStoreOptions { RootPath = Path.Combine(_root, "artifacts") });
 
@@ -248,7 +303,8 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
                 MaxDuration = TimeSpan.FromMinutes(5),
                 MaxMemoryBytes = 512 * 1024 * 1024,
                 MaxScratchBytes = 1024 * 1024,
-                MaxProcesses = 32
+                MaxProcesses = 32,
+                MaxCpuCores = 1.5
             },
             AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
             {
