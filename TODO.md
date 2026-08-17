@@ -376,8 +376,58 @@ runtime, which is what the storage cell below was blocked on.
       operations, and SaaS-to-on-premises connectivity before introducing a shared broker registry.
       Follow the
       [SaaS Tenant Isolation Architecture](docs/architecture/SaaSTenantIsolation.md#11-secure-outbound-data-gateway).
+
+      **Decomposed 2026-08-17, not started.** This cell is a new shipping component — an
+      on-premises daemon, a versioned wire protocol, a Portal admin surface, and an installer — not a
+      change to existing code, so it is sequenced as ordered slices. Each slice must be provable
+      without a customer network: the "on-premises" side runs as a real loopback-hosted process in
+      test, the way the Portal browser lane hosts Kestrel, because mocked transport evidence cannot
+      support a connectivity claim.
+
+      - **D1 — Binding model.** `SHARED:alias` resolves to either a direct binding or a Gateway
+        binding carrying connector type plus immutable gateway/resource IDs. Locked by §11.2: the
+        cloud side stores **no** physical endpoint and **no** credential, and there is no script
+        syntax that requests Gateway routing or a local bypass — promotion changes the binding, not
+        the script. A test must assert the stored binding cannot round-trip an endpoint or credential
+        field, or D1 is the "control exists, never asserted" shape again.
+      - **D2 — Enrollment lifecycle.** One-time tenant-admin enrollment in the Portal; the
+        on-premises administrator consumes it exactly once and establishes an asymmetric workload
+        identity with short-lived rotated credentials. Second consumption must fail closed.
+      - **D3 — Gateway-local resource registry.** Typed resources with stable IDs, local credential
+        references, allowed operations, and limits. Discovery proposes; only the on-premises
+        administrator approves. Credentials resolve gateway-side only.
+      - **D4 — Typed operation protocol.** Bidirectional gRPC streaming over HTTPS (typed WebSocket
+        only where a restrictive proxy forces it), one versioned operation model, mandatory
+        deadlines, cancellation, bounded buffering, flow control, max request/response size, and
+        concurrency limits. Reconnect keys off operation IDs against a durable outcome ledger:
+        **an ambiguous write is never retried blindly nor reported as safely failed** — the same rule
+        the sandbox coordinator already follows for ambiguous teardown.
+      - **D5 — Authority agreement.** Routing occurs only when execution tenant, capability tenant,
+        gateway identity tenant, catalog binding, resource ownership, actor grant, and policy version
+        all agree. No grant means deny. Containers receive a typed operation handle, never reusable
+        tunnel authority.
+      - **D6 — Revocation.** Disabling an alias or resource, or revoking the Gateway, fails new work
+        immediately and invalidates cached authority. This is the cell's highest-risk slice: the
+        v0.17.0 authorship-permission regression showed revocation logic passes review by hand and
+        fails a red test, so revocation gets tests before implementation.
+      - **D7 — Operator boundary.** Platform operators receive aggregate health only, and cannot
+        create tenant mappings, approve local destinations, read local credentials, or grant
+        themselves resource use. Negative tests, not documentation.
+      - **D8 — Runtime hardening, install, docs.** Hardened Windows service / systemd daemon with a
+        minimal local identity, outbound-only mutually authenticated TLS, DNS and canonical-path
+        revalidation at operation time, and refusal of arbitrary socket/shell/path/protocol
+        forwarding. Plus the installer, upgrade path, and administration guide.
 - [ ] **Shared.** Add the shared tenant/gateway session registry, typed stream routing, metering,
       backpressure, and negative cross-tenant tests without weakening gateway-local resource policy.
+
+      **Blocked on the Dedicated cell (recorded 2026-08-17).** The Broker is a separate data-plane
+      service, not a mode of the Gateway, and §11.4 requires it to isolate queues, buffers, caches,
+      temporary state, retry ledgers, logs, traces, and metrics per tenant and operation. Starting it
+      before D1–D6 exist would mean designing tenant-scoped routing against a protocol that has not
+      settled. Two constraints are already fixed and should not be re-litigated: gateway-local
+      resource policy stays authoritative — the Broker cannot widen it — and the metering the Broker
+      feeds is the counts-only ledger from domain 9, which may not read payload content or become
+      execution authorization.
 - [ ] **Both topologies.** Execute tenant workloads with default-deny networking, blocked cloud
       metadata/control-plane/internal hosting ranges, and only capability-authorized connector,
       storage, telemetry, or Gateway Broker destinations. Test DNS rebinding, redirects, alternate
