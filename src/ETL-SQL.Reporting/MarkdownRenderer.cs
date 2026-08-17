@@ -18,8 +18,8 @@ namespace ETL_SQL.Reporting
     /// <summary>
     /// Converts a <see cref="ReportManifest"/> into a Markdown string.
     ///
-    /// Chart-based visuals get an embedded <c>&lt;!-- CHART:{...} --&gt;</c> comment
-    /// containing the Chart.js config JSON — processed by the VS Code preview
+    /// Chart-based visuals get an embedded <c>&lt;!-- ECHART:{...} --&gt;</c> comment
+    /// containing the ECharts option JSON — processed by the VS Code preview
     /// and <c>etl-sql-report serve</c>.
     ///
     /// TABLE visuals are rendered as GFM pipe tables.
