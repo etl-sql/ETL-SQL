@@ -107,6 +107,16 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             defaultValue: Array.Empty<string>());
 
         yield return new(
+            "Security:EgressFenceExemptions",
+            GovernancePolicyScope.Network,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.StringList,
+            "Exact hosting-infrastructure destinations exempted from the non-bypassable egress fence " +
+            "(cloud metadata, link-local node services, container runtime bridge, cluster service " +
+            "discovery). Wildcards are rejected.",
+            defaultValue: Array.Empty<string>());
+
+        yield return new(
             "Security:AllowedEnvVars",
             GovernancePolicyScope.Security,
             GovernancePolicyClassification.Allowed,

@@ -385,6 +385,42 @@ runtime, which is what the storage cell below was blocked on.
       in the discovery list and in neither phase, though a dedicated tenant's own worker still must
       not reach the cloud metadata service.**
 
+      **Infrastructure-fence slice completed (2026-08-17).** `InfrastructureEgressFence` denies four
+      destination classes — cloud instance metadata/identity, link-local node services, the container
+      runtime host bridge, and cluster service discovery — in **every** topology, regardless of
+      enrollment state or host allowlist. That closes the specific hole named above:
+      `Security:AllowedHosts` defaults to `["*"]`, and both `EnforceEnterpriseHosts` and
+      `EnforceResolvedAddress` return early when a deployment is unenrolled or configures no
+      allowlist, so nothing previously stopped a dedicated tenant's own worker reading the instance
+      credential endpoint. `EnforceResolvedAddress_NoOpWhenStandaloneOrNoAllowlist` had pinned that
+      as intended behavior. The fence runs at connection creation (host *and* URL-shaped target), on
+      every dynamic REST URL including redirect/pagination/template targets, and inside
+      `PolicyBoundHttp`'s connect callback against each resolved address, so one control covers DNS
+      rebinding, redirects, alternate/obfuscated address forms (32-bit decimal, hex, dotted
+      hex/octal, IPv4-mapped IPv6, bracketed IPv6, trailing-dot FQDN), and port scanning. It sits
+      outside the policy-wrapping `try` so a fenced destination is reported as the non-policy denial
+      it is, with one security event whose sanitized target names the *class* rather than echoing
+      which infrastructure address answered. Loopback and RFC 1918 are deliberately excluded and stay
+      governed by the allowlist — fencing them would break every on-premises install without adding
+      a boundary the allowlist does not already provide. Exemptions are server-owned
+      (`Security:EgressFenceExemptions` in host configuration or
+      `network.egressFenceExemptions` in authoritative policy), must be exact hosts/addresses,
+      normalize across obfuscated forms, are rejected at policy-authoring time when they carry a
+      wildcard or name a non-fenced destination, and are ignored entirely when unenrolled. A wildcard
+      allowlist, an explicit `Security:AllowedHosts` entry for the metadata address, and a mid-run
+      policy replacement with the broadest possible allowlist all fail to widen it — each pinned by a
+      test. Sandboxed attempts additionally have no network namespace at all
+      (`--network none`, pinned by `DockerSandboxExecutionProviderTests`), which is the stronger
+      kernel-level form of default-deny.
+
+      Two things keep this cell open. **Shared internal hosting ranges** are not fenced: the classes
+      above are universal and hard-coded, but a specific deployment's own service subnets and other
+      tenants' pod CIDRs are deployment facts that need an operator-supplied deny list, and there is
+      no such surface yet. **Capability-authorized destinations** — the positive half, where an
+      attempt may reach only the exact connector/storage/telemetry/Gateway Broker endpoints its
+      per-attempt capability names — remain an allowlist decision rather than a capability-scoped
+      one, and depend on the Gateway and per-attempt capability issuance in the cells above.
+
 *Absorbs the retained discovery item **Internal Network Egress Fencing**.*
 
 ##### 9. Lifecycle — provisioning, backup, portability, deletion, metering

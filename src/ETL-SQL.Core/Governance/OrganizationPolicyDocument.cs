@@ -52,6 +52,8 @@ public sealed record OrganizationPolicyDocument
             values["Security:AllowedSchemes"] = Network.AllowedSchemes;
         if (Network.AllowedPorts.Count > 0)
             values["Security:AllowedPorts"] = Network.AllowedPorts.Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        if (Network.EgressFenceExemptions.Count > 0)
+            values["Security:EgressFenceExemptions"] = Network.EgressFenceExemptions;
         if (Execution.MaxParallelDegree.HasValue)
             values["Security:MaxParallelDegree"] = Execution.MaxParallelDegree.Value;
         if (Execution.MaxFileOperationsPerScript.HasValue)
@@ -229,6 +231,15 @@ public sealed record NetworkPolicySection
     /// scheme-implied port; a target with no discernible port is not blocked by this rule.
     /// </summary>
     public IReadOnlyList<int> AllowedPorts { get; init; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Exact destination literals exempted from the non-bypassable infrastructure egress fence
+    /// (<see cref="InfrastructureEgressFence"/>) — for the operator who genuinely runs a service on a
+    /// link-local address or a container-runtime bridge name. Entries must be exact hosts or
+    /// addresses; wildcards are ignored, because the point of the fence is that a broad allowlist
+    /// cannot widen it. Empty means the fence is fully closed, which is the default.
+    /// </summary>
+    public IReadOnlyList<string> EgressFenceExemptions { get; init; } = Array.Empty<string>();
 }
 
 public sealed record ExecutionPolicySection
@@ -607,6 +618,27 @@ public static class OrganizationPolicySchema
                 errors.Add($"Network allowed port '{port}' must be between 1 and 65535.");
             else if (!seenPorts.Add(port))
                 errors.Add($"Network allowed port '{port}' is duplicated.");
+        }
+
+        var seenExemptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var exemption in network.EgressFenceExemptions)
+        {
+            if (string.IsNullOrWhiteSpace(exemption))
+            {
+                errors.Add("Egress fence exemptions cannot contain blank entries.");
+                continue;
+            }
+
+            var trimmed = exemption.Trim();
+            // A wildcard exemption would turn the fence back into an allowlist decision, which is
+            // exactly the bypass the fence exists to prevent. Reject it at authoring time rather
+            // than silently dropping it, so the operator learns the entry does nothing.
+            if (trimmed.Contains('*', StringComparison.Ordinal))
+                errors.Add($"Egress fence exemption '{exemption}' must be an exact host or address; wildcards are not permitted.");
+            else if (!seenExemptions.Add(trimmed))
+                errors.Add($"Egress fence exemption '{exemption}' is duplicated.");
+            else if (InfrastructureEgressFence.Classify(trimmed) == InfrastructureDestinationClass.None)
+                errors.Add($"Egress fence exemption '{exemption}' does not name a fenced infrastructure destination.");
         }
     }
 

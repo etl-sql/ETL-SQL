@@ -763,6 +763,38 @@ Controls block:
 Network allowlisting supplements resource authorization; reachability alone never grants connector
 or Gateway access.
 
+### 12.1 Implementation status
+
+Two of these controls are in place, and they are different kinds of control.
+
+**Kernel-level default-deny for sandboxed attempts.** `DockerSandboxExecutionProvider` creates tenant
+containers with `--network none`, so a Hardened attempt has no network namespace to egress from at
+all. That is the strongest form of the requirement and needs no allowlist to be correct.
+
+**A non-bypassable infrastructure fence for every other execution path.**
+`InfrastructureEgressFence` denies four destination classes — cloud instance metadata and instance
+identity, link-local node services, the container runtime host bridge, and cluster service discovery
+— regardless of deployment topology, enrollment state, or host allowlist. This closes the specific
+hole that the organization host allowlist left open: `Security:AllowedHosts` defaults to `["*"]` and
+its internal-range rules do not evaluate at all when a deployment is unenrolled or configures no
+allowlist, so before the fence a *dedicated* tenant's own worker could read the instance credential
+endpoint. The fence is enforced at connection creation, on every dynamic REST URL including redirect
+and pagination targets, and again at socket-connect time against each resolved address, which covers
+DNS rebinding, redirects, alternate/obfuscated address forms, and port scanning in one place. A
+policy change mid-run cannot widen it, because a wildcard is not an exemption. Exemptions are
+server-owned, must name an exact host or address, and are validated at policy-authoring time.
+
+Loopback and RFC 1918 private ranges are deliberately outside the fence: on-premises databases live
+there, so fencing them would break every on-premises install without adding a boundary the host
+allowlist does not already provide. They stay governed by `Security:AllowedHosts` and
+`NetworkDestinationRules.IsRestrictedRange`.
+
+Still open: the *positive* half of this section — per-attempt capability-authorized destination
+allowlisting, where an attempt may reach only the exact connector, object-storage, telemetry, and
+Gateway Broker endpoints its capability names. That depends on the Gateway and on per-attempt
+capability issuance, and today an allowed destination is still an allowlist decision rather than a
+capability-scoped one.
+
 ## 13. Capacity and Noisy-Neighbor Boundary
 
 Admission and runtime enforcement cover tenant and global limits for:

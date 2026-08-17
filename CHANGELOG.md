@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a non-bypassable infrastructure egress fence. Connectors can no longer reach cloud instance
+  metadata endpoints, link-local node services, the container runtime host bridge, or cluster service
+  discovery in any deployment topology — the default `AllowedHosts: ["*"]`, an unenrolled host, and a
+  mid-run policy change cannot relax it. The fence is applied at connection creation, on every dynamic
+  REST URL including redirects, and again per resolved address at socket-connect time, so obfuscated
+  address forms, DNS rebinding, and port scanning are all covered. Loopback and RFC 1918 private
+  ranges are unchanged. Operators can exempt exact hosts/addresses through
+  `Security:EgressFenceExemptions` or authoritative policy; wildcard exemptions are rejected.
 - Added signed Managed Dedicated tenant upgrades with running-release verification, exclusive
   boundary locking, scheduler fencing, durable admission drain/reconciliation, atomic capacity
   assignment, exact rollback snapshots, interrupted-cutover recovery, and idempotent audit receipts.

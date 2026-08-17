@@ -37,6 +37,7 @@ Configures the zero-trust execution sandbox limits, folder restrictions, allowed
 | :--- | :--- | :--- | :--- | :--- |
 | `Security:PathProtectionMode` | string | `Restricted` | — | Controls boundary protection. Set to `Restricted` to block script reads/writes outside safe zones. |
 | `Security:AllowedHosts` | array | `["*"]` | — | Hosts permitted to connect to HTTP endpoints. |
+| `Security:EgressFenceExemptions` | array | `[]` | — | Exact hosts or addresses exempted from the non-bypassable infrastructure egress fence — see [Infrastructure egress fence](#infrastructure-egress-fence). Wildcards are rejected. |
 | `Security:ApprovedSafeZones` | array | `["c:\Users\chuck\scratch\ETL-SQL\samples"]` | — | Paths where scripts are permitted to write or read files when `PathProtectionMode` is restricted. |
 | `Security:AllowedEnvVars` | array | `["TEMP", "USERDOMAIN", ...]` | — | Environment variables whitelisted for access within ETL scripts via the `ENV_VAR()` function. |
 | `Security:AdditionalBlockedExtensions` | array | `[]` | — | Extra administrator-defined file extensions to deny. These only add restrictions and cannot weaken built-in blocked extensions. |
@@ -51,6 +52,34 @@ Configures the zero-trust execution sandbox limits, folder restrictions, allowed
 | `Security:SpillEncryptionEnabled` | boolean | `true` | `SET SPILL_ENCRYPTION ON\|OFF` | When true, buffers spilled to local disk during heavy queries are encrypted at rest. |
 | `Security:SpillCompressionEnabled` | boolean | `true` | `SET SPILL_COMPRESSION ON\|OFF` | When true, spilled buffers are compressed to save disk space. |
 | `Security:SpillFormat` | string | `Arrow` | `SET SPILL_FORMAT = 'AUTO'\|'JSON'\|'PARQUET'` | Serialization format for data spills. |
+
+### Infrastructure egress fence
+
+Independently of `Security:AllowedHosts`, connectors can never reach the hosting infrastructure a
+deployment runs on. The fence is always on — it applies to standalone, unenrolled, Managed
+Dedicated, and shared multi-tenant hosts alike, and the default `AllowedHosts: ["*"]` does not
+relax it. It denies four classes of destination:
+
+| Class | Covers |
+| :--- | :--- |
+| Cloud instance metadata | `169.254.169.254`, `169.254.170.2`, `168.63.129.16`, `100.100.100.200`, `192.0.0.192`, `fd00:ec2::254`, `metadata.google.internal`, `metadata.goog`, `metadata`, `instance-data` |
+| Link-local node services | anything in `169.254.0.0/16` or `fe80::/10` (kubelet, node agents) |
+| Container runtime bridge | `host.docker.internal`, `gateway.docker.internal`, `host.containers.internal`, `kubernetes.default[.svc[.cluster.local]]` and related names |
+| Cluster service discovery | any host ending `.svc`, `.cluster.local`, `.svc.cluster.local`, `.pod.cluster.local` |
+
+Obfuscated address forms are normalized before the check, so `2852039166`, `0xa9fea9fe`,
+`0251.0376.0251.0376`, and `::ffff:169.254.169.254` are all denied as `169.254.169.254`. The fence
+is applied at connection creation, on every dynamic REST URL (including redirect and pagination
+targets), and again at socket-connect time against each resolved address, so a permitted name
+cannot rebind onto an infrastructure address between check and connect. It is port-independent.
+
+Loopback and RFC 1918 private ranges are deliberately **not** fenced — on-premises databases live
+there, and they remain governed by `Security:AllowedHosts` and the internal-range rules.
+
+If you genuinely run a service on a fenced address, list it exactly in
+`Security:EgressFenceExemptions` (or in authoritative organization policy under
+`network.egressFenceExemptions`). Entries must be exact hosts or addresses; a wildcard entry is
+rejected, because a broad allowlist is precisely what must not be able to widen the fence.
 
 ---
 
