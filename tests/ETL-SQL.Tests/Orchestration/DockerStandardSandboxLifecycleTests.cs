@@ -54,4 +54,8 @@ public sealed class DockerStandardSandboxLifecycleTests : DockerSandboxLifecycle
     [DockerStandardSandboxFact]
     public Task StandardUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt() =>
         VerifyUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt();
+
+    [DockerStandardSandboxFact]
+    public Task StandardCheckpointedStateResumesInADifferentSandbox() =>
+        VerifyCheckpointedStateResumesInADifferentSandbox();
 }

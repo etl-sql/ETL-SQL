@@ -831,6 +831,18 @@ public static class CryptoUtils
 
     internal static byte[] GetMachineKey(string? entropy)
     {
+        // A server-mounted key is authoritative where one is provided. A disposable worker's
+        // LocalApplicationData is its own single-use scratch, so the file below would be fresh random
+        // material on every attempt — and everything it protected, checkpoints included, would be
+        // unreadable to the next sandbox even for the same tenant.
+        var mounted = ReadMountedMachineKey();
+        if (mounted is not null)
+        {
+            return entropy is null
+                ? mounted
+                : Rfc2898DeriveBytes.Pbkdf2(mounted, Encoding.UTF8.GetBytes(entropy), 1000, HashAlgorithmName.SHA256, 32);
+        }
+
         bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         string etlSqlDir = Path.Combine(appData, "etl-sql");
@@ -876,6 +888,25 @@ public static class CryptoUtils
 
         // Mix entropy into the key to make it user-bound if entropy is provided
         return Rfc2898DeriveBytes.Pbkdf2(baseKey, Encoding.UTF8.GetBytes(entropy), 1000, HashAlgorithmName.SHA256, 32);
+    }
+
+    /// <summary>
+    /// Reads the server-mounted machine key when the host provides one, applying the same contract as
+    /// <c>SecurityService.GetMachineKey</c>: an absolute path holding at least 32 characters. A
+    /// configured-but-unusable key fails rather than silently falling back to host-local material,
+    /// because the fallback would protect data under a key the rest of the fleet cannot reproduce.
+    /// </summary>
+    private static byte[]? ReadMountedMachineKey()
+    {
+        var keyFile = Environment.GetEnvironmentVariable("ETLSQL_MACHINE_KEY_FILE");
+        if (string.IsNullOrWhiteSpace(keyFile)) return null;
+        if (!Path.IsPathFullyQualified(keyFile))
+            throw new ExecutionException("ETLSQL_MACHINE_KEY_FILE must be an absolute server-mounted path.");
+
+        var key = File.ReadAllText(keyFile).Trim();
+        if (key.Length < 32)
+            throw new ExecutionException("The mounted ETL-SQL machine key must contain at least 32 characters.");
+        return SHA256.HashData(Encoding.UTF8.GetBytes(key));
     }
     /// <summary>
     /// Encrypts a file using a PGP public key.

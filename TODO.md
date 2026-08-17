@@ -298,9 +298,27 @@ runtime, which is what the storage cell below was blocked on.
       **Partially unblocked 2026-08-17.** A registered gVisor runtime and a digest-pinned runnable
       worker image now exist (see domain 4), and `DockerHardenedSandboxLifecycleTests` supplies the
       real hardened-runtime run, forced termination, and residue proof this cell was waiting on —
-      mocked command evidence is not substituted for it. The cell stays open for what that lane does
-      not cover: **different-sandbox checkpoint resume**, and **reserved placement proven on a real
-      tenant-dedicated hardened host** rather than through the host-fixed refusal tests alone.
+      mocked command evidence is not substituted for it.
+
+      **Different-sandbox checkpoint resume completed (2026-08-17), and proving it found the defect
+      that made it impossible.** Both lifecycle lanes now run a checkpoint in one sandbox, kill that
+      sandbox outright, destroy its workspace, and resume the tenant's session in a *different*
+      container on a *different* assignment whose script never assigns the value it writes out — so
+      the value can only have come from the first sandbox's checkpoint. The first run of that test
+      failed with `Machine-protected payload authentication failed`, and the cause was real: session
+      state is sealed with `CryptoUtils.GetMachineKey`, which derives from a random `machine.key` in
+      `LocalApplicationData`. In a sandbox that resolves to the assignment's single-use tmpfs, so
+      every attempt invented fresh key material and no checkpoint was readable by anything, ever —
+      while the per-tenant key the provider mounts at `/run/secrets/etlsql-machine-key` contributed
+      only entropy on top of it. The mounted key is now the authoritative base when the host provides
+      one, which is what `SecurityService.GetMachineKey` already documented as its purpose
+      ("allowing disposable workers to rehydrate encrypted checkpoints"). Cross-tenant separation is
+      unchanged and still asserted: different mounted material still cannot open another tenant's
+      state. This is the shape the ledger keeps finding — a control that exists, looks implemented,
+      and was never asserted end to end.
+
+      The cell stays open for **reserved placement proven on a real tenant-dedicated hardened host**
+      rather than through the host-fixed refusal tests alone.
 - [ ] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
       tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
       ambiguous-outcome handling, and destructive cleanup. Tenant-partitioned queues and

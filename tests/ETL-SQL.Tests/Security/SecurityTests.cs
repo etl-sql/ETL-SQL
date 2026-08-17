@@ -313,6 +313,46 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
+        public void MountedMachineKeyIsAuthoritativeSoDisposableWorkersCanRehydrateCheckpoints()
+        {
+            // A disposable worker's LocalApplicationData is its own single-use scratch. If the local
+            // random key file won, every attempt would protect state under material no other sandbox
+            // — including the next attempt of the same tenant — could ever reproduce.
+            var keyFile = Path.Combine(Path.GetTempPath(), $"etlsql-machine-key-{Guid.NewGuid():N}");
+            File.WriteAllText(keyFile, new string('k', 64));
+            var otherKeyFile = Path.Combine(Path.GetTempPath(), $"etlsql-machine-key-{Guid.NewGuid():N}");
+            File.WriteAllText(otherKeyFile, new string('m', 64));
+            try
+            {
+                Environment.SetEnvironmentVariable("ETLSQL_MACHINE_KEY_FILE", keyFile);
+                var plain = System.Text.Encoding.UTF8.GetBytes("checkpointed session state");
+                var sealedBytes = CryptoUtils.ProtectGeneric(plain, entropy: "tenant-a");
+
+                // A second worker holding the same mounted key reads it back.
+                Assert.Equal(plain, CryptoUtils.UnprotectGeneric(sealedBytes, entropy: "tenant-a"));
+
+                // A worker holding different key material cannot, so the mount is still the boundary.
+                Environment.SetEnvironmentVariable("ETLSQL_MACHINE_KEY_FILE", otherKeyFile);
+                Assert.ThrowsAny<Exception>(
+                    () => CryptoUtils.UnprotectGeneric(sealedBytes, entropy: "tenant-a"));
+
+                // A configured-but-unusable key fails rather than silently falling back to host-local
+                // material, which would protect data under a key the fleet cannot reproduce.
+                var shortKeyFile = Path.Combine(Path.GetTempPath(), $"etlsql-machine-key-{Guid.NewGuid():N}");
+                File.WriteAllText(shortKeyFile, "too-short");
+                Environment.SetEnvironmentVariable("ETLSQL_MACHINE_KEY_FILE", shortKeyFile);
+                Assert.ThrowsAny<Exception>(() => CryptoUtils.GetMachineKey(entropy: null));
+                File.Delete(shortKeyFile);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("ETLSQL_MACHINE_KEY_FILE", null);
+                File.Delete(keyFile);
+                File.Delete(otherKeyFile);
+            }
+        }
+
+        [Fact]
         public void TestScriptImmutability()
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);

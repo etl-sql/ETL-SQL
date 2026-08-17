@@ -27,6 +27,28 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         PRINT 'this script is not expected to finish';
         """;
 
+    // Reaches a top-level checkpoint label — which is what persists evaluator state — and then waits
+    // to be killed, so the attempt contributes a durable checkpoint and nothing else.
+    protected const string CheckpointThenWaitScript = """
+        DECLARE @Stage VARCHAR(50);
+        SET @Stage = 'checkpointed-by-the-first-sandbox';
+        Checkpoint1:
+        WAITFOR DELAY '00:05:00';
+        PRINT 'this script is not expected to finish';
+        """;
+
+    // Carries the checkpoint label (resume requires it) but never assigns @Stage. Any value it can
+    // write therefore came from the other sandbox's checkpoint, not from re-running the first half.
+    protected const string ResumeFromCheckpointScript = """
+        DECLARE @Stage VARCHAR(50);
+        Checkpoint1:
+        CREATE CONNECTION SandboxOut AS FLATFILE(PATH = '/workspace/output/resumed.csv', DELIMITER = ',', HEADER = ON);
+        CREATE TABLE #Resumed (Stage VARCHAR(50));
+        INSERT INTO #Resumed VALUES (@Stage);
+        INSERT INTO SandboxOut SELECT * FROM #Resumed;
+        PRINT 'safe';
+        """;
+
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), $"etlsql-sandbox-live-{Guid.NewGuid():N}");
     private readonly ProcessSandboxCommandRunner _docker = new();
@@ -229,6 +251,64 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         Assert.False(Directory.Exists(workspace.RootPath));
     }
 
+    protected async Task VerifyCheckpointedStateResumesInADifferentSandbox()
+    {
+        var artifacts = ArtifactStore();
+        var provider = new DockerSandboxExecutionProvider(Options(), _docker, artifacts);
+        var sessionId = $"resume-{Guid.NewGuid():N}";
+
+        // The first sandbox reaches its checkpoint and is then killed outright. Its workspace is
+        // destroyed with it, so only the tenant's server-owned session root survives the attempt.
+        var firstArtifact = await artifacts.PutScriptAsync(CheckpointThenWaitScript);
+        var firstWorkspace = await Workspaces().AssignAsync(Identity("tenant-a"));
+        var firstAttempt = await provider.PrepareAsync(
+            Request(firstArtifact, "tenant-a") with
+            {
+                AdmissionId = "live-checkpoint-1",
+                SessionId = sessionId
+            },
+            firstWorkspace,
+            default);
+        var firstContainer = TrackContainer(firstWorkspace.AssignmentId);
+        var firstRun = firstAttempt.RunAsync(default);
+        await WaitForCheckpointAsync(sessionId);
+        Assert.Equal(0, (await _docker.RunAsync("docker", ["kill", firstContainer])).ExitCode);
+        Assert.Equal(137, (await firstRun).ExitCode);
+        await firstAttempt.DestroyAsync(default);
+        Assert.False(await ContainerExistsAsync(firstContainer));
+        await firstWorkspace.DestroyAsync();
+        Assert.False(Directory.Exists(firstWorkspace.RootPath));
+
+        // The second sandbox is a different assignment in a different container, sharing only the
+        // tenant's session root. Its script never assigns @Stage.
+        var secondArtifact = await artifacts.PutScriptAsync(ResumeFromCheckpointScript);
+        var secondWorkspace = await Workspaces().AssignAsync(Identity("tenant-a"));
+        Assert.NotEqual(firstWorkspace.AssignmentId, secondWorkspace.AssignmentId);
+        var secondAttempt = await provider.PrepareAsync(
+            Request(secondArtifact, "tenant-a") with
+            {
+                AdmissionId = "live-checkpoint-2",
+                SessionId = sessionId,
+                ResumeFromCheckpoint = true
+            },
+            secondWorkspace,
+            default);
+        var secondContainer = TrackContainer(secondWorkspace.AssignmentId);
+        Assert.NotEqual(firstContainer, secondContainer);
+        var outcome = await secondAttempt.RunAsync(default);
+
+        AssertSucceeded(outcome);
+        // The value can only have come from the checkpoint the killed sandbox wrote: this attempt
+        // never set it, and the workspace that produced it no longer exists.
+        Assert.Contains(
+            "checkpointed-by-the-first-sandbox",
+            await File.ReadAllTextAsync(Path.Combine(secondWorkspace.OutputPath, "resumed.csv")));
+
+        await secondAttempt.DestroyAsync(default);
+        Assert.False(await ContainerExistsAsync(secondContainer));
+        await secondWorkspace.DestroyAsync();
+    }
+
     protected async Task VerifyUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt()
     {
         var artifacts = ArtifactStore();
@@ -299,6 +379,23 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         }
 
         Assert.Fail($"The sandbox container '{container}' never reached the running state.");
+    }
+
+    /// <summary>
+    /// Waits for the checkpoint to be durable on the tenant's session root rather than for a log
+    /// line, so the kill below cannot race the write it is supposed to happen after.
+    /// </summary>
+    private async Task WaitForCheckpointAsync(string sessionId)
+    {
+        var metadata = Path.Combine(SessionRoot, "tenant-a", sessionId, "metadata.db");
+        var deadline = DateTime.UtcNow.AddSeconds(120);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (File.Exists(metadata)) return;
+            await Task.Delay(100);
+        }
+
+        Assert.Fail($"The sandbox never persisted a checkpoint for session '{sessionId}'.");
     }
 
     private static async Task<SandboxWorkspaceAssignment> WaitForAssignmentAsync(
