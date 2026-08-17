@@ -1,4 +1,4 @@
-# ETL-SQL Development TODO List
+﻿# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for open active-release and roadmap work. Once work is
 verified, record its notable outcome in `CHANGELOG.md`.
@@ -117,43 +117,6 @@ cases in `OrchestratorJobApiAuthTests`.
       name-addressed `LogJobStartAsync` helper refuses to invent an unbound twin when the name
       belongs to a tenant. The Enterprise certification lane's `shared-state-and-artifact-providers`
       prerequisite should now get past this point to its remaining five.
-
-### Orchestrator — Job Administration UI
-
-Split out of Per-Object Authorization (2026-08-15) so the security boundary is not held hostage to a
-much larger UI build. Depends on that item for ownership and grant surfacing, but nothing else.
-
-**Scoped against what already exists (reviewed 2026-08-15).** `src/ETL-SQL.Portal/wwwroot/orchestrator.html`
-is not a stub — it has the service status chip with restart/stop, four clickable stat chips that filter
-the table, a triage board, a 24-hour Gantt timeline, the jobs table with run/enable-disable/kill/delete,
-a detail panel with Details and Script Flow (DAG) tabs, an inline script editor, a duration sparkline,
-run history with resume-from-named-checkpoint behind an impact-confirm dialog, a create-job modal, and
-a run-with-variable-overrides modal. This item extends that to the objects and metrics added since it
-was written; it is not a rebuild.
-
-- [x] **Schedule and notification objects.** `/api/schedules` and `/api/notifications` — the unified
-      catalog — have full UI catalog tables with create/edit/delete/toggle and dispatch tests.
-- [x] **Job metrics.** The sparkline toggles between duration and rows processed. Data quality failure
-      breakdowns, quarantine counters, and stewardship coverage scores are surfaced in the job details panel.
-- [x] **Bundles.** `jobType`/`targetPath` (`bundle://`) selector and pinning surfaced in create modal and details.
-- [x] **`DisplayName`, `Description`, and `Options`** — including `SandboxProfile` admission options in job forms,
-      table badges, and search filtering.
-- [x] **Watermark state.** High-water mark inspector with key editing and 1-click backfill reset.
-- [x] **Definition change log** — Chronological audit trail showing mutations, triggers, and access changes.
-- [x] **Table ergonomics** — Instant search, status filters, configurable pagination, and 7-day multi-day run calendar.
-- [x] **Job-to-job dependency view.** Interactive force-directed cross-job DAG showing upstream providers and downstream consumers.
-
-### Installer — component rework
-
-Raised 2026-08-15 while scoping the orchestrator/admin Portal deployment. The MSI already splits into
-`Feature_SDK`, `Feature_Orchestrator`, and `Feature_Portal` (`src/ETL-SQL.Installer/Installer.wxs`), so
-component-level installation works; the naming and the groupings are what need work.
-
-- [x] **Rename `Feature_SDK`** — renamed to `Feature_Workstation` ("Workstation Authoring"). Title, description, and dialog label now accurately describe the TUI, LSP, Report CLI, and Desktop Player as the workstation authoring toolkit.
-- [x] **Orchestrator feature** installs the job runner with the Admin Portal as a default-on sub-feature `Feature_AdminPortal`. The Admin Portal is a child of `Feature_Orchestrator` and is on by default, since Team and above require a Portal for identity. A Solo install can deselect it (`RequireFederatedIdentity=false`).
-- [x] **Report Portal feature** added as `Feature_ReportPortal` — an independent top-level feature so a team can put reporting on its own server, separate from the Orchestrator and Admin Portal.
-- [x] **Portal surface flag.** `PORTAL_SURFACE` property (`"All"` / `"AdminOnly"` / `"ReportOnly"`) is set by the preset or derived from the feature selection and written to `Portal:Surface` in `appsettings.json` by `configure-portal-jwt.ps1`. Installer feature selection and the runtime flag are one decision.
-- [x] **Deployment-profile install templates** added as a new `DeployProfileDlg` dialog inserted between the license page and component selection. Presets: Solo (Workstation only), Team (Workstation + Orchestrator + Admin Portal), Enterprise (all components). Each preset sets the checkbox defaults; the user can still customise before clicking Install.
 
 ### Platform — Progressive SaaS Delivery and Red Cells
 
@@ -505,7 +468,3 @@ Tenant Portability Bundle**.*
       cross-tenant evidence across database, artifact, cache, queue, audit, PII, lineage/quality,
       path, key, checkpoint, Gateway, sandbox, telemetry, support, restore, and resource-exhaustion
       surfaces.
-
-## Bugs
-### VS Code
-- [x] **ETL-SQL Results window stays open**  The `etlsql-results-view` now carries a `when: "etlsql.activeEditor"` clause in `package.json` so the panel tab only appears when an `.etlsql` or `.rptsql` file is active. A `setContext("etlsql.activeEditor", ...)` call in the `onDidChangeActiveTextEditor` handler (and on activation) keeps the flag in sync. Passive editor-change messages use the new `postMessagePassive` method so they never force the panel open when the user switches to a non-ETL-SQL file.
