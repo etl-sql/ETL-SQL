@@ -318,10 +318,26 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
 
 **Candidate, not scheduled.** In interactive dashboards and parameterized paginated reports, filters often exhibit natural parent-child relationships (e.g. selecting `Country = 'US'` should constrain the `State` dropdown to US states, and picking a `Department` should restrict the `Manager` slicer). Currently, slicers evaluate their source datasets independently at initial report evaluation or require manually written dependent queries.
 
-**Delivery stage.** This work introduces declarative parameter and slicer dependency graph evaluation:
-- **Declarative Cascading Bindings:** Extend `SLICER` / `MULTISELECT` syntax with dependency declarations (e.g. `DEPENDS_ON = (@country)` or `FILTER_BY = (@country = CountryCode)`).
-- **Client-Side Dependency Propagation:** The browser runtime automatically filters child option sets or re-queries dependent options when parent parameter state changes, resetting or re-defaulting invalid selections cleanly.
-- **Cycle Detection & Static Linting:** The LSP and AST compiler validate the parameter dependency DAG at authoring time to guarantee termination and prohibit circular parameter dependencies.
+**Architecture Decision (Visual-Level Contract):**
+Dependency rules belong on the **visual control** (`CREATE VISUAL ... AS SLICER / MULTISELECT`) rather than on `DECLARE @var` or `CREATE PAGE`. This preserves the clean separation between core engine scalar variable storage and presentation-tier dataset projection, while allowing offline `.etlsnap` runtimes to filter option sets client-side from Arrow tables without server round-trips.
+
+**Target Syntax Specification:**
+```sql
+CREATE VISUAL StateSlicer AS SLICER (
+  SOURCE     = #geo_hierarchy,
+  MAPPINGS   (VALUE = StateName, FILTER_BY = CountryName),
+  DEPENDS_ON = @country,
+  ON_INVALID = RESET_DEFAULT,   -- RESET_DEFAULT | SELECT_FIRST | CLEAR
+  DEFAULT    = 'All',
+  ACTIONS    (ON_CHANGE = SET_PARAMETER(@state, StateName))
+);
+```
+
+**Delivery Stages:**
+1. **Parser & AST Extension:** Add `DEPENDS_ON = @param` and `ON_INVALID = RESET_DEFAULT | SELECT_FIRST | CLEAR` to `VisualDefinition` and `ReportParser.cs`, plus `FILTER_BY` support in `MAPPINGS`.
+2. **Client-Side Dependency Propagation (`report-runtime.js`):** When `@country` changes, the browser runtime automatically filters the child visual's Arrow dataset by `CountryName == @country`. If the current value of `@state` is not in the filtered options, it evaluates the `ON_INVALID` action immediately with zero server latency.
+3. **Server-Side Re-evaluation (`ReportInteractionRefresher.cs`):** In live query mode, dependent visual queries are refreshed in topological order based on the parameter dependency graph.
+4. **Cycle Detection & Static Linting:** The LSP and AST compiler validate the parameter dependency DAG at authoring time to guarantee termination and prohibit circular parameter dependencies.
 
 ### Reporting & Presentation — Bookmarks & In-Report Saved Visual States
 
