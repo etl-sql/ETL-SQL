@@ -19,8 +19,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DELETE` | DML | [Statement Reference](reference/statements/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
 | `MERGE` | DML | [Statement Reference](reference/statements/README.md) | [MERGE.md](reference/statements/dml/merge.md) |
 | `TRUNCATE` | DML | [Statement Reference](reference/statements/README.md) | [TRUNCATE.md](reference/statements/dml/truncate.md) |
-| `GENERATE CALENDAR` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
-| `TRANSFORM` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
+| `GENERATE CALENDAR` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md#generate-calendar](reference/statements/data-prep.md#generate-calendar) |
+| `TRANSFORM` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md#transform](reference/statements/data-prep.md#transform) |
 | `DATA QUALITY RULES` | DML | [Statement Reference](reference/statements/README.md) | [DATA QUALITY RULES](reference/statements/dml/data-quality-rules.md) |
 | `TRANSFORM` | DML | [Statement Reference](reference/statements/README.md) | [TRANSFORM](reference/statements/dml/transform.md) |
 | `DEDUPLICATE` | Transform | [Transform](reference/transform/deduplicate.md) | [deduplicate.md](reference/transform/deduplicate.md) |
@@ -32,7 +32,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `ROLLING_AGGREGATE` | Transform | [Transform](reference/transform/rolling_aggregate.md) | [rolling_aggregate.md](reference/transform/rolling_aggregate.md) |
 | `SHARE_OF_TOTAL` | Transform | [Transform](reference/transform/share_of_total.md) | [share_of_total.md](reference/transform/share_of_total.md) |
 | `TOP_N_OTHERS` | Transform | [Transform](reference/transform/top_n_others.md) | [top_n_others.md](reference/transform/top_n_others.md) |
-| `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
+| `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md#compare-datasets](reference/statements/data-prep.md#compare-datasets) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
 | `DROP CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
@@ -78,7 +78,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `eng.variables` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.variables](reference/eng/variables.md) |
 | `eng.connection_config` | Diagnostics| [Engine Catalog](reference/eng/README.md) | [eng.connection_config](reference/eng/connection-config.md) |
 | `eng.connections` | Diagnostics| [Engine Catalog](reference/eng/README.md) | [eng.connections](reference/eng/connections.md) |
-| `eng.locks` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
+| `eng.locks` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.locks](reference/eng/locks.md) |
 | `CLEAR SESSION` | Session | [Statement Reference](reference/statements/README.md) | [CLEAR.md](reference/statements/session-control/clear.md) |
 | `USE PASSWORD` | Session / Security | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
 | `USE SETS` | Session | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
@@ -112,7 +112,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DIRECTORY Operations` | File IO | [Statement Reference](reference/statements/README.md) | [DIRECTORY Operations](reference/file-operations/directory.md) |
 | `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/receive-file.md) |
 | `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/send-file.md) |
-| `eng.active_sessions` | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
+| `eng.active_sessions` | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
 | `Service Accounts` | Portal Admin | [Statement Reference](reference/statements/README.md) | [Service Accounts](reference/portal-commands/service-accounts.md) |
 | `Admin Identity CLI` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [admin identity cli](reference/portal-commands/admin-identity-cli.md) |
 | `PORTAL SHOW` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [portal show](reference/portal-commands/portal-show.md) |
@@ -130,29 +130,29 @@ Statements are the top-level actions in an ETL-SQL script.
 | `WINDOW` | Window Functions | [Statement Reference](reference/statements/README.md) | [WINDOW](reference/statements/query-syntax/window.md) |
 | `` | Date/Time | [Statement Reference](reference/statements/README.md) | [](reference/functions/datetime/reldate.md) |
 | `Data Types` | Data Types | [Statement Reference](reference/statements/README.md) | [Data Types](reference/data-types.md) |
-| `eng.alerts()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.catalog_search()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
+| `eng.alerts()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.catalog_search()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
 | `eng.connection_config` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.connection_config](reference/eng/connection-config.md) |
 | `eng.data_quality_failures` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.data_quality_failures](reference/eng/data-quality-failures.md) |
 | `eng.data_quality_rules` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.data_quality_rules](reference/eng/data-quality-rules.md) |
 | `eng.data_quality_status` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.data_quality_status](reference/eng/data-quality-status.md) |
 | `eng.stewardship_gaps` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.stewardship_gaps](reference/eng/stewardship-gaps.md) |
 | `eng.stewardship_score` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.stewardship_score](reference/eng/stewardship-score.md) |
-| `eng.effective_permissions()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.embed_tokens()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.favorites()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
+| `eng.effective_permissions()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.embed_tokens()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.favorites()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
 | `eng.host_metrics` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.host_metrics](reference/eng/host-metrics.md) |
 | `eng.job_history` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.job_history](reference/eng/job-history.md) |
 | `eng.job_state` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.job_state](reference/eng/job-state.md) |
 | `eng.jobs` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.jobs](reference/eng/jobs.md) |
-| `eng.usage_metrics()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.recent_reports()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.reports` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.report_dependencies()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.report_history()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.saved_views()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.share_links()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.subscriptions` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
+| `eng.usage_metrics()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.recent_reports()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.reports` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.report_dependencies()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.report_history()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.saved_views()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.share_links()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.subscriptions` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
 | `eng.tables` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.tables](reference/eng/tables.md) |
 | `eng.version` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.version](reference/eng/version.md) |
 | `eng.bundle_dependencies` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.bundle_dependencies](reference/eng/bundle-dependencies.md) |
@@ -240,9 +240,9 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DROP SNAPSHOT` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_DATASET.md](reference/portal-commands/portal-dataset.md) |
 | `CREATE JOB ... FOR REPORT` | Orchestrator | [Job Orchestration](reference/orchestrator-jobs/schedule.md) | [PORTAL_REFRESHJOB.md](reference/portal-commands/portal-refreshjob.md) |
 | `ALTER JOB ... ADD SCHEDULE` | Orchestrator | [Job Orchestration](reference/orchestrator-jobs/schedule.md) | [PORTAL_REFRESHJOB.md](reference/portal-commands/portal-refreshjob.md) |
-| `eng.users` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.reports` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `eng.active_sessions` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
+| `eng.users` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.reports` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
+| `eng.active_sessions` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Portal eng.* Catalog](reference/eng/portal-catalog.md) |
 | `RESTART PORTAL` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_ADMIN.md](reference/portal-commands/portal-admin.md) |
 | `SHUTDOWN PORTAL` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_ADMIN.md](reference/portal-commands/portal-admin.md) |
 

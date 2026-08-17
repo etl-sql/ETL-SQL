@@ -4,7 +4,7 @@ High-level declarative data preparation statements that generate inspectable in-
 
 ---
 
-## `GENERATE CALENDAR`
+## `GENERATE CALENDAR` {#generate-calendar}
 
 Generates a comprehensive date dimension table populated with fiscal, calendar, weekday, and ISO date attributes:
 
@@ -53,7 +53,7 @@ ORDER BY c.Date;
 
 ---
 
-## `TRANSFORM ... USING FILL_DATES`
+## `TRANSFORM ... USING FILL_DATES` {#transform}
 
 Fills missing date gaps across partitioned time-series datasets. Generated rows preserve grouping keys and fill metric columns with `GAPS_FILL` (default `0`).
 
@@ -83,7 +83,7 @@ SELECT Region, OrderDate, Amount FROM #daily_sales_filled ORDER BY Region, Order
 
 ---
 
-## `COMPARE DATASETS`
+## `COMPARE DATASETS` {#compare-datasets}
 
 Compares two datasets by primary key, identifying created, modified, and deleted records:
 
