@@ -82,7 +82,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `CLEAR SESSION` | Session | [Statement Reference](reference/statements/README.md) | [CLEAR.md](reference/statements/session-control/clear.md) |
 | `USE PASSWORD` | Session / Security | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
 | `USE SETS` | Session | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
-| `CREATE SETS` | Session | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `CREATE SETS` | Session | [Variables & Parameters](reference/variables-parameters/README.md) | [CREATE SETS](reference/variables-parameters/create-sets.md) |
 | `DROP SETS` | Session | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
 | `REQUIRE VERSION` | Session | [Statement Reference](reference/statements/README.md) | [REQUIRE.md](reference/statements/session-control/require.md) |
 | `BULK INSERT` | File IO | [Statement Reference](reference/statements/README.md) | [BULK.INSERT.md](reference/file-operations/bulk-insert.md) |
