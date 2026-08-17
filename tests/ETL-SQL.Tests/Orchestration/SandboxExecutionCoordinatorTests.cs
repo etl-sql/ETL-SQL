@@ -173,7 +173,8 @@ public sealed class SandboxExecutionCoordinatorTests
             MaxMemoryBytes = 512 * 1024 * 1024,
             MaxScratchBytes = 1024 * 1024 * 1024,
             MaxProcesses = 32,
-            MaxCpuCores = 4
+            MaxCpuCores = 4,
+            MaxConnectorConcurrency = 16
         }
     };
 

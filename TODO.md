@@ -351,14 +351,63 @@ runtime, which is what the storage cell below was blocked on.
       Portal's signed tenant assertion or fixed Orchestrator host authority. REST creation, script-first
       `CREATE JOB`, and tenant-scoped subscription generation carry the binding; conflicting host and
       signed identities are denied, replacement cannot change it, and legacy/unbound jobs cannot enter
-      sandbox policy resolution. Global/durable weighted selection, scheduler-execution/restart
-      dispatch remain open. The production Docker OCI provider and scheduler dispatch seam described
-      in the Dedicated slice above now exist, but Shared cannot claim them until a real Hardened
-      runtime lane proves the boundary and cluster-global fair queued-work recovery is complete.
+      sandbox policy resolution.
+
+      **Cluster-global fair selection and queued-work recovery completed (2026-08-17).** Weighted fair
+      ordering was process-local: each node ranked only its own waiters and then raced
+      `TryActivateAsync`, so whichever node polled first took every freed slot — the head-of-line
+      blocking and starvation this cell forbids, on the exact topology it is about. Selection now
+      happens inside the ledger under the pool row lock, from state every node shares. It is weighted
+      fair queuing on durable virtual time: a tenant is charged `Scale / weight` per grant, where
+      `Scale` is the least common multiple of the allowed weights 1–16 so the division is exact and
+      fairness cannot drift through rounding, and the next slot goes to whichever backlogged tenant is
+      furthest behind its share. An idle tenant is lifted to the pool's monotonic virtual base, so it
+      neither hoards credit while away nor stays behind after a busy neighbour ran; weight buys a
+      proportional share rather than unconditional priority (weight 4 against weight 1 measures 8
+      grants to 2, and the light tenant is never starved out). Fairness is bounded by liveness through
+      dispatch claims: only a queued row whose claiming node is still polling competes, and the claim
+      is committed separately from the activation transaction, because a refusal would otherwise roll
+      back its own claim and leave every node believing it waits alone. Reconciliation cancels
+      abandoned queue entries, which otherwise accumulate as phantom work against a tenant's durable
+      queue depth, and a node waiting on an admission revoked underneath it — by a tenant lifecycle
+      fence or that sweep — now fails fast instead of polling forever for a slot nobody will grant.
+      Proven on SQLite and on real PostgreSQL 16, the topology where two nodes genuinely cannot see
+      each other's queues. Restart adoption of a persisted queued admission (`ResumeQueuedAsync`)
+      remains a seam with no scheduler caller: a crashed node's work is recovered today by job-lease
+      re-dispatch plus the abandoned-queue sweep, not by adopting the original admission row.
+
+      The production Docker OCI provider and scheduler dispatch seam described in the Dedicated slice
+      above now exist, and the real Hardened runtime lane recorded in domain 4 proves the boundary.
 - [ ] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security
       boundary.
+
+      **Containment slice completed (2026-08-17): CPU, IOPS, connector concurrency, queue depth.**
+      Memory, processes, scratch, duration, and default-deny networking were already enforced; three
+      of the listed controls were not, and the queue-depth ceiling was enforced in a way that does not
+      survive a fleet. CPU had no control at all — a sandbox could saturate every core on a shared
+      host while every other dimension was bounded — so `MaxCpuCores` is now a required part of the
+      portable limit contract and lands as `--cpus`. It is required rather than optional deliberately:
+      a ceiling a provider may ignore is worse than none, because the fleet believes it exists. IOPS is
+      now expressible and honest about what a host can do: block-I/O throttling is per-device, so a
+      profile may declare `MaxIops` only where the host declares the device carrying sandbox I/O, and
+      a host without one refuses the work instead of running it unthrottled behind a ceiling that
+      reads as enforced. Connector concurrency becomes a server-owned per-tenant profile value
+      injected as the engine's own `Engine:MaxConnectionsPerScript`, rather than whatever the worker
+      image defaults to. Queue depth was persisted but never checked, so a tenant whose work arrived
+      through N orchestrator nodes could queue N times its limit; the check now runs in the ledger
+      under the pool lock, where it holds for the whole cluster. Both lifecycle lanes now assert
+      memory, swap, `NanoCpus`, and `PidsLimit` from `docker inspect` rather than from the request, so
+      the evidence is that the ceilings reached the runtime.
+
+      **Gap — the two controls still not enforced.** There is no per-attempt **row** ceiling: the
+      engine's row-shaped settings are preview and spill thresholds, not a processed-row limit, so
+      enforcing this needs an engine-side counter rather than another profile field. And **interactive
+      sessions** are enforced only in the Dedicated topology, where onboarding materializes
+      `MaxReportSessions` into the per-tenant deployment's `MaxConcurrentReportExecutions`. In Shared,
+      `SharedTenantControlPlanes` records the quota and nothing reads it back at runtime — a declared
+      limit with no enforcement behind it, which is the shape this ledger keeps finding.
 - [ ] **High availability, Dedicated.** Fleet rollout, compatibility, and drain behavior across a
       population of per-tenant deployments — upgrading a hundred dedicated stacks is the operational
       problem the topology creates. **Gap — Phase C carried HA alone.**

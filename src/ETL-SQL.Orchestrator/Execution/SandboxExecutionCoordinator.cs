@@ -37,6 +37,12 @@ public sealed record SandboxResourceLimits
     /// startup failure rather than a quietly dropped control.
     /// </summary>
     public int? MaxIops { get; init; }
+    /// <summary>
+    /// Concurrent connector connections one attempt may hold. The engine already enforces this per
+    /// script; carrying it in the profile makes it a server-owned per-tenant ceiling rather than a
+    /// constant baked into whichever worker image the host happens to run.
+    /// </summary>
+    public required int MaxConnectorConcurrency { get; init; }
 
     internal void Validate()
     {
@@ -50,6 +56,10 @@ public sealed record SandboxResourceLimits
         if (MaxIops is <= 0)
             throw new ArgumentOutOfRangeException(
                 nameof(MaxIops), "A declared sandbox IOPS limit must be positive.");
+        if (MaxConnectorConcurrency <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxConnectorConcurrency),
+                "The sandbox connector concurrency limit must be positive.");
     }
 }
 

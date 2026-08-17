@@ -42,6 +42,7 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         AssertContainsPair(create, "--memory-swap", "536870912");
         AssertContainsPair(create, "--cpus", "1.5");
         AssertContainsPair(create, "--pids-limit", "32");
+        Assert.Contains("Engine__MaxConnectionsPerScript=8", create);
         Assert.Contains("--read-only", create);
         Assert.DoesNotContain("--privileged", create);
         Assert.Contains($"{DockerSandboxExecutionProvider.AdmissionLabel}=admission-1", create);
@@ -304,7 +305,8 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
                 MaxMemoryBytes = 512 * 1024 * 1024,
                 MaxScratchBytes = 1024 * 1024,
                 MaxProcesses = 32,
-                MaxCpuCores = 1.5
+                MaxCpuCores = 1.5,
+                MaxConnectorConcurrency = 8
             },
             AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
             {

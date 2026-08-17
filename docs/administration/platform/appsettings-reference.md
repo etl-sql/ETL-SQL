@@ -135,6 +135,7 @@ Configures concurrency limits, memory floors, and polling intervals for job exec
 | `Orchestration:SandboxExecution:Profiles:{name}:MaxProcesses` | integer | — | > 0 | Container PID ceiling. |
 | `Orchestration:SandboxExecution:Profiles:{name}:MaxCpuCores` | number | — | > 0 | CPU cores the attempt may consume per wall-clock second (`--cpus`). Required: an unbounded workload starves every co-tenant on the host. |
 | `Orchestration:SandboxExecution:Profiles:{name}:MaxIops` | integer | — | > 0 when present | Block-I/O ceiling applied to reads and writes. Requires `IopsThrottleDevice`; a host without one refuses the work rather than running it unthrottled. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxConnectorConcurrency` | integer | — | > 0 | Concurrent connector connections one attempt may hold, injected as the engine's `Engine:MaxConnectionsPerScript`. Server-owned, so it is not whatever the worker image happens to default to. |
 | `Orchestration:SandboxExecution:Tenants:{tenant}:DefaultProfile` | string | — | existing profile | Default server-owned profile for the tenant. |
 | `Orchestration:SandboxExecution:Tenants:{tenant}:AllowedProfiles` | array | — | nonempty | Exact profile entitlements; workload metadata may request only one of these names. |
 | `Orchestration:SandboxExecution:Tenants:{tenant}:Weight` | integer | — | 1–16 | Fair-admission weight. |

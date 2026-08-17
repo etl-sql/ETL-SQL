@@ -306,6 +306,9 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             "--env", "Session__Root=/var/lib/etl-sql/sessions",
             "--env", "ETLSQL_MACHINE_KEY_FILE=/run/secrets/etlsql-machine-key",
             "--env", "TMPDIR=/workspace/scratch",
+            // Server-owned per-tenant ceiling, not the worker image's default.
+            "--env", "Engine__MaxConnectionsPerScript=" +
+                     request.Limits.MaxConnectorConcurrency.ToString(CultureInfo.InvariantCulture),
             // Every writable location the workload can reach is this assignment's single-use tmpfs.
             // The root is read-only and the tenant uid is unmapped, so a home, XDG, machine-key
             // cache, log, or outbox path left at its default would either abort the run or write

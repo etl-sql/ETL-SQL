@@ -366,7 +366,8 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
             MaxMemoryBytes = 512 * 1024 * 1024,
             MaxScratchBytes = 32 * 1024 * 1024,
             MaxProcesses = 64,
-            MaxCpuCores = 2
+            MaxCpuCores = 2,
+            MaxConnectorConcurrency = 8
         },
         AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
         {

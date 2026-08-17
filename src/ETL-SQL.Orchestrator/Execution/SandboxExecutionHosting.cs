@@ -188,6 +188,7 @@ public static class SandboxExecutionServiceCollectionExtensions
                     MaxScratchBytes = RequirePositiveLong(child, "MaxScratchBytes"),
                     MaxProcesses = checked((int)RequirePositiveLong(child, "MaxProcesses")),
                     MaxCpuCores = RequirePositiveDouble(child, "MaxCpuCores"),
+                    MaxConnectorConcurrency = checked((int)RequirePositiveLong(child, "MaxConnectorConcurrency")),
                     MaxIops = OptionalPositiveInt(child, "MaxIops")
                 }
             });

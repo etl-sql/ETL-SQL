@@ -74,7 +74,8 @@ public sealed class SandboxScheduledJobExecutorTests : IDisposable
                         MaxMemoryBytes = 1024,
                         MaxScratchBytes = 1024,
                         MaxProcesses = 2,
-                        MaxCpuCores = 1
+                        MaxCpuCores = 1,
+                        MaxConnectorConcurrency = 4
                     }
                 }
             },

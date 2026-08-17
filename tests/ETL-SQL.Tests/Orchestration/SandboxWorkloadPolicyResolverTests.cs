@@ -95,7 +95,8 @@ public sealed class SandboxWorkloadPolicyResolverTests
                 MaxMemoryBytes = memory,
                 MaxScratchBytes = 4096,
                 MaxProcesses = processes,
-                MaxCpuCores = 1
+                MaxCpuCores = 1,
+                MaxConnectorConcurrency = 4
             }
         };
 
