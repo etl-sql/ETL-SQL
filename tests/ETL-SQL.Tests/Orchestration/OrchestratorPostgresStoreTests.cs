@@ -117,8 +117,12 @@ namespace ETL_SQL.Tests.Orchestration
             var beta = TenantContext.FromVerifiedCredential("tenant-beta");
             await evidence.SetJobStateAsync(alpha, "alpha-quality", "dq:quarantine-manifest:same", "alpha");
             await evidence.SetJobStateAsync(beta, "beta-quality", "dq:quarantine-manifest:same", "beta");
-            var alphaRun = await store.LogJobStartAsync("alpha-quality");
-            var betaRun = await store.LogJobStartAsync("beta-quality");
+            // Both jobs are tenant-bound, so their runs must be recorded against the resolved identity.
+            // The name-addressed test helper deliberately refuses to invent an unbound twin here.
+            var alphaRun = await store.LogJobStartAsync(
+                (await store.GetJobAsync("tenant-alpha", "alpha-quality"))!.Id);
+            var betaRun = await store.LogJobStartAsync(
+                (await store.GetJobAsync("tenant-beta", "beta-quality"))!.Id);
             await store.LogJobEndAsync(alphaRun, "SUCCESS", rowsProcessed: 1, rowsQuarantined: 1);
             await store.LogJobEndAsync(betaRun, "SUCCESS", rowsProcessed: 2, rowsQuarantined: 2);
             await store.SaveJobDataQualityFailuresAsync(alphaRun,
@@ -274,9 +278,11 @@ namespace ETL_SQL.Tests.Orchestration
             var saved = await store.GetJobAsync((string?)null, "cc-job");
             Assert.NotNull(saved);
 
-            // Stale version is rejected; current version succeeds.
-            Assert.False(await store.TrySaveJobAsync(Job("cc-job"), saved!.Version + 99));
-            Assert.True(await store.TrySaveJobAsync(Job("cc-job"), saved.Version));
+            // Stale version is rejected; current version succeeds. The saved definition carries the
+            // surrogate id the update matches on — a freshly constructed one gets a new id, so it
+            // would be refused for having no such row rather than for holding a stale version.
+            Assert.False(await store.TrySaveJobAsync(saved!, saved.Version + 99));
+            Assert.True(await store.TrySaveJobAsync(saved, saved.Version));
 
             await store.SaveJobAsync(Job("disabled-job", enabled: false));
             var active = (await store.GetActiveJobsAsync()).Select(j => j.Name).ToList();
@@ -339,8 +345,11 @@ namespace ETL_SQL.Tests.Orchestration
                 "release-1", 3, 2048, 4, now.AddSeconds(1)));
 
             Assert.Equal("Deleted", deleted.State.State);
-            Assert.Null(await store.GetJobAsync((string?)null, "pg-alpha-job"));
-            Assert.NotNull(await store.GetJobAsync((string?)null, "pg-beta-job"));
+            // Both jobs are tenant-bound, so they must be looked up in their own partitions: a null
+            // tenant reads the unbound partition, where neither job has ever existed and every
+            // assertion about them passes or fails for reasons that have nothing to do with deletion.
+            Assert.Null(await store.GetJobAsync("tenant-alpha", "pg-alpha-job"));
+            Assert.NotNull(await store.GetJobAsync("tenant-beta", "pg-beta-job"));
             Assert.Equal("Active", (await NewStore().GetSharedTenantStateAsync(beta))!.State);
         }
 
