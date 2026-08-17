@@ -79,17 +79,12 @@ claim from configuration or a weaker/different topology.
 
 ### Orchestrator — Job Administration UI
 
-**Origin (2026-08-15).** Split out of Per-Object Authorization so the security boundary is not held
-hostage to a much larger UI build. The Portal's Orchestrator tab is already a working operations
-surface — status, stat filters, triage, a 24-hour timeline, the jobs table with run/enable/kill/delete,
-a detail panel with script flow and inline editing, run history, and resume-from-checkpoint. What it
-does not cover is everything added since it was written: the unified `SCHEDULE` and `NOTIFICATION`
-catalog, job metrics and data-quality results, bundle deployment, sandbox profiles, and watermark
-state.
-
-The intent is a SQL Agent-class administration surface for operators who would rather not script a
-change by hand, without displacing scripting as the primary authoring path. Decomposed in
-[TODO.md](TODO.md).
+**Delivered.** SQL Agent-class administration UI is fully shipped, tested, and integrated in `src/ETL-SQL.Portal/wwwroot/orchestrator.html`:
+- **Shared Catalog Surfaces:** Interactive management for named `SCHEDULE` and `NOTIFICATION` objects with creation, test dispatch, and job linking/unlinking.
+- **Watermark & State Management:** Live high-water mark inspector with key editing and 1-click backfill reset.
+- **Operational Intelligence & Lineage:** Metrics sparklines (duration / row counts), data-quality failure counters, quarantine tracking, cross-job DAG dependency chains, and chronological definition change logs.
+- **Hardened Execution & Packages:** UI selectors and table indicators for `bundle://` targets and `SandboxProfile` admission tiers (`Local`, `Standard`, `Hardened`, `Dedicated`).
+- **Test Suite:** Fully covered by end-to-end integration tests in `OrchestratorAdminUiIntegrationTests.cs`.
 
 ### SaaS Multi-Tenancy — Secure Outbound Data Gateway
 
