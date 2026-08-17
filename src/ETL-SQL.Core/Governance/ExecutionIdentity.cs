@@ -46,6 +46,7 @@ public sealed record ExecutionIdentity
 
     private readonly HashSet<string> _groups = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _roles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _scopes = new(StringComparer.OrdinalIgnoreCase);
 
     public IEnumerable<string> Groups
     {
@@ -57,6 +58,22 @@ public sealed record ExecutionIdentity
     {
         get => _roles;
         init => _roles = ToCaseInsensitiveSet(value);
+    }
+
+    /// <summary>
+    /// The ceiling carried by a **service** caller's token — what the automation was issued to do,
+    /// capping what its roles and grants can then authorize. Empty for an interactive user, whose
+    /// authority is their roles and grants, already bounded by the session the identity came from.
+    ///
+    /// <para>This is carried here so that the same caller reaches the same decision whether a verb
+    /// arrives as an HTTP call or as an ETL-SQL statement. It was previously dropped at the host
+    /// boundary, which left every service principal looking scopeless to the engine — and a service
+    /// caller with no scopes is denied everything, so the two doors disagreed.</para>
+    /// </summary>
+    public IEnumerable<string> Scopes
+    {
+        get => _scopes;
+        init => _scopes = ToCaseInsensitiveSet(value);
     }
 
     public bool HasGroup(string name) =>

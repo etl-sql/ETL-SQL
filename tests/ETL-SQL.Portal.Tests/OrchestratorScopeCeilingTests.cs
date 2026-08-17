@@ -1,195 +1,196 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
-using ETL_SQL.Orchestrator.Service;
-using ETL_SQL.Orchestrator.Storage;
-using Microsoft.Data.Sqlite;
+using ETL_SQL.Orchestrator.Channels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Portal.Tests;
 
 /// <summary>
-/// The scope ceiling: what a token may do, independently of what its grants say.
+/// The scope ceiling on a service token, proved at both doors.
 ///
-/// <para>A grant answers "may this principal touch this object". A scope answers "may this token do
-/// this kind of thing at all". They are separate questions, and the ceiling is what makes it possible
-/// to hand an automation a narrow token without also narrowing the human who owns it — so these tests
-/// deliberately pair a broad ACL, and in places an Admin role, with a narrow scope.</para>
+/// <para>Scopes cap what a token issued to an automation may do, below whatever its roles and grants
+/// would otherwise allow. Two gaps made that untrue. Creation consulted only the caller's role, so a
+/// read-scoped token could still author objects; and <c>ExecutionIdentity</c> carried no scopes at
+/// all, so the engine saw every service caller as scopeless — which the ceiling reads as "may do
+/// nothing" — and refused verbs the identical token was allowed over HTTP.</para>
+///
+/// <para>Every case here is asserted for the **same caller** through both an endpoint and an ETL-SQL
+/// statement. A ceiling tested on one door only is how both gaps survived: each door looked right on
+/// its own.</para>
 /// </summary>
-public sealed class OrchestratorScopeCeilingTests : IDisposable
+[Trait("Category", "Portal")]
+public sealed class OrchestratorScopeCeilingTests
 {
-    private readonly string dbPath = Path.Combine(
-        Path.GetTempPath(), $"orchestrator_scope_{Guid.NewGuid():N}.db");
+    private const string ApiKey = "test-orch-key-12345";
+    private const string ReadScope = "orchestrator.read";
+    private const string PublishScope = "orchestrator.publish";
 
-    private async Task<(SQLiteJobHistoryStore Store, OrchestratorObjectAuthorizationService Authorization, string JobId)>
-        SeedGrantedJobAsync(string principalId)
+    [Fact]
+    public async Task ReadScopedServiceToken_CannotCreate_AtEitherDoor()
     {
-        var store = new SQLiteJobHistoryStore(dbPath);
-        await store.SaveJobAsync(new JobDefinition("nightly", "SELECT 1;", 1, "HOUR", null, null, null));
-        var jobId = (await store.GetJobAsync((string?)null, "nightly"))!.Id.Value;
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var reader = Service("1", ReadScope);
 
-        // Deliberately the broadest grant there is, so every denial below is the ceiling and not a
-        // missing permission.
-        await store.SaveObjectGrantAsync(new OrchestratorObjectGrant(
-            jobId, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.Service, principalId,
-            OrchestratorObjectPermission.Manage, "test"));
+        using (var create = Request(HttpMethod.Post, "/api/scheduled-jobs", reader, NewJob("read_scoped_job")))
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(create)).StatusCode);
 
-        return (store, new OrchestratorObjectAuthorizationService(store), jobId);
+        var script = await RunAdHocAsync(client, reader, "CREATE SCHEDULE read_scoped_schedule ON '0 2 * * *';");
+        Assert.Equal(JobRunStatus.Failed, script.Status);
+        Assert.Contains("may not create", script.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        // And nothing was authored on the way to being refused.
+        using var scope = factory.Services.CreateScope();
+        Assert.Null(await scope.ServiceProvider.GetRequiredService<IJobCatalogStore>()
+            .GetScheduleAsync(null, "read_scoped_schedule"));
+    }
+
+    [Fact]
+    public async Task PublishScopedServiceToken_CanCreate_AtEitherDoor()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var publisher = Service("2", PublishScope);
+
+        using (var create = Request(HttpMethod.Post, "/api/scheduled-jobs", publisher, NewJob("publish_scoped_job")))
+            Assert.Equal(HttpStatusCode.Created, (await client.SendAsync(create)).StatusCode);
+
+        var script = await RunAdHocAsync(
+            client, publisher, "CREATE SCHEDULE publish_scoped_schedule ON '0 2 * * *';");
+        Assert.Equal(JobRunStatus.Completed, script.Status);
+
+        using var scope = factory.Services.CreateScope();
+        Assert.NotNull(await scope.ServiceProvider.GetRequiredService<IJobCatalogStore>()
+            .GetScheduleAsync(null, "publish_scoped_schedule"));
+    }
+
+    /// <summary>
+    /// The regression that motivated threading scopes into <c>ExecutionIdentity</c>: a service caller
+    /// altering an object it owns. Over HTTP this always worked; from script it failed with
+    /// "lacks MANAGE authority", because the engine could not see the scope that permitted it.
+    /// </summary>
+    [Fact]
+    public async Task PublishScopedServiceToken_CanAlterItsOwnObject_FromScript()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var publisher = Service("2", PublishScope);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IJobCatalogStore>().SaveScheduleAsync(
+                new ScheduleDefinition(
+                    "owned_schedule", "0 2 * * *", "UTC",
+                    CreatedBy: "service:2", ModifiedBy: "service:2"));
+        }
+
+        var script = await RunAdHocAsync(
+            client, publisher,
+            "CREATE OR ALTER SCHEDULE owned_schedule ON '0 3 * * *' AT TIME ZONE 'UTC';");
+        Assert.Equal(JobRunStatus.Completed, script.Status);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var stored = await scope.ServiceProvider.GetRequiredService<IJobCatalogStore>()
+                .GetScheduleAsync(null, "owned_schedule");
+            Assert.Equal("0 3 * * *", stored!.Cron);
+        }
+    }
+
+    /// <summary>
+    /// The ceiling still bites where it should: owning the object does not lift it. A read-scoped
+    /// token that owns a schedule still cannot alter it, from either door.
+    /// </summary>
+    [Fact]
+    public async Task ReadScopedServiceToken_CannotAlterEvenItsOwnObject_FromScript()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var reader = Service("1", ReadScope);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IJobCatalogStore>().SaveScheduleAsync(
+                new ScheduleDefinition(
+                    "reader_owned_schedule", "0 2 * * *", "UTC",
+                    CreatedBy: "service:1", ModifiedBy: "service:1"));
+        }
+
+        var script = await RunAdHocAsync(
+            client, reader,
+            "CREATE OR ALTER SCHEDULE reader_owned_schedule ON '0 3 * * *' AT TIME ZONE 'UTC';");
+        Assert.Equal(JobRunStatus.Failed, script.Status);
+        Assert.Contains("lacks MANAGE authority", script.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var stored = await scope.ServiceProvider.GetRequiredService<IJobCatalogStore>()
+                .GetScheduleAsync(null, "reader_owned_schedule");
+            Assert.Equal("0 2 * * *", stored!.Cron);
+        }
+    }
+
+    /// <summary>
+    /// An interactive user carries no scopes and must not be capped by their absence — the ceiling
+    /// exists for tokens issued to automations, and reading "no scopes" as "no authority" for a
+    /// person would lock every human out of the engine path.
+    /// </summary>
+    [Fact]
+    public async Task InteractiveUserWithNoScopes_IsNotCappedByTheCeiling()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var person = new OrchestratorCaller("user", "7", "Grace Hopper", ["OrchestratorManager"], []);
+
+        var script = await RunAdHocAsync(client, person, "CREATE SCHEDULE human_schedule ON '0 2 * * *';");
+        Assert.Equal(JobRunStatus.Completed, script.Status);
     }
 
     private static OrchestratorCaller Service(string id, params string[] scopes) =>
-        new("service", id, id, [], [], null, scopes);
+        new("service", id, $"Automation {id}", ["OrchestratorManager"], [], null, scopes);
 
-    [Theory]
-    [InlineData("orchestrator.read", OrchestratorObjectPermission.Read, true)]
-    [InlineData("orchestrator.read", OrchestratorObjectPermission.Execute, false)]
-    [InlineData("orchestrator.read", OrchestratorObjectPermission.Override, false)]
-    [InlineData("orchestrator.read", OrchestratorObjectPermission.Manage, false)]
-    [InlineData("orchestrator.execute", OrchestratorObjectPermission.Read, true)]
-    [InlineData("orchestrator.execute", OrchestratorObjectPermission.Execute, true)]
-    [InlineData("orchestrator.execute", OrchestratorObjectPermission.Override, true)]
-    [InlineData("orchestrator.execute", OrchestratorObjectPermission.Manage, false)]
-    [InlineData("orchestrator.publish", OrchestratorObjectPermission.Manage, true)]
-    [InlineData("orchestrator.admin", OrchestratorObjectPermission.Manage, true)]
-    public async Task AScopeCapsWhatAGrantCanAuthorize(
-        string scope, OrchestratorObjectPermission required, bool expected)
+    private static object NewJob(string name) => new
     {
-        var (_, authorization, jobId) = await SeedGrantedJobAsync("automation");
+        name,
+        scriptText = "SELECT 1 AS Value;",
+        interval = 100,
+        unit = "DAY"
+    };
 
-        Assert.Equal(expected, await authorization.CanAsync(
-            Service("automation", scope), OrchestratorObjectKind.Job, jobId, null, required, null));
+    private static HttpRequestMessage Request(
+        HttpMethod method, string path, OrchestratorCaller caller, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Add("X-Orchestrator-Key", ApiKey);
+        request.Headers.Add(
+            OrchestratorIdentityAssertion.HeaderName,
+            OrchestratorIdentityAssertion.Create(caller, OrchestratorWebFactory.IdentitySecret));
+        if (body is not null) request.Content = JsonContent.Create(body);
+        return request;
     }
 
-    [Fact]
-    public async Task AServiceTokenWithNoScopesCanDoNothing()
+    private static async Task<JobStatusResponse> RunAdHocAsync(
+        HttpClient client, OrchestratorCaller caller, string script)
     {
-        var (_, authorization, jobId) = await SeedGrantedJobAsync("automation");
-
-        // Not "unscoped means unlimited". A token is issued to an automation for a stated purpose, so
-        // the absence of a purpose is the absence of authority — which is also why v1 assertions,
-        // which cannot carry scopes, are rejected outright rather than read as unscoped.
-        Assert.False(await authorization.CanAsync(
-            Service("automation"), OrchestratorObjectKind.Job, jobId, null,
-            OrchestratorObjectPermission.Read, null));
-    }
-
-    [Fact]
-    public async Task AnInteractiveUserIsNotCappedByScopes()
-    {
-        var store = new SQLiteJobHistoryStore(dbPath);
-        await store.SaveJobAsync(new JobDefinition("nightly", "SELECT 1;", 1, "HOUR", null, null, null));
-        var jobId = (await store.GetJobAsync((string?)null, "nightly"))!.Id.Value;
-        await store.SaveObjectGrantAsync(new OrchestratorObjectGrant(
-            jobId, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.User, "20",
-            OrchestratorObjectPermission.Execute, "test"));
-        var authorization = new OrchestratorObjectAuthorizationService(store);
-
-        // A person's authority is their roles and grants; the Portal session the assertion came from
-        // is what bounded it. Capping them by an empty scope list would lock every human out.
-        var member = new OrchestratorCaller("user", "20", "member", [], [], null, []);
-
-        Assert.True(await authorization.CanAsync(
-            member, OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Execute, null));
-    }
-
-    [Fact]
-    public async Task TheCeilingOutranksTheAdminRoleAndOwnership()
-    {
-        var (_, authorization, jobId) = await SeedGrantedJobAsync("automation");
-
-        // Both would otherwise be allowed outright. A narrow token held by a broad principal is the
-        // entire reason to issue one, so the ceiling has to be consulted before either.
-        var admin = new OrchestratorCaller(
-            "service", "automation", "automation", ["Admin"], [], null, ["orchestrator.read"]);
-        var owner = new OrchestratorCaller(
-            "service", "automation", "automation", [], [], null, ["orchestrator.read"]);
-
-        Assert.False(await authorization.CanAsync(
-            admin, OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Execute, null));
-        Assert.False(await authorization.CanAsync(
-            owner, OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Execute,
-            "service:automation"));
-    }
-
-    [Fact]
-    public async Task AScopeIsACeilingAndNeverAGrant()
-    {
-        var store = new SQLiteJobHistoryStore(dbPath);
-        await store.SaveJobAsync(new JobDefinition("nightly", "SELECT 1;", 1, "HOUR", null, null, null));
-        var jobId = (await store.GetJobAsync((string?)null, "nightly"))!.Id.Value;
-        var authorization = new OrchestratorObjectAuthorizationService(store);
-
-        // The widest scope there is, and no grant at all. A scope says what a token may attempt, never
-        // what it may reach: a publish account still cannot touch a job it was not granted.
-        Assert.False(await authorization.CanAsync(
-            Service("automation", "orchestrator.admin", "orchestrator.publish"),
-            OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Read, null));
-    }
-
-    [Fact]
-    public async Task NonOrchestratorScopesGrantNothingHere()
-    {
-        var (_, authorization, jobId) = await SeedGrantedJobAsync("automation");
-
-        // A token usually carries portal scopes too; none of them is authority over a job.
-        Assert.False(await authorization.CanAsync(
-            Service("automation", "portal.read", "reports.execute", "admin.identity"),
-            OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Read, null));
-    }
-
-    [Fact]
-    public void AVersionOneAssertionIsRefused()
-    {
-        const string secret = "unit-test-orchestrator-identity-signing-secret";
-
-        // Forged as v1 by hand — there is no longer a way to mint one — to prove the version check
-        // refuses it rather than reading a scopeless token as unlimited.
-        var payload = System.Text.Json.JsonSerializer.Serialize(new
+        string id;
+        using (var submit = Request(HttpMethod.Post, "/jobs", caller, new { scriptText = script }))
         {
-            version = 1,
-            issuer = OrchestratorIdentityAssertion.Issuer,
-            audience = OrchestratorIdentityAssertion.Audience,
-            issuedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            expiresAt = DateTimeOffset.UtcNow.AddMinutes(1).ToUnixTimeSeconds(),
-            nonce = Guid.NewGuid().ToString("N"),
-            subjectType = "service",
-            subjectId = "legacy",
-            displayName = "legacy",
-            roles = Array.Empty<string>(),
-            groupIds = Array.Empty<string>()
-        });
-        var encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(payload))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
-        using var hmac = new System.Security.Cryptography.HMACSHA256(
-            System.Text.Encoding.UTF8.GetBytes(secret));
-        var signature = Convert.ToBase64String(hmac.ComputeHash(System.Text.Encoding.ASCII.GetBytes(encoded)))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-        Assert.False(OrchestratorIdentityAssertion.TryValidate(
-            encoded + "." + signature, secret, out _, out var error));
-        Assert.Contains("version", error, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void ScopesSurviveTheAssertionRoundTrip()
-    {
-        const string secret = "unit-test-orchestrator-identity-signing-secret";
-        var issued = OrchestratorIdentityAssertion.Create(
-            new OrchestratorCaller("service", "automation", "automation", [], [], "acme",
-                ["orchestrator.read", "orchestrator.execute"]),
-            secret);
-
-        Assert.True(OrchestratorIdentityAssertion.TryValidate(issued, secret, out var caller, out _));
-        Assert.Equal(
-            ["orchestrator.execute", "orchestrator.read"],
-            caller!.EffectiveScopes.OrderBy(scope => scope, StringComparer.Ordinal).ToArray());
-    }
-
-    public void Dispose()
-    {
-        SqliteConnection.ClearAllPools();
-        foreach (var suffix in new[] { "", "-wal", "-shm" })
-        {
-            var path = dbPath + suffix;
-            if (File.Exists(path)) File.Delete(path);
+            var response = await client.SendAsync(submit);
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("jobId").GetString()!;
         }
+
+        for (var attempt = 0; attempt < 80; attempt++)
+        {
+            using var statusRequest = Request(HttpMethod.Get, $"/jobs/{id}", caller);
+            var status = await (await client.SendAsync(statusRequest)).Content
+                .ReadFromJsonAsync<JobStatusResponse>();
+            if (status?.Status is JobRunStatus.Failed or JobRunStatus.Completed) return status;
+            await Task.Delay(25);
+        }
+        throw new TimeoutException($"Scope-ceiling test job '{id}' did not complete.");
     }
 }

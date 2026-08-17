@@ -2108,6 +2108,10 @@ namespace ETL_SQL.Orchestrator.Service
             IsAdmin = caller.IsInRole("Admin"),
             TenantId = caller.TenantId,
             Roles = caller.Roles,
+            // The token's ceiling travels with the identity into the engine. Without it an ad-hoc
+            // script submitted by a service principal is judged scopeless — denied every object
+            // permission — while the same verb sent to an endpoint here is allowed.
+            Scopes = caller.EffectiveScopes,
             // Names, not principal keys. Row-level security asks HAS_GROUP('Finance') — the name a
             // script author wrote — while a grant resolves against the opaque key. This carried the
             // key's predecessor, the numeric group id, so HAS_GROUP could never match in a scheduled

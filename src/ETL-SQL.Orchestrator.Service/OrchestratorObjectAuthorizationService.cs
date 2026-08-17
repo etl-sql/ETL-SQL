@@ -1,4 +1,4 @@
-using ETL_SQL.Core.Data;
+﻿using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Orchestrator.Service;
@@ -6,10 +6,23 @@ namespace ETL_SQL.Orchestrator.Service;
 public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthorizationStore store)
     : IOrchestratorObjectAuthorizer
 {
-    public static bool CanCreate(OrchestratorCaller caller) =>
-        caller.IsInRole("Admin")
-        || caller.IsInRole("OrchestratorManager")
-        || caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Whether this caller may author an object that does not exist yet.
+    ///
+    /// <para>Role first, because there is no object to own or grant against. Then the same scope
+    /// ceiling every other verb is capped by: creation is a <c>MANAGE</c>-shaped act, and a token
+    /// issued to read must not be able to author. Without that check a read-scoped automation could
+    /// still fill the catalog with objects it could not then read, alter, or run — narrow in name
+    /// only, which is the opposite of what issuing a narrow token is for.</para>
+    /// </summary>
+    public static bool CanCreate(OrchestratorCaller caller)
+    {
+        // Legacy mode first: the API-key caller carries no roles and no scopes because in that mode
+        // there are no principals at all, so every later check would refuse it.
+        if (caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!caller.IsInRole("Admin") && !caller.IsInRole("OrchestratorManager")) return false;
+        return WithinScopeCeiling(caller, OrchestratorObjectPermission.Manage);
+    }
 
     bool IOrchestratorObjectAuthorizer.CanCreate(ExecutionIdentity? identity) =>
         identity is not null && CanCreate(ToCaller(identity));
@@ -200,6 +213,10 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
             identity.RealUser,
             identity.Roles.ToArray(),
             identity.Groups.ToArray(),
-            identity.TenantId);
+            identity.TenantId,
+            // Carried, not rebuilt empty. A scopeless service caller is denied everything by
+            // WithinScopeCeiling, so dropping these here made every service principal fail in the
+            // engine path while passing the identical check over HTTP.
+            identity.Scopes.ToArray());
     }
 }
