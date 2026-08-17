@@ -106,15 +106,17 @@ cases in `OrchestratorJobApiAuthTests`.
       diagnostic logs. It is not one of the object verbs, which is why Slice F left it. Correction:
       emit a `CatalogMutation` event targeting `SERVICE:<host>` from the same caller identity the
       object verbs use.
-- [ ] **Three `OrchestratorPostgresStoreTests` are red, and block a release evidence gate.**
-      `SharedTenantLifecycle_IsPartitionedAndDurableOnPostgres`,
-      `TenantQualityEvidence_IsPartitionedOnPostgres`, and `OptimisticConcurrency_And_ActiveJobs`
-      fail on PostgreSQL — tenant partitioning, an unbound-job helper collision, and an optimistic
-      concurrency assertion. **Pre-existing**, verified by running the same filter at `ce069e63`
-      (before any Slice F work) and getting the identical three failures, and unrelated to audit
-      emission. They are `Category=Integration`, so the default lane never sees them; the Enterprise
-      certification lane does, and they fail its `shared-state-and-artifact-providers` prerequisite,
-      which stops the lane before its remaining five prerequisites run.
+- [x] **Three `OrchestratorPostgresStoreTests` are red, and block a release evidence gate.**
+      **Fixed 2026-08-17; the lane is 16/16 on real PostgreSQL 16.** All three were harness defects
+      with no product bug behind them, and each carried a companion assertion that passed vacuously —
+      so the lane was both red and not checking what it named. All three are surrogate-identity
+      fallout: `GetJobAsync(null, name)` reads the *unbound* partition, where a tenant-bound job has
+      never existed, so "alpha was deleted" passed for free and "beta survived" could not pass;
+      `TrySaveJobAsync` matches on the surrogate id, so a freshly constructed `JobDefinition` was
+      refused for being a different row rather than for holding a stale version; and the
+      name-addressed `LogJobStartAsync` helper refuses to invent an unbound twin when the name
+      belongs to a tenant. The Enterprise certification lane's `shared-state-and-artifact-providers`
+      prerequisite should now get past this point to its remaining five.
 
 ### Orchestrator — Job Administration UI
 
@@ -485,22 +487,6 @@ Tenant Portability Bundle**.*
       cross-tenant evidence across database, artifact, cache, queue, audit, PII, lineage/quality,
       path, key, checkpoint, Gateway, sandbox, telemetry, support, restore, and resource-exhaustion
       surfaces.
-
-### Triage rule — a wrong answer outranks a crash
-
-Standing rule for this ledger, set 2026-08-10. **A defect that returns a wrong answer is more
-serious than one that fails**, and is filed at least P0 regardless of how narrow the trigger looks.
-A crash is self-reporting: someone sees it, and nothing downstream consumes it. A wrong number is
-consumed — written to a table, put in a report, acted on — and there is no moment at which anyone
-learns it was wrong.
-
-This also settles fix trade-offs: **never trade a wrong answer for a crash**. The first attempt at
-the window partition-spill P0 did exactly that — it returned correct results by declining a spill
-path, which would have made large partitioned queries exhaust memory instead. Correct-but-crashing
-is not a fix, it is a different defect.
-
-When one is found: file it as P0 with a reproducer that fails on the *behavior*, not on a plan or
-threshold choice, so it cannot be mistaken for a configuration artifact later.
 
 ## Bugs
 ### VS Code
