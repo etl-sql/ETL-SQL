@@ -1,4 +1,4 @@
-# ETL-SQL Development TODO List
+﻿# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for open active-release and roadmap work. Once work is
 verified, record its notable outcome in `CHANGELOG.md`.
@@ -31,6 +31,12 @@ inherited from v0.17.0.
 - [ ] Recovery drill — `etl-sql admin restore --validate --report`
 - [ ] HA fault injection — `etl-sql admin ha-soak validate` (run `fault-plan` before `fault-run`,
       and `evidence` before `validate` — see the RCI item below)
+- [ ] Deployment-profile certification, Enterprise lane —
+      `scripts/Test-DeploymentProfileCertification.ps1 -Profile Enterprise -ReleaseVersion 0.18.0`.
+      The `verifiable-caller-identity` and `per-object-authorization` prerequisites must be green on
+      the candidate commit, with the lane's own recorded topology claim rather than a v0.17.0 one.
+      Both were green on `feature/orchestrator-tenant-identity` when Slice F closed (2026-08-16);
+      that is a rehearsal, not the release claim.
 
 **Sequencing.** The release-process RCI items are scheduled **last**, deliberately. The RCI changes
 touch the validation gate and CI itself, so landing them
@@ -69,52 +75,51 @@ These tasks decompose the future tracks in [ROADMAP.md](ROADMAP.md). Their prese
 reviewable; it does not assign them to v0.18.0 or turn candidate phases into release commitments.
 Keep the roadmap's P0/P1/P2 ordering unless a release plan explicitly changes it.
 
-### Orchestrator — Per-Object Authorization
+### Orchestrator — authorization and audit follow-ups
 
-Decomposes the [ROADMAP.md](ROADMAP.md) item of the same name. **Read this preamble before picking up
-a slice** — most of the roadmap item is already built, and the open work is narrower than the roadmap
-text implies.
+Per-Object Authorization closed on 2026-08-16; the item and its slices were removed from here and
+from `ROADMAP.md`, and its release evidence moved to the gates above. The model is documented in
+[the permission matrix](docs/administration/orchestration/orchestrator-portal.md#permission-matrix)
+and [the Portal is the control plane](docs/administration/portal/orchestrator-integration.md#the-portal-is-the-control-plane);
+the superseded design record is `docs/architecture/decisions/job_schedule_notification.md` §4.5 and
+§10. Writing the matrix surfaced the items below. Neither invalidates the completion claim — the
+definition of done holds — but the first is a real inconsistency between the two doors.
 
-**Verified shipped (2026-08-15), not open work.** Federated identity
-(`OrchestratorIdentityAssertion` — HMAC, issuer/audience-bound, 2-minute lifetime, nonce; the
-caller-controlled `X-Orchestrator-Actor` header is retired and carries no authority; required by
-default when the service binds non-loopback, with a startup failure when the secret is missing).
-Per-object ACLs over `JOB`/`SCHEDULE`/`NOTIFICATION` × `READ`/`EXECUTE`/`OVERRIDE`/`MANAGE` ×
-`USER`/`GROUP`/`SERVICE`, enforced across the scheduled-job, schedule, notification, history, and
-data-quality endpoints including list filtering. Ownership checks that stop `CREATE OR ALTER` taking
-over another principal's name, in both the HTTP and engine-handler paths. Grant deletion on object
-drop. `OrchestratorPerObjectAuthorizationIntegrationTests` proves the definition-of-done scenarios and
-`scripts/Test-DeploymentProfileCertification.ps1` gates on it as the `per-object-authorization` hosted
-prerequisite. Do not re-plan or re-implement any of the above; extend it.
+- [ ] **The service-token scope ceiling is applied inconsistently.** Two halves of one problem, found
+      by writing the matrix and having to leave the scope column ambiguous.
+      1. **Creation escapes the ceiling.** `OrchestratorObjectAuthorizationService.CanCreate` checks
+         only the `Admin`/`OrchestratorManager` role, so a service token scoped `orchestrator.read`
+         can create a `JOB`, `SCHEDULE`, or `NOTIFICATION` — while `CREATE OR ALTER` on an object that
+         already exists, and every other verb, is capped correctly by `WithinScopeCeiling`. The
+         exposure is name-squatting and catalog pollution, not reaching another principal's objects.
+      2. **Scopes never reach the engine path.** `ExecutionIdentity` carries no scopes, so
+         `OrchestratorObjectAuthorizationService.ToCaller` rebuilds a caller with none, and
+         `WithinScopeCeiling` reads that as "a service caller with no scopes can do nothing". A
+         service principal therefore fails **every** object permission when the same verb arrives as
+         an ETL-SQL statement rather than an HTTP call — including the Portal background service,
+         which is issued the full ladder. Fail-closed, so nothing is over-permitted, but the two paths
+         do not make the same decision, which is the property the design rests on.
 
-**Design decisions taken (2026-08-15) — do not re-litigate.** Identity federates to the **Portal**,
-which is the single control plane for user provisioning, groups, and audit. The Orchestrator never
-grows its own principal registry; that was considered and rejected because it would be the second
-permission model the roadmap item exists to prevent, and because it would have no path to
-Active Directory at all. The Portal already syncs OIDC/AD group claims into Portal groups on every
-login (`OidcUserProvisioningService`), and grants resolve `Group` principals from the assertion, so a
-grant made against a Portal group inherits AD membership changes with no ETL-SQL action — that
-property is the point of the design. **Team and above require a Portal.** Solo may run without one
-via `RequireFederatedIdentity=false`, where no principals and no grants exist at all; the admin CLI
-manages that box directly. The integration shape is **exchange**: a client authenticates to the
-Portal and receives a short-lived Orchestrator assertion, then calls the Orchestrator directly. The
-proxy shape (Portal forwards every call) was rejected because it needs a Portal twin for every
-orchestrator endpoint, forever; presenting a Portal browser JWT to the Orchestrator was rejected
-because it undoes the deliberate audience separation between the two tokens.
-
-#### Slice F — Audit parity, documentation, and evidence
-
-- [ ] **F1 Audit parity.** ACL mutations emit `SecurityEventContract` naming the real principal;
-      confirm every other mutation verb (create/alter/drop/enable/disable/trigger/kill/resume) does
-      too, in both the HTTP and engine-handler paths, and add the missing ones.
-- [ ] **F2 Documentation.** Permission matrix (verb → required permission → required scope) in
-      `docs/administration/orchestration/orchestrator-portal.md`; the Portal-as-control-plane model and
-      the Solo exception in `docs/guides/administration.md`; new settings in the appsettings reference.
-- [ ] **F3 Retire stale text.** `ROADMAP.md` and `docs/architecture/decisions/job_schedule_notification.md`
-      (three places) still describe this as deferred and describe v0.18.0 as shipping "attribution,
-      not authorization". That is no longer true and misleads anyone reading it as current.
-- [ ] **F4 Evidence.** `per-object-authorization` and `verifiable-caller-identity` prerequisites green
-      on the release candidate; record the topology explicitly rather than inheriting a prior claim.
+      Correction: add scopes to `ExecutionIdentity` and thread them through `ToCaller`; have
+      `CanCreate` take the caller rather than the role set and require at least `orchestrator.publish`
+      for a service subject, leaving interactive users unchanged. Extend
+      `OrchestratorAuditParityTests` and `OrchestratorPerObjectAuthorizationIntegrationTests` with a
+      read-scoped service caller over both doors — a ceiling with no test that a narrow token is
+      actually narrow is the shape that let this through.
+- [ ] **`POST /management/stop` is not audited.** Stopping the whole Orchestrator writes a
+      `LogWarning` and no security event, so "who stopped the service" is answerable only from
+      diagnostic logs. It is not one of the object verbs, which is why Slice F left it. Correction:
+      emit a `CatalogMutation` event targeting `SERVICE:<host>` from the same caller identity the
+      object verbs use.
+- [ ] **Three `OrchestratorPostgresStoreTests` are red, and block a release evidence gate.**
+      `SharedTenantLifecycle_IsPartitionedAndDurableOnPostgres`,
+      `TenantQualityEvidence_IsPartitionedOnPostgres`, and `OptimisticConcurrency_And_ActiveJobs`
+      fail on PostgreSQL — tenant partitioning, an unbound-job helper collision, and an optimistic
+      concurrency assertion. **Pre-existing**, verified by running the same filter at `ce069e63`
+      (before any Slice F work) and getting the identical three failures, and unrelated to audit
+      emission. They are `Category=Integration`, so the default lane never sees them; the Enterprise
+      certification lane does, and they fail its `shared-state-and-artifact-providers` prerequisite,
+      which stops the lane before its remaining five prerequisites run.
 
 ### Orchestrator — Job Administration UI
 

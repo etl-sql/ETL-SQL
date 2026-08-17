@@ -1,4 +1,4 @@
-# ETL-SQL Product Roadmap
+﻿# ETL-SQL Product Roadmap
 
 This document tracks high-level product tracks and candidate phases. Their actionable work is
 decomposed in `TODO.md`. Once an initiative is verified, record its notable outcome in
@@ -76,55 +76,6 @@ report business logic.
 Every supported profile passes N → N+1, every promotion path preserves and reconciles its declared
 portable state, and each SaaS topology proves its own tenant isolation rather than inheriting a
 claim from configuration or a weaker/different topology.
-
-### Orchestrator — Per-Object Authorization
-
-**Origin (2026-07-27).** Surfaced while designing the unified job/schedule/notification model
-([job_schedule_notification.md](docs/architecture/decisions/job_schedule_notification.md)). Making the
-Orchestrator the system of record for `JOB`, `SCHEDULE`, and `NOTIFICATION` moved durable, mutable,
-operationally significant objects into a store whose API authenticated with a **single shared key**
-(`X-Orchestrator-Key`) and had no user or group model at all.
-
-The consequence at the time: anyone who could reach the orchestrator connection could create, alter,
-disable, or drop **anyone's** job. The only boundary was the use-ACL on the orchestrator connection in
-the Portal's governed catalog, which is connection-level, not per-object — a real asymmetry with the
-Portal's per-object RBAC, accepted then as a deliberate deferral rather than an oversight.
-
-**Largely delivered (verified 2026-08-15).** The anticipated trigger — a second client — arrived,
-and the four numbered work items were built rather than deferred. Shipped: federated identity
-(`OrchestratorIdentityAssertion`, HMAC and audience-bound, with the caller-controlled
-`X-Orchestrator-Actor` header retired); per-object ACLs over `JOB`/`SCHEDULE`/`NOTIFICATION` reusing
-the Portal's `READ`/`EXECUTE`/`OVERRIDE`/`MANAGE` vocabulary for user, group, and service principals;
-ownership checks that stop `CREATE OR ALTER` silently taking over a shared name in both the HTTP and
-engine paths; and audit events naming the acting principal. The definition-of-done scenarios are
-proved by `OrchestratorPerObjectAuthorizationIntegrationTests` and gated in release certification as
-the `per-object-authorization` hosted prerequisite.
-
-**The four gaps that kept it open are closed (2026-08-16).** A script-side `ORCHESTRATOR` connection
-now presents a Portal-issued assertion rather than the shared key alone. Grants have an administration
-surface in the Portal, the CLI (`etl-sql admin orchestrator show|grant|revoke`), and the API, so
-setting one no longer means hand-crafting a signed assertion. Ownership transfer and bulk adoption
-exist for the Solo host that attaches a Portal, and `promotion preflight` reports **DP009** for objects
-still unowned. Grants key on the Portal's stable principal keys, not on mutable numeric identifiers.
-Every mutation verb — not only ACL changes — emits a security event naming the acting principal, in
-both the HTTP and engine paths.
-
-**Remaining scope.** Release evidence only: the `per-object-authorization` and
-`verifiable-caller-identity` prerequisites must be collected against the v0.18.0 candidate rather than
-inherited from v0.17.0. Tracked in [TODO.md](TODO.md).
-
-**The control-plane decision (2026-08-15).** Identity federates to the **Portal**, which is the single
-place users, groups, and audit live. The Orchestrator does not grow its own principal registry: that
-would be the second permission model this item exists to prevent, and it would have no path to
-Active Directory, whereas Portal groups already synchronise from OIDC/AD group claims on every login.
-Team and above therefore require a Portal; Solo may run without one and has no principals or grants at
-all. Clients exchange a Portal credential for a short-lived Orchestrator assertion and then call the
-Orchestrator directly, which keeps the two tokens' audiences separate and avoids a Portal proxy twin
-for every orchestrator endpoint.
-
-**Definition of done.** A user who can reach an orchestrator cannot mutate a job they do not own, the
-Orchestrator's audit records name a person rather than a service, and the permission vocabulary is
-the Portal's rather than a second one.
 
 ### Orchestrator — Job Administration UI
 
