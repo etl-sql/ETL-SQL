@@ -797,20 +797,20 @@ CREATE CONNECTION name AS <Provider>( ... )
 ```
 | Option | Description | Documentation |
 | :--- | :--- | :--- |
-| `HOST` / `SERVER` | Server hostname or IP | [Data Connectors](reference/connectors/README.md) |
-| `PORT` | Network port | [Data Connectors](reference/connectors/README.md) |
-| `CONNECTION_STRING` / `URI` | Connection URI / string | [Data Connectors](reference/connectors/README.md) |
-| `DATABASE` | Database name | [Data Connectors](reference/connectors/README.md) |
-| `USER` / `UID` | Username | [Data Connectors](reference/connectors/README.md) |
-| `PASSWORD` | Password (can be 'ENC:...') | [Data Connectors](reference/connectors/README.md) |
-| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Data Connectors](reference/connectors/README.md) |
-| `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data Connectors](reference/connectors/README.md) |
-| `ENCRYPT` | Enable SSL/TLS encryption | [Data Connectors](reference/connectors/README.md) |
-| `PATH` | Root path for file-based connectors | [Data Connectors](reference/connectors/README.md) |
-| `DSN` / `DRIVER` | ODBC specific identifiers | [Data Connectors](reference/connectors/README.md) |
-| `KEYFILE` | Path to private key (SFTP/PGP) | [Data Connectors](reference/connectors/README.md) |
-| `PASSPHRASE` | Keyfile decryption password | [Data Connectors](reference/connectors/README.md) |
-| `SSL_MODE` | Postgres SSL behavior | [Data Connectors](reference/connectors/README.md) |
+| `HOST` / `SERVER` | Server hostname or IP | [Database Connectors](reference/connectors/databases/README.md) |
+| `PORT` | Network port | [Database Connectors](reference/connectors/databases/README.md) |
+| `CONNECTION_STRING` / `URI` | Connection URI / string | [MongoDB](reference/connectors/databases/mongodb.md) · [Neo4j](reference/connectors/databases/neo4j.md) |
+| `DATABASE` | Database name | [Database Connectors](reference/connectors/databases/README.md) |
+| `USER` / `UID` | Username | [Database Connectors](reference/connectors/databases/README.md) |
+| `PASSWORD` | Password (can be 'ENC:...') | [Database Connectors](reference/connectors/databases/README.md) |
+| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Database Connectors](reference/connectors/databases/README.md) |
+| `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [MSSQL](reference/connectors/databases/mssql.md) |
+| `ENCRYPT` | Enable SSL/TLS encryption | [MSSQL](reference/connectors/databases/mssql.md) |
+| `PATH` | Root path for file-based connectors | [FLATFILE](reference/connectors/files/flatfile.md) |
+| `DSN` / `DRIVER` | ODBC specific identifiers | [ODBC](reference/connectors/databases/odbc.md) |
+| `KEYFILE` | Path to private key (SFTP/PGP) | [SFTP](reference/connectors/services/sftp.md) |
+| `PASSPHRASE` | Keyfile decryption password | [SFTP](reference/connectors/services/sftp.md) |
+| `SSL_MODE` | Postgres SSL behavior | [Postgres](reference/connectors/databases/postgres.md) |
 
 ### 7.2 CREATE TABLE
 ```sql
