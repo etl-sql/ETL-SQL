@@ -380,6 +380,14 @@ runtime, which is what the storage cell below was blocked on.
 
       The production Docker OCI provider and scheduler dispatch seam described in the Dedicated slice
       above now exist, and the real Hardened runtime lane recorded in domain 4 proves the boundary.
+
+      **This cell's one remaining component is capabilities.** Queues, leases, checkpoints, quotas,
+      fair admission, ambiguous-outcome handling, and destructive cleanup are all implemented and
+      asserted; `CapabilityHandles` is carried on the request and validated, but
+      `DockerSandboxExecutionProvider` refuses any request that sets it rather than injecting
+      anything. That refusal is the correct interim behaviour — silently dropping a capability the
+      caller asked for would be worse — but capability-scoped credential injection into a sandbox is
+      unbuilt, and the cell stays open until it is.
 - [x] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security
@@ -428,9 +436,13 @@ runtime, which is what the storage cell below was blocked on.
       queue, it does not let a later arrival barge past an earlier one. A Shared deployment whose
       control plane cannot report lifecycle state fails startup rather than running with a quota that
       silently does not exist.
-- [ ] **High availability, Dedicated.** Fleet rollout, compatibility, and drain behavior across a
+- [x] **High availability, Dedicated.** Fleet rollout, compatibility, and drain behavior across a
       population of per-tenant deployments — upgrading a hundred dedicated stacks is the operational
-      problem the topology creates. **Gap — Phase C carried HA alone.**
+      problem the topology creates. **Closed 2026-08-17.** Rollout, compatibility, and drain are all
+      implemented and asserted; the slices below record each. **Scope of the claim:** this is
+      provider-neutral logic with unit and single-node integration evidence, not a multi-node fleet
+      soak — that is the separately tracked `admin ha-soak validate` release gate above, and it is
+      where fleet-scale behaviour must be demonstrated for a release.
 
       **Planning, compatibility, and progress tracking completed (2026-08-17).** Per-tenant upgrade
       with fencing, drain, and receipts already existed; what was missing was the layer above it —
@@ -477,9 +489,11 @@ runtime, which is what the storage cell below was blocked on.
       every new execution instead of shedding it. Tests hold an execution in flight, drain under that
       load, and prove both halves: new work refused, running work untouched, and lease loss still
       fencing rather than draining.
-- [ ] **High availability, Shared.** Tenant-aware fleet rollout, compatibility/drain behavior, and
+- [x] **High availability, Shared.** Tenant-aware fleet rollout, compatibility/drain behavior, and
       noisy-neighbour containment without silently falling back from Dedicated placement or Hardened
-      isolation.
+      isolation. **Closed 2026-08-17**, with the same scope caveat as the Dedicated cell above: the
+      behaviour is implemented and asserted, and fleet-scale demonstration belongs to the HA
+      fault-injection gate.
 
       **Noisy-neighbour containment and the no-downgrade clause completed (2026-08-17).** Containment
       is the work recorded in the two cells above: cluster-global weighted fair admission so no tenant
