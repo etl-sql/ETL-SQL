@@ -100,12 +100,18 @@ engine paths; and audit events naming the acting principal. The definition-of-do
 proved by `OrchestratorPerObjectAuthorizationIntegrationTests` and gated in release certification as
 the `per-object-authorization` hosted prerequisite.
 
-**Remaining scope, decomposed in [TODO.md](TODO.md).** Four gaps keep the item open. A script-side
-`ORCHESTRATOR` connection still authenticates with the shared key alone, so it is either refused by a
-federated Orchestrator or granted blanket authority by a legacy one. Grants have no administration
-surface, so setting one means hand-crafting a signed assertion. There is no ownership transfer or
-adoption path, which a solo deployment needs the moment it attaches a Portal. And grants key on
-mutable numeric Portal identifiers rather than stable ones.
+**The four gaps that kept it open are closed (2026-08-16).** A script-side `ORCHESTRATOR` connection
+now presents a Portal-issued assertion rather than the shared key alone. Grants have an administration
+surface in the Portal, the CLI (`etl-sql admin orchestrator show|grant|revoke`), and the API, so
+setting one no longer means hand-crafting a signed assertion. Ownership transfer and bulk adoption
+exist for the Solo host that attaches a Portal, and `promotion preflight` reports **DP009** for objects
+still unowned. Grants key on the Portal's stable principal keys, not on mutable numeric identifiers.
+Every mutation verb — not only ACL changes — emits a security event naming the acting principal, in
+both the HTTP and engine paths.
+
+**Remaining scope.** Release evidence only: the `per-object-authorization` and
+`verifiable-caller-identity` prerequisites must be collected against the v0.18.0 candidate rather than
+inherited from v0.17.0. Tracked in [TODO.md](TODO.md).
 
 **The control-plane decision (2026-08-15).** Identity federates to the **Portal**, which is the single
 place users, groups, and audit live. The Orchestrator does not grow its own principal registry: that

@@ -61,6 +61,20 @@ the snapshot manifest and CSV export are available.
 
 The portal never echoes the stored API key back to the browser — the **Admin → Settings** page shows only whether a key is set (`HasApiKey: true/false`). To change the key, type a new value and save. To clear it, check **Clear API key** and save.
 
+### The Portal is the control plane
+
+Users, groups, and audit live in the Portal, and only there. The Orchestrator has **no principal registry of its own** — it verifies the assertion the Portal signed, and resolves grants against the principal keys inside it. This is deliberate. A second user directory on the Orchestrator would be a second permission model to keep in step with the first, and it would have no path to Active Directory at all.
+
+What that buys you is a property worth stating plainly: the Portal already synchronises OIDC/AD group claims into Portal groups on every login, and an orchestrator grant made against a **group** resolves through the assertion. So a grant written once against `Data Engineering` follows that AD group's membership from then on — someone joining or leaving the group gains or loses the job access with no action in ETL-SQL.
+
+The integration shape is an **exchange**, not a proxy. A client authenticates to the Portal, receives a short-lived Orchestrator assertion, and then calls the Orchestrator directly. The Portal does not need a twin of every orchestrator endpoint, and the two tokens keep separate audiences — a Portal browser session is not accepted by the Orchestrator and never should be.
+
+**Team and above therefore require a Portal.** There is no supported way to run a shared Orchestrator with per-object authorization and no Portal, because there would be nothing to name in a grant.
+
+**The Solo exception.** One person on one box may run the Orchestrator without a Portal by setting `Orchestrator:RequireFederatedIdentity=false`. In that mode there are no principals, so there are no grants and no ownership: the API key is a root key over every job, schedule, and notification on the host. The entire `/api/authorization/...` surface answers `409 Conflict` rather than pretending otherwise, and the admin CLI manages the box directly. See [Legacy mode](../orchestration/orchestrator-portal.md#legacy-mode-solo-only) for how to tell which mode a host is in and how to promote one to a team.
+
+Audit follows the same principle. Every mutation — create, alter, drop, enable, disable, trigger, kill, resume, dispatch, grant, revoke, and ownership change — emits a security event naming the acting principal rather than the Portal service account, from the HTTP endpoints and from ETL-SQL statements alike. The [permission matrix](../orchestration/orchestrator-portal.md#permission-matrix) lists the audit action recorded for each verb.
+
 ## What the Orchestrator Tab Shows
 
 After connecting, the Orchestrator tab displays:

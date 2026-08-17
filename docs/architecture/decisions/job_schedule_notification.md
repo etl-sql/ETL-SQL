@@ -377,6 +377,13 @@ the same social answer: naming conventions plus a category in `OPTIONS`. The `Cr
 attribution columns (§10) at least make the takeover visible after the fact. Enforcing it needs
 per-object ownership on the Orchestrator, which is a roadmap item.
 
+> **Superseded (v0.18.0).** Per-object ownership shipped. `CREATE OR ALTER` and `CREATE OR REPLACE`
+> now preserve the existing owner and are refused to anyone without `MANAGE` on the object, in both
+> the HTTP and the statement-handler paths, so the silent takeover described above is no longer
+> possible on a federated Orchestrator. It remains possible in Solo legacy mode, where by design
+> there are no principals to own anything. See
+> [orchestrator-portal.md](../../administration/orchestration/orchestrator-portal.md#permission-matrix).
+
 **Referential rules, enforced and tested:**
 
 | Action | Behaviour |
@@ -680,6 +687,18 @@ under the notification's own policy, independently of the job's `MAX_RETRIES`.
 
 ### Attribution
 
+> **Superseded (v0.18.0).** This section records what shipped in v0.17.0 and why the harder half was
+> deferred. The trigger it names — a second client — arrived, and per-object authorization was built.
+> The Orchestrator now verifies a short-lived, HMAC-signed, audience-bound assertion issued by the
+> Portal; the trusted `X-Orchestrator-Actor` header is retired and carries no authority. Grants over
+> `JOB`/`SCHEDULE`/`NOTIFICATION` × `READ`/`EXECUTE`/`OVERRIDE`/`MANAGE` × `USER`/`GROUP`/`SERVICE`
+> are enforced on every mutating and reading endpoint, and every mutation verb emits a security event
+> naming the acting principal. **It is authorization, not merely attribution.** The paragraphs below
+> are kept as the record of the earlier decision, not as a description of current behaviour — read
+> [orchestrator-portal.md](../../administration/orchestration/orchestrator-portal.md#permission-matrix)
+> and [orchestrator-integration.md](../../administration/portal/orchestrator-integration.md#the-portal-is-the-control-plane)
+> for what the system does today.
+
 The Orchestrator's API authenticates with a single `X-Orchestrator-Key` and has no user model, so it
 cannot authorize per object — anyone who can reach the connection can mutate anyone's job. That is a
 deliberate deferral, recorded in `ROADMAP.md` under *Orchestrator — Per-Object Authorization*, with
@@ -744,16 +763,16 @@ not rediscovered as a surprise.
 | Rename | Not supported. `DISPLAY_NAME` covers the motive; identity stays stable for config-as-code. |
 | Idempotent replay | `CREATE OR ALTER` / `CREATE OR REPLACE` for all kinds, idempotent `ADD`/`REMOVE` (§4.5). |
 | Existing job data | None exists; `Interval`/`Unit`/`AtTime` are dropped outright. |
-| Orchestrator authorization | Attribution now, authorization on the roadmap (§10). |
+| Orchestrator authorization | Attribution at the time of writing; **per-object authorization shipped in v0.18.0** — see the superseding note in §10. |
 
 ### Known deferrals
 
-1. **No per-object authorization on the Orchestrator.** Anyone who can reach the orchestrator
-   connection can mutate anyone's job; the connection use-ACL is the only boundary and it is
-   connection-level. `ROADMAP.md` → *Orchestrator — Per-Object Authorization*.
-2. **Silent takeover under `CREATE OR ALTER`.** A second script importing an existing name adopts the
-   object rather than erroring. Mitigated by naming conventions, a category in `OPTIONS`, and the
-   attribution columns; enforceable only once ownership exists.
+1. ~~**No per-object authorization on the Orchestrator.**~~ **Closed in v0.18.0.** Federated identity
+   and per-object ACLs shipped; reachability no longer implies authority. See the superseding note
+   in §10.
+2. ~~**Silent takeover under `CREATE OR ALTER`.**~~ **Closed in v0.18.0** by ownership checks in both
+   the HTTP and statement-handler paths. Still possible in Solo legacy mode, where there are no
+   principals by design.
 3. **Overlapping runs are possible.** Refuse-and-record is the intended behaviour; §7 has the design.
 4. **Connection aliases are provisioned per host.** A job notification's alias must exist where the
    job runs, so an operator configures it on the orchestrator rather than the Portal pushing it. A

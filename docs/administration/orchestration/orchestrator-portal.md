@@ -90,6 +90,35 @@ Names are re-usable and identity is not: dropping an object deletes its grants, 
 
 Owners and administrators can grant `READ`, `EXECUTE`, `OVERRIDE`, or `MANAGE` to a Portal user, group, or service account. `MANAGE` includes all lower permissions; `OVERRIDE` includes execute/read; `EXECUTE` includes read. Variable-overridden triggers require `OVERRIDE`, because an override may widen the job's data scope. Plain triggers and named-checkpoint resumes require `EXECUTE`.
 
+### Permission matrix
+
+What each verb requires, whichever door it comes through. The same decision is made for an ETL-SQL statement and for the HTTP call behind the Portal button, so a row applies to both forms.
+
+**Scope** is the ceiling attached to a **service** token by the issuing Portal — it caps what the token can do and widens nothing. An interactive user carries no scopes; their authority is their roles and grants. A service token with no scopes at all can do nothing. The ladder is `orchestrator.read` → `orchestrator.execute` → `orchestrator.publish` → `orchestrator.admin`, and the column names the lowest rung that reaches the row.
+
+**Audit** names the action recorded in the `CatalogMutation` security event, so the trail can be searched by verb.
+
+| Verb | Object | Permission | Min. service scope | Audit action |
+| :--- | :--- | :--- | :--- | :--- |
+| `CREATE JOB`/`SCHEDULE`/`NOTIFICATION` — new name | — | Role `Admin` or `OrchestratorManager` | — | `CREATE_*` |
+| `CREATE OR ALTER`/`OR REPLACE` — existing name | that object | `MANAGE` | `orchestrator.publish` | `ALTER_*` / `REPLACE_*` |
+| `ALTER JOB`, `ALTER SCHEDULE`, `ALTER NOTIFICATION` | that object | `MANAGE` | `orchestrator.publish` | `ALTER_*` |
+| `ENABLE`/`DISABLE` job, schedule, or notification | that object | `MANAGE` | `orchestrator.publish` | `ENABLE_*` / `DISABLE_*` |
+| `DROP` job, schedule, or notification | that object | `MANAGE` | `orchestrator.publish` | `DROP_*` |
+| `ALTER JOB … ADD`/`REMOVE SCHEDULE`\|`NOTIFICATION` | job **and** target | `MANAGE` on the job, `READ` on the target | `orchestrator.publish` | `ATTACH_*` / `DETACH_*` |
+| `TRIGGER JOB` — no overrides | job | `EXECUTE` | `orchestrator.execute` | `TRIGGER_JOB` |
+| `TRIGGER JOB` — with variable overrides | job | `OVERRIDE` | `orchestrator.execute` | `TRIGGER_JOB` + `MANUAL_TRIGGER_VARIABLE_OVERRIDE` |
+| Resume a run from a named checkpoint | job | `EXECUTE` | `orchestrator.execute` | `RESUME_JOB` |
+| `KILL JOB` / kill a running job | job | `MANAGE` | `orchestrator.publish` | `KILL_JOB` |
+| Dispatch a notification | notification | `EXECUTE` | `orchestrator.execute` | `DISPATCH_NOTIFICATION` |
+| List or read objects, run history, data quality | that object | `READ` | `orchestrator.read` | — |
+| List, set, or revoke grants | that object | `MANAGE` | `orchestrator.publish` | `ACL_GRANT` / `ACL_REVOKE` |
+| Assign an owner, adopt unowned objects, list unowned | — | Role `Admin` | `orchestrator.admin` | `OWNER_SET` |
+
+Two rules cut across every row. **Tenant first** — a caller and an object in different tenants never match, before ownership, roles, or grants are considered; an administrator of one tenant has no authority in another. **Admin bypasses object permissions but not the tenant boundary or the scope ceiling**, so a read-scoped token issued to an administrator's automation is still a read-scoped token.
+
+The audit events are emitted from the HTTP endpoints and the statement handlers alike, and name the acting principal — display name and all — rather than the service that carried the call. See [Security events](../platform/security-events.md) for where they are delivered.
+
 The management API uses `/api/authorization/{kind}/{name}` to list grants and `/api/authorization/{kind}/{name}/{principalKind}/{principalId}` to set or revoke them. Valid kinds are `JOB`, `SCHEDULE`, and `NOTIFICATION`; valid principal kinds are `USER`, `GROUP`, and `SERVICE`. Job history and data-quality APIs filter rows using the same `READ` decision. Ad-hoc run status and cancellation are visible only to that run's submitting principal or an administrator. Kinds, principal kinds, and permissions are named in responses exactly as they are accepted in requests. The Portal proxies the same routes under `/api/orchestrator/authorization/...` for the Access panel and for `etl-sql admin orchestrator show|grant|revoke`, so no operator needs the Orchestrator's signing secret on their machine.
 
 ## Legacy mode (Solo only)

@@ -29,6 +29,12 @@ Quality and governance work fully without a Portal: see the
 [one-person quality loop](../guides/patterns/one-person-quality-loop.md) and
 [data quality](../guides/feature-guides/data-quality.md#running-unattended-without-portal).
 
+If you do want durable scheduling on the workstation, the Orchestrator service will run without a
+Portal in [legacy mode](orchestration/orchestrator-portal.md#legacy-mode-solo-only): the API key is
+the only identity, so there are no principals, no grants, and no ownership. That is supported for one
+person on one box and nothing larger — the moment a second person needs different access, you need a
+Portal, because a grant has to name someone.
+
 ## Team / SME
 
 A shared service for one organization, normally a single node. This is the smallest profile where
@@ -44,7 +50,10 @@ something.
 5. [Publishing reports](portal/publishing.md) and
    [connections and subscriptions](portal/connections-and-subscriptions.md).
 6. [Job scheduling](orchestration/job-scheduling.md) — durable schedules instead of the OS scheduler.
-7. [Production readiness checklist](portal/production-readiness.md) before go-live.
+7. [Orchestrator identity and object grants](portal/orchestrator-integration.md#the-portal-is-the-control-plane)
+   — set `Orchestrator:RequireFederatedIdentity=true` and assign an owner to anything created before
+   you paired the Portal. Team is the profile where the Solo escape hatch stops being appropriate.
+8. [Production readiness checklist](portal/production-readiness.md) before go-live.
 
 > [!IMPORTANT]
 > If you run Team on PostgreSQL, set `Portal:Topology:ExpectedMode` explicitly. The `Auto` default

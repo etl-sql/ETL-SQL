@@ -64,6 +64,9 @@ namespace ETL_SQL.Tests.Orchestration
             AlterJobAttachmentStatement => new AlterJobAttachmentStatementHandler(_store),
             CreateJobStatement => new CreateJobStatementHandler(_store, _store),
             DropJobStatement => new DropJobStatementHandler(_store),
+            AlterJobStatement => new AlterJobStatementHandler(_store),
+            EnableJobStatement => new EnableJobStatementHandler(_store),
+            DisableJobStatement => new DisableJobStatementHandler(_store),
             SetWhatIfStatement => new SetWhatIfStatementHandler(new EngineLogger()),
             _ => throw new InvalidOperationException($"No catalog handler for {statement.GetType().Name}.")
         };
@@ -337,6 +340,39 @@ namespace ETL_SQL.Tests.Orchestration
                 e.SanitizedTarget == "JOB:Nightly" &&
                 e.Reason.Contains("DROP_JOB", StringComparison.Ordinal));
         }
+
+        /// <summary>
+        /// The job verbs that changed a definition without leaving a record. `CREATE JOB` and
+        /// `DROP JOB` were audited from the start, so the gap read as covered — a scheduled job could
+        /// be repointed at a different script, or switched off entirely, and the audit trail showed
+        /// nothing between its creation and its deletion.
+        /// </summary>
+        [Fact]
+        public async Task JobDefinitionAndEnabledStateChanges_EmitSecurityAuditEvents()
+        {
+            var sink = new RecordingSecurityEventSink();
+            using var eventScope = SecurityEventRuntime.UseSinkForScope(sink);
+
+            await RunAsync(
+                "CREATE JOB Nightly FOR SCRIPT 'jobs/nightly.etlsql';" +
+                "ALTER JOB Nightly SET TARGET = 'jobs/elsewhere.etlsql';" +
+                "DISABLE JOB Nightly;" +
+                "ENABLE JOB Nightly;");
+
+            AssertAudited(sink, "JOB:Nightly", "ALTER_JOB");
+            AssertAudited(sink, "JOB:Nightly", "DISABLE_JOB");
+            AssertAudited(sink, "JOB:Nightly", "ENABLE_JOB");
+        }
+
+        private static void AssertAudited(RecordingSecurityEventSink sink, string target, string action) =>
+            Assert.True(
+                sink.Events.Any(e =>
+                    e.Type == SecurityEventType.CatalogMutation
+                    && e.Decision == SecurityEventDecision.Allowed
+                    && e.SanitizedTarget == target
+                    && e.Reason.StartsWith(action + ":", StringComparison.Ordinal)),
+                $"No CatalogMutation event recorded '{action}' on '{target}'. Recorded: "
+                + string.Join(" | ", sink.Events.Select(e => $"{e.SanitizedTarget} {e.Reason}")));
 
         [Fact]
         public async Task AddSchedule_UnknownSchedule_IsRefused()

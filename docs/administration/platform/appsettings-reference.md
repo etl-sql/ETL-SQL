@@ -224,6 +224,13 @@ Defines default settings, delays, timeouts, and credentials for remote systems.
 
 Configuration details for the background runner service.
 
+`IdentitySigningSecret` and `RequireFederatedIdentity` together choose the authorization model:
+federated identity with per-object grants, or Solo legacy mode with none. What each verb then
+requires is listed in the
+[permission matrix](../orchestration/orchestrator-portal.md#permission-matrix); why the Portal holds
+the principals is in
+[the Portal is the control plane](../portal/orchestrator-integration.md#the-portal-is-the-control-plane).
+
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `Orchestrator:ApiKey` | string | `""` | — | Secret token used to authenticate request calls to the scheduler API. |
@@ -270,6 +277,7 @@ Configuration settings for the Portal UI server, shared storage, and active inte
 | `Portal:Orchestrator:ApiUrl` | string | `http://localhost:5001` | — | Base URL of the Orchestrator Service. |
 | `Portal:Orchestrator:ApiKey` | string | `""` | — | Service credential sent to the Orchestrator; configure from a protected source. |
 | `Portal:Orchestrator:IdentitySigningSecret` | string | `""` | — | Dedicated 32+ byte secret used to sign short-lived caller assertions; must match the Orchestrator. |
+| `Portal:Orchestrator:PollIntervalSeconds` | integer | `60` | — | How often the Portal polls Orchestrator job history for dataset-refresh and subscription completions. The Portal runs in degraded mode (cached snapshots) while the Orchestrator is unreachable. |
 | `Portal:SubscriptionRetryDelaySeconds` | integer | `60` | — | Wait time to retry failed email subscription dispatches. |
 | `Portal:ScriptRootPath` | string | `./Reports` | — | Folder containing reports and dashboard scripts (`.rptsql`). |
 | `Portal:SnapshotDirectory` | string | `./Snapshots` | — | Directory where PDF/CSV dashboard exports are saved. |
