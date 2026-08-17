@@ -290,11 +290,10 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
 
 ### Language & Execution — Declarative Incremental Watermarking Syntax
 
-**Candidate, not scheduled.** ETL-SQL currently supports atomic, job-scoped incremental state through `GET_JOB_STATE` and `SET_JOB_STATE`. While functional and safe, setting up delta loads requires manual variable declaration and explicit update calls in the success path.
-
-**Delivery stage.** This work introduces declarative syntax sugar for incremental ingestion:
-- **Declarative Watermark Clause:** Direct support on source queries (e.g. `FROM src.Orders WITH (WATERMARK = 'OrderId', INITIAL = '0')`).
-- **Engine-Managed State Lifecycle:** The engine automatically retrieves the last recorded high-water mark, applies the filtering predicate, and stages the maximum observed key value to atomically update `eng.job_state` upon successful script completion.
+**Delivered.** Declarative incremental change tracking is fully shipped, tested, and documented:
+- **Declarative Watermark Clause:** Supported on source queries via `FROM src.Table WITH (WATERMARK = 'ColumnName', INITIAL = '...', KEY = '...', INCLUSIVE = TRUE)`.
+- **Engine-Managed State Lifecycle:** `WatermarkManager` and `SelectStatementHandler` automatically retrieve previous high-water marks, inject dynamic filtering predicates into query ASTs, track stream maxima, and atomically commit state to `eng.job_state` on statement success.
+- **Reference & Samples:** Documented in [`watermark.md`](docs/reference/statements/query-syntax/watermark.md), verified in `WatermarkQueryTests.cs`, and demonstrated in [`samples/declarative_watermark.etlsql`](samples/declarative_watermark.etlsql).
 
 ### Reporting & Presentation — Extensible Visual Runtimes (Data-Bound HTML/SVG & Vega-Lite)
 
