@@ -44,6 +44,47 @@ mid-release would mean debugging the measuring instrument and the product at the
 them at the end also means they are exercised for the first time on the *next* release rather than
 destabilising this one.
 
+### Four documentation tests are red and block the documentation evidence gate
+
+Found while verifying item 5 on 2026-08-17 and **verified pre-existing** — the identical four fail at
+`821bf0f2`, before this branch. They are not regressions, but the "Documentation/security-boundary
+suite" gate above cannot go green while they fail. Each is documentation the parser or grammar does
+not actually accept, which means the docs promise syntax the product rejects:
+
+- [ ] `DocSanityTests.GeneralDocs_SqlBlocks_ParseWithoutSyntaxError` —
+      `docs/guides/feature-guides/report-sql.md` block #13: `LABEL` inside a `CREATE VISUAL … CARD`
+      body is rejected as `Unexpected token 'LABEL' in CREATE BUTTON body`.
+- [ ] `EbnfConformanceTests.ParserAcceptedDocumentExamples_AreRecognizedByCompleteGrammar` — 2 of 960
+      examples: `PRINT_LAYOUT` in `reference/visuals-reporting/report/print-layout.md` and
+      `…/visual.md`. The recursive-descent parser accepts them and the complete EBNF does not, so the
+      published grammar and the implementation disagree.
+- [ ] `DocumentationSyntaxTests.ValidateDocumentationSnippets` —
+      `docs/reference/file-operations/send-email.md`: `SEND EMAIL … ATTACH @path` is rejected with
+      "Expected one of: WITH".
+- [ ] `HelpSystemTests.TestHelpFileOperations` — the file-operations help entry no longer contains
+      the expected `VERBOSE:` marker.
+
+Each needs a decision per case: fix the documentation, or implement the syntax it advertises. The
+`PRINT_LAYOUT` and `LABEL` cases arrived with the paginated-report documentation in `b9c29d9c` and
+`2f23ac74`, so the docs were written ahead of the grammar rather than the grammar regressing.
+
+### Two tests fail only under full-solution load
+
+Also found on 2026-08-17, and also pre-existing. Both pass in isolation and failed only inside a
+whole-solution run, which cost real time to distinguish from a regression — the point of recording
+them is that the next person does not repeat that.
+
+- [ ] `MetadataManagerTests.ValidCacheHit_TriggersBackgroundRefresh_WhenStale_AndReleasesSlot` and
+      `LiveObjectScaleAssessmentTests.LiveObjectsSupportDocumentedScaleMatrix(connection, 100)`.
+      Both count observations after a background refresh, so they are the wait-for-a-condition class
+      described in [flaky-test-stability.md](docs/releases/flaky-test-stability.md); neither uses
+      `LoadAwareWait`. Suspect `ConnectorRegistry.Instance` for the scale case — it is a mutable
+      global that makes connector tests order-dependent.
+
+One whole-solution run also aborted with a test-host `Internal CLR error (0x80131506)` after ~14
+minutes. It did not reproduce, and the machine was running Docker lanes and PostgreSQL containers at
+the time, so it is recorded as an observation rather than a defect.
+
 ### Release-process RCI — issues found cutting v0.17.0 (scheduled last)
 
 Thirteen process problems surfaced during this release. Remaining items are listed in rough value
@@ -117,6 +158,26 @@ cases in `OrchestratorJobApiAuthTests`.
       name-addressed `LogJobStartAsync` helper refuses to invent an unbound twin when the name
       belongs to a tenant. The Enterprise certification lane's `shared-state-and-artifact-providers`
       prerequisite should now get past this point to its remaining five.
+
+### Sandbox execution — follow-ups from item 5
+
+Recorded 2026-08-17 when "Scheduling, execution, and capacity" closed. Neither is part of that item's
+contract; both are the next thing each piece of it needs.
+
+- [ ] **Nothing consumes a mounted capability yet.** The delivery half is built and proven on a real
+      hardened runtime: handles resolve server-side, and material is bind-mounted read-only at
+      `/run/secrets/capabilities` with `ETLSQL_CAPABILITY_ROOT` naming the directory. But **no engine
+      code reads that variable**, and there is no `CAPABILITY:name` reference the way `SECRET:name`
+      exists. A script can only use a capability by hardcoding
+      `/run/secrets/capabilities/<handle>` as a file path, which works but is neither documented nor
+      checkable. Give capabilities a first-class reference resolved from the mounted root, so the
+      engine fails a missing capability by name instead of failing to open a file.
+- [ ] **CI runs none of the three sandbox lifecycle lanes.** Standard, Hardened, and Dedicated all
+      exist and pass, and all three run only by hand — the Hardened and Dedicated lanes additionally
+      need a prepared runtime, which is what `scripts/enable-hardened-sandbox-lane.sh` is for. A lane
+      nobody runs decays into a lane that no longer works, and this is the evidence the hostile-tenant
+      claims rest on. Add at least the Standard lane to CI, and the hardened pair to a runner that
+      can register gVisor.
 
 ### Platform — Progressive SaaS Delivery and Red Cells
 

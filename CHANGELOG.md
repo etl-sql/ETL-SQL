@@ -12,6 +12,29 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Made sandbox fair-share admission cluster-global. Weighted fair ordering was process-local, so on a
+  multi-node deployment whichever node polled first took every freed slot; selection now happens in
+  the durable ledger as weighted fair queuing on virtual time, and a heavier tenant weight buys a
+  proportional share rather than the ability to starve a lighter one.
+- Enforced the sandbox admission and runtime limits that were declared but not applied: CPU cores,
+  block-I/O (on hosts that declare a throttle device, refusing the work where they cannot), connector
+  concurrency, per-attempt processed rows, per-tenant interactive sessions in Shared deployments, and
+  a queue-depth ceiling that now holds across the whole fleet rather than per process.
+- Added capability delivery to sandboxed workloads. Server-issued handles resolve through the
+  governance secret provider, namespaced per tenant, and are bind-mounted read-only into the
+  attempt; a host that cannot resolve a granted capability refuses the work instead of running
+  without it.
+- Added fleet release rollout for Managed Dedicated deployments: eligibility and compatibility
+  planning, deterministic waves, and a sequencer that will not open the next wave while an earlier
+  one is draining or after failures exceed tolerance. Each cutover still requires its own signed,
+  tenant-scoped authorization.
+- Added graceful execution-node drain. A node can now leave rotation without dropping work —
+  in-flight reports finish, new ones are refused, and `/healthz` reports draining — where previously
+  the only way to stop a node cancelled everything it was running.
+- Fixed sandbox checkpoints being unreadable to any later attempt. Session state was sealed with key
+  material generated inside the attempt's own single-use scratch, so a resumed run reported "no saved
+  session found"; the server-mounted per-tenant key is now authoritative, and checkpoint resume across
+  separate sandboxes is verified on a hardened runtime.
 - Added signed Managed Dedicated tenant upgrades with running-release verification, exclusive
   boundary locking, scheduler fencing, durable admission drain/reconciliation, atomic capacity
   assignment, exact rollback snapshots, interrupted-cutover recovery, and idempotent audit receipts.
