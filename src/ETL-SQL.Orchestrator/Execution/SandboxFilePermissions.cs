@@ -20,6 +20,20 @@ internal static class SandboxFilePermissions
             path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
+    /// <summary>
+    /// Opens a leaf the sandbox only ever reads — capability material bound read-only. It grants read
+    /// and traverse, never write, so the workload can use what it was given and cannot add to it.
+    /// </summary>
+    public static void AllowUnprivilegedSandboxReads(string path)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        File.SetUnixFileMode(
+            path,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+    }
+
     public static void AllowUnprivilegedSandboxWrites(string path)
     {
         if (OperatingSystem.IsWindows()) return;

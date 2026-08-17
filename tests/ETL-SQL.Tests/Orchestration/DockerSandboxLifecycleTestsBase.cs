@@ -370,6 +370,50 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         await foreignPoolWorkspace.DestroyAsync();
     }
 
+    /// <summary>
+    /// A granted capability reaches a real container: mounted read-only at its own path, with the
+    /// material nowhere in the command, and the workload still runs. Proving the mount on a live
+    /// runtime is the part a command-construction test cannot show.
+    /// </summary>
+    protected async Task VerifyGrantedCapabilityIsMountedReadOnlyOnALiveRuntime()
+    {
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync(HarmlessScript);
+        var workspace = await Workspaces().AssignAsync(Identity("tenant-a"));
+        var provider = new DockerSandboxExecutionProvider(
+            Options(), _docker, artifacts, new StaticCapabilityResolver("live-capability-material"));
+
+        var attempt = await provider.PrepareAsync(
+            Request(artifact, "tenant-a") with
+            {
+                AdmissionId = "live-capability-1",
+                CapabilityHandles = ["warehouse-reader"]
+            },
+            workspace,
+            default);
+        var container = TrackContainer(workspace.AssignmentId);
+
+        var mounts = (await InspectAsync(container)).GetProperty("Mounts").EnumerateArray().ToArray();
+        Assert.Contains(workspace.AssignmentId, MountSource(mounts, "/run/secrets/capabilities"));
+        Assert.False(
+            MountRw(mounts, "/run/secrets/capabilities"),
+            "A workload may read the capabilities it was granted and must not be able to add to them.");
+
+        AssertSucceeded(await attempt.RunAsync(default));
+        await attempt.DestroyAsync(default);
+        await workspace.DestroyAsync();
+        // The material lived in the assignment, so it is gone with it.
+        Assert.False(Directory.Exists(Path.Combine(workspace.RootPath, "capabilities")));
+    }
+
+    private sealed class StaticCapabilityResolver(string material) : ISandboxCapabilityResolver
+    {
+        public Task<string> ResolveAsync(
+            SandboxAssignmentIdentity assignment,
+            string capabilityHandle,
+            CancellationToken cancellationToken) => Task.FromResult(material);
+    }
+
     protected async Task VerifyUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt()
     {
         var artifacts = ArtifactStore();
@@ -448,15 +492,25 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
     /// </summary>
     private async Task WaitForCheckpointAsync(string sessionId)
     {
+        // The file appearing is not the checkpoint being finished: killing the sandbox between the
+        // store creating its database and finishing the write leaves state the next attempt cannot
+        // read, which looks exactly like resume being broken. Wait until the size has settled.
         var metadata = Path.Combine(SessionRoot, "tenant-a", sessionId, "metadata.db");
         var deadline = DateTime.UtcNow.AddSeconds(120);
+        long? previousLength = null;
         while (DateTime.UtcNow < deadline)
         {
-            if (File.Exists(metadata)) return;
-            await Task.Delay(100);
+            if (File.Exists(metadata))
+            {
+                var length = new FileInfo(metadata).Length;
+                if (length > 0 && length == previousLength) return;
+                previousLength = length;
+            }
+
+            await Task.Delay(150);
         }
 
-        Assert.Fail($"The sandbox never persisted a checkpoint for session '{sessionId}'.");
+        Assert.Fail($"The sandbox never persisted a settled checkpoint for session '{sessionId}'.");
     }
 
     private static async Task<SandboxWorkspaceAssignment> WaitForAssignmentAsync(

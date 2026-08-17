@@ -59,6 +59,10 @@ public sealed class DockerStandardSandboxLifecycleTests : DockerSandboxLifecycle
     public Task StandardCheckpointedStateResumesInADifferentSandbox() =>
         VerifyCheckpointedStateResumesInADifferentSandbox();
 
+    [DockerStandardSandboxFact]
+    public Task StandardGrantedCapabilityIsMountedReadOnlyOnALiveRuntime() =>
+        VerifyGrantedCapabilityIsMountedReadOnlyOnALiveRuntime();
+
     /// <summary>
     /// The reserved-placement contract on an ordinary runtime. It proves the refusal logic against
     /// real containers; the citable Dedicated-tier result comes from

@@ -63,4 +63,8 @@ public sealed class DockerDedicatedSandboxLifecycleTests : DockerSandboxLifecycl
     [DockerHardenedSandboxFact]
     public Task DedicatedCheckpointedStateResumesInADifferentSandbox() =>
         VerifyCheckpointedStateResumesInADifferentSandbox();
+
+    [DockerHardenedSandboxFact]
+    public Task DedicatedGrantedCapabilityIsMountedReadOnlyOnALiveRuntime() =>
+        VerifyGrantedCapabilityIsMountedReadOnlyOnALiveRuntime();
 }

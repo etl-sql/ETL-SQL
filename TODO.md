@@ -299,7 +299,7 @@ runtime, which is what the storage cell below was blocked on.
       not a hostile-tenant result. Closing the cell needs one run of
       `dotnet test --filter FullyQualifiedName~DockerDedicatedSandboxLifecycleTests` on a host where
       the hardened lane is prepared.
-- [ ] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
+- [x] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
       tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
       ambiguous-outcome handling, and destructive cleanup. Tenant-partitioned queues and
       weighted/fair admission so one tenant cannot cause head-of-line blocking or starvation; enforce
@@ -381,13 +381,21 @@ runtime, which is what the storage cell below was blocked on.
       The production Docker OCI provider and scheduler dispatch seam described in the Dedicated slice
       above now exist, and the real Hardened runtime lane recorded in domain 4 proves the boundary.
 
-      **This cell's one remaining component is capabilities.** Queues, leases, checkpoints, quotas,
-      fair admission, ambiguous-outcome handling, and destructive cleanup are all implemented and
-      asserted; `CapabilityHandles` is carried on the request and validated, but
-      `DockerSandboxExecutionProvider` refuses any request that sets it rather than injecting
-      anything. That refusal is the correct interim behaviour — silently dropping a capability the
-      caller asked for would be worse — but capability-scoped credential injection into a sandbox is
-      unbuilt, and the cell stays open until it is.
+      **Capability injection completed (2026-08-17), the cell's last component.** `CapabilityHandles`
+      was carried and validated while the provider refused any request that set it. Handles now
+      resolve on the orchestrator side through the governance secret provider — so a sandbox
+      capability is the same material, with the same custody and rotation, as every other secret the
+      deployment holds, rather than a second credential store existing only for sandboxes — and are
+      namespaced per tenant, so one tenant's handle cannot resolve to another's material even where
+      both use the same name. Resolved material is written into the assignment's own directory,
+      owner-only until the single mounted leaf is opened, and bind-mounted **read-only** at
+      `/run/secrets/capabilities`; the workload may read what it was granted and cannot add to it.
+      Only the directory travels in the environment, never the material, because argv and the
+      environment are readable by anything that can see the process. A handle must be one plain name,
+      so it cannot choose where its material lands. A host with no resolver, or a capability the
+      tenant has not been provisioned, refuses the work before any container exists rather than
+      running it without a capability it was told it had — and the material dies with the assignment.
+      Proven on a live runtime in all three lanes, not only in command construction.
 - [x] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security

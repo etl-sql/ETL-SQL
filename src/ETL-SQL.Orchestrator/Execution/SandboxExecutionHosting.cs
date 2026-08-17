@@ -60,7 +60,18 @@ public static class SandboxExecutionServiceCollectionExtensions
         services.AddSingleton<ISandboxWorkloadPolicyResolver, SandboxWorkloadPolicyResolver>();
         services.AddSingleton<ISandboxTenantContextResolver>(
             new SandboxTenantContextResolver(configuration["Orchestrator:TenantId"]));
-        services.AddSingleton<ISandboxExecutionProvider, DockerSandboxExecutionProvider>();
+        // Capabilities resolve through the governance secret provider, so a sandbox capability is the
+        // same material, with the same custody, as every other secret the deployment holds. A host
+        // with no secret provider configured has no resolver, and the provider then refuses work
+        // that was granted capabilities rather than running it without them.
+        services.AddSingleton<ISandboxCapabilityResolver>(sp =>
+            new SecretBackedSandboxCapabilityResolver(
+                sp.GetRequiredService<ETL_SQL.Core.Governance.ISecretProvider>()));
+        services.AddSingleton<ISandboxExecutionProvider>(sp => new DockerSandboxExecutionProvider(
+            sp.GetRequiredService<DockerSandboxExecutionOptions>(),
+            sp.GetRequiredService<ISandboxCommandRunner>(),
+            sp.GetRequiredService<IImmutableSandboxArtifactStore>(),
+            sp.GetService<ISandboxCapabilityResolver>()));
         services.AddSingleton<ISandboxRuntimeReconciler, DockerSandboxRuntimeReconciler>();
         services.AddSingleton<SandboxExecutionCoordinator>();
         services.AddSingleton<ISandboxScheduledJobExecutor, SandboxScheduledJobExecutor>();
@@ -122,7 +133,18 @@ public static class SandboxExecutionServiceCollectionExtensions
         services.AddSingleton<ISandboxWorkloadPolicyResolver, SandboxWorkloadPolicyResolver>();
         services.AddSingleton<ISandboxTenantContextResolver>(
             new SandboxTenantContextResolver(configuration["Orchestrator:TenantId"]));
-        services.AddSingleton<ISandboxExecutionProvider, DockerSandboxExecutionProvider>();
+        // Capabilities resolve through the governance secret provider, so a sandbox capability is the
+        // same material, with the same custody, as every other secret the deployment holds. A host
+        // with no secret provider configured has no resolver, and the provider then refuses work
+        // that was granted capabilities rather than running it without them.
+        services.AddSingleton<ISandboxCapabilityResolver>(sp =>
+            new SecretBackedSandboxCapabilityResolver(
+                sp.GetRequiredService<ETL_SQL.Core.Governance.ISecretProvider>()));
+        services.AddSingleton<ISandboxExecutionProvider>(sp => new DockerSandboxExecutionProvider(
+            sp.GetRequiredService<DockerSandboxExecutionOptions>(),
+            sp.GetRequiredService<ISandboxCommandRunner>(),
+            sp.GetRequiredService<IImmutableSandboxArtifactStore>(),
+            sp.GetService<ISandboxCapabilityResolver>()));
         services.AddSingleton<ISandboxRuntimeReconciler, DockerSandboxRuntimeReconciler>();
         services.AddSingleton<SandboxExecutionCoordinator>();
         services.AddSingleton<ISandboxScheduledJobExecutor, SandboxScheduledJobExecutor>();

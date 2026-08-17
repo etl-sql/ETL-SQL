@@ -205,6 +205,87 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task GrantedCapabilitiesAreMountedReadOnlyAndNeverAppearInArgumentsOrEnvironment()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var provider = new DockerSandboxExecutionProvider(
+            Options(), commands, artifacts, new StubCapabilities("s3cret-material"));
+        var request = Request(artifact) with { AdmissionId = "admission-caps" };
+
+        await provider.PrepareAsync(
+            request with { CapabilityHandles = ["warehouse-reader"] }, workspace, default);
+
+        var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
+        Assert.Contains(create, argument =>
+            argument.Contains("/run/secrets/capabilities", StringComparison.Ordinal)
+            && argument.Contains("readonly", StringComparison.Ordinal));
+        Assert.Contains("ETLSQL_CAPABILITY_ROOT=/run/secrets/capabilities", create);
+        // argv and the environment are readable by anything that can see the process, so only the
+        // location may travel there — never the material.
+        Assert.DoesNotContain(create, argument => argument.Contains("s3cret-material", StringComparison.Ordinal));
+
+        var staged = Path.Combine(workspace.RootPath, "capabilities", "warehouse-reader");
+        Assert.Equal("s3cret-material", await File.ReadAllTextAsync(staged));
+        File.SetAttributes(Path.Combine(workspace.InputPath, "job.etlsql"), FileAttributes.Normal);
+        await workspace.DestroyAsync();
+        // Capability material dies with the assignment that was granted it.
+        Assert.False(File.Exists(staged));
+    }
+
+    [Fact]
+    public async Task AHostThatCannotResolveCapabilitiesRefusesWorkThatWasGrantedThem()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        // No resolver configured, and separately: a resolver that cannot produce the material.
+        var unconfigured = new DockerSandboxExecutionProvider(Options(), commands, artifacts);
+        var request = Request(artifact) with
+        {
+            AdmissionId = "admission-caps",
+            CapabilityHandles = ["warehouse-reader"]
+        };
+
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            unconfigured.PrepareAsync(request, workspace, default));
+
+        var unprovisioned = new DockerSandboxExecutionProvider(
+            Options(), commands, artifacts, new StubCapabilities(material: null));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            unprovisioned.PrepareAsync(request, workspace, default));
+
+        // Running without a capability the workload was told it had is worse than not running.
+        Assert.DoesNotContain(commands.Calls, call => call.Arguments.FirstOrDefault() == "create");
+        await workspace.DestroyAsync();
+    }
+
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("nested/handle")]
+    [InlineData("..")]
+    public async Task CapabilityHandlesCannotShapeAPath(string handle)
+    {
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var provider = new DockerSandboxExecutionProvider(
+            Options(), new RecordingCommands(
+                ImageEvidence(), Ok("29.6.2"), RuntimeEvidence()), artifacts,
+            new StubCapabilities("material"));
+        var request = Request(artifact) with { AdmissionId = "admission-caps" };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.PrepareAsync(
+            request with { CapabilityHandles = [handle] }, workspace, default));
+        await workspace.DestroyAsync();
+    }
+
+    [Fact]
     public async Task DeclaredRowCeilingIsCarriedIntoTheAttemptForTheEngineToEnforce()
     {
         var commands = new RecordingCommands(
@@ -344,6 +425,18 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         1, id, "tenant-a", "dedicated-tenant-a", 1, 1, 2,
         SandboxAdmissionState.Retained, "node", DateTimeOffset.UtcNow, 2,
         DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "retained");
+
+    private sealed class StubCapabilities(string? material) : ISandboxCapabilityResolver
+    {
+        public Task<string> ResolveAsync(
+            SandboxAssignmentIdentity assignment,
+            string capabilityHandle,
+            CancellationToken cancellationToken) =>
+            material is null
+                ? throw new UnauthorizedAccessException(
+                    $"Capability '{capabilityHandle}' is not provisioned for this tenant.")
+                : Task.FromResult(material);
+    }
 
     private static SandboxCommandResult Ok(string output) => new(0, output, "");
     private static SandboxCommandResult Fail(string error) => new(1, "", error);
