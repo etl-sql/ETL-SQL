@@ -273,11 +273,10 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
 
 ### Developer Experience & CI/CD — Native Unit Testing & Table Assertions
 
-**Candidate, not scheduled.** While `SET WHAT_IF ON` provides pre-flight dry runs against real data sources and `ASSERT JOB` evaluates operational run metrics, testing discrete transformation logic against synthetic edge cases currently requires ad-hoc scripts or manual `EXCEPT` queries.
-
-**Delivery stage.** This work introduces native unit testing primitives for ETL-SQL:
-- **Table Comparison Assertions:** Native syntax (`ASSERT TABLE #actual MATCHES #expected`) that compares two staging tables by schema and content, outputting detailed row/column diffs and mismatch summaries on failure.
-- **Script Test Harness:** A dedicated CLI test runner (`etlsql test MyPipeline.test.etlsql`) that executes scripts in isolated test environments using `MOCKDB` and synthetic `#temp` tables, asserting deterministic output states for pull request validation and AI agent self-verification.
+**Delivered.** Native unit testing and dataset assertions are fully shipped, tested, and documented:
+- **Table Comparison Assertions:** Native syntax (`ASSERT TABLE #actual MATCHES #expected [WITH (TOLERANCE = ..., IGNORE_ORDER = ..., IGNORE_COLUMNS = ..., MESSAGE = ...)]`) in `AssertTableStatementHandler.cs` evaluates schema equality, row counts, and value differences with actionable diff output.
+- **Script Test Harness (`etlsql test`):** A dedicated CLI test runner (`TestRunnerService.cs`) discovers and executes `*.test.etlsql` / `*.test.sql` scripts in isolated engine scopes, outputting formatted result summaries and returning non-zero exit codes for CI/CD gates.
+- **Reference & Samples:** Documented in [`assert-table.md`](docs/reference/statements/session-control/assert-table.md), verified in `AssertTableStatementTests.cs`, and demonstrated in [`samples/unit_test_table_assertion.test.etlsql`](samples/unit_test_table_assertion.test.etlsql).
 
 ### Tooling & Authoring — Visual Report Builder Round-Trip Fidelity & Trivia Preservation
 
