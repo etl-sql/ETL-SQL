@@ -1,4 +1,4 @@
-# Deployment-profile certification
+﻿# Deployment-profile certification
 
 Deployment-profile certification composes focused test suites into operator-readable proof for the
 Solo, Team, Enterprise, and SaaS contracts and their supported transitions. It does not replace the
@@ -50,8 +50,8 @@ prerequisites in **one run against one commit**:
 
 | Prerequisite | What the lane proves |
 | :--- | :--- |
-| `verifiable-caller-identity` | Federated OIDC identity and signed Orchestrator assertions carry a verifiable principal; an unsigned actor header carries no authority. |
-| `per-object-authorization` | Reaching an Orchestrator confers no authority over another principal's objects, `CREATE OR ALTER` cannot take over a shared name, and every mutation verb leaves an audit record naming the acting principal. |
+| `verifiable-caller-identity` | Federated OIDC identity and signed Orchestrator assertions carry a verifiable principal; an unsigned actor header carries no authority, and the Portal's own outbound calls carry a signed caller rather than the service key alone. |
+| `per-object-authorization` | Reaching an Orchestrator confers no authority over another principal's objects, `CREATE OR ALTER` cannot take over a shared name, every mutation verb leaves an audit record naming the acting principal, and a narrowly scoped service token is narrow at both doors. |
 | `shared-state-and-artifact-providers` | Portal and Orchestrator state resolve against shared PostgreSQL across processes; artifact storage honours its guarded contract. |
 | `scoped-secret-and-policy-authority` | Typed organization policy, the encrypted audited catalog secret store, and signed policy distribution guard execution and publishing. |
 | `durable-audit` | The remote audit outbox retains, redacts, and recovers mutation records instead of dropping them when the collector is unreachable. |

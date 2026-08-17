@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Certifies ETL-SQL deployment profiles and supported transitions.
 
@@ -86,8 +86,8 @@ function Get-ProfilePhases {
         }
         "Enterprise" {
             @(
-                New-Phase "Enterprise verifiable caller identity" $PortalTests "FullyQualifiedName~OidcAuthTests|FullyQualifiedName~OrchestratorIdentityAssertionTests" "Federated OIDC identity and short-lived signed Orchestrator assertions carry a verifiable principal across the service boundary; an unsigned actor header carries no authority." "verifiable-caller-identity"
-                New-Phase "Enterprise per-object authorization" $PortalTests "FullyQualifiedName~OrchestratorPerObjectAuthorizationIntegrationTests|FullyQualifiedName~OrchestratorAuditParityTests" "Reaching an Orchestrator does not confer authority over another principal's job, schedule, or notification, CREATE OR ALTER cannot silently take over a shared name, and every mutation verb leaves an audit record naming the acting principal rather than the service that carried the call." "per-object-authorization"
+                New-Phase "Enterprise verifiable caller identity" $PortalTests "FullyQualifiedName~OidcAuthTests|FullyQualifiedName~OrchestratorIdentityAssertionTests|FullyQualifiedName~OrchestratorJobChannelIdentityTests" "Federated OIDC identity and short-lived signed Orchestrator assertions carry a verifiable principal across the service boundary; an unsigned actor header carries no authority, and the Portal's own outbound calls carry a signed caller rather than the service key alone." "verifiable-caller-identity"
+                New-Phase "Enterprise per-object authorization" $PortalTests "FullyQualifiedName~OrchestratorPerObjectAuthorizationIntegrationTests|FullyQualifiedName~OrchestratorAuditParityTests|FullyQualifiedName~OrchestratorScopeCeilingTests" "Reaching an Orchestrator does not confer authority over another principal's job, schedule, or notification, CREATE OR ALTER cannot silently take over a shared name, every mutation verb leaves an audit record naming the acting principal rather than the service that carried the call, and a narrowly scoped service token is narrow at both the HTTP and the statement door." "per-object-authorization"
                 New-Phase "Enterprise shared Portal state provider" $PortalTests "FullyQualifiedName~PortalPostgresProviderTests|FullyQualifiedName~PortalMultiProcessPostgresTests" "Portal state resolves against shared PostgreSQL across multiple processes rather than node-local storage." "shared-state-and-artifact-providers"
                 New-Phase "Enterprise shared Orchestrator store and artifact roots" $CoreTests "FullyQualifiedName~OrchestratorPostgresStoreTests|FullyQualifiedName~FileSystemArtifactStorageTests|FullyQualifiedName~GuardedArtifactStorageTests" "Orchestrator durable state uses the shared PostgreSQL dialect, and artifact storage honours its guarded contract on a shared root." "shared-state-and-artifact-providers"
                 New-Phase "Enterprise policy authority" $CoreTests "FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~PolicyAuthorityServiceTests" "Typed organization policy and authority boundaries are enforced." "scoped-secret-and-policy-authority"
