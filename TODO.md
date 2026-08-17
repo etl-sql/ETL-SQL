@@ -82,52 +82,23 @@ from `ROADMAP.md`, and its release evidence moved to the gates above. The model 
 [the permission matrix](docs/administration/orchestration/orchestrator-portal.md#permission-matrix)
 and [the Portal is the control plane](docs/administration/portal/orchestrator-integration.md#the-portal-is-the-control-plane);
 the superseded design record is `docs/architecture/decisions/job_schedule_notification.md` §4.5 and
-§10. Writing the matrix surfaced the items below. Neither invalidates the completion claim — the
-definition of done holds — but the first is a real inconsistency between the two doors.
+§10.
 
-- [ ] **The Portal cannot submit ad-hoc jobs to a federated Orchestrator at all.** Found while
-      checking whether the scope-ceiling gap below is reachable — it mostly is not, because this
-      stops the request one layer earlier. `HttpJobChannelClient`'s `HttpClient` is configured in
-      `ETL-SQL.Portal/Program.cs` with `X-Orchestrator-Key` and **no identity assertion**, while
-      `ApiKeyDenied` requires both once `RequireFederatedIdentity=true`. So `POST /jobs` returns
-      **401**, and with it Portal report execution (`ExecutionJobService`, which submits remotely
-      whenever `Portal:Orchestrator:ApiUrl` is set) and the two `DataQualityController` submissions.
-      **Verified by test**, not by reading: an API-key-only `POST /jobs` against
-      `OrchestratorWebFactory(requireFederatedIdentity: true)` answers `Unauthorized`.
-      Fail-closed, so it is a functional break rather than a security hole — but it breaks exactly
-      the Team-and-above topology the administration docs prescribe. It went unnoticed because
-      `OrchestratorJobApiAuthTests` constructs `new OrchestratorWebFactory()`, which defaults to
-      **legacy** mode, so every existing `/jobs` auth test proves only the legacy path.
-      Correction: give the job channel the same treatment `OrchestratorProxyService` already has —
-      a per-request assertion from `OrchestratorAssertionIssuer` (`IssueForBackground()` when there
-      is no interactive user), which also fixes attribution, since these runs currently reach the
-      Orchestrator with no principal at all. Then re-run the existing `/jobs` auth tests against a
-      federated factory as well as a legacy one.
-- [ ] **`Portal:Orchestrator:SameHost` is dead configuration.** Declared on `PortalConfig` and
-      documented in `docs/administration/portal/orchestrator-integration.md`, never read anywhere.
-      Either wire it or drop it from the class and the doc; a setting that does nothing is worse
-      than an absent one.
-- [ ] **The service-token scope ceiling is applied inconsistently.** Two halves of one problem, found
-      by writing the matrix and having to leave the scope column ambiguous.
-      1. **Creation escapes the ceiling.** `OrchestratorObjectAuthorizationService.CanCreate` checks
-         only the `Admin`/`OrchestratorManager` role, so a service token scoped `orchestrator.read`
-         can create a `JOB`, `SCHEDULE`, or `NOTIFICATION` — while `CREATE OR ALTER` on an object that
-         already exists, and every other verb, is capped correctly by `WithinScopeCeiling`. The
-         exposure is name-squatting and catalog pollution, not reaching another principal's objects.
-      2. **Scopes never reach the engine path.** `ExecutionIdentity` carries no scopes, so
-         `OrchestratorObjectAuthorizationService.ToCaller` rebuilds a caller with none, and
-         `WithinScopeCeiling` reads that as "a service caller with no scopes can do nothing". A
-         service principal therefore fails **every** object permission when the same verb arrives as
-         an ETL-SQL statement rather than an HTTP call — including the Portal background service,
-         which is issued the full ladder. Fail-closed, so nothing is over-permitted, but the two paths
-         do not make the same decision, which is the property the design rests on.
+**Closed 2026-08-16, after the matrix surfaced them.** The Portal's job channel sent the API key
+with no caller assertion, so `POST /jobs` — report execution and data-quality submission — answered
+401 against a federated Orchestrator; it now signs through the same issuer the admin proxy uses.
+Object creation skipped the service-token scope ceiling, and `ExecutionIdentity` carried no scopes
+at all, so a service principal was refused every object permission from script while passing over
+HTTP; scopes now travel with the identity and creation is capped like every other verb.
+`Portal:Orchestrator:SameHost` gated a Start button that was never built — the setting is gone and
+the four documentation sites now say the Portal cannot start a stopped Orchestrator.
 
-      Correction: add scopes to `ExecutionIdentity` and thread them through `ToCaller`; have
-      `CanCreate` take the caller rather than the role set and require at least `orchestrator.publish`
-      for a service subject, leaving interactive users unchanged. Extend
-      `OrchestratorAuditParityTests` and `OrchestratorPerObjectAuthorizationIntegrationTests` with a
-      read-scoped service caller over both doors — a ceiling with no test that a narrow token is
-      actually narrow is the shape that let this through.
+The common cause is worth keeping: **each door was only ever tested on its own.** Every existing
+`/jobs` auth test constructed a legacy-mode factory, and no test asserted that a narrow token is
+actually narrow. New coverage asserts the same caller through an endpoint *and* an ETL-SQL
+statement — `OrchestratorScopeCeilingTests`, `OrchestratorJobChannelIdentityTests`, and federated
+cases in `OrchestratorJobApiAuthTests`.
+
 - [ ] **`POST /management/stop` is not audited.** Stopping the whole Orchestrator writes a
       `LogWarning` and no security event, so "who stopped the service" is answerable only from
       diagnostic logs. It is not one of the object verbs, which is why Slice F left it. Correction:

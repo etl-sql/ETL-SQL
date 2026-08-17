@@ -1,4 +1,4 @@
-# Orchestrator Management
+﻿# Orchestrator Management
 
 The portal includes a built-in **Orchestrator** tab that provides a web interface for managing ETL-SQL scheduled jobs. Access is controlled by the `OrchestratorAccess` policy: **Admin** or **OrchestratorManager** role.
 
@@ -13,8 +13,7 @@ The portal communicates with the Orchestrator Service over HTTP. Configure the c
   "Orchestrator": {
     "ApiUrl": "http://orchestrator-host:5001",
     "ApiKey": "your-shared-secret",
-    "IdentitySigningSecret": "a-distinct-random-secret-at-least-32-bytes",
-    "SameHost": false
+    "IdentitySigningSecret": "a-distinct-random-secret-at-least-32-bytes"
   }
 }
 ```
@@ -125,8 +124,7 @@ When the Orchestrator is online, two buttons appear next to the status chip:
 
 When the Orchestrator is offline:
 - An **Offline** banner is shown across the top of the page.
-- If `Portal:Orchestrator:SameHost = true` is configured, a **Start** button appears that uses the Windows `ServiceController` API to start the local service.
-- On separate-server deployments the portal displays: *"Orchestrator is offline — start the service on its host machine."*
+- The portal displays: *"Orchestrator is offline — start the service on its host machine."* There is no Start button: a stopped service under an OS supervisor restarts itself, and starting one that is not would require the Portal to hold service-control rights on the Orchestrator's host.
 
 ## Performance Metrics
 
@@ -149,7 +147,7 @@ The job detail panel's history table includes per-execution performance data:
 | `Portal:Orchestrator:ApiUrl` | Portal `appsettings.json` / env var | Base URL of the Orchestrator Service HTTP API |
 | `Portal:Orchestrator:ApiKey` | Portal `appsettings.json` / env var | Shared secret sent as `X-Orchestrator-Key` header |
 | `Portal:Orchestrator:IdentitySigningSecret` | Portal protected configuration / env var | Signs short-lived caller assertions; must match the Orchestrator value |
-| `Portal:Orchestrator:SameHost` | Portal `appsettings.json` / env var | `true` enables the **Start** button using Windows `ServiceController` |
+| `Portal:Orchestrator:PollIntervalSeconds` | Portal `appsettings.json` / env var | Seconds between Orchestrator job-history polls; default `60` |
 | `Portal:Orchestrator:DatabasePath` | Portal `appsettings.json` / env var | Location of the Orchestrator's SQLite DB from Portal context (used to query job status/history locally). Defaults to `../Orchestrator/etlsql.db` relative to the Portal's database directory. |
 | `portal-orchestrator.json` | Sidecar file next to portal database | Overrides for URL/key saved via the Admin UI; takes precedence over env vars |
 | `Orchestrator:DatabasePath` | Orchestrator `appsettings.json` / env var | Path to the Orchestrator's SQLite database. Defaults to `%LocalAppData%/ETL-SQL/etlsql.db` if unset. |

@@ -676,7 +676,6 @@ public class OrchestratorConfig
     /// 32 UTF-8 bytes. It is intentionally distinct from both the browser JWT and API key.
     /// </summary>
     public string? IdentitySigningSecret { get; set; }
-    public bool SameHost { get; set; } = false;
 
     /// <summary>Seconds between Orchestrator job-history polls. Minimum effective value is 1.</summary>
     public int PollIntervalSeconds { get; set; } = 60;

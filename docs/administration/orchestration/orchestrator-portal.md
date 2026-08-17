@@ -242,7 +242,7 @@ When the Orchestrator is **online**, two service-control buttons appear next to 
 - **Stop** — sends `POST /management/stop` to the Orchestrator, which calls `IHostApplicationLifetime.StopApplication()`. If the Orchestrator is registered as a Windows Service or systemd unit, the OS supervisor restarts it automatically. The portal polls `/health` every 3 seconds and updates the status chip as soon as the service comes back.
 - **Restart** — equivalent to Stop; the portal waits for the service to come back online.
 
-When the Orchestrator is **offline**, the portal displays a banner: *"Orchestrator is offline."* If `Portal:Orchestrator:SameHost = true` is configured, a **Start** button also appears that uses the Windows `ServiceController` API to start the local service. On separate-server deployments, start the service manually on its host.
+When the Orchestrator is **offline**, the portal displays a banner: *"Orchestrator is offline."* The portal cannot start a stopped Orchestrator — start it on its own host, through the Windows service manager or `systemctl`. This is why **Stop** is safe to offer and starting is not: a stopped service that the OS supervises comes back by itself, whereas starting one from a browser would mean the Portal holding service-control rights on another machine.
 
 ## Metrics and Scraping
 

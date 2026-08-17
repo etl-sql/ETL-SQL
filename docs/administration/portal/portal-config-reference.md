@@ -1,4 +1,4 @@
-# Configuration Reference
+﻿# Configuration Reference
 
 All settings live under the `"Portal"` key in `appsettings.json`. Every key can be overridden with an environment variable using the double-underscore separator: `Portal__Jwt__Secret`.
 
@@ -109,7 +109,6 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
     "Orchestrator": {
       "ApiUrl": null,
       "ApiKey": "",
-      "SameHost": false,
       "DatabasePath": "../Orchestrator/etlsql.db"
     }
   }
@@ -268,7 +267,6 @@ whose stored tenant matches the signed `tenant_id` claim. Cross-tenant lookups r
 | `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). |
 | `Orchestrator.ApiUrl` | *(empty)* | Base URL of the Orchestrator Service HTTP API. |
 | `Orchestrator.ApiKey` | *(empty)* | Shared secret API key used for authenticating Orchestrator HTTP calls. |
-| `Orchestrator.SameHost` | `false` | Set to `true` to enable managing the Orchestrator Windows Service control locally from the portal. |
 | `Orchestrator.DatabasePath` | `../Orchestrator/etlsql.db` | Location of the Orchestrator's SQLite DB from Portal context (used to query job status/history locally). |
 
 > [!IMPORTANT]

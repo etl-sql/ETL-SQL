@@ -1,4 +1,4 @@
-# HTTPS and Network Configuration
+﻿# HTTPS and Network Configuration
 
 HTTPS, reverse proxies, ports, and the network boundaries each service expects.
 
@@ -46,19 +46,13 @@ not require a shared snapshot filesystem, but both services must have the same n
 report data is never returned from the backward-compatible unauthenticated job-status surface. After
 configuration, execute a small report and confirm its snapshot manifest and CSV export are available.
 
-### Same-Host Service Start
+### Starting a stopped Orchestrator
 
-On Windows, if the Portal and Orchestrator run on the same host, the portal can start the Orchestrator service through `ServiceController` when it is offline:
-
-```json
-"Portal": {
-  "Orchestrator": {
-    "SameHost": true
-  }
-}
-```
-
-Leave `SameHost = false` for separate-server deployments.
+The Portal can stop an Orchestrator but never start one. A service under an OS supervisor —
+a Windows Service or a systemd unit — restarts itself after a stop, which is what makes the
+Portal's **Stop** and **Restart** buttons useful. Starting a service that is genuinely down is done
+on its own host, and deliberately so: the alternative is the Portal holding service-control rights
+on another machine.
 
 ---
 
