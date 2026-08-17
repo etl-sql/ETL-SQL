@@ -673,6 +673,20 @@ namespace ETL_SQL.App
             Description = "Why the fleet is being enumerated, so the access can be reviewed later.",
             Arity = ArgumentArity.ExactlyOne
         };
+        private static readonly Option<bool> FleetExecuteOption = new("--execute", Array.Empty<string>())
+        {
+            Description = "Walk the planned waves, cutting over every deployment the loaded signed authorization names."
+        };
+        private static readonly Option<string?> FleetRootOption = new("--fleet-root", Array.Empty<string>())
+        {
+            Description = "Root the deployments were onboarded under; each tenant occupies its own directory.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<int> FleetMaxFailuresOption = new("--max-failures", Array.Empty<string>())
+        {
+            Description = "Failed cutovers tolerated before the rollout stops opening waves.",
+            DefaultValueFactory = _ => 0
+        };
         private static readonly Option<string?> SaasUpgradeTargetReleaseOption = new("--target-release", Array.Empty<string>())
         {
             Description = "Release or immutable image digest assertion; must match signed upgrade authorization.",
@@ -1135,6 +1149,9 @@ namespace ETL_SQL.App
                 FleetOperatorOption,
                 FleetAuthorizationReferenceOption,
                 FleetReasonOption,
+                FleetExecuteOption,
+                FleetRootOption,
+                FleetMaxFailuresOption,
             };
             saasFleetPlanCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-fleet-plan", handler));
             promotionCommand.Add(saasFleetPlanCommand);
@@ -2059,6 +2076,9 @@ namespace ETL_SQL.App
                 cliContext.FleetOperator = res.GetValue(FleetOperatorOption);
                 cliContext.FleetAuthorizationReference = res.GetValue(FleetAuthorizationReferenceOption);
                 cliContext.FleetReason = res.GetValue(FleetReasonOption);
+                cliContext.FleetExecute = res.GetValue(FleetExecuteOption);
+                cliContext.FleetRoot = res.GetValue(FleetRootOption);
+                cliContext.FleetMaxFailures = res.GetValue(FleetMaxFailuresOption);
             }
             else if (commandName == "admin-promotion-saas-delete")
             {

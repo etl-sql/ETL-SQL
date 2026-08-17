@@ -13,6 +13,9 @@ etl-sql admin promotion saas-fleet-plan [options]
 | Option | Description |
 | :--- | :--- |
 | `--authorization` | Change record or rollout ticket this enumeration hangs off. |
+| `--execute` | Walk the planned waves, cutting over every deployment the loaded signed authorization names. |
+| `--fleet-root` | Root the deployments were onboarded under; each tenant occupies its own directory. |
+| `--max-failures` | Failed cutovers tolerated before the rollout stops opening waves. |
 | `--operator` | Platform person or service enumerating the fleet. Never a tenant user. |
 | `--reason` | Why the fleet is being enumerated, so the access can be reviewed later. |
 | `--target-release` | Release every eligible deployment is being rolled to. |

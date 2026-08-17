@@ -456,8 +456,18 @@ runtime, which is what the storage cell below was blocked on.
       "I needed to list the fleet" cannot become a way to obtain tenant-scoped authority in bulk. It
       reads control-plane metadata only and has no path to tenant data.
 
-      **Still open:** the sequencer that walks the waves and applies each cutover, and drain
-      behaviour observed across a real population rather than from per-tenant receipts.
+      **Sequencer completed (2026-08-17).** `SaasFleetRolloutSequencer` walks the plan wave by wave
+      and applies each cutover through the ordinary single-tenant path, and `saas-fleet-plan
+      --execute --fleet-root` drives it against the deployments one directory per tenant under the
+      root they were onboarded to. Two things stop it opening the next wave: a halt, because the
+      release has already broken deployments; and an earlier wave still **draining**, because
+      overlapping a fenced wave with the next one is how a rollout takes down more of the fleet than
+      it has repaired. A deployment the loaded signed authorization does not name is recorded as
+      *still owed* rather than failed — work waiting for approval must not halt a rollout — so the
+      run advances exactly as far as the grants an operator already holds, and never further.
+
+      **Still open:** drain behaviour observed across a real population under load, rather than
+      inferred from per-tenant receipts.
 - [ ] **High availability, Shared.** Tenant-aware fleet rollout, compatibility/drain behavior, and
       noisy-neighbour containment without silently falling back from Dedicated placement or Hardened
       isolation.
