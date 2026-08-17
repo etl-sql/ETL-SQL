@@ -241,9 +241,11 @@ runtime, which is what the storage cell below was blocked on.
 
 ##### 5. Scheduling, execution, and capacity
 
-- [ ] **Dedicated.** Provision tenant-dedicated queues, schedules, leases, quotas, session roots, and
+- [x] **Dedicated.** Provision tenant-dedicated queues, schedules, leases, quotas, session roots, and
       VM/worker boundaries; run disposable OCI tasks without treating a shared-kernel container as
-      the boundary between customers. Prove reserved placement.
+      the boundary between customers. Prove reserved placement. **Closed 2026-08-17** — reserved
+      placement, checkpoint resume across sandboxes, and the full lifecycle contract are proven on a
+      registered gVisor runtime with a digest-pinned image; see the completion records below.
 
       **Production hardened-provider slice completed (2026-08-13).** Scheduled jobs now prefer the
       configured `ISandboxScheduledJobExecutor`, which binds the job's immutable tenant, attempt,
@@ -291,14 +293,22 @@ runtime, which is what the storage cell below was blocked on.
       tenant's jobs today. `DockerDedicatedSandboxLifecycleTests` binds the whole lifecycle contract
       to the Dedicated tier on a host fixed to one tenant and pool.
 
-      **The cell stays open because that lane has not been run.** It requires a daemon-registered
-      gVisor/Kata runtime and a digest-pinned image, and skips with a precise diagnostic without them;
-      the development workstation has `runsc` installed in WSL but no registered runtime, and
-      `scripts/enable-hardened-sandbox-lane.sh` needs privileges this session could not obtain. What
-      exists today is the same contract proven at **Standard** tier on an ordinary runtime, which is
-      not a hostile-tenant result. Closing the cell needs one run of
-      `dotnet test --filter FullyQualifiedName~DockerDedicatedSandboxLifecycleTests` on a host where
-      the hardened lane is prepared.
+      **Run on a real hardened runtime 2026-08-17: `DockerDedicatedSandboxLifecycleTests` 7/7, and
+      `DockerHardenedSandboxLifecycleTests` 8/8 alongside it.** The lane was prepared with
+      `scripts/enable-hardened-sandbox-lane.sh` inside the Ubuntu WSL2 distro — gVisor `runsc`
+      release-20260810.0 registered with that distro's Docker daemon, and a worker image built from
+      this branch pinned through the loopback registry to
+      `localhost:5000/etlsql-sandbox-worker@sha256:9121e3b1…`. Because the tests assert the runtime and
+      image identity from `docker inspect` rather than from the request, passing means the workload
+      genuinely ran on gVisor from a digest-pinned image: a Dedicated host fixed to one tenant ran
+      that tenant's work and created **no container at all** for another tenant or for its own tenant
+      in a different capacity pool. The Dedicated tier's checkpoint resume across sandboxes, forced
+      termination, residue, teardown, and capability mounting all pass on the same runtime.
+
+      **Scope of the claim, unchanged from domain 4:** this is a developer workstation, not a
+      fleet-representative certification host, and CI does not run the lane. A release review wanting
+      fleet certification re-runs the same script and lane on its own runner; both are written to be
+      portable for exactly that.
 - [x] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
       tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
       ambiguous-outcome handling, and destructive cleanup. Tenant-partitioned queues and
