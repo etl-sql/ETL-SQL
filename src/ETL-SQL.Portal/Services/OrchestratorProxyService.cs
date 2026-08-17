@@ -504,13 +504,9 @@ public class OrchestratorProxyService(
     /// here: the exchange endpoint hands the same token to clients that call the Orchestrator
     /// directly, and two resolutions would eventually disagree about who someone is.
     /// </summary>
-    private async Task<string?> CurrentIdentityAssertionAsync(CancellationToken cancellationToken)
-    {
-        var issuer = assertionIssuer ?? new OrchestratorAssertionIssuer(portalConfig, portalDb);
-        var user = httpContext?.HttpContext?.User;
-        if (user?.Identity?.IsAuthenticated != true) return issuer.IssueForBackground();
-        return (await issuer.IssueForAsync(user, cancellationToken))?.Assertion;
-    }
+    private Task<string?> CurrentIdentityAssertionAsync(CancellationToken cancellationToken) =>
+        (assertionIssuer ?? new OrchestratorAssertionIssuer(portalConfig, portalDb))
+            .IssueForCurrentCallerAsync(httpContext?.HttpContext?.User, cancellationToken);
 
     /// <summary>
     /// Applies one Shared control-plane lifecycle step as attributed platform automation. This path

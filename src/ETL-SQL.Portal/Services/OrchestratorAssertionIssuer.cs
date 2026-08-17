@@ -59,6 +59,25 @@ public sealed class OrchestratorAssertionIssuer(
     }
 
     /// <summary>
+    /// The assertion for whoever is driving the current call: the authenticated principal when there
+    /// is one, and the Portal's own background identity when there is not.
+    ///
+    /// <para>Both outbound paths — the admin proxy and the ad-hoc job channel — resolve through here
+    /// rather than each deciding for itself, for the same reason the exchange endpoint does: two
+    /// resolutions eventually disagree about who someone is, and the disagreement shows up as an
+    /// authorization result nobody can explain.</para>
+    ///
+    /// <para>Null means this deployment does not federate identity — no signing secret — which is the
+    /// Solo case where the API key is the whole story. It is not an error, and a caller should send
+    /// no assertion header rather than an empty one.</para>
+    /// </summary>
+    public async Task<string?> IssueForCurrentCallerAsync(
+        ClaimsPrincipal? user, CancellationToken cancellationToken = default) =>
+        user?.Identity?.IsAuthenticated == true
+            ? (await IssueForAsync(user, cancellationToken))?.Assertion
+            : IssueForBackground();
+
+    /// <summary>
     /// The assertion for an authenticated Portal principal, or null when the deployment does not
     /// federate identity or the principal cannot be resolved to one.
     ///

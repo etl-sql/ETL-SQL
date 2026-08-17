@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net;
@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Service;
@@ -18,6 +19,13 @@ namespace ETL_SQL.Portal.Tests;
 /// Auth coverage for the ad-hoc job API. Proves that submitting, cancelling, and inspecting jobs all
 /// require a valid X-Orchestrator-Key, while liveness/readiness probes stay open. The factory always
 /// configures an API key, so the "no key" cases exercise the deny path.
+///
+/// <para><b>The factory defaults to legacy mode</b> — API key only, no caller assertion — so the
+/// cases above prove exactly one of the two authorization models. That gap once hid a live break:
+/// the Portal's job channel sent the key alone, which a federated Orchestrator refuses, and no test
+/// noticed because none of them ran federated. The federated cases below exist so a new test added
+/// here cannot quietly repeat that; end-to-end coverage of the channel itself lives in
+/// <see cref="OrchestratorJobChannelIdentityTests"/>.</para>
 /// </summary>
 [Trait("Category", "Portal")]
 public class OrchestratorJobApiAuthTests : IDisposable
@@ -85,6 +93,44 @@ public class OrchestratorJobApiAuthTests : IDisposable
         using var req = Request(HttpMethod.Get, "/jobs/deadbeef", apiKey: null);
         var res = await client.SendAsync(req);
         Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
+    // ── Federated mode ────────────────────────────────────────────────────────
+    //
+    // The same three verbs, against an Orchestrator that requires a signed caller as well as the
+    // service key. A valid key on its own is no longer enough, which is the difference the legacy
+    // cases above cannot see.
+
+    [Theory]
+    [InlineData("POST", "/jobs")]
+    [InlineData("DELETE", "/jobs/deadbeef")]
+    [InlineData("GET", "/jobs/deadbeef")]
+    public async Task Federated_ValidApiKeyWithoutAnAssertion_IsUnauthorized(string method, string uri)
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+
+        using var req = Request(
+            new HttpMethod(method), uri, ValidKey,
+            body: method == "POST" ? new { ScriptText = "PRINT 'hi';" } : null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(req)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Federated_ValidApiKeyWithAnAssertion_IsAccepted()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+
+        using var req = Request(HttpMethod.Post, "/jobs", ValidKey, body: new { ScriptText = "PRINT 'hi';" });
+        req.Headers.Add(
+            OrchestratorIdentityAssertion.HeaderName,
+            OrchestratorIdentityAssertion.Create(
+                new OrchestratorCaller("user", "1", "Ada Lovelace", ["OrchestratorManager"], []),
+                OrchestratorWebFactory.IdentitySecret));
+
+        Assert.Equal(HttpStatusCode.Accepted, (await client.SendAsync(req)).StatusCode);
     }
 
     [Theory]

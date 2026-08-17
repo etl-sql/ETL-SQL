@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -608,12 +608,17 @@ builder.Services.AddHttpClient<ETL_SQL.Portal.Services.OrchestratorProxyService>
 // ── Orchestrator Channel ──────────────────────────────────────────────────────
 if (!string.IsNullOrEmpty(portalConfig.Orchestrator.ApiUrl))
 {
+    // The API key identifies the Portal service; the assertion identifies the caller behind the
+    // submission. A federated Orchestrator requires both, so the handler is not optional here —
+    // without it every remote report execution is refused before it starts.
+    builder.Services.AddTransient<ETL_SQL.Portal.Services.OrchestratorJobChannelIdentityHandler>();
     builder.Services.AddHttpClient<IJobChannel, HttpJobChannelClient>(client =>
     {
         client.BaseAddress = new Uri(portalConfig.Orchestrator.ApiUrl);
         if (!string.IsNullOrWhiteSpace(portalConfig.Orchestrator.ApiKey))
             client.DefaultRequestHeaders.Add("X-Orchestrator-Key", portalConfig.Orchestrator.ApiKey);
     })
+        .AddHttpMessageHandler<ETL_SQL.Portal.Services.OrchestratorJobChannelIdentityHandler>()
         .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 }
 else
