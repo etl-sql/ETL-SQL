@@ -71,7 +71,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `ASSERT JOB` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT JOB](reference/statements/session-control/assert-job.md) |
 | `ASSERT TABLE` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT TABLE](reference/statements/session-control/assert-table.md) |
 | `CONFIG` | Session | [Statement Reference](reference/statements/README.md) | [CONFIG](reference/statements/session-control/config.md) |
-| `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](reference/statements/README.md) |
+| `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT SCHEMA](reference/statements/ddl/expect-schema.md) |
 | `LINT` | Validation | [Statement Reference](reference/statements/README.md) | [LINT.md](reference/statements/session-control/lint.md) |
 | `EXPLAIN` | Diagnostics | [Statement Reference](reference/statements/README.md) | [EXPLAIN.md](reference/statements/session-control/explain.md) |
 | `eng.profile` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.profile](reference/eng/profile.md) |
@@ -707,8 +707,8 @@ Read-only counters tracking session state.
 | `@@SORT_SPILLS` | Count of external sort spills | [@@SORT_SPILLS.md](reference/variables-parameters/@@sort_spills.md) |
 | `@@SUBQUERY_CACHE_HITS` | Subquery cache hit count | [@@SUBQUERY_CACHE_HITS.md](reference/variables-parameters/@@subquery_cache_hits.md) |
 | `@@SUBQUERY_CACHE_MISSES` | Subquery cache miss count | [@@SUBQUERY_CACHE_MISSES.md](reference/variables-parameters/@@subquery_cache_misses.md) |
-| `@@RESULTSETS` | Count of result sets from last stmt | [Standard Library](reference/functions/README.md) |
-| `@@PARTITIONS_COUNT` | External spill partition count | [Standard Library](reference/functions/README.md) |
+| `@@RESULTSETS` | Count of result sets from last stmt | [@@RESULTSETS.md](reference/variables-parameters/@@resultsets.md) |
+| `@@PARTITIONS_COUNT` | External spill partition count | [@@PARTITIONS_COUNT.md](reference/variables-parameters/@@partitions_count.md) |
 | `@@FILE_EXISTS(p)` | File existence check (also available as function `FILE_EXISTS()`) | - |
 | `@@DIRECTORY_EXISTS(p)` | Directory existence check (also available as function `DIRECTORY_EXISTS()`) | - |
 

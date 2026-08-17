@@ -19,6 +19,8 @@
 | [@@TOTAL_SPILLED_BYTES](@@total_spilled_bytes.md) | Cumulative bytes written to disk for all spill operations (sorts, joins, aggregations) in the current session. |
 | [@@TRANCOUNT](@@trancount.md) | Current transaction nesting depth. 0 means no active transaction; 1 means one open transaction; values greater than 1 mean nested transactions. |
 | [@@VERSION](@@version.md) | Full engine version string including the build number, target framework, and runtime information. |
+| [@@PARTITIONS_COUNT](@@partitions_count.md) | Count of external spill partitions created during the most recently completed sort, hash-join, or aggregation. 0 means the operation fit in memory. |
+| [@@RESULTSETS](@@resultsets.md) | Count of distinct result sets returned by the most recently executed statement or stored procedure call. |
 | [CREATE SETS](create-sets.md) | Defines a named, reusable group of variable assignments that can be activated as a unit (USE SETS) to switch between environments or configuration profiles. |
 | [declare](declare.md) | DECLARE creates a named variable in the current scope. Variables are scoped to the procedure, script, or block in which they are declared. |
 | [USE](use.md) | Applies session-level settings: encryption passwords or named sets. |
