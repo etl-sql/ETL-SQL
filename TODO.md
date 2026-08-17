@@ -1,4 +1,4 @@
-﻿# ETL-SQL Development TODO List
+# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for open active-release and roadmap work. Once work is
 verified, record its notable outcome in `CHANGELOG.md`.
@@ -99,6 +99,8 @@ actually narrow. New coverage asserts the same caller through an endpoint *and* 
 statement — `OrchestratorScopeCeilingTests`, `OrchestratorJobChannelIdentityTests`, and federated
 cases in `OrchestratorJobApiAuthTests`.
 
+- [ ] **Dedicated `OrchestratorViewer` role in Portal RBAC.** The Portal's `OrchestratorAccess` policy currently requires `Admin` or `OrchestratorManager`. Introduce a built-in `OrchestratorViewer` role in `PortalRole` seeding and policy definition so operators can browse the Orchestrator tab (read job status, run history, DAG dependencies, metrics, and watermarks) without possessing object creation (`CanCreate`) or management rights.
+- [ ] **Dynamic group claims validation for Orchestrator grants.** OIDC identity sync populates `UserGroup` memberships in the Portal database, and `OrchestratorCaller` carries `GroupIds`. Ensure end-to-end integration tests explicitly assert that group-level grants (`principalKind = GROUP`) evaluate accurately against users mapped via OIDC group claims during token assertion minting.
 - [ ] **`POST /management/stop` is not audited.** Stopping the whole Orchestrator writes a
       `LogWarning` and no security event, so "who stopped the service" is answerable only from
       diagnostic logs. It is not one of the object verbs, which is why Slice F left it. Correction:
