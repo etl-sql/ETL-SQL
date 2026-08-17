@@ -219,6 +219,13 @@ public class CliContext
     public int? SaasUpgradeMaxStorageMb { get; set; }
     public int? SaasUpgradeMaxReportSessions { get; set; }
     public bool SaasUpgradeExecute { get; set; }
+    // admin promotion saas-fleet-plan
+    public string? FleetTargetRelease { get; set; }
+    public int FleetWaveSize { get; set; } = 5;
+    public int FleetMaxFailures { get; set; }
+    public string? FleetOperator { get; set; }
+    public string? FleetAuthorizationReference { get; set; }
+    public string? FleetReason { get; set; }
     public string? SaasDeletionTenantRoot { get; set; }
     public string? SaasDeletionReceiptRoot { get; set; }
     public bool SaasDeletionExecute { get; set; }

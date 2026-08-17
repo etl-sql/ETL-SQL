@@ -167,6 +167,15 @@ namespace ETL_SQL.App
                 return await SaasTenantUpgradeService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command == "admin-promotion-saas-fleet-plan")
+            {
+                return await SaasFleetRolloutAdminService.RunAsync(
+                    ctx,
+                    logger,
+                    Program.ServiceProvider.GetRequiredService<
+                        ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>());
+            }
+
             if (ctx.Command == "admin-promotion-saas-delete")
             {
                 return await SaasTenantDeletionService.RunAsync(ctx, logger);

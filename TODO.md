@@ -431,6 +431,33 @@ runtime, which is what the storage cell below was blocked on.
 - [ ] **High availability, Dedicated.** Fleet rollout, compatibility, and drain behavior across a
       population of per-tenant deployments — upgrading a hundred dedicated stacks is the operational
       problem the topology creates. **Gap — Phase C carried HA alone.**
+
+      **Planning, compatibility, and progress tracking completed (2026-08-17).** Per-tenant upgrade
+      with fencing, drain, and receipts already existed; what was missing was the layer above it —
+      with a hundred stacks, a release is not one upgrade, and nothing answered which deployments are
+      eligible, in what order, or what the fleet's state is halfway through.
+      `SaasFleetRolloutPlanner` classifies every deployment against a target release (`Upgrade`,
+      `AlreadyCurrent`, `BlockedByState`, `IncompatibleRelease`), refusing to move a deployment
+      backwards or to race a lifecycle operation already in flight, and orders the eligible ones into
+      deterministic waves so a canary means the same tenants every time it is re-planned. Skipped
+      deployments do not consume a wave slot, which matters on the second pass when most of the fleet
+      is already current. Release ordering is numeric per component, so 0.10 follows 0.9 rather than
+      sorting before it. `Track` rolls per-tenant receipts up into one fleet answer and halts the
+      rollout past a tolerated failure count — continuing to push a release that has already broken
+      deployments is how one bad release becomes a fleet-wide outage — while a draining tenant counts
+      as work still finishing, never as damage. `etl-sql admin promotion saas-fleet-plan` surfaces it,
+      naming every deployment it is *not* rolling and why, because a stack silently missing from a
+      rollout is how one ends up a release behind for a year.
+
+      **The authorization boundary is deliberately unchanged.** Each cutover still runs through
+      `saas-upgrade` under its own signed, tenant-scoped grant; the planner confers no authority and
+      cannot upgrade anything. Enumerating the population needs the new
+      `FleetInventoryAuthorization` — attributed, time-limited, and *tenantless* by construction, so
+      "I needed to list the fleet" cannot become a way to obtain tenant-scoped authority in bulk. It
+      reads control-plane metadata only and has no path to tenant data.
+
+      **Still open:** the sequencer that walks the waves and applies each cutover, and drain
+      behaviour observed across a real population rather than from per-tenant receipts.
 - [ ] **High availability, Shared.** Tenant-aware fleet rollout, compatibility/drain behavior, and
       noisy-neighbour containment without silently falling back from Dedicated placement or Hardened
       isolation.
