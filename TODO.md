@@ -462,6 +462,22 @@ runtime, which is what the storage cell below was blocked on.
       noisy-neighbour containment without silently falling back from Dedicated placement or Hardened
       isolation.
 
+      **Noisy-neighbour containment and the no-downgrade clause completed (2026-08-17).** Containment
+      is the work recorded in the two cells above: cluster-global weighted fair admission so no tenant
+      can hold a shared pool, fleet-wide queue depth, and CPU, IOPS, rows, connector concurrency, and
+      per-tenant interactive sessions all enforced. The rollout planner in the Dedicated cell reads
+      the same Shared control plane, so it is tenant-aware for this topology too.
+
+      The no-silent-fallback clause is now pinned rather than assumed: capacity is not an input to
+      workload resolution, and a full Hardened pool makes work **queue** instead of spilling into a
+      roomier Standard pool sitting next to it, so the only way to change a tenant's tier is to change
+      the server-owned catalog. That joins the existing guards — the coordinator refuses provider
+      evidence below the required tier, and a missing pool fails closed rather than borrowing.
+
+      **Still open:** node drain observed across a Shared fleet — taking a node out of rotation under
+      load and showing tenant work neither drops nor re-places at a lower tier — and the rollout
+      sequencer noted in the Dedicated cell.
+
 *Absorbs the retained discovery items **Noisy-Neighbor CPU/Memory/I/O Containment** and
 **Tenant-Aware Fair-Share Scheduling**.*
 
