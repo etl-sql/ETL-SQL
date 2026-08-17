@@ -85,6 +85,28 @@ the superseded design record is `docs/architecture/decisions/job_schedule_notifi
 §10. Writing the matrix surfaced the items below. Neither invalidates the completion claim — the
 definition of done holds — but the first is a real inconsistency between the two doors.
 
+- [ ] **The Portal cannot submit ad-hoc jobs to a federated Orchestrator at all.** Found while
+      checking whether the scope-ceiling gap below is reachable — it mostly is not, because this
+      stops the request one layer earlier. `HttpJobChannelClient`'s `HttpClient` is configured in
+      `ETL-SQL.Portal/Program.cs` with `X-Orchestrator-Key` and **no identity assertion**, while
+      `ApiKeyDenied` requires both once `RequireFederatedIdentity=true`. So `POST /jobs` returns
+      **401**, and with it Portal report execution (`ExecutionJobService`, which submits remotely
+      whenever `Portal:Orchestrator:ApiUrl` is set) and the two `DataQualityController` submissions.
+      **Verified by test**, not by reading: an API-key-only `POST /jobs` against
+      `OrchestratorWebFactory(requireFederatedIdentity: true)` answers `Unauthorized`.
+      Fail-closed, so it is a functional break rather than a security hole — but it breaks exactly
+      the Team-and-above topology the administration docs prescribe. It went unnoticed because
+      `OrchestratorJobApiAuthTests` constructs `new OrchestratorWebFactory()`, which defaults to
+      **legacy** mode, so every existing `/jobs` auth test proves only the legacy path.
+      Correction: give the job channel the same treatment `OrchestratorProxyService` already has —
+      a per-request assertion from `OrchestratorAssertionIssuer` (`IssueForBackground()` when there
+      is no interactive user), which also fixes attribution, since these runs currently reach the
+      Orchestrator with no principal at all. Then re-run the existing `/jobs` auth tests against a
+      federated factory as well as a legacy one.
+- [ ] **`Portal:Orchestrator:SameHost` is dead configuration.** Declared on `PortalConfig` and
+      documented in `docs/administration/portal/orchestrator-integration.md`, never read anywhere.
+      Either wire it or drop it from the class and the doc; a setting that does nothing is worse
+      than an absent one.
 - [ ] **The service-token scope ceiling is applied inconsistently.** Two halves of one problem, found
       by writing the matrix and having to leave the scope column ambiguous.
       1. **Creation escapes the ceiling.** `OrchestratorObjectAuthorizationService.CanCreate` checks
