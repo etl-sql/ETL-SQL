@@ -194,23 +194,30 @@ Dedicated support from an Enterprise happy path, or Shared support from Dedicate
 
 ##### 4. Storage, paths, and artifacts
 
-**Current certification-environment constraint (2026-08-13).** The available development host is
-Docker Desktop on Linux/x86-64 with `runc` and NVIDIA runtimes only; it has no registered gVisor
-(`runsc`) or Kata runtime. ETL-SQL Portal and Orchestrator images and PostgreSQL/Testcontainers are
-available, so provider-neutral behavior, real Docker Desktop execution, multi-process coordination,
-forced `runc` termination, cleanup, recovery, and residue checks can be implemented and exercised
-here. Evidence produced on this host must be labeled **Docker Desktop / `runc`** and must not be
-represented as a hostile-tenant Hardened-runtime result. For the current development cycle, complete
-every testable portion on this host and retain the gVisor/Kata mount-isolation, forced-termination,
-and cross-sandbox checkpoint run as an explicit external certification gap until a suitable Linux
-host or CI runner becomes available. This constraint applies to the Shared storage cell below and
-the Dedicated/Shared Hardened execution cells in domain 5; it does not block their remaining
-provider-neutral scheduler and lifecycle work.
+**Certification-environment constraint lifted (2026-08-17).** This superseded the 2026-08-13 note
+that no gVisor or Kata runtime was reachable. A hardened runtime is now available and exercised:
+gVisor `runsc` release-20260810.0 (systrap platform) registered with Docker 29.7.2 on Ubuntu 26.04,
+kernel 6.18 WSL2, x86-64. `scripts/enable-hardened-sandbox-lane.sh` prepares any Linux host or CI
+runner the same way — installing gVisor, registering it, and giving the worker image a real registry
+digest through a loopback registry, because Hardened mode refuses a mutable tag or a local image ID.
 
-- [ ] **Shared.** Server-derived storage identifiers with a negative test that a caller-supplied
+Both tiers now run the *same* lifecycle assertions, so a difference in result is a difference in the
+runtime rather than in what was checked: `DockerStandardSandboxLifecycleTests` (`runc`, Standard) and
+`DockerHardenedSandboxLifecycleTests` (gVisor/Kata, digest-pinned, Hardened), over the shared
+`DockerSandboxLifecycleTestsBase`. The tier is in every test name, and the Hardened gate skips with a
+precise diagnostic rather than substituting an ordinary runtime, so the two can never be conflated.
+Standard evidence still must not be cited as a hostile-tenant result.
+
+**This host is a developer workstation, not a fleet-representative certification host, and CI does
+not yet run either lane.** A release review that wants fleet certification should re-run
+`enable-hardened-sandbox-lane.sh` plus the Hardened lane on its own runner; the lane is written to be
+portable for exactly that. What is settled is that the contract holds against a real hardened
+runtime, which is what the storage cell below was blocked on.
+
+- [x] **Shared.** Server-derived storage identifiers with a negative test that a caller-supplied
       object, prefix, or path identifier cannot widen scope, and no reuse of volumes, directories,
       object prefixes, or encryption data keys across tenants or sandbox assignments.
-      **Gap — no phase bullet covered shared storage scope.**
+      **Closed 2026-08-17 against a real gVisor runtime.** See the completion record below.
 
       **Control-plane and run-capability slice completed (2026-08-10).** Shared Portal artifact
       operations now require the request's verified `TenantContext`; scripts, maps, snapshots, and
@@ -230,6 +237,38 @@ provider-neutral scheduler and lifecycle work.
       read-only residue and that a successive assignment cannot observe or reuse the prior root. The
       cell remains open until a certified Hardened provider consumes this contract and proves its
       actual mounts and abnormal-exit cleanup obey the same lifecycle.
+
+      **Completion record (2026-08-17).** The lifecycle is proven against a real ETL-SQL workload on
+      both an ordinary runtime and gVisor, with identical assertions. Container inspection proves the
+      workload receives no named or anonymous volume, only bind sources belonging to its own
+      assignment plus its tenant's server-owned session and key roots, the declared hardened runtime,
+      a read-only root, a non-root numeric user, no network, dropped capabilities, no-new-privileges,
+      and a fresh tmpfs scratch. Successive assignments with identical logical tenant/run/attempt
+      identifiers receive different roots and no prior residue; two tenants share no workspace,
+      session, or key path and hold distinct key material; caller cancellation and an external forced
+      termination (SIGKILL, exit 137) both end with the container absent, the writable root deleted,
+      and the reconciler reporting `Detached`; and an unprovable removal retains the root for fenced
+      reconciliation instead of deleting a possibly-live mount. Provider-neutral negative tests
+      already cover caller-supplied path shaping, tenant traversal, and object-identifier scope.
+
+      **Five real defects were found and fixed by doing this, none of which a mocked or
+      Docker-Desktop-only lane could surface.** Three blocked containerized execution outright: the
+      provider now directs every writable path the workload can reach (`HOME`, XDG roots,
+      security-event outbox, app and script logs) into the assignment's single-use tmpfs rather than a
+      read-only or image-baked location; `ProcessActor` stops an unmapped container uid — where
+      `Environment.UserName` is legitimately empty — from aborting the run on a required audit actor;
+      and `scripts/Test-SandboxWorkerImage.ps1` can publish the stable tag the lane resolves. Two more
+      were visible only on a genuine Linux host, because Windows bind mounts had been masking them
+      with permissive ownership: the assignment's `output`/`scratch` leaves **and** the per-tenant
+      session mount were created by the orchestrator's account with no write access for the
+      unprivileged sandbox uid, so on any real host a sandbox could not write its own output or
+      persist session state. `SandboxFilePermissions` now restricts every enclosing root to the owning
+      account and opens only the mounted leaf, and the workspace, session, and key roots all use it.
+
+      **Scope of the claim.** This is real hardened-runtime evidence for the contract, produced on a
+      developer workstation rather than a fleet-representative certification host, and CI does not yet
+      run the lane. Cross-sandbox checkpoint resume and Dedicated reserved placement remain open in
+      domain 5 and are not claimed here.
 
 *Absorbs the retained discovery item **Tenant-Scoped Virtual Filesystem and Object Storage**.*
 
@@ -252,10 +291,12 @@ provider-neutral scheduler and lifecycle work.
       durable admission ID and releases only absent or proven-removed work. Tests pin scheduler
       routing, immutable input/tamper refusal, command construction, reserved placement, session-key
       separation, prepare cleanup, terminal teardown, and stopped/running/absent reconciliation.
-      This cell remains open because the current certification host exposes only ordinary `runc` and
-      NVIDIA runtimes and has no pinned runnable ETL-SQL engine image for gVisor/Kata. A real hardened
-      runtime run, forced termination, different-sandbox checkpoint resume, and residue proof are
-      still required; mocked command evidence is not substituted for that gate.
+      **Partially unblocked 2026-08-17.** A registered gVisor runtime and a digest-pinned runnable
+      worker image now exist (see domain 4), and `DockerHardenedSandboxLifecycleTests` supplies the
+      real hardened-runtime run, forced termination, and residue proof this cell was waiting on —
+      mocked command evidence is not substituted for it. The cell stays open for what that lane does
+      not cover: **different-sandbox checkpoint resume**, and **reserved placement proven on a real
+      tenant-dedicated hardened host** rather than through the host-fixed refusal tests alone.
 - [ ] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
       tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
       ambiguous-outcome handling, and destructive cleanup. Tenant-partitioned queues and

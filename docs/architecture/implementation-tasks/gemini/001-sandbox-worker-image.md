@@ -1,5 +1,10 @@
 # GEMINI-001 — Build a Runnable Sandbox Worker Image
 
+> **Status: complete (2026-08-17).** `src/ETL-SQL.App/Dockerfile.sandbox` and
+> `scripts/Test-SandboxWorkerImage.ps1` are in place; the script now takes `-Tag`/`-Keep` so the
+> lifecycle lane can resolve a stable local tag. The image only became runnable under a read-only
+> root once GEMINI-002's provider work directed writable state into the assignment tmpfs.
+
 ## Objective
 
 Add a purpose-built Linux container image that runs the ETL-SQL CLI as a single sandbox workload.

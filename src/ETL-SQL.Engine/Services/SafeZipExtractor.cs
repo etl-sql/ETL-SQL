@@ -69,7 +69,8 @@ public static class SafeZipExtractor
         string reason)
     {
         var snapshot = context.ExecutionPolicy ?? ExecutionPolicySnapshot.Capture(
-            EnterprisePolicyRuntime.Current, Environment.UserName, ScriptExecutionMode.Batch, "unknown");
+            EnterprisePolicyRuntime.Current, ETL_SQL.Core.Common.ProcessActor.Current,
+            ScriptExecutionMode.Batch, "unknown");
         return new FileSystemPolicyDeniedException(OperationPolicyDecision.Deny(snapshot,
             "Filesystem:ArchiveExtraction", $"<archive-entry>/{Path.GetFileName(entry)}",
             "entry must remain inside authorized extraction root", reason));

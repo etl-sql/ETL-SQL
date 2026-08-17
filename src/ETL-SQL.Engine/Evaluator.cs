@@ -1041,7 +1041,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         if (CurrentRecursiveDepth == 0)
         {
             var actor = script.Metadata.TryGetValue("author", out var author)
-                && !string.IsNullOrWhiteSpace(author) ? author : Environment.UserName;
+                && !string.IsNullOrWhiteSpace(author) ? author : Core.Common.ProcessActor.Current;
             var mode = InteractiveMode
                 ? ScriptExecutionMode.Interactive
                 : string.IsNullOrWhiteSpace(JobName)
@@ -1120,7 +1120,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             }
             if (!LineageTracker.GlobalMetadata.ContainsKey("author"))
             {
-                LineageTracker.GlobalMetadata["author"] = Environment.UserName;
+                LineageTracker.GlobalMetadata["author"] = Core.Common.ProcessActor.Current;
             }
             if (!LineageTracker.GlobalMetadata.ContainsKey("engine_version"))
             {

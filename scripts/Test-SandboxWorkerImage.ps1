@@ -1,10 +1,21 @@
 [CmdletBinding()]
-param()
+param(
+    # A stable tag lets the Docker Desktop / runc lifecycle tests find the image they need.
+    [string] $Tag,
+
+    # Keep the built image instead of removing the temporary tag. Implied by -Tag.
+    [switch] $Keep
+)
 
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$tag = "etlsql-sandbox-worker-test:$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+$keepImage = $Keep.IsPresent -or -not [string]::IsNullOrWhiteSpace($Tag)
+$tag = if ([string]::IsNullOrWhiteSpace($Tag)) {
+    "etlsql-sandbox-worker-test:$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+} else {
+    $Tag
+}
 
 Write-Host "==> Building sandbox worker image with temporary tag: $tag"
 & docker build -t $tag -f "$repoRoot/src/ETL-SQL.App/Dockerfile.sandbox" $repoRoot
@@ -38,8 +49,12 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "    Execution succeeded."
 Write-Host "    Version output: $versionOutput"
 
-Write-Host "==> Cleaning up temporary tag..."
-& docker rmi $tag | Out-Null
+if ($keepImage) {
+    Write-Host "==> Keeping tag: $tag"
+} else {
+    Write-Host "==> Cleaning up temporary tag..."
+    & docker rmi $tag | Out-Null
+}
 
 Write-Host ""
 Write-Host "SUCCESS: Sandbox worker image is viable."
@@ -47,4 +62,5 @@ Write-Host "--------------------------------------------------------"
 Write-Host "Local Image ID: $imageId"
 Write-Host "--------------------------------------------------------"
 Write-Host "Note: This is a local image ID, NOT a registry RepoDigest."
-Write-Host "Use this precise Local Image ID in subsequent Hardened/sandbox configurations."
+Write-Host "A local image ID is accepted only by the Standard provider mode. Hardened and Dedicated"
+Write-Host "configurations still require a digest-pinned registry reference."

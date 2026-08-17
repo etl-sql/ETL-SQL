@@ -502,6 +502,34 @@ read-only and output writable, and uses bounded tmpfs scratch. Ordinary `runc` a
 rather than relabeled Hardened. Deployment certification must still execute forced-exit and non-reuse
 probes against the actual selected runtime.
 
+A second registration, `AddStandardDockerSandboxExecution`, exists so those probes can be developed
+on an ordinary host. It puts the provider in `DockerSandboxMode.Standard`, which accepts a registered
+`runc`-class runtime and a local image ID, refuses Hardened or Dedicated requests before
+`docker create`, and emits `SandboxIsolationTier.Standard` evidence from the validated
+provider/runtime binding rather than from what the request asked for. Standard mode is also the only
+mode that may use a local image ID; Hardened and Dedicated still require a digest-pinned registry
+reference.
+
+Both tiers run the identical lifecycle assertions over a shared `DockerSandboxLifecycleTestsBase`, so
+a difference in result is a difference in the runtime rather than in what was checked:
+`DockerStandardSandboxLifecycleTests` on `runc` and `DockerHardenedSandboxLifecycleTests` on a
+registered gVisor or Kata runtime with a digest-pinned image. Each lane covers mount composition,
+volume and prefix non-reuse, per-tenant session and key separation, cancellation, external SIGKILL,
+reconciliation, residue, and retention on unproven detachment. The tier appears in every test name,
+and the Hardened gate skips with a precise diagnostic rather than substituting an ordinary runtime,
+so Standard results can never be cited as a hostile-tenant boundary. `scripts/enable-hardened-sandbox-lane.sh`
+prepares a Linux host or CI runner for the Hardened lane.
+
+Running real workloads this way exposed two host-permission defects that a Windows-bind-mount host
+had been masking: a sandbox runs as an unprivileged uid unrelated to the orchestrator's, so the
+assignment's writable leaves and the per-tenant session mount must admit that uid or the workload
+cannot write its own output or persist session state at all. `SandboxFilePermissions` now restricts
+every enclosing root to the owning account and opens only the mounted leaf — a runtime binds the leaf
+directly rather than walking the path, so other host accounts gain nothing. For the same reason the
+provider binds every writable path the workload can reach — `HOME`, XDG roots, the security-event
+outbox, and app and script logs — into the assignment's single-use tmpfs, so no run writes to a
+shared or image-baked location.
+
 `SandboxExecutionCoordinator` binds that workspace lifecycle to the provider-neutral execution
 contract. `ISandboxExecutionProvider.PrepareAsync` must return a non-executing attempt with provider,
 runtime, image, host-policy, and isolation-tier evidence. The coordinator rejects incomplete or
@@ -609,8 +637,11 @@ mount non-reuse, destructive teardown, and assignment-residue certification rema
 execution boundary rather than being inferred from these control-plane guarantees. The first
 provider-neutral workspace implementation now proves fresh tenant/run/attempt directory allocation,
 tamper-evident owned teardown, no reparse-point traversal during deletion, and no ordinary filesystem
-residue across successive assignments. Actual Hardened-provider mount behavior and forced-termination
-cleanup remain certification requirements.
+residue across successive assignments. Real-provider mount behavior, forced termination, and cleanup
+are exercised end to end on both an ordinary runtime and a registered gVisor runtime, so worker
+mount non-reuse and destructive teardown are no longer inferred from control-plane guarantees. What
+those lanes do not cover — cross-sandbox checkpoint resume, and reserved placement on a real
+tenant-dedicated hardened host — remains a certification requirement.
 
 Dedicated stores reduce collision risk but do not remove application authorization. Shared stores
 require negative tests against tenant swaps, equal object names, stale cache entries, backup/restore,

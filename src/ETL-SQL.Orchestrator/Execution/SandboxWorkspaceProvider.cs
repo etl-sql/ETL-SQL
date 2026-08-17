@@ -124,6 +124,7 @@ public sealed class FileSystemSandboxWorkspaceProvider : ISandboxWorkspaceProvid
 
         _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.RootPath));
         Directory.CreateDirectory(_rootPath);
+        SandboxFilePermissions.RestrictToOwner(_rootPath);
     }
 
     public async ValueTask<SandboxWorkspaceAssignment> AssignAsync(
@@ -170,9 +171,14 @@ public sealed class FileSystemSandboxWorkspaceProvider : ISandboxWorkspaceProvid
             await stream.FlushAsync(cancellationToken);
             markerWritten = true;
 
+            SandboxFilePermissions.RestrictToOwner(assignmentRoot);
             Directory.CreateDirectory(Path.Combine(assignmentRoot, "input"));
-            Directory.CreateDirectory(Path.Combine(assignmentRoot, "scratch"));
-            Directory.CreateDirectory(Path.Combine(assignmentRoot, "output"));
+            // A sandbox deliberately runs as an unprivileged uid unrelated to this process's, so the
+            // writable leaves must be writable by it or the workload cannot produce output at all.
+            // Only the leaves are opened up: every enclosing directory stays owner-only, and a runtime
+            // mounts the leaf directly instead of walking the path, so no other host user can reach it.
+            SandboxFilePermissions.AllowUnprivilegedSandboxWrites(Directory.CreateDirectory(Path.Combine(assignmentRoot, "scratch")).FullName);
+            SandboxFilePermissions.AllowUnprivilegedSandboxWrites(Directory.CreateDirectory(Path.Combine(assignmentRoot, "output")).FullName);
 
             return new SandboxWorkspaceAssignment(
                 identity, assignmentId, assignmentRoot, ownershipToken, DestroyAsync);

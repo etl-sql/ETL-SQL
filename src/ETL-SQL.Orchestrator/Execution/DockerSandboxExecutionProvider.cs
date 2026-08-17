@@ -158,6 +158,10 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         _machineKeyRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.MachineKeyRoot));
         Directory.CreateDirectory(_sessionRoot);
         Directory.CreateDirectory(_machineKeyRoot);
+        // Persistent tenant session state and key material stay unreachable to every other account on
+        // the host. Only the per-tenant leaf a sandbox actually mounts is opened to its uid.
+        SandboxFilePermissions.RestrictToOwner(_sessionRoot);
+        SandboxFilePermissions.RestrictToOwner(_machineKeyRoot);
     }
 
     public async Task<ISandboxAttempt> PrepareAsync(
@@ -200,7 +204,10 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         await _artifacts.StageAsync(request.ArtifactId, request.ArtifactHash, scriptPath, cancellationToken);
         var sessionPath = ResolveTenantSessionPath(tenantId);
         var machineKeyPath = ResolveTenantMachineKeyPath(tenantId);
-        Directory.CreateDirectory(sessionPath);
+        // The session mount is read-write and the sandbox runs as an unprivileged uid, so this leaf
+        // must admit that uid or the workload cannot persist session or checkpoint state at all.
+        SandboxFilePermissions.AllowUnprivilegedSandboxWrites(
+            Directory.CreateDirectory(sessionPath).FullName);
         RequireDockerMountSource(workspace.InputPath);
         RequireDockerMountSource(workspace.OutputPath);
         RequireDockerMountSource(sessionPath);
@@ -288,13 +295,25 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             "--env", "Session__Root=/var/lib/etl-sql/sessions",
             "--env", "ETLSQL_MACHINE_KEY_FILE=/run/secrets/etlsql-machine-key",
             "--env", "TMPDIR=/workspace/scratch",
+            // Every writable location the workload can reach is this assignment's single-use tmpfs.
+            // The root is read-only and the tenant uid is unmapped, so a home, XDG, machine-key
+            // cache, log, or outbox path left at its default would either abort the run or write
+            // where a later assignment could observe it. These are server-owned, not caller-supplied.
+            "--env", "HOME=/workspace/scratch",
+            "--env", "XDG_DATA_HOME=/workspace/scratch",
+            "--env", "XDG_CONFIG_HOME=/workspace/scratch",
+            "--env", "XDG_CACHE_HOME=/workspace/scratch",
+            "--env", "ETLSQL_SECURITY_EVENT_OUTBOX_PATH=/workspace/scratch/security-events.db",
+            "--env", "Logging__AppLog__Directory=/workspace/scratch/logs/app",
             "--workdir", "/workspace",
             "--label", $"{AdmissionLabel}={request.AdmissionId}",
             "--label", $"{TenantLabel}={request.Assignment.Tenant.Tenant.Value}",
             "--label", $"{AssignmentLabel}={workspace.AssignmentId}",
             "--entrypoint", _options.Entrypoint,
             _options.Image,
-            "run", "/workspace/input/job.etlsql", "--json"
+            // --log also selects the script log directory, which otherwise defaults to a path under
+            // the read-only working directory.
+            "run", "/workspace/input/job.etlsql", "--json", "--log", "/workspace/scratch/logs/scripts"
         };
         if (!string.IsNullOrWhiteSpace(request.SessionId))
         {

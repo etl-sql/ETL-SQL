@@ -155,7 +155,7 @@ public static class SecurityEventRuntime
         string reason)
     {
         var identity = enrollment?.ServiceIdentity;
-        if (string.IsNullOrWhiteSpace(identity)) identity = Environment.UserName;
+        if (string.IsNullOrWhiteSpace(identity)) identity = Common.ProcessActor.Current;
         var securityEvent = SecurityEventContract.Create(
             SecurityEventSeverity.Information,
             SecurityEventType.EnrollmentChanged,
@@ -234,7 +234,7 @@ public static class SecurityEventRuntime
         }
 
         var snapshot = context.ExecutionPolicy ?? ExecutionPolicySnapshot.Capture(
-            EnterprisePolicyRuntime.Current, Environment.UserName,
+            EnterprisePolicyRuntime.Current, Common.ProcessActor.Current,
             context.InteractiveMode ? ScriptExecutionMode.Interactive : ScriptExecutionMode.Batch,
             "unknown");
         var decision = new OperationPolicyDecision(false, "Engine:SecurityGuardrail", target,

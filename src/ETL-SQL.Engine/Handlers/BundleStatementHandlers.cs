@@ -326,7 +326,7 @@ public class PublishBundleStatementHandler(IBundleStore store) : IStatementHandl
             preflight.ContentHash,
             stmt.EncryptionMode.ToUpperInvariant(),
             stmt.EncryptionMode.Equals("KEYFILE", StringComparison.OrdinalIgnoreCase) ? stmt.KeyFile : null,
-            Environment.UserName,
+            ETL_SQL.Core.Common.ProcessActor.Current,
             stmt.Description));
 
         context.Log($"Published bundle '{stmt.BundleName}' version {version.Version} with {preflight.Files.Count} file(s).", ConsoleColor.Green);

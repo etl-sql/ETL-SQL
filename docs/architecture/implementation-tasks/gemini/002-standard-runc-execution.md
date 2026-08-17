@@ -1,5 +1,11 @@
 # GEMINI-002 — Add Explicit Standard Docker Desktop Execution
 
+> **Status: complete (2026-08-17).** Standard mode and its unit tests landed in `dfac9ac9`; the
+> Docker Desktop integration evidence is `tests/ETL-SQL.Tests/Orchestration/DockerStandardSandboxLifecycleTests.cs`
+> with its gate in `DockerSandboxEnvironment.cs`. Do not re-implement. Making a real workload run
+> also required directing all writable container state into the assignment tmpfs and fixing
+> `ProcessActor` for unmapped container uids; both are described in `TODO.md` domain 4.
+
 ## Dependency
 
 Start only after GEMINI-001 is reviewed and its worker image contract is available.

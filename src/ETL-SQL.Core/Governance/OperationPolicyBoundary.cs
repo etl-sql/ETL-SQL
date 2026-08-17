@@ -12,7 +12,7 @@ public static class OperationPolicyBoundary
     public static ExecutionPolicySnapshot Refresh(IExecutionContext context, string operationLabel)
     {
         var snapshot = context.ExecutionPolicy ?? ExecutionPolicySnapshot.Capture(
-            EnterprisePolicyRuntime.Current, Environment.UserName,
+            EnterprisePolicyRuntime.Current, Common.ProcessActor.Current,
             context.InteractiveMode ? ScriptExecutionMode.Interactive : ScriptExecutionMode.Batch,
             "unknown");
         var current = EnterprisePolicyRuntime.Current;

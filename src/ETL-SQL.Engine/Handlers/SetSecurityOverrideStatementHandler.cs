@@ -61,7 +61,7 @@ public class SetSecurityOverrideStatementHandler(ILogger logger) : IStatementHan
         if (stmt.Enabled || stmt.Override == SecurityOverride.FileTypeExtension)
         {
             var snapshot = context.ExecutionPolicy ?? ExecutionPolicySnapshot.Capture(
-                EnterprisePolicyRuntime.Current, Environment.UserName,
+                EnterprisePolicyRuntime.Current, ETL_SQL.Core.Common.ProcessActor.Current,
                 context.InteractiveMode ? ScriptExecutionMode.Interactive : ScriptExecutionMode.Batch,
                 "unknown");
             SecurityEventRuntime.EmitOverrideAttempt(snapshot, overrideName);
