@@ -363,10 +363,12 @@ runtime, which is what the storage cell below was blocked on.
 
       The production Docker OCI provider and scheduler dispatch seam described in the Dedicated slice
       above now exist, and the real Hardened runtime lane recorded in domain 4 proves the boundary.
-- [ ] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
+- [x] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security
-      boundary.
+      boundary. **Closed 2026-08-17** — every named control is enforced and asserted; the two slices
+      below record what was missing and where each ceiling is now applied. The caveat stands: these
+      are containment controls, and none of them is the hostile-tenant boundary.
 
       **Containment slice completed (2026-08-17): CPU, IOPS, connector concurrency, queue depth.**
       Memory, processes, scratch, duration, and default-deny networking were already enforced; three
@@ -386,13 +388,29 @@ runtime, which is what the storage cell below was blocked on.
       memory, swap, `NanoCpus`, and `PidsLimit` from `docker inspect` rather than from the request, so
       the evidence is that the ceilings reached the runtime.
 
-      **Gap — the two controls still not enforced.** There is no per-attempt **row** ceiling: the
-      engine's row-shaped settings are preview and spill thresholds, not a processed-row limit, so
-      enforcing this needs an engine-side counter rather than another profile field. And **interactive
-      sessions** are enforced only in the Dedicated topology, where onboarding materializes
-      `MaxReportSessions` into the per-tenant deployment's `MaxConcurrentReportExecutions`. In Shared,
-      `SharedTenantControlPlanes` records the quota and nothing reads it back at runtime — a declared
-      limit with no enforcement behind it, which is the shape this ledger keeps finding.
+      **Rows and interactive sessions completed (2026-08-17), closing the bullet's list.**
+
+      *Rows.* The engine's row-shaped settings were preview and spill thresholds, not a processed-row
+      limit, so there was no ceiling at all. `Engine:MaxRowsProcessed` (0 = unlimited) is enforced in
+      the one place every statement handler already accumulates through — the telemetry
+      `RowsProcessed` setter — rather than at ~20 handler call sites, because a per-handler check is
+      exactly the thing that would be silently missing from the next handler somebody writes. Resets
+      and per-statement bookkeeping still pass through untouched; only growth past the ceiling aborts.
+      A profile's `MaxRows` travels into the attempt as engine configuration, since a row is a unit
+      only the engine can count.
+
+      *Interactive sessions.* Dedicated deployments materialize `MaxReportSessions` into the
+      per-tenant node's `MaxConcurrentReportExecutions`; Shared has one node for every tenant, and the
+      node-wide execution cap is not tenant-aware, so one tenant's sessions could occupy every slot
+      while the provisioned quota was never read back. The Portal now resolves the tenant's ceiling
+      from the Shared control plane and holds a per-tenant gate *outermost* — a tenant at its ceiling
+      waits without occupying a user, group, or shared slot meanwhile. The ceiling is read per
+      admission rather than baked into a fixed semaphore, so a lifecycle upgrade releases more of the
+      queue and a downgrade holds it back, instead of being pinned to whatever the quota was when the
+      node first saw that tenant. Queued work keeps its place: a raised ceiling admits more of the
+      queue, it does not let a later arrival barge past an earlier one. A Shared deployment whose
+      control plane cannot report lifecycle state fails startup rather than running with a quota that
+      silently does not exist.
 - [ ] **High availability, Dedicated.** Fleet rollout, compatibility, and drain behavior across a
       population of per-tenant deployments — upgrading a hundred dedicated stacks is the operational
       problem the topology creates. **Gap — Phase C carried HA alone.**

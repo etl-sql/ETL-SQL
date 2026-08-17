@@ -329,6 +329,14 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             // the read-only working directory.
             "run", "/workspace/input/job.etlsql", "--json", "--log", "/workspace/scratch/logs/scripts"
         };
+        if (request.Limits.MaxRows is { } maxRows)
+        {
+            args.InsertRange(args.IndexOf("--workdir"),
+            [
+                "--env",
+                "Engine__MaxRowsProcessed=" + maxRows.ToString(CultureInfo.InvariantCulture)
+            ]);
+        }
         if (request.Limits.MaxIops is { } iops)
         {
             var rate = iops.ToString(CultureInfo.InvariantCulture);

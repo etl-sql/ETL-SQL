@@ -120,6 +120,59 @@ SELECT * FROM #large;";
             return new Parser(tokens, sql).Parse();
         }
 
+        [Fact]
+        public async Task RowCeiling_AbortsTheExecutionAndNamesTheLimit()
+        {
+            var evaluator = CreateEvaluator();
+            evaluator.MaxRowsProcessed = 3;
+            var script = Parse(@"
+CREATE TABLE #Rows (Id INT);
+INSERT INTO #Rows VALUES (1), (2), (3), (4), (5);");
+
+            var error = await Assert.ThrowsAnyAsync<Exception>(() => evaluator.Evaluate(script));
+
+            Assert.Contains("row limit", Flatten(error), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("3", Flatten(error));
+        }
+
+        [Fact]
+        public async Task RowCeilingOfZeroLeavesExecutionUnlimited()
+        {
+            var evaluator = CreateEvaluator();
+            evaluator.MaxRowsProcessed = 0;
+            var script = Parse(@"
+CREATE TABLE #Rows (Id INT);
+INSERT INTO #Rows VALUES (1), (2), (3), (4), (5);");
+
+            await evaluator.Evaluate(script);
+
+            Assert.Equal(5, evaluator.Telemetry.RowsProcessed);
+        }
+
+        [Fact]
+        public void RowCeilingIsEnforcedWhereEveryHandlerAccumulates()
+        {
+            // Handlers all reach rows through this one property, so the ceiling cannot be missing
+            // from a handler somebody adds later. Resets and bookkeeping must still pass through.
+            var telemetry = new ExecutionTelemetryManager { MaxRowsProcessed = 10 };
+
+            telemetry.RowsProcessed += 10;
+            Assert.Equal(10, telemetry.RowsProcessed);
+            telemetry.RowsProcessed = 4;
+            Assert.Equal(4, telemetry.RowsProcessed);
+
+            var breach = Assert.Throws<ExecutionException>(() => telemetry.RowsProcessed += 7);
+            Assert.Contains("row limit", breach.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string Flatten(Exception error)
+        {
+            var text = new System.Text.StringBuilder();
+            for (var current = error; current is not null; current = current.InnerException)
+                text.Append(current.Message).Append(' ');
+            return text.ToString();
+        }
+
         private Evaluator CreateEvaluator(ILogger? logger = null)
         {
             var l = logger ?? new TestLogger();

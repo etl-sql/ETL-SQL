@@ -11,11 +11,31 @@ public class ExecutionTelemetryManager : ITelemetryContext
     private readonly object _planDecisionLock = new();
     private readonly List<PlanDecision> _planDecisions = new();
 
+    /// <summary>
+    /// Ceiling on rows one execution may process; 0 disables it. Enforced in the
+    /// <see cref="RowsProcessed"/> setter rather than at the statement handlers, because every handler
+    /// that moves rows already accumulates through this one property — a per-handler check would be
+    /// silently absent from the next handler somebody writes.
+    /// </summary>
+    public long MaxRowsProcessed { get; set; }
+
     private long _rowsProcessed = 0;
     public long RowsProcessed
     {
         get => System.Threading.Interlocked.Read(ref _rowsProcessed);
-        set => System.Threading.Interlocked.Exchange(ref _rowsProcessed, value);
+        set
+        {
+            // Only growth can breach a ceiling; resets and per-statement bookkeeping must not.
+            var ceiling = MaxRowsProcessed;
+            if (ceiling > 0 && value > ceiling && value > System.Threading.Interlocked.Read(ref _rowsProcessed))
+            {
+                System.Threading.Interlocked.Exchange(ref _rowsProcessed, value);
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
+                    $"Execution exceeded its row limit of {ceiling:N0} rows (reached {value:N0}). " +
+                    "The limit is set by the server-owned execution profile.");
+            }
+            System.Threading.Interlocked.Exchange(ref _rowsProcessed, value);
+        }
     }
 
     private long _lastStatementRowsProcessed = 0;

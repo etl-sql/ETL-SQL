@@ -189,7 +189,8 @@ public static class SandboxExecutionServiceCollectionExtensions
                     MaxProcesses = checked((int)RequirePositiveLong(child, "MaxProcesses")),
                     MaxCpuCores = RequirePositiveDouble(child, "MaxCpuCores"),
                     MaxConnectorConcurrency = checked((int)RequirePositiveLong(child, "MaxConnectorConcurrency")),
-                    MaxIops = OptionalPositiveInt(child, "MaxIops")
+                    MaxIops = OptionalPositiveInt(child, "MaxIops"),
+                    MaxRows = OptionalPositiveLong(child, "MaxRows")
                 }
             });
         }
@@ -235,6 +236,16 @@ public static class SandboxExecutionServiceCollectionExtensions
         long.TryParse(section[key], out var value) && value > 0
             ? value
             : throw new InvalidOperationException($"Sandbox execution configuration '{section.Path}:{key}' must be positive.");
+
+    private static long? OptionalPositiveLong(IConfigurationSection section, string key)
+    {
+        var raw = section[key];
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return long.TryParse(raw, out var value) && value > 0
+            ? value
+            : throw new InvalidOperationException(
+                $"Sandbox execution configuration '{section.Path}:{key}' must be a positive integer when present.");
+    }
 
     private static int? OptionalPositiveInt(IConfigurationSection section, string key)
     {

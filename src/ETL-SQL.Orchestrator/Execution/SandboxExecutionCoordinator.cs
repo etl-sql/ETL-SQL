@@ -43,6 +43,12 @@ public sealed record SandboxResourceLimits
     /// constant baked into whichever worker image the host happens to run.
     /// </summary>
     public required int MaxConnectorConcurrency { get; init; }
+    /// <summary>
+    /// Rows one attempt may process before the engine aborts it. Null means this profile declares no
+    /// row ceiling. It is enforced inside the engine, since rows are a unit only the engine can count
+    /// — a container runtime has no idea what a row is.
+    /// </summary>
+    public long? MaxRows { get; init; }
 
     internal void Validate()
     {
@@ -60,6 +66,9 @@ public sealed record SandboxResourceLimits
             throw new ArgumentOutOfRangeException(
                 nameof(MaxConnectorConcurrency),
                 "The sandbox connector concurrency limit must be positive.");
+        if (MaxRows is <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxRows), "A declared sandbox row limit must be positive.");
     }
 }
 

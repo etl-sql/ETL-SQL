@@ -667,6 +667,24 @@ AddPortalModuleHostedService<ETL_SQL.Portal.Services.CapacityReportAdminService>
 
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.SessionCache>();
+// A Shared deployment enforces each tenant's provisioned interactive-session ceiling, which lives in
+// the Orchestrator control plane. Registering it only for Shared keeps single-tenant deployments on
+// the node-wide cap alone; when it IS Shared, an unavailable control plane fails startup rather than
+// letting the quota quietly not exist.
+if (portalConfig.SharedTenancy.Enabled)
+{
+    builder.Services.AddSingleton<ETL_SQL.Portal.Services.ITenantExecutionQuotaSource>(sp =>
+    {
+        var store = sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>()
+            .Create(sp.GetRequiredService<OrchestratorDbLocator>().Resolve());
+        return store is ETL_SQL.Orchestrator.Storage.ISharedTenantLifecycleStore lifecycle
+            ? new ETL_SQL.Portal.Services.SharedTenantExecutionQuotaSource(
+                sp.GetRequiredService<PortalConfig>(), lifecycle)
+            : throw new InvalidOperationException(
+                "Shared tenancy is enabled but the configured Orchestrator store cannot report tenant " +
+                "lifecycle state, so per-tenant execution quotas could not be enforced.");
+    });
+}
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.ExecutionJobService>();
 builder.Services.AddSingleton<ETL_SQL.Orchestrator.Scheduling.INodeLeaseLossHandler>(
     sp => sp.GetRequiredService<ETL_SQL.Portal.Services.ExecutionJobService>());

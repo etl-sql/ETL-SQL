@@ -205,6 +205,28 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task DeclaredRowCeilingIsCarriedIntoTheAttemptForTheEngineToEnforce()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var provider = new DockerSandboxExecutionProvider(Options(), commands, artifacts);
+        var request = Request(artifact) with { AdmissionId = "admission-rows" };
+
+        await provider.PrepareAsync(
+            request with { Limits = request.Limits with { MaxRows = 25_000 } }, workspace, default);
+
+        // Rows are a unit only the engine can count, so the ceiling travels as engine configuration
+        // rather than as a runtime flag.
+        var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
+        Assert.Contains("Engine__MaxRowsProcessed=25000", create);
+        File.SetAttributes(Path.Combine(workspace.InputPath, "job.etlsql"), FileAttributes.Normal);
+        await workspace.DestroyAsync();
+    }
+
+    [Fact]
     public async Task DeclaredIopsLimitIsThrottledPerDeviceOnAHostThatCanEnforceIt()
     {
         var commands = new RecordingCommands(
