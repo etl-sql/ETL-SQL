@@ -371,9 +371,73 @@ options; this guide covers the authoring workflow and links to them:
 - [Visuals](../../reference/visuals-reporting/report/visual.md) - `CREATE VISUAL`, plus the [full visual-type catalog](../../reference/visuals-reporting/visuals/index.md) (bar, line, matrix, card, slicer, map, and 25+ more).
 - [Datasets](../../reference/visuals-reporting/report/dataset.md) - `CREATE DATASET`, `EXPORT DATASET`, `PUBLISH DATASET`.
 - [Pages](../../reference/visuals-reporting/report/page.md) · [Containers](../../reference/visuals-reporting/report/container.md) · [Navigation](../../reference/visuals-reporting/report/navigation.md) · [Buttons](../../reference/visuals-reporting/report/button.md).
+- [Print Layout](../../reference/visuals-reporting/report/print-layout.md) - `PRINT_LAYOUT`, physical sheet sizes, margins, page breaks, and PDF compilation.
 - [Styles](../../reference/visuals-reporting/report/style.md) and [Themes](../../reference/visuals-reporting/report/theme.md).
 - [Actions](../../reference/visuals-reporting/report/actions.md) and [Interactions](../../reference/visuals-reporting/report/interactions.md).
 - [Report-SQL reference overview](../../reference/visuals-reporting/README.md).
+
+---
+
+## Paginated Reports & Print Layout
+
+While `DASHBOARD` pages provide fluid, responsive single-screen layouts, `PAGINATED` pages are designed for multi-page documents, invoice/statement generation, parameterized data runs, and pixel-precise physical printing or PDF export.
+
+### 1. Paginated Page Definition
+
+A paginated page declares physical dimensions via `PRINT_LAYOUT` (or `PAGE_LAYOUT`):
+
+```sql
+CREATE PAGE MonthlyInvoice AS PAGINATED (
+  LAYOUT (
+    STRUCTURE = 'H / T / S',
+    MAP (
+      'H' = InvoiceHeader,
+      'T' = LineItemsTable,
+      'S' = InvoiceSummary
+    )
+  ),
+  PRINT_LAYOUT (
+    PAGE_SIZE   = 'Letter',            -- Letter, A4, Legal, Executive, Tabloid, Custom
+    ORIENTATION = 'PORTRAIT',          -- PORTRAIT or LANDSCAPE
+    MARGINS     = (0.75, 0.75, 0.75, 0.75), -- top, right, bottom, left
+    UNITS       = 'in',                -- in, cm, mm, pt, px
+    OVERFLOW    = 'AUTO'               -- AUTO, CLIP, SPLIT, SCROLL
+  )
+);
+```
+
+### 2. Page Breaks & Print Control on Visuals
+
+Control how individual visuals interact with page boundaries:
+
+```sql
+CREATE VISUAL InvoiceSummary AS CARD (
+  SOURCE = #summary,
+  MAPPINGS (VALUE = BalanceDue, LABEL = 'Balance Due'),
+  PRINT_LAYOUT (
+    PAGE_BREAK_BEFORE = ON,    -- Forces this visual onto a fresh physical page
+    KEEP_TOGETHER     = ON     -- Prevents splitting the card across page edges
+  )
+);
+
+-- Exclude interactive prompts/buttons from printed output
+CREATE BUTTON RunButton AS (
+  LABEL = 'Apply Filters',
+  ACTIONS (ON_CLICK = APPLY_PARAMETERS),
+  PRINT_LAYOUT (EXCLUDE_FROM_PRINT = ON)
+);
+```
+
+### 3. Automatic Table Splitting
+
+When a `TABLE` visual contains more rows than can fit on a single physical page, the engine's `PhysicalPageCompiler` automatically splits the table into consecutive physical page slices (`startRowIndex` to `endRowIndex`), repeating column headers on each sheet.
+
+### 4. Parameter Staging and Deferred Execution
+
+On `PAGINATED` pages:
+- Prompts and slicers stage parameter changes locally until `APPLY_PARAMETERS` is clicked.
+- Visuals with `FETCH = ON_RUN` (or `FETCH = AUTO` on paginated pages) defer heavy database queries until the user executes the page run.
+- In automated scripts or CLI builds, use `--run-page` to compile all paginated result sets immediately.
 
 ## Building, serving, and previewing reports
 

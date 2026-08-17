@@ -12,6 +12,7 @@ This reference defines Report-SQL objects, visual types, mappings, options, acti
 - [INTERACTIONS](report/interactions.md)
 - [NAVIGATION](report/navigation.md)
 - [PAGE](report/page.md)
+- [PRINT_LAYOUT](report/print-layout.md)
 - [STYLE](report/style.md)
 - [VISUAL](report/visual.md)
 - [Report Runtime Contract](report-runtime-contract.md)

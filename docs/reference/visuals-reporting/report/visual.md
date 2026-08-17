@@ -1,16 +1,26 @@
 # VISUAL
-
-Visuals are the building blocks of reports. Each visual binds a data source to a chart or control.
+Visuals are the building blocks of reports. Each visual binds a data source to a chart, grid, control, or display element.
 
 ## Syntax
 
 ```sql
 CREATE VISUAL <name> AS <TYPE> (
-  SOURCE   = #temp_table | (inline SELECT),
-  FETCH    = AUTO | ON_LOAD | ON_RUN,
-  MAPPINGS (column_alias = col, ...),
-  OPTIONS  (KEY = value, ...),
-  ACTIONS  (ON_CHANGE = SET_PARAMETER(@var, value))
+  SOURCE   = #temp_table | (inline SELECT) | &dataset,
+  [FETCH   = AUTO | ON_LOAD | ON_RUN,]
+  [MAPPINGS (column_alias = col, ...),]
+  [OPTIONS  (KEY = value, ...),]
+  [ACTIONS  (ON_CLICK = <action>, ON_CHANGE = <action>, ...),]
+  [PRINT_LAYOUT (
+    [PAGE_BREAK_BEFORE = ON | OFF,]
+    [PAGE_BREAK_AFTER = ON | OFF,]
+    [KEEP_TOGETHER = ON | OFF,]
+    [EXCLUDE_FROM_PRINT = ON | OFF]
+  ),]
+  [ROW_DETAIL (
+    TARGET = <ChildVisualName>,
+    BINDINGS (@childParam = parentCol, ...),
+    [LIMIT = <number>]
+  )]
 );
 ```
 
@@ -36,7 +46,7 @@ CREATE VISUAL <name> AS <TYPE> (
 ## Display Types
 
 - **`CARD`**: Large KPI tile with optional trend and goal.
-- **`TABLE`**: Paginated sortable data grid.
+- **`TABLE`**: Paginated, sortable data grid with multi-page print splitting.
 - **`IMAGE`**: Static or dynamic image.
 - **`TEXT`**: Markdown or HTML narrative block.
 
@@ -52,20 +62,41 @@ CREATE VISUAL <name> AS <TYPE> (
 - **`TEXTBOX`**: Single-line text input.
 - **`NUMBERBOX`**: Numeric input with validation.
 
-## Usage Details
+## Print Layout & Page Breaks (`PRINT_LAYOUT`)
 
-- Use `AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC` on `BAR`/`HBAR`/`LINE`/`AREA`/`COMBO` visuals to control category order.
-- Viewer maximize is shown by default for data/chart visuals and hidden by default for input/control visuals. Override with `STYLE (ALLOW_MAXIMIZE = ON|OFF)`.
-- Use `FETCH = ON_RUN` for visuals that should wait for an `APPLY_PARAMETERS` run on a paginated page. `FETCH = AUTO` is the default: dashboards load immediately, while paginated pages load prompt controls immediately and defer result visuals.
-- Use `HELP VISUAL <TYPE>` for type-specific mappings and options (e.g. `HELP VISUAL BAR`, `HELP VISUAL CARD`, `HELP VISUAL TABLE`).
+- **PAGE_BREAK_BEFORE = ON | OFF** — Inserts a physical page break before rendering this visual.
+- **PAGE_BREAK_AFTER = ON | OFF** — Inserts a physical page break immediately after this visual.
+- **KEEP_TOGETHER = ON | OFF** — Prevents splitting this visual across physical page breaks.
+- **EXCLUDE_FROM_PRINT = ON | OFF** — Omits the visual from printed output and PDF export (useful for prompt controls or action buttons).
+
+## Expandable Master/Detail Rows (`ROW_DETAIL`)
+
+- **TARGET = <VisualName>** — Name of child visual to render inside expanded table rows.
+- **BINDINGS (@childParam = parentCol, ...)** — Parameter bindings passing parent row values into the child visual's query scope.
+- **LIMIT = <number>** — Maximum child rows to display per expanded parent row.
 
 ## Examples
 
 ```sql
+-- Chart visual with print layout controls
 CREATE VISUAL SalesBar AS BAR (
   SOURCE   = #monthly_sales,
   MAPPINGS (X = month, Y = revenue, COLOR = region),
-  OPTIONS  (TITLE = 'Revenue by Month', STACKED = ON, AXIS_SORT = SOURCE)
+  OPTIONS  (TITLE = 'Revenue by Month', STACKED = ON, AXIS_SORT = SOURCE),
+  PRINT_LAYOUT (
+    PAGE_BREAK_BEFORE = ON,
+    KEEP_TOGETHER = ON
+  )
+);
+
+-- Master table with expandable row details
+CREATE VISUAL CustomersTable AS TABLE (
+  SOURCE = #customers,
+  MAPPINGS (CustomerID = id, CustomerName = name, Country = country),
+  ROW_DETAIL (
+    TARGET = OrderDetailTable,
+    BINDINGS (@cust_id = CustomerID)
+  )
 );
 ```
 
@@ -77,9 +108,9 @@ ALTER VISUAL RevenueChart (TITLE = 'Revenue', OPTIONS (STACKED = ON));
 DROP VISUAL IF EXISTS RevenueChart;
 ```
 
-`ALTER VISUAL` patches `SOURCE`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `STYLE`, `TITLE`, `SUBTITLE`, and
-`TOOLTIP`. An omitted clause keeps its current value. The visual type itself is part of the
-definition, not a patchable field — changing `BAR` to `LINE` needs `CREATE OR REPLACE VISUAL`.
+`ALTER VISUAL` patches `SOURCE`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `STYLE`, `TITLE`, `SUBTITLE`, and `TOOLTIP`. The visual type itself is part of the definition — changing `BAR` to `LINE` needs `CREATE OR REPLACE VISUAL`.
 
 References:
+- [PRINT_LAYOUT Reference](print-layout.md)
+- [PAGE Reference](page.md)
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

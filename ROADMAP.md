@@ -1,4 +1,4 @@
-﻿# ETL-SQL Product Roadmap
+# ETL-SQL Product Roadmap
 
 This document tracks high-level product tracks and candidate phases. Their actionable work is
 decomposed in `TODO.md`. Once an initiative is verified, record its notable outcome in
@@ -313,4 +313,22 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
   - Integrates the permissive BSD-3-Clause **Vega-Lite** runtime as an alternative declarative visual compiler for specialized domain visualizations.
   - Allows embedding raw Vega-Lite JSON specifications (`SPEC = '{ ... }'`) directly within `.rptsql` scripts.
   - Supports composite marks, faceted distributions, error bands, and layered statistical charts while preserving deterministic client-side rendering and headless PDF/image export.
+
+### Reporting & Presentation — Cascading Parameter Defaults (Dependent Slicers)
+
+**Candidate, not scheduled.** In interactive dashboards and parameterized paginated reports, filters often exhibit natural parent-child relationships (e.g. selecting `Country = 'US'` should constrain the `State` dropdown to US states, and picking a `Department` should restrict the `Manager` slicer). Currently, slicers evaluate their source datasets independently at initial report evaluation or require manually written dependent queries.
+
+**Delivery stage.** This work introduces declarative parameter and slicer dependency graph evaluation:
+- **Declarative Cascading Bindings:** Extend `SLICER` / `MULTISELECT` syntax with dependency declarations (e.g. `DEPENDS_ON = (@country)` or `FILTER_BY = (@country = CountryCode)`).
+- **Client-Side Dependency Propagation:** The browser runtime automatically filters child option sets or re-queries dependent options when parent parameter state changes, resetting or re-defaulting invalid selections cleanly.
+- **Cycle Detection & Static Linting:** The LSP and AST compiler validate the parameter dependency DAG at authoring time to guarantee termination and prohibit circular parameter dependencies.
+
+### Reporting & Presentation — Bookmarks & In-Report Saved Visual States
+
+**Candidate, not scheduled.** While Portal administrators can save parameterized views at the catalog level via `CREATE SAVED VIEW`, report consumers and authors frequently need in-canvas bookmark buttons to switch between curated visual presets, toggled container visibility states, and specific filter/drill configurations during analytical storytelling or executive presentations.
+
+**Delivery stage.** This work introduces declarative in-report bookmarks:
+- **`CREATE BOOKMARK` Syntax:** Declarative definition capturing a named snapshot of active parameters, container visibility states (`VISIBLE`/`COLLAPSED`), and visual drill depths.
+- **Action Binding:** Buttons and navigation items can trigger `ACTIONS (ON_CLICK = APPLY_BOOKMARK(BookmarkName))` to transition the dashboard state with zero server round-trips.
+- **URL Hash Synchronization:** Active bookmarks reflect in browser URL hash fragments, enabling deep-linking directly into specific visual analytical states.
 

@@ -959,6 +959,9 @@ Specific to `.rptsql` files and the reporting engine.
 | `CREATE BUTTON` | Defines a clickable button | [BUTTON.md](reference/visuals-reporting/report/button.md) |
 | `ACTIONS` block | Interactive event bindings | [ACTIONS.md](reference/visuals-reporting/report/actions.md) |
 | `INTERACTIONS` block | Cross-visual filtering rules | [INTERACTIONS.md](reference/visuals-reporting/report/interactions.md) |
+| `PRINT_LAYOUT` block | Physical page dimensions, margins, and page breaks | [PRINT_LAYOUT.md](reference/visuals-reporting/report/print-layout.md) |
+| `PAGINATED` (Page Mode) | Print-ready multi-page report layout mode | [PAGE.md](reference/visuals-reporting/report/page.md) |
+| `ROW_DETAIL` | Expandable master/detail table rows | [VISUAL.md](reference/visuals-reporting/report/visual.md) |
 
 Lifecycle: every report object above supports `CREATE OR REPLACE <kind> <name>` and
 `DROP <kind> [IF EXISTS] <name>`. `ALTER <kind> <name> (...)` patches named clauses and is supported
