@@ -300,19 +300,60 @@ Design notes, recorded so the shape is not rediscovered when this is picked up:
 
 **Candidate, not scheduled.** While Apache ECharts provides exceptional performance and comprehensive chart-type coverage for the vast majority of analytical workloads, modern reporting often demands specialized escape hatches for bespoke infographic KPI cards, micro-visuals, and complex layered statistical graphics without sacrificing the script-first, Zero-Trust execution model.
 
-**Design principles and boundaries:**
-- **Zero-Trust rendering:** Custom visual extensions must remain declarative and safe across CLI Player, VS Code, and Portal runtimes. Untrusted, arbitrary JavaScript execution is prohibited.
-- **Diffable, script-first contracts:** Visual definitions remain standard `.rptsql` statements rather than compiled binary blobs or external web component dependencies.
+**Design Principles and Boundaries:**
+- **Zero-Trust Rendering:** Custom visual extensions must remain purely declarative and safe across CLI Player, VS Code, and Portal runtimes. Untrusted, arbitrary JavaScript execution is prohibited; all HTML/SVG templates pass through an AST-based sanitizer (stripping `<script>`, `<iframe>`, inline `on*` event handlers, and `javascript:` URIs).
+- **Diffable, Script-First Contracts:** Visual definitions remain standard `.rptsql` statements rather than compiled binary blobs or external web component dependencies.
+- **Deterministic Export Parity:** Templates and specs compile cleanly to SVG and styled elements in both browser runtimes and headless PDF exporters.
 
-**Delivery stages:**
+**Target Syntax Specifications:**
+```sql
+-- 1. Data-Bound HTML Template (Single KPI Card)
+CREATE VISUAL ServerHealthCard AS HTML (
+  SOURCE   = #server_metrics,
+  MODE     = SINGLE_ROW,               -- SINGLE_ROW (default) | REPEATER
+  TEMPLATE = '
+    <div class="health-card {{StatusClass}}">
+      <div class="header">{{ServerName}}</div>
+      <div class="metric">{{CpuPercent}}%</div>
+      <button data-action="SET_PARAMETER" data-param="@selected_server" data-value="{{ServerName}}">
+        Inspect
+      </button>
+    </div>
+  ',
+  STYLE (
+    CSS = '
+      .health-card { padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; }
+      .health-card.critical { background: #fee2e2; border-color: #ef4444; }
+    '
+  )
+);
+
+-- 2. Declarative Grammar-of-Graphics (Vega-Lite)
+CREATE VISUAL StatisticalDistribution AS VEGALITE (
+  SOURCE = #experiment_results,
+  SPEC   = '{
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "mark": "boxplot",
+    "encoding": {
+      "x": {"field": "ExperimentGroup", "type": "nominal"},
+      "y": {"field": "Yield", "type": "quantitative"},
+      "color": {"field": "ExperimentGroup", "type": "nominal"}
+    }
+  }'
+);
+```
+
+**Delivery Stages:**
 - **Tier 2: Data-Bound HTML / SVG Visuals (`TYPE = HTML` / `TYPE = SVG`):**
-  - Enables embedding sanitized HTML and SVG templates directly into `CREATE VISUAL` definitions bound to engine `#dataset` queries.
-  - Solves the "Last 5%" presentation gap for multi-metric KPI cards, status indicators, badges, trend delta arrows, and inline sparkline grids using standard CSS and SVG markup.
-  - Renders through an AST-based HTML sanitizer to guarantee script isolation and prevent DOM/XSS injection.
+  - AST Parser support for `TEMPLATE`, `MODE = SINGLE_ROW | REPEATER`, and scoped `STYLE (CSS = '...')`.
+  - Client-side Mustache-style data interpolation over Arrow row buffers.
+  - Interactive event delegation for `data-action="SET_PARAMETER|NAVIGATE_PAGE"` attributes.
+  - AST-based HTML/SVG sanitizer (DOMPurify integration).
 - **Tier 3: Declarative Grammar-of-Graphics (`TYPE = VEGALITE`):**
-  - Integrates the permissive BSD-3-Clause **Vega-Lite** runtime as an alternative declarative visual compiler for specialized domain visualizations.
-  - Allows embedding raw Vega-Lite JSON specifications (`SPEC = '{ ... }'`) directly within `.rptsql` scripts.
-  - Supports composite marks, faceted distributions, error bands, and layered statistical charts while preserving deterministic client-side rendering and headless PDF/image export.
+  - AST Parser support for `SPEC = '{ ... }'`.
+  - Integration of the permissive BSD-3-Clause **Vega-Lite** runtime in `report-runtime.js`.
+  - Server-side / snapshot SVG compilation pipeline for deterministic `STATIC` PDF export without live browser dependencies.
+
 
 ### Reporting & Presentation — Cascading Parameter Defaults (Dependent Slicers)
 
