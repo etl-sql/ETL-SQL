@@ -54,6 +54,8 @@ public sealed record OrganizationPolicyDocument
             values["Security:AllowedPorts"] = Network.AllowedPorts.Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
         if (Network.EgressFenceExemptions.Count > 0)
             values["Security:EgressFenceExemptions"] = Network.EgressFenceExemptions;
+        if (Network.DeniedEgressRanges.Count > 0)
+            values["Security:DeniedEgressRanges"] = Network.DeniedEgressRanges;
         if (Execution.MaxParallelDegree.HasValue)
             values["Security:MaxParallelDegree"] = Execution.MaxParallelDegree.Value;
         if (Execution.MaxFileOperationsPerScript.HasValue)
@@ -240,6 +242,15 @@ public sealed record NetworkPolicySection
     /// cannot widen it. Empty means the fence is fully closed, which is the default.
     /// </summary>
     public IReadOnlyList<string> EgressFenceExemptions { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// CIDR ranges this deployment's workloads may never reach — the hosting control plane, internal
+    /// management networks, and other tenants' pod/service CIDRs. The four universal fence classes are
+    /// hard-coded because they are the same everywhere; these are facts about one deployment, so only
+    /// the operator can supply them. Declared ranges have no exemption surface: the authority that
+    /// would exempt a range is the authority that listed it.
+    /// </summary>
+    public IReadOnlyList<string> DeniedEgressRanges { get; init; } = Array.Empty<string>();
 }
 
 public sealed record ExecutionPolicySection
@@ -639,6 +650,24 @@ public static class OrganizationPolicySchema
                 errors.Add($"Egress fence exemption '{exemption}' is duplicated.");
             else if (InfrastructureEgressFence.Classify(trimmed) == InfrastructureDestinationClass.None)
                 errors.Add($"Egress fence exemption '{exemption}' does not name a fenced infrastructure destination.");
+        }
+
+        var seenRanges = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var range in network.DeniedEgressRanges)
+        {
+            if (string.IsNullOrWhiteSpace(range))
+            {
+                errors.Add("Denied egress ranges cannot contain blank entries.");
+                continue;
+            }
+
+            var trimmed = range.Trim();
+            // A typo here silently drops a control the operator believes is in place, so it is a
+            // validation error rather than a skipped entry.
+            if (!InfrastructureEgressFence.IsValidDeniedRange(trimmed))
+                errors.Add($"Denied egress range '{range}' is not a valid CIDR range (expected address/prefix, e.g. 10.42.0.0/16).");
+            else if (!seenRanges.Add(trimmed))
+                errors.Add($"Denied egress range '{range}' is duplicated.");
         }
     }
 

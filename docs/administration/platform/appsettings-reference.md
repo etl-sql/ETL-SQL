@@ -38,6 +38,7 @@ Configures the zero-trust execution sandbox limits, folder restrictions, allowed
 | `Security:PathProtectionMode` | string | `Restricted` | — | Controls boundary protection. Set to `Restricted` to block script reads/writes outside safe zones. |
 | `Security:AllowedHosts` | array | `["*"]` | — | Hosts permitted to connect to HTTP endpoints. |
 | `Security:EgressFenceExemptions` | array | `[]` | — | Exact hosts or addresses exempted from the non-bypassable infrastructure egress fence — see [Infrastructure egress fence](#infrastructure-egress-fence). Wildcards are rejected. |
+| `Security:DeniedEgressRanges` | array | `[]` | — | CIDR ranges this deployment's workloads may never reach (hosting control plane, internal management networks, other tenants' subnets). Cannot be exempted. |
 | `Security:ApprovedSafeZones` | array | `["c:\Users\chuck\scratch\ETL-SQL\samples"]` | — | Paths where scripts are permitted to write or read files when `PathProtectionMode` is restricted. |
 | `Security:AllowedEnvVars` | array | `["TEMP", "USERDOMAIN", ...]` | — | Environment variables whitelisted for access within ETL scripts via the `ENV_VAR()` function. |
 | `Security:AdditionalBlockedExtensions` | array | `[]` | — | Extra administrator-defined file extensions to deny. These only add restrictions and cannot weaken built-in blocked extensions. |
@@ -80,6 +81,30 @@ If you genuinely run a service on a fenced address, list it exactly in
 `Security:EgressFenceExemptions` (or in authoritative organization policy under
 `network.egressFenceExemptions`). Entries must be exact hosts or addresses; a wildcard entry is
 rejected, because a broad allowlist is precisely what must not be able to widen the fence.
+
+#### Declaring this deployment's own internal ranges
+
+The four classes above are the same on every host, so they are built in. Your hosting control plane,
+internal management network, and (in a shared fleet) other tenants' pod and service CIDRs are facts
+only you know, so declare them as CIDR ranges in `Security:DeniedEgressRanges` — or in authoritative
+policy under `network.deniedEgressRanges`:
+
+```json
+"Security": {
+  "DeniedEgressRanges": [ "10.42.0.0/16", "172.20.0.0/14", "fd12:3456::/32" ]
+}
+```
+
+Declared ranges are checked against the destination address at connection creation and again against
+each resolved address at connect time. IPv4 and IPv6 ranges, any prefix length, and obfuscated
+address forms are all handled. Unlike the built-in classes, a declared range has **no** exemption:
+the authority that would exempt a range is the same authority that listed it, so the way out is to
+narrow the range. A malformed entry is rejected by policy validation rather than silently dropped, so
+a typo cannot quietly remove a control you believe is in place.
+
+Because a database connector has no resolved-address callback, a *name* that resolves into a declared
+range is caught at connect time only on HTTP-family connectors. For database connectors, declare
+ranges alongside a `Security:AllowedHosts` list rather than relying on ranges alone.
 
 ---
 

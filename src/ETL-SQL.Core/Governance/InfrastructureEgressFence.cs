@@ -23,7 +23,14 @@ public enum InfrastructureDestinationClass
     ContainerRuntime,
 
     /// <summary>Cluster-internal service discovery namespace (Kubernetes service/pod DNS).</summary>
-    ClusterServiceDiscovery
+    ClusterServiceDiscovery,
+
+    /// <summary>
+    /// An address range the operator declared off-limits for this deployment — the hosting control
+    /// plane, internal management networks, and other tenants' pod/service CIDRs. Unlike the four
+    /// universal classes, these are deployment facts only the operator knows.
+    /// </summary>
+    OperatorDeniedRange
 }
 
 /// <summary>
@@ -51,11 +58,20 @@ public enum InfrastructureDestinationClass
 /// (<c>Security:EgressFenceExemptions</c>) or from the host's own configuration, never from a script.
 /// An exemption must name the destination as an exact literal — wildcards are ignored by design, so
 /// a broad allowlist can never widen the fence.</para>
+///
+/// <para>The four classes above are universal, so they are hard-coded. The hosting control plane,
+/// internal management networks, and other tenants' pod/service CIDRs are not universal — they are
+/// facts about one deployment — so the operator declares them as CIDR ranges in
+/// <c>Security:DeniedEgressRanges</c>. Declared ranges are absolute: there is no exemption surface
+/// for them, because the operator who listed the range is the same authority that would exempt it.</para>
 /// </summary>
 public static class InfrastructureEgressFence
 {
     /// <summary>Organization policy key prefix carrying operator exemptions.</summary>
     public const string ExemptionPolicyKeyPrefix = "Security:EgressFenceExemptions:";
+
+    /// <summary>Organization policy key prefix carrying operator-declared denied CIDR ranges.</summary>
+    public const string DeniedRangePolicyKeyPrefix = "Security:DeniedEgressRanges:";
 
     /// <summary>
     /// Cloud instance metadata and instance identity endpoints. Every major provider serves
@@ -121,6 +137,33 @@ public static class InfrastructureEgressFence
     private static readonly AsyncLocal<HashSet<string>?> ScopedExemptions = new();
 
     private static readonly object ExemptionLock = new();
+
+    private static readonly List<CidrRange> ConfiguredDeniedRanges = [];
+
+    private static readonly object DeniedRangeLock = new();
+
+    /// <summary>
+    /// Replaces the host's own denied-range list, read from server-owned configuration
+    /// (<c>Security:DeniedEgressRanges</c>). Malformed entries are dropped here; authoritative policy
+    /// rejects them at authoring time instead, so an operator learns about a typo rather than
+    /// silently losing a control.
+    /// </summary>
+    public static void SetLocalDeniedRanges(IEnumerable<string>? ranges)
+    {
+        lock (DeniedRangeLock)
+        {
+            ConfiguredDeniedRanges.Clear();
+            if (ranges is null) return;
+            foreach (var entry in ranges)
+            {
+                if (CidrRange.TryParse(entry, out var range))
+                    ConfiguredDeniedRanges.Add(range);
+            }
+        }
+    }
+
+    /// <summary>True when the text is a well-formed CIDR range. Used by policy validation.</summary>
+    public static bool IsValidDeniedRange(string? cidr) => CidrRange.TryParse(cidr, out _);
 
     /// <summary>
     /// Replaces the host's own exemption list, read from server-owned configuration
@@ -209,7 +252,11 @@ public static class InfrastructureEgressFence
             return InfrastructureDestinationClass.LinkLocalNodeService;
         }
 
-        return InfrastructureDestinationClass.None;
+        // Operator-declared ranges are checked last: a universal class gives the more precise
+        // denial reason when both would match.
+        return IsInDeniedRange(address)
+            ? InfrastructureDestinationClass.OperatorDeniedRange
+            : InfrastructureDestinationClass.None;
     }
 
     /// <summary>
@@ -221,7 +268,9 @@ public static class InfrastructureEgressFence
     {
         var classification = Classify(host);
         if (classification == InfrastructureDestinationClass.None) return;
-        if (IsExempt(host!)) return;
+        // A declared range is the operator's own decision and carries no exemption surface — the
+        // authority that would exempt it is the authority that listed it.
+        if (classification != InfrastructureDestinationClass.OperatorDeniedRange && IsExempt(host!)) return;
 
         Deny(host!, classification,
             $"Outbound access to hosting infrastructure ({Describe(classification)}) is denied for all " +
@@ -241,7 +290,8 @@ public static class InfrastructureEgressFence
         ArgumentNullException.ThrowIfNull(address);
         var classification = ClassifyAddress(address);
         if (classification == InfrastructureDestinationClass.None) return;
-        if (IsExempt(address.ToString())) return;
+        if (classification != InfrastructureDestinationClass.OperatorDeniedRange
+            && IsExempt(address.ToString())) return;
 
         Deny(host, classification,
             $"DNS resolution reached hosting infrastructure ({Describe(classification)}); " +
@@ -264,10 +314,37 @@ public static class InfrastructureEgressFence
         }
     }
 
+    /// <summary>Operator-declared denied ranges currently in effect, in CIDR form. For diagnostics and tests.</summary>
+    public static IReadOnlyCollection<string> DeniedRanges =>
+        EffectiveDeniedRanges().Select(range => range.ToString()).ToArray();
+
     private static bool IsExempt(string destination)
     {
         var normalized = NetworkDestinationRules.Normalize(destination).TrimEnd('.');
         return Exemptions.Contains(normalized);
+    }
+
+    private static bool IsInDeniedRange(IPAddress address) =>
+        EffectiveDeniedRanges().Any(range => range.Contains(address));
+
+    private static List<CidrRange> EffectiveDeniedRanges()
+    {
+        List<CidrRange> effective;
+        lock (DeniedRangeLock)
+        {
+            effective = [.. ConfiguredDeniedRanges];
+        }
+
+        var policy = EnterprisePolicyRuntime.Current;
+        if (!policy.IsEnrolled) return effective;
+
+        foreach (var pair in policy.ConfigurationValues)
+        {
+            if (!pair.Key.StartsWith(DeniedRangePolicyKeyPrefix, StringComparison.OrdinalIgnoreCase)) continue;
+            if (CidrRange.TryParse(pair.Value, out var range)) effective.Add(range);
+        }
+
+        return effective;
     }
 
     private static IEnumerable<string> PolicyExemptions()
@@ -305,8 +382,74 @@ public static class InfrastructureEgressFence
         InfrastructureDestinationClass.LinkLocalNodeService => "link-local node service range",
         InfrastructureDestinationClass.ContainerRuntime => "container runtime host bridge",
         InfrastructureDestinationClass.ClusterServiceDiscovery => "cluster service discovery",
+        InfrastructureDestinationClass.OperatorDeniedRange => "operator-denied network range",
         _ => "hosting infrastructure"
     };
+
+    /// <summary>
+    /// A parsed CIDR range. Kept internal to the fence: the only thing anyone needs from it is
+    /// whether a resolved address falls inside a range the operator declared off-limits.
+    /// </summary>
+    private sealed class CidrRange
+    {
+        private readonly byte[] _network;
+        private readonly int _prefixLength;
+        private readonly AddressFamily _family;
+
+        private CidrRange(byte[] network, int prefixLength, AddressFamily family)
+        {
+            _network = network;
+            _prefixLength = prefixLength;
+            _family = family;
+        }
+
+        public static bool TryParse(string? cidr, out CidrRange range)
+        {
+            range = null!;
+            if (string.IsNullOrWhiteSpace(cidr)) return false;
+
+            var parts = cidr.Trim().Split('/');
+            if (parts.Length != 2) return false;
+            // Reuse the connector normalizer so an obfuscated network literal cannot define a range
+            // that never matches the canonical form the fence compares against.
+            if (!NetworkDestinationRules.TryParseAddress(NetworkDestinationRules.Normalize(parts[0]), out var address))
+                return false;
+            if (!int.TryParse(parts[1], System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var prefixLength))
+                return false;
+
+            var bytes = address.GetAddressBytes();
+            if (prefixLength < 0 || prefixLength > bytes.Length * 8) return false;
+
+            range = new CidrRange(Mask(bytes, prefixLength), prefixLength, address.AddressFamily);
+            return true;
+        }
+
+        public bool Contains(IPAddress address)
+        {
+            if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+            if (address.AddressFamily != _family) return false;
+
+            var masked = Mask(address.GetAddressBytes(), _prefixLength);
+            return masked.AsSpan().SequenceEqual(_network);
+        }
+
+        public override string ToString() =>
+            $"{new IPAddress(_network)}/{_prefixLength.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+
+        private static byte[] Mask(byte[] bytes, int prefixLength)
+        {
+            var masked = new byte[bytes.Length];
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                var remaining = prefixLength - (index * 8);
+                if (remaining >= 8) masked[index] = bytes[index];
+                else if (remaining > 0) masked[index] = (byte)(bytes[index] & (0xFF << (8 - remaining)));
+                else masked[index] = 0;
+            }
+            return masked;
+        }
+    }
 
     private sealed class ExemptionScope(HashSet<string>? previous) : IDisposable
     {

@@ -789,6 +789,17 @@ there, so fencing them would break every on-premises install without adding a bo
 allowlist does not already provide. They stay governed by `Security:AllowedHosts` and
 `NetworkDestinationRules.IsRestrictedRange`.
 
+**Operator-declared internal ranges.** The four classes above are universal, so they are built in.
+The hosting control plane, internal management networks, and other tenants' pod/service CIDRs are
+facts about one deployment, so the operator declares them as CIDR ranges
+(`Security:DeniedEgressRanges`, or `network.deniedEgressRanges` in authoritative policy). Declared
+ranges are enforced at the same two points as the built-in classes, across both address families, any
+prefix length, and obfuscated address forms. They carry no exemption surface — the authority that
+would exempt a range is the authority that listed it — and a malformed range is a policy-validation
+error rather than a silently dropped control. One limitation is worth stating: a DNS *name* that
+resolves into a declared range is caught at connect time only on HTTP-family connectors, because
+database connectors have no resolved-address callback; pair ranges with a host allowlist there.
+
 Still open: the *positive* half of this section — per-attempt capability-authorized destination
 allowlisting, where an attempt may reach only the exact connector, object-storage, telemetry, and
 Gateway Broker endpoints its capability names. That depends on the Gateway and on per-attempt

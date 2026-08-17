@@ -22,6 +22,7 @@ public sealed class InfrastructureEgressFenceTests : IDisposable
     {
         EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
         InfrastructureEgressFence.SetLocalExemptions(null);
+        InfrastructureEgressFence.SetLocalDeniedRanges(null);
     }
 
     // ---------------------------------------------------------------- classification
@@ -260,6 +261,172 @@ public sealed class InfrastructureEgressFenceTests : IDisposable
             InfrastructureEgressFence.EnforceHost("host.docker.internal"));
     }
 
+    // ------------------------------------------- operator-declared internal ranges
+
+    [Theory]
+    [InlineData("10.42.0.0/16", "10.42.7.9")]                 // this deployment's service subnet
+    [InlineData("10.42.0.0/16", "10.42.0.0")]                 // network address
+    [InlineData("10.42.0.0/16", "10.42.255.255")]             // broadcast address
+    [InlineData("172.20.0.0/14", "172.23.255.1")]             // non-octet prefix
+    [InlineData("192.0.2.128/25", "192.0.2.200")]             // sub-octet prefix
+    [InlineData("fd12:3456::/32", "fd12:3456:789a::1")]       // IPv6 range
+    [InlineData("10.42.7.9/32", "10.42.7.9")]                 // single host
+    [InlineData("0.0.0.0/0", "93.184.216.34")]                // deny-everything is expressible
+    public void DeniedRange_BlocksAddressesInsideTheDeclaredRange(string cidr, string host)
+    {
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        InfrastructureEgressFence.SetLocalDeniedRanges([cidr]);
+
+        Assert.Equal(InfrastructureDestinationClass.OperatorDeniedRange,
+            InfrastructureEgressFence.Classify(host));
+        var denied = Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            InfrastructureEgressFence.EnforceHost(host));
+        Assert.Contains("operator-denied network range", denied.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("10.42.0.0/16", "10.43.0.1")]                 // adjacent /16
+    [InlineData("10.42.0.0/16", "10.41.255.255")]
+    [InlineData("172.20.0.0/14", "172.24.0.1")]               // just past a /14
+    [InlineData("192.0.2.128/25", "192.0.2.127")]             // just below a /25
+    [InlineData("fd12:3456::/32", "fd12:3457::1")]
+    [InlineData("10.42.0.0/16", "db.corp.internal")]          // a name is not an address
+    public void DeniedRange_LeavesAddressesOutsideTheRangeAlone(string cidr, string host)
+    {
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        InfrastructureEgressFence.SetLocalDeniedRanges([cidr]);
+
+        Assert.Equal(InfrastructureDestinationClass.None, InfrastructureEgressFence.Classify(host));
+        Assert.Null(Record.Exception(() => InfrastructureEgressFence.EnforceHost(host)));
+    }
+
+    [Fact]
+    public void DeniedRange_DoesNotMatchAcrossAddressFamilies()
+    {
+        // A v4 range must not swallow a v6 address (or vice versa) through byte-length coincidence.
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        InfrastructureEgressFence.SetLocalDeniedRanges(["10.42.0.0/16"]);
+
+        Assert.Null(Record.Exception(() => InfrastructureEgressFence.EnforceHost("2001:db8::1")));
+
+        // An IPv4-mapped IPv6 form of a denied address is still the denied address.
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            InfrastructureEgressFence.EnforceHost("::ffff:10.42.7.9"));
+    }
+
+    [Fact]
+    public void DeniedRange_IsMatchedThroughObfuscatedAddressForms()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        InfrastructureEgressFence.SetLocalDeniedRanges(["10.42.0.0/16"]);
+
+        // 10.42.7.9 as a 32-bit decimal literal, and as dotted hex.
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            InfrastructureEgressFence.EnforceHost("170526473"));
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            InfrastructureEgressFence.EnforceHost("0xa.0x2a.0x7.0x9"));
+    }
+
+    [Fact]
+    public void DeniedRange_CannotBeExempted()
+    {
+        // Exemptions exist so an operator can permit a fenced *class* they legitimately use. A range
+        // the same operator declared needs no exemption path — removing the range is the way out.
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        InfrastructureEgressFence.SetLocalDeniedRanges(["10.42.0.0/16"]);
+        InfrastructureEgressFence.SetLocalExemptions(["10.42.7.9"]);
+
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            InfrastructureEgressFence.EnforceHost("10.42.7.9"));
+    }
+
+    [Fact]
+    public void DeniedRange_UniversalClassesKeepTheirMorePreciseReason()
+    {
+        // A range that overlaps a universal class must not relabel the denial: the metadata endpoint
+        // is still reported as the metadata endpoint.
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        InfrastructureEgressFence.SetLocalDeniedRanges(["169.254.0.0/16"]);
+
+        Assert.Equal(InfrastructureDestinationClass.CloudMetadata,
+            InfrastructureEgressFence.Classify("169.254.169.254"));
+    }
+
+    [Fact]
+    public void DeniedRange_FromOrganizationPolicyIsHonouredAndDroppedWhenUnenrolled()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(deniedRanges: ["10.42.0.0/16"]));
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            InfrastructureEgressFence.EnforceHost("10.42.7.9"));
+        Assert.Contains("10.42.0.0/16", InfrastructureEgressFence.DeniedRanges);
+
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        Assert.Null(Record.Exception(() => InfrastructureEgressFence.EnforceHost("10.42.7.9")));
+    }
+
+    [Fact]
+    public void DeniedRange_AppliesAtConnectTimeToARebindingName()
+    {
+        // The name passed every earlier check; it resolved into the operator's management subnet.
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        InfrastructureEgressFence.SetLocalDeniedRanges(["10.42.0.0/16"]);
+
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress(
+                "api.example.com", System.Net.IPAddress.Parse("10.42.7.9")));
+        Assert.Null(Record.Exception(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress(
+                "api.example.com", System.Net.IPAddress.Parse("10.43.7.9"))));
+    }
+
+    [Theory]
+    [InlineData("10.42.0.0")]          // no prefix
+    [InlineData("10.42.0.0/")]
+    [InlineData("10.42.0.0/33")]       // prefix wider than the family
+    [InlineData("fd12::/129")]
+    [InlineData("10.42.0.0/-1")]
+    [InlineData("not-an-address/16")]
+    [InlineData("10.42.0.0/16/24")]
+    public void DeniedRange_MalformedEntriesAreRejected(string cidr)
+    {
+        Assert.False(InfrastructureEgressFence.IsValidDeniedRange(cidr));
+
+        // A malformed local entry is dropped rather than throwing at startup, so one typo cannot
+        // stop the host from booting — policy validation is where the operator hears about it.
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        InfrastructureEgressFence.SetLocalDeniedRanges([cidr]);
+        Assert.Empty(InfrastructureEgressFence.DeniedRanges);
+    }
+
+    [Fact]
+    public void PolicyDocument_RejectsMalformedAndDuplicateDeniedRanges()
+    {
+        var document = new OrganizationPolicyDocument
+        {
+            Network = new NetworkPolicySection
+            {
+                DeniedEgressRanges = ["10.42.0.0/16", "10.42.0.0/16", "10.42.0.0/33", " "]
+            }
+        };
+
+        var result = OrganizationPolicySchema.Validate(document);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Contains("not a valid CIDR range", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Errors, error => error.Contains("is duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Errors, error => error.Contains("blank entries", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void GovernanceRegistry_PublishesTheDeniedRangeSurface()
+    {
+        var registry = GovernancePolicyRegistry.CreateDefault();
+
+        Assert.True(registry.TryGet("Security:DeniedEgressRanges", out var definition));
+        Assert.Equal(GovernancePolicyScope.Network, definition.Scope);
+        Assert.Equal(GovernancePolicyValueKind.StringList, definition.ValueKind);
+    }
+
     // ---------------------------------------------------------------- evidence
 
     [Fact]
@@ -432,14 +599,16 @@ public sealed class InfrastructureEgressFenceTests : IDisposable
     private static EffectiveEnterprisePolicy EnrolledPolicy(
         string[]? allowedHosts = null,
         int[]? allowedPorts = null,
-        string[]? fenceExemptions = null)
+        string[]? fenceExemptions = null,
+        string[]? deniedRanges = null)
     {
         var document = new OrganizationPolicyDocument
         {
             Network = new NetworkPolicySection
             {
                 AllowedPorts = allowedPorts ?? [],
-                EgressFenceExemptions = fenceExemptions ?? []
+                EgressFenceExemptions = fenceExemptions ?? [],
+                DeniedEgressRanges = deniedRanges ?? []
             },
             RemoteExecution = new RemoteExecutionPolicySection
             {

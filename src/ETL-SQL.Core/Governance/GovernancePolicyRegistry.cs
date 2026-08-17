@@ -117,6 +117,15 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             defaultValue: Array.Empty<string>());
 
         yield return new(
+            "Security:DeniedEgressRanges",
+            GovernancePolicyScope.Network,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.StringList,
+            "CIDR ranges this deployment's workloads may never reach — hosting control plane, internal " +
+            "management networks, and other tenants' pod/service CIDRs. Declared ranges cannot be exempted.",
+            defaultValue: Array.Empty<string>());
+
+        yield return new(
             "Security:AllowedEnvVars",
             GovernancePolicyScope.Security,
             GovernancePolicyClassification.Allowed,

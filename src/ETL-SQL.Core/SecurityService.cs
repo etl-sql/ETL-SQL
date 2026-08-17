@@ -137,6 +137,8 @@ public partial class SecurityService
             // runs a service on. Server-owned configuration, never a script-reachable setting.
             InfrastructureEgressFence.SetLocalExemptions(
                 section.GetSection("EgressFenceExemptions").Get<string[]>());
+            InfrastructureEgressFence.SetLocalDeniedRanges(
+                section.GetSection("DeniedEgressRanges").Get<string[]>());
 
             // 2. Approved Safe Zones (Guardrail Bypass Zones)
             var zones = section.GetSection("ApprovedSafeZones").Get<string[]>();

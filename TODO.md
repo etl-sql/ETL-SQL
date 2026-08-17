@@ -413,13 +413,26 @@ runtime, which is what the storage cell below was blocked on.
       (`--network none`, pinned by `DockerSandboxExecutionProviderTests`), which is the stronger
       kernel-level form of default-deny.
 
-      Two things keep this cell open. **Shared internal hosting ranges** are not fenced: the classes
-      above are universal and hard-coded, but a specific deployment's own service subnets and other
-      tenants' pod CIDRs are deployment facts that need an operator-supplied deny list, and there is
-      no such surface yet. **Capability-authorized destinations** — the positive half, where an
-      attempt may reach only the exact connector/storage/telemetry/Gateway Broker endpoints its
-      per-attempt capability names — remain an allowlist decision rather than a capability-scoped
-      one, and depend on the Gateway and per-attempt capability issuance in the cells above.
+      **Operator-declared range slice completed (2026-08-17).** The hosting control plane, internal
+      management networks, and other tenants' pod/service CIDRs are deployment facts rather than
+      universal classes, so `Security:DeniedEgressRanges` (host configuration) and
+      `network.deniedEgressRanges` (authoritative policy) let the operator declare them as CIDR
+      ranges. They are enforced at the same two points as the built-in classes, across IPv4 and IPv6,
+      at any prefix length including sub-octet and `/0`, and through obfuscated address forms; a
+      family mismatch cannot match by byte-length coincidence. Declared ranges carry **no** exemption
+      surface, deliberately — the authority that would exempt a range is the authority that listed it,
+      so the way out is to narrow the range, and a test pins that an exemption cannot reopen one. A
+      range overlapping a built-in class does not relabel the denial. Malformed ranges are a
+      policy-validation error rather than a silently dropped control, while a malformed *local* entry
+      is dropped so one typo cannot stop a host from booting.
+
+      One thing keeps this cell open: **capability-authorized destinations** — the positive half,
+      where an attempt may reach only the exact connector/storage/telemetry/Gateway Broker endpoints
+      its per-attempt capability names — remain an allowlist decision rather than a capability-scoped
+      one, and depend on the Gateway and per-attempt capability issuance in the cells above. One known
+      limitation is recorded rather than hidden: a DNS name resolving into a declared range is caught
+      at connect time only on HTTP-family connectors, because database connectors have no
+      resolved-address callback.
 
 *Absorbs the retained discovery item **Internal Network Egress Fencing**.*
 
