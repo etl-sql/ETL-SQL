@@ -9,6 +9,13 @@ namespace ETL_SQL.Core;
 /// </summary>
 public class CliContext
 {
+    /// <summary>
+    /// A shallow copy, for callers that drive one command repeatedly with different arguments — a
+    /// fleet rollout applying the same cutover to each tenant in turn. Copying rather than mutating
+    /// the caller's context keeps one deployment's arguments from leaking into the next.
+    /// </summary>
+    public CliContext Clone() => (CliContext)MemberwiseClone();
+
     public string Command { get; set; } = "run";
     public FileInfo? ScriptFile { get; set; }
     public bool IsPerfMode { get; set; }
@@ -219,6 +226,15 @@ public class CliContext
     public int? SaasUpgradeMaxStorageMb { get; set; }
     public int? SaasUpgradeMaxReportSessions { get; set; }
     public bool SaasUpgradeExecute { get; set; }
+    // admin promotion saas-fleet-plan
+    public string? FleetTargetRelease { get; set; }
+    public int FleetWaveSize { get; set; } = 5;
+    public int FleetMaxFailures { get; set; }
+    public string? FleetOperator { get; set; }
+    public string? FleetAuthorizationReference { get; set; }
+    public string? FleetReason { get; set; }
+    public bool FleetExecute { get; set; }
+    public string? FleetRoot { get; set; }
     public string? SaasDeletionTenantRoot { get; set; }
     public string? SaasDeletionReceiptRoot { get; set; }
     public bool SaasDeletionExecute { get; set; }

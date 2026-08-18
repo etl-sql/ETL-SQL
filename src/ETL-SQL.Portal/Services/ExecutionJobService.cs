@@ -15,6 +15,13 @@ namespace ETL_SQL.Portal.Services;
 
 public enum JobStatus { Pending, Running, Completed, Failed, Cancelled }
 
+/// <summary>
+/// Raised when a node that is draining is asked to start new work. It is a routing signal, not a
+/// failure: the caller should place the execution on a node that is staying in rotation.
+/// </summary>
+public sealed class NodeDrainingException(string reason)
+    : InvalidOperationException($"This execution node is draining and is not accepting new work. {reason}");
+
 internal enum ExecutionWorkloadKind { Interactive, Refresh }
 
 public record ExecutionJob(
@@ -94,7 +101,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         INodeCapacityMonitor? capacityMonitor = null,
         SnapshotPackageService? snapshotPackages = null,
         PortalAlertEvaluationService? alertEvaluation = null,
-        ITenantArtifactStorageFactory? tenantArtifacts = null)
+        ITenantArtifactStorageFactory? tenantArtifacts = null,
+        ITenantExecutionQuotaSource? tenantQuotas = null)
     {
         _config = config;
         _scopeFactory = scopeFactory;
@@ -113,7 +121,14 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             config.Resources.MaxConcurrentReportExecutions,
             config.Resources.InteractiveExecutionWeight,
             config.Resources.RefreshExecutionWeight);
+        _tenantQuotas = tenantQuotas;
     }
+
+    private readonly ITenantExecutionQuotaSource? _tenantQuotas;
+    private readonly TenantExecutionAdmission _tenantAdmission = new();
+
+    /// <summary>Concurrent executions this node currently attributes to a tenant, for tests and health.</summary>
+    internal int ActiveExecutionsForTenant(string tenantId) => _tenantAdmission.ActiveFor(tenantId);
 
     /// <summary>Terminal jobs stay queryable for this window, then are evicted so the
     /// in-memory job table cannot grow without bound on a long-running portal.</summary>
@@ -230,6 +245,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string actorType = "User", string? actorId = null, string? effectiveScopes = null,
         string? correlationId = null, int? impersonatedUserId = null)
     {
+        RefuseWhenDraining();
         EvictExpiredJobs();
         var keyScope = await ResolveKeyScopeAsync(reportId, userId);
         var jobId = Guid.NewGuid().ToString("N");
@@ -260,6 +276,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string actorType = "User", string? actorId = null, string? effectiveScopes = null,
         string? correlationId = null)
     {
+        RefuseWhenDraining();
         EvictExpiredJobs();
         var keyScope = await ResolveKeyScopeAsync(reportId, userId);
 
@@ -334,9 +351,15 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         var userGateHeld = false;
         var groupGates = new List<SemaphoreSlim>();
         WeightedExecutionAdmission.Permit? executionPermit = null;
+        IDisposable? tenantPermit = null;
         try
         {
             await WaitForNodeCapacityAsync(job, cts.Token).ConfigureAwait(false);
+
+            // The node-wide execution cap is not tenant-aware, so in a Shared deployment one tenant
+            // could otherwise hold every slot. This gate is outermost: a tenant at its provisioned
+            // session ceiling waits without occupying a user, group, or shared slot meanwhile.
+            tenantPermit = await AcquireTenantSlotAsync(job, cts.Token).ConfigureAwait(false);
 
             if (userGate is not null)
             {
@@ -356,6 +379,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         catch (OperationCanceledException)
         {
             executionPermit?.Dispose();
+            tenantPermit?.Dispose();
             ReleaseGates(groupGates);
             // Only release the per-user gate if WaitAsync actually acquired it — otherwise a job that
             // timed out *while waiting* for the gate would release a permit it never held, corrupting
@@ -379,6 +403,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         catch
         {
             executionPermit?.Dispose();
+            tenantPermit?.Dispose();
             ReleaseGates(groupGates);
             if (userGateHeld) userGate!.Release();
             throw;
@@ -631,6 +656,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             _runningJobCancellations.TryRemove(job.Id, out _);
             _jobCancellationReasons.TryRemove(job.Id, out _);
             executionPermit?.Dispose();
+            tenantPermit?.Dispose();
             ReleaseGates(groupGates);
             if (userGateHeld) userGate!.Release();
             _activeRefreshes.TryRemove(
@@ -683,6 +709,41 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         return true;
     }
 
+    /// <summary>
+    /// Takes this node out of rotation without dropping work: executions already running are allowed
+    /// to finish, and new ones are refused so they land on a node that is staying.
+    ///
+    /// <para>This is the graceful counterpart to <see cref="OnNodeLeaseLostAsync"/>, which fences an
+    /// abrupt loss of the node's claim by cancelling in-flight work. A rolling upgrade needs the
+    /// gentle path: killing every running report to install a release is an outage, not a rollout.</para>
+    /// </summary>
+    public void BeginDrain(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (Interlocked.Exchange(ref _draining, 1) == 1) return;
+        _drainReason = reason;
+        _log.LogWarning(
+            "Execution node draining: {Reason}. {InFlight} execution(s) will be allowed to finish; " +
+            "new executions are refused.", reason, InFlightExecutions);
+    }
+
+    /// <summary>Whether this node is draining, and how much work it is still waiting on.</summary>
+    public (bool Draining, string? Reason, int InFlight) DrainState =>
+        (Volatile.Read(ref _draining) == 1, _drainReason, InFlightExecutions);
+
+    /// <summary>Executions this node is still running. A drain is finished when this reaches zero.</summary>
+    public int InFlightExecutions => _jobs.Values.Count(
+        job => job.Status is JobStatus.Pending or JobStatus.Running);
+
+    private int _draining;
+    private string? _drainReason;
+
+    private void RefuseWhenDraining()
+    {
+        if (Volatile.Read(ref _draining) == 1)
+            throw new NodeDrainingException(_drainReason ?? "This node is draining.");
+    }
+
     public Task OnNodeLeaseLostAsync(string nodeId, string role, string reason, CancellationToken ct)
     {
         var cancelled = CancelLocalRunningJobs(
@@ -713,6 +774,24 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         }
 
         return cancelled;
+    }
+
+    /// <summary>
+    /// Holds a slot against the tenant's provisioned interactive-session ceiling. A deployment with no
+    /// Shared quota source, or a tenant with no provisioned ceiling, is governed by the node-wide cap
+    /// alone — the same behaviour as before this gate existed.
+    /// </summary>
+    private async Task<IDisposable?> AcquireTenantSlotAsync(ExecutionJob job, CancellationToken ct)
+    {
+        if (_tenantQuotas is null || string.IsNullOrWhiteSpace(job.KeyScope))
+            return null;
+
+        var limit = await _tenantQuotas
+            .GetMaxConcurrentExecutionsAsync(job.KeyScope, ct)
+            .ConfigureAwait(false);
+        return limit is > 0
+            ? await _tenantAdmission.AcquireAsync(job.KeyScope, limit.Value, ct).ConfigureAwait(false)
+            : null;
     }
 
     private SemaphoreSlim GetUserGate(string tenantId, int userId)

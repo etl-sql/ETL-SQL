@@ -67,6 +67,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin promotion import`](admin-promotion-import.md) | Import an Orchestrator promotion package idempotently |
 | [`etl-sql admin promotion preflight`](admin-promotion-preflight.md) | Create a secret-safe, mutation-free promotion inventory |
 | [`etl-sql admin promotion saas-delete`](admin-promotion-saas-delete.md) | Delete one Managed Dedicated tenant boundary under signed retention/legal authorization |
+| [`etl-sql admin promotion saas-fleet-plan`](admin-promotion-saas-fleet-plan.md) | Plan a release rollout across the Managed Dedicated fleet (plans only; never upgrades) |
 | [`etl-sql admin promotion saas-onboard`](admin-promotion-saas-onboard.md) | Create and populate one physically isolated SaaS tenant boundary |
 | [`etl-sql admin promotion saas-upgrade`](admin-promotion-saas-upgrade.md) | Drain and upgrade one Managed Dedicated tenant boundary |
 | [`etl-sql admin promotion validate`](admin-promotion-validate.md) | Validate mappings and collisions without changing the target |

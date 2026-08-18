@@ -54,4 +54,25 @@ public sealed class DockerStandardSandboxLifecycleTests : DockerSandboxLifecycle
     [DockerStandardSandboxFact]
     public Task StandardUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt() =>
         VerifyUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt();
+
+    [DockerStandardSandboxFact]
+    public Task StandardCheckpointedStateResumesInADifferentSandbox() =>
+        VerifyCheckpointedStateResumesInADifferentSandbox();
+
+    [DockerStandardSandboxFact]
+    public Task StandardGrantedCapabilityIsMountedReadOnlyOnALiveRuntime() =>
+        VerifyGrantedCapabilityIsMountedReadOnlyOnALiveRuntime();
+
+    /// <summary>
+    /// The reserved-placement contract on an ordinary runtime. It proves the refusal logic against
+    /// real containers; the citable Dedicated-tier result comes from
+    /// <see cref="DockerDedicatedSandboxLifecycleTests"/> on a hardened runtime.
+    /// </summary>
+    [DockerStandardSandboxFact]
+    public Task StandardHostFixedToOneTenantRunsOnlyItsOwnTenantAndPool() =>
+        VerifyReservedPlacementRunsOnlyTheHostsOwnTenantAndPool(Options() with
+        {
+            DedicatedTenantId = "tenant-a",
+            DedicatedPoolId = ReservedPoolId
+        });
 }

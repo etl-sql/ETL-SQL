@@ -27,6 +27,28 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         PRINT 'this script is not expected to finish';
         """;
 
+    // Reaches a top-level checkpoint label — which is what persists evaluator state — and then waits
+    // to be killed, so the attempt contributes a durable checkpoint and nothing else.
+    protected const string CheckpointThenWaitScript = """
+        DECLARE @Stage VARCHAR(50);
+        SET @Stage = 'checkpointed-by-the-first-sandbox';
+        Checkpoint1:
+        WAITFOR DELAY '00:05:00';
+        PRINT 'this script is not expected to finish';
+        """;
+
+    // Carries the checkpoint label (resume requires it) but never assigns @Stage. Any value it can
+    // write therefore came from the other sandbox's checkpoint, not from re-running the first half.
+    protected const string ResumeFromCheckpointScript = """
+        DECLARE @Stage VARCHAR(50);
+        Checkpoint1:
+        CREATE CONNECTION SandboxOut AS FLATFILE(PATH = '/workspace/output/resumed.csv', DELIMITER = ',', HEADER = ON);
+        CREATE TABLE #Resumed (Stage VARCHAR(50));
+        INSERT INTO #Resumed VALUES (@Stage);
+        INSERT INTO SandboxOut SELECT * FROM #Resumed;
+        PRINT 'safe';
+        """;
+
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), $"etlsql-sandbox-live-{Guid.NewGuid():N}");
     private readonly ProcessSandboxCommandRunner _docker = new();
@@ -70,6 +92,13 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         Assert.Contains("no-new-privileges", string.Join(
             ',', host.GetProperty("SecurityOpt").EnumerateArray().Select(value => value.GetString())));
         Assert.Equal("65532:65532", inspected.GetProperty("Config").GetProperty("User").GetString());
+
+        // Containment ceilings are only real if the runtime actually received them. NanoCpus is
+        // Docker's own encoding of --cpus, so this is the host's view rather than the request's.
+        Assert.Equal(512L * 1024 * 1024, host.GetProperty("Memory").GetInt64());
+        Assert.Equal(512L * 1024 * 1024, host.GetProperty("MemorySwap").GetInt64());
+        Assert.Equal(2_000_000_000L, host.GetProperty("NanoCpus").GetInt64());
+        Assert.Equal(64L, host.GetProperty("PidsLimit").GetInt64());
 
         // Nothing reusable is mounted: no named or anonymous volume, and every bind source belongs to
         // this assignment or to this tenant's server-owned session and key roots.
@@ -222,6 +251,169 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         Assert.False(Directory.Exists(workspace.RootPath));
     }
 
+    protected async Task VerifyCheckpointedStateResumesInADifferentSandbox()
+    {
+        var artifacts = ArtifactStore();
+        var provider = new DockerSandboxExecutionProvider(Options(), _docker, artifacts);
+        var sessionId = $"resume-{Guid.NewGuid():N}";
+
+        // The first sandbox reaches its checkpoint and is then killed outright. Its workspace is
+        // destroyed with it, so only the tenant's server-owned session root survives the attempt.
+        var firstArtifact = await artifacts.PutScriptAsync(CheckpointThenWaitScript);
+        var firstWorkspace = await Workspaces().AssignAsync(Identity("tenant-a"));
+        var firstAttempt = await provider.PrepareAsync(
+            Request(firstArtifact, "tenant-a") with
+            {
+                AdmissionId = "live-checkpoint-1",
+                SessionId = sessionId
+            },
+            firstWorkspace,
+            default);
+        var firstContainer = TrackContainer(firstWorkspace.AssignmentId);
+        var firstRun = firstAttempt.RunAsync(default);
+        await WaitForCheckpointAsync(sessionId);
+        Assert.Equal(0, (await _docker.RunAsync("docker", ["kill", firstContainer])).ExitCode);
+        Assert.Equal(137, (await firstRun).ExitCode);
+        await firstAttempt.DestroyAsync(default);
+        Assert.False(await ContainerExistsAsync(firstContainer));
+        await firstWorkspace.DestroyAsync();
+        Assert.False(Directory.Exists(firstWorkspace.RootPath));
+
+        // The second sandbox is a different assignment in a different container, sharing only the
+        // tenant's session root. Its script never assigns @Stage.
+        var secondArtifact = await artifacts.PutScriptAsync(ResumeFromCheckpointScript);
+        var secondWorkspace = await Workspaces().AssignAsync(Identity("tenant-a"));
+        Assert.NotEqual(firstWorkspace.AssignmentId, secondWorkspace.AssignmentId);
+        var secondAttempt = await provider.PrepareAsync(
+            Request(secondArtifact, "tenant-a") with
+            {
+                AdmissionId = "live-checkpoint-2",
+                SessionId = sessionId,
+                ResumeFromCheckpoint = true
+            },
+            secondWorkspace,
+            default);
+        var secondContainer = TrackContainer(secondWorkspace.AssignmentId);
+        Assert.NotEqual(firstContainer, secondContainer);
+        var outcome = await secondAttempt.RunAsync(default);
+
+        AssertSucceeded(outcome);
+        // The value can only have come from the checkpoint the killed sandbox wrote: this attempt
+        // never set it, and the workspace that produced it no longer exists.
+        Assert.Contains(
+            "checkpointed-by-the-first-sandbox",
+            await File.ReadAllTextAsync(Path.Combine(secondWorkspace.OutputPath, "resumed.csv")));
+
+        await secondAttempt.DestroyAsync(default);
+        Assert.False(await ContainerExistsAsync(secondContainer));
+        await secondWorkspace.DestroyAsync();
+    }
+
+    /// <summary>
+    /// Reserved placement on a host fixed to one tenant: its own tenant's work actually runs there,
+    /// and foreign tenant or pool work is refused before any runtime exists. The refusal half is what
+    /// distinguishes a reserved host from an ordinary one that merely happens to be running a single
+    /// tenant's jobs today.
+    /// </summary>
+    protected async Task VerifyReservedPlacementRunsOnlyTheHostsOwnTenantAndPool(
+        DockerSandboxExecutionOptions? hostOptions = null)
+    {
+        var options = hostOptions ?? Options();
+        Assert.False(
+            string.IsNullOrWhiteSpace(options.DedicatedTenantId),
+            "This lane must be configured as a tenant-dedicated host.");
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync(HarmlessScript);
+        var provider = new DockerSandboxExecutionProvider(options, _docker, artifacts);
+        var ownTenant = options.DedicatedTenantId!;
+
+        // Positive: the reserved host runs its own tenant's work, on the runtime it claims.
+        var workspace = await Workspaces().AssignAsync(Identity(ownTenant));
+        var attempt = await provider.PrepareAsync(
+            Request(artifact, ownTenant) with { AdmissionId = "live-reserved-1" }, workspace, default);
+        var container = TrackContainer(workspace.AssignmentId);
+        Assert.Equal(Tier, attempt.Evidence.IsolationTier);
+        Assert.Equal(ExpectedRuntime, attempt.Evidence.Runtime);
+        var inspected = await InspectAsync(container);
+        Assert.Equal(
+            ownTenant,
+            inspected.GetProperty("Config").GetProperty("Labels")
+                .GetProperty(DockerSandboxExecutionProvider.TenantLabel).GetString());
+        AssertSucceeded(await attempt.RunAsync(default));
+        await attempt.DestroyAsync(default);
+        await workspace.DestroyAsync();
+
+        // Negative: another tenant's work is refused, and no runtime is created for it at all.
+        var foreignWorkspace = await Workspaces().AssignAsync(Identity("tenant-b"));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.PrepareAsync(
+            Request(artifact, "tenant-b") with { AdmissionId = "live-reserved-foreign" },
+            foreignWorkspace,
+            default));
+        Assert.Empty(await ListContainersAsync(
+            $"label={DockerSandboxExecutionProvider.AssignmentLabel}={foreignWorkspace.AssignmentId}"));
+        await foreignWorkspace.DestroyAsync();
+
+        // Negative: its own tenant placed in a different capacity pool is refused too, so a reserved
+        // host cannot be borrowed by pointing other capacity at it.
+        var foreignPoolWorkspace = await Workspaces().AssignAsync(Identity(ownTenant));
+        var foreignPool = Request(artifact, ownTenant);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.PrepareAsync(
+            foreignPool with
+            {
+                AdmissionId = "live-reserved-foreign-pool",
+                AdmissionPolicy = foreignPool.AdmissionPolicy with { PoolId = "shared-elsewhere" }
+            },
+            foreignPoolWorkspace,
+            default));
+        Assert.Empty(await ListContainersAsync(
+            $"label={DockerSandboxExecutionProvider.AssignmentLabel}={foreignPoolWorkspace.AssignmentId}"));
+        await foreignPoolWorkspace.DestroyAsync();
+    }
+
+    /// <summary>
+    /// A granted capability reaches a real container: mounted read-only at its own path, with the
+    /// material nowhere in the command, and the workload still runs. Proving the mount on a live
+    /// runtime is the part a command-construction test cannot show.
+    /// </summary>
+    protected async Task VerifyGrantedCapabilityIsMountedReadOnlyOnALiveRuntime()
+    {
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync(HarmlessScript);
+        var workspace = await Workspaces().AssignAsync(Identity("tenant-a"));
+        var provider = new DockerSandboxExecutionProvider(
+            Options(), _docker, artifacts, new StaticCapabilityResolver("live-capability-material"));
+
+        var attempt = await provider.PrepareAsync(
+            Request(artifact, "tenant-a") with
+            {
+                AdmissionId = "live-capability-1",
+                CapabilityHandles = ["warehouse-reader"]
+            },
+            workspace,
+            default);
+        var container = TrackContainer(workspace.AssignmentId);
+
+        var mounts = (await InspectAsync(container)).GetProperty("Mounts").EnumerateArray().ToArray();
+        Assert.Contains(workspace.AssignmentId, MountSource(mounts, "/run/secrets/capabilities"));
+        Assert.False(
+            MountRw(mounts, "/run/secrets/capabilities"),
+            "A workload may read the capabilities it was granted and must not be able to add to them.");
+
+        AssertSucceeded(await attempt.RunAsync(default));
+        await attempt.DestroyAsync(default);
+        await workspace.DestroyAsync();
+        // The material lived in the assignment, so it is gone with it.
+        Assert.False(Directory.Exists(Path.Combine(workspace.RootPath, "capabilities")));
+    }
+
+    private sealed class StaticCapabilityResolver(string material) : ISandboxCapabilityResolver
+    {
+        public Task<string> ResolveAsync(
+            SandboxAssignmentIdentity assignment,
+            string capabilityHandle,
+            CancellationToken cancellationToken) => Task.FromResult(material);
+    }
+
     protected async Task VerifyUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt()
     {
         var artifacts = ArtifactStore();
@@ -294,6 +486,33 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         Assert.Fail($"The sandbox container '{container}' never reached the running state.");
     }
 
+    /// <summary>
+    /// Waits for the checkpoint to be durable on the tenant's session root rather than for a log
+    /// line, so the kill below cannot race the write it is supposed to happen after.
+    /// </summary>
+    private async Task WaitForCheckpointAsync(string sessionId)
+    {
+        // The file appearing is not the checkpoint being finished: killing the sandbox between the
+        // store creating its database and finishing the write leaves state the next attempt cannot
+        // read, which looks exactly like resume being broken. Wait until the size has settled.
+        var metadata = Path.Combine(SessionRoot, "tenant-a", sessionId, "metadata.db");
+        var deadline = DateTime.UtcNow.AddSeconds(120);
+        long? previousLength = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (File.Exists(metadata))
+            {
+                var length = new FileInfo(metadata).Length;
+                if (length > 0 && length == previousLength) return;
+                previousLength = length;
+            }
+
+            await Task.Delay(150);
+        }
+
+        Assert.Fail($"The sandbox never persisted a settled checkpoint for session '{sessionId}'.");
+    }
+
     private static async Task<SandboxWorkspaceAssignment> WaitForAssignmentAsync(
         CapturingWorkspaceProvider workspaces)
     {
@@ -320,10 +539,13 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
     private FileSystemSandboxWorkspaceProvider Workspaces() => new(
         new FileSystemSandboxWorkspaceOptions { RootPath = Path.Combine(_root, "workspaces") });
 
+    /// <summary>The single capacity pool these lanes place work in.</summary>
+    protected const string ReservedPoolId = "sandbox-pool";
+
     private static ISandboxAdmissionController Admissions() => new FairShareSandboxAdmissionController(
         new SandboxAdmissionControllerOptions
         {
-            PoolCapacities = new Dictionary<string, int>(StringComparer.Ordinal) { ["sandbox-pool"] = 4 }
+            PoolCapacities = new Dictionary<string, int>(StringComparer.Ordinal) { [ReservedPoolId] = 4 }
         });
 
     private static SandboxAssignmentIdentity Identity(string tenant) => new(
@@ -358,11 +580,13 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
             MaxDuration = TimeSpan.FromMinutes(5),
             MaxMemoryBytes = 512 * 1024 * 1024,
             MaxScratchBytes = 32 * 1024 * 1024,
-            MaxProcesses = 64
+            MaxProcesses = 64,
+            MaxCpuCores = 2,
+            MaxConnectorConcurrency = 8
         },
         AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
         {
-            PoolId = "sandbox-pool",
+            PoolId = ReservedPoolId,
             TenantWeight = 1,
             MaxConcurrentAttempts = 2,
             MaxQueuedAttempts = 2

@@ -107,7 +107,7 @@ public enum DockerSandboxMode
     Standard
 }
 
-public sealed class DockerSandboxExecutionOptions
+public sealed record DockerSandboxExecutionOptions
 {
     public DockerSandboxMode Mode { get; init; } = DockerSandboxMode.Hardened;
     public string DockerExecutable { get; init; } = "docker";
@@ -122,6 +122,12 @@ public sealed class DockerSandboxExecutionOptions
     public string User { get; init; } = "65532:65532";
     public string? DedicatedTenantId { get; init; }
     public string? DedicatedPoolId { get; init; }
+    /// <summary>
+    /// Host block device that carries sandbox I/O (for example <c>/dev/sda</c>). Block-I/O throttling
+    /// is per-device, so a host that does not declare one cannot honour a profile's IOPS ceiling and
+    /// must refuse that work instead of running it unthrottled.
+    /// </summary>
+    public string? IopsThrottleDevice { get; init; }
 }
 
 /// <summary>
@@ -142,17 +148,20 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
     private readonly DockerSandboxExecutionOptions _options;
     private readonly ISandboxCommandRunner _commands;
     private readonly IImmutableSandboxArtifactStore _artifacts;
+    private readonly ISandboxCapabilityResolver? _capabilities;
     private readonly string _sessionRoot;
     private readonly string _machineKeyRoot;
 
     public DockerSandboxExecutionProvider(
         DockerSandboxExecutionOptions options,
         ISandboxCommandRunner commands,
-        IImmutableSandboxArtifactStore artifacts)
+        IImmutableSandboxArtifactStore artifacts,
+        ISandboxCapabilityResolver? capabilities = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _commands = commands ?? throw new ArgumentNullException(nameof(commands));
         _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
+        _capabilities = capabilities;
         ValidateOptions(options);
         _sessionRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.SessionRoot));
         _machineKeyRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.MachineKeyRoot));
@@ -177,9 +186,15 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             throw new InvalidOperationException("The hardened Docker provider accepts only Hardened or Dedicated work.");
         if (request.RequiredIsolationTier >= SandboxIsolationTier.Hardened && _options.Mode == DockerSandboxMode.Standard)
             throw new InvalidOperationException("The Standard Docker provider accepts only Standard work.");
-        if (request.CapabilityHandles.Count != 0)
+        if (request.Limits.MaxIops is not null && string.IsNullOrWhiteSpace(_options.IopsThrottleDevice))
+            throw new InvalidOperationException(
+                "This sandbox host declares no block device for I/O throttling and cannot enforce the " +
+                "profile's IOPS limit; running the workload unthrottled would make the ceiling fictional.");
+        if (request.CapabilityHandles.Count != 0 && _capabilities is null)
             throw new NotSupportedException(
-                "Docker sandbox capability injection is not configured; raw capability handles will not be exposed.");
+                "This sandbox host has no capability resolver configured, so it cannot honour the " +
+                "capabilities this workload was granted; it refuses the work rather than running it " +
+                "without them.");
         if (request.VariableOverrides.Count != 0)
             throw new NotSupportedException(
                 "Docker sandbox variable override injection is not configured; values will not be exposed in process arguments.");
@@ -202,6 +217,7 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
 
         var scriptPath = Path.Combine(workspace.InputPath, "job.etlsql");
         await _artifacts.StageAsync(request.ArtifactId, request.ArtifactHash, scriptPath, cancellationToken);
+        var capabilityPath = await StageCapabilitiesAsync(request, workspace, cancellationToken);
         var sessionPath = ResolveTenantSessionPath(tenantId);
         var machineKeyPath = ResolveTenantMachineKeyPath(tenantId);
         // The session mount is read-write and the sandbox runs as an unprivileged uid, so this leaf
@@ -224,7 +240,8 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             createInvoked = true;
             var create = await _commands.RunAsync(
                 _options.DockerExecutable,
-                BuildCreateArguments(containerName, request, workspace, sessionPath, machineKeyPath),
+                BuildCreateArguments(
+                    containerName, request, workspace, sessionPath, machineKeyPath, capabilityPath),
                 cancellationToken);
             RequireSuccess(create, "create hardened sandbox");
 
@@ -268,12 +285,48 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         }
     }
 
+    /// <summary>
+    /// Resolves every granted capability on the orchestrator side and writes it into a directory of
+    /// this assignment's own, owner-only until the single mounted leaf is opened to the sandbox uid.
+    /// Material never reaches an argument or an environment value — only the directory it lives in
+    /// does — because argv and the environment are readable by anything that can see the process.
+    /// </summary>
+    private async Task<string?> StageCapabilitiesAsync(
+        SandboxWorkloadRequest request,
+        SandboxWorkspaceAssignment workspace,
+        CancellationToken cancellationToken)
+    {
+        if (request.CapabilityHandles.Count == 0) return null;
+
+        var root = Directory.CreateDirectory(Path.Combine(workspace.RootPath, "capabilities")).FullName;
+        SandboxFilePermissions.RestrictToOwner(root);
+        foreach (var handle in request.CapabilityHandles.Distinct(StringComparer.Ordinal))
+        {
+            SecretBackedSandboxCapabilityResolver.ValidateHandle(handle);
+            var material = await _capabilities!.ResolveAsync(
+                request.Assignment, handle, cancellationToken);
+            var path = Path.Combine(root, handle);
+            if (!Path.GetFullPath(path).StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                throw new UnauthorizedAccessException("A capability handle escaped its assignment directory.");
+
+            await File.WriteAllTextAsync(path, material, cancellationToken);
+            SandboxFilePermissions.RestrictToOwner(path);
+        }
+
+        // The mount is read-only, so opening the leaf lets the workload read its capabilities and
+        // nothing else — it cannot add, replace, or erase one.
+        SandboxFilePermissions.AllowUnprivilegedSandboxReads(root);
+        RequireDockerMountSource(root);
+        return root;
+    }
+
     private IReadOnlyList<string> BuildCreateArguments(
         string containerName,
         SandboxWorkloadRequest request,
         SandboxWorkspaceAssignment workspace,
         string sessionPath,
-        string machineKeyPath)
+        string machineKeyPath,
+        string? capabilityPath)
     {
         var args = new List<string>
         {
@@ -285,6 +338,7 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges",
             "--pids-limit", request.Limits.MaxProcesses.ToString(CultureInfo.InvariantCulture),
+            "--cpus", request.Limits.MaxCpuCores.ToString("0.###", CultureInfo.InvariantCulture),
             "--memory", request.Limits.MaxMemoryBytes.ToString(CultureInfo.InvariantCulture),
             "--memory-swap", request.Limits.MaxMemoryBytes.ToString(CultureInfo.InvariantCulture),
             "--tmpfs", $"/workspace/scratch:rw,noexec,nosuid,nodev,size={request.Limits.MaxScratchBytes}",
@@ -295,6 +349,9 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             "--env", "Session__Root=/var/lib/etl-sql/sessions",
             "--env", "ETLSQL_MACHINE_KEY_FILE=/run/secrets/etlsql-machine-key",
             "--env", "TMPDIR=/workspace/scratch",
+            // Server-owned per-tenant ceiling, not the worker image's default.
+            "--env", "Engine__MaxConnectionsPerScript=" +
+                     request.Limits.MaxConnectorConcurrency.ToString(CultureInfo.InvariantCulture),
             // Every writable location the workload can reach is this assignment's single-use tmpfs.
             // The root is read-only and the tenant uid is unmapped, so a home, XDG, machine-key
             // cache, log, or outbox path left at its default would either abort the run or write
@@ -315,6 +372,31 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             // the read-only working directory.
             "run", "/workspace/input/job.etlsql", "--json", "--log", "/workspace/scratch/logs/scripts"
         };
+        if (capabilityPath is not null)
+        {
+            args.InsertRange(args.IndexOf("--workdir"),
+            [
+                "--mount", $"type=bind,source={capabilityPath},target=/run/secrets/capabilities,readonly",
+                "--env", "ETLSQL_CAPABILITY_ROOT=/run/secrets/capabilities"
+            ]);
+        }
+        if (request.Limits.MaxRows is { } maxRows)
+        {
+            args.InsertRange(args.IndexOf("--workdir"),
+            [
+                "--env",
+                "Engine__MaxRowsProcessed=" + maxRows.ToString(CultureInfo.InvariantCulture)
+            ]);
+        }
+        if (request.Limits.MaxIops is { } iops)
+        {
+            var rate = iops.ToString(CultureInfo.InvariantCulture);
+            args.InsertRange(args.IndexOf("--workdir"),
+            [
+                "--device-read-iops", $"{_options.IopsThrottleDevice}:{rate}",
+                "--device-write-iops", $"{_options.IopsThrottleDevice}:{rate}"
+            ]);
+        }
         if (!string.IsNullOrWhiteSpace(request.SessionId))
         {
             args.Add("--session");
@@ -439,6 +521,16 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         ArgumentException.ThrowIfNullOrWhiteSpace(options.MachineKeyRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Entrypoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.User);
+
+        if (options.IopsThrottleDevice is { } device)
+        {
+            // The device is joined to the rate with ':', so a value carrying its own colon could
+            // rewrite the throttle argument instead of naming a device.
+            if (string.IsNullOrWhiteSpace(device) || !device.StartsWith('/') || device.Contains(':'))
+                throw new ArgumentException(
+                    "The sandbox IOPS throttle device must be an absolute host device path without a colon.",
+                    nameof(options));
+        }
 
         if (options.Mode == DockerSandboxMode.Hardened)
         {

@@ -135,6 +135,28 @@ public sealed class LedgerBackedSandboxAdmissionControllerTests : IDisposable
         await active.ReleaseAsync();
     }
 
+    [Fact]
+    public async Task WaitingNodeFailsFastWhenItsDurableAdmissionIsRevoked()
+    {
+        var ledger = Ledger();
+        var holder = Controller("node-holder", ledger);
+        var waiter = Controller("node-waiter", Ledger());
+        var held = await holder.AcquireAsync(Tenant("tenant-a"), Policy());
+        var waiting = waiter.AcquireAsync(Tenant("tenant-b"), Policy()).AsTask();
+        await Task.Delay(150); // flaky-delay-ok: lets the second node enqueue and start polling
+        Assert.False(waiting.IsCompleted);
+
+        var queued = (await ledger.ListTenantOpenAsync(Tenant("tenant-b"))).Single();
+        // A tenant lifecycle fence revokes queued work while a node is still waiting on it.
+        Assert.Equal(1, await ledger.CancelTenantQueuedAsync(Tenant("tenant-b")));
+
+        var revoked = await Assert.ThrowsAsync<SandboxAdmissionRevokedException>(
+            async () => await waiting.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(queued.AdmissionId, revoked.AdmissionId);
+        Assert.Equal(SandboxAdmissionState.Cancelled, revoked.State);
+        await held.ReleaseAsync();
+    }
+
     private RelationalSandboxAdmissionLedger Ledger() => new(
         new SqliteOrchestratorDialect($"Data Source={_databasePath};Pooling=False"));
 

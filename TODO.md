@@ -44,6 +44,47 @@ mid-release would mean debugging the measuring instrument and the product at the
 them at the end also means they are exercised for the first time on the *next* release rather than
 destabilising this one.
 
+### Four documentation tests are red and block the documentation evidence gate
+
+Found while verifying item 5 on 2026-08-17 and **verified pre-existing** — the identical four fail at
+`821bf0f2`, before this branch. They are not regressions, but the "Documentation/security-boundary
+suite" gate above cannot go green while they fail. Each is documentation the parser or grammar does
+not actually accept, which means the docs promise syntax the product rejects:
+
+- [ ] `DocSanityTests.GeneralDocs_SqlBlocks_ParseWithoutSyntaxError` —
+      `docs/guides/feature-guides/report-sql.md` block #13: `LABEL` inside a `CREATE VISUAL … CARD`
+      body is rejected as `Unexpected token 'LABEL' in CREATE BUTTON body`.
+- [ ] `EbnfConformanceTests.ParserAcceptedDocumentExamples_AreRecognizedByCompleteGrammar` — 2 of 960
+      examples: `PRINT_LAYOUT` in `reference/visuals-reporting/report/print-layout.md` and
+      `…/visual.md`. The recursive-descent parser accepts them and the complete EBNF does not, so the
+      published grammar and the implementation disagree.
+- [ ] `DocumentationSyntaxTests.ValidateDocumentationSnippets` —
+      `docs/reference/file-operations/send-email.md`: `SEND EMAIL … ATTACH @path` is rejected with
+      "Expected one of: WITH".
+- [ ] `HelpSystemTests.TestHelpFileOperations` — the file-operations help entry no longer contains
+      the expected `VERBOSE:` marker.
+
+Each needs a decision per case: fix the documentation, or implement the syntax it advertises. The
+`PRINT_LAYOUT` and `LABEL` cases arrived with the paginated-report documentation in `b9c29d9c` and
+`2f23ac74`, so the docs were written ahead of the grammar rather than the grammar regressing.
+
+### Two tests fail only under full-solution load
+
+Also found on 2026-08-17, and also pre-existing. Both pass in isolation and failed only inside a
+whole-solution run, which cost real time to distinguish from a regression — the point of recording
+them is that the next person does not repeat that.
+
+- [ ] `MetadataManagerTests.ValidCacheHit_TriggersBackgroundRefresh_WhenStale_AndReleasesSlot` and
+      `LiveObjectScaleAssessmentTests.LiveObjectsSupportDocumentedScaleMatrix(connection, 100)`.
+      Both count observations after a background refresh, so they are the wait-for-a-condition class
+      described in [flaky-test-stability.md](docs/releases/flaky-test-stability.md); neither uses
+      `LoadAwareWait`. Suspect `ConnectorRegistry.Instance` for the scale case — it is a mutable
+      global that makes connector tests order-dependent.
+
+One whole-solution run also aborted with a test-host `Internal CLR error (0x80131506)` after ~14
+minutes. It did not reproduce, and the machine was running Docker lanes and PostgreSQL containers at
+the time, so it is recorded as an observation rather than a defect.
+
 ### Release-process RCI — issues found cutting v0.17.0 (scheduled last)
 
 Thirteen process problems surfaced during this release. Remaining items are listed in rough value
@@ -99,57 +140,44 @@ actually narrow. New coverage asserts the same caller through an endpoint *and* 
 statement — `OrchestratorScopeCeilingTests`, `OrchestratorJobChannelIdentityTests`, and federated
 cases in `OrchestratorJobApiAuthTests`.
 
+- [ ] **Dedicated `OrchestratorViewer` role in Portal RBAC.** The Portal's `OrchestratorAccess` policy currently requires `Admin` or `OrchestratorManager`. Introduce a built-in `OrchestratorViewer` role in `PortalRole` seeding and policy definition so operators can browse the Orchestrator tab (read job status, run history, DAG dependencies, metrics, and watermarks) without possessing object creation (`CanCreate`) or management rights.
+- [ ] **Dynamic group claims validation for Orchestrator grants.** OIDC identity sync populates `UserGroup` memberships in the Portal database, and `OrchestratorCaller` carries `GroupIds`. Ensure end-to-end integration tests explicitly assert that group-level grants (`principalKind = GROUP`) evaluate accurately against users mapped via OIDC group claims during token assertion minting.
 - [ ] **`POST /management/stop` is not audited.** Stopping the whole Orchestrator writes a
       `LogWarning` and no security event, so "who stopped the service" is answerable only from
       diagnostic logs. It is not one of the object verbs, which is why Slice F left it. Correction:
       emit a `CatalogMutation` event targeting `SERVICE:<host>` from the same caller identity the
       object verbs use.
-- [ ] **Three `OrchestratorPostgresStoreTests` are red, and block a release evidence gate.**
-      `SharedTenantLifecycle_IsPartitionedAndDurableOnPostgres`,
-      `TenantQualityEvidence_IsPartitionedOnPostgres`, and `OptimisticConcurrency_And_ActiveJobs`
-      fail on PostgreSQL — tenant partitioning, an unbound-job helper collision, and an optimistic
-      concurrency assertion. **Pre-existing**, verified by running the same filter at `ce069e63`
-      (before any Slice F work) and getting the identical three failures, and unrelated to audit
-      emission. They are `Category=Integration`, so the default lane never sees them; the Enterprise
-      certification lane does, and they fail its `shared-state-and-artifact-providers` prerequisite,
-      which stops the lane before its remaining five prerequisites run.
+- [x] **Three `OrchestratorPostgresStoreTests` are red, and block a release evidence gate.**
+      **Fixed 2026-08-17; the lane is 16/16 on real PostgreSQL 16.** All three were harness defects
+      with no product bug behind them, and each carried a companion assertion that passed vacuously —
+      so the lane was both red and not checking what it named. All three are surrogate-identity
+      fallout: `GetJobAsync(null, name)` reads the *unbound* partition, where a tenant-bound job has
+      never existed, so "alpha was deleted" passed for free and "beta survived" could not pass;
+      `TrySaveJobAsync` matches on the surrogate id, so a freshly constructed `JobDefinition` was
+      refused for being a different row rather than for holding a stale version; and the
+      name-addressed `LogJobStartAsync` helper refuses to invent an unbound twin when the name
+      belongs to a tenant. The Enterprise certification lane's `shared-state-and-artifact-providers`
+      prerequisite should now get past this point to its remaining five.
 
-### Orchestrator — Job Administration UI
+### Sandbox execution — follow-ups from item 5
 
-Split out of Per-Object Authorization (2026-08-15) so the security boundary is not held hostage to a
-much larger UI build. Depends on that item for ownership and grant surfacing, but nothing else.
+Recorded 2026-08-17 when "Scheduling, execution, and capacity" closed. Neither is part of that item's
+contract; both are the next thing each piece of it needs.
 
-**Scoped against what already exists (reviewed 2026-08-15).** `src/ETL-SQL.Portal/wwwroot/orchestrator.html`
-is not a stub — it has the service status chip with restart/stop, four clickable stat chips that filter
-the table, a triage board, a 24-hour Gantt timeline, the jobs table with run/enable-disable/kill/delete,
-a detail panel with Details and Script Flow (DAG) tabs, an inline script editor, a duration sparkline,
-run history with resume-from-named-checkpoint behind an impact-confirm dialog, a create-job modal, and
-a run-with-variable-overrides modal. This item extends that to the objects and metrics added since it
-was written; it is not a rebuild.
-
-- [x] **Schedule and notification objects.** `/api/schedules` and `/api/notifications` — the unified
-      catalog — have full UI catalog tables with create/edit/delete/toggle and dispatch tests.
-- [x] **Job metrics.** The sparkline toggles between duration and rows processed. Data quality failure
-      breakdowns, quarantine counters, and stewardship coverage scores are surfaced in the job details panel.
-- [x] **Bundles.** `jobType`/`targetPath` (`bundle://`) selector and pinning surfaced in create modal and details.
-- [x] **`DisplayName`, `Description`, and `Options`** — including `SandboxProfile` admission options in job forms,
-      table badges, and search filtering.
-- [x] **Watermark state.** High-water mark inspector with key editing and 1-click backfill reset.
-- [x] **Definition change log** — Chronological audit trail showing mutations, triggers, and access changes.
-- [x] **Table ergonomics** — Instant search, status filters, configurable pagination, and 7-day multi-day run calendar.
-- [x] **Job-to-job dependency view.** Interactive force-directed cross-job DAG showing upstream providers and downstream consumers.
-
-### Installer — component rework
-
-Raised 2026-08-15 while scoping the orchestrator/admin Portal deployment. The MSI already splits into
-`Feature_SDK`, `Feature_Orchestrator`, and `Feature_Portal` (`src/ETL-SQL.Installer/Installer.wxs`), so
-component-level installation works; the naming and the groupings are what need work.
-
-- [x] **Rename `Feature_SDK`** — renamed to `Feature_Workstation` ("Workstation Authoring"). Title, description, and dialog label now accurately describe the TUI, LSP, Report CLI, and Desktop Player as the workstation authoring toolkit.
-- [x] **Orchestrator feature** installs the job runner with the Admin Portal as a default-on sub-feature `Feature_AdminPortal`. The Admin Portal is a child of `Feature_Orchestrator` and is on by default, since Team and above require a Portal for identity. A Solo install can deselect it (`RequireFederatedIdentity=false`).
-- [x] **Report Portal feature** added as `Feature_ReportPortal` — an independent top-level feature so a team can put reporting on its own server, separate from the Orchestrator and Admin Portal.
-- [x] **Portal surface flag.** `PORTAL_SURFACE` property (`"All"` / `"AdminOnly"` / `"ReportOnly"`) is set by the preset or derived from the feature selection and written to `Portal:Surface` in `appsettings.json` by `configure-portal-jwt.ps1`. Installer feature selection and the runtime flag are one decision.
-- [x] **Deployment-profile install templates** added as a new `DeployProfileDlg` dialog inserted between the license page and component selection. Presets: Solo (Workstation only), Team (Workstation + Orchestrator + Admin Portal), Enterprise (all components). Each preset sets the checkbox defaults; the user can still customise before clicking Install.
+- [ ] **Nothing consumes a mounted capability yet.** The delivery half is built and proven on a real
+      hardened runtime: handles resolve server-side, and material is bind-mounted read-only at
+      `/run/secrets/capabilities` with `ETLSQL_CAPABILITY_ROOT` naming the directory. But **no engine
+      code reads that variable**, and there is no `CAPABILITY:name` reference the way `SECRET:name`
+      exists. A script can only use a capability by hardcoding
+      `/run/secrets/capabilities/<handle>` as a file path, which works but is neither documented nor
+      checkable. Give capabilities a first-class reference resolved from the mounted root, so the
+      engine fails a missing capability by name instead of failing to open a file.
+- [ ] **CI runs none of the three sandbox lifecycle lanes.** Standard, Hardened, and Dedicated all
+      exist and pass, and all three run only by hand — the Hardened and Dedicated lanes additionally
+      need a prepared runtime, which is what `scripts/enable-hardened-sandbox-lane.sh` is for. A lane
+      nobody runs decays into a lane that no longer works, and this is the evidence the hostile-tenant
+      claims rest on. Add at least the Standard lane to CI, and the hardened pair to a runner that
+      can register gVisor.
 
 ### Platform — Progressive SaaS Delivery and Red Cells
 
@@ -274,9 +302,11 @@ runtime, which is what the storage cell below was blocked on.
 
 ##### 5. Scheduling, execution, and capacity
 
-- [ ] **Dedicated.** Provision tenant-dedicated queues, schedules, leases, quotas, session roots, and
+- [x] **Dedicated.** Provision tenant-dedicated queues, schedules, leases, quotas, session roots, and
       VM/worker boundaries; run disposable OCI tasks without treating a shared-kernel container as
-      the boundary between customers. Prove reserved placement.
+      the boundary between customers. Prove reserved placement. **Closed 2026-08-17** — reserved
+      placement, checkpoint resume across sandboxes, and the full lifecycle contract are proven on a
+      registered gVisor runtime with a digest-pinned image; see the completion records below.
 
       **Production hardened-provider slice completed (2026-08-13).** Scheduled jobs now prefer the
       configured `ISandboxScheduledJobExecutor`, which binds the job's immutable tenant, attempt,
@@ -294,10 +324,53 @@ runtime, which is what the storage cell below was blocked on.
       **Partially unblocked 2026-08-17.** A registered gVisor runtime and a digest-pinned runnable
       worker image now exist (see domain 4), and `DockerHardenedSandboxLifecycleTests` supplies the
       real hardened-runtime run, forced termination, and residue proof this cell was waiting on —
-      mocked command evidence is not substituted for it. The cell stays open for what that lane does
-      not cover: **different-sandbox checkpoint resume**, and **reserved placement proven on a real
-      tenant-dedicated hardened host** rather than through the host-fixed refusal tests alone.
-- [ ] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
+      mocked command evidence is not substituted for it.
+
+      **Different-sandbox checkpoint resume completed (2026-08-17), and proving it found the defect
+      that made it impossible.** Both lifecycle lanes now run a checkpoint in one sandbox, kill that
+      sandbox outright, destroy its workspace, and resume the tenant's session in a *different*
+      container on a *different* assignment whose script never assigns the value it writes out — so
+      the value can only have come from the first sandbox's checkpoint. The first run of that test
+      failed with `Machine-protected payload authentication failed`, and the cause was real: session
+      state is sealed with `CryptoUtils.GetMachineKey`, which derives from a random `machine.key` in
+      `LocalApplicationData`. In a sandbox that resolves to the assignment's single-use tmpfs, so
+      every attempt invented fresh key material and no checkpoint was readable by anything, ever —
+      while the per-tenant key the provider mounts at `/run/secrets/etlsql-machine-key` contributed
+      only entropy on top of it. The mounted key is now the authoritative base when the host provides
+      one, which is what `SecurityService.GetMachineKey` already documented as its purpose
+      ("allowing disposable workers to rehydrate encrypted checkpoints"). Cross-tenant separation is
+      unchanged and still asserted: different mounted material still cannot open another tenant's
+      state. This is the shape the ledger keeps finding — a control that exists, looks implemented,
+      and was never asserted end to end.
+
+      **Reserved placement is now a lifecycle contract, and half of it is proven (2026-08-17).**
+      Placement was covered only by host-fixed refusal unit tests, which prove the argument checks
+      rather than that a reserved host behaves as one.
+      `VerifyReservedPlacementRunsOnlyTheHostsOwnTenantAndPool` asserts both halves against real
+      containers: the host runs its own tenant's work on the runtime it claims, with the tenant label
+      on the container, and creates **no runtime at all** for another tenant or for its own tenant
+      placed in a different capacity pool — absence of a container, not merely an exception, because
+      that is what distinguishes a reserved host from an ordinary one that happens to be running one
+      tenant's jobs today. `DockerDedicatedSandboxLifecycleTests` binds the whole lifecycle contract
+      to the Dedicated tier on a host fixed to one tenant and pool.
+
+      **Run on a real hardened runtime 2026-08-17: `DockerDedicatedSandboxLifecycleTests` 7/7, and
+      `DockerHardenedSandboxLifecycleTests` 8/8 alongside it.** The lane was prepared with
+      `scripts/enable-hardened-sandbox-lane.sh` inside the Ubuntu WSL2 distro — gVisor `runsc`
+      release-20260810.0 registered with that distro's Docker daemon, and a worker image built from
+      this branch pinned through the loopback registry to
+      `localhost:5000/etlsql-sandbox-worker@sha256:9121e3b1…`. Because the tests assert the runtime and
+      image identity from `docker inspect` rather than from the request, passing means the workload
+      genuinely ran on gVisor from a digest-pinned image: a Dedicated host fixed to one tenant ran
+      that tenant's work and created **no container at all** for another tenant or for its own tenant
+      in a different capacity pool. The Dedicated tier's checkpoint resume across sandboxes, forced
+      termination, residue, teardown, and capability mounting all pass on the same runtime.
+
+      **Scope of the claim, unchanged from domain 4:** this is a developer workstation, not a
+      fleet-representative certification host, and CI does not run the lane. A release review wanting
+      fleet certification re-runs the same script and lane on its own runner; both are written to be
+      portable for exactly that.
+- [x] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
       tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
       ambiguous-outcome handling, and destructive cleanup. Tenant-partitioned queues and
       weighted/fair admission so one tenant cannot cause head-of-line blocking or starvation; enforce
@@ -351,20 +424,171 @@ runtime, which is what the storage cell below was blocked on.
       Portal's signed tenant assertion or fixed Orchestrator host authority. REST creation, script-first
       `CREATE JOB`, and tenant-scoped subscription generation carry the binding; conflicting host and
       signed identities are denied, replacement cannot change it, and legacy/unbound jobs cannot enter
-      sandbox policy resolution. Global/durable weighted selection, scheduler-execution/restart
-      dispatch remain open. The production Docker OCI provider and scheduler dispatch seam described
-      in the Dedicated slice above now exist, but Shared cannot claim them until a real Hardened
-      runtime lane proves the boundary and cluster-global fair queued-work recovery is complete.
-- [ ] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
+      sandbox policy resolution.
+
+      **Cluster-global fair selection and queued-work recovery completed (2026-08-17).** Weighted fair
+      ordering was process-local: each node ranked only its own waiters and then raced
+      `TryActivateAsync`, so whichever node polled first took every freed slot — the head-of-line
+      blocking and starvation this cell forbids, on the exact topology it is about. Selection now
+      happens inside the ledger under the pool row lock, from state every node shares. It is weighted
+      fair queuing on durable virtual time: a tenant is charged `Scale / weight` per grant, where
+      `Scale` is the least common multiple of the allowed weights 1–16 so the division is exact and
+      fairness cannot drift through rounding, and the next slot goes to whichever backlogged tenant is
+      furthest behind its share. An idle tenant is lifted to the pool's monotonic virtual base, so it
+      neither hoards credit while away nor stays behind after a busy neighbour ran; weight buys a
+      proportional share rather than unconditional priority (weight 4 against weight 1 measures 8
+      grants to 2, and the light tenant is never starved out). Fairness is bounded by liveness through
+      dispatch claims: only a queued row whose claiming node is still polling competes, and the claim
+      is committed separately from the activation transaction, because a refusal would otherwise roll
+      back its own claim and leave every node believing it waits alone. Reconciliation cancels
+      abandoned queue entries, which otherwise accumulate as phantom work against a tenant's durable
+      queue depth, and a node waiting on an admission revoked underneath it — by a tenant lifecycle
+      fence or that sweep — now fails fast instead of polling forever for a slot nobody will grant.
+      Proven on SQLite and on real PostgreSQL 16, the topology where two nodes genuinely cannot see
+      each other's queues. Restart adoption of a persisted queued admission (`ResumeQueuedAsync`)
+      remains a seam with no scheduler caller: a crashed node's work is recovered today by job-lease
+      re-dispatch plus the abandoned-queue sweep, not by adopting the original admission row.
+
+      The production Docker OCI provider and scheduler dispatch seam described in the Dedicated slice
+      above now exist, and the real Hardened runtime lane recorded in domain 4 proves the boundary.
+
+      **Capability injection completed (2026-08-17), the cell's last component.** `CapabilityHandles`
+      was carried and validated while the provider refused any request that set it. Handles now
+      resolve on the orchestrator side through the governance secret provider — so a sandbox
+      capability is the same material, with the same custody and rotation, as every other secret the
+      deployment holds, rather than a second credential store existing only for sandboxes — and are
+      namespaced per tenant, so one tenant's handle cannot resolve to another's material even where
+      both use the same name. Resolved material is written into the assignment's own directory,
+      owner-only until the single mounted leaf is opened, and bind-mounted **read-only** at
+      `/run/secrets/capabilities`; the workload may read what it was granted and cannot add to it.
+      Only the directory travels in the environment, never the material, because argv and the
+      environment are readable by anything that can see the process. A handle must be one plain name,
+      so it cannot choose where its material lands. A host with no resolver, or a capability the
+      tenant has not been provisioned, refuses the work before any container exists rather than
+      running it without a capability it was told it had — and the material dies with the assignment.
+      Proven on a live runtime in all three lanes, not only in command construction.
+- [x] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security
-      boundary.
-- [ ] **High availability, Dedicated.** Fleet rollout, compatibility, and drain behavior across a
+      boundary. **Closed 2026-08-17** — every named control is enforced and asserted; the two slices
+      below record what was missing and where each ceiling is now applied. The caveat stands: these
+      are containment controls, and none of them is the hostile-tenant boundary.
+
+      **Containment slice completed (2026-08-17): CPU, IOPS, connector concurrency, queue depth.**
+      Memory, processes, scratch, duration, and default-deny networking were already enforced; three
+      of the listed controls were not, and the queue-depth ceiling was enforced in a way that does not
+      survive a fleet. CPU had no control at all — a sandbox could saturate every core on a shared
+      host while every other dimension was bounded — so `MaxCpuCores` is now a required part of the
+      portable limit contract and lands as `--cpus`. It is required rather than optional deliberately:
+      a ceiling a provider may ignore is worse than none, because the fleet believes it exists. IOPS is
+      now expressible and honest about what a host can do: block-I/O throttling is per-device, so a
+      profile may declare `MaxIops` only where the host declares the device carrying sandbox I/O, and
+      a host without one refuses the work instead of running it unthrottled behind a ceiling that
+      reads as enforced. Connector concurrency becomes a server-owned per-tenant profile value
+      injected as the engine's own `Engine:MaxConnectionsPerScript`, rather than whatever the worker
+      image defaults to. Queue depth was persisted but never checked, so a tenant whose work arrived
+      through N orchestrator nodes could queue N times its limit; the check now runs in the ledger
+      under the pool lock, where it holds for the whole cluster. Both lifecycle lanes now assert
+      memory, swap, `NanoCpus`, and `PidsLimit` from `docker inspect` rather than from the request, so
+      the evidence is that the ceilings reached the runtime.
+
+      **Rows and interactive sessions completed (2026-08-17), closing the bullet's list.**
+
+      *Rows.* The engine's row-shaped settings were preview and spill thresholds, not a processed-row
+      limit, so there was no ceiling at all. `Engine:MaxRowsProcessed` (0 = unlimited) is enforced in
+      the one place every statement handler already accumulates through — the telemetry
+      `RowsProcessed` setter — rather than at ~20 handler call sites, because a per-handler check is
+      exactly the thing that would be silently missing from the next handler somebody writes. Resets
+      and per-statement bookkeeping still pass through untouched; only growth past the ceiling aborts.
+      A profile's `MaxRows` travels into the attempt as engine configuration, since a row is a unit
+      only the engine can count.
+
+      *Interactive sessions.* Dedicated deployments materialize `MaxReportSessions` into the
+      per-tenant node's `MaxConcurrentReportExecutions`; Shared has one node for every tenant, and the
+      node-wide execution cap is not tenant-aware, so one tenant's sessions could occupy every slot
+      while the provisioned quota was never read back. The Portal now resolves the tenant's ceiling
+      from the Shared control plane and holds a per-tenant gate *outermost* — a tenant at its ceiling
+      waits without occupying a user, group, or shared slot meanwhile. The ceiling is read per
+      admission rather than baked into a fixed semaphore, so a lifecycle upgrade releases more of the
+      queue and a downgrade holds it back, instead of being pinned to whatever the quota was when the
+      node first saw that tenant. Queued work keeps its place: a raised ceiling admits more of the
+      queue, it does not let a later arrival barge past an earlier one. A Shared deployment whose
+      control plane cannot report lifecycle state fails startup rather than running with a quota that
+      silently does not exist.
+- [x] **High availability, Dedicated.** Fleet rollout, compatibility, and drain behavior across a
       population of per-tenant deployments — upgrading a hundred dedicated stacks is the operational
-      problem the topology creates. **Gap — Phase C carried HA alone.**
-- [ ] **High availability, Shared.** Tenant-aware fleet rollout, compatibility/drain behavior, and
+      problem the topology creates. **Closed 2026-08-17.** Rollout, compatibility, and drain are all
+      implemented and asserted; the slices below record each. **Scope of the claim:** this is
+      provider-neutral logic with unit and single-node integration evidence, not a multi-node fleet
+      soak — that is the separately tracked `admin ha-soak validate` release gate above, and it is
+      where fleet-scale behaviour must be demonstrated for a release.
+
+      **Planning, compatibility, and progress tracking completed (2026-08-17).** Per-tenant upgrade
+      with fencing, drain, and receipts already existed; what was missing was the layer above it —
+      with a hundred stacks, a release is not one upgrade, and nothing answered which deployments are
+      eligible, in what order, or what the fleet's state is halfway through.
+      `SaasFleetRolloutPlanner` classifies every deployment against a target release (`Upgrade`,
+      `AlreadyCurrent`, `BlockedByState`, `IncompatibleRelease`), refusing to move a deployment
+      backwards or to race a lifecycle operation already in flight, and orders the eligible ones into
+      deterministic waves so a canary means the same tenants every time it is re-planned. Skipped
+      deployments do not consume a wave slot, which matters on the second pass when most of the fleet
+      is already current. Release ordering is numeric per component, so 0.10 follows 0.9 rather than
+      sorting before it. `Track` rolls per-tenant receipts up into one fleet answer and halts the
+      rollout past a tolerated failure count — continuing to push a release that has already broken
+      deployments is how one bad release becomes a fleet-wide outage — while a draining tenant counts
+      as work still finishing, never as damage. `etl-sql admin promotion saas-fleet-plan` surfaces it,
+      naming every deployment it is *not* rolling and why, because a stack silently missing from a
+      rollout is how one ends up a release behind for a year.
+
+      **The authorization boundary is deliberately unchanged.** Each cutover still runs through
+      `saas-upgrade` under its own signed, tenant-scoped grant; the planner confers no authority and
+      cannot upgrade anything. Enumerating the population needs the new
+      `FleetInventoryAuthorization` — attributed, time-limited, and *tenantless* by construction, so
+      "I needed to list the fleet" cannot become a way to obtain tenant-scoped authority in bulk. It
+      reads control-plane metadata only and has no path to tenant data.
+
+      **Sequencer completed (2026-08-17).** `SaasFleetRolloutSequencer` walks the plan wave by wave
+      and applies each cutover through the ordinary single-tenant path, and `saas-fleet-plan
+      --execute --fleet-root` drives it against the deployments one directory per tenant under the
+      root they were onboarded to. Two things stop it opening the next wave: a halt, because the
+      release has already broken deployments; and an earlier wave still **draining**, because
+      overlapping a fenced wave with the next one is how a rollout takes down more of the fleet than
+      it has repaired. A deployment the loaded signed authorization does not name is recorded as
+      *still owed* rather than failed — work waiting for approval must not halt a rollout — so the
+      run advances exactly as far as the grants an operator already holds, and never further.
+
+      **Node drain completed (2026-08-17).** Draining a node was not implemented at all: a Portal node
+      either ran, or lost its lease and had every in-flight execution cancelled. That abrupt path is
+      right for lease *loss* — the node has lost its claim and another may already be running the
+      work — but using it to install a release is an outage, not a rollout. `BeginDrain` now takes a
+      node out of rotation gracefully: executions already running are left to finish, new ones are
+      refused with `NodeDrainingException` so they land on a node that is staying, and `DrainState`
+      reports when the last one has drained. `GET /healthz` answers 503 while draining, because that
+      is what a load balancer probes — a node that kept answering 200 while refusing work would fail
+      every new execution instead of shedding it. Tests hold an execution in flight, drain under that
+      load, and prove both halves: new work refused, running work untouched, and lease loss still
+      fencing rather than draining.
+- [x] **High availability, Shared.** Tenant-aware fleet rollout, compatibility/drain behavior, and
       noisy-neighbour containment without silently falling back from Dedicated placement or Hardened
-      isolation.
+      isolation. **Closed 2026-08-17**, with the same scope caveat as the Dedicated cell above: the
+      behaviour is implemented and asserted, and fleet-scale demonstration belongs to the HA
+      fault-injection gate.
+
+      **Noisy-neighbour containment and the no-downgrade clause completed (2026-08-17).** Containment
+      is the work recorded in the two cells above: cluster-global weighted fair admission so no tenant
+      can hold a shared pool, fleet-wide queue depth, and CPU, IOPS, rows, connector concurrency, and
+      per-tenant interactive sessions all enforced. The rollout planner in the Dedicated cell reads
+      the same Shared control plane, so it is tenant-aware for this topology too.
+
+      The no-silent-fallback clause is now pinned rather than assumed: capacity is not an input to
+      workload resolution, and a full Hardened pool makes work **queue** instead of spilling into a
+      roomier Standard pool sitting next to it, so the only way to change a tenant's tier is to change
+      the server-owned catalog. That joins the existing guards — the coordinator refuses provider
+      evidence below the required tier, and a missing pool fails closed rather than borrowing.
+
+      **Still open:** node drain observed across a Shared fleet — taking a node out of rotation under
+      load and showing tenant work neither drops nor re-places at a lower tier — and the rollout
+      sequencer noted in the Dedicated cell.
 
 *Absorbs the retained discovery items **Noisy-Neighbor CPU/Memory/I/O Containment** and
 **Tenant-Aware Fair-Share Scheduling**.*
@@ -434,23 +658,3 @@ Tenant Portability Bundle**.*
       cross-tenant evidence across database, artifact, cache, queue, audit, PII, lineage/quality,
       path, key, checkpoint, Gateway, sandbox, telemetry, support, restore, and resource-exhaustion
       surfaces.
-
-### Triage rule — a wrong answer outranks a crash
-
-Standing rule for this ledger, set 2026-08-10. **A defect that returns a wrong answer is more
-serious than one that fails**, and is filed at least P0 regardless of how narrow the trigger looks.
-A crash is self-reporting: someone sees it, and nothing downstream consumes it. A wrong number is
-consumed — written to a table, put in a report, acted on — and there is no moment at which anyone
-learns it was wrong.
-
-This also settles fix trade-offs: **never trade a wrong answer for a crash**. The first attempt at
-the window partition-spill P0 did exactly that — it returned correct results by declining a spill
-path, which would have made large partitioned queries exhaust memory instead. Correct-but-crashing
-is not a fix, it is a different defect.
-
-When one is found: file it as P0 with a reproducer that fails on the *behavior*, not on a plan or
-threshold choice, so it cannot be mistaken for a configuration artifact later.
-
-## Bugs
-### VS Code
-- [x] **ETL-SQL Results window stays open**  The `etlsql-results-view` now carries a `when: "etlsql.activeEditor"` clause in `package.json` so the panel tab only appears when an `.etlsql` or `.rptsql` file is active. A `setContext("etlsql.activeEditor", ...)` call in the `onDidChangeActiveTextEditor` handler (and on activation) keeps the flag in sync. Passive editor-change messages use the new `postMessagePassive` method so they never force the panel open when the user switches to a non-ETL-SQL file.

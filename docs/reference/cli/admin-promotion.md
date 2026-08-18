@@ -16,6 +16,7 @@ etl-sql admin promotion <subcommand>
 | [`import`](admin-promotion-import.md) | Import an Orchestrator promotion package idempotently |
 | [`preflight`](admin-promotion-preflight.md) | Create a secret-safe, mutation-free promotion inventory |
 | [`saas-delete`](admin-promotion-saas-delete.md) | Delete one Managed Dedicated tenant boundary under signed retention/legal authorization |
+| [`saas-fleet-plan`](admin-promotion-saas-fleet-plan.md) | Plan a release rollout across the Managed Dedicated fleet (plans only; never upgrades) |
 | [`saas-onboard`](admin-promotion-saas-onboard.md) | Create and populate one physically isolated SaaS tenant boundary |
 | [`saas-upgrade`](admin-promotion-saas-upgrade.md) | Drain and upgrade one Managed Dedicated tenant boundary |
 | [`validate`](admin-promotion-validate.md) | Validate mappings and collisions without changing the target |

@@ -648,6 +648,45 @@ namespace ETL_SQL.App
             Description = "Provisioned Managed Dedicated tenant boundary to upgrade.",
             Arity = ArgumentArity.ExactlyOne
         };
+        private static readonly Option<string?> FleetTargetReleaseOption = new("--target-release", Array.Empty<string>())
+        {
+            Description = "Release every eligible deployment is being rolled to.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<int> FleetWaveSizeOption = new("--wave-size", Array.Empty<string>())
+        {
+            Description = "Deployments per rollout wave, so a canary wave can be small.",
+            DefaultValueFactory = _ => 5
+        };
+        private static readonly Option<string?> FleetOperatorOption = new("--operator", Array.Empty<string>())
+        {
+            Description = "Platform person or service enumerating the fleet. Never a tenant user.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> FleetAuthorizationReferenceOption = new("--authorization", Array.Empty<string>())
+        {
+            Description = "Change record or rollout ticket this enumeration hangs off.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> FleetReasonOption = new("--reason", Array.Empty<string>())
+        {
+            Description = "Why the fleet is being enumerated, so the access can be reviewed later.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<bool> FleetExecuteOption = new("--execute", Array.Empty<string>())
+        {
+            Description = "Walk the planned waves, cutting over every deployment the loaded signed authorization names."
+        };
+        private static readonly Option<string?> FleetRootOption = new("--fleet-root", Array.Empty<string>())
+        {
+            Description = "Root the deployments were onboarded under; each tenant occupies its own directory.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<int> FleetMaxFailuresOption = new("--max-failures", Array.Empty<string>())
+        {
+            Description = "Failed cutovers tolerated before the rollout stops opening waves.",
+            DefaultValueFactory = _ => 0
+        };
         private static readonly Option<string?> SaasUpgradeTargetReleaseOption = new("--target-release", Array.Empty<string>())
         {
             Description = "Release or immutable image digest assertion; must match signed upgrade authorization.",
@@ -1101,6 +1140,21 @@ namespace ETL_SQL.App
             };
             saasUpgradeCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-upgrade", handler));
             promotionCommand.Add(saasUpgradeCommand);
+            var saasFleetPlanCommand = new Command(
+                "saas-fleet-plan",
+                "Plan a release rollout across the Managed Dedicated fleet (plans only; never upgrades)")
+            {
+                FleetTargetReleaseOption,
+                FleetWaveSizeOption,
+                FleetOperatorOption,
+                FleetAuthorizationReferenceOption,
+                FleetReasonOption,
+                FleetExecuteOption,
+                FleetRootOption,
+                FleetMaxFailuresOption,
+            };
+            saasFleetPlanCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-fleet-plan", handler));
+            promotionCommand.Add(saasFleetPlanCommand);
             var saasDeleteCommand = new Command("saas-delete", "Delete one Managed Dedicated tenant boundary under signed retention/legal authorization")
             {
                 SaasTenantOption,
@@ -2014,6 +2068,17 @@ namespace ETL_SQL.App
                 cliContext.SaasMaxConcurrentJobs = res.GetValue(SaasMaxConcurrentJobsOption);
                 cliContext.SaasMaxStorageMb = res.GetValue(SaasMaxStorageMbOption);
                 cliContext.SaasMaxReportSessions = res.GetValue(SaasMaxReportSessionsOption);
+            }
+            else if (commandName == "admin-promotion-saas-fleet-plan")
+            {
+                cliContext.FleetTargetRelease = res.GetValue(FleetTargetReleaseOption);
+                cliContext.FleetWaveSize = res.GetValue(FleetWaveSizeOption);
+                cliContext.FleetOperator = res.GetValue(FleetOperatorOption);
+                cliContext.FleetAuthorizationReference = res.GetValue(FleetAuthorizationReferenceOption);
+                cliContext.FleetReason = res.GetValue(FleetReasonOption);
+                cliContext.FleetExecute = res.GetValue(FleetExecuteOption);
+                cliContext.FleetRoot = res.GetValue(FleetRootOption);
+                cliContext.FleetMaxFailures = res.GetValue(FleetMaxFailuresOption);
             }
             else if (commandName == "admin-promotion-saas-delete")
             {

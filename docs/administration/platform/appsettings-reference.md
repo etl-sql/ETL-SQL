@@ -77,6 +77,7 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:MaxMessages` | integer | `1000` | `SET MAX_MESSAGES = n` | Max console print lines or warning messages buffered for a script. |
 | `Engine:MaxInternalOperations` | integer | `100000` | — | Limit on internal loop execution steps. |
 | `Engine:MaxConnectionsPerScript` | integer | `100` | — | Maximum live non-temporary connections in one script. `0` disables the ceiling. Prefer staging and connection reuse well below this limit. |
+| `Engine:MaxRowsProcessed` | integer | `0` (unlimited) | — | Rows one execution may process before it is aborted. Enforced where every statement handler accumulates rows, so it applies to any statement that moves data. A sandboxed attempt receives this from its server-owned execution profile. |
 | `Engine:MaxTempTablesPerScript` | integer | `100` | — | Maximum live `#temp` tables in one script. Dropping a table releases capacity; `0` disables the ceiling. |
 | `Engine:MaxVariablesPerScript` | integer | `100` | — | Maximum variables in the active script scope. Redeclaration does not consume additional capacity; `0` disables the ceiling. |
 | `Engine:MaxVisualsPerScript` | integer | `100` | — | Maximum live visual definitions in one report script. Replacing a visual does not consume additional capacity; `0` disables the ceiling. |
@@ -112,6 +113,7 @@ Configures concurrency limits, memory floors, and polling intervals for job exec
 | `Orchestration:SandboxAdmission:LeaseSeconds` | number | `120` | > 0 | Durable admission ownership lease. The active controller renews at one third of this duration. |
 | `Orchestration:SandboxAdmission:ActivationPollMilliseconds` | number | `100` | > 0 | Delay before retrying a durable activation when relational capacity is unavailable. |
 | `Orchestration:SandboxAdmission:ReconciliationSeconds` | number | `30` | > 0 | Interval for retaining expired leases and probing retained runtimes for proven detachment. |
+| `Orchestration:SandboxAdmission:AbandonedQueueSeconds` | number | `600` | > ActivationPollMilliseconds | How long a queued admission may go unclaimed before reconciliation cancels it. A live waiter reclaims its place on every poll, so this only reaches entries whose node crashed, drained, or lost the work. |
 | `Orchestration:SandboxExecution:Enabled` | boolean | `false` | — | Routes scheduled jobs through the hardened Docker provider. Requires SandboxAdmission to be enabled. |
 | `Orchestration:SandboxExecution:Image` | string | — | digest-pinned OCI reference | Full engine image reference ending in `@sha256:...`; tags alone are refused. |
 | `Orchestration:SandboxExecution:ImageDigest` | string | — | canonical SHA-256 | Digest that must match the image reference and Docker repository-digest evidence. |
@@ -125,12 +127,17 @@ Configures concurrency limits, memory floors, and polling intervals for job exec
 | `Orchestration:SandboxExecution:MachineKeyRoot` | path | — | absolute | Parent containing one provisioned `<tenant-id>.key` file per tenant (minimum 32 characters, no reparse points). |
 | `Orchestration:SandboxExecution:DedicatedTenantId` | string | — | paired | Fixed tenant accepted by a Dedicated worker; must match `Orchestrator:TenantId`. |
 | `Orchestration:SandboxExecution:DedicatedPoolId` | string | — | paired | Exact non-borrowing pool accepted by a Dedicated worker. Required with `DedicatedTenantId`. |
+| `Orchestration:SandboxExecution:IopsThrottleDevice` | string | — | absolute device path | Host block device carrying sandbox I/O (for example `/dev/sda`). Required before any profile may declare `MaxIops`. |
 | `Orchestration:SandboxExecution:Profiles:{name}:PoolId` | string | — | configured admission pool | Physical pool selected only by server policy. |
 | `Orchestration:SandboxExecution:Profiles:{name}:IsolationTier` | enum | — | `Hardened` or `Dedicated` | Minimum provider evidence required before tenant code starts. |
 | `Orchestration:SandboxExecution:Profiles:{name}:MaxDurationSeconds` | number | — | > 0 | Per-attempt wall-clock ceiling. |
 | `Orchestration:SandboxExecution:Profiles:{name}:MaxMemoryBytes` | integer | — | > 0 | Hard memory and memory+swap ceiling. |
 | `Orchestration:SandboxExecution:Profiles:{name}:MaxScratchBytes` | integer | — | > 0 | Size of the assignment-local noexec/nosuid/nodev tmpfs. |
 | `Orchestration:SandboxExecution:Profiles:{name}:MaxProcesses` | integer | — | > 0 | Container PID ceiling. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxCpuCores` | number | — | > 0 | CPU cores the attempt may consume per wall-clock second (`--cpus`). Required: an unbounded workload starves every co-tenant on the host. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxIops` | integer | — | > 0 when present | Block-I/O ceiling applied to reads and writes. Requires `IopsThrottleDevice`; a host without one refuses the work rather than running it unthrottled. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxConnectorConcurrency` | integer | — | > 0 | Concurrent connector connections one attempt may hold, injected as the engine's `Engine:MaxConnectionsPerScript`. Server-owned, so it is not whatever the worker image happens to default to. |
+| `Orchestration:SandboxExecution:Profiles:{name}:MaxRows` | integer | — | > 0 when present | Rows one attempt may process before the engine aborts it, injected as `Engine:MaxRowsProcessed`. Rows are a unit only the engine can count, so this is enforced in the engine rather than by the runtime. |
 | `Orchestration:SandboxExecution:Tenants:{tenant}:DefaultProfile` | string | — | existing profile | Default server-owned profile for the tenant. |
 | `Orchestration:SandboxExecution:Tenants:{tenant}:AllowedProfiles` | array | — | nonempty | Exact profile entitlements; workload metadata may request only one of these names. |
 | `Orchestration:SandboxExecution:Tenants:{tenant}:Weight` | integer | — | 1–16 | Fair-admission weight. |

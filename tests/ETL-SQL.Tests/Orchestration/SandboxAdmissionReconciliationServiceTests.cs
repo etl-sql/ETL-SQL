@@ -43,12 +43,15 @@ public sealed class SandboxAdmissionReconciliationServiceTests : IDisposable
         {
             ["unresolved"] = state
         });
+        // An explicit long horizon keeps "waiting" queued, so the capacity assertion below can only be
+        // explained by the retained attempt still holding the slot.
         var service = new SandboxAdmissionReconciliationService(
-            ledger, runtime, ["shared-hardened"]);
+            ledger, runtime, ["shared-hardened"], TimeSpan.FromHours(1));
 
         var result = await service.RunOnceAsync(DateTimeOffset.UtcNow.AddMinutes(10));
 
         Assert.Equal(SandboxAdmissionState.Retained, (await ledger.ReadAsync("unresolved"))!.State);
+        Assert.Equal(SandboxAdmissionState.Queued, (await ledger.ReadAsync("waiting"))!.State);
         Assert.Null(await ledger.TryActivateAsync(
             "waiting", "node-b", 1, TimeSpan.FromMinutes(5)));
         Assert.Equal(state == SandboxRuntimeReconciliationState.Running ? 1 : 0, result.StillRunning);
@@ -73,6 +76,34 @@ public sealed class SandboxAdmissionReconciliationServiceTests : IDisposable
         var recovered = await service.RunOnceAsync(DateTimeOffset.UtcNow.AddMinutes(11));
         Assert.Equal(1, recovered.DetachedReleased);
         Assert.Equal(SandboxAdmissionState.Completed, (await ledger.ReadAsync("probe-failure"))!.State);
+    }
+
+    [Fact]
+    public async Task AbandonedQueueEntryIsReclaimedWhileALiveWaiterKeepsItsPlace()
+    {
+        var ledger = Ledger();
+        var filler = await ActiveAsync(ledger, "filler", "tenant-filler");
+        await ledger.EnqueueAsync("abandoned", Tenant("tenant-gone"), Policy());
+        await ledger.EnqueueAsync("live", Tenant("tenant-live"), Policy());
+
+        await Task.Delay(400); // flaky-delay-ok: ages the abandoned entry past the 200ms horizon below
+        // The live waiter polls; the pool is full so it stays queued, but its claim is now current.
+        Assert.Null(await ledger.TryActivateAsync("live", "node-live", 1, TimeSpan.FromMinutes(5)));
+
+        var service = new SandboxAdmissionReconciliationService(
+            ledger,
+            new StubRuntime(new Dictionary<string, SandboxRuntimeReconciliationState>()),
+            ["shared-hardened"],
+            TimeSpan.FromMilliseconds(200));
+        var result = await service.RunOnceAsync(DateTimeOffset.UtcNow);
+
+        Assert.Equal(1, result.AbandonedQueuedCancelled);
+        Assert.Equal(SandboxAdmissionState.Cancelled, (await ledger.ReadAsync("abandoned"))!.State);
+        Assert.Equal(SandboxAdmissionState.Queued, (await ledger.ReadAsync("live"))!.State);
+        // Active work is not queue garbage and must survive the sweep untouched.
+        Assert.Equal(SandboxAdmissionState.Active, (await ledger.ReadAsync("filler"))!.State);
+        Assert.True(await ledger.TryCompleteAsync("filler", "node-a", filler));
+        Assert.NotNull(await ledger.TryActivateAsync("live", "node-live", 1, TimeSpan.FromMinutes(5)));
     }
 
     private static async Task<long> ActiveAsync(

@@ -21,6 +21,42 @@ public sealed class SandboxWorkloadPolicyResolverTests
     }
 
     [Fact]
+    public async Task CongestionNeverDowngradesPlacementOrIsolation()
+    {
+        // The Shared HA clause: a busy fleet must not quietly serve Hardened work from somewhere
+        // cheaper. Capacity is not an input to resolution, and a full pool queues rather than
+        // spilling into another one — so the only way to change a tenant's tier is to change the
+        // server-owned catalog.
+        var resolver = Resolver();
+        var admission = new FairShareSandboxAdmissionController(new SandboxAdmissionControllerOptions
+        {
+            PoolCapacities = new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["shared-hardened"] = 1,
+                ["shared-standard"] = 8
+            }
+        });
+
+        var resolved = resolver.Resolve(Job(), Tenant("tenant-a"));
+        var held = await admission.AcquireAsync(Tenant("tenant-a"), resolved.AdmissionPolicy);
+
+        // The hardened pool is now full while a roomy standard pool sits next to it.
+        var underPressure = resolver.Resolve(Job(), Tenant("tenant-a"));
+        Assert.Equal(resolved.ProfileName, underPressure.ProfileName);
+        Assert.Equal(SandboxIsolationTier.Hardened, underPressure.RequiredIsolationTier);
+        Assert.Equal("shared-hardened", underPressure.AdmissionPolicy.PoolId);
+
+        var queued = admission.AcquireAsync(Tenant("tenant-a"), underPressure.AdmissionPolicy).AsTask();
+        await Task.Delay(100); // flaky-delay-ok: proves the attempt waits for its own tier's capacity
+        Assert.False(queued.IsCompleted, "Hardened work must queue rather than take a lesser pool.");
+
+        await held.ReleaseAsync();
+        var admitted = await queued.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("shared-hardened", admitted.PoolId);
+        await admitted.ReleaseAsync();
+    }
+
+    [Fact]
     public void JobMaySelectOnlyAnEntitledNamedProfile()
     {
         var resolver = Resolver();
@@ -94,7 +130,9 @@ public sealed class SandboxWorkloadPolicyResolverTests
                 MaxDuration = TimeSpan.FromMinutes(5),
                 MaxMemoryBytes = memory,
                 MaxScratchBytes = 4096,
-                MaxProcesses = processes
+                MaxProcesses = processes,
+                MaxCpuCores = 1,
+                MaxConnectorConcurrency = 4
             }
         };
 

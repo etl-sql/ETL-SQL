@@ -172,7 +172,9 @@ public sealed class SandboxExecutionCoordinatorTests
             MaxDuration = TimeSpan.FromMinutes(5),
             MaxMemoryBytes = 512 * 1024 * 1024,
             MaxScratchBytes = 1024 * 1024 * 1024,
-            MaxProcesses = 32
+            MaxProcesses = 32,
+            MaxCpuCores = 4,
+            MaxConnectorConcurrency = 16
         }
     };
 

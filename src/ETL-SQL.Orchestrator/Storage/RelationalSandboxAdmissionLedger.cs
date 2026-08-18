@@ -27,7 +27,32 @@ public sealed record SandboxAdmissionLedgerEntry(
     long FenceToken,
     DateTimeOffset EnqueuedUtc,
     DateTimeOffset UpdatedUtc,
-    string? ReconciliationReason);
+    string? ReconciliationReason,
+    string? ClaimedByNode = null,
+    DateTimeOffset? ClaimHeartbeatUtc = null);
+
+/// <summary>
+/// One cluster-global weighted-fair selection decision for a pool: the durable admission that must be
+/// activated next, and — when the caller was refused — the admission that outranked it.
+/// </summary>
+public sealed record SandboxAdmissionSelection(
+    string? EligibleAdmissionId,
+    string? EligibleTenantId,
+    IReadOnlyList<string> ContendingTenantIds);
+
+/// <summary>
+/// Raised when a tenant's durable queue for a pool is already at its configured depth. The ceiling is
+/// fleet-wide, so it holds however many orchestrator nodes the tenant's work arrives through.
+/// </summary>
+public sealed class SandboxQueueDepthExceededException(string tenantId, string poolId, int maxQueued)
+    : Exception(
+        $"The tenant sandbox queue for pool '{poolId}' is at its configured limit of {maxQueued} " +
+        "waiting attempts.")
+{
+    public string TenantId { get; } = tenantId;
+    public string PoolId { get; } = poolId;
+    public int MaxQueuedAttempts { get; } = maxQueued;
+}
 
 public interface ISandboxAdmissionLedger
 {
@@ -43,6 +68,16 @@ public interface ISandboxAdmissionLedger
         int poolCapacity,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports the cluster-global weighted-fair selection for a pool without changing any state. It is
+    /// diagnostic only: activation still re-evaluates the decision inside its own transaction, so a
+    /// caller cannot turn this answer into an authorization to run.
+    /// </summary>
+    Task<SandboxAdmissionSelection> PeekEligibleAsync(
+        string poolId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new SandboxAdmissionSelection(null, null, []));
 
     Task<bool> TryRenewAsync(
         string admissionId,
@@ -78,6 +113,17 @@ public interface ISandboxAdmissionLedger
         string admissionId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Cancels queued admissions that no node is waiting on any more — the node crashed, drained, or
+    /// lost the work before it ever ran. Without this, a shared queue accumulates phantom entries that
+    /// consume a tenant's durable queue depth and misreport how much work the fleet still owes.
+    /// </summary>
+    Task<int> CancelAbandonedQueuedAsync(
+        DateTimeOffset now,
+        TimeSpan abandonedAfter,
+        string reason,
+        CancellationToken cancellationToken = default) => Task.FromResult(0);
+
     Task<SandboxAdmissionLedgerEntry?> ReadAsync(
         string admissionId,
         CancellationToken cancellationToken = default);
@@ -101,15 +147,33 @@ public interface ISandboxAdmissionLedger
 }
 
 /// <summary>
-/// Durable SQLite/PostgreSQL admission queue and fenced reservation ledger. Capacity selection remains
-/// an admission-controller concern; this store makes ownership, restart recovery, and ambiguous
-/// teardown state authoritative across orchestrator nodes.
+/// Durable SQLite/PostgreSQL admission queue and fenced reservation ledger. It makes ownership,
+/// restart recovery, and ambiguous teardown state authoritative across orchestrator nodes, and it owns
+/// the cluster-global weighted-fair selection: a node's process-local ordering can only propose a
+/// candidate, never decide which tenant consumes the next slot of a shared pool.
 /// </summary>
-public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect dialect)
+/// <param name="claimFreshness">
+/// How long a queued admission's dispatch claim keeps competing for capacity after the claiming node
+/// last polled for it. A node that stops polling — because it crashed, drained, or lost the work —
+/// stops blocking the rest of the cluster once its claim goes stale, so fairness cannot cost liveness.
+/// </param>
+public sealed class RelationalSandboxAdmissionLedger(
+    IOrchestratorStoreDialect dialect,
+    TimeSpan? claimFreshness = null)
     : ISandboxAdmissionLedger
 {
+    /// <summary>Default staleness horizon for a queued admission's dispatch claim.</summary>
+    public static readonly TimeSpan DefaultClaimFreshness = TimeSpan.FromSeconds(15);
+
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
+    private readonly TimeSpan _claimFreshness = Validate(claimFreshness ?? DefaultClaimFreshness);
     private bool _initialized;
+
+    private static TimeSpan Validate(TimeSpan claimFreshness) =>
+        claimFreshness > TimeSpan.Zero
+            ? claimFreshness
+            : throw new ArgumentOutOfRangeException(
+                nameof(claimFreshness), "The dispatch-claim freshness horizon must be positive.");
 
     public async Task<bool> EnqueueAsync(
         string admissionId,
@@ -126,7 +190,21 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         var now = DateTimeOffset.UtcNow.ToString("O");
         await using var connection = dialect.CreateConnection();
         await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // Serialize enqueues for the pool so the depth check below cannot be raced. A per-node ceiling
+        // is not a ceiling: with N orchestrator nodes a tenant would otherwise queue N times its limit.
+        await LockPoolAsync(connection, transaction, policy.PoolId, cancellationToken);
+        if (await CountQueuedAsync(
+                connection, transaction, policy.PoolId, tenant.Tenant.Value, cancellationToken)
+            >= policy.MaxQueuedAttempts)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw new SandboxQueueDepthExceededException(
+                tenant.Tenant.Value, policy.PoolId, policy.MaxQueuedAttempts);
+        }
+
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO SandboxAdmissions
                 (AdmissionId, TenantId, PoolId, TenantWeight, MaxConcurrentAttempts,
@@ -143,7 +221,27 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         command.AddParam("@maxActive", policy.MaxConcurrentAttempts);
         command.AddParam("@maxQueued", policy.MaxQueuedAttempts);
         command.AddParam("@now", now);
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        var inserted = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        await transaction.CommitAsync(cancellationToken);
+        return inserted;
+    }
+
+    private static async Task<int> CountQueuedAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string poolId,
+        string tenantId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT COUNT(*) FROM SandboxAdmissions
+             WHERE PoolId = @pool AND TenantId = @tenant AND State = 'Queued';
+            """;
+        command.AddParam("@pool", poolId);
+        command.AddParam("@tenant", tenantId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
 
     public async Task<long?> TryActivateAsync(
@@ -158,12 +256,31 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         await EnsureInitializedAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
+        // The claim is committed on its own so a losing attempt still advertises this node as a live
+        // contender. Inside the activation transaction it would be rolled back with the refusal, and
+        // every node would keep believing it was the only one waiting.
+        await RecordDispatchClaimAsync(admissionId, leaseOwner, now, cancellationToken);
+
         await using var connection = dialect.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var queued = await ReadEntryAsync(connection, transaction, admissionId, "Queued", cancellationToken);
         if (queued is null)
         {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        // Every grant in a pool serializes on the pool row before any virtual time is read, so two
+        // nodes cannot both select against the same stale fair-share snapshot.
+        await LockPoolAsync(connection, transaction, queued.PoolId, cancellationToken);
+        var winner = await SelectEligibleAsync(
+            connection, transaction, queued.PoolId, admissionId, now, cancellationToken);
+        if (winner?.AdmissionId != admissionId)
+        {
+            // Another tenant is further behind its weighted share of this pool. Refusing here is what
+            // makes fairness cluster-global: without it, per-node ordering lets whichever node polls
+            // first take every freed slot.
             await transaction.RollbackAsync(cancellationToken);
             return null;
         }
@@ -175,6 +292,8 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
             await transaction.RollbackAsync(cancellationToken);
             return null;
         }
+
+        await ChargeFairShareAsync(connection, transaction, winner, cancellationToken);
 
         await using var update = connection.CreateCommand();
         update.Transaction = transaction;
@@ -326,6 +445,32 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
+    public async Task<int> CancelAbandonedQueuedAsync(
+        DateTimeOffset now,
+        TimeSpan abandonedAfter,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        if (abandonedAfter <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(abandonedAfter));
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        await EnsureInitializedAsync(cancellationToken);
+        await using var connection = dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        // A never-claimed row is measured from when it was enqueued, so an admission whose node died
+        // between enqueue and its first poll is reclaimed on the same horizon as one abandoned later.
+        command.CommandText = """
+            UPDATE SandboxAdmissions
+               SET State = 'Cancelled', UpdatedUtc = @now, ReconciliationReason = @reason
+             WHERE State = 'Queued'
+               AND COALESCE(ClaimHeartbeatUtc, EnqueuedUtc) <= @abandoned;
+            """;
+        command.AddParam("@now", now.ToString("O"));
+        command.AddParam("@reason", reason);
+        command.AddParam("@abandoned", now.Subtract(abandonedAfter).ToString("O"));
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SandboxAdmissionLedgerEntry>> ListOpenAsync(
         string poolId,
         CancellationToken cancellationToken = default)
@@ -360,7 +505,8 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         command.CommandText = """
             SELECT Sequence, AdmissionId, TenantId, PoolId, TenantWeight,
                    MaxConcurrentAttempts, MaxQueuedAttempts, State, LeaseOwner,
-                   LeaseExpiresUtc, FenceToken, EnqueuedUtc, UpdatedUtc, ReconciliationReason
+                   LeaseExpiresUtc, FenceToken, EnqueuedUtc, UpdatedUtc, ReconciliationReason,
+                   ClaimedByNode, ClaimHeartbeatUtc
               FROM SandboxAdmissions
              WHERE TenantId = @tenant AND State IN ('Queued', 'Active', 'Retained')
              ORDER BY Sequence;
@@ -473,7 +619,9 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
                         FenceToken               {dialect.Int64Type} NOT NULL DEFAULT 0,
                         EnqueuedUtc               TEXT NOT NULL,
                         UpdatedUtc                TEXT NOT NULL,
-                        ReconciliationReason     TEXT NULL
+                        ReconciliationReason     TEXT NULL,
+                        ClaimedByNode            TEXT NULL,
+                        ClaimHeartbeatUtc        TEXT NULL
                     );
                     CREATE INDEX IF NOT EXISTS IX_SandboxAdmissions_PoolStateSequence
                         ON SandboxAdmissions (PoolId, State, Sequence);
@@ -481,16 +629,19 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
                         ON SandboxAdmissions (TenantId, State);
                     CREATE TABLE IF NOT EXISTS SandboxAdmissionPools (
                         PoolId       TEXT PRIMARY KEY,
-                        ActiveCount  INTEGER NOT NULL DEFAULT 0
+                        ActiveCount  INTEGER NOT NULL DEFAULT 0,
+                        VirtualBase  {dialect.Int64Type} NOT NULL DEFAULT 0
                     );
                     CREATE TABLE IF NOT EXISTS SandboxAdmissionTenantCapacity (
                         PoolId       TEXT NOT NULL,
                         TenantId     TEXT NOT NULL,
                         ActiveCount  INTEGER NOT NULL DEFAULT 0,
+                        VirtualTime  {dialect.Int64Type} NOT NULL DEFAULT 0,
                         PRIMARY KEY (PoolId, TenantId)
                     );
                     """;
                 await create.ExecuteNonQueryAsync(cancellationToken);
+                await AddFairSelectionColumnsAsync(connection, cancellationToken);
                 _initialized = true;
             }
             finally
@@ -506,6 +657,40 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         finally
         {
             _initializeGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Additive migration for a ledger created before cluster-global fair selection existed. An older
+    /// database simply has no claims and no accumulated virtual time, so every queued row starts
+    /// unclaimed and every tenant starts level.
+    /// </summary>
+    private async Task AddFairSelectionColumnsAsync(
+        DbConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await AddColumnIfMissingAsync("SandboxAdmissions", "ClaimedByNode", "TEXT NULL");
+        await AddColumnIfMissingAsync("SandboxAdmissions", "ClaimHeartbeatUtc", "TEXT NULL");
+        await AddColumnIfMissingAsync("SandboxAdmissionPools", "VirtualBase", $"{dialect.Int64Type} NOT NULL DEFAULT 0");
+        await AddColumnIfMissingAsync(
+            "SandboxAdmissionTenantCapacity", "VirtualTime", $"{dialect.Int64Type} NOT NULL DEFAULT 0");
+        return;
+
+        async Task AddColumnIfMissingAsync(string table, string column, string definition)
+        {
+            var columns = await dialect.GetColumnNamesAsync(connection, table, cancellationToken);
+            if (columns.Contains(column))
+                return;
+            await using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+            try
+            {
+                await alter.ExecuteNonQueryAsync(cancellationToken);
+            }
+            catch (DbException)
+            {
+                // Another node won the same additive migration between the snapshot and this ALTER.
+            }
         }
     }
 
@@ -549,6 +734,230 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         return await reader.ReadAsync(cancellationToken) ? ReadEntry(reader) : null;
     }
 
+    /// <summary>
+    /// Marks this node as actively waiting on a queued admission. Only rows with a fresh claim compete
+    /// in the weighted-fair selection, so an abandoned queue entry cannot hold a pool hostage.
+    /// </summary>
+    private async Task RecordDispatchClaimAsync(
+        string admissionId,
+        string leaseOwner,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE SandboxAdmissions
+               SET ClaimedByNode = @owner, ClaimHeartbeatUtc = @now
+             WHERE AdmissionId = @id AND State = 'Queued';
+            """;
+        command.AddParam("@id", admissionId);
+        command.AddParam("@owner", leaseOwner);
+        command.AddParam("@now", now.ToString("O"));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<SandboxAdmissionSelection> PeekEligibleAsync(
+        string poolId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(poolId);
+        await EnsureInitializedAsync(cancellationToken);
+        await using var connection = dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var (winner, contenders) = await SelectWithContendersAsync(
+            connection, transaction, poolId, requestedAdmissionId: null, DateTimeOffset.UtcNow, cancellationToken);
+        await transaction.RollbackAsync(cancellationToken);
+        return new SandboxAdmissionSelection(winner?.AdmissionId, winner?.TenantId, contenders);
+    }
+
+    private async Task<Candidate?> SelectEligibleAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string poolId,
+        string? requestedAdmissionId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        (await SelectWithContendersAsync(
+            connection, transaction, poolId, requestedAdmissionId, now, cancellationToken)).Winner;
+
+    /// <summary>
+    /// Weighted fair queuing over the pool's live-claimed queue. Each tenant carries a durable virtual
+    /// time that advances by <c>Scale / weight</c> every time it is granted a slot, so a heavier weight
+    /// buys proportionally more grants rather than unconditional priority — the next slot always goes
+    /// to whichever backlogged tenant is furthest behind its share. A tenant that was idle is lifted to
+    /// the pool's virtual base first, so it can neither hoard credit while away nor stay permanently
+    /// behind after a busy neighbour ran. Equal virtual time falls back to durable enqueue order, and a
+    /// tenant already at its concurrency maximum is not a candidate at all.
+    /// </summary>
+    private async Task<(Candidate? Winner, IReadOnlyList<string> Contenders)> SelectWithContendersAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string poolId,
+        string? requestedAdmissionId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var poolBase = await ReadPoolVirtualBaseAsync(connection, transaction, poolId, cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT a.AdmissionId, a.TenantId, a.Sequence, a.TenantWeight, a.MaxConcurrentAttempts,
+                   COALESCE(c.ActiveCount, 0), COALESCE(c.VirtualTime, 0)
+              FROM SandboxAdmissions a
+              LEFT JOIN SandboxAdmissionTenantCapacity c
+                     ON c.PoolId = a.PoolId AND c.TenantId = a.TenantId
+             WHERE a.PoolId = @pool AND a.State = 'Queued'
+               AND (a.ClaimHeartbeatUtc >= @fresh OR a.AdmissionId = @requested)
+             ORDER BY a.Sequence;
+            """;
+        command.AddParam("@pool", poolId);
+        command.AddParam("@fresh", now.Subtract(_claimFreshness).ToString("O"));
+        command.AddParam("@requested", (object?)requestedAdmissionId ?? string.Empty);
+
+        var heads = new List<Candidate>();
+        var seenTenants = new HashSet<string>(StringComparer.Ordinal);
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var tenantId = reader.GetString(1);
+                // Rows arrive in durable sequence order, so the first row of a tenant is its head; a
+                // tenant never competes with itself for the same slot.
+                if (!seenTenants.Add(tenantId))
+                    continue;
+                var activeCount = Convert.ToInt32(reader.GetValue(5));
+                var maxConcurrent = reader.GetInt32(4);
+                if (activeCount >= maxConcurrent)
+                    continue;
+                heads.Add(new Candidate(
+                    reader.GetString(0),
+                    tenantId,
+                    poolId,
+                    Convert.ToInt64(reader.GetValue(2)),
+                    reader.GetInt32(3),
+                    Math.Max(Convert.ToInt64(reader.GetValue(6)), poolBase)));
+            }
+        }
+
+        var winner = heads.Count == 0
+            ? null
+            : heads.Aggregate(static (best, next) => Outranks(next, best) ? next : best);
+        return (winner, heads.Select(candidate => candidate.TenantId).ToArray());
+    }
+
+    private static bool Outranks(Candidate candidate, Candidate incumbent) =>
+        candidate.EffectiveVirtualTime != incumbent.EffectiveVirtualTime
+            ? candidate.EffectiveVirtualTime < incumbent.EffectiveVirtualTime
+            : candidate.Sequence < incumbent.Sequence;
+
+    /// <summary>
+    /// Charges the granted tenant its weighted cost and advances the pool's virtual base to the grant
+    /// that just happened. The base is monotonic, so a tenant cannot rewind the pool by going idle.
+    /// </summary>
+    private static async Task ChargeFairShareAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        Candidate winner,
+        CancellationToken cancellationToken)
+    {
+        await using (var chargeTenant = connection.CreateCommand())
+        {
+            chargeTenant.Transaction = transaction;
+            chargeTenant.CommandText = """
+                UPDATE SandboxAdmissionTenantCapacity
+                   SET VirtualTime = @charged
+                 WHERE PoolId = @pool AND TenantId = @tenant;
+                """;
+            chargeTenant.AddParam("@charged", winner.EffectiveVirtualTime + VirtualTimeScale / winner.TenantWeight);
+            chargeTenant.AddParam("@pool", winner.PoolId);
+            chargeTenant.AddParam("@tenant", winner.TenantId);
+            if (await chargeTenant.ExecuteNonQueryAsync(cancellationToken) != 1)
+                throw new InvalidOperationException("Sandbox tenant fair-share ledger is inconsistent.");
+        }
+
+        await using var advanceBase = connection.CreateCommand();
+        advanceBase.Transaction = transaction;
+        advanceBase.CommandText = """
+            UPDATE SandboxAdmissionPools
+               SET VirtualBase = @base
+             WHERE PoolId = @pool AND VirtualBase < @base;
+            """;
+        advanceBase.AddParam("@base", winner.EffectiveVirtualTime);
+        advanceBase.AddParam("@pool", winner.PoolId);
+        await advanceBase.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<long> ReadPoolVirtualBaseAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string poolId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT VirtualBase FROM SandboxAdmissionPools WHERE PoolId = @pool;";
+        command.AddParam("@pool", poolId);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is null or DBNull ? 0 : Convert.ToInt64(value);
+    }
+
+    /// <summary>
+    /// Takes the pool's write lock so all grants for one pool serialize before any fair-share state is
+    /// read. Without it two nodes could select against the same snapshot and both believe they won.
+    /// </summary>
+    private static async Task LockPoolAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string poolId,
+        CancellationToken cancellationToken)
+    {
+        await EnsurePoolRowAsync(connection, transaction, poolId, cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE SandboxAdmissionPools
+               SET VirtualBase = VirtualBase
+             WHERE PoolId = @pool;
+            """;
+        command.AddParam("@pool", poolId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task EnsurePoolRowAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string poolId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO SandboxAdmissionPools (PoolId, ActiveCount)
+            VALUES (@pool, 0)
+            ON CONFLICT (PoolId) DO NOTHING;
+            """;
+        command.AddParam("@pool", poolId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Virtual-time unit for one grant at weight 1. It is the least common multiple of every allowed
+    /// tenant weight (1..16), so <c>Scale / weight</c> is exact for all of them and fairness never
+    /// drifts through rounding.
+    /// </summary>
+    private const long VirtualTimeScale = 720720;
+
+    private sealed record Candidate(
+        string AdmissionId,
+        string TenantId,
+        string PoolId,
+        long Sequence,
+        int TenantWeight,
+        long EffectiveVirtualTime);
+
     private static async Task<bool> TryReserveCapacityAsync(
         DbConnection connection,
         DbTransaction transaction,
@@ -558,17 +967,7 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         int tenantCapacity,
         CancellationToken cancellationToken)
     {
-        await using (var ensurePool = connection.CreateCommand())
-        {
-            ensurePool.Transaction = transaction;
-            ensurePool.CommandText = """
-                INSERT INTO SandboxAdmissionPools (PoolId, ActiveCount)
-                VALUES (@pool, 0)
-                ON CONFLICT (PoolId) DO NOTHING;
-                """;
-            ensurePool.AddParam("@pool", poolId);
-            await ensurePool.ExecuteNonQueryAsync(cancellationToken);
-        }
+        await EnsurePoolRowAsync(connection, transaction, poolId, cancellationToken);
 
         await using (var reservePool = connection.CreateCommand())
         {
@@ -699,7 +1098,9 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         reader.GetInt64(reader.GetOrdinal("FenceToken")),
         DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("EnqueuedUtc"))),
         DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("UpdatedUtc"))),
-        ReadNullableString(reader, "ReconciliationReason"));
+        ReadNullableString(reader, "ReconciliationReason"),
+        ReadNullableString(reader, "ClaimedByNode"),
+        ReadNullableDateTimeOffset(reader, "ClaimHeartbeatUtc"));
 
     private static string? ReadNullableString(DbDataReader reader, string name)
     {

@@ -532,4 +532,16 @@ All ETL-SQL keywords must be **UPPERCASE, underscore-separated**: `ENGINE_COMPAT
 
 ---
 
+## 16. Triage & Defect Principles — A Wrong Answer Outranks a Crash
+
+All agents, contributors, and maintainers must strictly adhere to this core engineering rule:
+
+- **A defect that returns a wrong answer is more serious than one that fails / crashes**, and must be treated as at least **P0** regardless of how narrow the trigger appears.
+  - A crash is self-reporting: execution stops immediately, operators are notified, and nothing downstream consumes corrupt data.
+  - A wrong answer / silent data corruption is silently consumed: written to destination databases, incorporated into reports, and acted upon by downstream business logic without warning.
+- **Never trade a wrong answer for a crash.** Correct-but-crashing (e.g. silently declining a spill path and causing out-of-memory crashes on large datasets) is not a fix; it is merely substituting one defect for another.
+- **Reproduction & Regressions:** When filing or fixing a data correctness bug, always create a deterministic reproducer that asserts directly on *behavior and output correctness*, not internal plan selection or memory thresholds.
+
+---
+
 *For a complete syntax walkthrough, start at [Getting Started](docs/guides/onboarding/getting-started.md), then use the [Syntax Index](docs/syntax-index.md) to find the focused reference page for each statement, function, or option.*

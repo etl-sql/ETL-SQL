@@ -40,6 +40,9 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         AssertContainsPair(create, "--security-opt", "no-new-privileges");
         AssertContainsPair(create, "--memory", "536870912");
         AssertContainsPair(create, "--memory-swap", "536870912");
+        AssertContainsPair(create, "--cpus", "1.5");
+        AssertContainsPair(create, "--pids-limit", "32");
+        Assert.Contains("Engine__MaxConnectionsPerScript=8", create);
         Assert.Contains("--read-only", create);
         Assert.DoesNotContain("--privileged", create);
         Assert.Contains($"{DockerSandboxExecutionProvider.AdmissionLabel}=admission-1", create);
@@ -201,6 +204,162 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
             Options().WithRuntime(runtime), new RecordingCommands(), ArtifactStore()));
     }
 
+    [Fact]
+    public async Task GrantedCapabilitiesAreMountedReadOnlyAndNeverAppearInArgumentsOrEnvironment()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var provider = new DockerSandboxExecutionProvider(
+            Options(), commands, artifacts, new StubCapabilities("s3cret-material"));
+        var request = Request(artifact) with { AdmissionId = "admission-caps" };
+
+        await provider.PrepareAsync(
+            request with { CapabilityHandles = ["warehouse-reader"] }, workspace, default);
+
+        var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
+        Assert.Contains(create, argument =>
+            argument.Contains("/run/secrets/capabilities", StringComparison.Ordinal)
+            && argument.Contains("readonly", StringComparison.Ordinal));
+        Assert.Contains("ETLSQL_CAPABILITY_ROOT=/run/secrets/capabilities", create);
+        // argv and the environment are readable by anything that can see the process, so only the
+        // location may travel there — never the material.
+        Assert.DoesNotContain(create, argument => argument.Contains("s3cret-material", StringComparison.Ordinal));
+
+        var staged = Path.Combine(workspace.RootPath, "capabilities", "warehouse-reader");
+        Assert.Equal("s3cret-material", await File.ReadAllTextAsync(staged));
+        File.SetAttributes(Path.Combine(workspace.InputPath, "job.etlsql"), FileAttributes.Normal);
+        await workspace.DestroyAsync();
+        // Capability material dies with the assignment that was granted it.
+        Assert.False(File.Exists(staged));
+    }
+
+    [Fact]
+    public async Task AHostThatCannotResolveCapabilitiesRefusesWorkThatWasGrantedThem()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        // No resolver configured, and separately: a resolver that cannot produce the material.
+        var unconfigured = new DockerSandboxExecutionProvider(Options(), commands, artifacts);
+        var request = Request(artifact) with
+        {
+            AdmissionId = "admission-caps",
+            CapabilityHandles = ["warehouse-reader"]
+        };
+
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            unconfigured.PrepareAsync(request, workspace, default));
+
+        var unprovisioned = new DockerSandboxExecutionProvider(
+            Options(), commands, artifacts, new StubCapabilities(material: null));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            unprovisioned.PrepareAsync(request, workspace, default));
+
+        // Running without a capability the workload was told it had is worse than not running.
+        Assert.DoesNotContain(commands.Calls, call => call.Arguments.FirstOrDefault() == "create");
+        await workspace.DestroyAsync();
+    }
+
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("nested/handle")]
+    [InlineData("..")]
+    public async Task CapabilityHandlesCannotShapeAPath(string handle)
+    {
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var provider = new DockerSandboxExecutionProvider(
+            Options(), new RecordingCommands(
+                ImageEvidence(), Ok("29.6.2"), RuntimeEvidence()), artifacts,
+            new StubCapabilities("material"));
+        var request = Request(artifact) with { AdmissionId = "admission-caps" };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.PrepareAsync(
+            request with { CapabilityHandles = [handle] }, workspace, default));
+        await workspace.DestroyAsync();
+    }
+
+    [Fact]
+    public async Task DeclaredRowCeilingIsCarriedIntoTheAttemptForTheEngineToEnforce()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var provider = new DockerSandboxExecutionProvider(Options(), commands, artifacts);
+        var request = Request(artifact) with { AdmissionId = "admission-rows" };
+
+        await provider.PrepareAsync(
+            request with { Limits = request.Limits with { MaxRows = 25_000 } }, workspace, default);
+
+        // Rows are a unit only the engine can count, so the ceiling travels as engine configuration
+        // rather than as a runtime flag.
+        var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
+        Assert.Contains("Engine__MaxRowsProcessed=25000", create);
+        File.SetAttributes(Path.Combine(workspace.InputPath, "job.etlsql"), FileAttributes.Normal);
+        await workspace.DestroyAsync();
+    }
+
+    [Fact]
+    public async Task DeclaredIopsLimitIsThrottledPerDeviceOnAHostThatCanEnforceIt()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var options = Options() with { IopsThrottleDevice = "/dev/sda" };
+        var provider = new DockerSandboxExecutionProvider(options, commands, artifacts);
+        var request = Request(artifact) with { AdmissionId = "admission-iops" };
+
+        await provider.PrepareAsync(
+            request with { Limits = request.Limits with { MaxIops = 500 } }, workspace, default);
+
+        var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
+        AssertContainsPair(create, "--device-read-iops", "/dev/sda:500");
+        AssertContainsPair(create, "--device-write-iops", "/dev/sda:500");
+        File.SetAttributes(Path.Combine(workspace.InputPath, "job.etlsql"), FileAttributes.Normal);
+        await workspace.DestroyAsync();
+    }
+
+    [Fact]
+    public async Task HostThatCannotThrottleIoRefusesWorkPromisingAnIopsCeiling()
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        // No IopsThrottleDevice: the ceiling cannot be applied, so the run must not start at all
+        // rather than proceed with unthrottled I/O against every co-tenant on the host.
+        var provider = new DockerSandboxExecutionProvider(Options(), commands, artifacts);
+        var request = Request(artifact) with { AdmissionId = "admission-iops" };
+
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await provider.PrepareAsync(
+                request with { Limits = request.Limits with { MaxIops = 500 } }, workspace, default));
+
+        Assert.Contains("IOPS", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(commands.Calls, call => call.Arguments.FirstOrDefault() == "create");
+        await workspace.DestroyAsync();
+    }
+
+    [Theory]
+    [InlineData("relative/device")]
+    [InlineData("/dev/sda:99")]
+    public void ThrottleDeviceCannotRewriteTheRateArgument(string device)
+    {
+        Assert.Throws<ArgumentException>(() => new DockerSandboxExecutionProvider(
+            Options() with { IopsThrottleDevice = device }, new RecordingCommands(), ArtifactStore()));
+    }
+
     private FileSystemImmutableSandboxArtifactStore ArtifactStore() => new(
         new ImmutableSandboxArtifactStoreOptions { RootPath = Path.Combine(_root, "artifacts") });
 
@@ -248,7 +407,9 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
                 MaxDuration = TimeSpan.FromMinutes(5),
                 MaxMemoryBytes = 512 * 1024 * 1024,
                 MaxScratchBytes = 1024 * 1024,
-                MaxProcesses = 32
+                MaxProcesses = 32,
+                MaxCpuCores = 1.5,
+                MaxConnectorConcurrency = 8
             },
             AdmissionPolicy = new ResolvedSandboxAdmissionPolicy
             {
@@ -264,6 +425,18 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         1, id, "tenant-a", "dedicated-tenant-a", 1, 1, 2,
         SandboxAdmissionState.Retained, "node", DateTimeOffset.UtcNow, 2,
         DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "retained");
+
+    private sealed class StubCapabilities(string? material) : ISandboxCapabilityResolver
+    {
+        public Task<string> ResolveAsync(
+            SandboxAssignmentIdentity assignment,
+            string capabilityHandle,
+            CancellationToken cancellationToken) =>
+            material is null
+                ? throw new UnauthorizedAccessException(
+                    $"Capability '{capabilityHandle}' is not provisioned for this tenant.")
+                : Task.FromResult(material);
+    }
 
     private static SandboxCommandResult Ok(string output) => new(0, output, "");
     private static SandboxCommandResult Fail(string error) => new(1, "", error);

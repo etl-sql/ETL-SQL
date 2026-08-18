@@ -21,6 +21,8 @@ public class EvaluatorOptions
     public int MaxSmtpEmailsPerScript { get; set; } = SecurityService.DefaultMaxSmtpEmailsPerScript;
     public int MaxInternalOperations { get; set; } = 100000;
     public int MaxConnectionsPerScript { get; set; } = 100;
+    /// <summary>Rows one execution may process before it is aborted; 0 disables the ceiling.</summary>
+    public long MaxRowsProcessed { get; set; }
     public int MaxTempTablesPerScript { get; set; } = 100;
     public int MaxVariablesPerScript { get; set; } = 100;
     public int MaxVisualsPerScript { get; set; } = 100;

@@ -55,4 +55,12 @@ public sealed class DockerHardenedSandboxLifecycleTests : DockerSandboxLifecycle
     [DockerHardenedSandboxFact]
     public Task HardenedUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt() =>
         VerifyUnprovenRuntimeDetachmentRetainsWritableStateInsteadOfDeletingIt();
+
+    [DockerHardenedSandboxFact]
+    public Task HardenedCheckpointedStateResumesInADifferentSandbox() =>
+        VerifyCheckpointedStateResumesInADifferentSandbox();
+
+    [DockerHardenedSandboxFact]
+    public Task HardenedGrantedCapabilityIsMountedReadOnlyOnALiveRuntime() =>
+        VerifyGrantedCapabilityIsMountedReadOnlyOnALiveRuntime();
 }

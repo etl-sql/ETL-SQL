@@ -27,7 +27,8 @@ public sealed record SandboxReconciliationResult(
     int StillRunning,
     int Unknown,
     int ProbeFailures,
-    int FenceConflicts);
+    int FenceConflicts,
+    int AbandonedQueuedCancelled = 0);
 
 /// <summary>
 /// Performs one provider-neutral reconciliation pass. Lease expiry alone never releases capacity;
@@ -35,14 +36,22 @@ public sealed record SandboxReconciliationResult(
 /// </summary>
 public sealed class SandboxAdmissionReconciliationService
 {
+    /// <summary>
+    /// How long a queued admission may go unclaimed before the fleet treats it as abandoned. It is far
+    /// longer than any dispatch poll interval, so a live waiter is never mistaken for a dead one.
+    /// </summary>
+    public static readonly TimeSpan DefaultAbandonedQueueHorizon = TimeSpan.FromMinutes(10);
+
     private readonly ISandboxAdmissionLedger _ledger;
     private readonly ISandboxRuntimeReconciler _runtime;
     private readonly IReadOnlyList<string> _poolIds;
+    private readonly TimeSpan _abandonedQueueHorizon;
 
     public SandboxAdmissionReconciliationService(
         ISandboxAdmissionLedger ledger,
         ISandboxRuntimeReconciler runtime,
-        IReadOnlyCollection<string> poolIds)
+        IReadOnlyCollection<string> poolIds,
+        TimeSpan? abandonedQueueHorizon = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
@@ -50,6 +59,10 @@ public sealed class SandboxAdmissionReconciliationService
         _poolIds = poolIds.Distinct(StringComparer.Ordinal).ToArray();
         if (_poolIds.Count == 0 || _poolIds.Any(string.IsNullOrWhiteSpace))
             throw new ArgumentException("At least one nonblank sandbox capacity pool is required.", nameof(poolIds));
+        _abandonedQueueHorizon = abandonedQueueHorizon ?? DefaultAbandonedQueueHorizon;
+        if (_abandonedQueueHorizon <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(
+                nameof(abandonedQueueHorizon), "The abandoned-queue horizon must be positive.");
     }
 
     public async Task<SandboxReconciliationResult> RunOnceAsync(
@@ -59,6 +72,11 @@ public sealed class SandboxAdmissionReconciliationService
         var expired = await _ledger.RetainExpiredAsync(
             now,
             "admission lease expired; runtime reconciliation required",
+            cancellationToken);
+        var abandoned = await _ledger.CancelAbandonedQueuedAsync(
+            now,
+            _abandonedQueueHorizon,
+            "queued admission abandoned; no node claimed it within the recovery horizon",
             cancellationToken);
         var released = 0;
         var running = 0;
@@ -107,6 +125,6 @@ public sealed class SandboxAdmissionReconciliationService
         }
 
         return new SandboxReconciliationResult(
-            expired, released, running, unknown, probeFailures, fenceConflicts);
+            expired, released, running, unknown, probeFailures, fenceConflicts, abandoned);
     }
 }

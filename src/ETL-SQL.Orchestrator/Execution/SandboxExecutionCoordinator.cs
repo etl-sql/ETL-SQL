@@ -25,6 +25,30 @@ public sealed record SandboxResourceLimits
     public required long MaxMemoryBytes { get; init; }
     public required long MaxScratchBytes { get; init; }
     public required int MaxProcesses { get; init; }
+    /// <summary>
+    /// CPU time the attempt may consume per wall-clock second, in cores. It is required rather than
+    /// optional: an unbounded workload starves every co-tenant on the host, and a limit a provider is
+    /// free to ignore is worse than none because the fleet believes the ceiling exists.
+    /// </summary>
+    public required double MaxCpuCores { get; init; }
+    /// <summary>
+    /// Optional block-I/O ceiling in operations per second, applied to reads and writes alike. Null
+    /// means this profile makes no I/O promise; a positive value a host cannot actually enforce is a
+    /// startup failure rather than a quietly dropped control.
+    /// </summary>
+    public int? MaxIops { get; init; }
+    /// <summary>
+    /// Concurrent connector connections one attempt may hold. The engine already enforces this per
+    /// script; carrying it in the profile makes it a server-owned per-tenant ceiling rather than a
+    /// constant baked into whichever worker image the host happens to run.
+    /// </summary>
+    public required int MaxConnectorConcurrency { get; init; }
+    /// <summary>
+    /// Rows one attempt may process before the engine aborts it. Null means this profile declares no
+    /// row ceiling. It is enforced inside the engine, since rows are a unit only the engine can count
+    /// — a container runtime has no idea what a row is.
+    /// </summary>
+    public long? MaxRows { get; init; }
 
     internal void Validate()
     {
@@ -32,6 +56,19 @@ public sealed record SandboxResourceLimits
             throw new ArgumentOutOfRangeException(
                 nameof(SandboxResourceLimits),
                 "Sandbox duration, memory, scratch, and process limits must all be positive.");
+        if (MaxCpuCores <= 0 || double.IsNaN(MaxCpuCores) || double.IsInfinity(MaxCpuCores))
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxCpuCores), "The sandbox CPU limit must be a positive number of cores.");
+        if (MaxIops is <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxIops), "A declared sandbox IOPS limit must be positive.");
+        if (MaxConnectorConcurrency <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxConnectorConcurrency),
+                "The sandbox connector concurrency limit must be positive.");
+        if (MaxRows is <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxRows), "A declared sandbox row limit must be positive.");
     }
 }
 

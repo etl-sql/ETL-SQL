@@ -48,6 +48,16 @@ public interface ISharedTenantLifecycleStore
     Task<SharedTenantControlPlaneState?> GetSharedTenantStateAsync(
         TenantContext tenant,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Enumerates the control-plane record of every tenant, for fleet rollout planning. It reads
+    /// operational metadata only — tenant id, lifecycle state, release, capacity assignment — and
+    /// confers no authority over any tenant: each cutover still needs its own signed grant.
+    /// </summary>
+    Task<IReadOnlyList<SharedTenantControlPlaneState>> ListSharedTenantStatesAsync(
+        FleetInventoryAuthorization authorization,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
 }
 
 public partial class RelationalJobHistoryStore
@@ -61,6 +71,38 @@ public partial class RelationalJobHistoryStore
         await using var connection = _dialect.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         return await ReadStateAsync(connection, null, tenantId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SharedTenantControlPlaneState>> ListSharedTenantStatesAsync(
+        FleetInventoryAuthorization authorization,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(authorization);
+        if (authorization.IsExpiredAt(now))
+            throw new UnauthorizedAccessException(
+                "The fleet inventory authorization has expired; enumerating the tenant population " +
+                "requires a current, attributed authorization.");
+
+        await EnsureInitializedAsync();
+        await using var connection = _dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT TenantId, State, ActiveRelease, MaxConcurrentJobs, MaxStorageMb,
+                   MaxReportSessions, FenceEpoch, UpdatedAtUtc, DeletedAtUtc, Version
+              FROM SharedTenantControlPlanes ORDER BY TenantId;";
+        var states = new List<SharedTenantControlPlaneState>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            states.Add(new(
+                reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
+                reader.GetInt32(4), reader.GetInt32(5), reader.GetInt64(6),
+                DateTimeOffset.Parse(reader.GetString(7)),
+                reader.IsDBNull(8) ? null : DateTimeOffset.Parse(reader.GetString(8)), reader.GetInt64(9)));
+        }
+        return states;
     }
 
     public async Task<SharedTenantLifecycleResult> ApplySharedTenantLifecycleAsync(
