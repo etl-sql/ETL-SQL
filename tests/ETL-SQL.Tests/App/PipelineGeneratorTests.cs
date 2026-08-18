@@ -215,18 +215,17 @@ namespace ETL_SQL.Tests.App
             Assert.Contains("CustomerId                INT", code);
             Assert.Contains("Email                     VARCHAR(150)", code);
 
-            // Assert Tagging
-            Assert.Contains("CustomerId                /*@d: Unique customer ID; @pii*/", code);
-            Assert.Contains("Email                     /*@d: Email address; @pii*/", code);
+            // Assert Data Quality Rules & Tagging
+            Assert.Contains("@expect: 'NOT NULL, UNIQUE'", code);
+            Assert.Contains("@fail: 'QUARANTINE'", code);
+            Assert.Contains("@d: 'Unique customer ID'", code);
+            Assert.Contains("@pii", code);
+            Assert.Contains("@expect: 'MATCHES ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$, IN (''valid_email_format'')'", code);
+            Assert.Contains("@d: 'Email address'", code);
 
-            // Assert Validation Review and Quarantine Gates
-            Assert.Contains("REGEXP_LIKE(Email, '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$') = 0", code);
-            Assert.Contains("CREATE TABLE #spec_validation_issues", code);
-            Assert.Contains("'REGEX_FORMAT'", code);
-            Assert.Contains("'ALLOWED_VALUES'", code);
-            Assert.Contains("SELECT * INTO #rejected_data FROM #cleaned_data", code);
-            Assert.Contains("SELECT * INTO #valid_data FROM #cleaned_data", code);
-            Assert.Contains("SELECT * INTO outbound_dest FROM #valid_data;", code);
+            // Assert Quarantine Routing
+            Assert.Contains("ON FAILURE QUARANTINE TO #rejected_data WITH (HANDLING = SCRIPT);", code);
+            Assert.Contains("SELECT * INTO outbound_dest FROM #cleaned_data;", code);
 
             // Assert final metadata tag statement.
             Assert.Contains("INSERT TAG FOR TABLE #cleaned_data (", code);
@@ -641,6 +640,82 @@ namespace ETL_SQL.Tests.App
             {
                 Assert.StartsWith(Path.GetFullPath(modulesDir), Path.GetFullPath(file));
             }
+        }
+
+        [Fact]
+        public async Task Generate_ExplicitDataQualityRules_EmitsExpectFailAndOnFailure()
+        {
+            var schemaPath = Path.Combine(_tempDir, "dq_schema.json");
+            var outputPath = Path.Combine(_tempDir, "dq_output.etlsql");
+
+            var jsonContent = @"
+{
+  ""pipeline_name"": ""dq_pipeline"",
+  ""metadata"": {
+    ""description"": ""Data quality pipeline"",
+    ""owner"": ""Risk Team"",
+    ""classification"": ""restricted""
+  },
+  ""source"": {
+    ""connector_type"": ""FLATFILE"",
+    ""format"": ""CSV"",
+    ""path"": ""C:/Inbound/trades.csv"",
+    ""reject_policy"": ""warn""
+  },
+  ""destination"": {
+    ""connector_type"": ""FLATFILE"",
+    ""format"": ""CSV"",
+    ""path"": ""trades_out"",
+    ""naming_pattern"": ""clean_trades.csv""
+  },
+  ""schema"": [
+    {
+      ""column_name"": ""TradeId"",
+      ""type_family"": ""VARCHAR"",
+      ""max_length"": 50,
+      ""nullable"": false,
+      ""description"": ""Primary trade identifier"",
+      ""expect_rules"": [""NOT NULL"", ""UNIQUE"", ""MATCHES ^TRD-[0-9]+$""],
+      ""fail_action"": ""THROW"",
+      ""tags"": [""key""]
+    },
+    {
+      ""column_name"": ""Amount"",
+      ""type_family"": ""DECIMAL"",
+      ""precision"": 18,
+      ""scale"": 2,
+      ""nullable"": false,
+      ""description"": ""Trade notional amount"",
+      ""expect_rules"": [""> 0"", ""< 1000000000""],
+      ""fail_rules"": [""<= 0""],
+      ""tags"": [""financial""]
+    }
+  ]
+}";
+            await File.WriteAllTextAsync(schemaPath, jsonContent);
+
+            var result = await PipelineGenerator.Generate(schemaPath, outputPath, NullLogger.Instance);
+
+            Assert.Equal(0, result);
+            Assert.True(File.Exists(outputPath));
+
+            var code = await File.ReadAllTextAsync(outputPath);
+
+            // Assert Column 1 Rules
+            Assert.Contains("@expect: 'NOT NULL, UNIQUE, MATCHES ^TRD-[0-9]+$'", code);
+            Assert.Contains("@fail: 'THROW'", code);
+            Assert.Contains("@d: 'Primary trade identifier'", code);
+
+            // Assert Column 2 Rules
+            Assert.Contains("@expect: '> 0, < 1000000000'", code);
+            Assert.Contains("@fail: '<= 0'", code);
+            Assert.Contains("@financial", code);
+
+            // Assert Statement ON FAILURE WARN routing
+            Assert.Contains("ON FAILURE WARN;", code);
+
+            var script = new Parser(new Lexer(code).Tokenize(), code).Parse();
+            Assert.Empty(script.Diagnostics);
         }
     }
 }

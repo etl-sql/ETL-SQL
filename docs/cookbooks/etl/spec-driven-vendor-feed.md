@@ -20,8 +20,8 @@ etl-sql gen-script `
 The generated template includes:
 * `EXPECT SCHEMA #staging (...)` from the JSON contract.
 * `INSERT TAG FOR TABLE #cleaned_data (...)` lineage metadata.
-* `#spec_validation_issues` counts for regex and allowed-value failures.
-* `#rejected_data` and `#valid_data` when `source.reject_policy` is `quarantine`.
+* Inline `@expect: '...'`, `@fail: '...'`, and `@d: '...'` data quality rules and tags.
+* `ON FAILURE QUARANTINE TO #rejected_data;` when `source.reject_policy` is `quarantine`.
 
 ### Step 3: Complete the extraction block
 
@@ -56,8 +56,9 @@ etl-sql run samples/07_Real_World/realworld_12_spec_driven_customer_feed.etlsql
 
 Expected result:
 * 3 inbound rows are staged and cleaned.
-* 1 row is quarantined for invalid email or status.
-* 2 rows are written to `#vendor_customer_export`.
-* `#spec_validation_issues` and `#rejected_data` are available for review.
+* 2 non-compliant rows (invalid email format and unapproved status) are routed to `#rejected_data`.
+* 1 valid row is written to `#vendor_customer_export`.
+* `#cleaned_data` and `#rejected_data` are available for downstream load and quarantine review.
 
 Use this pattern as the handoff between AI extraction and production ETL work: the AI accelerates the first draft, while the script still forces schema validation, governance tagging, and explicit review of rejected rows.
+

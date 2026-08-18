@@ -51,6 +51,8 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
         if (Uri.TryCreate(target, UriKind.Absolute, out var fenceUri))
             InfrastructureEgressFence.EnforceHost(fenceUri.Host);
 
+        CapabilityAuthorizedDestinationScope.Enforce(host, target);
+
         try
         {
             RejectEmbeddedCredentials(target);

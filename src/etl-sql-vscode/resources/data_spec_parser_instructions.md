@@ -85,6 +85,9 @@ Single-dataset shape:
       "allowed_values": ["array of strings (optional, enum/domain values from the spec)"],
       "is_key": "boolean (optional, true if the field is part of the business key)",
       "tags": ["array of strings (pii | phi | pci | sensitive | etc. if column contains personal or sensitive info)"],
+      "expect_rules": ["array of strings (optional, e.g. ['NOT NULL', 'UNIQUE', 'MATCHES ^[0-9]{5}$', '> 0', 'IN (''A'', ''B'')'])"],
+      "fail_rules": ["array of strings (optional, e.g. ['NULL', '<= 0'])"],
+      "fail_action": "string (optional: THROW | WARN | QUARANTINE)",
       "mapping_type": "string (optional: lookup | aggregation | constant | flat)",
       "mapping_rule": "string (optional: join lookup explanation, aggregation logic, or constant value)"
     }
@@ -152,6 +155,9 @@ Multi-dataset shape:
           "allowed_values": ["strings"],
           "is_key": "boolean",
           "tags": ["strings"],
+          "expect_rules": ["strings"],
+          "fail_rules": ["strings"],
+          "fail_action": "string (THROW | WARN | QUARANTINE)",
           "mapping_type": "string (lookup | aggregation | constant | flat)",
           "mapping_rule": "string"
         }
@@ -205,11 +211,22 @@ Evaluate column names, classifications, and descriptions to assign metadata tags
     *   "Confidential" -> `confidential`
     *   "Restricted", "Highly Confidential", or containing PII/PHI -> `restricted`
 
-### 4. VALIDATION RULES & REGEX EXTRACTION
+### 4. DATA QUALITY RULES (@expect, @fail, and ON FAILURE)
 
-Scan descriptions, rules, and comment fields for formatting constraints to create a `validation_regex`:
-*   *Format: SKU-XXXXX* -> `^SKU-\\d{5}$`
-*   *SSN Format: 999-99-9999* -> `^\\d{3}-\\d{2}-\\d{4}$`
-*   *Postal Code Format* -> `^\\d{5}(-\\d{4})?$`
-*   *Email Format* -> `^[^@]+@[^@]+\\.[^@]+$`
-*   *Must be exactly N characters* -> `^.{N}$`
+Scan descriptions, business rules, and constraints to generate declarative validation rules:
+
+*   **Format regexes:**
+    *   *Format: SKU-XXXXX* -> `validation_regex`: `^SKU-\\d{5}$` or `expect_rules`: `["MATCHES ^SKU-\\d{5}$"]`
+    *   *SSN Format: 999-99-9999* -> `validation_regex`: `^\\d{3}-\\d{2}-\\d{4}$`
+    *   *Postal Code Format* -> `validation_regex`: `^\\d{5}(-\\d{4})?$`
+    *   *Email Format* -> `validation_regex`: `^[^@]+@[^@]+\\.[^@]+$`
+    *   *Must be exactly N characters* -> `validation_regex`: `^.{N}$`
+*   **Value bounds and domains:**
+    *   *Must be positive / > 0* -> `expect_rules`: `["> 0"]`
+    *   *Must be non-negative / >= 0* -> `expect_rules`: `[">= 0"]`
+    *   *Range 1 to 100* -> `expect_rules`: `["BETWEEN 1 AND 100"]`
+    *   *Allowed values (e.g. ACTIVE, INACTIVE)* -> `allowed_values`: `["ACTIVE", "INACTIVE"]` or `expect_rules`: `["IN (''ACTIVE'', ''INACTIVE'')"]`
+*   **Fail conditions & actions:**
+    *   *If invalid must quarantine* -> `source.reject_policy = "quarantine"` (compiles to statement-level `ON FAILURE QUARANTINE TO #rejected_data;`)
+    *   *If invalid must abort batch* -> `source.reject_policy = "fail_batch"` (compiles to `ON FAILURE THROW;`)
+    *   *Column-specific fail action* -> `fail_action: "THROW" | "WARN" | "QUARANTINE"`

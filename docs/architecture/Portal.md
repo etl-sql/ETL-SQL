@@ -522,6 +522,14 @@ Entries hold `SECRET:name` references, never credential values; detail responses
 | GET | `/api/admin/services` | Admin | Configuration + last run of each native admin service |
 | GET | `/api/admin/services/{name}/history` | Admin | Run ledger for one service (`?limit=`) |
 
+### Admin — Gateways
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/admin/gateways/enroll` | Admin | Issue one-time enrollment token for a Gateway instance |
+| GET | `/api/admin/gateways/{gatewayId}` | Admin | Inspect Gateway enrollment state, timestamps, and workload key thumbprint |
+| POST | `/api/admin/gateways/{gatewayId}/revoke` | Admin | Revoke Gateway enrollment token and unregister active session |
+
 ### Catalog
 
 | Method | Path | Auth | Description |

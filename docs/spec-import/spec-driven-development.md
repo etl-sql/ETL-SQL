@@ -144,7 +144,7 @@ The command generates a pre-formatted ETL-SQL script containing:
 *   Source layout notes for file format, headers, skipped rows, null tokens, keys, duplicate policy, fixed-width positions, date formats, and allowed values when the vendor spec provides them.
 *   Outbound connection declarations (e.g. `CREATE CONNECTION ... AS FLATFILE`) mapped from the spec.
 *   Cleansing and casting statements (e.g. `TRY_CAST`, `SUBSTRING`) for every target column.
-*   Validation review tables for regex and allowed-value checks, with optional quarantine behavior when `source.reject_policy` is `quarantine`.
+*   Declarative inline Data Quality rules (`@expect: '...'`, `@fail: '...'`) and statement-level `ON FAILURE` routing (e.g. `ON FAILURE QUARANTINE TO #rejected_data;`).
 *   Lineage tagging declarations using `TAG` (see [Lineage.md](../reference/statements/session-control/lineage.md)).
 *   An `EXPECT SCHEMA` constraint validator (see [EXPECT SCHEMA](../reference/statements/ddl/expect-schema.md)).
 
@@ -187,8 +187,8 @@ For a complete worked example, see [Specification-Driven Vendor Feed Build](../c
 At runtime, the script executes safety assertions before uploading data:
 
 1.  **Type & Alignment Gate:** The `EXPECT SCHEMA` check ensures the extraction query output `#staging` is structured exactly as the target spec expects, preventing unexpected upstream shifts from crashing database inserts.
-2.  **Length & Format Check:** The cleansing query automatically truncates long strings using `SUBSTRING` and records regex or allowed-value failures in `#spec_validation_issues`.
-3.  **Reject Handling:** With `source.reject_policy = "quarantine"`, invalid rows are written to `#rejected_data` and only `#valid_data` is uploaded. With `fail_batch`, the script throws after writing validation counts. With `warn`, it prints a warning and continues.
-4.  **Governance Tagging:** The derived columns automatically inherit classification properties like `@pii` or `@confidential` and push them downstream to trace data lineage.
+2.  **Declarative Data Quality Gate:** Column-level `@expect` rules enforce value constraints (e.g. `NOT NULL`, `UNIQUE`, `MATCHES <regex>`, `IN (<allowed>)`, `> 0`), while `@fail` tags define column actions (`THROW`, `WARN`, `QUARANTINE`).
+3.  **Statement-Level Reject Routing:** With `source.reject_policy = "quarantine"`, the projection uses `ON FAILURE QUARANTINE TO #rejected_data;` so clean records flow to `#cleaned_data` while non-compliant records route to `#rejected_data`. With `fail_batch`, `ON FAILURE THROW;` halts execution immediately. With `warn`, `ON FAILURE WARN;` records warnings without interrupting the pipeline.
+4.  **Governance Tagging:** The derived columns automatically inherit classification properties like `@pii`, `@key`, or `@confidential` and push them downstream to trace data lineage.
 
 

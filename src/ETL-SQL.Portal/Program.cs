@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -101,6 +101,7 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider
     return ETL_SQL.Core.Governance.ConnectionCatalogProviderFactory.Create(options)
         ?? (ETL_SQL.Core.Governance.IConnectionCatalogProvider)ETL_SQL.Portal.Services.UnconfiguredConnectionCatalogProvider.Instance;
 });
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayEnrollmentStore, ETL_SQL.Core.Governance.InMemoryGatewayEnrollmentStore>();
 builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();
 builder.Services.AddScoped<StudioCapabilityStore>();

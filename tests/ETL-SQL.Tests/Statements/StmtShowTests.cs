@@ -11,6 +11,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Orchestrator;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -47,6 +48,17 @@ namespace ETL_SQL.Tests.Statements.Statements
                 var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IJobHistoryStore));
                 if (descriptor != null) services.Remove(descriptor);
                 services.AddSingleton<IJobHistoryStore>(mockStore);
+            }
+            else
+            {
+                var tempDb = Path.Combine(Path.GetTempPath(), $"show_tests_{Guid.NewGuid():N}.db");
+                var store = new SQLiteJobHistoryStore(tempDb);
+                var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IJobHistoryStore));
+                if (descriptor != null) services.Remove(descriptor);
+                services.AddSingleton<IJobHistoryStore>(store);
+                var relDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(RelationalJobHistoryStore));
+                if (relDescriptor != null) services.Remove(relDescriptor);
+                services.AddSingleton<RelationalJobHistoryStore>(store);
             }
             if (lineageStore != null)
             {

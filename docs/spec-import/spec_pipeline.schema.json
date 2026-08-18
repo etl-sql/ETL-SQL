@@ -332,6 +332,24 @@
             "type": "string"
           }
         },
+        "expect_rules": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fail_rules": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fail_action": {
+          "type": "string",
+          "enum": ["THROW", "WARN", "QUARANTINE"]
+        },
         "mapping_type": {
           "type": "string",
           "enum": ["lookup", "aggregation", "constant", "flat"]

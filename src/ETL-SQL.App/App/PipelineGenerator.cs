@@ -462,15 +462,16 @@ namespace ETL_SQL.App
             sb.AppendLine();
 
             // 6. Transforming, Casting, and Documenting Inline Tags
-            sb.Indent(1).AppendLine("-- 6. TRANSFORMATION, CASTING & GOVERNANCE TAGGING");
+            sb.Indent(1).AppendLine("-- 6. TRANSFORMATION, CASTING & DATA QUALITY RULES");
             sb.Indent(1).AppendLine("SELECT");
+            var rejectPolicy = spec.Source?.RejectPolicy?.ToLowerInvariant() ?? "fail_batch";
             if (spec.Schema != null)
             {
                 for (int i = 0; i < spec.Schema.Count; i++)
                 {
                     var col = spec.Schema[i];
                     var castExpr = GetCastingExpression(col);
-                    var comment = GetInlineComment(col);
+                    var comment = GetInlineComment(col, rejectPolicy);
                     var comma = (i == spec.Schema.Count - 1) ? "" : ",";
                     sb.Indent(2).AppendLine($"{castExpr,-50} AS {col.ColumnName,-25} {comment}{comma}");
                 }
@@ -496,52 +497,38 @@ namespace ETL_SQL.App
                 sb.Indent(1).AppendLine("-- [USER TODO]: Group by non-aggregated columns for calculations");
                 sb.Indent(1).AppendLine($"-- GROUP BY {groupByList}");
             }
-            sb.Indent(1).Append(";").AppendLine();
-            sb.AppendLine();
 
-            // 7. Validation review gates
-            var validationRules = BuildValidationRules(spec.Schema);
-            var outputTable = "#cleaned_data";
-            var rejectPolicy = spec.Source?.RejectPolicy?.ToLowerInvariant() ?? "fail_batch";
-            if (validationRules.Count > 0)
+            var hasExpectRules = spec.Schema != null && spec.Schema.Any(c =>
+                !c.Nullable ||
+                c.IsKey == true ||
+                !string.IsNullOrWhiteSpace(c.ValidationRegex) ||
+                (c.AllowedValues != null && c.AllowedValues.Count > 0) ||
+                (c.ExpectRules != null && c.ExpectRules.Count > 0) ||
+                (c.FailRules != null && c.FailRules.Count > 0));
+
+            if (hasExpectRules)
             {
-                sb.Indent(1).AppendLine("-- 7. SPECIFICATION VALIDATION REVIEW GATES");
-                sb.Indent(1).AppendLine("CREATE TABLE #spec_validation_issues (column_name VARCHAR(128), issue_type VARCHAR(40), issue_count INT);");
-                foreach (var rule in validationRules)
-                {
-                    sb.Indent(1).AppendLine($"INSERT INTO #spec_validation_issues");
-                    sb.Indent(1).AppendLine($"SELECT '{EscapeSqlString(rule.ColumnName)}', '{rule.IssueType}', COUNT(*) FROM #cleaned_data WHERE {rule.Predicate};");
-                }
-
                 if (rejectPolicy == "quarantine")
                 {
-                    var combinedPredicate = string.Join(" OR ", validationRules.Select(r => $"({r.Predicate})"));
-                    sb.Indent(1).AppendLine("SELECT * INTO #rejected_data FROM #cleaned_data");
-                    sb.Indent(1).AppendLine($"WHERE {combinedPredicate};");
-                    sb.Indent(1).AppendLine("SELECT * INTO #valid_data FROM #cleaned_data");
-                    sb.Indent(1).AppendLine($"WHERE NOT ({combinedPredicate});");
-                    sb.Indent(1).AppendLine("PRINT 'Specification validation completed. Review #spec_validation_issues and #rejected_data before release.';");
-                    outputTable = "#valid_data";
+                    sb.Indent(1).AppendLine("ON FAILURE QUARANTINE TO #rejected_data WITH (HANDLING = SCRIPT);");
                 }
                 else if (rejectPolicy == "warn")
                 {
-                    sb.Indent(1).AppendLine("IF EXISTS (SELECT 1 FROM #spec_validation_issues WHERE issue_count > 0)");
-                    sb.Indent(1).AppendLine("BEGIN");
-                    sb.Indent(2).AppendLine("PRINT 'Specification validation warnings found. Review #spec_validation_issues.';");
-                    sb.Indent(1).AppendLine("END");
+                    sb.Indent(1).AppendLine("ON FAILURE WARN;");
                 }
                 else
                 {
-                    sb.Indent(1).AppendLine("IF EXISTS (SELECT 1 FROM #spec_validation_issues WHERE issue_count > 0)");
-                    sb.Indent(1).AppendLine("BEGIN");
-                    sb.Indent(2).AppendLine("THROW 50002, 'Specification validation failed. Review #spec_validation_issues for failed columns and counts.', 16;");
-                    sb.Indent(1).AppendLine("END");
+                    sb.Indent(1).AppendLine("ON FAILURE THROW;");
                 }
-                sb.AppendLine();
             }
+            else
+            {
+                sb.Indent(1).Append(";").AppendLine();
+            }
+            sb.AppendLine();
 
-            // 8. Output generation & lineage logging
-            sb.Indent(1).AppendLine("-- 8. PIPELINE INHERITED DATA GOVERNANCE");
+            // 7. Output generation & lineage logging
+            sb.Indent(1).AppendLine("-- 7. PIPELINE INHERITED DATA GOVERNANCE");
             sb.Indent(1).AppendLine("INSERT TAG FOR TABLE #cleaned_data (");
             sb.Indent(2).AppendLine($"pipeline_source = '{specFileName}',");
             sb.Indent(2).AppendLine($"owner = '{owner}',");
@@ -549,8 +536,8 @@ namespace ETL_SQL.App
             sb.Indent(1).AppendLine(");");
             sb.AppendLine();
 
-            sb.Indent(1).AppendLine("-- 9. OUTBOUND UPLOAD");
-            sb.Indent(1).AppendLine($"SELECT * INTO outbound_dest FROM {outputTable};");
+            sb.Indent(1).AppendLine("-- 8. OUTBOUND UPLOAD");
+            sb.Indent(1).AppendLine($"SELECT * INTO outbound_dest FROM #cleaned_data;");
             sb.AppendLine();
 
             sb.Indent(1).AppendLine("PRINT 'Pipeline execution completed successfully.';");
@@ -563,34 +550,6 @@ namespace ETL_SQL.App
             return sb.ToString();
         }
 
-        private static List<ValidationRule> BuildValidationRules(List<SpecColumn>? schema)
-        {
-            var rules = new List<ValidationRule>();
-            if (schema == null) return rules;
-
-            foreach (var column in schema)
-            {
-                if (!string.IsNullOrWhiteSpace(column.ValidationRegex))
-                {
-                    var escapedRegex = EscapeSqlString(column.ValidationRegex);
-                    rules.Add(new ValidationRule(
-                        column.ColumnName ?? "",
-                        "REGEX_FORMAT",
-                        $"{column.ColumnName} IS NOT NULL AND REGEXP_LIKE({column.ColumnName}, '{escapedRegex}') = 0"));
-                }
-
-                if (column.AllowedValues is { Count: > 0 })
-                {
-                    var allowedValues = string.Join(", ", column.AllowedValues.Select(v => $"'{EscapeSqlString(v)}'"));
-                    rules.Add(new ValidationRule(
-                        column.ColumnName ?? "",
-                        "ALLOWED_VALUES",
-                        $"{column.ColumnName} IS NOT NULL AND {column.ColumnName} NOT IN ({allowedValues})"));
-                }
-            }
-
-            return rules;
-        }
 
         private static void WriteSourceContractComments(StringBuilder sb, SpecPipeline spec)
         {
@@ -892,24 +851,89 @@ namespace ETL_SQL.App
             return $"TRY_CAST({colName} AS {GetSqlTypeString(col)})";
         }
 
-        private static string GetInlineComment(SpecColumn col)
+        private static string GetInlineComment(SpecColumn col, string? rejectPolicy = null)
         {
             var tagsList = new List<string>();
+
+            // 1. Data Quality Expect Rules
+            var rules = new List<string>();
+            if (col.ExpectRules != null && col.ExpectRules.Count > 0)
+            {
+                rules.AddRange(col.ExpectRules);
+            }
+            else
+            {
+                if (!col.Nullable)
+                {
+                    rules.Add("NOT NULL");
+                }
+                if (col.IsKey == true)
+                {
+                    if (!rules.Contains("NOT NULL")) rules.Add("NOT NULL");
+                    if (!rules.Contains("UNIQUE")) rules.Add("UNIQUE");
+                }
+                if (!string.IsNullOrWhiteSpace(col.ValidationRegex))
+                {
+                    rules.Add($"MATCHES {col.ValidationRegex.Trim()}");
+                }
+                if (col.AllowedValues != null && col.AllowedValues.Count > 0)
+                {
+                    var vals = string.Join(", ", col.AllowedValues.Select(v => $"''{v.Replace("'", "''''")}''"));
+                    rules.Add($"IN ({vals})");
+                }
+            }
+
+            if (rules.Count > 0)
+            {
+                var combinedRules = string.Join(", ", rules);
+                tagsList.Add($"@expect: '{combinedRules}'");
+            }
+
+            // 2. Fail Rules / Fail Action
+            if (col.FailRules != null && col.FailRules.Count > 0)
+            {
+                tagsList.Add($"@fail: '{string.Join(", ", col.FailRules)}'");
+            }
+            else if (!string.IsNullOrWhiteSpace(col.FailAction))
+            {
+                tagsList.Add($"@fail: '{col.FailAction.Trim().ToUpperInvariant()}'");
+            }
+            else if (rules.Count > 0 && !string.IsNullOrWhiteSpace(rejectPolicy))
+            {
+                var normPolicy = rejectPolicy.Trim().ToLowerInvariant();
+                if (normPolicy == "quarantine")
+                {
+                    tagsList.Add("@fail: 'QUARANTINE'");
+                }
+                else if (normPolicy == "fail_batch" || normPolicy == "throw" || normPolicy == "reject")
+                {
+                    tagsList.Add("@fail: 'THROW'");
+                }
+                else if (normPolicy == "warn")
+                {
+                    tagsList.Add("@fail: 'WARN'");
+                }
+            }
+
+            // 3. Description
             if (!string.IsNullOrEmpty(col.Description))
             {
-                tagsList.Add($"@d: {col.Description}");
+                tagsList.Add($"@d: '{col.Description.Replace("'", "''")}'");
             }
+
+            // 4. Tags
             if (col.Tags != null && col.Tags.Count > 0)
             {
                 foreach (var tag in col.Tags)
                 {
                     if (tag.Equals("none", StringComparison.OrdinalIgnoreCase)) continue;
-                    tagsList.Add($"@{tag.ToLower()}");
+                    var cleanTag = tag.TrimStart('@').ToLowerInvariant();
+                    tagsList.Add($"@{cleanTag}");
                 }
             }
 
             if (tagsList.Count == 0) return "";
-            return $"/*{string.Join("; ", tagsList)}*/";
+            return $"/* {string.Join("; ", tagsList)} */";
         }
 
         private static string ResolveConnectorType(string connectorType, string format)
@@ -931,8 +955,6 @@ namespace ETL_SQL.App
             return connectorType;
         }
     }
-
-    internal record ValidationRule(string ColumnName, string IssueType, string Predicate);
 
     internal static class SpecPipelineValidator
     {
@@ -1484,6 +1506,15 @@ namespace ETL_SQL.App
 
         [JsonPropertyName("tags")]
         public List<string>? Tags { get; set; }
+
+        [JsonPropertyName("expect_rules")]
+        public List<string>? ExpectRules { get; set; }
+
+        [JsonPropertyName("fail_rules")]
+        public List<string>? FailRules { get; set; }
+
+        [JsonPropertyName("fail_action")]
+        public string? FailAction { get; set; }
 
         [JsonPropertyName("mapping_type")]
         public string? MappingType { get; set; }

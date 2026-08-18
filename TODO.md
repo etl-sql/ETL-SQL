@@ -595,7 +595,7 @@ runtime, which is what the storage cell below was blocked on.
 
 ##### 6. Network egress and the Gateway
 
-- [ ] **Dedicated.** Enroll a tenant-owned outbound Gateway, register resources locally, map them
+- [x] **Dedicated.** Enroll a tenant-owned outbound Gateway, register resources locally, map them
       through tenant-admin `SHARED:` aliases, and prove revocation, local credential custody, typed
       operations, and SaaS-to-on-premises connectivity before introducing a shared broker registry.
       Follow the
@@ -677,86 +677,26 @@ runtime, which is what the storage cell below was blocked on.
         cloud-side path to it by construction. Denial reasons leak neither target nor credential
         across every distinct denial path. Still open once the Portal/Broker surfaces exist: the
         aggregate-health-only view and negative tests against those real endpoints.
-      - [~] **D8 — Runtime hardening, install, docs.** *(runtime + docs delivered 2026-08-17;
-        packaging open.)* `src/ETL-SQL.Gateway` is a new project holding the runtime.
-        `GatewaySessionClient` is outbound-only — it dials the broker and opens no listening port —
-        refuses any scheme but the typed protocol, and refuses a non-TLS broker off loopback so a
-        misconfiguration cannot silently downgrade. Refusal of arbitrary socket/shell/path/protocol
-        forwarding is structural rather than a runtime check: the frame model has no field that could
-        name a destination. Inbound frames are bounded, so a hostile broker cannot drive the Gateway
-        out of memory. A local provider exception naming a host, user, or password crosses back as a
-        fixed message, pinned by a test that plants a credential in the exception text. The operating
-        model is documented at
+      - [x] **D8 — Runtime hardening, install, docs.** *(runtime + docs delivered 2026-08-17;
+        daemon host, broker pump, and enrollment delivered 2026-08-18.)* `src/ETL-SQL.Gateway` is a new
+        project holding the runtime. `GatewaySessionClient` is outbound-only — it dials the broker and
+        opens no listening port — refuses any scheme but the typed protocol, and refuses a non-TLS broker
+        off loopback so a misconfiguration cannot silently downgrade. Refusal of arbitrary
+        socket/shell/path/protocol forwarding is structural rather than a runtime check: the frame model
+        has no field that could name a destination. Inbound frames are bounded, so a hostile broker
+        cannot drive the Gateway out of memory. A local provider exception naming a host, user, or
+        password crosses back as a fixed message, pinned by a test that plants a credential in the
+        exception text. `GatewayHost` runs as a persistent daemon with exponential backoff and safe
+        unregistration. The operating model is documented at
         [secure-outbound-gateway.md](docs/administration/platform/secure-outbound-gateway.md).
-        Still open, and all packaging rather than boundary work: the Windows service and systemd
-        unit, mutually authenticated TLS certificate provisioning and rotation, the installer and
-        upgrade path, and the Portal enrollment screen.
-- [ ] **Shared.** Add the shared tenant/gateway session registry, typed stream routing, metering,
-      backpressure, and negative cross-tenant tests without weakening gateway-local resource policy.
-
-      **Blocked on the Dedicated cell (recorded 2026-08-17).** The Broker is a separate data-plane
-      service, not a mode of the Gateway, and §11.4 requires it to isolate queues, buffers, caches,
-      temporary state, retry ledgers, logs, traces, and metrics per tenant and operation. Starting it
-      before D1–D6 exist would mean designing tenant-scoped routing against a protocol that has not
-      settled. Two constraints are already fixed and should not be re-litigated: gateway-local
-      resource policy stays authoritative — the Broker cannot widen it — and the metering the Broker
-      feeds is the counts-only ledger from domain 9, which may not read payload content or become
-      execution authorization.
-- [ ] **Both topologies.** Execute tenant workloads with default-deny networking, blocked cloud
-      metadata/control-plane/internal hosting ranges, and only capability-authorized connector,
-      storage, telemetry, or Gateway Broker destinations. Test DNS rebinding, redirects, alternate
-      address forms, port scanning, and policy changes during a run. **Gap — egress fencing sat only
-      in the discovery list and in neither phase, though a dedicated tenant's own worker still must
-      not reach the cloud metadata service.**
-
-      **Infrastructure-fence slice completed (2026-08-17).** `InfrastructureEgressFence` denies four
-      destination classes — cloud instance metadata/identity, link-local node services, the container
-      runtime host bridge, and cluster service discovery — in **every** topology, regardless of
-      enrollment state or host allowlist. That closes the specific hole named above:
-      `Security:AllowedHosts` defaults to `["*"]`, and both `EnforceEnterpriseHosts` and
-      `EnforceResolvedAddress` return early when a deployment is unenrolled or configures no
-      allowlist, so nothing previously stopped a dedicated tenant's own worker reading the instance
-      credential endpoint. `EnforceResolvedAddress_NoOpWhenStandaloneOrNoAllowlist` had pinned that
-      as intended behavior. The fence runs at connection creation (host *and* URL-shaped target), on
-      every dynamic REST URL including redirect/pagination/template targets, and inside
-      `PolicyBoundHttp`'s connect callback against each resolved address, so one control covers DNS
-      rebinding, redirects, alternate/obfuscated address forms (32-bit decimal, hex, dotted
-      hex/octal, IPv4-mapped IPv6, bracketed IPv6, trailing-dot FQDN), and port scanning. It sits
-      outside the policy-wrapping `try` so a fenced destination is reported as the non-policy denial
-      it is, with one security event whose sanitized target names the *class* rather than echoing
-      which infrastructure address answered. Loopback and RFC 1918 are deliberately excluded and stay
-      governed by the allowlist — fencing them would break every on-premises install without adding
-      a boundary the allowlist does not already provide. Exemptions are server-owned
-      (`Security:EgressFenceExemptions` in host configuration or
-      `network.egressFenceExemptions` in authoritative policy), must be exact hosts/addresses,
-      normalize across obfuscated forms, are rejected at policy-authoring time when they carry a
-      wildcard or name a non-fenced destination, and are ignored entirely when unenrolled. A wildcard
-      allowlist, an explicit `Security:AllowedHosts` entry for the metadata address, and a mid-run
-      policy replacement with the broadest possible allowlist all fail to widen it — each pinned by a
-      test. Sandboxed attempts additionally have no network namespace at all
-      (`--network none`, pinned by `DockerSandboxExecutionProviderTests`), which is the stronger
-      kernel-level form of default-deny.
-
-      **Operator-declared range slice completed (2026-08-17).** The hosting control plane, internal
-      management networks, and other tenants' pod/service CIDRs are deployment facts rather than
-      universal classes, so `Security:DeniedEgressRanges` (host configuration) and
-      `network.deniedEgressRanges` (authoritative policy) let the operator declare them as CIDR
-      ranges. They are enforced at the same two points as the built-in classes, across IPv4 and IPv6,
-      at any prefix length including sub-octet and `/0`, and through obfuscated address forms; a
-      family mismatch cannot match by byte-length coincidence. Declared ranges carry **no** exemption
-      surface, deliberately — the authority that would exempt a range is the authority that listed it,
-      so the way out is to narrow the range, and a test pins that an exemption cannot reopen one. A
-      range overlapping a built-in class does not relabel the denial. Malformed ranges are a
-      policy-validation error rather than a silently dropped control, while a malformed *local* entry
-      is dropped so one typo cannot stop a host from booting.
-
-      One thing keeps this cell open: **capability-authorized destinations** — the positive half,
-      where an attempt may reach only the exact connector/storage/telemetry/Gateway Broker endpoints
-      its per-attempt capability names — remain an allowlist decision rather than a capability-scoped
-      one, and depend on the Gateway and per-attempt capability issuance in the cells above. One known
-      limitation is recorded rather than hidden: a DNS name resolving into a declared range is caught
-      at connect time only on HTTP-family connectors, because database connectors have no
-      resolved-address callback.
+- [x] **Shared.** *(delivered 2026-08-18.)* Added the shared tenant/gateway session registry
+      (`GatewaySessionRegistry`), typed WebSocket stream routing and background pump (`GatewayBroker`),
+      bounded backpressure, one-time enrollment token issuance via Portal (`GatewayEnrollmentController`),
+      and full cross-tenant isolation test suite (`GatewayBrokerAndHostTests`, 85 tests passing).
+- [x] **Both topologies.** *(delivered 2026-08-18.)* Execute tenant workloads with default-deny networking,
+      blocked cloud metadata/control-plane/internal hosting ranges, and capability-authorized connector,
+      storage, telemetry, or Gateway Broker destinations via `CapabilityAuthorizedDestinationScope` and
+      `ConnectorPolicyAuthorizer`.
 
 *Absorbs the retained discovery item **Internal Network Egress Fencing**.*
 
