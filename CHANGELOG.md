@@ -35,6 +35,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   material generated inside the attempt's own single-use scratch, so a resumed run reported "no saved
   session found"; the server-mounted per-tenant key is now authoritative, and checkpoint resume across
   separate sandboxes is verified on a hardened runtime.
+- Added the Gateway typed-operation contract and durable outcome ledger. Operation bounds have no
+  unlimited representation and a resource's registered limits can only narrow them. Reconnect follows
+  one rule: an ambiguous write is never retried blindly nor reported as safely failed, a dropped
+  in-flight write is ambiguous rather than assumed not to have happened, a dropped read may simply
+  re-run, and a committed outcome cannot be downgraded by a late report.
 - Added the Secure Outbound Data Gateway enrollment, resource registry, and authority model. A
   tenant-issued enrollment is consumable exactly once and stores only a hash of its one-time token,
   so the record cannot enrol a Gateway; expired, revoked, consumed, and cross-tenant presentations

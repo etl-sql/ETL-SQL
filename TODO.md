@@ -642,12 +642,19 @@ runtime, which is what the storage cell below was blocked on.
         discovery cannot redefine an already-approved resource (otherwise a rogue pass could repoint
         an approved alias). `ToPublishedMetadata` is the only projection that leaves the Gateway and
         carries neither target nor credential, asserted by serializing it and looking for both.
-      - **D4 — Typed operation protocol.** Bidirectional gRPC streaming over HTTPS (typed WebSocket
-        only where a restrictive proxy forces it), one versioned operation model, mandatory
-        deadlines, cancellation, bounded buffering, flow control, max request/response size, and
-        concurrency limits. Reconnect keys off operation IDs against a durable outcome ledger:
-        **an ambiguous write is never retried blindly nor reported as safely failed** — the same rule
-        the sandbox coordinator already follows for ambiguous teardown.
+      - [~] **D4 — Typed operation protocol.** *(contract and outcome ledger delivered 2026-08-17;
+        transport open.)* `GatewayOperationBounds` has no unlimited representation, validates itself,
+        and `NarrowTo` lets a resource's registered limits only restrict, never widen. A
+        `GatewayOperation` is a per-operation handle naming a resource and an operation class; it
+        cannot express a host, port, or protocol, so a container never holds reusable tunnel
+        authority. `GatewayOutcomeLedger` implements the reconnect rule: **an ambiguous write is
+        neither retried blindly nor reported as safely failed**, a dropped in-flight *write* is
+        ambiguous rather than "never happened", a dropped in-flight *read* may simply re-run because
+        repeating it changes nothing, and a committed outcome cannot be downgraded by a late
+        ambiguous report. The ledger is keyed by tenant *and* operation ID as a tuple — a
+        concatenated string key would let `("a","bc")` and `("ab","c")` collide into one another's
+        outcome, which is pinned by a test. Still open: the actual gRPC/WebSocket transport, flow
+        control on a real stream, and a durable ledger behind the same contract tests.
       - [x] **D5 — Authority agreement.** *(delivered 2026-08-17.)* `GatewayAuthority.Evaluate` is
         the single decision point for all seven clauses. Each is falsified independently against an
         otherwise-valid request, which is the point: the recurring defect here has been each door
