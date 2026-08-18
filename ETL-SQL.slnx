@@ -10,6 +10,7 @@
     <Project Path="src/ETL-SQL.App/ETL-SQL.App.csproj" />
     <Project Path="src/ETL-SQL.Core/ETL-SQL.Core.csproj" />
     <Project Path="src/ETL-SQL.Engine/ETL-SQL.Engine.csproj" />
+    <Project Path="src/ETL-SQL.Gateway/ETL-SQL.Gateway.csproj" />
     <Project Path="src/ETL-SQL.Connectors.Cloud/ETL-SQL.Connectors.Cloud.csproj" />
     <Project Path="src/ETL-SQL.Connectors.Common/ETL-SQL.Connectors.Common.csproj" />
     <Project Path="src/ETL-SQL.Connectors.Databases/ETL-SQL.Connectors.Databases.csproj" />

@@ -35,6 +35,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   material generated inside the attempt's own single-use scratch, so a resumed run reported "no saved
   session found"; the server-mounted per-tenant key is now authoritative, and checkpoint resume across
   separate sandboxes is verified on a hardened runtime.
+- Added the on-premises Gateway runtime and its typed WebSocket transport in a new
+  `ETL-SQL.Gateway` project. The Gateway dials out and never listens, refuses any scheme but the
+  typed protocol and any non-TLS broker off loopback, bounds inbound frames, narrows cloud-supplied
+  limits by the resource's registered ones, and returns a fixed message when a local provider fails
+  so a host, user, or password in the provider's exception never crosses the wire. The frame model
+  has no field for a host, port, scheme, path, or command, so a compromised cloud side cannot ask the
+  Gateway to reach an arbitrary destination.
 - Added the Gateway typed-operation contract and durable outcome ledger. Operation bounds have no
   unlimited representation and a resource's registered limits can only narrow them. Reconnect follows
   one rule: an ambiguous write is never retried blindly nor reported as safely failed, a dropped

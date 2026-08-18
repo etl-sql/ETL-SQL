@@ -642,8 +642,7 @@ runtime, which is what the storage cell below was blocked on.
         discovery cannot redefine an already-approved resource (otherwise a rogue pass could repoint
         an approved alias). `ToPublishedMetadata` is the only projection that leaves the Gateway and
         carries neither target nor credential, asserted by serializing it and looking for both.
-      - [~] **D4 — Typed operation protocol.** *(contract and outcome ledger delivered 2026-08-17;
-        transport open.)* `GatewayOperationBounds` has no unlimited representation, validates itself,
+      - [x] **D4 — Typed operation protocol.** *(delivered 2026-08-17; gRPC variant deferred.)* `GatewayOperationBounds` has no unlimited representation, validates itself,
         and `NarrowTo` lets a resource's registered limits only restrict, never widen. A
         `GatewayOperation` is a per-operation handle naming a resource and an operation class; it
         cannot express a host, port, or protocol, so a container never holds reusable tunnel
@@ -653,8 +652,14 @@ runtime, which is what the storage cell below was blocked on.
         repeating it changes nothing, and a committed outcome cannot be downgraded by a late
         ambiguous report. The ledger is keyed by tenant *and* operation ID as a tuple — a
         concatenated string key would let `("a","bc")` and `("ab","c")` collide into one another's
-        outcome, which is pinned by a test. Still open: the actual gRPC/WebSocket transport, flow
-        control on a real stream, and a durable ledger behind the same contract tests.
+        outcome, which is pinned by a test. The **typed WebSocket transport** is implemented and
+        exercised over a real loopback socket — `GatewayTransportTests` stands up an `HttpListener`
+        broker and runs the real `GatewaySessionClient` against it, so this is not mocked-transport
+        evidence. `GatewayFrame` has no host/port/scheme/path/command field at all, asserted by
+        reflection, so a compromised cloud side cannot express "reach this destination". gRPC is
+        deferred deliberately: it needs a new third-party dependency and therefore a
+        THIRD-PARTY-INVENTORY/NOTICES audit, and §11.5 permits the typed WebSocket transport.
+        Still open: a durable ledger behind the same contract tests.
       - [x] **D5 — Authority agreement.** *(delivered 2026-08-17.)* `GatewayAuthority.Evaluate` is
         the single decision point for all seven clauses. Each is falsified independently against an
         otherwise-valid request, which is the point: the recurring defect here has been each door
@@ -672,10 +677,20 @@ runtime, which is what the storage cell below was blocked on.
         cloud-side path to it by construction. Denial reasons leak neither target nor credential
         across every distinct denial path. Still open once the Portal/Broker surfaces exist: the
         aggregate-health-only view and negative tests against those real endpoints.
-      - **D8 — Runtime hardening, install, docs.** Hardened Windows service / systemd daemon with a
-        minimal local identity, outbound-only mutually authenticated TLS, DNS and canonical-path
-        revalidation at operation time, and refusal of arbitrary socket/shell/path/protocol
-        forwarding. Plus the installer, upgrade path, and administration guide.
+      - [~] **D8 — Runtime hardening, install, docs.** *(runtime + docs delivered 2026-08-17;
+        packaging open.)* `src/ETL-SQL.Gateway` is a new project holding the runtime.
+        `GatewaySessionClient` is outbound-only — it dials the broker and opens no listening port —
+        refuses any scheme but the typed protocol, and refuses a non-TLS broker off loopback so a
+        misconfiguration cannot silently downgrade. Refusal of arbitrary socket/shell/path/protocol
+        forwarding is structural rather than a runtime check: the frame model has no field that could
+        name a destination. Inbound frames are bounded, so a hostile broker cannot drive the Gateway
+        out of memory. A local provider exception naming a host, user, or password crosses back as a
+        fixed message, pinned by a test that plants a credential in the exception text. The operating
+        model is documented at
+        [secure-outbound-gateway.md](docs/administration/platform/secure-outbound-gateway.md).
+        Still open, and all packaging rather than boundary work: the Windows service and systemd
+        unit, mutually authenticated TLS certificate provisioning and rotation, the installer and
+        upgrade path, and the Portal enrollment screen.
 - [ ] **Shared.** Add the shared tenant/gateway session registry, typed stream routing, metering,
       backpressure, and negative cross-tenant tests without weakening gateway-local resource policy.
 

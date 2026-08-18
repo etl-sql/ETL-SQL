@@ -43,6 +43,7 @@
     <ProjectReference Include="..\..\src\ETL-SQL.Infrastructure.Logging\ETL-SQL.Infrastructure.Logging.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Infrastructure.Sqlite\ETL-SQL.Infrastructure.Sqlite.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Gateway\ETL-SQL.Gateway.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Connectors.Cloud\ETL-SQL.Connectors.Cloud.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Connectors.Databases\ETL-SQL.Connectors.Databases.csproj" />
