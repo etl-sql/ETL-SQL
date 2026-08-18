@@ -20,12 +20,6 @@ const bundledAssets = [
     project: 'https://echarts.apache.org/'
   },
   {
-    component: 'Chart.js',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/chart.min.js',
-    license: 'MIT',
-    project: 'https://www.chartjs.org/'
-  },
-  {
     component: 'Tabulator',
     files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.js; src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.css',
     license: 'MIT',

@@ -270,6 +270,99 @@ access is gone.
 - **Engine-Managed State Lifecycle:** `WatermarkManager` and `SelectStatementHandler` automatically retrieve previous high-water marks, inject dynamic filtering predicates into query ASTs, track stream maxima, and atomically commit state to `eng.job_state` on statement success.
 - **Reference & Samples:** Documented in [`watermark.md`](docs/reference/statements/query-syntax/watermark.md), verified in `WatermarkQueryTests.cs`, and demonstrated in [`samples/declarative_watermark.etlsql`](samples/declarative_watermark.etlsql).
 
+### Reporting & Presentation — Grammar-of-Graphics Spec IR and Pluggable Chart Backends
+
+**Candidate, not scheduled.** Visual definitions currently compile straight from the report AST into
+ECharts-shaped option objects in `ManifestBuilder`. The vendor's option schema has become the de facto
+internal contract: every downstream consumer — `report-runtime.js`, `EChartsSsrRenderer`, `PdfExporter`,
+`MarkdownRenderer`/`SvgChartRenderer`, and `TerminalRenderer` — re-derives meaning from it. Two costs follow.
+First, ~25 visual types are each modelled independently, which is why `Renderers/SpecializedRenderer.cs`
+carries the weight it does; composition that should be free (facets, layered marks, alternate coordinate
+systems) has to be hand-built per type. Second, deterministic static export has no native path, which is
+what pushes the export pipeline toward embedding a JavaScript engine to run ECharts server-side.
+
+The insight driving this track: **the grammar is the differentiator and the renderer is commodity.** A
+chart specification that is a first-class part of the query language gains lineage tracking, Analysis-tier
+lint, LSP completion, and reviewable diffs — none of which any charting library can supply. Pixel emission
+is a solved problem that should be bought, not rebuilt.
+
+**Design Principles and Boundaries:**
+- **Spec first, renderer second:** a neutral grammar-of-graphics IR (data, transforms/stats, encodings,
+  marks, scales, coordinate systems, facets) becomes the canonical representation. Renderers become
+  interchangeable backends that compile *from* it and never define it.
+- **Type keywords are sugar:** existing `CHART BAR | CANDLESTICK | WATERFALL | …` keywords lower into specs
+  the way dialect operators lower into canonical AST nodes. Shipped `.rptsql` scripts keep rendering
+  unchanged; this track is additive at the language surface.
+- **Eliminating ECharts is an explicit non-goal.** The target end state demotes it from universal renderer
+  to the interactive, large-data, and exotic-layout backend (canvas rendering, LTTB downsampling, geo
+  projections, sankey/treemap/force layouts). A per-visual routing rule selects a backend by spec coverage,
+  so migration is incremental and reversible at every step, with no parity cliff.
+- **Buy the mathematics, own the grammar** (see borrowing strategy below).
+
+**Borrowing Strategy — What to Take Rather Than Build:**
+
+The long tail that sinks hand-rolled chart engines is almost entirely pure, well-tested, permissively
+licensed mathematics that already exists. The borrow is asymmetric across the two runtimes:
+
+- **Browser backend — take packages.** The modular D3 submodules are headless by construction (the
+  DOM-bound `d3-selection`/`d3-transition` are precisely the parts not needed): `d3-scale` and
+  `d3-scale-chromatic` for scales and palettes, `d3-array` for extents/binning/tick selection, `d3-time`
+  and `d3-time-format` for DST-correct multi-level time axes, `d3-shape` for path/arc/stack/curve
+  generation, `d3-hierarchy` for squarified treemap and partition/sunburst, `d3-sankey`, `d3-force`,
+  `d3-geo` for projections, `d3-format` for number formatting, and `d3-delaunay` for nearest-point
+  hit-testing. Tree-shaken, the cartesian core plausibly lands well under the current 1,091 KB ECharts
+  bundle. `uplot` is the candidate escape hatch for very large time-series where canvas is mandatory.
+- **Server backend — take algorithms, not runtimes.** No C# grammar-of-graphics library exists; ScottPlot
+  and OxyPlot are imperative plotting APIs with their own models, usable at most as a stopgap for simple
+  cartesian export. The tractable path is porting the small pure-math modules above into the Reporting
+  tier, since they are algorithmic rather than DOM-dependent. Text measurement is the one genuinely hard
+  server-side primitive — axis and legend layout depend on measured glyph widths — and is solved by
+  SkiaSharp/HarfBuzzSharp or by reading metrics from an embedded font, not by reimplementation.
+- **Observable Plot is a deliberate rejection.** It is the closest existing grammar-of-graphics layer over
+  D3, but it is DOM-dependent, so server-side use reintroduces a JavaScript runtime — defeating the main
+  reason to build the export backend at all.
+- **Vega-Lite: borrow the vocabulary, not necessarily the runtime.** Its published grammar is the most
+  thoroughly worked-out declarative chart schema available and should anchor the IR's shape and naming.
+  Aligning with it also makes Vega-Lite viable as an *import/export interchange format* for the native
+  spec, which is a materially cheaper way to deliver the Tier 3 goal in the entry below than shipping a
+  second live chart runtime.
+- **TanStack supplies philosophy, not charts.** Its headless-logic model — the library owns the
+  computation, the host owns the markup — is exactly the split this track applies to charting. Its charting
+  package is React-only and comparatively narrow, and the report runtimes are vanilla JS, so it is not a
+  candidate here. `@tanstack/table` is worth evaluating separately against the 432 KB Tabulator dependency.
+- **Compliance:** every package adopted *or ported* enters `THIRD-PARTY-INVENTORY.md` and
+  `THIRD-PARTY-NOTICES.md` in the same change and triggers a licence audit; ported source must retain
+  upstream attribution. Licences above are permissive (ISC / BSD-3-Clause / MIT) but are to be confirmed
+  at audit time rather than assumed.
+
+**Delivery Stages:**
+- **Stage 1: Neutral spec IR plus an ECharts compiler backend.** `ManifestBuilder` emits the grammar spec;
+  a separate compiler translates spec → ECharts option. Entirely invisible to users, and worth doing on
+  its own merits even if no further stage is scheduled — it stops four independent renderers from
+  reverse-engineering a vendor schema.
+- **Stage 2: Encoding-based authoring syntax.** `GEOM` / `ENCODE` / `STAT` / `COORD` / `FACET` surface in
+  `.rptsql`, with existing chart-type keywords desugaring to specs. Collapses the type matrix: candlestick
+  becomes segment + rect, boxplot a stat, donut a pie under polar coordinates, waterfall a bar over a
+  cumulative stat. Faceting becomes intrinsic rather than a bespoke feature.
+- **Stage 3: Native C# SVG backend for the static export surface.** The highest-value build in this track,
+  because static export has no tooltips, hit-testing, zoom, or animation — a small fraction of the work for
+  most of the benefit. It removes the need to embed a V8/ClearScript JavaScript engine for server-side
+  ECharts rendering (build size, cold start, memory, CVE surface, and cross-platform packaging cost), and
+  it supersedes `SvgChartRenderer.cs`, which today covers 4 of ~25 visual types and placeholder-renders the
+  remainder.
+- **Stage 4 (speculative — gated on Stage 3): browser SVG backend for interactive visuals.** To be
+  reconsidered only after the export backend proves the geometry core, and never for large-data, geographic,
+  or network/hierarchy layouts. The plausible terminal state is an export-only build that ships without a
+  chart library at all, while interactive deployments retain ECharts.
+
+**Explicit risks:** SVG degrades past roughly 10k nodes, so canvas routing stays mandatory for dense
+scatter and long time series. Reaching visual parity across ~25 shipped types is a regression surface
+covering every existing sample and customer report. And the well-known edge cases — zero values under log
+scales, all-null series, single-point lines, negative bars crossing zero, stacked series of mixed sign,
+duplicate categories — are ones a mature library has already absorbed and a new backend rediscovers one at
+a time. Staged per-visual routing is what keeps each of these bounded.
+
+
 ### Reporting & Presentation — Extensible Visual Runtimes (Data-Bound HTML/SVG & Vega-Lite)
 
 **Candidate, not scheduled.** While Apache ECharts provides exceptional performance and comprehensive chart-type coverage for the vast majority of analytical workloads, modern reporting often demands specialized escape hatches for bespoke infographic KPI cards, micro-visuals, and complex layered statistical graphics without sacrificing the script-first, Zero-Trust execution model.
@@ -327,6 +420,11 @@ CREATE VISUAL StatisticalDistribution AS VEGALITE (
   - AST Parser support for `SPEC = '{ ... }'`.
   - Integration of the permissive BSD-3-Clause **Vega-Lite** runtime in `report-runtime.js`.
   - Server-side / snapshot SVG compilation pipeline for deterministic `STATIC` PDF export without live browser dependencies.
+  - **Sequencing note:** Tier 3 overlaps the *Grammar-of-Graphics Spec IR* track above and should not be
+    scheduled ahead of it. If that track's Stage 1 lands first, `TYPE = VEGALITE` is best delivered by
+    translating the submitted spec into the native IR — reusing the existing backends and the Stage 3 export
+    pipeline — rather than shipping and maintaining a second live chart runtime plus its own SVG compiler.
+    Tier 2 (`HTML` / `SVG` templates) is independent and carries no such overlap.
 
 
 ### Reporting & Presentation — Cascading Parameter Defaults (Dependent Slicers)

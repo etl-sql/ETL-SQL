@@ -20,12 +20,6 @@ const bundledAssets = [
     project: 'https://echarts.apache.org/'
   },
   {
-    component: 'Chart.js',
-    version: '4.4.1',
-    license: 'MIT',
-    project: 'https://www.chartjs.org/'
-  },
-  {
     component: 'Tabulator',
     version: '5.5.0',
     license: 'MIT',

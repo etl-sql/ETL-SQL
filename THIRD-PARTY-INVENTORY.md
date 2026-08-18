@@ -11,7 +11,6 @@ About screens. It is not legal advice.
 | Component | Files | License | Project |
 | :--- | :--- | :--- | :--- |
 | Apache ECharts | src/ETL-SQL.ReportRuntime/Resources/Shared/echarts.min.js | Apache-2.0 | https://echarts.apache.org/ |
-| Chart.js | src/ETL-SQL.ReportRuntime/Resources/Shared/chart.min.js | MIT | https://www.chartjs.org/ |
 | Tabulator | src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.js; src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.css | MIT | https://tabulator.info/ |
 | CodeMirror @codemirror/autocomplete 6.20.3 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
 | CodeMirror @codemirror/commands 6.10.4 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
@@ -57,7 +56,7 @@ About screens. It is not legal advice.
 | Microsoft.Extensions.Configuration | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Connectors.Common/ETL-SQL.Connectors.Common.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
 | Microsoft.Extensions.Configuration.Abstractions | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Analysis/ETL-SQL.Analysis.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
 | Microsoft.Extensions.Configuration.Binder | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
-| Microsoft.Extensions.Configuration.EnvironmentVariables | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
+| Microsoft.Extensions.Configuration.EnvironmentVariables | 10.0.9 | runtime, test | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj |
 | Microsoft.Extensions.Configuration.Json | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
 | Microsoft.Extensions.DependencyInjection | 10.0.9 | runtime, test | MIT | expression | https://dot.net/ | src/ETL-SQL.Analysis/ETL-SQL.Analysis.csproj; src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.ReportHosting/ETL-SQL.ReportHosting.csproj |

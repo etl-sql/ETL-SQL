@@ -2,7 +2,7 @@
 
 - **Portal static assets are now revalidated rather than re-downloaded.** Every response, static
   assets included, carried `Cache-Control: no-store`, so each page navigation refetched roughly
-  3.4 MB — about 1.9 MB of it vendored libraries (`echarts`, `tabulator`, `arrow`, `chart`) that had
+  3.4 MB — about 1.9 MB of it vendored libraries (`echarts`, `tabulator`, `arrow`) that had
   not changed since install.
 
   The policy is now split by what a response is. Documents and API responses stay `no-store`: they
