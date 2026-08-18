@@ -34,6 +34,10 @@ public sealed class GovernanceEnforcementAuditTests
             ["Security:MaxRecursiveNestingDepth"] = (Boundary.EnterpriseSnapshot, "Evaluator.EnterRecursiveScope → OperationPolicyBoundary.EnforceCeiling"),
             ["Security:MaxSpillBytesPerScript"] = (Boundary.EnterpriseSnapshot, "SpillStore → OperationPolicyBoundary.EnforceSpillCeiling"),
             ["Security:AllowedHosts"] = (Boundary.EnterpriseSnapshot, "ConnectorPolicyAuthorizer.EnforceEnterpriseHosts (+ REST per-request)"),
+            // The fence itself needs no policy value; this key only names the exact destinations an
+            // operator has exempted, so it is read from live policy rather than a captured snapshot.
+            ["Security:EgressFenceExemptions"] = (Boundary.ConfigPrecedence, "InfrastructureEgressFence.EnforceHost / EnforceResolvedAddress"),
+            ["Security:DeniedEgressRanges"] = (Boundary.ConfigPrecedence, "InfrastructureEgressFence.EnforceHost / EnforceResolvedAddress"),
             ["Security:AllowedDockerImages"] = (Boundary.EnterpriseSnapshot, "DockerStatementHandler → ProcessPolicyRules.EnforceDockerImage"),
             ["Security:MaxParallelDegree"] = (Boundary.EnterpriseSnapshot, "SetThresholdStatementHandler → OperationPolicyBoundary.EnforceCeiling"),
             ["Security:MaxSmtpEmailsPerScript"] = (Boundary.EnterpriseSnapshot, "Evaluator.RecordSmtpEmailSend → OperationPolicyBoundary.EnforceCeiling"),

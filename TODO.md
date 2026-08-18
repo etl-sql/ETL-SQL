@@ -600,14 +600,113 @@ runtime, which is what the storage cell below was blocked on.
       operations, and SaaS-to-on-premises connectivity before introducing a shared broker registry.
       Follow the
       [SaaS Tenant Isolation Architecture](docs/architecture/SaaSTenantIsolation.md#11-secure-outbound-data-gateway).
+
+      **Decomposed 2026-08-17, not started.** This cell is a new shipping component — an
+      on-premises daemon, a versioned wire protocol, a Portal admin surface, and an installer — not a
+      change to existing code, so it is sequenced as ordered slices. Each slice must be provable
+      without a customer network: the "on-premises" side runs as a real loopback-hosted process in
+      test, the way the Portal browser lane hosts Kestrel, because mocked transport evidence cannot
+      support a connectivity claim.
+
+      - **D1 — Binding model.** `SHARED:alias` resolves to either a direct binding or a Gateway
+        binding carrying connector type plus immutable gateway/resource IDs. Locked by §11.2: the
+        cloud side stores **no** physical endpoint and **no** credential, and there is no script
+        syntax that requests Gateway routing or a local bypass — promotion changes the binding, not
+        the script. A test must assert the stored binding cannot round-trip an endpoint or credential
+        field, or D1 is the "control exists, never asserted" shape again.
+      - **D2 — Enrollment lifecycle.** One-time tenant-admin enrollment in the Portal; the
+        on-premises administrator consumes it exactly once and establishes an asymmetric workload
+        identity with short-lived rotated credentials. Second consumption must fail closed.
+      - **D3 — Gateway-local resource registry.** Typed resources with stable IDs, local credential
+        references, allowed operations, and limits. Discovery proposes; only the on-premises
+        administrator approves. Credentials resolve gateway-side only.
+      - **D4 — Typed operation protocol.** Bidirectional gRPC streaming over HTTPS (typed WebSocket
+        only where a restrictive proxy forces it), one versioned operation model, mandatory
+        deadlines, cancellation, bounded buffering, flow control, max request/response size, and
+        concurrency limits. Reconnect keys off operation IDs against a durable outcome ledger:
+        **an ambiguous write is never retried blindly nor reported as safely failed** — the same rule
+        the sandbox coordinator already follows for ambiguous teardown.
+      - **D5 — Authority agreement.** Routing occurs only when execution tenant, capability tenant,
+        gateway identity tenant, catalog binding, resource ownership, actor grant, and policy version
+        all agree. No grant means deny. Containers receive a typed operation handle, never reusable
+        tunnel authority.
+      - **D6 — Revocation.** Disabling an alias or resource, or revoking the Gateway, fails new work
+        immediately and invalidates cached authority. This is the cell's highest-risk slice: the
+        v0.17.0 authorship-permission regression showed revocation logic passes review by hand and
+        fails a red test, so revocation gets tests before implementation.
+      - **D7 — Operator boundary.** Platform operators receive aggregate health only, and cannot
+        create tenant mappings, approve local destinations, read local credentials, or grant
+        themselves resource use. Negative tests, not documentation.
+      - **D8 — Runtime hardening, install, docs.** Hardened Windows service / systemd daemon with a
+        minimal local identity, outbound-only mutually authenticated TLS, DNS and canonical-path
+        revalidation at operation time, and refusal of arbitrary socket/shell/path/protocol
+        forwarding. Plus the installer, upgrade path, and administration guide.
 - [ ] **Shared.** Add the shared tenant/gateway session registry, typed stream routing, metering,
       backpressure, and negative cross-tenant tests without weakening gateway-local resource policy.
+
+      **Blocked on the Dedicated cell (recorded 2026-08-17).** The Broker is a separate data-plane
+      service, not a mode of the Gateway, and §11.4 requires it to isolate queues, buffers, caches,
+      temporary state, retry ledgers, logs, traces, and metrics per tenant and operation. Starting it
+      before D1–D6 exist would mean designing tenant-scoped routing against a protocol that has not
+      settled. Two constraints are already fixed and should not be re-litigated: gateway-local
+      resource policy stays authoritative — the Broker cannot widen it — and the metering the Broker
+      feeds is the counts-only ledger from domain 9, which may not read payload content or become
+      execution authorization.
 - [ ] **Both topologies.** Execute tenant workloads with default-deny networking, blocked cloud
       metadata/control-plane/internal hosting ranges, and only capability-authorized connector,
       storage, telemetry, or Gateway Broker destinations. Test DNS rebinding, redirects, alternate
       address forms, port scanning, and policy changes during a run. **Gap — egress fencing sat only
       in the discovery list and in neither phase, though a dedicated tenant's own worker still must
       not reach the cloud metadata service.**
+
+      **Infrastructure-fence slice completed (2026-08-17).** `InfrastructureEgressFence` denies four
+      destination classes — cloud instance metadata/identity, link-local node services, the container
+      runtime host bridge, and cluster service discovery — in **every** topology, regardless of
+      enrollment state or host allowlist. That closes the specific hole named above:
+      `Security:AllowedHosts` defaults to `["*"]`, and both `EnforceEnterpriseHosts` and
+      `EnforceResolvedAddress` return early when a deployment is unenrolled or configures no
+      allowlist, so nothing previously stopped a dedicated tenant's own worker reading the instance
+      credential endpoint. `EnforceResolvedAddress_NoOpWhenStandaloneOrNoAllowlist` had pinned that
+      as intended behavior. The fence runs at connection creation (host *and* URL-shaped target), on
+      every dynamic REST URL including redirect/pagination/template targets, and inside
+      `PolicyBoundHttp`'s connect callback against each resolved address, so one control covers DNS
+      rebinding, redirects, alternate/obfuscated address forms (32-bit decimal, hex, dotted
+      hex/octal, IPv4-mapped IPv6, bracketed IPv6, trailing-dot FQDN), and port scanning. It sits
+      outside the policy-wrapping `try` so a fenced destination is reported as the non-policy denial
+      it is, with one security event whose sanitized target names the *class* rather than echoing
+      which infrastructure address answered. Loopback and RFC 1918 are deliberately excluded and stay
+      governed by the allowlist — fencing them would break every on-premises install without adding
+      a boundary the allowlist does not already provide. Exemptions are server-owned
+      (`Security:EgressFenceExemptions` in host configuration or
+      `network.egressFenceExemptions` in authoritative policy), must be exact hosts/addresses,
+      normalize across obfuscated forms, are rejected at policy-authoring time when they carry a
+      wildcard or name a non-fenced destination, and are ignored entirely when unenrolled. A wildcard
+      allowlist, an explicit `Security:AllowedHosts` entry for the metadata address, and a mid-run
+      policy replacement with the broadest possible allowlist all fail to widen it — each pinned by a
+      test. Sandboxed attempts additionally have no network namespace at all
+      (`--network none`, pinned by `DockerSandboxExecutionProviderTests`), which is the stronger
+      kernel-level form of default-deny.
+
+      **Operator-declared range slice completed (2026-08-17).** The hosting control plane, internal
+      management networks, and other tenants' pod/service CIDRs are deployment facts rather than
+      universal classes, so `Security:DeniedEgressRanges` (host configuration) and
+      `network.deniedEgressRanges` (authoritative policy) let the operator declare them as CIDR
+      ranges. They are enforced at the same two points as the built-in classes, across IPv4 and IPv6,
+      at any prefix length including sub-octet and `/0`, and through obfuscated address forms; a
+      family mismatch cannot match by byte-length coincidence. Declared ranges carry **no** exemption
+      surface, deliberately — the authority that would exempt a range is the authority that listed it,
+      so the way out is to narrow the range, and a test pins that an exemption cannot reopen one. A
+      range overlapping a built-in class does not relabel the denial. Malformed ranges are a
+      policy-validation error rather than a silently dropped control, while a malformed *local* entry
+      is dropped so one typo cannot stop a host from booting.
+
+      One thing keeps this cell open: **capability-authorized destinations** — the positive half,
+      where an attempt may reach only the exact connector/storage/telemetry/Gateway Broker endpoints
+      its per-attempt capability names — remain an allowlist decision rather than a capability-scoped
+      one, and depend on the Gateway and per-attempt capability issuance in the cells above. One known
+      limitation is recorded rather than hidden: a DNS name resolving into a declared range is caught
+      at connect time only on HTTP-family connectors, because database connectors have no
+      resolved-address callback.
 
 *Absorbs the retained discovery item **Internal Network Egress Fencing**.*
 

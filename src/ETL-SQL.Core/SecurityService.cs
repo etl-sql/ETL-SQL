@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
 using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Services;
@@ -130,6 +131,14 @@ public partial class SecurityService
                 AllowedHosts.UnionWith(hosts);
                 _logger.Info("Security: Loaded {Count} allowed hosts.", hosts.Length);
             }
+
+            // 1a. Infrastructure egress fence exemptions. The fence itself is non-bypassable and
+            // needs no configuration; this only names the exact destinations an operator genuinely
+            // runs a service on. Server-owned configuration, never a script-reachable setting.
+            InfrastructureEgressFence.SetLocalExemptions(
+                section.GetSection("EgressFenceExemptions").Get<string[]>());
+            InfrastructureEgressFence.SetLocalDeniedRanges(
+                section.GetSection("DeniedEgressRanges").Get<string[]>());
 
             // 2. Approved Safe Zones (Guardrail Bypass Zones)
             var zones = section.GetSection("ApprovedSafeZones").Get<string[]>();

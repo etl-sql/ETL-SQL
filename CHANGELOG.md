@@ -35,6 +35,18 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   material generated inside the attempt's own single-use scratch, so a resumed run reported "no saved
   session found"; the server-mounted per-tenant key is now authoritative, and checkpoint resume across
   separate sandboxes is verified on a hardened runtime.
+- Added a non-bypassable infrastructure egress fence. Connectors can no longer reach cloud instance
+  metadata endpoints, link-local node services, the container runtime host bridge, or cluster service
+  discovery in any deployment topology — the default `AllowedHosts: ["*"]`, an unenrolled host, and a
+  mid-run policy change cannot relax it. The fence is applied at connection creation, on every dynamic
+  REST URL including redirects, and again per resolved address at socket-connect time, so obfuscated
+  address forms, DNS rebinding, and port scanning are all covered. Loopback and RFC 1918 private
+  ranges are unchanged. Operators can exempt exact hosts/addresses through
+  `Security:EgressFenceExemptions` or authoritative policy; wildcard exemptions are rejected.
+- Added `Security:DeniedEgressRanges` so an operator can declare this deployment's own off-limits CIDR
+  ranges — hosting control plane, internal management networks, other tenants' subnets. Ranges are
+  enforced at connection creation and per resolved address, across IPv4 and IPv6 at any prefix length,
+  and cannot be exempted. Malformed ranges fail policy validation instead of being dropped silently.
 - Added signed Managed Dedicated tenant upgrades with running-release verification, exclusive
   boundary locking, scheduler fencing, durable admission drain/reconciliation, atomic capacity
   assignment, exact rollback snapshots, interrupted-cutover recovery, and idempotent audit receipts.

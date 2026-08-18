@@ -43,6 +43,14 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
         string? host,
         string? target)
     {
+        // The infrastructure fence runs first, unconditionally, and outside the wrapping try. It is
+        // not an organization-policy decision — enrollment state and a wildcard allowlist cannot
+        // relax it — so a fenced destination is reported as the plain non-policy denial it is, with
+        // one security event, rather than as a ConnectorPolicyDeniedException.
+        InfrastructureEgressFence.EnforceHost(host);
+        if (Uri.TryCreate(target, UriKind.Absolute, out var fenceUri))
+            InfrastructureEgressFence.EnforceHost(fenceUri.Host);
+
         try
         {
             RejectEmbeddedCredentials(target);
@@ -90,9 +98,11 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
     {
         if (string.IsNullOrWhiteSpace(host)) return;
         var snapshot = OperationPolicyBoundary.Refresh(context, "<connector-probe>");
-        // The local egress guardrail throws a plain SecurityException; keep it outside the wrapping
-        // try so a local denial is reported as-is and not misclassified as an enterprise
-        // ConnectorPolicyDeniedException. Only organization-policy denials are wrapped.
+        // The local egress guardrail and the infrastructure fence throw plain SecurityExceptions;
+        // keep them outside the wrapping try so a local denial is reported as-is and not
+        // misclassified as an enterprise ConnectorPolicyDeniedException. Only organization-policy
+        // denials are wrapped.
+        InfrastructureEgressFence.EnforceHost(host);
         context.SecurityService.ValidateHost(host);
         try
         {
@@ -116,7 +126,10 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
     {
         ArgumentNullException.ThrowIfNull(url);
         var snapshot = OperationPolicyBoundary.Refresh(context, "<connector-probe>");
-        // Local egress guardrail throws a plain SecurityException, unwrapped (see EnforceEnterpriseHost).
+        // Fence and local egress guardrail throw plain SecurityExceptions, unwrapped (see
+        // EnforceEnterpriseHost). The fence also covers the redirect/pagination path, so a 302 to the
+        // metadata service is denied on an unenrolled host with no allowlist.
+        InfrastructureEgressFence.EnforceHost(url.Host);
         context.SecurityService.ValidateHost(url.Host);
         try
         {
@@ -144,6 +157,10 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
     public static void EnforceResolvedAddress(string host, System.Net.IPAddress address)
     {
         ArgumentNullException.ThrowIfNull(address);
+        // Infrastructure classes are fenced with no enrollment or allowlist precondition — an
+        // unenrolled worker is still running on someone else's node.
+        InfrastructureEgressFence.EnforceResolvedAddress(host, address);
+
         var policy = EnterprisePolicyRuntime.Current;
         if (!policy.IsEnrolled) return;
 
