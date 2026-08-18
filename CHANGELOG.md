@@ -35,6 +35,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   material generated inside the attempt's own single-use scratch, so a resumed run reported "no saved
   session found"; the server-mounted per-tenant key is now authoritative, and checkpoint resume across
   separate sandboxes is verified on a hardened runtime.
+- Added the Secure Outbound Data Gateway binding model. A `SHARED:` catalog alias can now resolve to
+  a Gateway binding — connector type plus immutable Gateway and resource IDs — instead of a direct
+  target. A Gateway-bound entry cannot store a physical endpoint or a credential; those stay on the
+  on-premises Gateway, and the catalog store refuses an entry that carries either. Resolving a
+  Gateway-bound alias fails closed while no Gateway data plane runs, rather than falling back to a
+  direct connection, and a script can neither add a binding to a direct alias nor bypass one.
 - Added a non-bypassable infrastructure egress fence. Connectors can no longer reach cloud instance
   metadata endpoints, link-local node services, the container runtime host bridge, or cluster service
   discovery in any deployment topology — the default `AllowedHosts: ["*"]`, an unenrolled host, and a

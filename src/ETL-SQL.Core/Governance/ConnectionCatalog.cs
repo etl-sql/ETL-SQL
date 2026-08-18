@@ -7,6 +7,13 @@ namespace ETL_SQL.Core.Governance;
 /// A shared connection catalog entry: connector type, non-secret options, and SECRET: references.
 /// Credential fields hold references, never resolved values, so rotating a secret never touches
 /// catalog entries.
+///
+/// <para>An entry resolves to exactly one of two bindings. A <b>direct</b> binding names a target the
+/// execution plane may reach itself. A <b>Gateway</b> binding sets <see cref="Gateway"/> and carries
+/// no target and no credential, because those are Gateway-local facts
+/// (<c>docs/architecture/SaaSTenantIsolation.md</c> §11.2). Which one an alias resolves to is an
+/// administrative decision: promoting a script between environments changes the binding, never the
+/// script, and there is no script syntax that can request or bypass Gateway routing.</para>
 /// </summary>
 public sealed record SharedConnectionDefinition(
     string Alias,
@@ -14,7 +21,8 @@ public sealed record SharedConnectionDefinition(
     string? Target,
     IReadOnlyDictionary<string, string> Options,
     bool Disabled,
-    IReadOnlyCollection<string>? SensitiveFields = null);
+    IReadOnlyCollection<string>? SensitiveFields = null,
+    GatewayResourceBinding? Gateway = null);
 
 /// <summary>Resolves SHARED:alias references to cataloged connection definitions.</summary>
 public interface IConnectionCatalogProvider
@@ -54,7 +62,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
     public string ProviderName => "LocalCatalog";
 
     private sealed record EntryPayload(
-        string ConnectorType, string? Target, Dictionary<string, string> Options, List<string>? SensitiveFields = null);
+        string ConnectorType, string? Target, Dictionary<string, string> Options, List<string>? SensitiveFields = null,
+        GatewayResourceBinding? Gateway = null);
 
     // The local catalog has no user model: its trust boundary is filesystem access on the single
     // node, so the caller identity is not evaluated here.
@@ -76,7 +85,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
         return new SharedConnectionDefinition(
-            alias, payload.ConnectorType, payload.Target, payload.Options, Disabled: false, payload.SensitiveFields);
+            alias, payload.ConnectorType, payload.Target, payload.Options, Disabled: false, payload.SensitiveFields,
+            payload.Gateway);
     }
 
     public async Task StoreAsync(SharedConnectionDefinition definition, CancellationToken cancellationToken = default)
@@ -84,6 +94,9 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         ArgumentNullException.ThrowIfNull(definition);
         if (string.IsNullOrWhiteSpace(definition.ConnectorType))
             throw new ArgumentException("A connector type is required.", nameof(definition));
+        // A Gateway-bound entry must not be storable with an endpoint or credential, whatever the
+        // caller passed — the store is the last place that can refuse.
+        GatewayBindingValidator.EnsureValid(definition.Gateway, definition.Target, definition.Options);
 
         var path = GetEntryPath(definition.Alias);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -91,7 +104,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
             definition.ConnectorType.Trim(),
             definition.Target,
             new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase),
-            definition.SensitiveFields?.ToList());
+            definition.SensitiveFields?.ToList(),
+            definition.Gateway);
         var protectedValue = CryptoUtils.ProtectMachine(JsonSerializer.Serialize(payload), definition.Alias);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
         if (!OperatingSystem.IsWindows())
@@ -121,7 +135,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
         return new SharedConnectionDefinition(
-            alias, payload.ConnectorType, payload.Target, payload.Options, disabled, payload.SensitiveFields);
+            alias, payload.ConnectorType, payload.Target, payload.Options, disabled, payload.SensitiveFields,
+            payload.Gateway);
     }
 
     public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)

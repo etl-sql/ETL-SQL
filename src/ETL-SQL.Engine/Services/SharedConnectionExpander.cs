@@ -68,6 +68,20 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
             throw new ExecutionException($"Connection catalog entry '{alias}' is disabled.");
         }
 
+        // A Gateway-bound alias resolves to a Gateway and a registered resource, never to an
+        // address this process may dial. Until the Gateway data plane exists, the only correct
+        // outcome is to refuse: falling back to a direct connection would silently turn a binding
+        // that deliberately carries no endpoint into whatever the script's own options happen to
+        // name, which is exactly the local-bypass the architecture forbids (§11.2).
+        if (definition.Gateway != null)
+        {
+            EmitUseDenied(alias, identity, catalogProvider.ProviderName, "GatewayRoutingUnavailable");
+            throw new ExecutionException(
+                $"Connection catalog entry '{alias}' is bound to Gateway '{definition.Gateway.GatewayId}' and can only " +
+                "be reached through the outbound Gateway data plane, which this deployment does not run. " +
+                "The entry carries no direct endpoint by design; it cannot fall back to a direct connection.");
+        }
+
         if (declaredConnectorType != null
             && !definition.ConnectorType.Equals(declaredConnectorType, StringComparison.OrdinalIgnoreCase))
         {

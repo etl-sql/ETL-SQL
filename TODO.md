@@ -608,12 +608,24 @@ runtime, which is what the storage cell below was blocked on.
       test, the way the Portal browser lane hosts Kestrel, because mocked transport evidence cannot
       support a connectivity claim.
 
-      - **D1 — Binding model.** `SHARED:alias` resolves to either a direct binding or a Gateway
-        binding carrying connector type plus immutable gateway/resource IDs. Locked by §11.2: the
-        cloud side stores **no** physical endpoint and **no** credential, and there is no script
-        syntax that requests Gateway routing or a local bypass — promotion changes the binding, not
-        the script. A test must assert the stored binding cannot round-trip an endpoint or credential
-        field, or D1 is the "control exists, never asserted" shape again.
+      - [x] **D1 — Binding model.** *(delivered 2026-08-17.)* `SharedConnectionDefinition` now carries
+        an optional `GatewayResourceBinding` of connector type plus immutable Gateway/resource IDs.
+        `GatewayBindingValidator` refuses any Gateway-bound entry that also carries a target, an
+        endpoint-shaped option (`HOST`, `SERVER`, `URL`, `PORT`, `DSN`, `DATA SOURCE`, …), or a
+        credential, and refuses malformed IDs including path-separator and traversal shapes; the
+        local catalog store enforces it on write, so the store is the last line of refusal rather
+        than trusting its callers. Tests assert the stored binding cannot round-trip an endpoint or
+        credential and that the persisted bytes contain no routable address. `SharedConnectionExpander`
+        **fails closed** on a Gateway-bound alias while no Gateway data plane exists — it never falls
+        back to a direct connection, and the refusal does not echo the destination the script
+        proposed. Script options cannot introduce a binding on a direct alias or bypass one on a
+        Gateway-bound alias, asserted behaviourally.
+
+        **Naming collision worth knowing.** `CREATE BINDING x AS GATEWAY (RESOURCE = '…')` already
+        parses and reads exactly like this feature. It is unrelated: a validation-only stub for
+        governed `EXECUTE TOOL` metadata whose own reference page says it is *not* an authorization
+        or resource boundary, and whose handler only logs. Do not wire Gateway routing through it,
+        and do not assume the `GATEWAY` lexer token belongs to this work.
       - **D2 — Enrollment lifecycle.** One-time tenant-admin enrollment in the Portal; the
         on-premises administrator consumes it exactly once and establishes an asymmetric workload
         identity with short-lived rotated credentials. Second consumption must fail closed.

@@ -694,6 +694,21 @@ tenant connection alias:  sales_prod
 The script knows only `sales_prod`. Promotion changes the target environment's binding, not the
 script. There is no script option that requests Gateway routing or an automatic local bypass.
 
+**Implementation status (2026-08-17).** The binding model is in place.
+`SharedConnectionDefinition` carries an optional `GatewayResourceBinding` of connector type plus
+immutable Gateway and resource IDs. `GatewayBindingValidator` refuses a Gateway-bound entry that
+also carries a target, an endpoint-shaped option, a credential, or a malformed ID, and the catalog
+store enforces this on write so the store — not its callers — is the last line of refusal. Resolution
+**fails closed**: a Gateway-bound alias cannot fall back to a direct connection while no Gateway data
+plane exists, and script options can neither add a binding to a direct alias nor supply an endpoint
+to bypass one. The remaining slices — enrollment, the Gateway-local resource registry, the typed
+operation protocol, authority agreement, revocation, and the operator boundary — are tracked in
+`TODO.md` as D2–D8.
+
+Note that the unrelated `CREATE BINDING … AS GATEWAY (…)` statement is a validation-only stub for
+governed `EXECUTE TOOL` metadata and is explicitly not an authorization or resource boundary. It
+does not and must not bind a connection to the Gateway described here.
+
 ### 11.3 Administrative Workflow
 
 1. A tenant administrator creates a one-time Gateway enrollment in the Portal.
