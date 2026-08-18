@@ -420,10 +420,9 @@ CREATE VISUAL InvoiceSummary AS CARD (
   )
 );
 
--- Exclude interactive prompts/buttons from printed output
-CREATE BUTTON RunButton AS (
-  LABEL = 'Apply Filters',
-  ACTIONS (ON_CLICK = APPLY_PARAMETERS),
+-- Exclude interactive prompt visuals from printed output
+CREATE VISUAL DatePrompt AS DATEPICKER (
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@asOfDate, value)),
   PRINT_LAYOUT (EXCLUDE_FROM_PRINT = ON)
 );
 ```

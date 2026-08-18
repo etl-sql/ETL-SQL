@@ -24,21 +24,21 @@ namespace ETL_SQL.Tests.Analysis
             await evaluator.Evaluate(Parse("HELP SEND FILE;"));
             var output = string.Join("\n", evaluator.Messages);
 
-            Assert.Contains("VERBOSE:", output);
-            Assert.Contains("SHORTHAND:", output);
+            Assert.Contains("SEND FILE", output);
+            Assert.Contains("Shorthand", output);
             Assert.Contains("OVERWRITE", output);
 
             evaluator.Messages.Clear();
             await evaluator.Evaluate(Parse("HELP RECEIVE FILE;"));
             output = string.Join("\n", evaluator.Messages);
-            Assert.Contains("VERBOSE:", output);
-            Assert.Contains("SHORTHAND:", output);
+            Assert.Contains("RECEIVE FILE", output);
+            Assert.Contains("Shorthand", output);
 
             evaluator.Messages.Clear();
             await evaluator.Evaluate(Parse("HELP SEND EMAIL;"));
             output = string.Join("\n", evaluator.Messages);
-            Assert.Contains("VERBOSE:", output);
-            Assert.Contains("SHORTHAND:", output);
+            Assert.Contains("SEND EMAIL", output);
+            Assert.Contains("Shorthand", output);
 
             evaluator.Messages.Clear();
             await evaluator.Evaluate(Parse("HELP CONFIG;"));

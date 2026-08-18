@@ -1178,17 +1178,55 @@ public static class DefaultGrammar
 
         tree.RegisterStartNode("SEND", sendNode);
 
-        // Email path
+        // Email path: SEND EMAIL TO ... FROM ... SUBJECT ... BODY ... [CC ...] [BCC ...] [ATTACH ...] [AT ...] [WITH ...]
         sendNode.AddTransitionTo("EMAIL", sendEmail, SuggestionType.Keyword);
-        sendEmail.AddWildcardTransition(emailSubject, "<subject>");
+        var emailClause = new StateNode("SEND EMAIL CLAUSE");
+        var emailAtNode = new StateNode("SEND EMAIL AT");
+        var emailAtConnNode = new StateNode("SEND EMAIL AT CONN");
+        var emailKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "TO", "FROM", "SUBJECT", "BODY", "CC", "BCC", "ATTACH", "AT", "WITH"
+        };
 
-        emailSubject.AddTransition(new StateTransition(
-            t => !t.Value.Equals("AT", StringComparison.OrdinalIgnoreCase) && !t.Value.Equals("WITH", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
-            emailSubject,
-            "<subject_token>"
+        sendEmail.AddWildcardTransition(emailClause, "<clause_or_subject>");
+        foreach (var kw in emailKeywords)
+        {
+            if (kw.Equals("AT", StringComparison.OrdinalIgnoreCase))
+                sendEmail.AddTransitionTo("AT", emailAtNode, SuggestionType.Keyword);
+            else if (kw.Equals("WITH", StringComparison.OrdinalIgnoreCase))
+                sendEmail.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+            else
+                sendEmail.AddTransitionTo(kw, emailClause, SuggestionType.Keyword);
+        }
+
+        emailClause.AddTransition(new StateTransition(
+            t => !emailKeywords.Contains(t.Value) && t.Type != TokenType.SEMICOLON,
+            emailClause,
+            "<email_clause_token>"
         ));
-        emailSubject.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
-        emailSubject.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+
+        foreach (var kw in emailKeywords)
+        {
+            if (kw.Equals("AT", StringComparison.OrdinalIgnoreCase))
+                emailClause.AddTransitionTo("AT", emailAtNode, SuggestionType.Keyword);
+            else if (kw.Equals("WITH", StringComparison.OrdinalIgnoreCase))
+                emailClause.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+            else
+                emailClause.AddTransitionTo(kw, emailClause, SuggestionType.Keyword);
+        }
+
+        emailAtNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || t.Type == TokenType.VARIABLE || t.Type == TokenType.STRING_LITERAL || IsWord(t.Value),
+            emailAtConnNode,
+            "<connection_name>",
+            SuggestionType.Connection
+        ));
+
+        emailAtConnNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+        foreach (var kw in new[] { "ATTACH", "CC", "BCC", "BODY", "SUBJECT", "FROM", "TO" })
+        {
+            emailAtConnNode.AddTransitionTo(kw, emailClause, SuggestionType.Keyword);
+        }
 
         // File path: SEND FILE 'path' TO 'destination'
         sendNode.AddTransitionTo("FILE", sendFile, SuggestionType.Keyword);

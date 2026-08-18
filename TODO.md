@@ -1,4 +1,4 @@
-﻿# ETL-SQL Development TODO List
+# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for open active-release and roadmap work. Once work is
 verified, record its notable outcome in `CHANGELOG.md`.
@@ -51,18 +51,18 @@ Found while verifying item 5 on 2026-08-17 and **verified pre-existing** — the
 suite" gate above cannot go green while they fail. Each is documentation the parser or grammar does
 not actually accept, which means the docs promise syntax the product rejects:
 
-- [ ] `DocSanityTests.GeneralDocs_SqlBlocks_ParseWithoutSyntaxError` —
+- [x] `DocSanityTests.GeneralDocs_SqlBlocks_ParseWithoutSyntaxError` —
       `docs/guides/feature-guides/report-sql.md` block #13: `LABEL` inside a `CREATE VISUAL … CARD`
-      body is rejected as `Unexpected token 'LABEL' in CREATE BUTTON body`.
-- [ ] `EbnfConformanceTests.ParserAcceptedDocumentExamples_AreRecognizedByCompleteGrammar` — 2 of 960
+      body is rejected as `Unexpected token 'LABEL' in CREATE BUTTON body`. (Resolved: Fixed block #13 in `report-sql.md` to use valid prompt visual syntax).
+- [x] `EbnfConformanceTests.ParserAcceptedDocumentExamples_AreRecognizedByCompleteGrammar` — 2 of 960
       examples: `PRINT_LAYOUT` in `reference/visuals-reporting/report/print-layout.md` and
       `…/visual.md`. The recursive-descent parser accepts them and the complete EBNF does not, so the
-      published grammar and the implementation disagree.
-- [ ] `DocumentationSyntaxTests.ValidateDocumentationSnippets` —
+      published grammar and the implementation disagree. (Resolved: Added `PRINT_LAYOUT` and `ROW_DETAIL` clauses and string literal mapping support to `grammar.ebnf`).
+- [x] `DocumentationSyntaxTests.ValidateDocumentationSnippets` —
       `docs/reference/file-operations/send-email.md`: `SEND EMAIL … ATTACH @path` is rejected with
-      "Expected one of: WITH".
-- [ ] `HelpSystemTests.TestHelpFileOperations` — the file-operations help entry no longer contains
-      the expected `VERBOSE:` marker.
+      "Expected one of: WITH". (Resolved: Updated `DefaultGrammar.cs` to fully support all email clause transitions in any order).
+- [x] `HelpSystemTests.TestHelpFileOperations` — the file-operations help entry no longer contains
+      the expected `VERBOSE:` marker. (Resolved: Updated test assertions in `AnalysisHelpTests.cs` to align with the embedded markdown reference help format).
 
 Each needs a decision per case: fix the documentation, or implement the syntax it advertises. The
 `PRINT_LAYOUT` and `LABEL` cases arrived with the paginated-report documentation in `b9c29d9c` and
@@ -787,9 +787,21 @@ checked off meaningfully. Split:
       round trip prove durable partitioning. This cell remains open until the Shared Gateway and
       tenant storage providers feed their actual byte/storage/connector-class measures and hostile
       fleet evidence proves those producers cannot misattribute a tenant.
+- [ ] **SaaS Multi-Tenancy — Control Plane Dashboard (Platform Admin UI).** (ROADMAP Phase 2 maturity goal).
+      Dedicated visual dashboard for fleet observability, tenant lifecycle management, and resource
+      monitoring, physically separated from the customer-facing `ETL-SQL.Portal`.
+      - **Physical separation & identity isolation:** Hosted as an isolated endpoint/application;
+        authenticates platform principals only via `PlatformAccessGrant` with zero capability to mint
+        tenant sessions or inspect tenant raw scripts/data.
+      - **Fleet observability:** Real-time visibility into shared worker pool utilization, Gateway Broker
+        health, tenant quota headroom, queue depth, and noisy-neighbor containment.
+      - **Platform audit trail:** Attributed audit receipts for all operator-driven tenant lifecycle events.
+- [ ] **SaaS Testing — API Load and Soak Testing.** (ROADMAP Phase 2 maturity goal). Target
+      Orchestrator and Portal APIs with sustained multi-tenant concurrency (k6 / JMeter) to validate
+      connection pooling, fair-share queueing, and memory stability under high tenant density.
 
-*Absorbs the retained discovery items **Usage Metering & Billing Collector** and **Full-Fidelity
-Tenant Portability Bundle**.*
+*Absorbs the retained discovery items **Usage Metering & Billing Collector**, **Full-Fidelity
+Tenant Portability Bundle**, and **Control Plane Dashboard**.*
 
 #### Certification and evidence
 

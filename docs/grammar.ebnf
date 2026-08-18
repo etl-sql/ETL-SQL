@@ -620,8 +620,13 @@ visual_clause = ( "TITLE" | "SUBTITLE" | "CONTENT" | "DEFAULT" | "VALUE" | "PLAC
               | "SUMMARY" "(" summary_item { "," summary_item } ")"
               | "STYLE" ( "=" identifier | style_body )
               | "LABEL_POSITION" [ "=" ] ( identifier | string_literal )
-              | ( "MIN" | "MAX" | "DECIMALS" ) [ "=" ] number ;
-visual_mapping = [ "COLUMN" ] identifier [ "=" identifier | "AS" ( identifier | string_literal ) ] ;
+              | ( "MIN" | "MAX" | "DECIMALS" ) [ "=" ] number
+              | ( "PAGE_LAYOUT" | "PRINT_LAYOUT" ) "(" report_option { "," report_option } ")"
+              | "ROW_DETAIL" "(" row_detail_clause { "," row_detail_clause } ")" ;
+visual_mapping = [ "COLUMN" ] identifier [ "=" ( identifier | string_literal ) | "AS" ( identifier | string_literal ) ] ;
+row_detail_clause = "TARGET" [ "=" ] ( identifier | string_literal )
+                  | ( "BINDINGS" | "MAPPINGS" | "MAP" ) "(" variable_name [ "=" ] ( identifier | string_literal ) { "," variable_name [ "=" ] ( identifier | string_literal ) } ")"
+                  | "LIMIT" [ "=" ] number ;
 report_option = ( identifier | string_literal ) [ "=" expression | "(" report_option { "," report_option } ")" ] ;
 report_series = ( "BAR" | "LINE" | identifier ) identifier ;
 summary_item = identifier [ "=" expression | "(" identifier ")" [ "AS" ( identifier | string_literal ) ] ] ;
