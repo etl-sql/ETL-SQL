@@ -35,6 +35,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   material generated inside the attempt's own single-use scratch, so a resumed run reported "no saved
   session found"; the server-mounted per-tenant key is now authoritative, and checkpoint resume across
   separate sandboxes is verified on a hardened runtime.
+- Added the Secure Outbound Data Gateway enrollment, resource registry, and authority model. A
+  tenant-issued enrollment is consumable exactly once and stores only a hash of its one-time token,
+  so the record cannot enrol a Gateway; expired, revoked, consumed, and cross-tenant presentations
+  are indistinguishable to a caller. The Gateway-local registry holds the only copy of a resource's
+  target and credential reference, discovery can propose but never approve, and the published
+  projection carries neither. Routing is authorized in one place and only when execution tenant,
+  capability tenant, Gateway identity tenant, catalog binding, resource ownership, actor grant, and
+  policy version all agree; revoking a Gateway or disabling a resource denies on the next evaluation
+  with no grace window.
 - Added the Secure Outbound Data Gateway binding model. A `SHARED:` catalog alias can now resolve to
   a Gateway binding — connector type plus immutable Gateway and resource IDs — instead of a direct
   target. A Gateway-bound entry cannot store a physical endpoint or a credential; those stay on the

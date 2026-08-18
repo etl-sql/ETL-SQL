@@ -626,29 +626,45 @@ runtime, which is what the storage cell below was blocked on.
         governed `EXECUTE TOOL` metadata whose own reference page says it is *not* an authorization
         or resource boundary, and whose handler only logs. Do not wire Gateway routing through it,
         and do not assume the `GATEWAY` lexer token belongs to this work.
-      - **D2 — Enrollment lifecycle.** One-time tenant-admin enrollment in the Portal; the
-        on-premises administrator consumes it exactly once and establishes an asymmetric workload
-        identity with short-lived rotated credentials. Second consumption must fail closed.
-      - **D3 — Gateway-local resource registry.** Typed resources with stable IDs, local credential
-        references, allowed operations, and limits. Discovery proposes; only the on-premises
-        administrator approves. Credentials resolve gateway-side only.
+      - [x] **D2 — Enrollment lifecycle.** *(contract delivered 2026-08-17; Portal surface open.)*
+        `IGatewayEnrollmentStore` issues a one-time enrollment and consumes it exactly once, binding
+        the presented workload public-key thumbprint. Only a SHA-256 of the token is stored, so
+        possession of the record cannot enrol a Gateway, and comparison is constant-time. Expired,
+        revoked, already-consumed, and cross-tenant presentations all fail with the **same** message
+        on purpose — distinguishing them would tell a holder of a stolen token which enrollments are
+        worth attacking. Weak tokens are refused at issue. Still open: the Portal issuing UI/API, a
+        durable store behind the same contract tests, and short-lived credential rotation.
+      - [x] **D3 — Gateway-local resource registry.** *(delivered 2026-08-17.)*
+        `GatewayResourceRegistry` holds typed resources with stable IDs, the local target, a local
+        credential reference, an enumerated operation class, and mandatory positive limits — an
+        absent bound would mean unbounded, so it is rejected. Discovery may only `Propose`; approval
+        is a separate call, a proposed resource neither executes nor reaches the tenant catalog, and
+        discovery cannot redefine an already-approved resource (otherwise a rogue pass could repoint
+        an approved alias). `ToPublishedMetadata` is the only projection that leaves the Gateway and
+        carries neither target nor credential, asserted by serializing it and looking for both.
       - **D4 — Typed operation protocol.** Bidirectional gRPC streaming over HTTPS (typed WebSocket
         only where a restrictive proxy forces it), one versioned operation model, mandatory
         deadlines, cancellation, bounded buffering, flow control, max request/response size, and
         concurrency limits. Reconnect keys off operation IDs against a durable outcome ledger:
         **an ambiguous write is never retried blindly nor reported as safely failed** — the same rule
         the sandbox coordinator already follows for ambiguous teardown.
-      - **D5 — Authority agreement.** Routing occurs only when execution tenant, capability tenant,
-        gateway identity tenant, catalog binding, resource ownership, actor grant, and policy version
-        all agree. No grant means deny. Containers receive a typed operation handle, never reusable
-        tunnel authority.
-      - **D6 — Revocation.** Disabling an alias or resource, or revoking the Gateway, fails new work
-        immediately and invalidates cached authority. This is the cell's highest-risk slice: the
-        v0.17.0 authorship-permission regression showed revocation logic passes review by hand and
-        fails a red test, so revocation gets tests before implementation.
-      - **D7 — Operator boundary.** Platform operators receive aggregate health only, and cannot
-        create tenant mappings, approve local destinations, read local credentials, or grant
-        themselves resource use. Negative tests, not documentation.
+      - [x] **D5 — Authority agreement.** *(delivered 2026-08-17.)* `GatewayAuthority.Evaluate` is
+        the single decision point for all seven clauses. Each is falsified independently against an
+        otherwise-valid request, which is the point: the recurring defect here has been each door
+        being tested alone while nothing asserts the set agrees. A grant belonging to another tenant,
+        principal, resource, or narrower operation class does not count, and knowing another tenant's
+        alias/gateway/resource/operation is not enough. Denial reasons never echo a target or a
+        credential.
+      - [x] **D6 — Revocation.** *(delivered 2026-08-17.)* Revoking the Gateway denies on the very
+        next authority evaluation with no grace window; disabling a resource unpublishes it, stops
+        execution, and cannot be undone by approving it again. Tested, per the v0.17.0 lesson that
+        revocation logic passes a careful read and fails a red test.
+      - [x] **D7 — Operator boundary.** *(structural half delivered 2026-08-17.)* A platform
+        operator principal gets no implicit authority — with no grant naming it the decision is
+        denial, not an operator override — and approval exists only on the Gateway, so there is no
+        cloud-side path to it by construction. Denial reasons leak neither target nor credential
+        across every distinct denial path. Still open once the Portal/Broker surfaces exist: the
+        aggregate-health-only view and negative tests against those real endpoints.
       - **D8 — Runtime hardening, install, docs.** Hardened Windows service / systemd daemon with a
         minimal local identity, outbound-only mutually authenticated TLS, DNS and canonical-path
         revalidation at operation time, and refusal of arbitrary socket/shell/path/protocol
