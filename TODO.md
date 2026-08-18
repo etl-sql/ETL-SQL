@@ -737,9 +737,15 @@ checked off meaningfully. Split:
       - **UI & Sandbox:** Shipped standalone platform admin interface and interactive UI sandbox
         story (`control-plane-dashboard.story.js`) with complete Playwright and unit test coverage
         (`ControlPlaneDashboardTests`, `ControlPlaneDashboardUiTests`).
-- [ ] **SaaS Testing — API Load and Soak Testing.** (ROADMAP Phase 2 maturity goal). Target
-      Orchestrator and Portal APIs with sustained multi-tenant concurrency (k6 / JMeter) to validate
+- [x] **SaaS Testing — API Load and Soak Testing.** *(delivered 2026-08-18.)*
+      Target Orchestrator and Portal APIs with sustained multi-tenant concurrency to validate
       connection pooling, fair-share queueing, and memory stability under high tenant density.
+      - Implemented native in-tree .NET load and soak testing harness (`SaaSMultiTenantLoadAndSoakTests`)
+        without third-party tooling (zero k6 / JMeter external dependencies).
+      - Proves fair-share throughput and starvation-freedom under concurrency (Jain's Fairness Index $\ge 0.95$).
+      - Proves noisy-neighbor containment (flooded tenants do not degrade quiet tenant latencies or success rate).
+      - Proves memory stability and bounded working-set growth over sustained soak iterations.
+      - Proves sub-200ms platform control plane fleet queries under high tenant density.
 
 *Absorbs the retained discovery items **Usage Metering & Billing Collector**, **Full-Fidelity
 Tenant Portability Bundle**, and **Control Plane Dashboard**.*
