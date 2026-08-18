@@ -256,4 +256,226 @@ public sealed class ControlPlaneDashboardService(
             IsAtCapacity: isAtCapacity,
             CapturedAtUtc: DateTimeOffset.UtcNow);
     }
+
+    public async Task<PlatformAuditReceiptDto> ProvisionTenantAsync(ProvisionTenantAdminRequest req, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(req);
+        if (string.IsNullOrWhiteSpace(req.TenantId)) throw new ArgumentException("Tenant ID is required.");
+        if (string.IsNullOrWhiteSpace(req.PlatformOperator)) throw new ArgumentException("Platform operator identity is required.");
+        if (string.IsNullOrWhiteSpace(req.AuthorizationReference)) throw new ArgumentException("Authorization reference is required.");
+        if (string.IsNullOrWhiteSpace(req.Reason)) throw new ArgumentException("Reason is required.");
+
+        var existing = await db.SharedTenantLifecycles.FirstOrDefaultAsync(t => t.TenantId == req.TenantId, ct);
+        if (existing is not null) throw new InvalidOperationException($"Tenant '{req.TenantId}' already exists.");
+
+        var now = DateTime.UtcNow;
+        var opId = $"op-prov-{Guid.NewGuid():N}"[..18];
+
+        var tenant = new SharedTenantLifecycle
+        {
+            TenantId = req.TenantId.Trim(),
+            State = "Active",
+            ActiveRelease = req.ActiveRelease ?? "v0.18.0",
+            MaxConcurrentJobs = req.MaxConcurrentJobs ?? 10,
+            MaxStorageMb = req.MaxStorageMb ?? 20480,
+            MaxReportSessions = req.MaxReportSessions ?? 50,
+            FenceEpoch = 1,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+        db.SharedTenantLifecycles.Add(tenant);
+
+        // Resources
+        db.SharedTenantResources.AddRange(
+            new SharedTenantResource { ScopedId = $"{tenant.TenantId}/index", TenantId = tenant.TenantId, Kind = "index", CreatedAtUtc = now },
+            new SharedTenantResource { ScopedId = $"{tenant.TenantId}/queue", TenantId = tenant.TenantId, Kind = "queue", CreatedAtUtc = now },
+            new SharedTenantResource { ScopedId = $"{tenant.TenantId}/storage", TenantId = tenant.TenantId, Kind = "storage", CreatedAtUtc = now }
+        );
+
+        // Operation audit record
+        var op = new SharedTenantLifecycleOperation
+        {
+            OperationId = opId,
+            TenantId = tenant.TenantId,
+            Kind = "Provision",
+            Status = "Completed",
+            Phase = "Activated",
+            PlatformOperator = req.PlatformOperator.Trim(),
+            AuthorizationReference = req.AuthorizationReference.Trim(),
+            Reason = req.Reason.Trim(),
+            AuthorizationExpiresUtc = now.AddDays(1),
+            TargetRelease = tenant.ActiveRelease,
+            TargetMaxConcurrentJobs = tenant.MaxConcurrentJobs,
+            TargetMaxStorageMb = tenant.MaxStorageMb,
+            TargetMaxReportSessions = tenant.MaxReportSessions,
+            StartedAtUtc = now,
+            CompletedAtUtc = now
+        };
+        db.SharedTenantLifecycleOperations.Add(op);
+
+        await db.SaveChangesAsync(ct);
+
+        var raw = $"{op.OperationId}|{op.TenantId}|{op.Kind}|{op.Status}|{op.PlatformOperator}|{op.AuthorizationReference}";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant()[..16];
+
+        return new PlatformAuditReceiptDto(
+            OperationId: op.OperationId,
+            TenantId: op.TenantId,
+            Kind: op.Kind,
+            Status: op.Status,
+            Phase: op.Phase,
+            PlatformOperator: op.PlatformOperator,
+            AuthorizationReference: op.AuthorizationReference,
+            Reason: op.Reason,
+            AuthorizationExpiresUtc: op.AuthorizationExpiresUtc,
+            TargetRelease: op.TargetRelease,
+            TargetMaxConcurrentJobs: op.TargetMaxConcurrentJobs,
+            TargetMaxStorageMb: op.TargetMaxStorageMb,
+            TargetMaxReportSessions: op.TargetMaxReportSessions,
+            ReceiptHash: hash);
+    }
+
+    public async Task<PlatformAuditReceiptDto> UpdateTenantQuotasAsync(string tenantId, UpdateTenantQuotasAdminRequest req, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(req);
+        if (string.IsNullOrWhiteSpace(tenantId)) throw new ArgumentException("Tenant ID is required.");
+        if (string.IsNullOrWhiteSpace(req.PlatformOperator)) throw new ArgumentException("Platform operator identity is required.");
+        if (string.IsNullOrWhiteSpace(req.AuthorizationReference)) throw new ArgumentException("Authorization reference is required.");
+        if (string.IsNullOrWhiteSpace(req.Reason)) throw new ArgumentException("Reason is required.");
+
+        var tenant = await db.SharedTenantLifecycles.FirstOrDefaultAsync(t => t.TenantId == tenantId, ct);
+        if (tenant is null) throw new InvalidOperationException($"Tenant '{tenantId}' was not found.");
+
+        if (req.MaxConcurrentJobs.HasValue) tenant.MaxConcurrentJobs = req.MaxConcurrentJobs.Value;
+        if (req.MaxStorageMb.HasValue) tenant.MaxStorageMb = req.MaxStorageMb.Value;
+        if (req.MaxReportSessions.HasValue) tenant.MaxReportSessions = req.MaxReportSessions.Value;
+
+        var now = DateTime.UtcNow;
+        tenant.UpdatedAtUtc = now;
+
+        var opId = $"op-quota-{Guid.NewGuid():N}"[..18];
+        var op = new SharedTenantLifecycleOperation
+        {
+            OperationId = opId,
+            TenantId = tenant.TenantId,
+            Kind = "UpdateQuotas",
+            Status = "Completed",
+            Phase = "Updated",
+            PlatformOperator = req.PlatformOperator.Trim(),
+            AuthorizationReference = req.AuthorizationReference.Trim(),
+            Reason = req.Reason.Trim(),
+            AuthorizationExpiresUtc = now.AddDays(1),
+            TargetRelease = tenant.ActiveRelease,
+            TargetMaxConcurrentJobs = tenant.MaxConcurrentJobs,
+            TargetMaxStorageMb = tenant.MaxStorageMb,
+            TargetMaxReportSessions = tenant.MaxReportSessions,
+            StartedAtUtc = now,
+            CompletedAtUtc = now
+        };
+        db.SharedTenantLifecycleOperations.Add(op);
+
+        await db.SaveChangesAsync(ct);
+
+        var raw = $"{op.OperationId}|{op.TenantId}|{op.Kind}|{op.Status}|{op.PlatformOperator}|{op.AuthorizationReference}";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant()[..16];
+
+        return new PlatformAuditReceiptDto(
+            OperationId: op.OperationId,
+            TenantId: op.TenantId,
+            Kind: op.Kind,
+            Status: op.Status,
+            Phase: op.Phase,
+            PlatformOperator: op.PlatformOperator,
+            AuthorizationReference: op.AuthorizationReference,
+            Reason: op.Reason,
+            AuthorizationExpiresUtc: op.AuthorizationExpiresUtc,
+            TargetRelease: op.TargetRelease,
+            TargetMaxConcurrentJobs: op.TargetMaxConcurrentJobs,
+            TargetMaxStorageMb: op.TargetMaxStorageMb,
+            TargetMaxReportSessions: op.TargetMaxReportSessions,
+            ReceiptHash: hash);
+    }
+
+    public async Task<PlatformAuditReceiptDto> UpdateTenantStateAsync(string tenantId, UpdateTenantStateAdminRequest req, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(req);
+        if (string.IsNullOrWhiteSpace(tenantId)) throw new ArgumentException("Tenant ID is required.");
+        if (string.IsNullOrWhiteSpace(req.State)) throw new ArgumentException("Target state is required.");
+        if (string.IsNullOrWhiteSpace(req.PlatformOperator)) throw new ArgumentException("Platform operator identity is required.");
+        if (string.IsNullOrWhiteSpace(req.AuthorizationReference)) throw new ArgumentException("Authorization reference is required.");
+        if (string.IsNullOrWhiteSpace(req.Reason)) throw new ArgumentException("Reason is required.");
+
+        var validStates = new[] { "Active", "Maintenance", "Quarantined" };
+        var normalizedState = validStates.FirstOrDefault(s => s.Equals(req.State, StringComparison.OrdinalIgnoreCase))
+            ?? throw new ArgumentException($"Invalid state '{req.State}'. Valid states are: {string.Join(", ", validStates)}.");
+
+        var tenant = await db.SharedTenantLifecycles.FirstOrDefaultAsync(t => t.TenantId == tenantId, ct);
+        if (tenant is null) throw new InvalidOperationException($"Tenant '{tenantId}' was not found.");
+
+        tenant.State = normalizedState;
+        var now = DateTime.UtcNow;
+        tenant.UpdatedAtUtc = now;
+
+        var opId = $"op-state-{Guid.NewGuid():N}"[..18];
+        var op = new SharedTenantLifecycleOperation
+        {
+            OperationId = opId,
+            TenantId = tenant.TenantId,
+            Kind = $"SetState:{normalizedState}",
+            Status = "Completed",
+            Phase = "StateChanged",
+            PlatformOperator = req.PlatformOperator.Trim(),
+            AuthorizationReference = req.AuthorizationReference.Trim(),
+            Reason = req.Reason.Trim(),
+            AuthorizationExpiresUtc = now.AddDays(1),
+            StartedAtUtc = now,
+            CompletedAtUtc = now
+        };
+        db.SharedTenantLifecycleOperations.Add(op);
+
+        await db.SaveChangesAsync(ct);
+
+        var raw = $"{op.OperationId}|{op.TenantId}|{op.Kind}|{op.Status}|{op.PlatformOperator}|{op.AuthorizationReference}";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant()[..16];
+
+        return new PlatformAuditReceiptDto(
+            OperationId: op.OperationId,
+            TenantId: op.TenantId,
+            Kind: op.Kind,
+            Status: op.Status,
+            Phase: op.Phase,
+            PlatformOperator: op.PlatformOperator,
+            AuthorizationReference: op.AuthorizationReference,
+            Reason: op.Reason,
+            AuthorizationExpiresUtc: op.AuthorizationExpiresUtc,
+            TargetRelease: op.TargetRelease,
+            TargetMaxConcurrentJobs: op.TargetMaxConcurrentJobs,
+            TargetMaxStorageMb: op.TargetMaxStorageMb,
+            TargetMaxReportSessions: op.TargetMaxReportSessions,
+            ReceiptHash: hash);
+    }
 }
+
+public sealed record ProvisionTenantAdminRequest(
+    string TenantId,
+    string? ActiveRelease,
+    int? MaxConcurrentJobs,
+    int? MaxStorageMb,
+    int? MaxReportSessions,
+    string PlatformOperator,
+    string AuthorizationReference,
+    string Reason);
+
+public sealed record UpdateTenantQuotasAdminRequest(
+    int? MaxConcurrentJobs,
+    int? MaxStorageMb,
+    int? MaxReportSessions,
+    string PlatformOperator,
+    string AuthorizationReference,
+    string Reason);
+
+public sealed record UpdateTenantStateAdminRequest(
+    string State,
+    string PlatformOperator,
+    string AuthorizationReference,
+    string Reason);

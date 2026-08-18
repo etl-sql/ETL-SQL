@@ -74,4 +74,67 @@ public sealed class ControlPlaneDashboardController(
 
         return Ok(health);
     }
+
+    [HttpPost("tenants/provision")]
+    public async Task<IActionResult> ProvisionTenant([FromBody] ProvisionTenantAdminRequest request, CancellationToken ct)
+    {
+        if (!config.SharedTenancy.Enabled) return NotFound();
+        if (!IsAuthorized()) return Unauthorized(new { error = "Platform management credentials required." });
+
+        try
+        {
+            var receipt = await service.ProvisionTenantAsync(request, ct);
+            return Ok(receipt);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("tenants/{tenantId}/quotas")]
+    public async Task<IActionResult> UpdateQuotas(string tenantId, [FromBody] UpdateTenantQuotasAdminRequest request, CancellationToken ct)
+    {
+        if (!config.SharedTenancy.Enabled) return NotFound();
+        if (!IsAuthorized()) return Unauthorized(new { error = "Platform management credentials required." });
+
+        try
+        {
+            var receipt = await service.UpdateTenantQuotasAsync(tenantId, request, ct);
+            return Ok(receipt);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("tenants/{tenantId}/state")]
+    public async Task<IActionResult> UpdateState(string tenantId, [FromBody] UpdateTenantStateAdminRequest request, CancellationToken ct)
+    {
+        if (!config.SharedTenancy.Enabled) return NotFound();
+        if (!IsAuthorized()) return Unauthorized(new { error = "Platform management credentials required." });
+
+        try
+        {
+            var receipt = await service.UpdateTenantStateAsync(tenantId, request, ct);
+            return Ok(receipt);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
 }

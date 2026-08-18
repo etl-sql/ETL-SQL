@@ -71,6 +71,10 @@
                 <span style="font-size:0.75rem;color:var(--portal-muted);">${t.quotaUtilizationPercentage || 0}%</span>
               </div>
             </td>
+            <td style="padding:10px 16px;text-align:right;">
+              <button class="btn-quota" data-tenant="${esc(t.tenantId)}" data-jobs="${t.maxConcurrentJobs}" data-storage="${t.maxStorageMb}" data-reports="${t.maxReportSessions}" style="padding:4px 8px;font-size:0.75rem;border:1px solid var(--portal-border);border-radius:3px;background:var(--portal-surface-subtle);color:var(--portal-text);cursor:pointer;margin-right:4px;">Quotas</button>
+              <button class="btn-state" data-tenant="${esc(t.tenantId)}" data-state="${esc(t.state)}" style="padding:4px 8px;font-size:0.75rem;border:1px solid var(--portal-border);border-radius:3px;background:var(--portal-surface-subtle);color:var(--portal-text);cursor:pointer;">State</button>
+            </td>
           </tr>
         `).join('');
       }
@@ -98,7 +102,7 @@
     }
   }
 
-  function initInteractiveControls(container) {
+  function initInteractiveControls(container, onReload) {
     // Setup tabs
     const tabs = container.querySelectorAll('.cp-tab');
     tabs.forEach(tab => {
@@ -124,29 +128,188 @@
         });
       });
     }
+
+    // Modal helpers
+    function showModal(id) {
+      const el = container.querySelector(id);
+      if (el) el.style.display = 'flex';
+    }
+    function hideModals() {
+      container.querySelectorAll('#modalProvision, #modalQuotas, #modalState').forEach(m => m.style.display = 'none');
+    }
+
+    container.querySelectorAll('.btn-cancel').forEach(btn => btn.addEventListener('click', hideModals));
+
+    // Provision button
+    const btnOpenProv = container.querySelector('#btnOpenProvision');
+    if (btnOpenProv) {
+      btnOpenProv.addEventListener('click', () => showModal('#modalProvision'));
+    }
+
+    // Row buttons (delegated)
+    const tbody = container.querySelector('#tenantTableBody');
+    if (tbody) {
+      tbody.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.classList.contains('btn-quota')) {
+          const tenant = target.dataset.tenant;
+          const jobs = target.dataset.jobs;
+          const storage = target.dataset.storage;
+          const modal = container.querySelector('#modalQuotas');
+          if (modal) {
+            modal.querySelector('#quotaTenantId').value = tenant;
+            modal.querySelector('#quotaMaxJobs').value = jobs || 10;
+            modal.querySelector('#quotaStorageMb').value = storage || 20480;
+            showModal('#modalQuotas');
+          }
+        } else if (target.classList.contains('btn-state')) {
+          const tenant = target.dataset.tenant;
+          const state = target.dataset.state;
+          const modal = container.querySelector('#modalState');
+          if (modal) {
+            modal.querySelector('#stateTenantId').value = tenant;
+            modal.querySelector('#stateSelect').value = state || 'Active';
+            showModal('#modalState');
+          }
+        }
+      });
+    }
+
+    function showReceipt(receipt) {
+      const alert = container.querySelector('#receiptAlert');
+      if (alert) {
+        alert.style.display = 'block';
+        alert.innerHTML = `<strong>Receipt ${esc(receipt.operationId)}:</strong> Action <code>${esc(receipt.kind)}</code> executed by <code>${esc(receipt.platformOperator)}</code> (Ref: <code>${esc(receipt.authorizationReference)}</code>). Receipt Hash: <code>${esc(receipt.receiptHash)}</code>`;
+        setTimeout(() => { alert.style.display = 'none'; }, 10000);
+      }
+    }
+
+    // Forms
+    const formProv = container.querySelector('#formProvision');
+    if (formProv) {
+      formProv.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+          tenantId: formProv.querySelector('#provTenantId').value.trim(),
+          maxConcurrentJobs: parseInt(formProv.querySelector('#provMaxJobs').value, 10),
+          maxStorageMb: parseInt(formProv.querySelector('#provStorageMb').value, 10),
+          platformOperator: formProv.querySelector('#provOperator').value.trim(),
+          authorizationReference: formProv.querySelector('#provAuthRef').value.trim(),
+          reason: formProv.querySelector('#provReason').value.trim()
+        };
+
+        try {
+          const res = await fetch('/api/platform/control-plane/tenants/provision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            const receipt = await res.json();
+            hideModals();
+            showReceipt(receipt);
+            if (onReload) onReload();
+          } else {
+            const err = await res.json();
+            alert('Provisioning failed: ' + (err.error || res.statusText));
+          }
+        } catch (err) {
+          alert('Network error: ' + err.message);
+        }
+      });
+    }
+
+    const formQuotas = container.querySelector('#formQuotas');
+    if (formQuotas) {
+      formQuotas.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const tenantId = formQuotas.querySelector('#quotaTenantId').value;
+        const payload = {
+          maxConcurrentJobs: parseInt(formQuotas.querySelector('#quotaMaxJobs').value, 10),
+          maxStorageMb: parseInt(formQuotas.querySelector('#quotaStorageMb').value, 10),
+          platformOperator: formQuotas.querySelector('#quotaOperator').value.trim(),
+          authorizationReference: formQuotas.querySelector('#quotaAuthRef').value.trim(),
+          reason: formQuotas.querySelector('#quotaReason').value.trim()
+        };
+
+        try {
+          const res = await fetch(`/api/platform/control-plane/tenants/${encodeURIComponent(tenantId)}/quotas`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            const receipt = await res.json();
+            hideModals();
+            showReceipt(receipt);
+            if (onReload) onReload();
+          } else {
+            const err = await res.json();
+            alert('Updating quotas failed: ' + (err.error || res.statusText));
+          }
+        } catch (err) {
+          alert('Network error: ' + err.message);
+        }
+      });
+    }
+
+    const formState = container.querySelector('#formState');
+    if (formState) {
+      formState.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const tenantId = formState.querySelector('#stateTenantId').value;
+        const payload = {
+          state: formState.querySelector('#stateSelect').value,
+          platformOperator: formState.querySelector('#stateOperator').value.trim(),
+          authorizationReference: formState.querySelector('#stateAuthRef').value.trim(),
+          reason: formState.querySelector('#stateReason').value.trim()
+        };
+
+        try {
+          const res = await fetch(`/api/platform/control-plane/tenants/${encodeURIComponent(tenantId)}/state`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            const receipt = await res.json();
+            hideModals();
+            showReceipt(receipt);
+            if (onReload) onReload();
+          } else {
+            const err = await res.json();
+            alert('Updating state failed: ' + (err.error || res.statusText));
+          }
+        } catch (err) {
+          alert('Network error: ' + err.message);
+        }
+      });
+    }
   }
 
   // Export for Sandbox and live page
   window.ControlPlaneUI = {
-    render: function (container, data) {
+    render: function (container, data, onReload) {
       renderControlPlane(container, data);
-      initInteractiveControls(container);
+      initInteractiveControls(container, onReload);
     },
     init: initInteractiveControls
   };
 
   if (document.getElementById('kpiStrip')) {
-    initInteractiveControls(document.body);
-
-    // Auto-fetch on standalone page
-    fetch('/api/platform/control-plane/overview')
-      .then(r => r.ok ? r.json() : null)
-      .then(async (overview) => {
+    async function loadData() {
+      try {
+        const overview = await fetch('/api/platform/control-plane/overview').then(r => r.ok ? r.json() : null);
         if (!overview) return;
         const tenants = await fetch('/api/platform/control-plane/tenants').then(r => r.ok ? r.json() : []);
         const audit = await fetch('/api/platform/control-plane/audit').then(r => r.ok ? r.json() : []);
         renderControlPlane(document.body, { overview, tenants, audit });
-      })
-      .catch(err => console.warn('Control plane API offline or unauthorized.', err));
+      } catch (err) {
+        console.warn('Control plane API offline or unauthorized.', err);
+      }
+    }
+
+    initInteractiveControls(document.body, loadData);
+    loadData();
   }
 })();

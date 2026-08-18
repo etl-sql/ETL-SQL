@@ -172,6 +172,95 @@ public sealed class ControlPlaneDashboardTests : IDisposable
         Assert.IsType<NotFoundResult>(res4);
     }
 
+    [Fact]
+    public async Task ProvisionTenant_CreatesTenantResourcesAndAuditReceipt()
+    {
+        await using var db = await DatabaseAsync();
+        var service = new ControlPlaneDashboardService(db);
+
+        var req = new ProvisionTenantAdminRequest(
+            TenantId: "tenant-new-corp",
+            ActiveRelease: "v0.18.0",
+            MaxConcurrentJobs: 15,
+            MaxStorageMb: 40960,
+            MaxReportSessions: 60,
+            PlatformOperator: "admin@platform.test",
+            AuthorizationReference: "CHG-2026-9999",
+            Reason: "New tenant onboarding");
+
+        var receipt = await service.ProvisionTenantAsync(req);
+
+        Assert.Equal("tenant-new-corp", receipt.TenantId);
+        Assert.Equal("Provision", receipt.Kind);
+        Assert.Equal("Completed", receipt.Status);
+        Assert.False(string.IsNullOrWhiteSpace(receipt.ReceiptHash));
+
+        // Verify DB
+        var savedTenant = await db.SharedTenantLifecycles.SingleOrDefaultAsync(t => t.TenantId == "tenant-new-corp");
+        Assert.NotNull(savedTenant);
+        Assert.Equal("Active", savedTenant.State);
+        Assert.Equal(15, savedTenant.MaxConcurrentJobs);
+
+        var resources = await db.SharedTenantResources.Where(r => r.TenantId == "tenant-new-corp").ToListAsync();
+        Assert.Equal(3, resources.Count);
+
+        var savedOp = await db.SharedTenantLifecycleOperations.SingleOrDefaultAsync(o => o.TenantId == "tenant-new-corp");
+        Assert.NotNull(savedOp);
+        Assert.Equal("admin@platform.test", savedOp.PlatformOperator);
+    }
+
+    [Fact]
+    public async Task UpdateTenantQuotasAndState_ModifiesRecordAndEmitsAuditReceipts()
+    {
+        await using var db = await DatabaseAsync();
+        db.SharedTenantLifecycles.Add(new SharedTenantLifecycle
+        {
+            TenantId = "tenant-target",
+            State = "Active",
+            ActiveRelease = "v0.18.0",
+            MaxConcurrentJobs = 10,
+            MaxStorageMb = 10240,
+            MaxReportSessions = 20
+        });
+        await db.SaveChangesAsync();
+
+        var service = new ControlPlaneDashboardService(db);
+
+        // 1. Update Quotas
+        var quotaReq = new UpdateTenantQuotasAdminRequest(
+            MaxConcurrentJobs: 25,
+            MaxStorageMb: 51200,
+            MaxReportSessions: 50,
+            PlatformOperator: "sre@platform.test",
+            AuthorizationReference: "CHG-QUOTA-01",
+            Reason: "Scale up for marketing campaign");
+
+        var quotaReceipt = await service.UpdateTenantQuotasAsync("tenant-target", quotaReq);
+        Assert.Equal("UpdateQuotas", quotaReceipt.Kind);
+        Assert.Equal(25, quotaReceipt.TargetMaxConcurrentJobs);
+
+        var updatedTenant = await db.SharedTenantLifecycles.SingleAsync(t => t.TenantId == "tenant-target");
+        Assert.Equal(25, updatedTenant.MaxConcurrentJobs);
+        Assert.Equal(51200, updatedTenant.MaxStorageMb);
+
+        // 2. Update State to Maintenance
+        var stateReq = new UpdateTenantStateAdminRequest(
+            State: "Maintenance",
+            PlatformOperator: "sre@platform.test",
+            AuthorizationReference: "INC-2026-444",
+            Reason: "Emergency maintenance window");
+
+        var stateReceipt = await service.UpdateTenantStateAsync("tenant-target", stateReq);
+        Assert.Equal("SetState:Maintenance", stateReceipt.Kind);
+
+        var maintTenant = await db.SharedTenantLifecycles.SingleAsync(t => t.TenantId == "tenant-target");
+        Assert.Equal("Maintenance", maintTenant.State);
+
+        // Verify 2 audit receipts generated
+        var auditTrail = await service.GetPlatformAuditTrailAsync();
+        Assert.Equal(2, auditTrail.Count);
+    }
+
     public void Dispose()
     {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
