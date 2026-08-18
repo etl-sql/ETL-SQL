@@ -705,28 +705,24 @@ runtime, which is what the storage cell below was blocked on.
 The former `Managed operations` bullet was one checkbox covering nine deliverables and could not be
 checked off meaningfully. Split:
 
-- [ ] **Shared — backup and recovery.** Tenant-scoped export/restore from shared stores, including
-      proof that point-in-time recovery, retry, or cache rebuild cannot introduce another tenant's
-      rows.
-- [ ] **Shared — metering.** Shared-fleet attribution for rows/bytes, connector class, sandbox
-      CPU/memory/I/O, Gateway traffic, storage, and concurrency. Metering keeps its own durable,
-      tenant-partitioned ledger; it cannot read payload content or become execution authorization.
-
-      **Counts-only ledger and scheduler adoption completed (2026-08-13).**
-      `RelationalTenantMeteringLedger` is a separate SQLite/PostgreSQL event ledger whose append and
-      query APIs require a host-fixed or verified-credential `TenantContext`; events contain no
-      tenant selector. Composite tenant/source/event idempotency lets equal event IDs coexist across
-      tenants, and reads cannot omit the tenant predicate. Its fixed enum/count schema covers rows,
-      read/write bytes, connector class, sandbox CPU/peak-memory/I/O, Gateway ingress/egress, storage,
-      concurrency, duration, and status, with no script, parameter, target, resource/object name, row
-      sample, secret, or authorization result. It exposes evidence append/query only and execution
-      policy has no dependency on it. The scheduler now emits one idempotent event per tenant-bound
-      attempt, including sandbox CPU/memory/spill I/O when the sandbox path ran; engine JSON completion
-      envelopes carry process peak-memory and CPU measurements across the OCI boundary. Ledger failure
-      cannot change a completed workload. SQLite restart/collision tests and a real PostgreSQL 64-bit
-      round trip prove durable partitioning. This cell remains open until the Shared Gateway and
-      tenant storage providers feed their actual byte/storage/connector-class measures and hostile
-      fleet evidence proves those producers cannot misattribute a tenant.
+- [x] **Shared — backup and recovery.** *(delivered 2026-08-18.)* Tenant-scoped export and restore
+      from shared stores (`OrchestratorPromotionPackageService.ExportAsync(TenantContext, ...)`),
+      surface classification inventory across all Portal, Orchestrator, and Artifact stores
+      (`SharedBackupSurfaceInventory`), and proof that point-in-time recovery, retry, or cache rebuild
+      cannot introduce another tenant's rows (`SharedBackupAndRecoveryTests`).
+- [x] **Shared — metering.** *(delivered 2026-08-18.)* Shared-fleet attribution for rows/bytes, connector
+      class, sandbox CPU/memory/I/O, Gateway traffic, storage, and concurrency. Metering keeps its own
+      durable, tenant-partitioned ledger (`ITenantMeteringLedger` / `RelationalTenantMeteringLedger`);
+      it cannot read payload content or become execution authorization.
+      - Fixed enum/count schema covers rows, read/write bytes, connector class, sandbox CPU/peak-memory/I/O,
+        Gateway ingress/egress, storage, concurrency, duration, and status.
+      - Scheduler emits idempotent events per tenant attempt across process/sandbox boundaries.
+      - Gateway Broker (`GatewayBroker` / `ActiveGatewaySession`) feeds actual byte/row/duration measures
+        attributed to verified tenant contexts.
+      - Tenant artifact storage (`TenantScopedArtifactStorage` / `TenantArtifactStorageFactory`) feeds
+        actual read/written storage byte metrics.
+      - Partitioning and hostile fleet attribution resistance proven via `TenantMeteringLedgerTests`
+        and `SharedTenantMeteringIntegrationTests`.
 - [ ] **SaaS Multi-Tenancy — Control Plane Dashboard (Platform Admin UI).** (ROADMAP Phase 2 maturity goal).
       Dedicated visual dashboard for fleet observability, tenant lifecycle management, and resource
       monitoring, physically separated from the customer-facing `ETL-SQL.Portal`.

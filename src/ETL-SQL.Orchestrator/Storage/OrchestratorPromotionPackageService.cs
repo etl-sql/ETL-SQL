@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Quality;
 
 namespace ETL_SQL.Orchestrator.Storage;
@@ -33,6 +34,109 @@ public static partial class OrchestratorPromotionPackageService
     public sealed record ValidationResult(IReadOnlyList<ValidationFinding> Findings)
     {
         public bool IsValid => Findings.All(f => !string.Equals(f.Severity, "Error", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static async Task<Package> ExportAsync(
+        TenantContext tenant,
+        IJobHistoryStore history,
+        IJobCatalogStore catalog,
+        ILineageCatalogStore lineage,
+        int historyLimit = 10_000,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        ct.ThrowIfCancellationRequested();
+        var tenantId = tenant.Tenant.Value;
+
+        IReadOnlyList<JobDefinition> jobs;
+        if (history is ITenantJobEvidenceStore evidenceStore)
+        {
+            jobs = (await evidenceStore.GetAllJobsAsync(tenant)).OrderBy(j => j.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+        else
+        {
+            jobs = (await history.GetAllJobsAsync())
+                .Where(j => string.Equals(j.TenantId, tenantId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(j => j.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        var tenantJobNames = jobs.Select(j => j.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var schedules = (await catalog.GetSchedulesAsync(historyLimit))
+            .Where(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        var notifications = (await catalog.GetNotificationsAsync(historyLimit))
+            .Where(n => string.Equals(n.TenantId, tenantId, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(n => n.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        var jobSchedules = (await catalog.GetJobSchedulesAsync())
+            .Where(l => l.JobName is not null && tenantJobNames.Contains(l.JobName))
+            .OrderBy(l => l.JobName, StringComparer.OrdinalIgnoreCase).ThenBy(l => l.ScheduleName, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        var jobNotifications = (await catalog.GetJobNotificationsAsync())
+            .Where(l => l.JobName is not null && tenantJobNames.Contains(l.JobName))
+            .OrderBy(l => l.JobName, StringComparer.OrdinalIgnoreCase).ThenBy(l => l.NotificationName, StringComparer.OrdinalIgnoreCase).ThenBy(l => l.Trigger).ToArray();
+
+        IReadOnlyList<JobHistoryEntry> runs;
+        if (history is ITenantJobEvidenceStore evidenceRuns)
+        {
+            runs = (await evidenceRuns.GetHistoryAsync(tenant, limit: historyLimit))
+                .Where(r => r.EndTime.HasValue).OrderBy(r => r.StartTime).ThenBy(r => r.Id).ToArray();
+        }
+        else
+        {
+            runs = (await history.GetHistoryAsync(limit: historyLimit))
+                .Where(r => r.EndTime.HasValue && tenantJobNames.Contains(r.JobName))
+                .OrderBy(r => r.StartTime).ThenBy(r => r.Id).ToArray();
+        }
+
+        var runIds = runs.Select(r => r.Id).ToHashSet();
+
+        IReadOnlyList<QualityFailureRecord> failures;
+        if (history is ITenantJobEvidenceStore evidenceFailures)
+        {
+            var rawFailures = new List<QualityFailureRecord>();
+            foreach (var jobName in tenantJobNames)
+            {
+                var dqList = await evidenceFailures.GetDataQualityFailuresForJobAsync(tenant, jobName, historyLimit);
+                rawFailures.AddRange(dqList.Select(f => new QualityFailureRecord(f.RunId, f.TargetTable, f.ColumnName, f.Rule, f.Action, f.FailureCount, f.Owner)));
+            }
+            failures = rawFailures.OrderBy(f => f.SourceRunId).ThenBy(f => f.ColumnName, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+        else
+        {
+            failures = (await history.GetDataQualityFailuresAsync(historyLimit))
+                .Where(f => runIds.Contains(f.RunId))
+                .Select(f => new QualityFailureRecord(f.RunId, f.TargetTable, f.ColumnName, f.Rule, f.Action, f.FailureCount, f.Owner))
+                .OrderBy(f => f.SourceRunId).ThenBy(f => f.ColumnName, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        IReadOnlyList<LineageHistoryEntry> lineageRows;
+        if (lineage is ITenantLineageCatalogStore tenantLineage)
+        {
+            lineageRows = (await tenantLineage.GetRecentLineageAsync(tenant, historyLimit))
+                .OrderBy(l => l.RunAt).ThenBy(l => l.Id).ToArray();
+        }
+        else
+        {
+            lineageRows = (await lineage.GetRecentLineageAsync(historyLimit))
+                .Where(l => string.Equals(l.TenantId, tenantId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(l => l.RunAt).ThenBy(l => l.Id).ToArray();
+        }
+
+        var inspectable = jobs.SelectMany(j => new[] { j.Script, j.TargetPath, j.Options })
+            .Concat(notifications.SelectMany(n => new[] { n.ConnectionName, n.Recipient, n.Options }))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Cast<string>()
+            .ToArray();
+        if (inspectable.Any(value => RawCredentialRegex().IsMatch(value)))
+            throw new InvalidOperationException("Orchestrator promotion export refused a raw credential literal; replace it with SECRET:name.");
+        var requiredSecrets = inspectable.SelectMany(value => SecretReferenceRegex().Matches(value).Select(match => match.Groups[1].Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        return new(SchemaVersion, DateTimeOffset.UtcNow, jobs, schedules, notifications,
+            jobSchedules, jobNotifications, runs, failures, lineageRows, requiredSecrets);
     }
 
     public static async Task<Package> ExportAsync(

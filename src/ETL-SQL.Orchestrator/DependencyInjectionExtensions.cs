@@ -28,6 +28,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;

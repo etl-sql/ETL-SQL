@@ -90,7 +90,10 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
               return stories.map(s => ({
                 id: s.id,
                 title: s.title,
-                fixtures: (s.fixtures ?? [{ id: '' }]).map(f => f.id),
+                fixtures: (Array.isArray(s.fixtures)
+                  ? s.fixtures
+                  : (s.fixtures && typeof s.fixtures === 'object' ? Object.entries(s.fixtures).map(([k, v]) => typeof v === 'object' ? { id: v?.id ?? k } : { id: k }) : [{ id: '' }])
+                ).map(f => (typeof f === 'object' ? (f?.id ?? '') : String(f))),
               }));
             }
             """);

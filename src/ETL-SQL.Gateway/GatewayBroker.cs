@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Gateway;
 
@@ -11,10 +13,12 @@ namespace ETL_SQL.Gateway;
 public sealed class GatewayBroker(
     IGatewayEnrollmentStore enrollmentStore,
     GatewaySessionRegistry sessionRegistry,
+    ITenantMeteringLedger? meteringLedger = null,
     int maxFrameBytes = 1 << 20,
     TimeProvider? timeProvider = null)
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+    private readonly ITenantMeteringLedger? _meteringLedger = meteringLedger;
 
     /// <summary>
     /// Accepts and authenticates an incoming WebSocket connection from an on-premises Gateway.
@@ -67,7 +71,8 @@ public sealed class GatewayBroker(
             helloFrame.WorkloadPublicKeyThumbprint,
             socket,
             maxFrameBytes,
-            _time.GetUtcNow());
+            _time.GetUtcNow(),
+            _meteringLedger);
 
         if (!sessionRegistry.TryRegister(session))
         {
@@ -146,6 +151,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
     private readonly TaskCompletionSource _closeTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _sessionCts = new();
     private readonly Task _pumpTask;
+    private readonly ITenantMeteringLedger? _meteringLedger;
 
     public string TenantId { get; }
     public string GatewayId { get; }
@@ -159,7 +165,8 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         string workloadPublicKeyThumbprint,
         WebSocket socket,
         int maxFrameBytes,
-        DateTimeOffset connectedUtc)
+        DateTimeOffset connectedUtc,
+        ITenantMeteringLedger? meteringLedger = null)
     {
         TenantId = tenantId;
         GatewayId = gatewayId;
@@ -167,6 +174,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         _socket = socket;
         _maxFrameBytes = maxFrameBytes;
         ConnectedUtc = connectedUtc;
+        _meteringLedger = meteringLedger;
         _pumpTask = Task.Run(PumpInboundAsync);
     }
 
@@ -179,6 +187,11 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         ArgumentNullException.ThrowIfNull(operation);
 
         await _executeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var sw = Stopwatch.StartNew();
+        long egressBytes = 0;
+        long ingressBytes = 0;
+        long totalRows = 0;
+        var status = TenantMeteringStatus.Failed;
         try
         {
             var opFrame = new GatewayFrame
@@ -196,6 +209,8 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                 Parameters = parameters
             };
 
+            var serialized = opFrame.Serialize();
+            egressBytes = Encoding.UTF8.GetByteCount(serialized);
             await SendFrameInternalAsync(opFrame, cancellationToken).ConfigureAwait(false);
 
             var columns = new List<string>();
@@ -205,6 +220,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
             while (true)
             {
                 var frame = await _inboundChannel.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                ingressBytes += Encoding.UTF8.GetByteCount(frame.Serialize());
 
                 if (frame.Kind == GatewayFrameKind.Fault)
                     throw new GatewayProtocolException(frame.Reason ?? "Gateway returned an unclassified fault.");
@@ -224,11 +240,40 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                 }
             }
 
+            totalRows = rows.Count;
+            status = TenantMeteringStatus.Succeeded;
             return new GatewayExecutionResult(columns, rows, truncated);
         }
         finally
         {
+            sw.Stop();
             _executeGate.Release();
+
+            if (_meteringLedger is not null)
+            {
+                try
+                {
+                    var tenant = TenantContext.FromVerifiedCredential(TenantId);
+                    await _meteringLedger.AppendAsync(tenant, new TenantMeteringEvent
+                    {
+                        SourceEventId = $"gw-{operation.OperationId}",
+                        Source = TenantMeteringSource.Gateway,
+                        WorkloadClass = TenantWorkloadClass.Gateway,
+                        ConnectorClass = TenantConnectorClass.Gateway,
+                        Status = status,
+                        Rows = totalRows,
+                        GatewayIngressBytes = ingressBytes,
+                        GatewayEgressBytes = egressBytes,
+                        ConcurrencyUnits = 1,
+                        DurationMilliseconds = sw.ElapsedMilliseconds,
+                        RecordedAtUtc = DateTimeOffset.UtcNow
+                    }, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Metering ledger failures never alter execution results
+                }
+            }
         }
     }
 

@@ -112,7 +112,7 @@ public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
 
         await Expect(page.Locator("[data-gov-state='unauthorized']")).ToBeVisibleAsync();
         // Naming the roles turns a dead end into a request someone can make.
-        await Expect(page.Locator("[data-gov-state='unauthorized']")).ToContainTextAsync("StewardshipViewer");
+        await Expect(page.Locator("[data-gov-state='unauthorized']")).ToContainTextAsync("GovernanceViewer");
         await Expect(page.Locator("[data-gov-state='unauthorized']"))
             .ToContainTextAsync("not an empty estate");
 

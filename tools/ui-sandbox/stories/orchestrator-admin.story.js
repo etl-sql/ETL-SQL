@@ -98,10 +98,10 @@ export default {
   id: 'orchestrator-admin-ui',
   title: 'Orchestrator — Job Administration UI',
   category: 'Orchestrator',
-  fixtures: FIXTURES,
-  render(container, key = 'schedules') {
-    const fixture = FIXTURES[key] || FIXTURES.schedules;
-    container.innerHTML = `
+  fixtures: Object.entries(FIXTURES).map(([id, fixture]) => ({ id, label: fixture.label })),
+  async mount(stage, fixtureId, ctx) {
+    const fixture = FIXTURES[fixtureId] || FIXTURES.schedules;
+    stage.innerHTML = `
       <div style="padding:20px;max-width:1100px;margin:0 auto;font-family:var(--portal-font, system-ui, sans-serif);">
         <div style="margin-bottom:16px;">
           <h2 style="margin:0 0 6px;font-size:1.25em;">${fixture.label}</h2>

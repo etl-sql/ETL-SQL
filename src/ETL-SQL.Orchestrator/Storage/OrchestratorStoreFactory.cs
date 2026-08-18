@@ -1,6 +1,7 @@
 using System;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Multitenancy;
 using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Orchestrator.Storage

@@ -9,6 +9,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Scheduling;
 using ETL_SQL.Orchestrator.Execution;

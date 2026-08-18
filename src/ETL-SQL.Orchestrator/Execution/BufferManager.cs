@@ -452,13 +452,13 @@ namespace ETL_SQL.Orchestrator.Execution
         {
             try
             {
-                var sessions = _sessionReservations.Keys.ToList();
+                var sessions = _sessionReservations.Keys.ToArray();
                 foreach (var sessionId in sessions)
                 {
                     if (_sessionReservations.TryGetValue(sessionId, out var dict))
                     {
                         var toReclaim = new List<IResourceReservation>();
-                        foreach (var reservation in dict.Values)
+                        foreach (var reservation in dict.Values.ToArray())
                         {
                             if (reservation.Owner != null && !reservation.Owner.IsAlive)
                             {
@@ -479,7 +479,7 @@ namespace ETL_SQL.Orchestrator.Execution
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during BufferManager zombie sweep.");
+                _logger.LogWarning(ex, "[ZOMBIE_RECLAMATION] Error during zombie reservation pruning.");
             }
         }
     }
