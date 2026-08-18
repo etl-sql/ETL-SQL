@@ -675,7 +675,7 @@ namespace ETL_SQL.App
         };
         private static readonly Option<bool> FleetExecuteOption = new("--execute", Array.Empty<string>())
         {
-            Description = "Walk the planned waves, cutting over every deployment the loaded signed authorization names."
+            Description = "Walk each wave in order, cutting over every deployment the loaded signed authorization names."
         };
         private static readonly Option<string?> FleetRootOption = new("--fleet-root", Array.Empty<string>())
         {
