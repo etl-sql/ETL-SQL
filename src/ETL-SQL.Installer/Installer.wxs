@@ -34,7 +34,7 @@
              The preset only sets the checkboxes; the user can still
              change individual selections before clicking Install.
         ══════════════════════════════════════════════════════════════════ -->
-        <Property Id="DEPLOY_PROFILE" Value="" Secure="yes" />
+        <Property Id="DEPLOY_PROFILE" Value="ENTERPRISE" Secure="yes" />
 
         <!-- ═══════════════════════════════════════════════════════════════
              Component-selection properties.
@@ -379,7 +379,7 @@
                 <Control Id="EntDesc"  Type="Text" X="36" Y="154" Width="310" Height="20" Transparent="yes" NoPrefix="yes" Text="All components: Workstation tools + Orchestrator + Admin Portal + Report Portal. Use on a dedicated server or HA node." />
 
                 <!-- Custom -->
-                <Control Id="CustomRadio" Type="RadioButton" X="20" Y="180" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="" />
+                <Control Id="CustomRadio" Type="RadioButton" X="20" Y="180" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="CUSTOM" />
                 <Control Id="CustomLabel" Type="Text" X="36" Y="180" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Custom" />
                 <Control Id="CustomDesc"  Type="Text" X="36" Y="194" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="Select individual components on the next screen." />
 

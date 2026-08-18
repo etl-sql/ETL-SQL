@@ -1,9 +1,18 @@
-﻿-- FLATFILE Kitchen Sink
+-- FLATFILE Kitchen Sink
 SET WHAT_IF OFF;
 SET ALLOW_FILE_TYPE_ACCESS = '.dat';
 
+IF NOT DIRECTORY_EXISTS('samples/output') CREATE DIRECTORY 'samples/output';
+IF FILE_EXISTS('samples/output/std.csv') DELETE FILE 'samples/output/std.csv';
+IF FILE_EXISTS('samples/output/pipe.txt') DELETE FILE 'samples/output/pipe.txt';
+IF FILE_EXISTS('samples/output/data.tsv.gz') DELETE FILE 'samples/output/data.tsv.gz';
+IF FILE_EXISTS('samples/output/secret.csv') DELETE FILE 'samples/output/secret.csv';
+IF FILE_EXISTS('samples/output/fixed.dat') DELETE FILE 'samples/output/fixed.dat';
+IF FILE_EXISTS('samples/output/custom.csv') DELETE FILE 'samples/output/custom.csv';
+IF FILE_EXISTS('samples/output/qual.csv') DELETE FILE 'samples/output/qual.csv';
+
 -- Data preparation
-SELECT 1 AS ID, 'Alice' AS Name, 'HR' AS Dept, 5000.50 AS Salary, CAST('2026-01-15' AS DATE) AS JoinDate INTO #sample;
+SELECT 1 AS ID, 'Alice' AS Name, 'HR' AS Dept, 5000.50 AS Salary, '2026-01-15' AS JoinDate INTO #sample;
 INSERT INTO #sample VALUES (2, 'Bob', 'IT', 6000.00, '2026-02-20');
 INSERT INTO #sample VALUES (3, 'Charlie', 'IT', 5500.00, '2026-03-05');
 

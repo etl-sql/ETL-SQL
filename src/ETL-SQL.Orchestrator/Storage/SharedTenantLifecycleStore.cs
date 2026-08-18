@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Globalization;
 using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Orchestrator.Storage;
@@ -99,8 +100,8 @@ public partial class RelationalJobHistoryStore
             states.Add(new(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
                 reader.GetInt32(4), reader.GetInt32(5), reader.GetInt64(6),
-                DateTimeOffset.Parse(reader.GetString(7)),
-                reader.IsDBNull(8) ? null : DateTimeOffset.Parse(reader.GetString(8)), reader.GetInt64(9)));
+                ParseDateTimeOffset(reader.GetValue(7)),
+                reader.IsDBNull(8) ? null : ParseDateTimeOffset(reader.GetValue(8)), reader.GetInt64(9)));
         }
         return states;
     }
@@ -486,9 +487,17 @@ public partial class RelationalJobHistoryStore
         if (!await reader.ReadAsync(ct)) return null;
         return new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
             reader.GetInt32(4), reader.GetInt32(5), reader.GetInt64(6),
-            DateTimeOffset.Parse(reader.GetString(7)),
-            reader.IsDBNull(8) ? null : DateTimeOffset.Parse(reader.GetString(8)), reader.GetInt64(9));
+            ParseDateTimeOffset(reader.GetValue(7)),
+            reader.IsDBNull(8) ? null : ParseDateTimeOffset(reader.GetValue(8)), reader.GetInt64(9));
     }
+
+    private static DateTimeOffset ParseDateTimeOffset(object value) => value switch
+    {
+        DateTimeOffset dto => dto,
+        DateTime dt => dt.Kind == DateTimeKind.Utc ? new DateTimeOffset(dt) : new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)),
+        string text => DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        _ => DateTimeOffset.UtcNow
+    };
 
     private static void AddCommand(
         DbCommand command, SharedTenantLifecycleCommand value, string tenantId)

@@ -4,6 +4,7 @@
 -- 1. File Operations (Verbose Syntax)
 -- Syntax: COPY FILE '<src>' TO '<dest>' [WITH(OVERWRITE=ON|OFF)]
 PRINT 'Demonstrating Verbose File Syntax';
+IF NOT DIRECTORY_EXISTS('samples/output') CREATE DIRECTORY 'samples/output';
 COPY FILE 'testdata/test_source.csv' TO 'samples/output/io_demo_copy.csv' WITH(OVERWRITE=ON);
 MOVE FILE 'samples/output/io_demo_copy.csv' TO 'samples/output/io_demo_moved.csv';
 DELETE FILE 'samples/output/io_demo_moved.csv';
