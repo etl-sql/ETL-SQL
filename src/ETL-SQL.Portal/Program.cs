@@ -117,6 +117,7 @@ builder.Services.AddScoped<PortalSupportBundleService>();
 builder.Services.AddSingleton<SupportAccessApprovalService>();
 builder.Services.AddScoped<SharedTenantResourceRegistry>();
 builder.Services.AddScoped<SharedTenantLifecycleService>();
+builder.Services.AddScoped<ControlPlaneDashboardService>();
 builder.Services.AddScoped<PolicyImpactService>();
 builder.Services.AddScoped<EnvironmentPlanService>();
 builder.Services.AddSingleton<ETL_SQL.Core.IMetadataManager, ETL_SQL.Core.Services.MetadataManager>();

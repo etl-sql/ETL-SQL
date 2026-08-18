@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Control Plane — ETL-SQL SaaS Platform Administration</title>
+  <link rel="stylesheet" href="/css/portal.css?v=0.18.0">
+  <style>
+    .cp-header {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1e293b;
+    }
+    .cp-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .cp-badge {
+      background: #3b82f6;
+      color: #ffffff;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .cp-security-banner {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-left: 4px solid #3b82f6;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      color: #94a3b8;
+      font-size: 0.875rem;
+    }
+    .cp-security-banner strong {
+      color: #f1f5f9;
+    }
+    .cp-kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .cp-kpi {
+      background: var(--portal-surface);
+      border: 1px solid var(--portal-border);
+      border-radius: var(--portal-radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .cp-kpi-label {
+      font-size: 0.8rem;
+      color: var(--portal-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .cp-kpi-val {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--portal-text);
+    }
+    .cp-kpi-sub {
+      font-size: 0.75rem;
+      color: var(--portal-muted);
+      margin-top: 4px;
+    }
+    .cp-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--portal-border);
+      margin-bottom: 20px;
+    }
+    .cp-tab {
+      padding: 10px 16px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--portal-muted);
+      border-bottom: 2px solid transparent;
+    }
+    .cp-tab.active {
+      color: var(--portal-accent);
+      border-bottom-color: var(--portal-accent);
+    }
+    .cp-panel {
+      display: none;
+    }
+    .cp-panel.active {
+      display: block;
+    }
+    .cp-state-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .cp-state-active { background: var(--portal-success-soft); color: var(--portal-success); }
+    .cp-state-provisioning { background: var(--portal-accent-soft); color: var(--portal-accent); }
+    .cp-state-maintenance { background: var(--portal-warning-soft); color: var(--portal-warning); }
+    .cp-state-quarantined { background: var(--portal-danger-soft); color: var(--portal-danger); }
+    .cp-state-deleting { background: var(--portal-danger-soft); color: var(--portal-danger); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="cp-header">
+    <div class="cp-title">
+      <span>ETL-SQL</span>
+      <span class="cp-badge">SaaS Control Plane</span>
+    </div>
+    <div style="font-size:0.85rem;color:#94a3b8;" id="operatorInfo">
+      Platform Operator: <strong>Attributed (Read-Only)</strong>
+    </div>
+  </div>
+
+  <div class="app-body admin-body" style="padding:24px;max-width:1400px;margin:0 auto;">
+    <div class="cp-security-banner">
+      <strong>Zero-Trust Platform Boundary:</strong> The Control Plane enforces Platform Identity Isolation (<code>PlatformAccessGrant</code>). It observes fleet health, quotas, worker capacity, and Gateway Broker connections. It physically cannot peek at customer scripts, datasets, query parameters, or raw row data.
+    </div>
+
+    <!-- KPI Strip -->
+    <div class="cp-kpis" id="kpiStrip">
+      <div class="cp-kpi">
+        <span class="cp-kpi-label">Active Tenants</span>
+        <span class="cp-kpi-val" id="kpiTenants">-</span>
+        <span class="cp-kpi-sub" id="kpiTenantsSub">Shared fleet</span>
+      </div>
+      <div class="cp-kpi">
+        <span class="cp-kpi-label">Active Executions</span>
+        <span class="cp-kpi-val" id="kpiExecutions">-</span>
+        <span class="cp-kpi-sub" id="kpiQueueDepth">Queue: -</span>
+      </div>
+      <div class="cp-kpi">
+        <span class="cp-kpi-label">Connected Gateways</span>
+        <span class="cp-kpi-val" id="kpiGateways">-</span>
+        <span class="cp-kpi-sub" id="kpiGatewayTenants">Across 0 tenants</span>
+      </div>
+      <div class="cp-kpi">
+        <span class="cp-kpi-label">Audit Outbox</span>
+        <span class="cp-kpi-val" id="kpiAuditOutbox">-</span>
+        <span class="cp-kpi-sub" id="kpiAuditPending">Pending</span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="cp-tabs" role="tablist">
+      <button class="cp-tab active" data-tab="tenants">Tenant Estate</button>
+      <button class="cp-tab" data-tab="audit">Platform Audit Log</button>
+      <button class="cp-tab" data-tab="fleet">Worker &amp; Gateway Fleet</button>
+    </div>
+
+    <!-- Panels -->
+    <div class="cp-panel active" id="panel-tenants">
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <h3 style="margin:0;font-size:1.1rem;">Tenant Inventory</h3>
+            <p style="margin:4px 0 0;font-size:0.85rem;color:var(--portal-muted);">Operational status and quota allocations for all registered tenants.</p>
+          </div>
+          <input type="search" id="tenantSearch" placeholder="Filter tenants..." style="padding:6px 12px;border:1px solid var(--portal-border);border-radius:4px;font-size:0.85rem;width:240px;">
+        </div>
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+          <table class="data-table" style="width:100%;border-collapse:collapse;" id="tenantTable">
+            <thead>
+              <tr style="text-align:left;border-bottom:1px solid var(--portal-border);background:var(--portal-surface-subtle);">
+                <th style="padding:10px 16px;">Tenant ID</th>
+                <th style="padding:10px 16px;">State</th>
+                <th style="padding:10px 16px;">Release</th>
+                <th style="padding:10px 16px;">Concurrent Jobs</th>
+                <th style="padding:10px 16px;">Storage Quota</th>
+                <th style="padding:10px 16px;">Active / Queued</th>
+                <th style="padding:10px 16px;">Gateways</th>
+                <th style="padding:10px 16px;">Quota Load</th>
+              </tr>
+            </thead>
+            <tbody id="tenantTableBody">
+              <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--portal-muted);">Loading tenant inventory...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="cp-panel" id="panel-audit">
+      <div class="card">
+        <div class="card-header">
+          <h3 style="margin:0;font-size:1.1rem;">Platform Audit Trail</h3>
+          <p style="margin:4px 0 0;font-size:0.85rem;color:var(--portal-muted);">Immutable audit receipts for operator-driven lifecycle actions.</p>
+        </div>
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+          <table class="data-table" style="width:100%;border-collapse:collapse;" id="auditTable">
+            <thead>
+              <tr style="text-align:left;border-bottom:1px solid var(--portal-border);background:var(--portal-surface-subtle);">
+                <th style="padding:10px 16px;">Operation ID</th>
+                <th style="padding:10px 16px;">Tenant</th>
+                <th style="padding:10px 16px;">Kind</th>
+                <th style="padding:10px 16px;">Status</th>
+                <th style="padding:10px 16px;">Operator</th>
+                <th style="padding:10px 16px;">Auth Ref</th>
+                <th style="padding:10px 16px;">Reason</th>
+                <th style="padding:10px 16px;">Receipt Hash</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--portal-muted);">Loading audit trail...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="cp-panel" id="panel-fleet">
+      <div class="card">
+        <div class="card-header">
+          <h3 style="margin:0;font-size:1.1rem;">Worker Pool &amp; Gateway Capacity</h3>
+          <p style="margin:4px 0 0;font-size:0.85rem;color:var(--portal-muted);">Shared compute nodes, OCI sandbox limits, and Gateway broker health.</p>
+        </div>
+        <div class="card-body" style="padding:20px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+            <div style="background:var(--portal-surface-subtle);padding:16px;border-radius:6px;border:1px solid var(--portal-border);">
+              <h4 style="margin:0 0 10px;font-size:0.95rem;">Compute &amp; Sandboxing</h4>
+              <ul style="margin:0;padding-left:20px;font-size:0.85rem;color:var(--portal-text-soft);line-height:1.6;">
+                <li>Isolation Profile: <strong>Hardened OCI Sandbox (runc)</strong></li>
+                <li>Mount Policy: <strong>Per-Attempt Scratch Mounts (No cross-tenant residue)</strong></li>
+                <li>Process Trimming: <strong>Lean Evaluator Profile</strong></li>
+                <li>Noisy Neighbor Protection: <strong>Strict Fair-Share Fifo Queues</strong></li>
+              </ul>
+            </div>
+            <div style="background:var(--portal-surface-subtle);padding:16px;border-radius:6px;border:1px solid var(--portal-border);">
+              <h4 style="margin:0 0 10px;font-size:0.95rem;">Gateway Broker Posture</h4>
+              <ul style="margin:0;padding-left:20px;font-size:0.85rem;color:var(--portal-text-soft);line-height:1.6;">
+                <li>Protocol: <strong>Reverse WebSocket (Strict Egress Fencing)</strong></li>
+                <li>Credentials: <strong>One-Time Consumable Tokens + Thumbprint Binding</strong></li>
+                <li>Frame Traffic Metering: <strong>Attributed into ITenantMeteringLedger</strong></li>
+                <li>Replay Protection: <strong>Frame-Level Operation Bounds</strong></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/control-plane.js?v=0.18.0"></script>
+</body>
+</html>

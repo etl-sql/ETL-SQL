@@ -723,15 +723,20 @@ checked off meaningfully. Split:
         actual read/written storage byte metrics.
       - Partitioning and hostile fleet attribution resistance proven via `TenantMeteringLedgerTests`
         and `SharedTenantMeteringIntegrationTests`.
-- [ ] **SaaS Multi-Tenancy — Control Plane Dashboard (Platform Admin UI).** (ROADMAP Phase 2 maturity goal).
+- [x] **SaaS Multi-Tenancy — Control Plane Dashboard (Platform Admin UI).** *(delivered 2026-08-18.)*
       Dedicated visual dashboard for fleet observability, tenant lifecycle management, and resource
       monitoring, physically separated from the customer-facing `ETL-SQL.Portal`.
-      - **Physical separation & identity isolation:** Hosted as an isolated endpoint/application;
-        authenticates platform principals only via `PlatformAccessGrant` with zero capability to mint
-        tenant sessions or inspect tenant raw scripts/data.
+      - **Physical separation & identity isolation:** Hosted as an isolated endpoint/application
+        (`/control-plane.html` and `api/platform/control-plane/*`); authenticates platform principals
+        only via `PlatformAccessGrant` / `X-Portal-Platform-Key` with zero capability to mint tenant
+        sessions or inspect tenant raw scripts/data.
       - **Fleet observability:** Real-time visibility into shared worker pool utilization, Gateway Broker
-        health, tenant quota headroom, queue depth, and noisy-neighbor containment.
-      - **Platform audit trail:** Attributed audit receipts for all operator-driven tenant lifecycle events.
+        health, tenant quota headroom, queue depth, and noisy-neighbor containment via `ControlPlaneDashboardService`.
+      - **Platform audit trail:** Attributed audit receipts with SHA-256 integrity hashes for all
+        operator-driven tenant lifecycle events.
+      - **UI & Sandbox:** Shipped standalone platform admin interface and interactive UI sandbox
+        story (`control-plane-dashboard.story.js`) with complete Playwright and unit test coverage
+        (`ControlPlaneDashboardTests`, `ControlPlaneDashboardUiTests`).
 - [ ] **SaaS Testing — API Load and Soak Testing.** (ROADMAP Phase 2 maturity goal). Target
       Orchestrator and Portal APIs with sustained multi-tenant concurrency (k6 / JMeter) to validate
       connection pooling, fair-share queueing, and memory stability under high tenant density.

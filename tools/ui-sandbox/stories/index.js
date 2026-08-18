@@ -24,8 +24,10 @@ import orchestratorRunOverrides from './orchestrator-run-overrides.story.js';
 import orchestratorCheckpointResume from './orchestrator-checkpoint-resume.story.js';
 import orchestratorAcl from './orchestrator-acl.story.js';
 import orchestratorAdmin from './orchestrator-admin.story.js';
+import controlPlaneDashboard from './control-plane-dashboard.story.js';
 
 export const stories = [
+  controlPlaneDashboard,
   triageBoard,
   orchestratorAdmin,
   orchestratorRunOverrides,
