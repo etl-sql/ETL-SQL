@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Gateway;
 using ETL_SQL.Portal.Filters;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -12,7 +13,7 @@ namespace ETL_SQL.Portal.Controllers;
 /// Administrative lifecycle for Gateway enrollments (SaaS Tenant Isolation §11.3).
 ///
 /// <para>Allows tenant administrators to issue one-time enrollment tokens, inspect enrollment states,
-/// and revoke Gateways. The enrollment secret token is returned only once at creation time and never
+/// list live cluster nodes, and revoke Gateways. The enrollment secret token is returned only once at creation time and never
 /// stored in plaintext or logged.</para>
 /// </summary>
 [ApiController]
@@ -22,7 +23,8 @@ namespace ETL_SQL.Portal.Controllers;
 public sealed class GatewayEnrollmentController(
     IGatewayEnrollmentStore enrollmentStore,
     AuditService audit,
-    RequestTenantContextAccessor tenantAccessor) : ControllerBase
+    RequestTenantContextAccessor tenantAccessor,
+    GatewaySessionRegistry? gatewayRegistry = null) : ControllerBase
 {
     public sealed record IssueEnrollmentRequest(
         string GatewayId,
@@ -35,13 +37,45 @@ public sealed class GatewayEnrollmentController(
         DateTimeOffset CreatedUtc,
         DateTimeOffset ExpiresUtc,
         DateTimeOffset? ConsumedUtc,
-        string? WorkloadPublicKeyThumbprint);
+        string? WorkloadPublicKeyThumbprint,
+        bool IsOnline = false,
+        int ActiveNodes = 0,
+        int TotalNodes = 0,
+        IReadOnlyList<GatewaySessionInfo>? Nodes = null);
 
     private string CurrentTenantId =>
         tenantAccessor.Current?.Tenant.Value ?? "default";
 
     private int CurrentUserId =>
         int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+
+    [HttpGet]
+    public async Task<IActionResult> List(CancellationToken ct)
+    {
+        var enrollments = await enrollmentStore.ListByTenantAsync(CurrentTenantId, ct);
+        var activeClusters = gatewayRegistry?.ListActiveClusters(CurrentTenantId) ?? [];
+        var clusterMap = activeClusters.ToDictionary(c => c.GatewayId, StringComparer.OrdinalIgnoreCase);
+
+        var list = enrollments.Select(e =>
+        {
+            clusterMap.TryGetValue(e.GatewayId, out var cluster);
+            var isOnline = cluster is { ActiveNodes: > 0 };
+            return new GatewayEnrollmentDto(
+                e.EnrollmentId,
+                e.GatewayId,
+                e.State,
+                e.CreatedUtc,
+                e.ExpiresUtc,
+                e.ConsumedUtc,
+                e.WorkloadPublicKeyThumbprint,
+                IsOnline: isOnline,
+                ActiveNodes: cluster?.ActiveNodes ?? 0,
+                TotalNodes: cluster?.TotalNodes ?? 0,
+                Nodes: cluster?.Nodes ?? []);
+        }).ToList();
+
+        return Ok(list);
+    }
 
     [HttpPost("enroll")]
     public async Task<IActionResult> Issue([FromBody] IssueEnrollmentRequest request, CancellationToken ct)

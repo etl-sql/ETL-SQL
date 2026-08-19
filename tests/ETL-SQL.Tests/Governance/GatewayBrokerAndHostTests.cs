@@ -54,6 +54,69 @@ public sealed class GatewayBrokerAndHostTests
     }
 
     [Fact]
+    public async Task Broker_MultiNodeCluster_AcceptsMultipleNodesAndLoadBalances()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry);
+
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        // Node 1 connects
+        using var client1 = new ClientWebSocket();
+        await client1.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(client1, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            NodeId = "node-alpha",
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+        var ack1 = await ReceiveFrameAsync(client1);
+        Assert.NotNull(ack1);
+        Assert.Equal(GatewayFrameKind.HelloAck, ack1.Kind);
+
+        // Node 2 connects with the same Gateway ID
+        using var client2 = new ClientWebSocket();
+        await client2.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(client2, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            NodeId = "node-beta",
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+        var ack2 = await ReceiveFrameAsync(client2);
+        Assert.NotNull(ack2);
+        Assert.Equal(GatewayFrameKind.HelloAck, ack2.Kind);
+
+        // Check cluster registry
+        var clusters = registry.ListActiveClusters(TenantA);
+        Assert.Single(clusters);
+        Assert.Equal(2, clusters[0].ActiveNodes);
+        Assert.Equal(2, clusters[0].TotalNodes);
+
+        // Round-robin load balancing
+        var pickedNodes = new HashSet<string>();
+        for (int i = 0; i < 4; i++)
+        {
+            Assert.True(registry.TryGet(TenantA, GatewayId, out var session));
+            Assert.NotNull(session);
+            pickedNodes.Add(session.NodeId);
+        }
+        Assert.Contains("node-alpha", pickedNodes);
+        Assert.Contains("node-beta", pickedNodes);
+
+        await client1.CloseAsync(WebSocketCloseStatus.NormalClosure, "Done", CancellationToken.None);
+        await client2.CloseAsync(WebSocketCloseStatus.NormalClosure, "Done", CancellationToken.None);
+    }
+
+    [Fact]
     public async Task Broker_RefusesUnenrolledOrMismatchedThumbprint()
     {
         var enrollmentStore = new InMemoryGatewayEnrollmentStore();

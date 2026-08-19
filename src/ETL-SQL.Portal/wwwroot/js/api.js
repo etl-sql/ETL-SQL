@@ -453,6 +453,17 @@ export const connectionsApi = {
     revokeAcl: (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl/${groupId}`, { method: 'DELETE' }),
 };
 
+// ── Admin — on-premises data gateways ────────────────────────────────────────
+
+export const gatewaysApi = {
+    list:   () => apiJson('/api/admin/gateways'),
+    get:    (gatewayId) => apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}`),
+    enroll: (gatewayId, expirationMinutes = 60) =>
+        apiJson('/api/admin/gateways/enroll', { method: 'POST', body: { gatewayId, expirationMinutes } }),
+    revoke: (gatewayId) =>
+        apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}/revoke`, { method: 'POST' }),
+};
+
 // ── Admin — enterprise policy authority ───────────────────────────────────────
 
 export const policyAuthorityApi = {

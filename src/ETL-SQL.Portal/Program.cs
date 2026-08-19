@@ -102,6 +102,8 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider
         ?? (ETL_SQL.Core.Governance.IConnectionCatalogProvider)ETL_SQL.Portal.Services.UnconfiguredConnectionCatalogProvider.Instance;
 });
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayEnrollmentStore, ETL_SQL.Core.Governance.InMemoryGatewayEnrollmentStore>();
+builder.Services.AddSingleton<ETL_SQL.Gateway.GatewaySessionRegistry>();
+builder.Services.AddSingleton<ETL_SQL.Gateway.GatewayBroker>();
 builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();
 builder.Services.AddScoped<StudioCapabilityStore>();

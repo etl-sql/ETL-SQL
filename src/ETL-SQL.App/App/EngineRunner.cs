@@ -220,6 +220,17 @@ namespace ETL_SQL.App
                 return await EnterpriseEnrollmentManager.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command is "gateway-setup" or "admin-gateway-setup")
+            {
+                return await GatewaySetupService.RunSetupAsync(
+                    ctx.PortalUrl,
+                    ctx.GatewayToken,
+                    ctx.GatewayId,
+                    ctx.GatewayNodeId,
+                    ctx.GatewayInstallService,
+                    ctx.GatewayNonInteractive);
+            }
+
             if (ctx.Command == "config-setup-jwt")
             {
                 return await RunSetupJwt(logger, ctx.UpdateConfig);

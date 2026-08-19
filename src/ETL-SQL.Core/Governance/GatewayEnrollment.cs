@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace ETL_SQL.Core.Governance;
 
 /// <summary>Lifecycle state of a Gateway enrollment.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum GatewayEnrollmentState
 {
     /// <summary>Issued by a tenant administrator and not yet consumed.</summary>
@@ -64,6 +66,9 @@ public interface IGatewayEnrollmentStore
 
     Task<GatewayEnrollment?> FindByGatewayAsync(
         string tenantId, string gatewayId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<GatewayEnrollment>> ListByTenantAsync(
+        string tenantId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Hashing for one-time enrollment tokens. Separate so every store agrees on the form.</summary>
@@ -195,6 +200,19 @@ public sealed class InMemoryGatewayEnrollmentStore(TimeProvider? timeProvider = 
             return Task.FromResult(_enrollments.Values.FirstOrDefault(enrollment =>
                 string.Equals(enrollment.TenantId, tenantId, StringComparison.Ordinal)
                 && string.Equals(enrollment.GatewayId, gatewayId, StringComparison.Ordinal)));
+        }
+    }
+
+    public Task<IReadOnlyList<GatewayEnrollment>> ListByTenantAsync(
+        string tenantId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        lock (_gate)
+        {
+            var list = _enrollments.Values
+                .Where(e => string.Equals(e.TenantId, tenantId, StringComparison.Ordinal))
+                .ToList();
+            return Task.FromResult<IReadOnlyList<GatewayEnrollment>>(list);
         }
     }
 }

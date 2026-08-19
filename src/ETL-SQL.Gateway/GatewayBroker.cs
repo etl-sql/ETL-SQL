@@ -65,9 +65,11 @@ public sealed class GatewayBroker(
         }, cancellationToken).ConfigureAwait(false);
 
         // 4. Register session
+        var nodeId = !string.IsNullOrWhiteSpace(helloFrame.NodeId) ? helloFrame.NodeId : Guid.NewGuid().ToString("N")[..8];
         var session = new ActiveGatewaySession(
             helloFrame.TenantId,
             helloFrame.GatewayId,
+            nodeId,
             helloFrame.WorkloadPublicKeyThumbprint,
             socket,
             maxFrameBytes,
@@ -76,7 +78,7 @@ public sealed class GatewayBroker(
 
         if (!sessionRegistry.TryRegister(session))
         {
-            await SendFrameAsync(socket, GatewayFrame.Fault(null, "Another session is already active for this Gateway."), cancellationToken).ConfigureAwait(false);
+            await SendFrameAsync(socket, GatewayFrame.Fault(null, "Another session is already active for this Gateway node."), cancellationToken).ConfigureAwait(false);
             await CloseSocketAsync(socket, "Conflict.", cancellationToken).ConfigureAwait(false);
             return;
         }
@@ -155,6 +157,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
 
     public string TenantId { get; }
     public string GatewayId { get; }
+    public string NodeId { get; }
     public string WorkloadPublicKeyThumbprint { get; }
     public DateTimeOffset ConnectedUtc { get; }
     public bool IsActive => _socket.State == WebSocketState.Open && !_closeTcs.Task.IsCompleted;
@@ -162,6 +165,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
     public ActiveGatewaySession(
         string tenantId,
         string gatewayId,
+        string nodeId,
         string workloadPublicKeyThumbprint,
         WebSocket socket,
         int maxFrameBytes,
@@ -170,6 +174,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
     {
         TenantId = tenantId;
         GatewayId = gatewayId;
+        NodeId = nodeId;
         WorkloadPublicKeyThumbprint = workloadPublicKeyThumbprint;
         _socket = socket;
         _maxFrameBytes = maxFrameBytes;

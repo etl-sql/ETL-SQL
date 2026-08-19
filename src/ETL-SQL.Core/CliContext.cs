@@ -293,4 +293,11 @@ public class CliContext
     public int EnterpriseMaxOfflineHours { get; set; } = 24;
     public bool EnterpriseAllowOfflineFailure { get; set; }
     public bool EnterpriseConfirm { get; set; }
+
+    // gateway commands
+    public string? GatewayToken { get; set; }
+    public string? GatewayId { get; set; }
+    public string? GatewayNodeId { get; set; }
+    public bool GatewayInstallService { get; set; }
+    public bool GatewayNonInteractive { get; set; }
 }

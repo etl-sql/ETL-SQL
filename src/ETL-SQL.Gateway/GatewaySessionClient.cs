@@ -10,8 +10,12 @@ public sealed record GatewaySessionOptions(
     string TenantId,
     string GatewayId,
     string WorkloadPublicKeyThumbprint,
+    string? NodeId = null,
     int MaxFrameBytes = 1 << 20)
 {
+    /// <summary>Resolved node identity (explicit or host machine name).</summary>
+    public string EffectiveNodeId => !string.IsNullOrWhiteSpace(NodeId) ? NodeId : Environment.MachineName;
+
     /// <summary>
     /// The Gateway is outbound-only: it dials the broker and never listens. A non-TLS destination is
     /// refused outside loopback, so a misconfiguration cannot quietly downgrade the session.
@@ -66,6 +70,7 @@ public sealed class GatewaySessionClient(
             Kind = GatewayFrameKind.Hello,
             TenantId = options.TenantId,
             GatewayId = options.GatewayId,
+            NodeId = options.EffectiveNodeId,
             WorkloadPublicKeyThumbprint = options.WorkloadPublicKeyThumbprint
         }, cancellationToken).ConfigureAwait(false);
 

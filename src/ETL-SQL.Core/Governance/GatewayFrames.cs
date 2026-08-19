@@ -44,6 +44,7 @@ public sealed record GatewayFrame
 
     public string? TenantId { get; init; }
     public string? GatewayId { get; init; }
+    public string? NodeId { get; init; }
     public string? WorkloadPublicKeyThumbprint { get; init; }
 
     public string? OperationId { get; init; }

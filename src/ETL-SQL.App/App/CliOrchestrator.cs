@@ -906,6 +906,31 @@ namespace ETL_SQL.App
             Description = "Confirm the destructive enterprise unenrollment operation."
         };
 
+        private static readonly Option<string?> GatewayPortalOption = new("--portal")
+        {
+            Description = "Portal URL (e.g. https://portal.company.com)."
+        };
+        private static readonly Option<string?> GatewayTokenOption = new("--token")
+        {
+            Description = "One-time enrollment token issued by Portal."
+        };
+        private static readonly Option<string?> GatewayIdOption = new("--gateway-id")
+        {
+            Description = "Logical gateway or cluster ID."
+        };
+        private static readonly Option<string?> GatewayNodeIdOption = new("--node-id")
+        {
+            Description = "Node machine identifier (default: host machine name)."
+        };
+        private static readonly Option<bool> GatewayInstallServiceOption = new("--install-service")
+        {
+            Description = "Register as a background system service (Windows Service / systemd)."
+        };
+        private static readonly Option<bool> GatewayNonInteractiveOption = new("--non-interactive", new[] { "-y" })
+        {
+            Description = "Run in non-interactive mode without prompting."
+        };
+
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
             var rootCommand = new RootCommand("ETL-SQL Engine - Modern Data Integration Tool");
@@ -1040,9 +1065,10 @@ namespace ETL_SQL.App
             };
             extractSpecCommand.SetAction(context => Dispatch(context, "extract-spec", handler));
 
-            // 13. ADMIN Command group — supported operator workflows (doctor, support-bundle, backup, restore)
+            // 13. ADMIN Command group — supported operator workflows (doctor, support-bundle, backup, restore, gateway)
             var adminCommand = new Command("admin", "Operator and administration commands");
             adminCommand.Add(BuildDoctorCommand(handler));
+            adminCommand.Add(BuildGatewayCommand(handler));
             var supportBundleCommand = new Command("support-bundle", "Collect a redacted support archive (config, health, logs, database metrics)")
             {
                 BundleOutputOption,
@@ -1807,8 +1833,27 @@ namespace ETL_SQL.App
             rootCommand.Add(adminCommand);
             rootCommand.Add(enterpriseCommand);
             rootCommand.Add(initCommand);
+            rootCommand.Add(BuildGatewayCommand(handler));
 
             return rootCommand;
+        }
+
+        // Builds a fresh Gateway command instance.
+        private static Command BuildGatewayCommand(Func<CliContext, Task<int>> handler)
+        {
+            var gatewayCommand = new Command("gateway", "On-premises Data Gateway administration and setup");
+            var setupCommand = new Command("setup", "Configure and enroll this machine as an on-premises Data Gateway node")
+            {
+                GatewayPortalOption,
+                GatewayTokenOption,
+                GatewayIdOption,
+                GatewayNodeIdOption,
+                GatewayInstallServiceOption,
+                GatewayNonInteractiveOption
+            };
+            setupCommand.SetAction(context => Dispatch(context, "gateway-setup", handler));
+            gatewayCommand.Add(setupCommand);
+            return gatewayCommand;
         }
 
         // Builds a fresh Doctor command instance. A System.CommandLine Command cannot be attached to
@@ -2173,6 +2218,15 @@ namespace ETL_SQL.App
             else if (commandName == "enterprise-unenroll")
             {
                 cliContext.EnterpriseConfirm = res.GetValue(EnterpriseConfirmOption);
+            }
+            else if (commandName is "gateway-setup" or "admin-gateway-setup")
+            {
+                cliContext.PortalUrl = res.GetValue(GatewayPortalOption);
+                cliContext.GatewayToken = res.GetValue(GatewayTokenOption);
+                cliContext.GatewayId = res.GetValue(GatewayIdOption);
+                cliContext.GatewayNodeId = res.GetValue(GatewayNodeIdOption);
+                cliContext.GatewayInstallService = res.GetValue(GatewayInstallServiceOption);
+                cliContext.GatewayNonInteractive = res.GetValue(GatewayNonInteractiveOption);
             }
             else if (commandName == "init")
             {
