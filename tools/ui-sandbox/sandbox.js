@@ -39,7 +39,7 @@ let currentFixtureId = null;
 let currentInstance = null;
 let searchQuery = '';
 let activeCategoryFilter = 'all';
-let collapsedCategories = new Set();
+let collapsedCategories = new Set(categoryOrder);
 let stageTheme = 'light'; // 'light' or 'dark'
 
 // Parse URL Hash on initial load
@@ -219,7 +219,7 @@ function renderSidebar() {
       btn.addEventListener('click', () => {
         currentStory = story;
         currentFixtureId = null;
-        selectStory();
+        selectStory(true);
       });
 
       itemsContainer.appendChild(btn);
@@ -316,9 +316,8 @@ async function mount() {
   syncUrlHash();
 }
 
-function selectStory() {
-  // Ensure the category containing the active story is expanded
-  if (currentStory.category && collapsedCategories.has(currentStory.category)) {
+function selectStory(autoExpand = false) {
+  if (autoExpand && currentStory.category && collapsedCategories.has(currentStory.category)) {
     collapsedCategories.delete(currentStory.category);
   }
 
@@ -330,10 +329,12 @@ function selectStory() {
   renderFixtures();
   mount();
 
-  // Scroll active item into view
-  const activeBtn = $storiesNav.querySelector('.story-link.is-active');
-  if (activeBtn) {
-    activeBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  // Scroll active item into view if expanded
+  if (!collapsedCategories.has(currentStory.category)) {
+    const activeBtn = $storiesNav.querySelector('.story-link.is-active');
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
   }
 }
 
@@ -410,7 +411,7 @@ window.addEventListener('keydown', (e) => {
     if (nextIndex !== currentIndex && visibleStories[nextIndex]) {
       currentStory = visibleStories[nextIndex];
       currentFixtureId = null;
-      selectStory();
+      selectStory(true);
     }
   }
 });
