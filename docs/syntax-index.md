@@ -163,8 +163,10 @@ Statements are the top-level actions in an ETL-SQL script.
 | `eng.bundle_dependencies` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.bundle_dependencies](reference/eng/bundle-dependencies.md) |
 | `eng.bundle_files` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.bundle_files](reference/eng/bundle-files.md) |
 | `eng.bundles` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.bundles](reference/eng/bundles.md) |
+| `eng.capabilities` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.capabilities](reference/eng/capabilities.md) |
 | `eng.columns` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.columns](reference/eng/columns.md) |
 | `eng` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng](reference/eng/eng.md) |
+| `eng.effective_permissions` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.effective_permissions](reference/eng/effective-permissions.md) |
 | `eng.job_statement_metrics` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.job_statement_metrics](reference/eng/job-statement-metrics.md) |
 | `eng.lineage_history` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.lineage_history](reference/eng/lineage-history.md) |
 | `eng.lineage` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.lineage](reference/eng/lineage.md) |
@@ -176,6 +178,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `eng.safe_zones` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.safe_zones](reference/eng/safe-zones.md) |
 | `eng.sessions` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.sessions](reference/eng/sessions.md) |
 | `eng.tags` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.tags](reference/eng/tags.md) |
+| `eng.tenant_context` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.tenant_context](reference/eng/tenant-context.md) |
 | `GENERATE` | DML | [Statement Reference](reference/statements/README.md) | [GENERATE.md](reference/statements/session-control/generate.md) |
 | `CASE` | Expressions | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
 | `WITH` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
@@ -1115,10 +1118,13 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `eng.bundles` | Orch | Queryable virtual table for latest published bundle versions |
 | `eng.bundle_files` | Orch | Queryable virtual table for files in published bundle versions |
 | `eng.bundle_dependencies` | Orch | Queryable virtual table for packaged `RUN SCRIPT` dependencies |
+| `eng.capabilities` | Governance | Queryable virtual table for provisioned capabilities and mounts |
 | `eng.columns` | Diagnostics | Queryable virtual table for session and connection column metadata |
 | `eng.connections` | Diagnostics | Queryable virtual table for active session connections |
 | `eng.connection_config` | Diagnostics | Queryable virtual table for redacted active connection configuration |
+| `eng.effective_permissions` | Governance | Queryable virtual table for effective principal permissions |
 | `eng.tables` | Diagnostics | Queryable virtual table for session and connection table metadata |
+| `eng.tenant_context` | Governance | Queryable virtual table for verified tenant identity and isolation |
 | `eng.variables` | Diagnostics | Queryable virtual table for session variables with sensitive values masked |
 | `eng.views` | Diagnostics | Queryable virtual table for session view definitions |
 | `eng.version` | Diagnostics | Queryable virtual table for engine version metadata |

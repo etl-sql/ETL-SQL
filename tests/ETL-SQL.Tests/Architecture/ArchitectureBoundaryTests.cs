@@ -51,6 +51,7 @@ public sealed class ArchitectureBoundaryTests
         ["Orchestrator"] = 3,
         ["ReportHosting"] = 3,
         ["Portal.Migrations.Postgres"] = 3,
+        ["Gateway"] = 3,
         ["LanguageServer"] = 4,
         ["Orchestrator.Service"] = 4,
         ["ReportPlayer"] = 4,

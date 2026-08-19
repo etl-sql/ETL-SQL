@@ -7,12 +7,14 @@
 | [eng.bundle_dependencies](bundle-dependencies.md) | - Engine Catalog |
 | [eng.bundle_files](bundle-files.md) | - Engine Catalog |
 | [eng.bundles](bundles.md) | - Engine Catalog |
+| [`eng.capabilities`](capabilities.md) | Server-provisioned runtime capabilities and bind-mounted assets. |
 | [eng.columns](columns.md) | - Engine Catalog |
 | [eng.connection_config](connection-config.md) | - Engine Catalog |
 | [eng.connections](connections.md) | - Engine Catalog |
 | [eng.data_quality_failures](data-quality-failures.md) | Orchestrator history. Failed sample values are never persisted or returned. |
 | [`eng.data_quality_rules`](data-quality-rules.md) | Data-quality rules captured from `@expect` and `@fail` metadata in the current session. |
 | [eng.data_quality_status](data-quality-status.md) | configured Orchestrator history. Qualify it with an `ORCHESTRATOR` connection to query a remote |
+| [`eng.effective_permissions`](effective-permissions.md) | Computed access rights, roles, and administrative scopes for the active principal. |
 | [ENG](eng.md) | - **eng.connections** - Active session connections. |
 | [eng.host_metrics](host-metrics.md) | - Engine Catalog |
 | [eng.job_history](job-history.md) | - Engine Catalog |
@@ -33,6 +35,7 @@
 | [eng.stewardship_score](stewardship-score.md) | Weights and required-tag rules come from the nearest `etlsql-policy.json`. Without a workspace policy, the standard required tags are `@owner`, `@s... |
 | [eng.tables](tables.md) | - Engine Catalog |
 | [eng.tags](tags.md) | - Engine Catalog |
+| [`eng.tenant_context`](tenant-context.md) | Verified tenant identity, isolation mode, storage grants, and root path boundaries. |
 | [eng.variables](variables.md) | - Engine Catalog |
 | [eng.version](version.md) | - Engine Catalog |
 | [eng.views](views.md) | - Engine Catalog |

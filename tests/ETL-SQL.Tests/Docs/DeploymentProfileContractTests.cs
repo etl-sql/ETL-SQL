@@ -81,7 +81,7 @@ public sealed class DeploymentProfileContractTests
     }
 
     private static string Standard() => File.ReadAllText(Path.Combine(
-        RepoRoot, "docs", "architecture", "standards", "Deployment_Profile_Standards.md"));
+        RepoRoot, "docs", "architecture", "standards", "Deployment_Profile_Standards.md")).Replace("\r\n", "\n");
 
     private static string FindRepoRoot()
     {
