@@ -495,18 +495,32 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
     {
         // The file appearing is not the checkpoint being finished: killing the sandbox between the
         // store creating its database and finishing the write leaves state the next attempt cannot
-        // read, which looks exactly like resume being broken. Wait until the size has settled.
+        // read, which looks exactly like resume being broken. Wait until the variables table
+        // is committed and queryable.
         var metadata = Path.Combine(SessionRoot, "tenant-a", sessionId, "metadata.db");
         // flaky-wait-budget-ok: checkpoint file settling deadline
         var deadline = DateTime.UtcNow.AddSeconds(120);
-        long? previousLength = null;
         while (DateTime.UtcNow < deadline)
         {
             if (File.Exists(metadata))
             {
-                var length = new FileInfo(metadata).Length;
-                if (length > 0 && length == previousLength) return;
-                previousLength = length;
+                try
+                {
+                    await using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={metadata};Mode=ReadOnly");
+                    await conn.OpenAsync();
+                    await using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT COUNT(*) FROM variables WHERE name LIKE '%Stage%';";
+                    var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                    if (count > 0)
+                    {
+                        Microsoft.Data.Sqlite.SqliteConnection.ClearPool(conn);
+                        return;
+                    }
+                }
+                catch
+                {
+                    // Database may be locked or initializing schema; retry next poll
+                }
             }
 
             await Task.Delay(150);
