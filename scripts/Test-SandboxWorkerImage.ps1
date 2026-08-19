@@ -18,10 +18,21 @@ $tag = if ([string]::IsNullOrWhiteSpace($Tag)) {
 }
 
 Write-Host "==> Building sandbox worker image with temporary tag: $tag"
-& docker build -t $tag -f "$repoRoot/src/ETL-SQL.App/Dockerfile.sandbox" $repoRoot
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Docker build failed."
-    exit $LASTEXITCODE
+$buildSuccess = $false
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+    & docker build -t $tag -f "$repoRoot/src/ETL-SQL.App/Dockerfile.sandbox" $repoRoot
+    if ($LASTEXITCODE -eq 0) {
+        $buildSuccess = $true
+        break
+    }
+    if ($attempt -lt 3) {
+        Write-Warning "Docker build attempt $attempt failed; retrying in $($attempt * 2) seconds..."
+        Start-Sleep -Seconds ($attempt * 2)
+    }
+}
+if (-not $buildSuccess) {
+    Write-Error "Docker build failed after 3 attempts."
+    exit 1
 }
 
 Write-Host "==> Obtaining content image ID..."

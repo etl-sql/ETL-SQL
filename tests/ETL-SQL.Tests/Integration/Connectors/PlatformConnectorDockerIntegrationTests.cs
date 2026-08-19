@@ -304,16 +304,34 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         public static async Task BuildDockerImageAsync(string dockerfile, string imageName)
         {
-            var (exitCode, output) = await RunDockerAsync(
-                FindRepoRoot(),
-                timeoutMs: 600_000,
-                "build", "--progress=plain", "-f", dockerfile, "-t", imageName, ".");
+            var repoRoot = FindRepoRoot();
+            const int maxAttempts = 3;
+            var lastExitCode = -1;
+            var lastOutput = string.Empty;
 
-            if (exitCode != 0)
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                throw new InvalidOperationException(
-                    $"Docker image build failed for {imageName} with exit code {exitCode}.{Environment.NewLine}{output}");
+                var (exitCode, output) = await RunDockerAsync(
+                    repoRoot,
+                    timeoutMs: 600_000,
+                    "build", "--progress=plain", "-f", dockerfile, "-t", imageName, ".");
+
+                if (exitCode == 0)
+                {
+                    return;
+                }
+
+                lastExitCode = exitCode;
+                lastOutput = output;
+
+                if (attempt < maxAttempts)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(attempt * 2));
+                }
             }
+
+            throw new InvalidOperationException(
+                $"Docker image build failed for {imageName} after {maxAttempts} attempts with exit code {lastExitCode}.{Environment.NewLine}{lastOutput}");
         }
 
         /// <summary>

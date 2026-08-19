@@ -280,6 +280,30 @@ jobs:
             sudo ln -s "$LDAP_SO" /usr/lib/libldap-2.5.so.0 || true
           fi
 
+      - name: Pre-pull base Docker images
+        shell: pwsh
+        run: |
+          $images = @(
+            'mcr.microsoft.com/dotnet/sdk:10.0',
+            'mcr.microsoft.com/dotnet/aspnet:10.0',
+            'mcr.microsoft.com/dotnet/runtime:10.0'
+          )
+          foreach ($img in $images) {
+            $pulled = $false
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+              Write-Host "Pulling $img (attempt $attempt/5)..."
+              docker pull $img
+              if ($LASTEXITCODE -eq 0) {
+                $pulled = $true
+                break
+              }
+              Start-Sleep -Seconds ($attempt * 2)
+            }
+            if (-not $pulled) {
+              Write-Warning "Failed to pre-pull $img after 5 attempts; continuing to build step."
+            }
+          }
+
       - name: Build sandbox worker image
         shell: pwsh
         run: .\scripts\Test-SandboxWorkerImage.ps1 -Tag etlsql-sandbox-worker-test:local -Keep

@@ -185,14 +185,31 @@ public sealed class SharedTenantMeteringIntegrationTests : IDisposable
 
         public static async Task<LoopbackWebSocketServer> StartAsync(Func<WebSocket, CancellationToken, Task> handler)
         {
-            var listener = new HttpListener();
-            var port = RandomNumberGenerator.GetInt32(40000, 50000);
-            var prefix = $"http://127.0.0.1:{port}/";
-            listener.Prefixes.Add(prefix);
-            listener.Start();
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                var listener = new HttpListener();
+                var port = RandomNumberGenerator.GetInt32(30000, 60000);
+                var prefix = $"http://127.0.0.1:{port}/";
+                try
+                {
+                    listener.Prefixes.Add(prefix);
+                    listener.Start();
 
-            var wsUri = new Uri($"ws://127.0.0.1:{port}/");
-            return new LoopbackWebSocketServer(listener, wsUri, handler);
+                    var wsUri = new Uri($"ws://127.0.0.1:{port}/");
+                    return new LoopbackWebSocketServer(listener, wsUri, handler);
+                }
+                catch (HttpListenerException)
+                {
+                    try { listener.Close(); } catch { }
+                }
+                catch (Exception)
+                {
+                    try { listener.Close(); } catch { }
+                    throw;
+                }
+            }
+
+            throw new InvalidOperationException("Could not bind a loopback WebSocket server port after multiple attempts.");
         }
 
         private async Task ListenLoop()
@@ -224,8 +241,8 @@ public sealed class SharedTenantMeteringIntegrationTests : IDisposable
         {
             _cts.Cancel();
             try { _listener.Stop(); } catch { }
+            try { _listener.Close(); } catch { }
             try { await _listenTask.WaitAsync(TimeSpan.FromMilliseconds(500)); } catch { }
-            _listener.Close();
             _cts.Dispose();
         }
     }

@@ -297,11 +297,30 @@ namespace ETL_SQL.Tests.Analysis
                 transformationKind: TransformationKind.Aggregation,
                 transformationExpression: "SUM(amount)");
 
-            var port = GetFreePort();
-            var prefix = $"http://localhost:{port}/ol/";
-            var listener = new HttpListener();
-            listener.Prefixes.Add(prefix);
-            listener.Start();
+            HttpListener? listener = null;
+            string prefix = "";
+            for (var attempt = 0; attempt < 8; attempt++)
+            {
+                var port = GetFreePort();
+                prefix = $"http://localhost:{port}/ol/";
+                var l = new HttpListener();
+                try
+                {
+                    l.Prefixes.Add(prefix);
+                    l.Start();
+                    listener = l;
+                    break;
+                }
+                catch (HttpListenerException)
+                {
+                    try { l.Close(); } catch { }
+                }
+            }
+
+            if (listener == null)
+            {
+                throw new InvalidOperationException("Could not bind an HttpListener port for OpenLineage export test.");
+            }
 
             string? body = null;
             var serverTask = Task.Run(async () =>
