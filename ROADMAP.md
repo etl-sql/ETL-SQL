@@ -295,6 +295,7 @@ The insight driving this track: **the grammar is the differentiator and the rend
 - **Stage 3: `CUSTOM` Multi-Layer Syntax & Vega-Lite Translator:** Add parser and AST support for `CREATE VISUAL ... AS CUSTOM (...)` with `SCALES (...)` block and `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`. *(Note: This stage establishes the `ComponentTooltipSpec` hook for the [Visual and Container Tooltips](#reporting--presentation--visual-and-container-tooltips-viz-in-tooltip) roadmap track).*
 - **Stage 4: Native Vector SVG Micro-Renderer:** Implement lightweight browser SVG/DOM renderer for Tier 2 Cartesian & Circular charts (`BAR`, `LINE`, `SCATTER`, `PIE`, `COMBO`, `WATERFALL`). Conditionally omit ECharts for reports containing only Tier 1 & Tier 2 visuals.
 - **Stage 5: Complete ECharts Retirement via D3:** Replace remaining Tier 3 complex visuals (`MAP` via `d3-geo`, `TREEMAP`/`SUNBURST` via `d3-hierarchy`, `SANKEY` via `d3-sankey`, `NETWORK` via `d3-force`) with specialized D3 micro-packages. Completely retire `echarts.min.js` from the repository, achieving a ~35 KB total standalone runtime footprint.
+- **Stage 6: Advanced Composite Samples & Cookbook:** Create production-grade sample scripts for high-impact composite visuals (Dumbbell variance plots, Bullet graphs with qualitative zones, Ridgeline distribution plots). Author comprehensive guides: *"How to Build a CUSTOM Chart"*, *"Enhancing Standard Charts with Overlay Layers"*, and add 10+ recipes to the Reporting Cookbook.
 
 ---
 
