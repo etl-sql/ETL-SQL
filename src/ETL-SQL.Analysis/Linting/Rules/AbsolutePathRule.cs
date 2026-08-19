@@ -130,6 +130,7 @@ public class AbsolutePathRule : ILintRule
         if (string.IsNullOrWhiteSpace(path)) return;
         if (path.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return;
         if (path.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)) return;
+        if (path.StartsWith("CAPABILITY:", StringComparison.OrdinalIgnoreCase)) return;
         if (path.StartsWith("SHARED:", StringComparison.OrdinalIgnoreCase)) return; // catalog alias, not a path
         if (path.Contains("://")) return; // Skip URLs (http, s3, etc)
 

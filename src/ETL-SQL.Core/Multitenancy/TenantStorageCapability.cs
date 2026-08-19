@@ -98,6 +98,12 @@ public sealed class TenantStorageCapability
             return resolved;
         }
 
+        // Bind-mounted sandbox capabilities are server-provisioned read-only assets.
+        if (write != true && SafePath.TryResolveWithinRoot(Governance.CapabilityReference.GetCapabilityRoot(), resolved, out _))
+        {
+            return resolved;
+        }
+
         throw new global::ETL_SQL.Services.SecurityException(
             $"Tenant storage capability denied {(write is null ? "path" : write.Value ? "write" : "read")} access outside its authorized run roots.");
     }

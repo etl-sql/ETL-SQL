@@ -23,6 +23,9 @@ public static partial class SecretRedactor
     [GeneratedRegex(@"\bSECRET:[A-Za-z0-9_.:/@\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex SecretReferencePattern();
 
+    [GeneratedRegex(@"\bCAPABILITY:[A-Za-z0-9_.:/@\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex CapabilityReferencePattern();
+
     [GeneratedRegex(@"\bSHARED:[A-Za-z0-9_.:/@\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex SharedReferencePattern();
 
@@ -74,6 +77,7 @@ public static partial class SecretRedactor
             || value.StartsWith("DPAPI-M:", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("MACHINE:", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("CAPABILITY:", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -87,6 +91,7 @@ public static partial class SecretRedactor
             return $"{prefix}:{Mask}";
         });
         redacted = SecretReferencePattern().Replace(redacted, $"SECRET:{Mask}");
+        redacted = CapabilityReferencePattern().Replace(redacted, $"CAPABILITY:{Mask}");
         redacted = SharedReferencePattern().Replace(redacted, $"SHARED:{Mask}");
         redacted = BearerPattern().Replace(redacted, $"Bearer {Mask}");
         redacted = UrlCredentialPattern().Replace(redacted, $"$1{Mask}@");

@@ -280,6 +280,15 @@ jobs:
             sudo ln -s "$LDAP_SO" /usr/lib/libldap-2.5.so.0 || true
           fi
 
+      - name: Build sandbox worker image
+        shell: pwsh
+        run: .\scripts\Test-SandboxWorkerImage.ps1 -Tag etlsql-sandbox-worker-test:local -Keep
+
+      - name: Enable hardened sandbox runtime (gVisor & local registry)
+        run: |
+          sudo bash ./scripts/enable-hardened-sandbox-lane.sh etlsql-sandbox-worker-test:local
+          echo "ETLSQL_SANDBOX_WORKER_DIGEST_IMAGE=$(cat /tmp/etlsql-pinned-worker-image)" >> $GITHUB_ENV
+
       - name: Run Docker Integration Tests
         shell: pwsh
         run: .\scripts\test-lane.ps1 -Lane integration -Configuration Release -NoRestore -NoBuild

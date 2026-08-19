@@ -160,20 +160,8 @@ cases in `OrchestratorJobApiAuthTests`.
 Recorded 2026-08-17 when "Scheduling, execution, and capacity" closed. Neither is part of that item's
 contract; both are the next thing each piece of it needs.
 
-- [ ] **Nothing consumes a mounted capability yet.** The delivery half is built and proven on a real
-      hardened runtime: handles resolve server-side, and material is bind-mounted read-only at
-      `/run/secrets/capabilities` with `ETLSQL_CAPABILITY_ROOT` naming the directory. But **no engine
-      code reads that variable**, and there is no `CAPABILITY:name` reference the way `SECRET:name`
-      exists. A script can only use a capability by hardcoding
-      `/run/secrets/capabilities/<handle>` as a file path, which works but is neither documented nor
-      checkable. Give capabilities a first-class reference resolved from the mounted root, so the
-      engine fails a missing capability by name instead of failing to open a file.
-- [ ] **CI runs none of the three sandbox lifecycle lanes.** Standard, Hardened, and Dedicated all
-      exist and pass, and all three run only by hand — the Hardened and Dedicated lanes additionally
-      need a prepared runtime, which is what `scripts/enable-hardened-sandbox-lane.sh` is for. A lane
-      nobody runs decays into a lane that no longer works, and this is the evidence the hostile-tenant
-      claims rest on. Add at least the Standard lane to CI, and the hardened pair to a runner that
-      can register gVisor.
+- [x] **Nothing consumes a mounted capability yet.** Fixed: Introduced `CapabilityReference` (`CAPABILITY:<handle>`) resolving against `ETLSQL_CAPABILITY_ROOT` (default `/run/secrets/capabilities`), supported in `ResolvePath` across the engine and execution contexts, `ConnectionSecretResolver` (path and content dereferencing with runtime secret redaction), `TenantStorageCapability` read-only grant authorization, and linting rules (`AbsolutePathRule`, `FileSystemSecurityRule`). Missing capabilities fail with explicit `FileNotFoundException` mentioning the capability handle and root path. Asserted in `CapabilityReferenceTests` (18 tests).
+- [x] **CI runs none of the three sandbox lifecycle lanes.** Fixed: Configured CI `docker-integration-tests` job in `.github/workflows/ci.yml` on `ubuntu-latest` to build the sandbox worker image (`Test-SandboxWorkerImage.ps1`) and prepare the hardened runtime (`enable-hardened-sandbox-lane.sh` installing gVisor, registering `runsc`, starting local registry, and setting `ETLSQL_SANDBOX_WORKER_DIGEST_IMAGE`), executing all three lifecycle lanes (`DockerStandardSandboxLifecycleTests`, `DockerHardenedSandboxLifecycleTests`, `DockerDedicatedSandboxLifecycleTests`) in CI.
 
 ### Platform — Progressive SaaS Delivery and Red Cells
 

@@ -305,7 +305,12 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public Task Evaluate(Script script, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt) => throw new NotSupportedException();
     public Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args) => Task.CompletedTask;
-    public string ResolvePath(string path) => StorageCapability?.RequirePath(path) ?? path;
+    public string ResolvePath(string path)
+    {
+        if (Governance.CapabilityReference.IsCapabilityReference(path))
+            return Governance.CapabilityReference.ResolvePath(path);
+        return StorageCapability?.RequirePath(path) ?? path;
+    }
     public bool FunctionExists(string name) => false;
     public bool ProcedureExists(string name) => false;
 

@@ -65,18 +65,6 @@ public sealed class SecretBackedSandboxCapabilityResolver(ISecretProvider secret
     /// A handle becomes a file name, so it must be one plain segment. Anything that could shape a
     /// path would let a caller choose where its material lands, or which file it overwrites.
     /// </summary>
-    internal static void ValidateHandle(string capabilityHandle)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(capabilityHandle);
-        if (capabilityHandle.Length > 128 ||
-            capabilityHandle is "." or ".." ||
-            capabilityHandle.AsSpan().IndexOfAny('/', '\\', ':') >= 0 ||
-            capabilityHandle.Any(character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
-        {
-            throw new ArgumentException(
-                $"Capability handle '{capabilityHandle}' is not a single plain name.",
-                nameof(capabilityHandle));
-        }
-    }
+    internal static void ValidateHandle(string capabilityHandle) =>
+        CapabilityReference.ValidateHandle(capabilityHandle);
 }

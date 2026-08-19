@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
@@ -18,6 +19,9 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         if (string.IsNullOrEmpty(target))
             return target;
 
+        if (CapabilityReference.IsCapabilityReference(target))
+            return CapabilityReference.ResolvePath(target);
+
         if (IsSecretReference(target))
             return await ResolveSecretValueAsync(target, cancellationToken).ConfigureAwait(false);
 
@@ -34,6 +38,21 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         var resolved = new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in options)
         {
+            if (CapabilityReference.IsCapabilityReference(value))
+            {
+                if (IsFilePathField(key))
+                {
+                    resolved[key] = CapabilityReference.ResolvePath(value);
+                }
+                else
+                {
+                    var content = CapabilityReference.ResolveContent(value);
+                    SecretRedactor.RegisterRuntimeSecret(content);
+                    resolved[key] = content;
+                }
+                continue;
+            }
+
             if (!IsSecretReference(value))
                 continue;
 
@@ -45,6 +64,21 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
 
         return resolved;
     }
+
+    private static bool IsFilePathField(string key) =>
+        key.Equals("KEYFILE", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("KEY_FILE", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("CREDENTIAL_FILE", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("CREDENTIALS_FILE", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("PRIVATE_KEY_FILE", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("SERVICE_ACCOUNT_KEY_FILE", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("SSL_CERT", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("SSL_KEY", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("CERTIFICATE_PATH", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("PATH", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("FILE", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("FILEPATH", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("FILE_PATH", StringComparison.OrdinalIgnoreCase);
 
     // Resolvable = built-in credential set ∪ org-designated (global or connector-scoped) ∪ fields
     // the catalog entry itself classifies as sensitive.

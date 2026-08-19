@@ -26,6 +26,17 @@ public partial class Evaluator
         if (path.Length >= 2 && path[0] == '"' && path[^1] == '"')
             path = path[1..^1];
 
+        if (ETL_SQL.Core.Governance.CapabilityReference.IsCapabilityReference(path))
+        {
+            var capabilityPath = ETL_SQL.Core.Governance.CapabilityReference.ResolvePath(path);
+            if (_securityService != null)
+            {
+                _securityService.ValidatePath(capabilityPath);
+            }
+            StorageCapability?.RequirePath(capabilityPath, write: false);
+            return capabilityPath;
+        }
+
         string resolved = path;
         var parts = path.Split(new[] { '/', '\\' }, 2);
         var connName = parts[0];
