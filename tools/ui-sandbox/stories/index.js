@@ -10,6 +10,7 @@ import adminCatalog from './admin-catalog.story.js';
 import vscodeWebviews from './vscode-webviews.story.js';
 import secretsAdmin from './secrets-admin.story.js';
 import connectionsAdmin from './connections-admin.story.js';
+import gatewaysAdmin from './gateways-admin.story.js';
 import policyAuthorityAdmin from './policy-authority-admin.story.js';
 import snapshotDesigner from './snapshot-designer.story.js';
 import lineageDag from './lineage-dag.story.js';
@@ -26,32 +27,89 @@ import orchestratorAcl from './orchestrator-acl.story.js';
 import orchestratorAdmin from './orchestrator-admin.story.js';
 import controlPlaneDashboard from './control-plane-dashboard.story.js';
 
-export const stories = [
+const categoryDefaults = {
+  'gateways-admin': 'Admin & Fleet',
+  'connections-admin': 'Admin & Fleet',
+  'secrets-admin': 'Admin & Fleet',
+  'datasets-admin': 'Admin & Fleet',
+  'policy-authority-admin': 'Admin & Fleet',
+  'portal-operations': 'Admin & Fleet',
+  'admin-catalog': 'Admin & Fleet',
+  'subscription-history': 'Admin & Fleet',
+
+  'control-plane-dashboard': 'Control Plane & SaaS',
+  'triage-board': 'Control Plane & SaaS',
+
+  'orchestrator-admin': 'Orchestrator & Jobs',
+  'orchestrator-run-overrides': 'Orchestrator & Jobs',
+  'orchestrator-checkpoint-resume': 'Orchestrator & Jobs',
+  'orchestrator-acl': 'Orchestrator & Jobs',
+
+  'portal-governance': 'Governance & Security',
+  'data-quality-queue': 'Governance & Security',
+
+  'lineage-dag': 'Lineage & Graphs',
+  'lineage-catalog': 'Lineage & Graphs',
+  'lineage-ui': 'Lineage & Graphs',
+
+  'designer': 'Designers & Visuals',
+  'snapshot-designer': 'Designers & Visuals',
+
+  'script-editor': 'Script Editors & IDE',
+  'script-editor-unified': 'Script Editors & IDE',
+  'vscode-webviews': 'Script Editors & IDE',
+
+  'portal-responsive-shell': 'Portal Shell & Views',
+  'portal-studio': 'Portal Shell & Views',
+  'feedback': 'Portal Shell & Views'
+};
+
+export const rawStories = [
+  // Admin & Fleet
+  gatewaysAdmin,
+  connectionsAdmin,
+  secretsAdmin,
+  datasetsAdmin,
+  policyAuthorityAdmin,
+  portalOperations,
+  adminCatalog,
+  subscriptionHistory,
+
+  // Control Plane & SaaS
   controlPlaneDashboard,
   triageBoard,
+
+  // Orchestrator & Jobs
   orchestratorAdmin,
   orchestratorRunOverrides,
   orchestratorCheckpointResume,
   orchestratorAcl,
+
+  // Governance & Security
   portalGovernance,
   dataQualityQueue,
-  portalResponsiveShell,
-  portalStudio,
-  portalOperations,
-  feedback,
-  scriptEditor,
-  scriptEditorUnified,
+
+  // Lineage & Graphs
+  lineageDag,
+  lineageCatalog,
+  lineageUi,
+
+  // Designers & Visuals
   designer,
   snapshotDesigner,
-  lineageUi,
-  lineageCatalog,
-  datasetsAdmin,
-  subscriptionHistory,
-  adminCatalog,
+
+  // Script Editors & IDE
+  scriptEditor,
+  scriptEditorUnified,
   vscodeWebviews,
-  secretsAdmin,
-  connectionsAdmin,
-  policyAuthorityAdmin,
-  lineageDag
+
+  // Portal Shell & Views
+  portalResponsiveShell,
+  portalStudio,
+  feedback
 ];
 
+export const stories = rawStories.map((story) => {
+  story.category = story.category || categoryDefaults[story.id] || 'Other Surfaces';
+  return story;
+});
