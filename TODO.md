@@ -142,11 +142,7 @@ cases in `OrchestratorJobApiAuthTests`.
 
 - [x] **Dedicated `OrchestratorViewer` role in Portal RBAC.** The Portal's `OrchestratorAccess` policy now accepts `Admin`, `OrchestratorManager`, and `OrchestratorViewer`. Seeded in `PortalRole` definitions, exposed in `NavigationController` and Admin/Orchestrator UI, and asserted via `OrchestratorObjectAuthorizationTests` and `RoleJourneyTests`. `OrchestratorViewer` grants read-only browsing (status, history, DAG dependencies, metrics) while disallowing object creation (`CanCreate == false`) and mutation.
 - [x] **Dynamic group claims validation for Orchestrator grants.** OIDC identity sync populates `UserGroup` memberships in the Portal database, and `OrchestratorCaller` carries `GroupIds` mapped from the group's `PrincipalKey`. Verified with end-to-end integration tests (`DynamicOidcGroupClaims_DriveOrchestratorAssertionGroupGrants_AndRevokeOnClaimLoss`) proving group grants (`principalKind = GROUP`) evaluate accurately upon assertion token minting and correctly revoke on claim loss.
-- [ ] **`POST /management/stop` is not audited.** Stopping the whole Orchestrator writes a
-      `LogWarning` and no security event, so "who stopped the service" is answerable only from
-      diagnostic logs. It is not one of the object verbs, which is why Slice F left it. Correction:
-      emit a `CatalogMutation` event targeting `SERVICE:<host>` from the same caller identity the
-      object verbs use.
+- [x] **`POST /management/stop` is not audited.** Fixed: `POST /management/stop` now emits a `CatalogMutation` security event targeting `SERVICE:<host>` (severity `Warning`, action `STOP`) capturing the verified caller identity (`AuditActor` / `PrincipalKey` / `TenantId`), asserted in `OrchestratorAuditParityTests.ManagementStopEmitsSecurityEventNamingTheRealPrincipal`.
 - [x] **Three `OrchestratorPostgresStoreTests` are red, and block a release evidence gate.**
       **Fixed 2026-08-17; the lane is 16/16 on real PostgreSQL 16.** All three were harness defects
       with no product bug behind them, and each carried a companion assertion that passed vacuously —

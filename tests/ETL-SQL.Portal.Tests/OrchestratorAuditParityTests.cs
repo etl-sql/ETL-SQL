@@ -131,6 +131,31 @@ public sealed class OrchestratorAuditParityTests
             && e.Reason.Contains("scope", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task ManagementStopEmitsSecurityEventNamingTheRealPrincipal()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var sink = new RecordingSecurityEventSink();
+        using var sinkScope = new SecurityEventSinkScope(sink);
+
+        var admin = new OrchestratorCaller("user", "42", "Charles Babbage", ["Admin", "OrchestratorManager"], []);
+
+        using var stop = Request(HttpMethod.Post, "/management/stop", admin);
+        var response = await client.SendAsync(stop);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        AssertAudited(sink, $"SERVICE:{Environment.MachineName}", "STOP");
+
+        var stopEvent = Assert.Single(sink.Events, e =>
+            e.Type == SecurityEventType.CatalogMutation
+            && e.SanitizedTarget == $"SERVICE:{Environment.MachineName}");
+
+        Assert.Contains("Charles Babbage", stopEvent.ActorIdentity, StringComparison.Ordinal);
+        Assert.Equal("user:42", stopEvent.EffectiveIdentity);
+        Assert.Equal(SecurityEventSeverity.Warning, stopEvent.Severity);
+    }
+
     private static async Task UpdateAsync(
         HttpClient client, OrchestratorWebFactory factory, OrchestratorCaller caller, object body)
     {

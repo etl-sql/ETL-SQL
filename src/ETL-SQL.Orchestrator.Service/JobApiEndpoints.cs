@@ -1986,6 +1986,14 @@ namespace ETL_SQL.Orchestrator.Service
                 IHostApplicationLifetime lifetime, ILogger<Program> logger) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var caller = RequestCaller(ctx);
+                EmitObjectMutationAudit(
+                    caller,
+                    $"SERVICE:{Environment.MachineName}",
+                    "STOP",
+                    "Graceful stop requested via management API",
+                    ctx.TraceIdentifier,
+                    SecurityEventSeverity.Warning);
                 logger.LogWarning("Graceful stop requested via management API.");
                 lifetime.StopApplication();
                 return Results.Ok(new { Message = "Stop signal sent. Service will shut down and restart if managed by OS supervisor." });
