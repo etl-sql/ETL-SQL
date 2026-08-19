@@ -20,6 +20,7 @@
 | [Deployment profile transitions](profile-transitions.md) | ETL-SQL promotions preserve source-controlled pipeline and report logic while changing target |
 | [Resource Controls](resources.md) | Use resource settings to keep one report or job from consuming the whole host. |
 | [Row-Level Security](row-level-security.md) | Folder and dataset permissions control **which reports a user can open** — the coarse-grained gate. |
+| [SaaS Operator Best Practices & FAQ](saas-operations-faq.md) | Practical operating patterns, tenant isolation blueprints, and FAQs for hosting multi-tenant SME fleets. |
 | [Secrets and Keys](secrets.md) | ETL-SQL supports encrypted values for secrets such as passwords, JWT secrets, certificate |
 | [Central Security Events and SIEM Delivery](security-events.md) | Security events are separate from diagnostic logs and governance audit records: a dedicated versioned contract with a durable local outbox and opti... |
 | [Portal State, Data Roots, and High Availability](state-and-ha.md) | Where the Portal keeps its state, which directories it is allowed to touch, and what a multi-node high-availability deployment requires. |

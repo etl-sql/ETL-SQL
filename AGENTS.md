@@ -248,6 +248,7 @@ Use this map to find the right document for any task.
 | Orchestrator job operations | **[Job Orchestration](docs/administration/orchestration/README.md)** |
 | Deployment profiles, portability boundaries, and SaaS topology | **[Deployment Profile Architecture](./docs/architecture/DeploymentProfiles.md)** |
 | SaaS tenant isolation, hardened execution, checkpoints, and outbound Gateway | **[SaaS Tenant Isolation Architecture](./docs/architecture/SaaSTenantIsolation.md)** |
+| SaaS operator best practices, multi-tenant fleet hosting, and FAQ | **[SaaS Operator FAQ](docs/administration/platform/saas-operations-faq.md)** |
 | Tenant export/import, rebinding, cutover, and SaaS exit | **[Tenant Portability Architecture](./docs/architecture/TenantPortability.md)** |
 | Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)** |
 
