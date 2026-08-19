@@ -149,6 +149,7 @@ internal static class PortalDatabaseMigrationLock
         var connection = db.Database.GetDbConnection();
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+        command.CommandTimeout = 300;
         var parameter = command.CreateParameter();
         parameter.ParameterName = "@key";
         parameter.Value = PostgresAdvisoryLockKey;

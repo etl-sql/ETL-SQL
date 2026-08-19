@@ -530,6 +530,20 @@ Entries hold `SECRET:name` references, never credential values; detail responses
 | GET | `/api/admin/gateways/{gatewayId}` | Admin | Inspect Gateway enrollment state, timestamps, and workload key thumbprint |
 | POST | `/api/admin/gateways/{gatewayId}/revoke` | Admin | Revoke Gateway enrollment token and unregister active session |
 
+### Platform — Control Plane
+
+Dedicated platform admin control plane for SaaS fleet observability, tenant operational capacity, lifecycle management, and platform audit receipts. Authenticates exclusively via the platform management key (`X-Portal-Platform-Key` header). Responses contain strictly operational metadata and counts (zero tenant script bodies or data rows).
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/platform/control-plane/overview` | Platform Key | Fleet aggregate metrics, capacity, and tenant state distribution |
+| GET | `/api/platform/control-plane/tenants` | Platform Key | Tenant inventory with operational metrics, quota usage, and status |
+| GET | `/api/platform/control-plane/tenants/{tenantId}/health` | Platform Key | Individual tenant operational health, storage, and quota consumption |
+| GET | `/api/platform/control-plane/audit` | Platform Key | Platform administration audit log with cryptographic receipt verification |
+| POST | `/api/platform/control-plane/tenants/provision` | Platform Key | Provision a new tenant boundary in the shared fleet |
+| POST | `/api/platform/control-plane/tenants/{tenantId}/quotas` | Platform Key | Update tenant execution and storage quota limits |
+| POST | `/api/platform/control-plane/tenants/{tenantId}/state` | Platform Key | Transition tenant state (`Active`, `Suspended`, `Archived`) |
+
 ### Catalog
 
 | Method | Path | Auth | Description |

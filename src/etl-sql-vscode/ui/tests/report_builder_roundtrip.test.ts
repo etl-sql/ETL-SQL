@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, test, expect, beforeEach } from 'vitest';
 import { JSDOM } from 'jsdom';
 
@@ -167,7 +168,7 @@ describe('Visual Report Builder Round-Trip Fidelity & Trivia Tests', () => {
         };
 
         // Mock API parser to return syntax error
-        const mockAuthFetch = async (url: string, init: any) => {
+        const mockAuthFetch = async (url: string) => {
             if (url.endsWith('/api/designer/parse')) {
                 return {
                     ok: true,

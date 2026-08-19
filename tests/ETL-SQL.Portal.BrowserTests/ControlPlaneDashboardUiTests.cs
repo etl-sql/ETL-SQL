@@ -1,6 +1,6 @@
 using Microsoft.Playwright;
-using static Microsoft.Playwright.Assertions;
 using Xunit;
+using static Microsoft.Playwright.Assertions;
 
 namespace ETL_SQL.Portal.BrowserTests;
 

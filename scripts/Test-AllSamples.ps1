@@ -92,8 +92,8 @@ foreach ($script in $etlScripts) {
                 $available = $false
             }
             else {
-                & $dockerCommand.Source info --format '{{.ServerVersion}}' *> $null
-                $available = $LASTEXITCODE -eq 0
+                $osType = & $dockerCommand.Source info --format '{{.OSType}}' 2>$null
+                $available = ($LASTEXITCODE -eq 0 -and $osType -eq 'linux')
             }
         }
         if (-not $available) {

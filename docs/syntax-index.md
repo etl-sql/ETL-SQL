@@ -118,6 +118,11 @@ Statements are the top-level actions in an ETL-SQL script.
 | `PORTAL SHOW` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [portal show](reference/portal-commands/portal-show.md) |
 | `EXPECT SCHEMA` | DDL / Validation | [Statement Reference](reference/statements/README.md) | [EXPECT SCHEMA](reference/statements/ddl/expect-schema.md) |
 | `TEST CONNECTION` | DDL / Diagnostics | [Statement Reference](reference/statements/README.md) | [TEST CONNECTION](reference/statements/ddl/test-connection.md) |
+| `CREATE BINDING` | DDL / Declarative | [Statement Reference](reference/statements/README.md) | [CREATE BINDING](reference/statements/ddl/create-binding.md) |
+| `CREATE TOOL` | DDL / Machine Tools | [Statement Reference](reference/statements/README.md) | [CREATE TOOL](reference/statements/ddl/create-tool.md) |
+| `EXECUTE TOOL` | DML / Machine Tools | [Statement Reference](reference/statements/README.md) | [EXECUTE TOOL](reference/statements/dml/execute-tool.md) |
+| `PAGE_LAYOUT` | Reporting DDL | [Statement Reference](reference/statements/README.md) | [PAGE_LAYOUT](reference/statements/ddl/page_layout.md) |
+| `PRINT_LAYOUT` | Reporting DDL | [Statement Reference](reference/statements/README.md) | [PRINT_LAYOUT](reference/statements/ddl/print_layout.md) |
 | `UNNEST / FLATTEN` | DML / Query | [Statement Reference](reference/statements/README.md) | [UNNEST / FLATTEN](reference/statements/dml/unnest.md) |
 | `Execution Blocks` | Flow Control | [Statement Reference](reference/statements/README.md) | [Execution Blocks](reference/statements/execution-blocks.md) |
 | `Expressions and Operators` | Expressions | [Statement Reference](reference/statements/README.md) | [Expressions and Operators](reference/statements/expressions-and-operators.md) |
@@ -270,6 +275,7 @@ Connectors define how to communicate with external data sources.
 | `XML` | File | [XML.md](reference/connectors/files/xml.md) | PATH, ROOT_PATH, ENCODING, ... |
 | `PARQUET` | File | [PARQUET.md](reference/connectors/files/parquet.md) | PATH, COMPRESSION, ... |
 | `AVRO` | File | [AVRO.md](reference/connectors/files/avro.md) | PATH, ... |
+| `Transactional Writes` | File Ops | [Transactional Writes](reference/connectors/files/transactional-writes.md) | Atomic and isolated file overwrite patterns |
 | `SFTP` | Transfer | [SFTP.md](reference/connectors/services/sftp.md) | HOST, PORT, USER, PASSWORD, KEYFILE, PASSPHRASE |
 | `FTP` | Transfer | [FTP.md](reference/connectors/services/ftp.md) | HOST, PORT, USER, PASSWORD, USE_SSL |
 | `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](reference/connectors/services/azure-blob.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
@@ -1310,26 +1316,38 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 
 | Command | Purpose | Help File |
 | :--- | :--- | :--- |
+| `etl-sql admin access-simulate` | Simulate what a user can reach — the access question, answered without a browser | [admin access simulate](reference/cli/admin-access-simulate.md) |
 | `etl-sql admin backup` | Back up portal/orchestrator state into split-custody data and keys archives | [admin backup](reference/cli/admin-backup.md) |
 | `etl-sql admin doctor` | Perform a system health check to verify the environment | [admin doctor](reference/cli/admin-doctor.md) |
-| `etl-sql admin ha-soak diagnostics` | Export a redacted diagnostics bundle for a topology run | [admin ha-soak diagnostics](reference/cli/admin-ha-soak-diagnostics.md) |
-| `etl-sql admin ha-soak evidence` | Generate the non-secret HA soak evidence checklist | [admin ha-soak evidence](reference/cli/admin-ha-soak-evidence.md) |
-| `etl-sql admin ha-soak fault-plan` | Generate the HA fault-injection plan | [admin ha-soak fault-plan](reference/cli/admin-ha-soak-fault-plan.md) |
-| `etl-sql admin ha-soak fault-run` | Run the bounded HA fault-injection harness | [admin ha-soak fault-run](reference/cli/admin-ha-soak-fault-run.md) |
-| `etl-sql admin ha-soak large-job-plan` | Generate the concurrent large-job soak plan | [admin ha-soak large-job-plan](reference/cli/admin-ha-soak-large-job-plan.md) |
-| `etl-sql admin ha-soak large-job-run` | Run the bounded concurrent large-job soak harness | [admin ha-soak large-job-run](reference/cli/admin-ha-soak-large-job-run.md) |
-| `etl-sql admin ha-soak metrics` | Capture a non-secret PostgreSQL metrics snapshot | [admin ha-soak metrics](reference/cli/admin-ha-soak-metrics.md) |
-| `etl-sql admin ha-soak prepare` | Generate an isolated PostgreSQL HA soak topology run root | [admin ha-soak prepare](reference/cli/admin-ha-soak-prepare.md) |
-| `etl-sql admin ha-soak runbook` | Generate an ordered operator runbook for a topology run | [admin ha-soak runbook](reference/cli/admin-ha-soak-runbook.md) |
-| `etl-sql admin ha-soak validate` | Validate completed HA soak evidence before citing it | [admin ha-soak validate](reference/cli/admin-ha-soak-validate.md) |
-| `etl-sql admin ha-soak workload` | Materialize the sustained-load workload config for a topology run | [admin ha-soak workload](reference/cli/admin-ha-soak-workload.md) |
-| `etl-sql admin ha-soak` | Prepare and collect PostgreSQL HA soak certification artifacts | [admin ha-soak](reference/cli/admin-ha-soak.md) |
+| `etl-sql admin group add-member` | Add a user to a group | [admin group add member](reference/cli/admin-group-add-member.md) |
+| `etl-sql admin group capabilities` | Show a group's Studio capabilities | [admin group capabilities](reference/cli/admin-group-capabilities.md) |
+| `etl-sql admin group create` | Create a Portal group | [admin group create](reference/cli/admin-group-create.md) |
+| `etl-sql admin group delete` | Delete a Portal group | [admin group delete](reference/cli/admin-group-delete.md) |
+| `etl-sql admin group list` | List Portal groups | [admin group list](reference/cli/admin-group-list.md) |
+| `etl-sql admin group members` | List the members of a group | [admin group members](reference/cli/admin-group-members.md) |
+| `etl-sql admin group remove-member` | Remove a user from a group | [admin group remove member](reference/cli/admin-group-remove-member.md) |
+| `etl-sql admin group set-capabilities` | Replace a group's Studio capabilities with the given set | [admin group set capabilities](reference/cli/admin-group-set-capabilities.md) |
+| `etl-sql admin group update` | Rename a group or change its description | [admin group update](reference/cli/admin-group-update.md) |
+| `etl-sql admin group` | Manage Portal groups and their membership | [admin group](reference/cli/admin-group.md) |
+| `etl-sql admin ha-soak diagnostics` | Export a redacted diagnostics bundle for a topology run | [admin ha soak diagnostics](reference/cli/admin-ha-soak-diagnostics.md) |
+| `etl-sql admin ha-soak evidence` | Generate the non-secret HA soak evidence checklist | [admin ha soak evidence](reference/cli/admin-ha-soak-evidence.md) |
+| `etl-sql admin ha-soak fault-plan` | Generate the HA fault-injection plan | [admin ha soak fault plan](reference/cli/admin-ha-soak-fault-plan.md) |
+| `etl-sql admin ha-soak fault-run` | Run the bounded HA fault-injection harness | [admin ha soak fault run](reference/cli/admin-ha-soak-fault-run.md) |
+| `etl-sql admin ha-soak large-job-plan` | Generate the concurrent large-job soak plan | [admin ha soak large job plan](reference/cli/admin-ha-soak-large-job-plan.md) |
+| `etl-sql admin ha-soak large-job-run` | Run the bounded concurrent large-job soak harness | [admin ha soak large job run](reference/cli/admin-ha-soak-large-job-run.md) |
+| `etl-sql admin ha-soak metrics` | Capture a non-secret PostgreSQL metrics snapshot | [admin ha soak metrics](reference/cli/admin-ha-soak-metrics.md) |
+| `etl-sql admin ha-soak prepare` | Generate an isolated PostgreSQL HA soak topology run root | [admin ha soak prepare](reference/cli/admin-ha-soak-prepare.md) |
+| `etl-sql admin ha-soak runbook` | Generate an ordered operator runbook for a topology run | [admin ha soak runbook](reference/cli/admin-ha-soak-runbook.md) |
+| `etl-sql admin ha-soak validate` | Validate completed HA soak evidence before citing it | [admin ha soak validate](reference/cli/admin-ha-soak-validate.md) |
+| `etl-sql admin ha-soak workload` | Materialize the sustained-load workload config for a topology run | [admin ha soak workload](reference/cli/admin-ha-soak-workload.md) |
+| `etl-sql admin ha-soak` | Prepare and collect PostgreSQL HA soak certification artifacts | [admin ha soak](reference/cli/admin-ha-soak.md) |
 | `etl-sql admin machine connection delete` | Permanently remove a machine-local shared connection | [admin machine connection delete](reference/cli/admin-machine-connection-delete.md) |
 | `etl-sql admin machine connection disable` | Disable a machine-local shared connection | [admin machine connection disable](reference/cli/admin-machine-connection-disable.md) |
 | `etl-sql admin machine connection enable` | Re-enable a machine-local shared connection | [admin machine connection enable](reference/cli/admin-machine-connection-enable.md) |
 | `etl-sql admin machine connection list` | List machine-local shared connections and status | [admin machine connection list](reference/cli/admin-machine-connection-list.md) |
 | `etl-sql admin machine connection set` | Store a machine-local SHARED: connection | [admin machine connection set](reference/cli/admin-machine-connection-set.md) |
 | `etl-sql admin machine connection verify` | Verify a machine-local shared connection without printing values | [admin machine connection verify](reference/cli/admin-machine-connection-verify.md) |
+| `etl-sql admin machine connection` | Manage the machine-local shared connection catalog | [admin machine connection](reference/cli/admin-machine-connection.md) |
 | `etl-sql admin machine secret delete` | Permanently remove a machine-local secret | [admin machine secret delete](reference/cli/admin-machine-secret-delete.md) |
 | `etl-sql admin machine secret disable` | Disable a machine-local secret | [admin machine secret disable](reference/cli/admin-machine-secret-disable.md) |
 | `etl-sql admin machine secret enable` | Re-enable a disabled machine-local secret | [admin machine secret enable](reference/cli/admin-machine-secret-enable.md) |
@@ -1337,54 +1355,59 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin machine secret rotate` | Replace an existing machine-local secret | [admin machine secret rotate](reference/cli/admin-machine-secret-rotate.md) |
 | `etl-sql admin machine secret set` | Encrypt and store a named machine-local secret | [admin machine secret set](reference/cli/admin-machine-secret-set.md) |
 | `etl-sql admin machine secret verify` | Resolve a machine-local secret without printing the value | [admin machine secret verify](reference/cli/admin-machine-secret-verify.md) |
-| `etl-sql admin migrate-database` | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment | [admin migrate-database](reference/cli/admin-migrate-database.md) |
+| `etl-sql admin machine secret` | Manage the machine-local Governance:Secrets provider | [admin machine secret](reference/cli/admin-machine-secret.md) |
+| `etl-sql admin machine tool delete` | Permanently remove a machine-local tool | [admin machine tool delete](reference/cli/admin-machine-tool-delete.md) |
+| `etl-sql admin machine tool list` | List machine-local tools | [admin machine tool list](reference/cli/admin-machine-tool-list.md) |
+| `etl-sql admin machine tool set` | Store a machine-local tool | [admin machine tool set](reference/cli/admin-machine-tool-set.md) |
+| `etl-sql admin machine tool` | Manage the machine-local tool catalog | [admin machine tool](reference/cli/admin-machine-tool.md) |
+| `etl-sql admin machine` | Manage machine-local governance stores | [admin machine](reference/cli/admin-machine.md) |
+| `etl-sql admin migrate-database` | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment | [admin migrate database](reference/cli/admin-migrate-database.md) |
+| `etl-sql admin orchestrator adopt` | Assign an owner to every unowned object (administrators only) | [admin orchestrator adopt](reference/cli/admin-orchestrator-adopt.md) |
+| `etl-sql admin orchestrator grant` | Grant a principal a permission on an object | [admin orchestrator grant](reference/cli/admin-orchestrator-grant.md) |
+| `etl-sql admin orchestrator revoke` | Revoke a principal's grant on an object | [admin orchestrator revoke](reference/cli/admin-orchestrator-revoke.md) |
+| `etl-sql admin orchestrator set-owner` | Reassign an object's owner (administrators only) | [admin orchestrator set owner](reference/cli/admin-orchestrator-set-owner.md) |
+| `etl-sql admin orchestrator show` | Show the grants on one Orchestrator object | [admin orchestrator show](reference/cli/admin-orchestrator-show.md) |
+| `etl-sql admin orchestrator unowned` | List objects with no recorded owner — reachable only by administrators | [admin orchestrator unowned](reference/cli/admin-orchestrator-unowned.md) |
+| `etl-sql admin orchestrator` | Manage per-object Orchestrator grants and ownership | [admin orchestrator](reference/cli/admin-orchestrator.md) |
+| `etl-sql admin portal-whoami` | Resolve Portal credentials and print the identity, roles, and scopes (never a secret) | [admin portal whoami](reference/cli/admin-portal-whoami.md) |
+| `etl-sql admin promotion export` | Export eligible Orchestrator catalog and governance state | [admin promotion export](reference/cli/admin-promotion-export.md) |
+| `etl-sql admin promotion import` | Import an Orchestrator promotion package idempotently | [admin promotion import](reference/cli/admin-promotion-import.md) |
+| `etl-sql admin promotion preflight` | Create a secret-safe, mutation-free promotion inventory | [admin promotion preflight](reference/cli/admin-promotion-preflight.md) |
+| `etl-sql admin promotion saas-delete` | Delete one Managed Dedicated tenant boundary under signed retention/legal authorization | [admin promotion saas delete](reference/cli/admin-promotion-saas-delete.md) |
+| `etl-sql admin promotion saas-fleet-plan` | Plan a release rollout across the Managed Dedicated fleet (plans only; never upgrades) | [admin promotion saas fleet plan](reference/cli/admin-promotion-saas-fleet-plan.md) |
+| `etl-sql admin promotion saas-onboard` | Create and populate one physically isolated SaaS tenant boundary | [admin promotion saas onboard](reference/cli/admin-promotion-saas-onboard.md) |
+| `etl-sql admin promotion saas-upgrade` | Drain and upgrade one Managed Dedicated tenant boundary | [admin promotion saas upgrade](reference/cli/admin-promotion-saas-upgrade.md) |
+| `etl-sql admin promotion validate` | Validate mappings and collisions without changing the target | [admin promotion validate](reference/cli/admin-promotion-validate.md) |
+| `etl-sql admin promotion` | Inspect and prepare deployment-profile promotions | [admin promotion](reference/cli/admin-promotion.md) |
 | `etl-sql admin restore` | Validate and restore a backup (data + keys archives) | [admin restore](reference/cli/admin-restore.md) |
-| `etl-sql admin support-bundle` | Collect a redacted support archive (config, health, logs, database metrics) | [admin support-bundle](reference/cli/admin-support-bundle.md) |
-| `etl-sql admin access simulate` | Simulate access | [admin access simulate](reference/cli/admin-access-simulate.md) |
-| `etl-sql admin group add-member` | Add member to group | [admin group add-member](reference/cli/admin-group-add-member.md) |
-| `etl-sql admin group capabilities` | View group capabilities | [admin group capabilities](reference/cli/admin-group-capabilities.md) |
-| `etl-sql admin group create` | Create a group | [admin group create](reference/cli/admin-group-create.md) |
-| `etl-sql admin group delete` | Delete a group | [admin group delete](reference/cli/admin-group-delete.md) |
-| `etl-sql admin group list` | List groups | [admin group list](reference/cli/admin-group-list.md) |
-| `etl-sql admin group members` | List group members | [admin group members](reference/cli/admin-group-members.md) |
-| `etl-sql admin group remove-member` | Remove member from group | [admin group remove-member](reference/cli/admin-group-remove-member.md) |
-| `etl-sql admin group set-capabilities` | Set capabilities for a group | [admin group set-capabilities](reference/cli/admin-group-set-capabilities.md) |
-| `etl-sql admin group update` | Update group | [admin group update](reference/cli/admin-group-update.md) |
-| `etl-sql admin group` | Manage groups | [admin group](reference/cli/admin-group.md) |
-| `etl-sql admin machine connection` | Manage machine connection | [admin machine connection](reference/cli/admin-machine-connection.md) |
-| `etl-sql admin machine secret` | Manage machine secret | [admin machine secret](reference/cli/admin-machine-secret.md) |
-| `etl-sql admin machine` | Manage machine settings | [admin machine](reference/cli/admin-machine.md) |
-| `etl-sql admin portal whoami` | Show portal identity | [admin portal whoami](reference/cli/admin-portal-whoami.md) |
-| `etl-sql admin promotion export` | Export promotion | [admin promotion export](reference/cli/admin-promotion-export.md) |
-| `etl-sql admin promotion import` | Import promotion | [admin promotion import](reference/cli/admin-promotion-import.md) |
-| `etl-sql admin promotion preflight` | Promotion preflight check | [admin promotion preflight](reference/cli/admin-promotion-preflight.md) |
-| `etl-sql admin promotion saas-delete` | Delete a Managed Dedicated tenant boundary | [admin promotion saas-delete](reference/cli/admin-promotion-saas-delete.md) |
-| `etl-sql admin promotion saas-onboard` | SaaS onboard promotion | [admin promotion saas-onboard](reference/cli/admin-promotion-saas-onboard.md) |
-| `etl-sql admin promotion saas-upgrade` | Drain and upgrade a Managed Dedicated tenant boundary | [admin promotion saas-upgrade](reference/cli/admin-promotion-saas-upgrade.md) |
-| `etl-sql admin promotion validate` | Validate promotion | [admin promotion validate](reference/cli/admin-promotion-validate.md) |
-| `etl-sql admin promotion` | Manage promotions | [admin promotion](reference/cli/admin-promotion.md) |
-| `etl-sql admin service-account create` | Create service account | [admin service-account create](reference/cli/admin-service-account-create.md) |
-| `etl-sql admin service-account list` | List service accounts | [admin service-account list](reference/cli/admin-service-account-list.md) |
-| `etl-sql admin service-account revoke` | Revoke service account | [admin service-account revoke](reference/cli/admin-service-account-revoke.md) |
-| `etl-sql admin service-account rotate-secret` | Rotate service account secret | [admin service-account rotate-secret](reference/cli/admin-service-account-rotate-secret.md) |
-| `etl-sql admin service-account update` | Update service account | [admin service-account update](reference/cli/admin-service-account-update.md) |
-| `etl-sql admin service-account` | Manage service accounts | [admin service-account](reference/cli/admin-service-account.md) |
-| `etl-sql admin session disconnect` | Disconnect session | [admin session disconnect](reference/cli/admin-session-disconnect.md) |
-| `etl-sql admin session list` | List sessions | [admin session list](reference/cli/admin-session-list.md) |
-| `etl-sql admin session` | Manage admin sessions | [admin session](reference/cli/admin-session.md) |
-| `etl-sql admin user create` | Create user | [admin user create](reference/cli/admin-user-create.md) |
-| `etl-sql admin user delete` | Delete user | [admin user delete](reference/cli/admin-user-delete.md) |
-| `etl-sql admin user disable` | Disable user | [admin user disable](reference/cli/admin-user-disable.md) |
-| `etl-sql admin user enable` | Enable user | [admin user enable](reference/cli/admin-user-enable.md) |
-| `etl-sql admin user list` | List users | [admin user list](reference/cli/admin-user-list.md) |
-| `etl-sql admin user permissions` | Manage user permissions | [admin user permissions](reference/cli/admin-user-permissions.md) |
-| `etl-sql admin user reset-password` | Reset user password | [admin user reset-password](reference/cli/admin-user-reset-password.md) |
-| `etl-sql admin user revoke-tokens` | Revoke user tokens | [admin user revoke-tokens](reference/cli/admin-user-revoke-tokens.md) |
-| `etl-sql admin user show` | Show user details | [admin user show](reference/cli/admin-user-show.md) |
-| `etl-sql admin user update` | Update user | [admin user update](reference/cli/admin-user-update.md) |
-| `etl-sql admin user` | Manage users | [admin user](reference/cli/admin-user.md) |
+| `etl-sql admin service-account create` | Create a Portal service account | [admin service account create](reference/cli/admin-service-account-create.md) |
+| `etl-sql admin service-account list` | List Portal service accounts | [admin service account list](reference/cli/admin-service-account-list.md) |
+| `etl-sql admin service-account revoke` | Permanently revoke a Portal service account | [admin service account revoke](reference/cli/admin-service-account-revoke.md) |
+| `etl-sql admin service-account rotate-secret` | Rotate a service account secret | [admin service account rotate secret](reference/cli/admin-service-account-rotate-secret.md) |
+| `etl-sql admin service-account update` | Update a Portal service account | [admin service account update](reference/cli/admin-service-account-update.md) |
+| `etl-sql admin service-account` | Manage Portal service accounts | [admin service account](reference/cli/admin-service-account.md) |
+| `etl-sql admin session disconnect` | Disconnect a user's Portal sessions | [admin session disconnect](reference/cli/admin-session-disconnect.md) |
+| `etl-sql admin session list` | List active Portal sessions | [admin session list](reference/cli/admin-session-list.md) |
+| `etl-sql admin session` | Inspect and disconnect Portal sign-in sessions | [admin session](reference/cli/admin-session.md) |
+| `etl-sql admin support-bundle` | Collect a redacted support archive (config, health, logs, database metrics) | [admin support bundle](reference/cli/admin-support-bundle.md) |
+| `etl-sql admin tenant export` | Compose a signed, optionally tenant-encrypted portability bundle | [admin tenant export](reference/cli/admin-tenant-export.md) |
+| `etl-sql admin tenant import` | Preflight and apply a bundle with workloads disabled | [admin tenant import](reference/cli/admin-tenant-import.md) |
+| `etl-sql admin tenant preflight` | Report what a target must supply before a bundle can be imported | [admin tenant preflight](reference/cli/admin-tenant-preflight.md) |
+| `etl-sql admin tenant validate` | Verify a bundle's integrity and, with --operator-key, its authenticity | [admin tenant validate](reference/cli/admin-tenant-validate.md) |
+| `etl-sql admin tenant` | Export, inspect, and import tenant portability bundles | [admin tenant](reference/cli/admin-tenant.md) |
+| `etl-sql admin user create` | Create a Portal user | [admin user create](reference/cli/admin-user-create.md) |
+| `etl-sql admin user delete` | Delete a Portal user | [admin user delete](reference/cli/admin-user-delete.md) |
+| `etl-sql admin user disable` | Deactivate a Portal user | [admin user disable](reference/cli/admin-user-disable.md) |
+| `etl-sql admin user enable` | Reactivate a Portal user | [admin user enable](reference/cli/admin-user-enable.md) |
+| `etl-sql admin user list` | List Portal users | [admin user list](reference/cli/admin-user-list.md) |
+| `etl-sql admin user permissions` | Show a user's effective permissions — answers "why can this person see this" | [admin user permissions](reference/cli/admin-user-permissions.md) |
+| `etl-sql admin user reset-password` | Set a user's password, read from stdin | [admin user reset password](reference/cli/admin-user-reset-password.md) |
+| `etl-sql admin user revoke-tokens` | Revoke a user's issued tokens | [admin user revoke tokens](reference/cli/admin-user-revoke-tokens.md) |
+| `etl-sql admin user show` | Show one Portal user | [admin user show](reference/cli/admin-user-show.md) |
+| `etl-sql admin user update` | Update a Portal user's details or role | [admin user update](reference/cli/admin-user-update.md) |
+| `etl-sql admin user` | Manage Portal users | [admin user](reference/cli/admin-user.md) |
 | `etl-sql admin` | Operator and administration commands | [admin](reference/cli/admin.md) |
-| `etl-sql config setup-jwt` | Generate a secure JWT secret and update appsettings.json | [config setup-jwt](reference/cli/config-setup-jwt.md) |
+| `etl-sql config setup-jwt` | Generate a secure JWT secret and update appsettings.json | [config setup jwt](reference/cli/config-setup-jwt.md) |
 | `etl-sql config` | Manage application configuration | [config](reference/cli/config.md) |
 | `etl-sql doctor` | Perform a system health check to verify the environment | [doctor](reference/cli/doctor.md) |
 | `etl-sql encrypt` | Utility to encrypt a string for secure connections | [encrypt](reference/cli/encrypt.md) |
@@ -1392,18 +1415,18 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql enterprise status` | Inspect machine enterprise enrollment | [enterprise status](reference/cli/enterprise-status.md) |
 | `etl-sql enterprise unenroll` | Remove machine enterprise enrollment | [enterprise unenroll](reference/cli/enterprise-unenroll.md) |
 | `etl-sql enterprise` | Manage machine-level enterprise policy enrollment | [enterprise](reference/cli/enterprise.md) |
-| `etl-sql extract-spec` | Extract data dictionary / schema pages from a large PDF specification | [extract-spec](reference/cli/extract-spec.md) |
-| `etl-sql gen-script` | Compile a schema JSON specification into a validated ETL-SQL script template | [gen-script](reference/cli/gen-script.md) |
+| `etl-sql extract-spec` | Extract data dictionary / schema pages from a large PDF specification | [extract spec](reference/cli/extract-spec.md) |
+| `etl-sql gen-script` | Compile a schema JSON specification into a validated ETL-SQL script template | [gen script](reference/cli/gen-script.md) |
 | `etl-sql generate` | Generate mock data for testing projects | [generate](reference/cli/generate.md) |
 | `etl-sql init` | Scaffold a starter configuration and first ETL-SQL script for new users | [init](reference/cli/init.md) |
 | `etl-sql notices` | Show third-party notices and dependency credits | [notices](reference/cli/notices.md) |
 | `etl-sql purge` | Delete all ETL-SQL runtime data (reports, snapshots, databases, logs, sessions) | [purge](reference/cli/purge.md) |
 | `etl-sql run` | Execute an ETL-SQL script | [run](reference/cli/run.md) |
-| `etl-sql scan` | Scan files | [scan](reference/cli/scan.md) |
+| `etl-sql scan` | Inspect local or cataloged database schemas for stewardship gaps | [scan](reference/cli/scan.md) |
 | `etl-sql serve` | Start a live preview server for a Report-SQL script | [serve](reference/cli/serve.md) |
 | `etl-sql session clear` | Clear a session state | [session clear](reference/cli/session-clear.md) |
 | `etl-sql session` | Manage ad-hoc execution sessions | [session](reference/cli/session.md) |
-| `etl-sql test` | Run internal diagnostics or unit tests | [test](reference/cli/test.md) |
+| `etl-sql test` | Run native ETL-SQL test suites (*.test.etlsql) and table assertions | [test](reference/cli/test.md) |
 | `etl-sql ui edit` | Start the modern windowed Terminal IDE (default) | [ui edit](reference/cli/ui-edit.md) |
 | `etl-sql ui old` | Start the legacy Spectre-based console editor | [ui old](reference/cli/ui-old.md) |
 | `etl-sql ui repl` | Start the JSON-based REPL protocol for IDE integration | [ui repl](reference/cli/ui-repl.md) |

@@ -365,22 +365,22 @@
 
                 <!-- Solo -->
                 <Control Id="SoloRadio" Type="RadioButton" X="20" Y="60" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="SOLO" />
-                <Control Id="SoloLabel" Type="Text" X="36" Y="60" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Solo / Workstation" />
+                <Control Id="SoloLabel" Type="Text" X="36" Y="60" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Emphasized}Solo / Workstation" />
                 <Control Id="SoloDesc"  Type="Text" X="36" Y="74" Width="310" Height="20" Transparent="yes" NoPrefix="yes" Text="Script editor, Language Server, and Desktop Player. No services installed. Best for individual developers and analysts." />
 
                 <!-- Team -->
                 <Control Id="TeamRadio" Type="RadioButton" X="20" Y="100" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="TEAM" />
-                <Control Id="TeamLabel" Type="Text" X="36" Y="100" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Team / SME" />
+                <Control Id="TeamLabel" Type="Text" X="36" Y="100" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Emphasized}Team / SME" />
                 <Control Id="TeamDesc"  Type="Text" X="36" Y="114" Width="310" Height="20" Transparent="yes" NoPrefix="yes" Text="Workstation tools + Orchestrator Service + Admin Portal. Shared job scheduling, per-object security, and orchestration UI. No Report Portal." />
 
                 <!-- Enterprise -->
                 <Control Id="EntRadio" Type="RadioButton" X="20" Y="140" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="ENTERPRISE" />
-                <Control Id="EntLabel" Type="Text" X="36" Y="140" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Enterprise / Full Install" />
+                <Control Id="EntLabel" Type="Text" X="36" Y="140" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Emphasized}Enterprise / Full Install" />
                 <Control Id="EntDesc"  Type="Text" X="36" Y="154" Width="310" Height="20" Transparent="yes" NoPrefix="yes" Text="All components: Workstation tools + Orchestrator + Admin Portal + Report Portal. Use on a dedicated server or HA node." />
 
                 <!-- Custom -->
                 <Control Id="CustomRadio" Type="RadioButton" X="20" Y="180" Width="12" Height="12" Property="DEPLOY_PROFILE" Text="CUSTOM" />
-                <Control Id="CustomLabel" Type="Text" X="36" Y="180" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title_sm}Custom" />
+                <Control Id="CustomLabel" Type="Text" X="36" Y="180" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Emphasized}Custom" />
                 <Control Id="CustomDesc"  Type="Text" X="36" Y="194" Width="310" Height="12" Transparent="yes" NoPrefix="yes" Text="Select individual components on the next screen." />
 
                 <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
