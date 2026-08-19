@@ -66,6 +66,7 @@ public sealed class CriticalJourneyTests(PortalBrowserFixture fixture)
         await page.ClickAsync("#nu-saveBtn");
 
         await Expect(page.Locator("#nu-error")).ToBeEmptyAsync();
+        await page.FillAsync("#userFilter", username);
         await Expect(page.Locator("#userTableWrap")).ToContainTextAsync(username);
     }
 

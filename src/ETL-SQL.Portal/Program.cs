@@ -378,11 +378,11 @@ builder.Services.AddAuthorization(opt =>
     // whole estate. Deciding is steward judgement. Configuring changes what "governed" means for
     // everyone, so whoever can lower the bar is not whoever works against it.
     opt.AddPolicy("GovernanceRead", p =>
-        p.RequireRole("Admin", "StewardshipManager", "DataSteward", "StewardshipViewer"));
+        p.RequireRole("Admin", "GovernanceManager", "StewardshipManager", "DataSteward", "GovernanceViewer", "StewardshipViewer"));
     opt.AddPolicy("GovernanceDecide", p =>
-        p.RequireRole("Admin", "StewardshipManager", "DataSteward"));
+        p.RequireRole("Admin", "GovernanceManager", "StewardshipManager", "DataSteward"));
     opt.AddPolicy("GovernanceConfigure", p =>
-        p.RequireRole("Admin", "StewardshipManager"));
+        p.RequireRole("Admin", "GovernanceManager", "StewardshipManager"));
 });
 builder.Services.AddRateLimiter(options =>
 {

@@ -67,7 +67,7 @@ export function createLineageCatalog(opts = {}) {
     prepare = () => {},
     onModeChange = () => {},
     allowAudit = true,
-    promptFn = ((message, value) => window.ETLSQLFeedback.prompt(message, { title: 'Save lineage view', label: 'View name', value, required: true, confirmLabel: 'Save view', auditAction: 'lineage.view.save' })),
+    promptFn = ((message, value) => window.ETLSQLFeedback?.prompt ? window.ETLSQLFeedback.prompt(message, { title: 'Save lineage view', label: 'View name', value, required: true, confirmLabel: 'Save view', auditAction: 'lineage.view.save' }) : Promise.resolve(window.prompt ? window.prompt(message, value) : null)),
     viewKey = 'etlsql_lineage_views',
   } = opts;
 

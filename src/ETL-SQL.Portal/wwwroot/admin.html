@@ -738,7 +738,7 @@ document.getElementById('nu-saveBtn').addEventListener('click', async () => {
       await adminApi.createUser(body);
     }
     document.getElementById('newUserForm').style.display = 'none';
-    loadUsers();
+    await loadUsers();
   } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
 });
 

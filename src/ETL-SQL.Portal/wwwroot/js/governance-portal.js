@@ -209,9 +209,9 @@ export function createGovernancePortal(opts = {}) {
       const rowsHtml = state.dqJobs.map(job => {
         const trend = state.dqTrends[job.name];
         const status = trend?.runs?.[0]?.status || 'Unknown';
-        const processed = trend?.totalRowsProcessed || 0;
-        const quarantined = trend?.totalRowsQuarantined || 0;
-        const warned = trend?.totalRowsWarned || 0;
+        const processed = trend?.totalRowsProcessed ?? 0;
+        const quarantined = trend?.totalRowsQuarantined ?? 0;
+        const warned = trend?.totalRowsWarned ?? 0;
         
         let rateHtml = '—';
         if (trend && trend.latestQuarantineRate !== null && trend.latestQuarantineRate !== undefined) {
@@ -231,9 +231,9 @@ export function createGovernancePortal(opts = {}) {
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); vertical-align: middle;">
               <span class="gov-badge ${badgeClass}" style="padding: 2px 6px; border-radius: 4px; font-size: 11px;">${esc(status)}</span>
             </td>
-            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; vertical-align: middle;">${processed.toLocaleString()}</td>
-            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; font-weight: 500; vertical-align: middle;">${quarantined.toLocaleString()}</td>
-            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; vertical-align: middle;">${warned.toLocaleString()}</td>
+            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; vertical-align: middle;">${Number(processed).toLocaleString()}</td>
+            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; font-weight: 500; vertical-align: middle;">${Number(quarantined).toLocaleString()}</td>
+            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; vertical-align: middle;">${Number(warned).toLocaleString()}</td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; font-weight: 600; vertical-align: middle;">${rateHtml}</td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: center; vertical-align: middle;">
               <button class="btn btn-outline btn-xs" data-view-dq-trend="${esc(job.name)}" type="button">Rules & Trend</button>
@@ -443,9 +443,9 @@ export function createGovernancePortal(opts = {}) {
       .map(job => {
         const trend = state.dqTrends[job.name];
         const status = trend?.runs?.[0]?.status || 'Unknown';
-        const processed = trend?.totalRowsProcessed || 0;
-        const quarantined = trend?.totalRowsQuarantined || 0;
-        const warned = trend?.totalRowsWarned || 0;
+        const processed = trend?.totalRowsProcessed ?? 0;
+        const quarantined = trend?.totalRowsQuarantined ?? 0;
+        const warned = trend?.totalRowsWarned ?? 0;
         
         let rateHtml = '—';
         if (trend && trend.latestQuarantineRate !== null && trend.latestQuarantineRate !== undefined) {
@@ -465,9 +465,9 @@ export function createGovernancePortal(opts = {}) {
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); vertical-align: middle;">
               <span class="gov-badge ${badgeClass}" style="padding: 2px 6px; border-radius: 4px; font-size: 11px;">${esc(status)}</span>
             </td>
-            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; vertical-align: middle;">${processed.toLocaleString()}</td>
-            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; font-weight: 500; vertical-align: middle;">${quarantined.toLocaleString()}</td>
-            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; vertical-align: middle;">${warned.toLocaleString()}</td>
+            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; vertical-align: middle;">${Number(processed).toLocaleString()}</td>
+            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; font-weight: 500; vertical-align: middle;">${Number(quarantined).toLocaleString()}</td>
+            <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; vertical-align: middle;">${Number(warned).toLocaleString()}</td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: right; font-weight: 600; vertical-align: middle;">${rateHtml}</td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); text-align: center; vertical-align: middle;">
               <button class="btn btn-outline btn-xs" data-view-dq-trend="${esc(job.name)}" type="button">Rules & Trend</button>
@@ -478,34 +478,35 @@ export function createGovernancePortal(opts = {}) {
 
     const rulesHtml = state.allRules
       .filter(rule => {
-        const q = state.dqSearchFilter.toLowerCase();
+        const q = (state.dqSearchFilter || '').toLowerCase();
         return !q 
-          || rule.targetTable.toLowerCase().includes(q) 
+          || (rule.targetTable || '').toLowerCase().includes(q) 
           || (rule.targetColumn || '').toLowerCase().includes(q)
-          || rule.rule.toLowerCase().includes(q)
+          || (rule.rule || '').toLowerCase().includes(q)
           || (rule.jobName || '').toLowerCase().includes(q);
       })
       .map(rule => {
+        const action = rule.action || '';
         return `
           <tr>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); font-weight: 600;">
               ${esc(rule.jobName || 'Unassigned')}
             </td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151);">
-              <div><code>${esc(rule.targetTable)}</code></div>
+              <div><code>${esc(rule.targetTable || '—')}</code></div>
               <div style="font-size: 11px; color: var(--portal-muted, #9ca3af); margin-top: 2px;">Column: <code>${esc(rule.targetColumn || '—')}</code></div>
             </td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); vertical-align: middle;">
-              <span class="gov-badge gov-badge-auto">${esc(rule.ruleTag)}</span>
+              <span class="gov-badge gov-badge-auto">${esc(rule.ruleTag || '—')}</span>
             </td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); vertical-align: middle;">
-              <code>${esc(rule.rule)}</code>
+              <code>${esc(rule.rule || '—')}</code>
             </td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); vertical-align: middle;">
-              <span class="gov-badge ${rule.action.includes('QUARANTINE') ? 'gov-badge-risk' : 'gov-badge-noise'}">${esc(rule.action)}</span>
+              <span class="gov-badge ${action.includes('QUARANTINE') ? 'gov-badge-risk' : 'gov-badge-noise'}">${esc(action || '—')}</span>
             </td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); vertical-align: middle; color: var(--portal-muted, #9ca3af); font-size: 11px;">
-              ${esc(rule.sourceFile || '—')}:${esc(rule.line)}
+              ${esc(rule.sourceFile || '—')}:${esc(rule.line || '0')}
             </td>
           </tr>
         `;
@@ -779,13 +780,13 @@ export function createGovernancePortal(opts = {}) {
     };
 
     const renderSparkline = (runs) => {
-      const ordered = runs.slice().reverse().filter(r => r.quarantineRate !== null && r.quarantineRate !== undefined);
+      const ordered = (runs || []).slice().reverse().filter(r => r && r.quarantineRate !== null && r.quarantineRate !== undefined);
       if (ordered.length < 2) return '';
       const values = ordered.map(r => Number(r.quarantineRate));
       const max = Math.max(...values, 0.0001);
       const bars = ordered.map(run => {
         const height = Math.max(2, Math.round((Number(run.quarantineRate) / max) * 100));
-        const title = `${formatDate(run.endTime || run.startTime)} — ${formatRate(run.quarantineRate)} quarantined (${run.rowsQuarantined} of ${run.rowsProcessed})`;
+        const title = `${formatDate(run.endTime || run.startTime)} — ${formatRate(run.quarantineRate)} quarantined (${run.rowsQuarantined ?? 0} of ${run.rowsProcessed ?? 0})`;
         return `<span class="dq-spark-bar" style="height:${height}%; display: inline-block; width: 6px; margin-right: 2px; background: var(--portal-accent, #3b82f6); border-radius: 1px;" title="${esc(title)}"></span>`;
       }).join('');
       return `<div class="dq-spark" role="img" aria-label="Quarantine rate over the last ${ordered.length} runs" style="height: 40px; display: flex; align-items: flex-end; margin: 16px 0; background: var(--portal-bg, #0b1220); padding: 4px; border-radius: 4px; border: 1px solid var(--portal-border, #374151);">${bars}</div>`;
@@ -821,8 +822,8 @@ export function createGovernancePortal(opts = {}) {
                 </div>
                 <div class="dq-trend-stat" style="padding: 12px; background: var(--portal-bg, #0b1220); border-radius: 6px; border: 1px solid var(--portal-border, #374151);">
                   <span class="dq-trend-label" style="display: block; font-size: 12px; color: var(--portal-muted, #9ca3af); margin-bottom: 4px;">Rows quarantined / warned</span>
-                  <strong style="font-size: 20px;">${trend.totalRowsQuarantined.toLocaleString()} / ${trend.totalRowsWarned.toLocaleString()}</strong>
-                  <span class="dq-trend-flat" style="display: block; font-size: 12px; color: var(--portal-muted, #9ca3af); margin-top: 4px;">of ${trend.totalRowsProcessed.toLocaleString()} processed</span>
+                  <strong style="font-size: 20px;">${Number(trend.totalRowsQuarantined ?? 0).toLocaleString()} / ${Number(trend.totalRowsWarned ?? 0).toLocaleString()}</strong>
+                  <span class="dq-trend-flat" style="display: block; font-size: 12px; color: var(--portal-muted, #9ca3af); margin-top: 4px;">of ${Number(trend.totalRowsProcessed ?? 0).toLocaleString()} processed</span>
                 </div>
               </div>
               ${renderSparkline(trend.runs || [])}
@@ -831,12 +832,12 @@ export function createGovernancePortal(opts = {}) {
               ${rules.length ? `<table class="dq-rows-table" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
                 <thead><tr><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Target Table</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Column</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Tag</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Rule</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Action</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Source</th></tr></thead>
                 <tbody>${rules.map(rule => `<tr>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.targetTable)}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.targetTable || '—')}</td>
                   <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.targetColumn || '—')}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(rule.ruleTag)}</code></td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(rule.rule)}</code></td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.action)}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.sourceFile || '—')}:${esc(rule.line)}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(rule.ruleTag || '—')}</code></td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(rule.rule || '—')}</code></td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.action || '—')}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.sourceFile || '—')}:${esc(rule.line || '0')}</td>
                 </tr>`).join('')}</tbody>
               </table>` : '<p class="library-subtitle" style="color: var(--portal-muted, #9ca3af);">No readable rule definitions were found for this job script.</p>'}
               
@@ -845,9 +846,9 @@ export function createGovernancePortal(opts = {}) {
                 <table class="dq-rows-table" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
                   <thead><tr><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Column</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Rule</th><th style="text-align: right; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Failures</th></tr></thead>
                   <tbody>${trend.topRuleFailures.map(f => `<tr>
-                    <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(f.column)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(f.rule)}</code></td>
-                    <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${f.count.toLocaleString()}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(f.column || '—')}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(f.rule || '—')}</code></td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${Number(f.count ?? 0).toLocaleString()}</td>
                   </tr>`).join('')}</tbody>
                 </table>` : '<p class="library-subtitle" style="color: var(--portal-muted, #9ca3af);">No per-rule failure counts recorded for these runs.</p>'}
               
@@ -856,10 +857,10 @@ export function createGovernancePortal(opts = {}) {
                 <thead><tr><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Completed</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Status</th><th style="text-align: right; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Processed</th><th style="text-align: right; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Quarantined</th><th style="text-align: right; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Warned</th><th style="text-align: right; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Rate</th></tr></thead>
                 <tbody>${(trend.runs || []).map(run => `<tr>
                   <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(formatDate(run.endTime || run.startTime))}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(run.status)}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${run.rowsProcessed.toLocaleString()}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${run.rowsQuarantined.toLocaleString()}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${run.rowsWarned.toLocaleString()}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(run.status || '—')}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${Number(run.rowsProcessed ?? 0).toLocaleString()}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${Number(run.rowsQuarantined ?? 0).toLocaleString()}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${Number(run.rowsWarned ?? 0).toLocaleString()}</td>
                   <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); text-align: right;">${formatRate(run.quarantineRate)}</td>
                 </tr>`).join('')}</tbody>
               </table>`}
