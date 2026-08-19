@@ -282,7 +282,7 @@ The insight driving this track: **the grammar is the differentiator and the rend
 - **Spec first, renderer second:** a neutral grammar-of-graphics IR (`ChartSpec`) representing data bindings, statistical transforms, mark layers, scale mappings, coordinate projections, and faceting becomes the canonical contract in `ETL-SQL.Core.Reporting.Spec`.
 - **Type keywords are sugar:** existing `BAR`, `LINE`, `PIE`, `DONUT`, `WATERFALL`, `CANDLESTICK`, etc., remain the zero-friction "easy button" for authors and lower automatically into `ChartSpec`.
 - **Multi-layer authoring via `CUSTOM`:** complex composite graphics (e.g. dual-axis actual vs budget with target lines, confidence intervals, scatter with regression rules, bullet charts) are authored directly using `CREATE VISUAL <name> AS CUSTOM (...)`.
-- **Eliminating ECharts is an explicit non-goal:** ECharts remains the interactive browser backend. Decoupling allows incremental routing of standard Cartesian charts to lighter, modern renderers over time while preserving ECharts for heavy WebGL, maps, and exotic network/hierarchy layouts.
+- **Phased ECharts retirement via D3 micro-modules:** ECharts serves as the initial bridge for browser rendering while the GoG IR matures. Standard Cartesian/Polar charts (Tier 2) migrate to our native vector SVG engine, and complex spatial/hierarchy charts (Tier 3) migrate to lightweight D3 micro-packages (`d3-geo`, `d3-hierarchy`, `d3-sankey`, `d3-force`). This completely eliminates the 1.1 MB `echarts.min.js` dependency in favor of a ~35 KB modular footprint with 100% vector SVG display and print fidelity.
 - **Native C# static export:** server-side PDF and static report exports compile directly from `ChartSpec` into SVG XML via pure C# geometry and scale mathematics, completely removing the need to embed a V8/ClearScript JavaScript engine on the server.
 - **Vega-Lite semantic alignment & interchange:** the IR borrows Vega-Lite's proven vocabulary, allowing external Vega-Lite JSON specs to be translated directly into native `ChartSpec` via pure C# AST parsing without shipping a second live charting runtime.
 
@@ -290,7 +290,8 @@ The insight driving this track: **the grammar is the differentiator and the rend
 - **Stage 1: Neutral Spec IR and ECharts Lowering Compiler:** Implement `ChartSpec` record hierarchy; build `SpecDesugarer` to lower existing visual types; build `SpecToEChartsCompiler`. Existing `.rptsql` files render identically.
 - **Stage 2: Native C# SVG Static Export Backend:** Implement pure C# scale math (Linear, Band, Time) and vector geometry. Replaces `SvgChartRenderer.cs` and powers headless PDF and email exports without browser/V8 dependencies.
 - **Stage 3: `CUSTOM` Multi-Layer Syntax & Vega-Lite Translator:** Add parser and AST support for `CREATE VISUAL ... AS CUSTOM (...)`. Implement `VegaLiteToSpecCompiler` to parse raw Vega-Lite JSON into `ChartSpec`.
-- **Stage 4: Pluggable Browser Micro-Renderers (Stretch):** Introduce lightweight, modern SVG/Canvas browser micro-renderers to selectively replace ECharts for standard Cartesian charts.
+- **Stage 4: Native Vector SVG Micro-Renderer:** Implement lightweight browser SVG/DOM renderer for Tier 2 Cartesian & Circular charts (`BAR`, `LINE`, `SCATTER`, `PIE`, `COMBO`, `WATERFALL`). Conditionally omit ECharts for reports containing only Tier 1 & Tier 2 visuals.
+- **Stage 5: Complete ECharts Retirement via D3:** Replace remaining Tier 3 complex visuals (`MAP` via `d3-geo`, `TREEMAP`/`SUNBURST` via `d3-hierarchy`, `SANKEY` via `d3-sankey`, `NETWORK` via `d3-force`) with specialized D3 micro-packages. Completely retire `echarts.min.js` from the repository, achieving a ~35 KB total standalone runtime footprint.
 
 ---
 

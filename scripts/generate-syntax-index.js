@@ -11,7 +11,7 @@ const beginMarker = '<!-- BEGIN GENERATED CANONICAL TOKEN INDEX -->';
 const endMarker = '<!-- END GENERATED CANONICAL TOKEN INDEX -->';
 
 function readText(filePath) {
-  return fs.readFileSync(filePath, 'utf8');
+  return fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
 }
 
 function escapeRegex(value) {
@@ -279,7 +279,7 @@ function main() {
     return;
   }
 
-  if (current !== updated) {
+  if (current !== updated || fs.readFileSync(syntaxIndexPath, 'utf8') !== updated) {
     fs.writeFileSync(syntaxIndexPath, updated, 'utf8');
   }
 }
