@@ -619,9 +619,17 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         }
 
         if (!Directory.Exists(_root)) return;
-        foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
-            File.SetAttributes(file, FileAttributes.Normal);
-        Directory.Delete(_root, recursive: true);
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(_root, recursive: true);
+        }
+        catch
+        {
+            // On Linux CI, volume-mounted files written by Docker containers (e.g. metadata.db)
+            // may belong to container UIDs that the host runner cannot remove.
+        }
     }
 
     private sealed class CapturingWorkspaceProvider(ISandboxWorkspaceProvider inner) : ISandboxWorkspaceProvider

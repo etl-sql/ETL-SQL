@@ -460,6 +460,9 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `CHECKSUM(value1, ...)` | System | [CHECKSUM.md](reference/functions/cryptography/checksum.md) | 64-bit integer hash |
 | `BINARY_CHECKSUM(value1, ...)` | System | [BINARY_CHECKSUM.md](reference/functions/cryptography/binary_checksum.md) | Binary-compatible hash |
 | `ENV(variable_name)` | System | [ENV.md](reference/functions/general/env.md) | Host environment variable value |
+| `CURRENT_TENANT()` | System | [CURRENT_TENANT.md](reference/functions/general/current_tenant.md) | Display name or identifier of current tenant |
+| `TENANT_ID()` | System | [TENANT_ID.md](reference/functions/general/tenant_id.md) | Unique ID of current tenant context |
+| `IS_SANDBOX()` | System | [IS_SANDBOX.md](reference/functions/general/is_sandbox.md) | Returns TRUE if running in an isolated sandbox |
 | `CONNECTION_PROPERTY(connection, property)` | System | [CONNECTION_PROPERTY.md](reference/functions/table-valued/connection_property.md) | Resolves properties of configured connections |
 | `GENERATE_SERIES(start, stop, [step])` | System | [GENERATE_SERIES.md](reference/functions/table-valued/generate_series.md) | Returns table of numbers/dates |
 | `ERROR_MESSAGE()` | System | [ERROR_MESSAGE.md](reference/functions/error/error_message.md) | Error string in CATCH block |
@@ -2159,6 +2162,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `COVAR_POP` | Function | Canonical built-in function |
 | `COVAR_SAMP` | Function | Canonical built-in function |
 | `CUME_DIST` | Function | Canonical built-in function |
+| `CURRENT_TENANT` | Function | Canonical built-in function |
 | `DATALENGTH` | Function | Canonical built-in function |
 | `DATE_PART` | Function | Canonical built-in function |
 | `DATE_TRUNC` | Function | Canonical built-in function |
@@ -2194,6 +2198,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `HASHBYTES` | Function | Canonical built-in function |
 | `INITCAP` | Function | Canonical built-in function |
 | `INSTR` | Function | Canonical built-in function |
+| `IS_SANDBOX` | Function | Canonical built-in function |
 | `ISJSON` | Function | Canonical built-in function |
 | `ISNULL` | Function | Canonical built-in function |
 | `JSON_ARRAY` | Function | Canonical built-in function |
@@ -2297,6 +2302,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SUM` | Function | Canonical built-in function |
 | `SYSDATE` | Function | Canonical built-in function |
 | `TAN` | Function | Canonical built-in function |
+| `TENANT_ID` | Function | Canonical built-in function |
 | `TIMEFROMPARTS` | Function | Canonical built-in function |
 | `TO_STR` | Function | Canonical built-in function |
 | `TO_TIMESTAMP` | Function | Canonical built-in function |

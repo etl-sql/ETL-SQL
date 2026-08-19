@@ -171,7 +171,8 @@ public static class LanguageMetadata
         "PATH_COMBINE", "PATH_FILENAME", "PATH_EXTENSION", "PATH_DIRECTORY",
         "CONNECTION_PROPERTY",
         "SAME_PERIOD_LAST_YEAR", "START_OF_MONTH", "END_OF_MONTH", "START_OF_QUARTER", "END_OF_QUARTER", "START_OF_WEEK", "END_OF_WEEK",
-        "SAFE_DIVIDE", "CLEAN_STRING", "MASK_EMAIL", "MASK_PHONE", "MASK_SSN", "AGE_BUCKET", "VALUE_BUCKET"
+        "SAFE_DIVIDE", "CLEAN_STRING", "MASK_EMAIL", "MASK_PHONE", "MASK_SSN", "AGE_BUCKET", "VALUE_BUCKET",
+        "CURRENT_TENANT", "TENANT_ID", "IS_SANDBOX"
     };
 
     public static string EngineVersion => typeof(LanguageMetadata).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";

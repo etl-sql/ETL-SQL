@@ -54,11 +54,62 @@ We adopt a **Grammar-of-Graphics (GoG) Intermediate Representation (IR)** as the
 3. **Pluggable, Incremental Migration:** Eliminating ECharts overnight is an anti-goal. ECharts remains the initial interactive browser backend for all charts. As lighter, faster, or more modern renderers are introduced, visuals are routed per-spec with zero parity cliffs.
 4. **Native Static Export:** Server-side PDF and static report exports compile directly from `ChartSpec` into SVG XML via pure C# geometry and scale mathematics, completely eliminating headless JavaScript/V8 dependencies on the server.
 5. **Vega-Lite Semantic Alignment:** We align our GoG vocabulary with Vega-Lite’s proven mathematical abstractions (channels, mark types, scale properties) without forcing raw JSON syntax into `.rptsql`. This also enables direct, bidirectional Vega-Lite JSON translation.
-6. **Non-Chart Visual Boundaries:** Tabular visuals (`TABLE`), single KPI metrics (`CARD`), template widgets (`HTML`/`SVG`), and interactive inputs (`SLICER`, `DATEPICKER`, `SLIDER`) remain specialized, lightweight components outside the GoG mark abstraction.
+6. **Non-Chart Visual & Structural Boundaries:**
+   - **Structural & Layout Primitives:** `CREATE PAGE`, `CREATE CONTAINER`, `CREATE BUTTON`, and `CREATE NAVIGATION` are pure HTML/CSS layout and event orchestration entities (rendered via CSS Grid, Flexbox, and native DOM buttons). They are strictly outside the GoG mark/scale abstraction.
+   - **Tabular & Form Controls:** Tabular grids (`TABLE`), single metric tiles (`CARD`), markdown narratives (`TEXT`), and input controls (`SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`) remain lightweight, specialized DOM components.
 
 ---
 
-## 3. The `ChartSpec` Intermediate Representation
+## 3. Visual Catalog Tier Audit
+
+ETL-SQL supports **36 visual types** plus report structural primitives. Under the GoG architecture, these divide cleanly into three implementation tiers:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 All 36 Visual Types                                    │
+└───────────────┬──────────────────────────┬─────────────────────────────┬───────────────┘
+                │                          │                             │
+                ▼                          ▼                             ▼
+   ┌─────────────────────────┐┌─────────────────────────┐┌──────────────────────────────┐
+   │    Tier 1: HTML / DOM   ││   Tier 2: Native SVG    ││  Tier 3: 3rd-Party / Heavy   │
+   │  (13 Non-Chart Widgets) ││   (17 Standard Charts)  ││    (6 Complex / Spatial)     │
+   │                         ││                         ││                              │
+   │ • Tables & Cards        ││ • Bar, HBar, Line       ││ • GeoJSON Maps               │
+   │ • Text & Image          ││ • Scatter, Bubble       ││ • Network / Force Graphs     │
+   │ • All 9 Form Controls   ││ • Pie, Donut, Gauge     ││ • Sankey Flow Ribbons        │
+   │ • Pages & Containers    ││ • Combo, Waterfall      ││ • Treemap / Sunburst Trees   │
+   │ • Buttons & Navigation  ││ • BoxPlot, Candlestick  ││ • Gantt Timeline Charts      │
+   │                         ││ • HeatMap, Funnel       ││                              │
+   └─────────────────────────┘└─────────────────────────┘└──────────────────────────────┘
+```
+
+### Tier 1: Native HTML / DOM Controls (13 Visuals + Layout Primitives)
+*Rendered directly as semantic HTML/CSS without charting libraries or vector path mathematics.*
+
+- **Data & Narrative:** `TABLE` (Tabulator / HTML table), `CARD` (KPI metric tile), `TEXT` (Markdown narrative), `IMAGE` (`<img>`).
+- **Interactive Form Inputs:** `SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`.
+- **Layout & Structure:** `PAGE` (CSS Grid `grid-template-areas`), `CONTAINER` (Tabs / Accordion / Clusters), `BUTTON` (Action trigger), `NAVIGATION` (Top/sidebar nav).
+
+### Tier 2: Native GoG / SVG Engine (17 Visuals — High-ROI to Build)
+*Standard Cartesian (X/Y) or Polar graphics using straightforward scale math (Linear, Band, Time, Log) and SVG primitives (`<rect>`, `<path>`, `<circle>`, `<polygon>`). Building our own renderer in pure C# and JS unlocks 100% server/client visual parity and eliminates ~85% of ECharts reliance.*
+
+- **Cartesian Standard:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `COMBO`, `WATERFALL`, `BOXPLOT`, `CANDLESTICK`, `HEATMAP`.
+- **Circular / Polar:** `PIE`, `DONUT`, `GAUGE`, `FUNNEL`, `RADAR`.
+- **Small Multiples / Grid:** `TRELLIS`, `MATRIX`.
+
+### Tier 3: Specialized 3rd-Party / Heavy Layout Engine (6 Visuals)
+*Visuals requiring complex topological simulation, physics, GeoJSON projections, or multi-level spatial partitioning. These remain hosted by ECharts (or dedicated libraries like MapLibre / D3).*
+
+- `MAP` — GeoJSON polygon parsing, Mercator/Albers projections, boundary clipping, zoom/pan.
+- `NETWORK` — Force-directed physics simulations, dynamic node collisions, edge spring physics.
+- `SANKEY` — Multi-stage flow layout, cycle resolution, curved bezier ribbons.
+- `TREEMAP` — Squarified 2D space partitioning algorithms (Bruls-Huizing-van Wijk).
+- `SUNBURST` — Multi-tier hierarchical polar partitioning with variable-depth arcs.
+- `GANTT` — Time-scale task scheduling with dependency connectors and milestone snapping.
+
+---
+
+## 4. The `ChartSpec` Intermediate Representation
 
 The `ChartSpec` model is defined in `ETL-SQL.Core.Reporting.Spec`:
 
@@ -97,9 +148,9 @@ public sealed record EncodingSpec
 
 ---
 
-## 4. Authoring Syntax in Report-SQL (`.rptsql`)
+## 5. Authoring Syntax in Report-SQL (`.rptsql`)
 
-### 4.1 The "Easy Button" (Declarative Desugaring)
+### 5.1 The "Easy Button" (Declarative Desugaring)
 Standard visualizations use familiar, zero-friction syntax:
 
 ```sql
@@ -126,7 +177,7 @@ The `SpecDesugarer` lowers this into:
 }
 ```
 
-### 4.2 Multi-Layer Visuals via `CUSTOM`
+### 5.2 Multi-Layer Visuals via `CUSTOM`
 For complex, multi-mark graphics, authors use the `CUSTOM` visual keyword:
 
 #### Pattern 1: Actual vs. Budget with Target Line
@@ -197,7 +248,7 @@ CREATE VISUAL PerformanceBullet AS CUSTOM (
 
 ---
 
-## 5. Interactions, Tooltips, and Formats
+## 6. Interactions, Tooltips, and Formats
 
 1. **Tooltips:** Auto-generated from active encodings or customized via `TOOLTIP(TITLE = ..., CONTENT = ...)`. Number/Date formatting expressions (`FORMAT(value, pattern)`) are evaluated identically across C# and JavaScript runtimes.
 2. **Interactive Bindings:** `ACTIONS(ON_CLICK = SET_PARAMETER(...), ON_DOUBLE_CLICK = DRILL_REPORT(...))` and `INTERACTIONS(VisualA = VisualB)` attach to the `ChartSpec.Selections` schema. Any compliant backend translates native clicks/brushes into identical ETL-SQL engine events.
@@ -205,7 +256,7 @@ CREATE VISUAL PerformanceBullet AS CUSTOM (
 
 ---
 
-## 6. Delivery Phases
+## 7. Delivery Phases
 
 | Phase | Milestone | Description |
 | :--- | :--- | :--- |

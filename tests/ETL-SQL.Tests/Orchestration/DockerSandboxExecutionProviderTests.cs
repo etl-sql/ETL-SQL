@@ -455,9 +455,16 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
     public void Dispose()
     {
         if (!Directory.Exists(_root)) return;
-        foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
-            File.SetAttributes(file, FileAttributes.Normal);
-        Directory.Delete(_root, recursive: true);
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(_root, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup for volume-mounted paths on Linux CI
+        }
     }
 
     private sealed class RecordingCommands(params SandboxCommandResult[] results) : ISandboxCommandRunner
