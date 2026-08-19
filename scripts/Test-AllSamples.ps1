@@ -166,7 +166,7 @@ foreach ($script in $etlScripts) {
         -and $exitCode -eq $expectedExitCode `
         -and (-not $hasInternalError) `
         -and (-not [string]::IsNullOrWhiteSpace($expectedError)) `
-        -and $cliOutput.Contains($expectedError, [StringComparison]::OrdinalIgnoreCase)
+        -and ($cliOutput.IndexOf($expectedError, [StringComparison]::OrdinalIgnoreCase) -ge 0)
 
     if ((-not $expectsFailure -and $exitCode -eq 0 -and (-not $hasInternalError)) `
         -or $matchesExpectedFailure) {

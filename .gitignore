@@ -212,6 +212,7 @@ samples/output/*.enc
 /package-lock.json
 /portal_manifest.json
 /release-validation-*.log
+*.etlstate
 
 smoke-parity/
 

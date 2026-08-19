@@ -111,7 +111,7 @@ public sealed class GatewayBrokerAndHostTests
         var runTask = host.RunAsync(cts.Token);
 
         // Allow connection to establish
-        await Task.Delay(100);
+        await Task.Delay(100); // flaky-delay-ok: broker connection establishment
         Assert.Equal(GatewayHostStatus.Connected, host.Status);
 
         cts.Cancel();

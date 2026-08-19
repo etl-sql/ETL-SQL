@@ -472,6 +472,7 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
 
     private async Task WaitForRunningAsync(string container)
     {
+        // flaky-wait-budget-ok: container inspect status polling deadline
         var deadline = DateTime.UtcNow.AddSeconds(60);
         while (DateTime.UtcNow < deadline)
         {
@@ -496,6 +497,7 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         // store creating its database and finishing the write leaves state the next attempt cannot
         // read, which looks exactly like resume being broken. Wait until the size has settled.
         var metadata = Path.Combine(SessionRoot, "tenant-a", sessionId, "metadata.db");
+        // flaky-wait-budget-ok: checkpoint file settling deadline
         var deadline = DateTime.UtcNow.AddSeconds(120);
         long? previousLength = null;
         while (DateTime.UtcNow < deadline)
@@ -516,6 +518,7 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
     private static async Task<SandboxWorkspaceAssignment> WaitForAssignmentAsync(
         CapturingWorkspaceProvider workspaces)
     {
+        // flaky-wait-budget-ok: workspace allocation deadline
         var deadline = DateTime.UtcNow.AddSeconds(60);
         while (DateTime.UtcNow < deadline)
         {

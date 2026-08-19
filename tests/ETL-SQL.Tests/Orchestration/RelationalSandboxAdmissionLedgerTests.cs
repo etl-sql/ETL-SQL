@@ -292,7 +292,7 @@ public sealed class RelationalSandboxAdmissionLedgerTests : IDisposable
 
         // The node never came back. Once its claim is stale the pool must not stay idle behind it.
         var afterStaleness = Store(TimeSpan.FromMilliseconds(1));
-        await Task.Delay(20);
+        await Task.Delay(20); // flaky-delay-ok: lease staleness expiration gap
         Assert.NotNull(await afterStaleness.TryActivateAsync("busy-2", "node-b", 1, Lease));
         Assert.Equal(SandboxAdmissionState.Queued, (await live.ReadAsync("gone-1"))!.State);
     }

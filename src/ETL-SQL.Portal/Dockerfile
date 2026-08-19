@@ -30,6 +30,7 @@ COPY ["src/ETL-SQL.Portal/ETL-SQL.Portal.csproj", "ETL-SQL.Portal/"]
 COPY ["src/ETL-SQL.Infrastructure.Docker/ETL-SQL.Infrastructure.Docker.csproj", "ETL-SQL.Infrastructure.Docker/"]
 COPY ["src/ETL-SQL.Infrastructure.Logging/ETL-SQL.Infrastructure.Logging.csproj", "ETL-SQL.Infrastructure.Logging/"]
 COPY ["src/ETL-SQL.Infrastructure.Sqlite/ETL-SQL.Infrastructure.Sqlite.csproj", "ETL-SQL.Infrastructure.Sqlite/"]
+COPY ["src/ETL-SQL.Gateway/ETL-SQL.Gateway.csproj", "ETL-SQL.Gateway/"]
 
 
 RUN dotnet restore "ETL-SQL.Portal/ETL-SQL.Portal.csproj" -r linux-x64
