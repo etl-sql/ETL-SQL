@@ -444,3 +444,23 @@ CREATE BUTTON QuickSwitch AS (
 3. **Portal & Shell Integration:** Automatically render a global "Bookmarks" menu in the Report Player / Portal header bar populated from the `ReportManifest.Bookmarks` catalog.
 4. **URL Hash Synchronization:** Synchronize active bookmarks with browser URL hash fragments (`#bookmark=WestCoastDeepDive`) to enable one-click deep linking into specific report states.
 
+---
+
+### Governance & Infrastructure — Data Gateway: Interactive Viewer Identity & Row-Level Security Delegation
+
+**Candidate, not scheduled.** When interactive report dashboards query on-premises data sources via the Data Gateway, queries currently execute under static database or service account credentials configured for the resource. In regulated enterprise environments, target databases (such as SQL Server, PostgreSQL, Snowflake, and Oracle) enforce Row-Level Security (RLS) policies based on the specific end-user viewing the report.
+
+**Architecture Decision (Cross-Platform Context Propagation):**
+Rather than relying solely on Windows-only Active Directory Kerberos Constrained Delegation (KCD), the Gateway protocol will support cross-platform **Caller Identity Context Injection**:
+- **Context Envelope:** The Portal passes the authenticated viewer's verified identity (`Email`, `PrincipalId`, `Roles`, `Groups`) inside `GatewayOperationBounds.CallerContext`.
+- **Database Session Setting:** Before executing queries on the target engine, the Gateway executes the appropriate database session context command:
+  - *SQL Server:* `EXEC sp_set_session_context @key=N'UserId', @value=@viewerEmail;`
+  - *PostgreSQL:* `SET LOCAL app.current_user = 'alice@corp.com';` (or `SET LOCAL ROLE ...`)
+  - *Snowflake / Oracle:* Session tag injection / `DBMS_SESSION.SET_CONTEXT`.
+- **Zero-Trust Audit:** All gateway outcome ledger entries and audit outbox records log both the executing service identity and the authenticated caller identity for end-to-end audit compliance.
+
+**Delivery Stages:**
+1. **Protocol Extension:** Add `CallerContext` (principal key, identity, roles, directory groups) to `GatewayOperation` and `GatewayFrame`.
+2. **Session Context Injection:** Implement connector-specific session context setters in `IGatewayResourceExecutor` for MSSQL, PostgreSQL, Oracle, and Snowflake.
+3. **Portal DirectQuery Binding:** Pass ambient session identity from Portal interactive report controllers through to the Gateway execution dispatcher.
+4. **Optional Kerberos Constrained Delegation (Windows Overlay):** Add Windows-specific `WindowsIdentity.RunImpersonated` support for on-prem Active Directory Windows Integrated Authentication where Kerberos SPNs are configured.
