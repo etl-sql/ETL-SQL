@@ -11,6 +11,8 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin access-simulate`](admin-access-simulate.md) | Simulate what a user can reach — the access question, answered without a browser |
 | [`etl-sql admin backup`](admin-backup.md) | Back up portal/orchestrator state into split-custody data and keys archives |
 | [`etl-sql admin doctor`](admin-doctor.md) | Perform a system health check to verify the environment |
+| [`etl-sql admin gateway`](admin-gateway.md) | On-premises Data Gateway administration and setup |
+| [`etl-sql admin gateway setup`](admin-gateway-setup.md) | Configure and enroll this machine as an on-premises Data Gateway node |
 | [`etl-sql admin group`](admin-group.md) | Manage Portal groups and their membership |
 | [`etl-sql admin group add-member`](admin-group-add-member.md) | Add a user to a group |
 | [`etl-sql admin group capabilities`](admin-group-capabilities.md) | Show a group's Studio capabilities |
@@ -107,6 +109,8 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql enterprise status`](enterprise-status.md) | Inspect machine enterprise enrollment |
 | [`etl-sql enterprise unenroll`](enterprise-unenroll.md) | Remove machine enterprise enrollment |
 | [`etl-sql extract-spec`](extract-spec.md) | Extract data dictionary / schema pages from a large PDF specification |
+| [`etl-sql gateway`](gateway.md) | On-premises Data Gateway administration and setup |
+| [`etl-sql gateway setup`](gateway-setup.md) | Configure and enroll this machine as an on-premises Data Gateway node |
 | [`etl-sql gen-script`](gen-script.md) | Compile a schema JSON specification into a validated ETL-SQL script template |
 | [`etl-sql generate`](generate.md) | Generate mock data for testing projects |
 | [`etl-sql init`](init.md) | Scaffold a starter configuration and first ETL-SQL script for new users |

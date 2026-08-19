@@ -113,7 +113,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
                 // dispose/re-mount path is part of what breaks, and a story that leaks between
                 // fixtures only shows up when one is mounted after another.
                 await DismissOpenOverlaysAsync(page);
-                await page.ClickAsync($".story-link:nth-of-type({Array.IndexOf(stories, story) + 1})");
+                await page.ClickAsync($"button.story-link[data-story-id='{story.Id}']");
                 await page.WaitForTimeoutAsync(150);
 
                 if (story.Fixtures.Length > 1 && story.Fixtures[i].Length > 0)

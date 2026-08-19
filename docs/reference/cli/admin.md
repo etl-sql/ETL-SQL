@@ -15,6 +15,7 @@ etl-sql admin <subcommand>
 | [`access-simulate`](admin-access-simulate.md) | Simulate what a user can reach — the access question, answered without a browser |
 | [`backup`](admin-backup.md) | Back up portal/orchestrator state into split-custody data and keys archives |
 | [`doctor`](admin-doctor.md) | Perform a system health check to verify the environment |
+| [`gateway`](admin-gateway.md) | On-premises Data Gateway administration and setup |
 | [`group`](admin-group.md) | Manage Portal groups and their membership |
 | [`ha-soak`](admin-ha-soak.md) | Prepare and collect PostgreSQL HA soak certification artifacts |
 | [`machine`](admin-machine.md) | Manage machine-local governance stores |

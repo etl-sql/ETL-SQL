@@ -545,4 +545,20 @@ All agents, contributors, and maintainers must strictly adhere to this core engi
 
 ---
 
+## 17. Cross-Platform Line Endings & Pre-Push Validation
+
+To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions runs:
+
+1. **Shell Scripts (`.sh`) Must Use LF**:
+   - Shell scripts (`*.sh`) and systemd units (`*.service`) must strictly use LF line endings (CRLF causes `bad interpreter` / bash syntax errors on Linux runners).
+   - Normalize with: `node scripts/check-shell-line-endings.js --fix`
+2. **Shared Report Runtime Assets Must Use LF**:
+   - Always edit canonical assets in `src/ETL-SQL.ReportRuntime/Resources/Shared/` and run `node .\scripts\sync-assets.js` followed by `node .\scripts\sync-assets.js -Check`.
+3. **C# Text/Doc Assertions Must Normalize Line Endings**:
+   - When writing C# tests that read markdown or text files from disk via `File.ReadAllText()`, never assume `\r\n` or `\n`. Always use `.Replace("\r\n", "\n")` or regex `\r?\n` for cross-platform stability.
+4. **Always Run Pre-Push Validation Locally**:
+   - Before pushing to remote, always execute `.\scripts\Test-PrePush.ps1` (or verify via git pre-push hook). It verifies formatting, asset sync, syntax index sync, link coverage, flaky sleep patterns, test lane inventory, and fast contract tests in ~30 seconds.
+
+---
+
 *For a complete syntax walkthrough, start at [Getting Started](docs/guides/onboarding/getting-started.md), then use the [Syntax Index](docs/syntax-index.md) to find the focused reference page for each statement, function, or option.*
