@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net;
@@ -295,6 +295,53 @@ public class OrchestratorJobApiAuthTests : IDisposable
         var conflictBody = await conflict.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>();
         Assert.Equal(2, conflictBody!["current"]!["version"]!.GetValue<long>());
         Assert.Equal(2, conflictBody["current"]!["interval"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public async Task GetEffectivePermissions_WithoutApiKey_IsUnauthorized()
+    {
+        var client = _factory.CreateClient();
+        using var req = Request(HttpMethod.Get, "/api/effective-permissions", apiKey: null);
+        var res = await client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetEffectivePermissions_WithValidKey_ReturnsPermissionsList()
+    {
+        var client = _factory.CreateClient();
+        using var req = Request(HttpMethod.Get, "/api/effective-permissions", apiKey: ValidKey);
+        var res = await client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        var list = await res.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonArray>();
+        Assert.NotNull(list);
+        Assert.NotEmpty(list!);
+    }
+
+    [Fact]
+    public async Task GetCapabilities_WithValidKey_ReturnsCapabilitiesList()
+    {
+        var client = _factory.CreateClient();
+        using var req = Request(HttpMethod.Get, "/api/capabilities", apiKey: ValidKey);
+        var res = await client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        var list = await res.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonArray>();
+        Assert.NotNull(list);
+    }
+
+    [Fact]
+    public async Task GetTenantContext_WithValidKey_ReturnsContext()
+    {
+        var client = _factory.CreateClient();
+        using var req = Request(HttpMethod.Get, "/api/tenant-context", apiKey: ValidKey);
+        var res = await client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        var obj = await res.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>();
+        Assert.NotNull(obj);
+        Assert.NotNull(obj!["tenantId"]);
     }
 
     private static string? Tag(Activity activity, string key) =>

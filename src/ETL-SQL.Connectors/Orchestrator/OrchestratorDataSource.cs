@@ -1085,6 +1085,31 @@ namespace ETL_SQL.Connectors.Orchestrator
 
     internal sealed class OrchestratorCatalogDataSource(HttpClient http, string tableName) : IDataSource
     {
+        private sealed record OrchestratorEffectivePermissionDto(
+            string PrincipalKey,
+            string ActorIdentity,
+            string Role,
+            string GroupId,
+            string Scope,
+            bool CanCreate,
+            bool CanMutate,
+            bool CanExecute,
+            string Source);
+
+        private sealed record OrchestratorCapabilityDto(
+            string Name,
+            long SizeBytes,
+            string MountedPath,
+            bool IsAvailable,
+            DateTime LastModifiedUtc);
+
+        private sealed record OrchestratorTenantContextDto(
+            string TenantId,
+            string RunId,
+            bool IsSandboxed,
+            int StorageGrantsCount,
+            string CapabilityRoot);
+
         private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
         private readonly string _tableName = tableName.Trim();
         public string Path => _tableName;
@@ -1101,13 +1126,65 @@ namespace ETL_SQL.Connectors.Orchestrator
                 "eng.data_quality_failures" => "api/data-quality/failures",
                 "eng.stewardship_score" => "api/stewardship/score",
                 "eng.stewardship_gaps" => "api/stewardship/gaps",
+                "eng.effective_permissions" or "eng.permissions" => "api/effective-permissions",
+                "eng.capabilities" => "api/capabilities",
+                "eng.tenant_context" => "api/tenant-context",
                 _ => throw new NotSupportedException($"ORCHESTRATOR SELECT does not expose '{_tableName}'.")
             };
             using var response = await http.GetAsync(endpoint, cancellationToken);
             if (!response.IsSuccessStatusCode)
                 throw new ExecutionException($"Orchestrator API error ({(int)response.StatusCode}): {SecretRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken))}");
 
-            if (normalized.EndsWith("data_quality_status", StringComparison.Ordinal))
+            if (normalized.EndsWith("effective_permissions", StringComparison.Ordinal) || normalized.EndsWith("permissions", StringComparison.Ordinal))
+            {
+                var perms = await response.Content.ReadFromJsonAsync<OrchestratorEffectivePermissionDto[]>(Json, cancellationToken) ?? [];
+                var columns = new[] { "principal_key", "actor_identity", "role", "group_id", "scope", "can_create", "can_mutate", "can_execute", "source" };
+                var rows = perms.Select(p => new Row
+                {
+                    ["principal_key"] = p.PrincipalKey,
+                    ["actor_identity"] = p.ActorIdentity,
+                    ["role"] = p.Role,
+                    ["group_id"] = p.GroupId,
+                    ["scope"] = p.Scope,
+                    ["can_create"] = p.CanCreate,
+                    ["can_mutate"] = p.CanMutate,
+                    ["can_execute"] = p.CanExecute,
+                    ["source"] = p.Source
+                }).ToList();
+                yield return await BuildAsync(columns, rows);
+            }
+            else if (normalized.EndsWith("capabilities", StringComparison.Ordinal))
+            {
+                var caps = await response.Content.ReadFromJsonAsync<OrchestratorCapabilityDto[]>(Json, cancellationToken) ?? [];
+                var columns = new[] { "name", "size_bytes", "mounted_path", "is_available", "last_modified_utc" };
+                var rows = caps.Select(c => new Row
+                {
+                    ["name"] = c.Name,
+                    ["size_bytes"] = c.SizeBytes,
+                    ["mounted_path"] = c.MountedPath,
+                    ["is_available"] = c.IsAvailable,
+                    ["last_modified_utc"] = c.LastModifiedUtc
+                }).ToList();
+                yield return await BuildAsync(columns, rows);
+            }
+            else if (normalized.EndsWith("tenant_context", StringComparison.Ordinal))
+            {
+                var tc = await response.Content.ReadFromJsonAsync<OrchestratorTenantContextDto>(Json, cancellationToken);
+                var columns = new[] { "tenant_id", "run_id", "is_sandboxed", "storage_grants_count", "capability_root" };
+                var rows = tc != null ? new List<Row>
+                {
+                    new()
+                    {
+                        ["tenant_id"] = tc.TenantId,
+                        ["run_id"] = tc.RunId,
+                        ["is_sandboxed"] = tc.IsSandboxed,
+                        ["storage_grants_count"] = tc.StorageGrantsCount,
+                        ["capability_root"] = tc.CapabilityRoot
+                    }
+                } : [];
+                yield return await BuildAsync(columns, rows);
+            }
+            else if (normalized.EndsWith("data_quality_status", StringComparison.Ordinal))
             {
                 var statuses = await response.Content.ReadFromJsonAsync<JobDataQualityStatus[]>(Json, cancellationToken) ?? [];
                 var columns = new[] { "run_id", "job_name", "start_time", "end_time", "status", "rows_processed", "rows_warned", "rows_quarantined", "warn_percent", "quarantine_percent", "failed_rule_count", "freshest_value_utc", "freshness_state", "error_summary", "source" };
@@ -1176,7 +1253,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 }).ToList();
                 yield return await BuildAsync(columns, rows);
             }
-            else
+            else if (normalized.EndsWith("stewardship_gaps", StringComparison.Ordinal))
             {
                 var gaps = await response.Content.ReadFromJsonAsync<StewardshipGap[]>(Json, cancellationToken) ?? [];
                 var columns = new[] { "scope_type", "scope_name", "component", "target_table", "target_column", "requirement", "source_file", "line", "evaluated_at_utc", "definition_version" };

@@ -80,6 +80,19 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("USER_ROLES", UserRoles,
                 "USER_ROLES(): Table-valued — one 'Value' row per role the current user holds. Empty when no identity is present.");
 
+            registry.RegisterWithHelp("CURRENT_TENANT", (args, ctx) =>
+                ctx.StorageCapability?.Tenant.Tenant.Value ?? ctx.ExecutionIdentity?.TenantId ?? "standalone",
+                "CURRENT_TENANT(): Returns the tenant identifier of the current execution context ('standalone' when unbound).");
+            registry.RegisterWithHelp("TENANT_ID", (args, ctx) =>
+                ctx.StorageCapability?.Tenant.Tenant.Value ?? ctx.ExecutionIdentity?.TenantId ?? "standalone",
+                "TENANT_ID(): Alias for CURRENT_TENANT().");
+
+            registry.RegisterWithHelp("IS_SANDBOX", (args, ctx) =>
+                ctx.StorageCapability != null
+                || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ETLSQL_CAPABILITY_ROOT"))
+                || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ETLSQL_SECURITY_EVENT_OUTBOX_PATH")),
+                "IS_SANDBOX(): Returns TRUE if the current execution is running inside a sandboxed runtime.");
+
             registry.RegisterWithHelp("GET_JOB_STATE", async (args, ctx) =>
             {
                 if (args.Count < 1) throw new ExecutionException("GET_JOB_STATE requires at least 1 argument (key)");

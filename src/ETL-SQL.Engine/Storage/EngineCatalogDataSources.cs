@@ -1903,6 +1903,231 @@ public sealed class StewardshipGapsDataSource : IDataSource
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
+public sealed class CapabilitiesDataSource : IDataSource
+{
+    private static readonly string[] Columns = ["name", "size_bytes", "mounted_path", "is_available", "last_modified_utc"];
+
+    public string Path => "eng.capabilities";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        var root = CapabilityReference.GetCapabilityRoot();
+
+        if (System.IO.Directory.Exists(root))
+        {
+            var dirInfo = new System.IO.DirectoryInfo(root);
+            foreach (var file in dirInfo.GetFiles().OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["name"] = file.Name,
+                    ["size_bytes"] = file.Length,
+                    ["mounted_path"] = file.FullName,
+                    ["is_available"] = true,
+                    ["last_modified_utc"] = file.LastWriteTimeUtc
+                });
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        if (rows.Count > 0 || !System.IO.Directory.Exists(root))
+            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        throw new NotSupportedException("eng.capabilities is read-only.");
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.capabilities is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class TenantContextDataSource : IDataSource
+{
+    private readonly IExecutionContext _context;
+    private static readonly string[] Columns = ["tenant_id", "run_id", "is_sandboxed", "storage_grants_count", "capability_root"];
+
+    public TenantContextDataSource(IExecutionContext context)
+    {
+        _context = context;
+    }
+
+    public string Path => "eng.tenant_context";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var tenantId = _context.StorageCapability?.Tenant.Tenant.Value
+            ?? _context.ExecutionIdentity?.TenantId
+            ?? "standalone";
+        var runId = _context.StorageCapability?.RunId ?? "local";
+        var isSandboxed = _context.StorageCapability != null
+            || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ETLSQL_CAPABILITY_ROOT"))
+            || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ETLSQL_SECURITY_EVENT_OUTBOX_PATH"));
+        var grantCount = _context.StorageCapability?.Grants.Count ?? 0;
+        var capabilityRoot = CapabilityReference.GetCapabilityRoot();
+
+        var rows = new List<Row>
+        {
+            new()
+            {
+                ["tenant_id"] = tenantId,
+                ["run_id"] = runId,
+                ["is_sandboxed"] = isSandboxed,
+                ["storage_grants_count"] = grantCount,
+                ["capability_root"] = capabilityRoot
+            }
+        };
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        throw new NotSupportedException("eng.tenant_context is read-only.");
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.tenant_context is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class EffectivePermissionsDataSource : IDataSource
+{
+    private readonly IExecutionContext _context;
+    private static readonly string[] Columns = ["principal_key", "actor_identity", "role", "group_id", "scope", "can_create", "can_mutate", "can_execute", "source"];
+
+    public EffectivePermissionsDataSource(IExecutionContext context)
+    {
+        _context = context;
+    }
+
+    public string Path => "eng.effective_permissions";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        var identity = _context.ExecutionIdentity;
+        var tenant = _context.StorageCapability?.Tenant.Tenant.Value
+            ?? identity?.TenantId
+            ?? "global";
+
+        if (identity is not null)
+        {
+            var isViewerOnly = !identity.IsAdmin && identity.Roles.Any() && identity.Roles.All(r => r.Contains("Viewer", StringComparison.OrdinalIgnoreCase));
+            var canCreate = identity.IsAdmin || (!isViewerOnly && identity.Roles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase) || r.Equals("OrchestratorManager", StringComparison.OrdinalIgnoreCase) || r.Equals("Editor", StringComparison.OrdinalIgnoreCase)));
+            var canMutate = identity.IsAdmin || !isViewerOnly;
+            var canExecute = identity.IsAdmin || !isViewerOnly;
+
+            foreach (var role in identity.Roles)
+            {
+                rows.Add(new Row
+                {
+                    ["principal_key"] = identity.EffectiveUser,
+                    ["actor_identity"] = identity.RealUser,
+                    ["role"] = role,
+                    ["group_id"] = "",
+                    ["scope"] = tenant,
+                    ["can_create"] = canCreate,
+                    ["can_mutate"] = canMutate,
+                    ["can_execute"] = canExecute,
+                    ["source"] = "ENGINE"
+                });
+            }
+
+            foreach (var group in identity.Groups)
+            {
+                rows.Add(new Row
+                {
+                    ["principal_key"] = identity.EffectiveUser,
+                    ["actor_identity"] = identity.RealUser,
+                    ["role"] = "",
+                    ["group_id"] = group,
+                    ["scope"] = tenant,
+                    ["can_create"] = canCreate,
+                    ["can_mutate"] = canMutate,
+                    ["can_execute"] = canExecute,
+                    ["source"] = "ENGINE"
+                });
+            }
+
+            if (rows.Count == 0)
+            {
+                rows.Add(new Row
+                {
+                    ["principal_key"] = identity.EffectiveUser,
+                    ["actor_identity"] = identity.RealUser,
+                    ["role"] = identity.IsAdmin ? "Admin" : "None",
+                    ["group_id"] = "",
+                    ["scope"] = tenant,
+                    ["can_create"] = identity.IsAdmin,
+                    ["can_mutate"] = identity.IsAdmin,
+                    ["can_execute"] = identity.IsAdmin,
+                    ["source"] = "ENGINE"
+                });
+            }
+        }
+        else
+        {
+            rows.Add(new Row
+            {
+                ["principal_key"] = "system",
+                ["actor_identity"] = Environment.UserName,
+                ["role"] = "Admin",
+                ["group_id"] = "",
+                ["scope"] = "global",
+                ["can_create"] = true,
+                ["can_mutate"] = true,
+                ["can_execute"] = true,
+                ["source"] = "ENGINE"
+            });
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        throw new NotSupportedException("eng.effective_permissions is read-only.");
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.effective_permissions is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 internal static class EngineCatalogTableBuilder
 {
     public static async Task<DataTable> BuildAsync(IEnumerable<string> columns, IEnumerable<Row> rows)

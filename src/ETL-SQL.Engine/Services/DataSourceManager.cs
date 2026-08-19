@@ -327,6 +327,18 @@ public class DataSourceManager(
         {
             return new ProtectedDataSuggestionsDataSource(_lineageCatalogStore, _configuration);
         }
+        else if (IsEngineVirtualTable(table, "capabilities"))
+        {
+            return new CapabilitiesDataSource();
+        }
+        else if (IsEngineVirtualTable(table, "tenant_context"))
+        {
+            return new TenantContextDataSource(_evaluator);
+        }
+        else if (IsEngineVirtualTable(table, "effective_permissions") || IsEngineVirtualTable(table, "permissions"))
+        {
+            return new EffectivePermissionsDataSource(_evaluator);
+        }
         else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
         {
             return new LineageDataSource(_evaluator.LineageTracker);

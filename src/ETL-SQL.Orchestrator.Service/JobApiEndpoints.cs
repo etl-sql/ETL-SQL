@@ -604,6 +604,104 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(evaluation.Gaps);
             }).WithName("getStewardshipGaps");
 
+            app.MapGet("/api/effective-permissions", (HttpContext ctx, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var caller = RequestCaller(ctx);
+                var tenant = RequestTenant(ctx, cfg);
+                var isViewerOnly = caller.Roles.Count > 0
+                    && caller.Roles.All(r => r.Contains("Viewer", StringComparison.OrdinalIgnoreCase));
+                var canCreate = !isViewerOnly && caller.Roles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase) || r.Equals("OrchestratorManager", StringComparison.OrdinalIgnoreCase));
+                var canMutate = !isViewerOnly;
+                var canExecute = !isViewerOnly;
+
+                var list = new List<object>();
+                foreach (var role in caller.Roles)
+                {
+                    list.Add(new
+                    {
+                        PrincipalKey = caller.PrincipalKey,
+                        ActorIdentity = caller.AuditActor,
+                        Role = role,
+                        GroupId = "",
+                        Scope = tenant ?? "global",
+                        CanCreate = canCreate,
+                        CanMutate = canMutate,
+                        CanExecute = canExecute,
+                        Source = "ORCHESTRATOR"
+                    });
+                }
+                foreach (var group in caller.GroupIds)
+                {
+                    list.Add(new
+                    {
+                        PrincipalKey = caller.PrincipalKey,
+                        ActorIdentity = caller.AuditActor,
+                        Role = "",
+                        GroupId = group,
+                        Scope = tenant ?? "global",
+                        CanCreate = canCreate,
+                        CanMutate = canMutate,
+                        CanExecute = canExecute,
+                        Source = "ORCHESTRATOR"
+                    });
+                }
+                if (list.Count == 0)
+                {
+                    list.Add(new
+                    {
+                        PrincipalKey = caller.PrincipalKey,
+                        ActorIdentity = caller.AuditActor,
+                        Role = "None",
+                        GroupId = "",
+                        Scope = tenant ?? "global",
+                        CanCreate = false,
+                        CanMutate = false,
+                        CanExecute = false,
+                        Source = "ORCHESTRATOR"
+                    });
+                }
+                return Results.Ok(list);
+            }).WithName("getEffectivePermissions");
+
+            app.MapGet("/api/capabilities", (HttpContext ctx, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var root = CapabilityReference.GetCapabilityRoot();
+                var list = new List<object>();
+                if (Directory.Exists(root))
+                {
+                    var dir = new DirectoryInfo(root);
+                    foreach (var f in dir.GetFiles().OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        list.Add(new
+                        {
+                            Name = f.Name,
+                            SizeBytes = f.Length,
+                            MountedPath = f.FullName,
+                            IsAvailable = true,
+                            LastModifiedUtc = f.LastWriteTimeUtc
+                        });
+                    }
+                }
+                return Results.Ok(list);
+            }).WithName("getMountedCapabilities");
+
+            app.MapGet("/api/tenant-context", (HttpContext ctx, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var caller = RequestCaller(ctx);
+                var tenant = RequestTenant(ctx, cfg) ?? caller.TenantId ?? "standalone";
+                return Results.Ok(new
+                {
+                    TenantId = tenant,
+                    RunId = ctx.TraceIdentifier,
+                    IsSandboxed = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ETLSQL_CAPABILITY_ROOT")),
+                    StorageGrantsCount = 0,
+                    CapabilityRoot = CapabilityReference.GetCapabilityRoot()
+                });
+            }).WithName("getTenantContext");
+
             app.MapGet("/api/schedules", async (HttpContext ctx, IJobCatalogStore catalog,
                 OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
                 int limit = 100, int offset = 0) =>

@@ -24,7 +24,7 @@ public static class EngineCatalog
         "bundles", "bundle_files", "bundle_dependencies", "tags",
         "lineage", "locks", "sessions", "lineage_history", "missing_tags",
         "protected_data", "protected_data_suggestions", "data_quality_rules", "stewardship_score", "stewardship_gaps",
-        "job_statement_metrics"
+        "job_statement_metrics", "capabilities", "tenant_context", "effective_permissions"
     };
 
     public static readonly Dictionary<string, List<ColumnMetadata>> TableColumns = new(StringComparer.OrdinalIgnoreCase)
@@ -73,6 +73,9 @@ public static class EngineCatalog
             new("dq_rows_validated", "INT"), new("dq_rows_quarantined", "INT"), new("dq_rows_warned", "INT"),
             new("dq_validation_ms", "INT"), new("failed", "BOOLEAN"), new("source", "VARCHAR")
         },
+        ["capabilities"] = new() { new("name", "VARCHAR"), new("size_bytes", "BIGINT"), new("mounted_path", "VARCHAR"), new("is_available", "BOOLEAN"), new("last_modified_utc", "DATETIME") },
+        ["tenant_context"] = new() { new("tenant_id", "VARCHAR"), new("run_id", "VARCHAR"), new("is_sandboxed", "BOOLEAN"), new("storage_grants_count", "INT"), new("capability_root", "VARCHAR") },
+        ["effective_permissions"] = new() { new("principal_key", "VARCHAR"), new("actor_identity", "VARCHAR"), new("role", "VARCHAR"), new("group_id", "VARCHAR"), new("scope", "VARCHAR"), new("can_create", "BOOLEAN"), new("can_mutate", "BOOLEAN"), new("can_execute", "BOOLEAN"), new("source", "VARCHAR") },
         ["profile"] = new()
         {
             new("timestamp", "VARCHAR"), new("statement", "VARCHAR"), new("rows_processed", "VARCHAR"), new("index_used", "VARCHAR"), new("duration_ms", "VARCHAR"), new("memory_kb", "VARCHAR"),
