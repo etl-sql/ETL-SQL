@@ -1,5 +1,5 @@
 // UI Sandbox runtime — Category accordions, instant fuzzy filter, deep linking, theme switching & mounting.
-import { stories } from './stories/index.js';
+import { categoryOrder, stories } from './stories/index.js';
 
 const categoryIcons = {
   'Admin & Fleet': '⚙️',
@@ -87,9 +87,13 @@ function syncUrlHash() {
   }
 }
 
-// Group stories by category
+// Group stories by ordered category
 function getGroupedStories() {
   const groups = new Map();
+  for (const cat of categoryOrder) {
+    groups.set(cat, []);
+  }
+
   for (const s of stories) {
     const cat = s.category || 'Other Surfaces';
     if (!groups.has(cat)) groups.set(cat, []);
@@ -128,19 +132,26 @@ function renderSidebar() {
 
   const grouped = getGroupedStories();
   let totalVisible = 0;
+  let totalGroupsWithItems = 0;
+  let collapsedGroupsCount = 0;
   const isSearching = searchQuery.trim().length > 0;
 
   for (const [category, allInCat] of grouped.entries()) {
     const visibleStories = filterStories(allInCat);
     if (visibleStories.length === 0) continue;
     totalVisible += visibleStories.length;
+    totalGroupsWithItems++;
 
     const groupEl = document.createElement('div');
     groupEl.className = 'category-group';
+    groupEl.dataset.category = category;
 
     // Auto-expand if searching, else respect user collapse state
     const isCollapsed = !isSearching && collapsedCategories.has(category);
-    if (isCollapsed) groupEl.classList.add('is-collapsed');
+    if (isCollapsed) {
+      groupEl.classList.add('is-collapsed');
+      collapsedGroupsCount++;
+    }
 
     // Header
     const headerBtn = document.createElement('button');
@@ -167,10 +178,12 @@ function renderSidebar() {
     headerBtn.addEventListener('click', () => {
       if (collapsedCategories.has(category)) {
         collapsedCategories.delete(category);
+        groupEl.classList.remove('is-collapsed');
       } else {
         collapsedCategories.add(category);
+        groupEl.classList.add('is-collapsed');
       }
-      groupEl.classList.toggle('is-collapsed');
+      updateCollapseAllButtonState(totalGroupsWithItems);
     });
 
     // Stories list in category
@@ -216,12 +229,14 @@ function renderSidebar() {
     $storiesNav.appendChild(groupEl);
   }
 
-  // Update showing text
+  // Update showing count text
   if (totalVisible === stories.length) {
     $showingCountText.textContent = `Showing all ${stories.length} stories`;
   } else {
     $showingCountText.textContent = `Showing ${totalVisible} of ${stories.length} stories`;
   }
+
+  updateCollapseAllButtonState(totalGroupsWithItems);
 
   // Empty search state
   if (totalVisible === 0) {
@@ -238,6 +253,14 @@ function renderSidebar() {
       renderSidebar();
     });
     $storiesNav.appendChild(emptyDiv);
+  }
+}
+
+function updateCollapseAllButtonState(totalGroups) {
+  if (collapsedCategories.size >= totalGroups && totalGroups > 0) {
+    $collapseAllBtn.textContent = 'Expand all';
+  } else {
+    $collapseAllBtn.textContent = 'Collapse all';
   }
 }
 
@@ -294,6 +317,11 @@ async function mount() {
 }
 
 function selectStory() {
+  // Ensure the category containing the active story is expanded
+  if (currentStory.category && collapsedCategories.has(currentStory.category)) {
+    collapsedCategories.delete(currentStory.category);
+  }
+
   $storyCategory.textContent = currentStory.category || 'SURFACE';
   $storyTitle.textContent = currentStory.title;
   $storySubtitle.textContent = currentStory.subtitle || currentStory.id;
@@ -418,14 +446,14 @@ $filterChips.addEventListener('click', (e) => {
 // Collapse / Expand All
 $collapseAllBtn.addEventListener('click', () => {
   const grouped = getGroupedStories();
-  if (collapsedCategories.size >= grouped.size) {
+  const visibleCategories = Array.from(grouped.keys()).filter((cat) => filterStories(grouped.get(cat)).length > 0);
+
+  if (collapsedCategories.size >= visibleCategories.length) {
     collapsedCategories.clear();
-    $collapseAllBtn.textContent = 'Collapse all';
   } else {
-    for (const cat of grouped.keys()) {
+    for (const cat of visibleCategories) {
       collapsedCategories.add(cat);
     }
-    $collapseAllBtn.textContent = 'Expand all';
   }
   renderSidebar();
 });

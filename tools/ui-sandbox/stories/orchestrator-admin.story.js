@@ -97,7 +97,7 @@ const FIXTURES = {
 export default {
   id: 'orchestrator-admin-ui',
   title: 'Orchestrator — Job Administration UI',
-  category: 'Orchestrator',
+  category: 'Orchestrator & Jobs',
   fixtures: Object.entries(FIXTURES).map(([id, fixture]) => ({ id, label: fixture.label })),
   async mount(stage, fixtureId, ctx) {
     const fixture = FIXTURES[fixtureId] || FIXTURES.schedules;

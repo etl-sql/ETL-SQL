@@ -187,7 +187,7 @@ export default {
   id: 'gateways-admin',
   title: 'Data Gateways Admin',
   subtitle: 'api/admin/gateways & cluster fleet management',
-  category: 'Admin & Operations',
+  category: 'Admin & Fleet',
   fixtures: [
     { id: 'healthy-fleet', label: 'Healthy Fleet (Multi-Node Clusters)' },
     { id: 'single-offline', label: 'Offline Gateway' },

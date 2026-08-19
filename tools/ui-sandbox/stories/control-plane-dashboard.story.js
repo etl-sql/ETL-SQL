@@ -196,7 +196,7 @@ const FIXTURES = {
 export default {
   id: 'control-plane-dashboard',
   title: 'Control Plane — SaaS Platform Admin',
-  category: 'Platform',
+  category: 'Control Plane & SaaS',
   fixtures: Object.entries(FIXTURES).map(([id, fixture]) => ({ id, label: fixture.label })),
   async mount(stage, fixtureId, ctx) {
     const fixtureDef = FIXTURES[fixtureId] || FIXTURES.healthy;

@@ -27,7 +27,19 @@ import orchestratorAcl from './orchestrator-acl.story.js';
 import orchestratorAdmin from './orchestrator-admin.story.js';
 import controlPlaneDashboard from './control-plane-dashboard.story.js';
 
+export const categoryOrder = [
+  'Admin & Fleet',
+  'Control Plane & SaaS',
+  'Orchestrator & Jobs',
+  'Governance & Security',
+  'Lineage & Graphs',
+  'Designers & Visuals',
+  'Script Editors & IDE',
+  'Portal Shell & Views'
+];
+
 const categoryDefaults = {
+  // Admin & Fleet
   'gateways-admin': 'Admin & Fleet',
   'connections-admin': 'Admin & Fleet',
   'secrets-admin': 'Admin & Fleet',
@@ -37,28 +49,36 @@ const categoryDefaults = {
   'admin-catalog': 'Admin & Fleet',
   'subscription-history': 'Admin & Fleet',
 
+  // Control Plane & SaaS
   'control-plane-dashboard': 'Control Plane & SaaS',
   'triage-board': 'Control Plane & SaaS',
 
+  // Orchestrator & Jobs
+  'orchestrator-admin-ui': 'Orchestrator & Jobs',
   'orchestrator-admin': 'Orchestrator & Jobs',
   'orchestrator-run-overrides': 'Orchestrator & Jobs',
   'orchestrator-checkpoint-resume': 'Orchestrator & Jobs',
   'orchestrator-acl': 'Orchestrator & Jobs',
 
+  // Governance & Security
   'portal-governance': 'Governance & Security',
   'data-quality-queue': 'Governance & Security',
 
+  // Lineage & Graphs
   'lineage-dag': 'Lineage & Graphs',
   'lineage-catalog': 'Lineage & Graphs',
   'lineage-ui': 'Lineage & Graphs',
 
+  // Designers & Visuals
   'designer': 'Designers & Visuals',
   'snapshot-designer': 'Designers & Visuals',
 
+  // Script Editors & IDE
   'script-editor': 'Script Editors & IDE',
   'script-editor-unified': 'Script Editors & IDE',
   'vscode-webviews': 'Script Editors & IDE',
 
+  // Portal Shell & Views
   'portal-responsive-shell': 'Portal Shell & Views',
   'portal-studio': 'Portal Shell & Views',
   'feedback': 'Portal Shell & Views'
@@ -110,6 +130,6 @@ export const rawStories = [
 ];
 
 export const stories = rawStories.map((story) => {
-  story.category = story.category || categoryDefaults[story.id] || 'Other Surfaces';
+  story.category = categoryDefaults[story.id] || story.category || 'Other Surfaces';
   return story;
 });
