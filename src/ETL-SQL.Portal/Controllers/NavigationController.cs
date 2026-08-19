@@ -43,7 +43,7 @@ public sealed class NavigationController(
         var destinations = new List<NavDestinationDto>
         {
             Role("adminNav", "Admin"),
-            Role("orchestratorNav", "Admin", "OrchestratorManager"),
+            Role("orchestratorNav", "Admin", "OrchestratorManager", "OrchestratorViewer"),
             Module("docsNav", "Documentation"),
             Studio()
         };

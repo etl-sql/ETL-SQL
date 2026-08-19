@@ -155,6 +155,37 @@ public sealed class OrchestratorObjectAuthorizationTests : IDisposable
             OrchestratorObjectPermission.Read, null));
     }
 
+    [Fact]
+    public async Task OrchestratorViewerRole_CannotCreateObjects_ButCanReadGrantedObjects()
+    {
+        var store = new SQLiteJobHistoryStore(dbPath);
+        var authorization = new OrchestratorObjectAuthorizationService(store);
+        var jobId = await SaveJobAsync(store, "nightly", null);
+        var viewer = new OrchestratorCaller("user", "10", "viewer", ["OrchestratorViewer"], []);
+        var manager = new OrchestratorCaller("user", "11", "manager", ["OrchestratorManager"], []);
+
+        // CanCreate requires Admin or OrchestratorManager
+        Assert.False(OrchestratorObjectAuthorizationService.CanCreate(viewer));
+        Assert.True(OrchestratorObjectAuthorizationService.CanCreate(manager));
+
+        // Stranger viewer cannot read ungranted job
+        Assert.False(await authorization.CanAsync(
+            viewer, OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Read, "user:1"));
+
+        // Grant READ to viewer
+        await store.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+            jobId, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.User, "10",
+            OrchestratorObjectPermission.Read, "user:1"));
+
+        // Viewer can now read, but not execute or manage
+        Assert.True(await authorization.CanAsync(
+            viewer, OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Read, "user:1"));
+        Assert.False(await authorization.CanAsync(
+            viewer, OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Execute, "user:1"));
+        Assert.False(await authorization.CanAsync(
+            viewer, OrchestratorObjectKind.Job, jobId, null, OrchestratorObjectPermission.Manage, "user:1"));
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();

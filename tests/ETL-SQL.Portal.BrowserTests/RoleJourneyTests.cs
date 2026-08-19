@@ -44,6 +44,7 @@ public sealed class RoleJourneyTests(PortalBrowserFixture fixture)
     [InlineData("Viewer", false)]
     [InlineData("Publisher", true)]
     [InlineData("DataSteward", false)]
+    [InlineData("OrchestratorViewer", false)]
     [InlineData("OrchestratorManager", false)]
     public async Task StudioIsOffered_OnlyToRolesHoldingStudioAccess(string role, bool seesStudio)
     {
@@ -77,6 +78,8 @@ public sealed class RoleJourneyTests(PortalBrowserFixture fixture)
         { "Publisher", false, false, true },
         // Works the data-quality queue, which lives under Governance.
         { "DataSteward", false, false, true },
+        // Browses the scheduler without management rights — the "Viewer" journey.
+        { "OrchestratorViewer", false, true, true },
         // Operates the scheduler and nothing else — the "Operator" journey.
         { "OrchestratorManager", false, true, true },
     };
@@ -111,6 +114,7 @@ public sealed class RoleJourneyTests(PortalBrowserFixture fixture)
     [Theory]
     [InlineData("Viewer", false, false)]
     [InlineData("Publisher", false, false)]
+    [InlineData("OrchestratorViewer", false, false)]
     [InlineData("OrchestratorManager", false, false)]
     [InlineData("DataSteward", true, true)]
     public async Task GovernanceSubViews_AreOfferedOnlyToRolesTheirApisAccept(

@@ -71,14 +71,15 @@ If `ScriptRoot` is not set it defaults to the Orchestrator's working directory. 
 
 ## Granting Portal Access
 
-Two roles can access the Orchestrator tab in the portal:
+Roles that can access the Orchestrator tab in the portal:
 
 | Role | Access |
 | :--- | :--- |
 | **Admin** | Full object-authority bypass — Orchestrator tab is always visible |
 | **OrchestratorManager** | May create objects and manage objects they own or have been granted; cannot access the Admin panel |
+| **OrchestratorViewer** | Read-only visibility into the Orchestrator tab (read job status, run history, DAG dependencies, metrics, watermarks) for granted or public objects without object creation (`CanCreate`) or management rights; cannot access the Admin panel |
 
-Assign the `OrchestratorManager` role to operations staff who need to manage jobs but should not be able to create users or manage reports. See the [Portal Administrator's Guide](../portal/README.md#orchestrator-manager-role) for role assignment instructions.
+Assign the `OrchestratorManager` role to operations staff who need to manage jobs but should not be able to create users or manage reports. Assign `OrchestratorViewer` to users who need observability over jobs and execution metrics without mutation rights. See the [Portal Administrator's Guide](../portal/README.md#orchestrator-manager-role) for role assignment instructions.
 
 ### Object ownership and grants
 

@@ -1143,12 +1143,19 @@ applyPortalBranding();
 initTheme();
 
 let isAdmin = false;
+let isManager = false;
 try {
   const identity = getSessionIdentity(auth.getToken());
   renderSessionIdentity(identity, document.getElementById('topbarUser'));
   isAdmin = hasRole(identity, 'Admin');
-  const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager');
+  isManager = hasRole(identity, 'Admin', 'OrchestratorManager');
+  const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager', 'OrchestratorViewer');
   if (!canOrch) window.location.href = '/index.html';
+  if (!isManager) {
+    document.getElementById('newJobBtn')?.setAttribute('style', 'display:none');
+    document.getElementById('newScheduleBtn')?.setAttribute('style', 'display:none');
+    document.getElementById('newNotificationBtn')?.setAttribute('style', 'display:none');
+  }
 } catch { window.location.href = '/login.html'; }
 
 applyNavigationSafely();

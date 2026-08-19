@@ -148,6 +148,7 @@ var rawSecret = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
 | `Publisher` | Create folders, publish reports, manage subscriptions |
 | `Viewer` | Browse, run, and export accessible reports |
 | `OrchestratorManager` | Scheduled jobs and execution history; no Admin panel |
+| `OrchestratorViewer` | Read-only access to scheduled jobs, run history, and metrics; no creation/management |
 | `FleetReader` | Scoped cross-environment fleet status reads |
 | `StewardshipViewer` | Read the stewardship dashboard |
 | `DataSteward` | Stewardship decisions and the data-quality quarantine queue |

@@ -1,6 +1,6 @@
-﻿# Orchestrator Management
+# Orchestrator Management
 
-The portal includes a built-in **Orchestrator** tab that provides a web interface for managing ETL-SQL scheduled jobs. Access is controlled by the `OrchestratorAccess` policy: **Admin** or **OrchestratorManager** role.
+The portal includes a built-in **Orchestrator** tab that provides a web interface for managing ETL-SQL scheduled jobs. Access is controlled by the `OrchestratorAccess` policy: **Admin**, **OrchestratorManager**, or **OrchestratorViewer** role.
 
 ## Connecting to the Orchestrator Service
 

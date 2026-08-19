@@ -1,7 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text.Json;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Orchestrator.Service;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
@@ -330,6 +334,101 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
     }
 
     [Fact]
+    public async Task DynamicOidcGroupClaims_DriveOrchestratorAssertionGroupGrants_AndRevokeOnClaimLoss()
+    {
+        var username = "oidc_grant_user_" + Guid.NewGuid().ToString("N")[..8];
+        var groupKey = PortalPrincipalKey.New();
+        var jobId = "job_" + Guid.NewGuid().ToString("N")[..8];
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var group = new Group
+            {
+                Name = "data_engineers_" + username,
+                Provider = "OIDC",
+                AdGroup = "data_engineers",
+                PrincipalKey = groupKey
+            };
+            db.Groups.Add(group);
+            await db.SaveChangesAsync();
+        }
+
+        // Set up an Orchestrator authorization store with a GROUP grant targeting groupKey
+        var dbPath = Path.Combine(Path.GetTempPath(), $"orch_oidc_acl_{Guid.NewGuid():N}.db");
+        try
+        {
+            var grantStore = new SQLiteJobHistoryStore(dbPath);
+            await grantStore.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+                jobId, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.Group, groupKey,
+                OrchestratorObjectPermission.Read, "admin:1"));
+            var authorizer = new OrchestratorObjectAuthorizationService(grantStore);
+
+            // First login: user presents claim ["data_engineers"]
+            _factory.Stub.Identity = new OidcIdentity("sub-" + username, username, $"{username}@example.com", ["data_engineers"]);
+            var client1 = NoRedirectClient();
+            await client1.GetAsync("/api/auth/oidc/login");
+            var callback1 = await client1.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+            var (token1, _) = await ParseHandoffTokensAsync(callback1);
+
+            // Exchange Portal session for Orchestrator assertion
+            var exchangeReq1 = new HttpRequestMessage(HttpMethod.Post, "/api/auth/orchestrator-assertion");
+            exchangeReq1.Headers.Authorization = new("Bearer", token1);
+            var exchangeRes1 = await _factory.CreateClient().SendAsync(exchangeReq1);
+            Assert.Equal(HttpStatusCode.OK, exchangeRes1.StatusCode);
+            var assertionBody1 = await exchangeRes1.Content.ReadFromJsonAsync<JsonElement>();
+            var assertion1 = assertionBody1.GetProperty("assertion").GetString()!;
+
+            // Validate assertion has groupKey in caller.GroupIds
+            Assert.True(OrchestratorIdentityAssertion.TryValidate(
+                assertion1, "test-orchestrator-signing-secret-key-12345", out var caller1, out var err1), err1);
+            Assert.NotNull(caller1);
+            Assert.Contains(groupKey, caller1!.GroupIds);
+
+            // Assert Orchestrator authorizer approves Read for caller1 via the GROUP grant
+            Assert.True(await authorizer.CanAsync(
+                caller1, OrchestratorObjectKind.Job, jobId, caller1.TenantId, OrchestratorObjectPermission.Read, "admin:1"));
+            // Manage is NOT granted by Read grant
+            Assert.False(await authorizer.CanAsync(
+                caller1, OrchestratorObjectKind.Job, jobId, caller1.TenantId, OrchestratorObjectPermission.Manage, "admin:1"));
+
+            // Second login: user no longer has "data_engineers" in claims
+            _factory.Stub.Identity = new OidcIdentity("sub-" + username, username, $"{username}@example.com", []);
+            var client2 = NoRedirectClient();
+            await client2.GetAsync("/api/auth/oidc/login");
+            var callback2 = await client2.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+            var (token2, _) = await ParseHandoffTokensAsync(callback2);
+
+            // Exchange second Portal session for Orchestrator assertion
+            var exchangeReq2 = new HttpRequestMessage(HttpMethod.Post, "/api/auth/orchestrator-assertion");
+            exchangeReq2.Headers.Authorization = new("Bearer", token2);
+            var exchangeRes2 = await _factory.CreateClient().SendAsync(exchangeReq2);
+            Assert.Equal(HttpStatusCode.OK, exchangeRes2.StatusCode);
+            var assertionBody2 = await exchangeRes2.Content.ReadFromJsonAsync<JsonElement>();
+            var assertion2 = assertionBody2.GetProperty("assertion").GetString()!;
+
+            // Validate assertion now has EMPTY groupIds
+            Assert.True(OrchestratorIdentityAssertion.TryValidate(
+                assertion2, "test-orchestrator-signing-secret-key-12345", out var caller2, out var err2), err2);
+            Assert.NotNull(caller2);
+            Assert.DoesNotContain(groupKey, caller2!.GroupIds);
+
+            // Orchestrator authorizer now DENIES Read for caller2
+            Assert.False(await authorizer.CanAsync(
+                caller2, OrchestratorObjectKind.Job, jobId, caller2.TenantId, OrchestratorObjectPermission.Read, "admin:1"));
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            foreach (var s in new[] { "", "-wal", "-shm" })
+            {
+                var p = dbPath + s;
+                if (File.Exists(p)) try { File.Delete(p); } catch { }
+            }
+        }
+    }
+
+    [Fact]
     public async Task Providers_ReflectsOidcEnabled()
     {
         var res = await _factory.CreateClient().GetFromJsonAsync<ProvidersDto>("/api/auth/providers");
@@ -505,6 +604,7 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
                     PostLoginRedirectPath = "/index.html"
                 }
             };
+            config.Orchestrator.IdentitySigningSecret = "test-orchestrator-signing-secret-key-12345";
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)

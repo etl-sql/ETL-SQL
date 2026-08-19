@@ -147,6 +147,7 @@ CREATE GROUP 'GG-Finance-Readers' WITH (
 | **Publisher** | Create folders, publish reports, manage subscriptions |
 | **Viewer** | Browse accessible folders, run and export reports, manage their own subscriptions |
 | **OrchestratorManager** | Orchestrator tab only — create/edit/delete/trigger/kill scheduled jobs, view execution history. Cannot access the Admin panel. |
+| **OrchestratorViewer** | Orchestrator tab only (read-only) — view scheduled jobs, run histories, metrics, DAGs, and watermarks for granted objects without creation or management rights. Cannot access the Admin panel. |
 | **GovernanceViewer** | Read the governance dashboard — estate posture, scores and the rules behind them, badges, findings, and the decisions on them. No mutations. |
 | **DataSteward** | Everything GovernanceViewer can do, plus the steward decisions: ignore a finding as a false positive, accept a risk, reopen, mark an asset reviewed, and assign badges. Also gates the data-quality quarantine queue. |
 | **GovernanceManager** | Everything DataSteward can do, plus configuration: run scans, change the score threshold and enabled checks, manage glossary terms, and manage suppression categories. |
@@ -169,7 +170,7 @@ Every governance mutation is audited. Threshold changes record the value **befor
 because "who lowered the threshold" cannot be answered from the new value alone.
 
 <a name="orchestrator-manager-role"></a>
-Assign `OrchestratorManager` to operations staff who need to manage the ETL-SQL Orchestrator from the web UI without needing full admin rights. A user with only this role can see and use the Orchestrator tab but has no access to user management, groups, folders, audit logs, or report publishing.
+Assign `OrchestratorManager` to operations staff who need to manage the ETL-SQL Orchestrator from the web UI without needing full admin rights. A user with only this role can see and use the Orchestrator tab but has no access to user management, groups, folders, audit logs, or report publishing. Assign `OrchestratorViewer` to operators or observers who need read-only access to view job statuses, execution histories, DAG dependencies, metrics, and watermarks without object creation (`CanCreate`) or management rights.
 
 ## Creating a User
 

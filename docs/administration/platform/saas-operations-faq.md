@@ -291,9 +291,9 @@ When `StorageUsedMb` reaches `MaxStorageMb`:
 ---
 
 ## Related Documentation
-- [Deployment Profile Architecture](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/DeploymentProfiles.md)
-- [SaaS Tenant Isolation Specification](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/SaaSTenantIsolation.md)
-- [Tenant Portability & Exit](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/TenantPortability.md)
+- [Deployment Profile Architecture](../../architecture/DeploymentProfiles.md)
+- [SaaS Tenant Isolation Specification](../../architecture/SaaSTenantIsolation.md)
+- [Tenant Portability & Exit](../../architecture/TenantPortability.md)
 - [Platform Configuration Settings Reference](appsettings-reference.md)
 - [Secure Outbound Gateway Guide](secure-outbound-gateway.md)
 - [Backup, Monitoring, and Health Guide](backup-and-monitoring.md)

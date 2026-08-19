@@ -367,7 +367,7 @@ builder.Services.AddAuthentication(opt =>
 
 builder.Services.AddAuthorization(opt =>
 {
-    opt.AddPolicy("OrchestratorAccess", p => p.RequireRole("Admin", "OrchestratorManager"));
+    opt.AddPolicy("OrchestratorAccess", p => p.RequireRole("Admin", "OrchestratorManager", "OrchestratorViewer"));
     // Quarantine remediation reads raw failing source rows (which carry whatever PII the source
     // carried), edits them, and enqueues jobs that re-run production loads. That is steward work,
     // not something every authenticated report reader may do.
@@ -1139,7 +1139,7 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
 
     // FleetReader: a scoped, read-only role for the fleet aggregator — authorizes only
     // GET /api/fleet/status and nothing else (see Departmental_Isolation.md fleet trust boundary).
-    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager", "FleetReader", "StewardshipViewer", "DataSteward", "StewardshipManager" })
+    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager", "OrchestratorViewer", "FleetReader", "StewardshipViewer", "DataSteward", "StewardshipManager" })
     {
         if (!await roleMgr.RoleExistsAsync(role))
             await roleMgr.CreateAsync(new PortalRole(role));
