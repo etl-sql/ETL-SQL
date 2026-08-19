@@ -111,15 +111,15 @@ ETL-SQL solves this via the **Secure Outbound Gateway**:
    - The Portal generates a single-use enrollment token with an expiration window.
 2. **Hand Off Agent to Client**:
    - Provide the client IT team with the lightweight Gateway binary and enrollment token:
-     ```bash
-     etl-sql-gateway --portal-url https://portal.yourdomain.com --enrollment-token <TOKEN>
-     ```
+```bash
+etl-sql-gateway --portal-url https://portal.yourdomain.com --enrollment-token <TOKEN>
+```
 3. **Execute Pushdown Queries**:
-   - Tenant scripts reference the remote database transparently:
-     ```sql
-     CREATE CONNECTION onprem_db AS GATEWAY(SERVER='sql-prod.local', DATABASE='ERP', TRUSTED_CONNECTION=TRUE);
-     SELECT * INTO #staged_sales FROM onprem_db.dbo.Orders WHERE OrderDate >= DATEADD(DAY, -1, GETDATE());
-     ```
+   - Tenant scripts reference the registered Gateway resource transparently through its shared connection alias:
+```sql
+CREATE CONNECTION onprem_db AS MSSQL('SHARED:onprem_erp');
+SELECT * INTO #staged_sales FROM onprem_db.dbo.Orders WHERE OrderDate >= DATEADD(DAY, -1, GETDATE());
+```
 
 ---
 
@@ -129,9 +129,11 @@ In a shared SaaS environment, one tenant executing a runaway script must never i
 
 ### 1. Concurrency Ceilings
 Limit how many background pipeline tasks and interactive sessions a single tenant can run concurrently:
-```sql
--- Update quota via Control Plane API or Web Modal
+```http
 POST /api/platform/control-plane/tenants/acme-corp/quotas
+Content-Type: application/json
+X-Portal-Platform-Key: <PLATFORM_MANAGEMENT_KEY>
+
 {
   "maxConcurrentJobs": 3,
   "maxStorageMb": 5120,
