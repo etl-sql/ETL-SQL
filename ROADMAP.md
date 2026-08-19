@@ -292,9 +292,47 @@ The insight driving this track: **the grammar is the differentiator and the rend
 **Delivery Stages:**
 - **Stage 1: Neutral Spec IR and ECharts Lowering Compiler:** Implement `ChartSpec` record hierarchy; build `SpecDesugarer` for all 17 Tier 2 types; build `SpecToEChartsCompiler`. JSON columnar vectors serialize in `VisualManifest`.
 - **Stage 2: Native C# SVG Static Export Backend:** Implement pure C# scale math (Linear, Band, Time, Log) and SkiaSharp text metrics in `SvgChartCompiler.cs`. Replaces `EChartsSsrRenderer.cs` and powers headless PDF and email exports without V8/Node.js.
-- **Stage 3: `CUSTOM` Multi-Layer Syntax & Vega-Lite Translator:** Add parser and AST support for `CREATE VISUAL ... AS CUSTOM (...)` with `SCALES (...)` block and `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`.
+- **Stage 3: `CUSTOM` Multi-Layer Syntax & Vega-Lite Translator:** Add parser and AST support for `CREATE VISUAL ... AS CUSTOM (...)` with `SCALES (...)` block and `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`. *(Note: This stage establishes the `ComponentTooltipSpec` hook for the [Visual and Container Tooltips](#reporting--presentation--visual-and-container-tooltips-viz-in-tooltip) roadmap track).*
 - **Stage 4: Native Vector SVG Micro-Renderer:** Implement lightweight browser SVG/DOM renderer for Tier 2 Cartesian & Circular charts (`BAR`, `LINE`, `SCATTER`, `PIE`, `COMBO`, `WATERFALL`). Conditionally omit ECharts for reports containing only Tier 1 & Tier 2 visuals.
 - **Stage 5: Complete ECharts Retirement via D3:** Replace remaining Tier 3 complex visuals (`MAP` via `d3-geo`, `TREEMAP`/`SUNBURST` via `d3-hierarchy`, `SANKEY` via `d3-sankey`, `NETWORK` via `d3-force`) with specialized D3 micro-packages. Completely retire `echarts.min.js` from the repository, achieving a ~35 KB total standalone runtime footprint.
+
+---
+
+### Reporting & Presentation — Visual & Container Tooltips (Viz-in-Tooltip)
+
+**Candidate, not scheduled.** Modern analytical reporting frequently demands on-hover micro-visual drill-ins (e.g. hovering over a region bar or category slice reveals a filtered sparkline, subcategory breakdown bar chart, or a multi-metric KPI summary card).
+
+**Architecture Decision (Presentation Surface Contract):**
+Tooltips exist as first-class presentation targets rather than plain text strings:
+- **Simple Text (Zero-Ceremony Sugar):** `TOOLTIP (TITLE = ..., CONTENT = ...)` remains concise for standard formatted expressions.
+- **Visual & Container Tooltips:** `TOOLTIP (VISUAL = VisualName, PARAMETERS (...))` or `TOOLTIP (CONTAINER = ContainerName, PARAMETERS (...))` attaches a micro-visual or container to data points.
+- **Instant Client-Side Vector Slicing:** Hovered row values bind directly to child visual parameters in memory over pre-staged columnar vectors, rendering rich micro-visuals in $< 1\text{ ms}$ with zero server round-trip latency.
+- **Viewport Boundary Awareness:** Floating popover anchors to the hovered mark geometry with automatic flip/shift positioning to prevent viewport clipping.
+
+**Target Syntax Specification:**
+```sql
+-- 1. Mini-chart definition (rendered only within tooltip popovers)
+CREATE VISUAL SubcategoryBreakdown AS BAR (
+  SOURCE   = #subcategory_sales,
+  MAPPINGS (X = SubCategory, Y = Revenue),
+  OPTIONS  (STYLE = COMPACT, HEIGHT = 160)
+);
+
+-- 2. Parent visual binds hover event to the mini-chart with parameter context
+CREATE VISUAL CategorySales AS PIE (
+  SOURCE   = #sales,
+  MAPPINGS (CATEGORY = CategoryName, VALUE = TotalRevenue),
+  TOOLTIP  (
+    VISUAL     = SubcategoryBreakdown,
+    PARAMETERS (@selectedCategory = CategoryName)
+  )
+);
+```
+
+**Delivery Stages:**
+1. **Spec IR & AST Extension:** Extend `TooltipSpec` in `ETL-SQL.Core.Reporting.Spec` to support `ComponentTooltipSpec(TargetVisualOrContainer, ParameterBindings)`.
+2. **Runtime Popover Host (`report-runtime.js`):** Implement floating tooltip portal mounting target visual/container with sub-pixel bounding-box collision detection.
+3. **Local Vector Cross-Filtering:** Propagate hovered row parameters to child visual dataset vectors instantaneously in browser memory.
 
 ---
 
@@ -318,6 +356,7 @@ CREATE VISUAL ServerHealthCard AS HTML (
       <div class="header">{{ServerName}}</div>
       <div class="metric">{{CpuPercent}}%</div>
       <button data-action="SET_PARAMETER" data-param="@selected_server" data-value="{{ServerName}}">
+
         Inspect
       </button>
     </div>
