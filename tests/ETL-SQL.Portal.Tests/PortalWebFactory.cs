@@ -184,6 +184,8 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
             services.AddSingleton<ETL_SQL.Core.Data.INodeRegistryStore>(testStore);
             services.AddSingleton<ETL_SQL.Core.Data.IWriteEpochStore>(testStore);
             services.AddSingleton<ETL_SQL.Core.Data.IClusterLockStore>(testStore);
+            services.RemoveAll<ETL_SQL.Orchestrator.Scheduling.INodeCapacityMonitor>();
+            services.AddSingleton<ETL_SQL.Orchestrator.Scheduling.INodeCapacityMonitor>(new PortalTestCapacityMonitor());
 
             ConfigureHostedServices(services);
             CustomizeServices(services);
@@ -221,4 +223,17 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
             try { Directory.Delete(TempDir, recursive: true); } catch { /* best effort */ }
         }
     }
+}
+
+internal sealed class PortalTestCapacityMonitor : ETL_SQL.Orchestrator.Scheduling.INodeCapacityMonitor
+{
+    public ETL_SQL.Orchestrator.Scheduling.NodeCapacitySnapshot Capture() => new(
+        WorkingSetBytes: 50 * 1024 * 1024,
+        GcHeapBytes: 20 * 1024 * 1024,
+        TotalAvailableMemoryBytes: 1024L * 1024 * 1024 * 8,
+        MemoryLoadPercent: 10.0,
+        ProcessCpuPercent: 5.0,
+        ProcessorCount: Environment.ProcessorCount,
+        IsOverloaded: false,
+        CapturedAtUtc: DateTime.UtcNow);
 }

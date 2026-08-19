@@ -157,6 +157,7 @@ function Invoke-ShardedEngineTests {
         shards = @()
     }
 
+    $shardEntries = @{}
     for ($shard = 0; $shard -lt $ShardCount; $shard++) {
         if ($buckets[$shard].Count -eq 0) { continue }
         $number = $shard + 1
@@ -177,13 +178,15 @@ function Invoke-ShardedEngineTests {
         $settingsPath = Join-Path $EvidenceDirectory ("shard-{0:D2}.runsettings" -f $number)
         $settings = "<RunSettings><RunConfiguration><TestCaseFilter>$escapedFilter</TestCaseFilter></RunConfiguration></RunSettings>"
         Set-Content -LiteralPath $settingsPath -Value $settings -Encoding utf8NoBOM
-        $manifest.shards += [ordered]@{
+        $entry = [ordered]@{
             number = $number
             expectedTests = $loads[$shard]
             classes = @($buckets[$shard])
             methods = @($methods)
             results = ("shard-{0:D2}.trx" -f $number)
         }
+        $manifest.shards += $entry
+        $shardEntries[$number] = $entry
     }
     $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'manifest.json') -Encoding utf8NoBOM
 
@@ -207,13 +210,13 @@ function Invoke-ShardedEngineTests {
         if ($CollectCoverage) { $args += "--collect:XPlat Code Coverage" }
         & dotnet @args
         if ($LASTEXITCODE -ne 0) {
-            $script:LaneFailures += "engine spill shard $number/$ShardCount"
+            $script:LaneFailures += "engine shard $number/$ShardCount"
             $script:LaneExitCode = $LASTEXITCODE
         }
 
         $trxPath = Join-Path $EvidenceDirectory ("shard-{0:D2}.trx" -f $number)
         if (-not (Test-Path -LiteralPath $trxPath)) {
-            $script:LaneFailures += "engine spill shard $number/$ShardCount missing TRX"
+            $script:LaneFailures += "engine shard $number/$ShardCount missing TRX"
             $script:LaneExitCode = 1
             continue
         }
@@ -222,7 +225,9 @@ function Invoke-ShardedEngineTests {
         $namespace = [System.Xml.XmlNamespaceManager]::new($trx.NameTable)
         $namespace.AddNamespace("trx", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
         $results = @($trx.SelectNodes("//trx:UnitTestResult", $namespace))
-        $manifest.shards[$shard]["actualResults"] = $results.Count
+        if ($shardEntries.ContainsKey($number)) {
+            $shardEntries[$number]["actualResults"] = $results.Count
+        }
         $executedTotal += $results.Count
 
         foreach ($testId in @($results | ForEach-Object { $_.testId } | Sort-Object -Unique)) {
@@ -243,7 +248,7 @@ function Invoke-ShardedEngineTests {
 
     Write-Host "Engine execution: $executedTotal results ($($executedTotal - $testNames.Count) runtime-expanded theory rows); cross-shard test identities: $($crossShardTestIds.Count)." -ForegroundColor Cyan
     if ($crossShardTestIds.Count -gt 0) {
-        $script:LaneFailures += "engine spill shard overlap ($($crossShardTestIds.Count) test identities)"
+        $script:LaneFailures += "engine shard overlap ($($crossShardTestIds.Count) test identities)"
         $script:LaneExitCode = 1
     }
 }
@@ -342,7 +347,16 @@ switch ($Lane) {
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
     }
     "engine" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
+        if ($EngineShardCount -gt 1) {
+            $evidenceDir = if ($CollectCoverage -or $ResultsDirectory -ne "coverage") {
+                Join-Path $repoRoot $ResultsDirectory
+            } else {
+                Join-Path $repoRoot ("release-validation\engine-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+            }
+            Invoke-ShardedEngineTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir
+        } else {
+            Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
+        }
     }
     "portal" {
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
