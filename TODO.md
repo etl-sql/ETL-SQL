@@ -76,4 +76,13 @@ Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/relea
    - `Invoke-SmokeParity.ps1` must explicitly set `$env:Orchestrator__DatabasePath = Join-Path $root "orchestrator.db"` in addition to Portal DB path to prevent local host runs from picking up ambient developer databases from `%APPDATA%\ETL-SQL\etlsql.db`.
 4. **Secret Scanner Test Fixture Allowlisting**:
    - High-signal credential scanners should maintain explicit test fixture paths in `ALLOWLIST_PATHS` in `scripts/scan-secrets.js` whenever new test suites introduce mock PEM blocks.
+5. **Fast Targeted Retesting & Resume Protocol**:
+   - Never restart the full 38-phase matrix (`Test-PreRelease.ps1`) from scratch to verify an isolated fix.
+   - Use targeted commands during iteration:
+     - Single test/class: `dotnet test <project> --filter FullyQualifiedName~<Test>` (1–5s).
+     - Fast sanity: `.\scripts\Test-PrePush.ps1` (~60s).
+     - Specific lane: `.\scripts\test-lane.ps1 -Lane <smoke|fast|portal|integration|browser|ebnf|slt>`.
+     - Direct packaging: `.\scripts\build-msi.ps1` or `.\scripts\publish-release.ps1`.
+     - Smoke parity: `.\scripts\Invoke-SmokeParity.ps1`.
+   - Resume the release validation suite with `.\scripts\Test-PreRelease.ps1 -Resume -ForceResume` to skip already-passed phases and pick up directly where it left off.
 
