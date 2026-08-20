@@ -19,7 +19,6 @@ public class PrintStatementHandler : IStatementHandler
     }
 
     /// <summary>Executes the PRINT statement, evaluating and concatenating all provided arguments.</summary>
-    /// <summary>Executes the PRINT statement, evaluating and concatenating all provided arguments.</summary>
     public async Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (PrintStatement)statement;

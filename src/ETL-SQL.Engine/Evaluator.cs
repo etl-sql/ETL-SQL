@@ -1254,8 +1254,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
         catch (ReturnException ex)
         {
-            if (ex.Value != null) Console.WriteLine($"[RETURN] {ex.Value}");
-            else Console.WriteLine("[RETURN]");
+            if (ex.Value != null) _logger.Info("[RETURN] {Value}", ex.Value);
+            else _logger.Info("[RETURN]");
         }
         finally
         {
