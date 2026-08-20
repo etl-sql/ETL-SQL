@@ -505,7 +505,7 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
             if (runTask is { IsCompleted: true })
             {
                 var earlyOutcome = await runTask;
-                Assert.Fail($"The sandbox exited prematurely before checkpointing (exit code {earlyOutcome.ExitCode}): {earlyOutcome.ErrorMessage}\n{earlyOutcome.RawResult?.Output}");
+                Assert.Fail($"The sandbox exited prematurely before checkpointing (exit code {earlyOutcome.ExitCode}): {earlyOutcome.SanitizedDiagnostic}\n{earlyOutcome.Result?.ErrorMessage}");
             }
 
             if (File.Exists(metadata))

@@ -36,6 +36,7 @@ const ALLOWLIST_PATHS = new Set([
   'tests/ETL-SQL.Tests/Connectors/BigQueryConnectorUnitTests.cs',
   'tests/ETL-SQL.Tests/Hardening/HardeningSshTests.cs',
   'tests/ETL-SQL.Tests/Hardening/SshKeyManagementTests.cs',
+  'tests/ETL-SQL.Tests/Governance/CapabilityReferenceTests.cs',
 ]);
 
 // Unambiguous secret formats — these almost never false-positive in source.
