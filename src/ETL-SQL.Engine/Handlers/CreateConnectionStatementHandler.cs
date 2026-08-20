@@ -21,7 +21,8 @@ public class CreateConnectionStatementHandler(
     ILogger logger,
     IConfiguration? config = null,
     ISecretProvider? secretProvider = null,
-    IConnectionCatalogProvider? connectionCatalog = null) : IStatementHandler
+    IConnectionCatalogProvider? connectionCatalog = null,
+    IGatewayOperationRouter? gatewayRouter = null) : IStatementHandler
 {
     private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
     private readonly ILogger _logger = logger;
@@ -101,6 +102,7 @@ public class CreateConnectionStatementHandler(
         }
         target = Interpolate(target ?? "");
         IReadOnlyCollection<string>? entrySensitiveFields = null;
+        GatewayResourceBinding? gatewayBinding = null;
         if (SharedConnectionExpander.IsSharedReference(target))
         {
             var expanded = await _sharedExpander.ExpandAsync(
@@ -108,12 +110,31 @@ public class CreateConnectionStatementHandler(
             target = expanded.Target;
             options = expanded.Options;
             entrySensitiveFields = expanded.SensitiveFields;
+            gatewayBinding = expanded.Gateway;
             // Remember that this alias came from the governed catalog. A durable artifact written
             // later in the run (a quarantine replay manifest) can then say its target is reopenable
             // through the same governed path, instead of a reader inferring it from the alias — a
             // script-local connection sharing the name is not the same connection.
             context.CatalogBackedConnections[stmt.ConnectionName] = connectionType ?? string.Empty;
         }
+        if (gatewayBinding is not null)
+        {
+            if (gatewayRouter is null || context.ExecutionIdentity is null
+                || string.IsNullOrWhiteSpace(context.ExecutionIdentity.TenantId))
+                throw new ExecutionException("The Gateway-bound connection requires a tenant-authenticated Gateway data plane.");
+            var gatewayDataSource = new GatewayBoundDataSource(
+                gatewayRouter, context.ExecutionIdentity, gatewayBinding, connectionType ?? string.Empty);
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: Would {(alreadyExists ? "alter" : "create")} Gateway connection {stmt.ConnectionName}", ConsoleColor.Yellow);
+                return;
+            }
+            if (alreadyExists && existingDataSource != null) await existingDataSource.DisposeAsync();
+            context.Connections[stmt.ConnectionName] = gatewayDataSource;
+            context.LastResult = new DataTable();
+            return;
+        }
+
         target = await _secretResolver.ResolveTargetAsync(
             target, context.CancellationToken, connectionType, entrySensitiveFields);
         if (options != null)

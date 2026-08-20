@@ -17,7 +17,8 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
     public sealed record ExpandedConnection(
         string Target,
         Dictionary<string, string> Options,
-        IReadOnlyCollection<string>? SensitiveFields);
+        IReadOnlyCollection<string>? SensitiveFields,
+        GatewayResourceBinding? Gateway = null);
 
     public static bool IsSharedReference(string? target) =>
         !string.IsNullOrEmpty(target) && target.TrimStart().StartsWith(SharedPrefix, StringComparison.OrdinalIgnoreCase);
@@ -68,18 +69,11 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
             throw new ExecutionException($"Connection catalog entry '{alias}' is disabled.");
         }
 
-        // A Gateway-bound alias resolves to a Gateway and a registered resource, never to an
-        // address this process may dial. Until the Gateway data plane exists, the only correct
-        // outcome is to refuse: falling back to a direct connection would silently turn a binding
-        // that deliberately carries no endpoint into whatever the script's own options happen to
-        // name, which is exactly the local-bypass the architecture forbids (§11.2).
         if (definition.Gateway != null)
         {
-            EmitUseDenied(alias, identity, catalogProvider.ProviderName, "GatewayRoutingUnavailable");
-            throw new ExecutionException(
-                $"Connection catalog entry '{alias}' is bound to Gateway '{definition.Gateway.GatewayId}' and can only " +
-                "be reached through the outbound Gateway data plane, which this deployment does not run. " +
-                "The entry carries no direct endpoint by design; it cannot fall back to a direct connection.");
+            if (scriptOptions?.Count > 0)
+                throw new ExecutionException("A Gateway-bound SHARED connection does not accept script-supplied connection options.");
+            return new ExpandedConnection(string.Empty, new(StringComparer.OrdinalIgnoreCase), null, definition.Gateway);
         }
 
         if (declaredConnectorType != null

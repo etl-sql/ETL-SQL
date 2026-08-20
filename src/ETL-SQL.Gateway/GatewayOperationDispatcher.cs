@@ -11,6 +11,7 @@ public interface IGatewayResourceExecutor
 {
     Task<GatewayExecutionResult> ExecuteAsync(
         GatewayResource resource,
+        GatewayOperationClass operationClass,
         string? request,
         IReadOnlyList<string>? parameters,
         GatewayOperationBounds bounds,
@@ -131,7 +132,7 @@ public sealed class GatewayOperationDispatcher(
         try
         {
             var result = await executor
-                .ExecuteAsync(resource, frame.Request, frame.Parameters, bounds, deadline.Token)
+                .ExecuteAsync(resource, operation.Class, frame.Request, frame.Parameters, bounds, deadline.Token)
                 .ConfigureAwait(false);
 
             var rows = result.Rows.Count > bounds.MaxRows

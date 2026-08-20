@@ -1,3 +1,6 @@
+using System.Text.Json;
+using ETL_SQL.Common;
+
 namespace ETL_SQL.Core.Governance;
 
 /// <summary>Approval state of a Gateway-local resource registration.</summary>
@@ -80,6 +83,29 @@ public sealed class GatewayResourceRegistry
 {
     private readonly Dictionary<string, GatewayResource> _resources = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
+    private readonly string? _persistencePath;
+
+    public GatewayResourceRegistry(string? persistencePath = null)
+    {
+        if (persistencePath is null) return;
+        if (!Path.IsPathFullyQualified(persistencePath))
+            throw new ArgumentException("The Gateway resource registry path must be absolute.", nameof(persistencePath));
+        _persistencePath = Path.GetFullPath(persistencePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(_persistencePath)!);
+        if (!File.Exists(_persistencePath)) return;
+        try
+        {
+            var protectedJson = File.ReadAllText(_persistencePath);
+            var resources = JsonSerializer.Deserialize<List<GatewayResource>>(
+                CryptoUtils.Unprotect(protectedJson, "gateway-resource-registry")) ?? [];
+            foreach (var resource in resources)
+                _resources[resource.ResourceId] = resource;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            throw new GatewayResourceException("The protected Gateway resource registry could not be loaded.");
+        }
+    }
 
     /// <summary>Records a discovered resource as <see cref="GatewayResourceState.Proposed"/>. Never approves.</summary>
     public Task<GatewayResource> ProposeAsync(GatewayResource resource, CancellationToken cancellationToken = default)
@@ -100,6 +126,7 @@ public sealed class GatewayResourceRegistry
             }
 
             _resources[proposed.ResourceId] = proposed;
+            PersistLocked();
         }
 
         return Task.FromResult(proposed);
@@ -120,6 +147,7 @@ public sealed class GatewayResourceRegistry
 
             var approved = existing with { State = GatewayResourceState.Approved };
             _resources[resourceId] = approved;
+            PersistLocked();
             return Task.FromResult(approved);
         }
     }
@@ -132,6 +160,7 @@ public sealed class GatewayResourceRegistry
             if (!_resources.TryGetValue(resourceId, out var existing))
                 throw new GatewayResourceException($"Resource '{resourceId}' is not registered.");
             _resources[resourceId] = existing with { State = GatewayResourceState.Disabled };
+            PersistLocked();
         }
 
         return Task.CompletedTask;
@@ -179,6 +208,26 @@ public sealed class GatewayResourceRegistry
                 .ToList();
             return Task.FromResult(published);
         }
+    }
+
+    public Task<IReadOnlyList<GatewayResource>> ListAsync(CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<GatewayResource>>(
+                _resources.Values.OrderBy(resource => resource.ResourceId, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private void PersistLocked()
+    {
+        if (_persistencePath is null) return;
+        var protectedJson = CryptoUtils.ProtectMachine(
+            JsonSerializer.Serialize(_resources.Values.OrderBy(resource => resource.ResourceId)),
+            "gateway-resource-registry");
+        var temporary = _persistencePath + ".tmp";
+        File.WriteAllText(temporary, protectedJson);
+        File.Move(temporary, _persistencePath, true);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(_persistencePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
     private static void EnsureWellFormed(GatewayResource resource)

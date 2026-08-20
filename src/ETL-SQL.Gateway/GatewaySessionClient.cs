@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Text;
 using ETL_SQL.Core.Governance;
 
@@ -11,7 +12,9 @@ public sealed record GatewaySessionOptions(
     string GatewayId,
     string WorkloadPublicKeyThumbprint,
     string? NodeId = null,
-    int MaxFrameBytes = 1 << 20)
+    int MaxFrameBytes = 1 << 20,
+    string? WorkloadPrivateKeyPkcs8Base64 = null,
+    IReadOnlyList<GatewayPublishedResource>? PublishedResources = null)
 {
     /// <summary>Resolved node identity (explicit or host machine name).</summary>
     public string EffectiveNodeId => !string.IsNullOrWhiteSpace(NodeId) ? NodeId : Environment.MachineName;
@@ -71,10 +74,31 @@ public sealed class GatewaySessionClient(
             TenantId = options.TenantId,
             GatewayId = options.GatewayId,
             NodeId = options.EffectiveNodeId,
-            WorkloadPublicKeyThumbprint = options.WorkloadPublicKeyThumbprint
+            WorkloadPublicKeyThumbprint = options.WorkloadPublicKeyThumbprint,
+            WorkloadPublicKey = ExportPublicKey(options.WorkloadPrivateKeyPkcs8Base64),
+            PublishedResources = options.PublishedResources
         }, cancellationToken).ConfigureAwait(false);
 
         var ack = await ReceiveAsync(socket, cancellationToken).ConfigureAwait(false);
+        if (ack?.Kind == GatewayFrameKind.Challenge)
+        {
+            if (string.IsNullOrWhiteSpace(options.WorkloadPrivateKeyPkcs8Base64)
+                || string.IsNullOrWhiteSpace(ack.Challenge))
+            {
+                throw new GatewayProtocolException(
+                    "The broker requires proof of the enrolled Gateway workload key.");
+            }
+
+            await SendAsync(socket, new GatewayFrame
+            {
+                Kind = GatewayFrameKind.Authenticate,
+                TenantId = options.TenantId,
+                GatewayId = options.GatewayId,
+                WorkloadPublicKeyThumbprint = options.WorkloadPublicKeyThumbprint,
+                Signature = SignChallenge(options.WorkloadPrivateKeyPkcs8Base64, ack.Challenge)
+            }, cancellationToken).ConfigureAwait(false);
+            ack = await ReceiveAsync(socket, cancellationToken).ConfigureAwait(false);
+        }
         if (ack is null || ack.Kind != GatewayFrameKind.HelloAck)
         {
             await CloseAsync(socket, "The broker refused the session.", cancellationToken).ConfigureAwait(false);
@@ -99,6 +123,22 @@ public sealed class GatewaySessionClient(
 
         await CloseAsync(socket, "Session complete.", cancellationToken).ConfigureAwait(false);
         return served;
+    }
+
+    private static string? ExportPublicKey(string? privateKeyBase64)
+    {
+        if (string.IsNullOrWhiteSpace(privateKeyBase64)) return null;
+        using var key = ECDsa.Create();
+        key.ImportPkcs8PrivateKey(Convert.FromBase64String(privateKeyBase64), out _);
+        return Convert.ToBase64String(key.ExportSubjectPublicKeyInfo());
+    }
+
+    private static string SignChallenge(string privateKeyBase64, string challengeBase64)
+    {
+        using var key = ECDsa.Create();
+        key.ImportPkcs8PrivateKey(Convert.FromBase64String(privateKeyBase64), out _);
+        return Convert.ToBase64String(key.SignData(
+            Convert.FromBase64String(challengeBase64), HashAlgorithmName.SHA256));
     }
 
     private async Task SendAsync(WebSocket socket, GatewayFrame frame, CancellationToken cancellationToken)

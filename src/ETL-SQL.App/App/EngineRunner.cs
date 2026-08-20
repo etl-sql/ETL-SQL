@@ -225,11 +225,18 @@ namespace ETL_SQL.App
                 return await GatewaySetupService.RunSetupAsync(
                     ctx.PortalUrl,
                     ctx.GatewayToken,
+                    ctx.GatewayTenantId,
                     ctx.GatewayId,
                     ctx.GatewayNodeId,
                     ctx.GatewayInstallService,
                     ctx.GatewayNonInteractive);
             }
+
+            if (ctx.Command is "gateway-start" or "admin-gateway-start")
+                return await GatewayRuntimeService.RunAsync(registry, logger);
+
+            if (ctx.Command.StartsWith("gateway-resource-", StringComparison.Ordinal))
+                return await GatewayResourceAdminService.RunAsync(ctx, logger);
 
             if (ctx.Command == "config-setup-jwt")
             {

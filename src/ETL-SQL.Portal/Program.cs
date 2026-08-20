@@ -101,9 +101,10 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider
     return ETL_SQL.Core.Governance.ConnectionCatalogProviderFactory.Create(options)
         ?? (ETL_SQL.Core.Governance.IConnectionCatalogProvider)ETL_SQL.Portal.Services.UnconfiguredConnectionCatalogProvider.Instance;
 });
-builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayEnrollmentStore, ETL_SQL.Core.Governance.InMemoryGatewayEnrollmentStore>();
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayEnrollmentStore, ETL_SQL.Portal.Data.DbGatewayEnrollmentStore>();
 builder.Services.AddSingleton<ETL_SQL.Gateway.GatewaySessionRegistry>();
 builder.Services.AddSingleton<ETL_SQL.Gateway.GatewayBroker>();
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayOperationRouter, ETL_SQL.Portal.Services.PortalGatewayOperationRouter>();
 builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();
 builder.Services.AddScoped<StudioCapabilityStore>();
@@ -755,6 +756,10 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.ISharedTenantLifecycleOrchest
 
 // ── App pipeline ──────────────────────────────────────────────────────────────
 var app = builder.Build();
+app.UseWebSockets(new WebSocketOptions
+{
+    KeepAliveInterval = TimeSpan.FromSeconds(30)
+});
 
 if (Directory.Exists(app.Environment.WebRootPath))
 {
@@ -1036,6 +1041,20 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();
 app.MapControllers();
+
+app.Map("/api/gateway/broker", async context =>
+{
+    if (!context.WebSockets.IsWebSocketRequest)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsJsonAsync(new { error = "A Gateway WebSocket is required." });
+        return;
+    }
+
+    using var socket = await context.WebSockets.AcceptWebSocketAsync();
+    await context.RequestServices.GetRequiredService<ETL_SQL.Gateway.GatewayBroker>()
+        .HandleInboundConnectionAsync(socket, context.RequestAborted);
+}).AllowAnonymous().RequireRateLimiting("anonymous-token");
 
 // Health endpoint — detailed checks (db, orchestrator, execution capacity)
 app.MapHealthChecks("/health", new HealthCheckOptions

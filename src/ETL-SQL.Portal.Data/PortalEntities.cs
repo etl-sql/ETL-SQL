@@ -806,6 +806,26 @@ public class PolicyMachineEntity
     public string? CanaryGroup { get; set; }
 }
 
+// ── Outbound Gateway Enrollment ──────────────────────────────────────────────
+
+/// <summary>
+/// Durable Portal record for a one-time outbound Gateway enrollment. Only the token hash is
+/// persisted; the token returned at issue time cannot be recovered from this row.
+/// </summary>
+public class GatewayEnrollmentEntity : IVersionedEntity
+{
+    public string EnrollmentId { get; set; } = "";
+    public string TenantId { get; set; } = "";
+    public string GatewayId { get; set; } = "";
+    public string TokenHash { get; set; } = "";
+    public DateTimeOffset CreatedUtc { get; set; }
+    public DateTimeOffset ExpiresUtc { get; set; }
+    public string State { get; set; } = "Pending";
+    public DateTimeOffset? ConsumedUtc { get; set; }
+    public string? WorkloadPublicKeyThumbprint { get; set; }
+    public long Version { get; set; } = 1;
+}
+
 // ── Report Refresh Job Links ──────────────────────────────────────────────────
 
 public class ReportJobLink

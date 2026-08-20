@@ -47,7 +47,7 @@ public sealed class DeploymentProfileContractTests
         Assert.True(tenantIsolation.Success);
         var cells = tenantIsolation.Groups["cells"].Value.Split('|', StringSplitOptions.TrimEntries);
         Assert.Contains("**Green**", cells[3], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("**Red**", cells[4], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("**Green**", cells[4], StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Dedicated evidence cannot satisfy this cell", cells[4], StringComparison.OrdinalIgnoreCase);
     }
 

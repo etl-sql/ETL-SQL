@@ -45,7 +45,7 @@ public sealed class DeploymentProfileJourneyFixtureTests
     {
         var fixture = Load();
 
-        Assert.Equal(new[] { "Enterprise", "SaaS", "Solo", "Team" },
+        Assert.Equal(new[] { "Enterprise", "SaaS", "SharedSaaS", "Solo", "Team" },
             fixture.Journeys.SelectMany(j => j.Profiles).Distinct().Order());
         Assert.Equal(new[] { "EnterpriseToSaaS", "SoloToSaaS", "SoloToTeam", "TeamToEnterprise", "Upgrade" },
             fixture.Journeys.SelectMany(j => j.Transitions).Distinct().Order());

@@ -29,6 +29,7 @@ public interface IGatewaySession : IAsyncDisposable
     string WorkloadPublicKeyThumbprint { get; }
     DateTimeOffset ConnectedUtc { get; }
     bool IsActive { get; }
+    IReadOnlyList<GatewayPublishedResource> PublishedResources => [];
 
     Task<GatewayExecutionResult> ExecuteAsync(
         GatewayOperation operation,

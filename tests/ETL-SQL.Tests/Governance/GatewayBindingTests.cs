@@ -251,8 +251,13 @@ public sealed class GatewayBindingTests : IDisposable
                 new Dictionary<string, string> { ["HOST"] = "attacker.example.com" },
                 identity: null, CancellationToken.None));
 
-        Assert.Contains("hq-gateway", error.Message, StringComparison.Ordinal);
-        Assert.Contains("cannot fall back to a direct connection", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("does not accept script-supplied", error.Message, StringComparison.OrdinalIgnoreCase);
+
+        var routed = await expander.ExpandAsync(
+            "POSTGRES", "SHARED:sales_prod", new Dictionary<string, string>(),
+            identity: null, CancellationToken.None);
+        Assert.Equal(new GatewayResourceBinding("hq-gateway", "corp-sql-sales"), routed.Gateway);
+        Assert.Empty(routed.Target);
         // The refusal must not have leaked the script's proposed destination back either.
         Assert.DoesNotContain("attacker.example.com", error.Message, StringComparison.OrdinalIgnoreCase);
     }

@@ -1,4 +1,5 @@
 using ETL_SQL.App;
+using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Storage;
 using Xunit;
 
@@ -130,6 +131,40 @@ public sealed class SaasFleetRolloutSequencerTests
 
         // The cutover that was already running is allowed to return; the next one never starts.
         Assert.Equal(["tenant-a"], attempted);
+    }
+
+    [Fact]
+    public async Task SharedFleetDrainUnderLoadCompletesOwnedWorkAndNeverDowngradesPlacement()
+    {
+        var fleet = new SharedFleetDrainCoordinator(
+        [
+            new SharedFleetNode("node-a", SandboxIsolationTier.Hardened),
+            new SharedFleetNode("node-b", SandboxIsolationTier.Hardened),
+            new SharedFleetNode("dedicated-alpha", SandboxIsolationTier.Dedicated, "tenant-a")
+        ]);
+        var inFlight = fleet.Place("alpha-in-flight", "tenant-a", SandboxIsolationTier.Hardened);
+        Assert.Equal("node-a", inFlight.NodeId);
+
+        var run = await SaasFleetRolloutSequencer.RunAsync(
+            Plan(1, "tenant-a"),
+            (tenant, _) =>
+            {
+                var retained = fleet.BeginDrain("node-a");
+                Assert.Single(retained, work => work.WorkId == "alpha-in-flight" && work.TenantId == tenant.TenantId);
+                var replacement = fleet.Place("beta-new", "tenant-b", SandboxIsolationTier.Hardened);
+                Assert.Equal("node-b", replacement.NodeId);
+                Assert.Equal(SandboxIsolationTier.Hardened, replacement.RequiredIsolationTier);
+                Assert.Throws<InvalidOperationException>(() =>
+                    fleet.Place("dedicated-beta", "tenant-b", SandboxIsolationTier.Dedicated));
+                Assert.Throws<UnauthorizedAccessException>(() => fleet.Complete("alpha-in-flight", "tenant-b"));
+                fleet.Complete("alpha-in-flight", tenant.TenantId);
+                Assert.True(fleet.CanReplace("node-a"));
+                return Task.FromResult(new FleetCutoverResult(tenant.TenantId, FleetRolloutOutcome.Completed));
+            },
+            maxFailures: 0);
+
+        Assert.Equal(1, run.WavesCompleted);
+        Assert.Equal(["beta-new"], fleet.InFlight.Select(work => work.WorkId));
     }
 
     private static FleetRolloutPlan Plan(int waveSize, params string[] tenantIds) =>

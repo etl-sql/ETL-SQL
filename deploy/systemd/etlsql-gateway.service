@@ -1,0 +1,21 @@
+[Unit]
+Description=ETL-SQL Secure Outbound Data Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=etlsql-gateway
+Group=etlsql-gateway
+ExecStart=/usr/local/bin/etlsql gateway start
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/etlsql-gateway
+Environment=HOME=/var/lib/etlsql-gateway
+
+[Install]
+WantedBy=multi-user.target

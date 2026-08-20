@@ -48,6 +48,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
     public DbSet<PolicyVersionEntity> PolicyVersions => Set<PolicyVersionEntity>();
     public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
+    public DbSet<GatewayEnrollmentEntity> GatewayEnrollments => Set<GatewayEnrollmentEntity>();
     public DbSet<PortalSecret> PortalSecrets => Set<PortalSecret>();
     public DbSet<PortalSharedConnection> PortalSharedConnections => Set<PortalSharedConnection>();
     public DbSet<SharedConnectionAcl> SharedConnectionAcls => Set<SharedConnectionAcl>();
@@ -89,6 +90,20 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Issuer).HasMaxLength(2048);
             e.Property(x => x.ClientId).HasMaxLength(512);
             e.Property(x => x.ClientSecretReference).HasMaxLength(256);
+        });
+
+        builder.Entity<GatewayEnrollmentEntity>(e =>
+        {
+            e.HasKey(x => x.EnrollmentId);
+            e.Property(x => x.EnrollmentId).HasMaxLength(32);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.GatewayId).HasMaxLength(128);
+            e.Property(x => x.TokenHash).HasMaxLength(64);
+            e.Property(x => x.State).HasMaxLength(16);
+            e.Property(x => x.WorkloadPublicKeyThumbprint).HasMaxLength(256);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.TenantId, x.GatewayId });
+            e.HasIndex(x => new { x.TenantId, x.TokenHash }).IsUnique();
         });
 
         builder.Entity<SharedTenantResource>(e =>

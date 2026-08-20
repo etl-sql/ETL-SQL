@@ -914,6 +914,10 @@ namespace ETL_SQL.App
         {
             Description = "One-time enrollment token issued by Portal."
         };
+        private static readonly Option<string?> GatewayTenantOption = new("--tenant")
+        {
+            Description = "Tenant identifier from the Portal enrollment command."
+        };
         private static readonly Option<string?> GatewayIdOption = new("--gateway-id")
         {
             Description = "Logical gateway or cluster ID."
@@ -930,6 +934,11 @@ namespace ETL_SQL.App
         {
             Description = "Run in non-interactive mode without prompting."
         };
+        private static readonly Option<string?> GatewayResourceIdOption = new("--resource-id") { Description = "Stable local resource ID." };
+        private static readonly Option<string?> GatewayConnectorTypeOption = new("--connector") { Description = "Registered connector type." };
+        private static readonly Option<string?> GatewayLocalTargetOption = new("--target") { Description = "Local connector target; use ${CREDENTIAL} for the resolved credential." };
+        private static readonly Option<string?> GatewayCredentialOption = new("--credential-ref") { Description = "Local credential reference in ENV:name form." };
+        private static readonly Option<string?> GatewayOperationsOption = new("--operations") { Description = "Comma-separated READ, WRITE, EXECUTE operation classes." };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -1846,6 +1855,7 @@ namespace ETL_SQL.App
             {
                 GatewayPortalOption,
                 GatewayTokenOption,
+                GatewayTenantOption,
                 GatewayIdOption,
                 GatewayNodeIdOption,
                 GatewayInstallServiceOption,
@@ -1853,6 +1863,27 @@ namespace ETL_SQL.App
             };
             setupCommand.SetAction(context => Dispatch(context, "gateway-setup", handler));
             gatewayCommand.Add(setupCommand);
+            var startCommand = new Command("start", "Run the enrolled Gateway daemon in the foreground");
+            startCommand.SetAction(context => Dispatch(context, "gateway-start", handler));
+            gatewayCommand.Add(startCommand);
+            var resourceCommand = new Command("resource", "Administer the protected Gateway-local resource registry")
+            {
+                GatewayResourceIdOption, GatewayConnectorTypeOption, GatewayLocalTargetOption,
+                GatewayCredentialOption, GatewayOperationsOption
+            };
+            var proposeCommand = new Command("propose", "Propose a local connector resource");
+            proposeCommand.SetAction(context => Dispatch(context, "gateway-resource-propose", handler));
+            resourceCommand.Add(proposeCommand);
+            foreach (var action in new[] { "approve", "disable" })
+            {
+                var command = new Command(action, $"{action} a local Gateway resource");
+                command.SetAction(context => Dispatch(context, $"gateway-resource-{action}", handler));
+                resourceCommand.Add(command);
+            }
+            var listCommand = new Command("list", "List local Gateway resources without revealing targets or credentials");
+            listCommand.SetAction(context => Dispatch(context, "gateway-resource-list", handler));
+            resourceCommand.Add(listCommand);
+            gatewayCommand.Add(resourceCommand);
             return gatewayCommand;
         }
 
@@ -2223,10 +2254,19 @@ namespace ETL_SQL.App
             {
                 cliContext.PortalUrl = res.GetValue(GatewayPortalOption);
                 cliContext.GatewayToken = res.GetValue(GatewayTokenOption);
+                cliContext.GatewayTenantId = res.GetValue(GatewayTenantOption);
                 cliContext.GatewayId = res.GetValue(GatewayIdOption);
                 cliContext.GatewayNodeId = res.GetValue(GatewayNodeIdOption);
                 cliContext.GatewayInstallService = res.GetValue(GatewayInstallServiceOption);
                 cliContext.GatewayNonInteractive = res.GetValue(GatewayNonInteractiveOption);
+            }
+            else if (commandName.StartsWith("gateway-resource-", StringComparison.Ordinal))
+            {
+                cliContext.GatewayResourceId = TryGetString(res, GatewayResourceIdOption);
+                cliContext.GatewayConnectorType = TryGetString(res, GatewayConnectorTypeOption);
+                cliContext.GatewayLocalTarget = TryGetString(res, GatewayLocalTargetOption);
+                cliContext.GatewayCredentialReference = TryGetString(res, GatewayCredentialOption);
+                cliContext.GatewayOperations = TryGetString(res, GatewayOperationsOption);
             }
             else if (commandName == "init")
             {

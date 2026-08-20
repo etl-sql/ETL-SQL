@@ -12,6 +12,26 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Audited and retired verified completion records from `TODO.md`, and reopened two claims whose
+  implementation evidence was incomplete: production end-to-end Gateway operation and Shared-fleet
+  drain/replacement. Removed the already-delivered Control Plane Dashboard and API load/soak phases
+  from `ROADMAP.md`.
+- Made Portal Gateway enrollments durable on SQLite and PostgreSQL, including one-time token hashes,
+  optimistic-concurrency consumption, tenant partitioning, schema migrations, and backup-surface
+  classification. Added the token-authenticated bootstrap endpoint and the Portal WebSocket broker
+  route.
+- Fixed a Gateway broker race that acknowledged a session before registering it, allowing a client
+  to receive `HelloAck` while the routing registry still reported the Gateway offline.
+- Added restart-durable file persistence to the Gateway outcome ledger. Committed outcomes and
+  ambiguous writes retain their reconnect decisions across daemon recreation.
+- Completed the executable Secure Outbound Gateway path: one-time Portal bootstrap, machine-protected
+  ECDSA workload identity with signed-challenge proof, foreground daemon and OS service packaging,
+  protected local resource administration, bounded connector execution, and authority-evaluated
+  `SHARED:` alias routing over the typed broker data plane.
+- Added a Shared SaaS hostile-isolation certification lane spanning shared state, artifacts, cache,
+  queue, audit, PII/stewardship, lineage, paths, keys, checkpoints, Gateway, sandbox, quotas,
+  telemetry, support, restore, identity, and resource exhaustion. Added fleet drain placement that
+  preserves in-flight tenant work, shifts new work to ready nodes, and cannot lower isolation tiers.
 - Made sandbox fair-share admission cluster-global. Weighted fair ordering was process-local, so on a
   multi-node deployment whichever node polled first took every freed slot; selection now happens in
   the durable ledger as weighted fair queuing on virtual time, and a heavier tenant weight buys a

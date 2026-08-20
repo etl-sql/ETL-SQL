@@ -61,7 +61,7 @@ public sealed class SharedTenantMeteringIntegrationTests : IDisposable
         var ledger = Ledger();
         var registry = new GatewaySessionRegistry();
         var store = new InMemoryGatewayEnrollmentStore();
-        var broker = new GatewayBroker(store, registry, meteringLedger: ledger);
+        var broker = new GatewayBroker(store, registry, meteringLedger: ledger, allowUnprovenTestIdentities: true);
 
         var alpha = TenantContext.FromVerifiedCredential("tenant-alpha");
 

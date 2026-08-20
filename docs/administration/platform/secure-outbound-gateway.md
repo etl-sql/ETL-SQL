@@ -4,11 +4,10 @@ The Gateway lets ETL-SQL reach private databases, file roots, and APIs **without
 exceptions**. It is an outbound-connected, tenant-attested policy enforcement point — not a VPN, a
 SOCKS proxy, a raw TCP relay, or a remotely configurable host/port forwarder.
 
-> **Delivery status.** The binding model, enrollment, resource registry, authority model, typed
-> operation protocol, outcome ledger, and the WebSocket transport are implemented. Packaging (the
-> Windows service and systemd unit), the Portal enrollment screen, and mutually authenticated TLS
-> certificate provisioning are not yet shipped. Until they are, treat this page as the operating
-> model rather than an install guide.
+The executable path is shipped: setup consumes the Portal's one-time enrollment, seals an ECDSA
+workload key to the machine, and the foreground daemon proves possession with a fresh signed
+challenge before Portal registers it. Portal enrollment and Gateway write outcomes are durable;
+Gateway-local resources are stored machine-protected and are administered only on the Gateway.
 
 ## What a script sees
 
@@ -50,9 +49,50 @@ store a target or a credential, and the catalog store refuses an entry that trie
 If the cloud side could hold both the private address and the key to reach it, a compromised catalog
 would hand over everything the Gateway exists to protect.
 
-If no Gateway data plane is running, resolving a Gateway-bound alias **fails closed**. It never falls
-back to a direct connection, because falling back would send tenant data to whatever the script's own
-options happened to name.
+If no authenticated Gateway data plane is running, a Gateway-bound alias **fails closed**. It never
+falls back to a direct connection.
+
+## Install and start
+
+Issue the enrollment in Portal's Gateway administration page, then run the generated command on the
+on-premises host:
+
+```powershell
+etlsql gateway setup --portal https://portal.example.com --tenant tenant-a `
+  --gateway-id hq-gateway --token ONE_TIME_TOKEN --non-interactive
+```
+
+The token is consumed over HTTPS and is never written to configuration. The config contains only
+the broker identity plus a machine-protected PKCS#8 private key. Start the daemon in the foreground:
+
+```powershell
+etlsql gateway start
+```
+
+For unattended operation, use
+`deploy/windows/install-etlsql-gateway.ps1` on Windows or install
+`deploy/systemd/etlsql-gateway.service` on Linux. The service account must own its ETL-SQL local
+application-data directory and the environment variables referenced by its resources.
+
+## Register local resources
+
+Targets and credentials never pass through Portal. Propose locally, inspect, then approve:
+
+```powershell
+$env:ETLSQL_GATEWAY_SALES = 'local-password-or-structured-secret'
+etlsql gateway resource propose --resource-id corp-sql-sales --connector POSTGRES `
+  --target 'Host=db.corp.internal;Database=Sales;Password=${CREDENTIAL}' `
+  --credential-ref ENV:ETLSQL_GATEWAY_SALES --operations READ,WRITE
+etlsql gateway resource approve --resource-id corp-sql-sales
+etlsql gateway resource list
+```
+
+`list` exposes the ID, state, connector, and operation classes only. Disablement is immediate for
+new operations:
+
+```powershell
+etlsql gateway resource disable --resource-id corp-sql-sales
+```
 
 ## Administrative workflow
 

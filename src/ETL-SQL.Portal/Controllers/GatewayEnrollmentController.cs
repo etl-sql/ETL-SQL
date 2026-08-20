@@ -110,6 +110,7 @@ public sealed class GatewayEnrollmentController(
             {
                 enrollmentId = enrollment.EnrollmentId,
                 gatewayId = enrollment.GatewayId,
+                tenantId = enrollment.TenantId,
                 oneTimeToken = oneTimeToken, // Only returned once upon generation
                 expiresUtc = enrollment.ExpiresUtc
             });

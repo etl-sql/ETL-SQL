@@ -184,20 +184,6 @@ tampered, replayed, cross-tenant, or oversized packages fail before target activ
 can validate and retain the export with published tooling and customer-held keys after source SaaS
 access is gone.
 
-### SaaS Multi-Tenancy — Control Plane Dashboard (Platform Admin UI)
-
-**Candidate, not scheduled.** As the SaaS offering matures beyond initial CLI-driven onboarding and configuration, tier-1/tier-2 support and platform operations will require a dedicated visual dashboard for fleet observability, tenant lifecycle management, and resource monitoring.
-
-**Design principles and boundaries:**
-
-- **Physical separation from the Portal:** The SaaS Admin UI must be a completely separate application (or physically separate endpoint) from the customer-facing `ETL-SQL.Portal`. Adding a "Super Admin" tab to the existing Portal introduces the hazard of context bleed, where a platform admin might bypass tenant scopes or leak data across the deeply baked `TenantContext`.
-- **Identity isolation:** It must enforce the Platform Identity Separation contract (`PlatformAccessGrant`). Platform administrators operate under a distinct identity model that cannot mint tenant sessions or assume "God Mode" within a tenant's data space.
-- **Observability over mutation:** The primary goal of the UI is situational awareness—monitoring shared worker capacity, tracking Gateway Broker health, viewing tenant execution quotas, and identifying head-of-line blocking in queues. Declarative mutations (like tenant provisioning) should remain heavily CLI/API driven.
-
-**Delivery stage.** This is a Phase 2 maturity goal. The current CLI-first approach (`admin promotion saas-onboard`, `admin tenant preflight`) correctly forces robust API design and scripting automation. The Control Plane Dashboard will be scheduled when the Shared SaaS topology reaches sufficient density to make CLI-based fleet health checks unscalable.
-
-**Certification gate.** The Control Plane UI authenticates only platform principals (never tenant users); it physically cannot render a tenant's `.etlsql` scripts, report artifacts, or `SHARED:` gateway credentials; its telemetry scopes aggregate usage across the fleet without retrieving tenant-owned raw data; and any tenant lifecycle mutations it performs generate an attributed platform audit receipt.
-
 ### Language — Compound `@expect` Rules (AND / OR)
 
 **Delivered.** Compound data quality rules (`AND`, `OR`, and parenthesized sub-expressions) are fully shipped, tested, and documented:
@@ -222,12 +208,6 @@ access is gone.
 **Candidate, not scheduled.** The unified `ETL-SQL.exe` binary provides an excellent developer experience (DX) by bundling the Portal, Admin CLI, and Orchestrator into one drop-in executable. However, loading the entire DI graph and assemblies for these control-plane features adds unnecessary memory footprint and cold-start latency to ephemeral sandboxes.
 
 **Delivery stage.** This work leverages .NET trimming and feature flags to produce a dedicated `ETL-SQL-Engine` binary artifact. It strips out all administrative, portal, and orchestration-hosting code, leaving only the pure script evaluator and connectors. This minimizes the compute cost and attack surface inside Shared SaaS OCI sandboxes.
-
-### SaaS Testing — API Load and Soak Testing
-
-**Candidate, not scheduled.** Current UI, SLT, and fuzzy testing validate functional correctness but do not stress the concurrency mechanisms required for SaaS density.
-
-**Delivery stage.** This work introduces formal load-testing pipelines (e.g., k6 or JMeter) targeting the Orchestrator and Portal APIs. It will simulate hundreds of concurrent workflows to expose connection pool exhaustion, memory leaks, and head-of-line blocking in the Shared SaaS infrastructure under sustained load.
 
 ### SaaS Testing — Chaos Engineering (Fault Injection)
 

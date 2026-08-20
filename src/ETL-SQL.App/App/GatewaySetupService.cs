@@ -1,116 +1,125 @@
-using System;
-using System.IO;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Governance;
 using Spectre.Console;
 
-namespace ETL_SQL.App
+namespace ETL_SQL.App;
+
+public sealed record GatewayConfig(
+    string PortalUrl,
+    string BrokerUrl,
+    string TenantId,
+    string GatewayId,
+    string NodeId,
+    string WorkloadPublicKeyThumbprint,
+    string ProtectedWorkloadPrivateKeyPkcs8);
+
+public static class GatewaySetupService
 {
-    public sealed record GatewayConfig(
-        string PortalUrl,
-        string TenantId,
-        string GatewayId,
-        string NodeId,
-        string WorkloadPublicKeyThumbprint,
-        string WorkloadPrivateKeyHex);
+    internal static string ConfigDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "gateway");
+    internal static string ConfigPath => Path.Combine(ConfigDirectory, "gateway-config.json");
 
-    public static class GatewaySetupService
+    private sealed record ConsumeRequest(string TenantId, string OneTimeToken, string WorkloadPublicKeyThumbprint);
+    private sealed record ConsumeResponse(string TenantId, string GatewayId, string WorkloadPublicKeyThumbprint);
+
+    public static async Task<int> RunSetupAsync(
+        string? portalUrl, string? token, string? tenantId, string? gatewayId, string? nodeId,
+        bool installService, bool nonInteractive)
     {
-        public static async Task<int> RunSetupAsync(
-            string? portalUrl,
-            string? token,
-            string? gatewayId,
-            string? nodeId,
-            bool installService,
-            bool nonInteractive)
+        AnsiConsole.MarkupLine("[bold blue]=== ETL-SQL Data Gateway Setup Wizard ===[/]");
+
+        if (string.IsNullOrWhiteSpace(portalUrl))
         {
-            AnsiConsole.MarkupLine("[bold blue]=== ETL-SQL Data Gateway Setup Wizard ===[/]");
-            AnsiConsole.MarkupLine("[grey]Configuring on-premises Gateway daemon for secure cloud connectivity.[/]\n");
-
-            if (string.IsNullOrWhiteSpace(portalUrl))
-            {
-                if (nonInteractive)
-                {
-                    AnsiConsole.MarkupLine("[red]Error: --portal URL is required in non-interactive mode.[/]");
-                    return 1;
-                }
-                portalUrl = AnsiConsole.Ask<string>("Enter the Portal base URL (e.g. [green]https://portal.company.com[/]):");
-            }
-
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                if (nonInteractive)
-                {
-                    AnsiConsole.MarkupLine("[red]Error: --token is required in non-interactive mode.[/]");
-                    return 1;
-                }
-                token = AnsiConsole.Prompt(
-                    new TextPrompt<string>("Enter the one-time [green]Enrollment Token[/] issued by Portal:")
-                        .Secret('*'));
-            }
-
-            if (string.IsNullOrWhiteSpace(nodeId))
-            {
-                nodeId = Environment.MachineName;
-                if (!nonInteractive)
-                {
-                    nodeId = AnsiConsole.Ask("Node Identifier (machine name):", nodeId);
-                }
-            }
-
-            // Generate workload identity key pair (ECDSA P-256)
-            using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-            var pubKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
-            var thumbprint = Convert.ToHexString(SHA256.HashData(pubKeyBytes)).ToLowerInvariant();
-            var privKeyHex = Convert.ToHexString(ecdsa.ExportECPrivateKey());
-
-            AnsiConsole.MarkupLine($"[green]✓[/] Generated local cryptographic workload identity: [grey]{thumbprint[..Math.Min(12, thumbprint.Length)]}...[/]");
-
-            // Save local configuration
-            var configDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ETL-SQL", "gateway");
-            Directory.CreateDirectory(configDir);
-            var configPath = Path.Combine(configDir, "gateway-config.json");
-
-            var config = new GatewayConfig(
-                PortalUrl: portalUrl.TrimEnd('/'),
-                TenantId: "default",
-                GatewayId: gatewayId ?? "default-gw",
-                NodeId: nodeId,
-                WorkloadPublicKeyThumbprint: thumbprint,
-                WorkloadPrivateKeyHex: privKeyHex);
-
-            var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(configPath, json, Encoding.UTF8);
-
-            AnsiConsole.MarkupLine($"[green]✓[/] Gateway configuration saved to: [grey]{configPath}[/]");
-
-            // Check if service installation was requested
-            if (!installService && !nonInteractive)
-            {
-                installService = AnsiConsole.Confirm("Would you like to register this Gateway as a background system service?", false);
-            }
-
-            if (installService)
-            {
-                if (OperatingSystem.IsWindows())
-                {
-                    AnsiConsole.MarkupLine("\n[yellow]To register Windows Service, run as Administrator:[/]");
-                    AnsiConsole.MarkupLine($"[grey]sc.exe create ETLSQLGateway binPath= \"{Environment.ProcessPath} gateway start\" start= auto[/]");
-                }
-                else if (OperatingSystem.IsLinux())
-                {
-                    AnsiConsole.MarkupLine("\n[yellow]To enable systemd service on Linux, run:[/]");
-                    AnsiConsole.MarkupLine($"[grey]sudo systemctl enable --now etlsql-gateway.service[/]");
-                }
-            }
-
-            AnsiConsole.MarkupLine("\n[bold green]✓ Gateway setup complete![/]");
-            AnsiConsole.MarkupLine("To start the Gateway daemon in foreground mode, run: [bold]etlsql gateway start[/]\n");
-            return 0;
+            if (nonInteractive) return Error("--portal URL is required in non-interactive mode.");
+            portalUrl = AnsiConsole.Ask<string>("Portal base URL:");
         }
+        if (!Uri.TryCreate(portalUrl, UriKind.Absolute, out var portalUri)
+            || (portalUri.Scheme != Uri.UriSchemeHttps
+                && !(portalUri.Scheme == Uri.UriSchemeHttp && portalUri.IsLoopback)))
+            return Error("The Portal URL must use HTTPS (HTTP is allowed only for loopback testing).");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            if (nonInteractive) return Error("--token is required in non-interactive mode.");
+            token = AnsiConsole.Prompt(new TextPrompt<string>("One-time enrollment token:").Secret('*'));
+        }
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            if (nonInteractive) return Error("--tenant is required in non-interactive mode.");
+            tenantId = AnsiConsole.Ask<string>("Tenant identifier:");
+        }
+
+        nodeId = string.IsNullOrWhiteSpace(nodeId) ? Environment.MachineName : nodeId.Trim();
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var publicKey = key.ExportSubjectPublicKeyInfo();
+        var thumbprint = Convert.ToHexString(SHA256.HashData(publicKey));
+
+        ConsumeResponse enrollment;
+        try
+        {
+            using var client = PolicyBoundHttp.CreateClient(timeout: TimeSpan.FromSeconds(30));
+            using var response = await client.PostAsJsonAsync(
+                new Uri(portalUri, "/api/gateway/enrollment/consume"),
+                new ConsumeRequest(tenantId.Trim(), token, thumbprint)).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return Error("Portal refused the one-time enrollment token.");
+            enrollment = await response.Content.ReadFromJsonAsync<ConsumeResponse>().ConfigureAwait(false)
+                ?? throw new InvalidDataException("Portal returned an empty enrollment response.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidDataException)
+        {
+            return Error("Gateway enrollment could not be completed with Portal.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(gatewayId)
+            && !string.Equals(gatewayId, enrollment.GatewayId, StringComparison.Ordinal))
+            return Error("The enrolled Gateway ID does not match --gateway-id.");
+        if (!string.Equals(thumbprint, enrollment.WorkloadPublicKeyThumbprint, StringComparison.OrdinalIgnoreCase))
+            return Error("Portal returned a different workload identity than the one enrolled.");
+
+        var entropy = $"gateway:{enrollment.TenantId}:{enrollment.GatewayId}";
+        var protectedPrivateKey = CryptoUtils.ProtectMachine(
+            Convert.ToBase64String(key.ExportPkcs8PrivateKey()), entropy);
+        var brokerUri = new UriBuilder(portalUri)
+        {
+            Scheme = portalUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
+            Port = portalUri.IsDefaultPort ? -1 : portalUri.Port,
+            Path = "/api/gateway/broker",
+            Query = string.Empty
+        }.Uri.AbsoluteUri;
+        var config = new GatewayConfig(
+            portalUri.GetLeftPart(UriPartial.Authority).TrimEnd('/'), brokerUri,
+            enrollment.TenantId, enrollment.GatewayId, nodeId, thumbprint, protectedPrivateKey);
+
+        Directory.CreateDirectory(ConfigDirectory);
+        await File.WriteAllTextAsync(
+            ConfigPath, JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8)
+            .ConfigureAwait(false);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(ConfigPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+        AnsiConsole.MarkupLine($"[green]✓[/] Enrolled Gateway [grey]{Markup.Escape(enrollment.GatewayId)}[/].");
+        AnsiConsole.MarkupLine($"[green]✓[/] Protected configuration saved to [grey]{Markup.Escape(ConfigPath)}[/].");
+        if (installService) PrintServiceInstructions();
+        AnsiConsole.MarkupLine("Run [bold]etlsql gateway start[/] to start the foreground daemon.");
+        return 0;
+    }
+
+    private static int Error(string message)
+    {
+        AnsiConsole.MarkupLine($"[red]Error: {Markup.Escape(message)}[/]");
+        return 1;
+    }
+
+    private static void PrintServiceInstructions()
+    {
+        if (OperatingSystem.IsWindows())
+            AnsiConsole.MarkupLine($"Run as Administrator: [grey]sc.exe create ETLSQLGateway binPath= \"{Markup.Escape(Environment.ProcessPath ?? "etlsql")} gateway start\" start= auto[/]");
+        else if (OperatingSystem.IsLinux())
+            AnsiConsole.MarkupLine("Install deploy/systemd/etlsql-gateway.service, then run [grey]systemctl enable --now etlsql-gateway[/].");
     }
 }

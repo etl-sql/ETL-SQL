@@ -3,7 +3,7 @@
   "journeys": [
     {
       "name": "portable-pipeline-execution",
-      "profiles": ["Solo", "Team", "Enterprise", "SaaS"],
+      "profiles": ["Solo", "Team", "Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS"],
       "portableState": ["scripts", "parameters", "lineage-tags", "quality-rules"],
       "hostOwnedState": ["resolved-secrets", "execution-root"],
@@ -13,7 +13,7 @@
     },
     {
       "name": "connection-and-secret-rebinding",
-      "profiles": ["Team", "Enterprise", "SaaS"],
+      "profiles": ["Team", "Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS"],
       "portableState": ["logical-connection-name", "secret-reference"],
       "hostOwnedState": ["connection-string", "secret-value", "credential-provider"],
@@ -23,7 +23,7 @@
     },
     {
       "name": "schedules-and-notifications",
-      "profiles": ["Team", "Enterprise", "SaaS"],
+      "profiles": ["Team", "Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS"],
       "portableState": ["job", "schedule", "notification-definition"],
       "hostOwnedState": ["scheduler-lease", "notification-credential", "activation-state"],
@@ -33,7 +33,7 @@
     },
     {
       "name": "quality-and-stewardship",
-      "profiles": ["Solo", "Team", "Enterprise", "SaaS"],
+      "profiles": ["Solo", "Team", "Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS"],
       "portableState": ["quality-rule", "owner-tag", "steward-tag", "lineage-tag"],
       "hostOwnedState": ["alert-destination", "retention-policy"],
@@ -43,7 +43,7 @@
     },
     {
       "name": "report-publication",
-      "profiles": ["Team", "Enterprise", "SaaS"],
+      "profiles": ["Team", "Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS"],
       "portableState": ["report-script", "dataset-definition", "folder-path"],
       "hostOwnedState": ["dataset-key", "publish-permission", "portal-root"],
@@ -53,7 +53,7 @@
     },
     {
       "name": "identity-and-ownership",
-      "profiles": ["Enterprise", "SaaS"],
+      "profiles": ["Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["TeamToEnterprise", "EnterpriseToSaaS"],
       "portableState": ["catalog-owner", "role-intent"],
       "hostOwnedState": ["oidc-subject", "group-membership", "service-account", "approval"],
@@ -63,7 +63,7 @@
     },
     {
       "name": "backup-and-restore",
-      "profiles": ["Solo", "Team", "Enterprise", "SaaS"],
+      "profiles": ["Solo", "Team", "Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS"],
       "portableState": ["manifest", "catalog", "history", "artifact-checksum"],
       "hostOwnedState": ["backup-key", "restore-root"],
@@ -73,7 +73,7 @@
     },
     {
       "name": "environment-promotion",
-      "profiles": ["Team", "Enterprise", "SaaS"],
+      "profiles": ["Team", "Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS"],
       "portableState": ["jobs", "schedules", "reports", "lineage-tags", "quality-rules"],
       "hostOwnedState": ["bindings", "secrets", "identity", "activation-state"],
@@ -93,7 +93,7 @@
     },
     {
       "name": "n-to-n-plus-one-upgrade",
-      "profiles": ["Solo", "Team", "Enterprise", "SaaS"],
+      "profiles": ["Solo", "Team", "Enterprise", "SaaS", "SharedSaaS"],
       "transitions": ["Upgrade"],
       "portableState": ["profile-manifest", "catalog", "artifacts"],
       "hostOwnedState": ["schema-version", "migration-lease", "rollback-package"],
@@ -103,7 +103,7 @@
     },
     {
       "name": "saas-import-and-export",
-      "profiles": ["SaaS"],
+      "profiles": ["SaaS", "SharedSaaS"],
       "transitions": ["EnterpriseToSaaS", "SoloToSaaS"],
       "portableState": ["scripts", "jobs", "reports", "lineage-tags", "quality-rules"],
       "hostOwnedState": ["tenant-id", "identity", "database", "artifact-root", "keys", "secrets"],
@@ -113,7 +113,7 @@
     },
     {
       "name": "tenant-isolation-and-failure-containment",
-      "profiles": ["SaaS"],
+      "profiles": ["SaaS", "SharedSaaS"],
       "transitions": ["EnterpriseToSaaS", "SoloToSaaS"],
       "portableState": ["tenant-scoped-artifacts"],
       "hostOwnedState": ["database", "artifact-root", "key", "cache", "queue", "audit", "telemetry", "support-access", "resource-limit"],

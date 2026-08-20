@@ -316,7 +316,7 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
       const res = await gatewaysApi.enroll(gatewayId, expiry);
       $resultToken.value = res.oneTimeToken;
       const portalOrigin = window.location.origin;
-      $resultCmd.value = `etlsql gateway setup --portal ${portalOrigin} --token ${res.oneTimeToken}`;
+      $resultCmd.value = `etlsql gateway setup --portal ${portalOrigin} --tenant ${res.tenantId} --gateway-id ${res.gatewayId} --token ${res.oneTimeToken}`;
       $enrollForm.style.display = 'none';
       $enrollResult.style.display = 'block';
     } catch (err) {

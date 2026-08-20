@@ -211,6 +211,40 @@ public sealed class GatewayOperationProtocolTests
             () => ledger.RecordTerminal(OtherTenant, mine.OperationId, GatewayOutcomeState.Committed));
     }
 
+    [Fact]
+    public void DurableLedgerPreservesCommittedAndAmbiguousWriteDecisionsAcrossRestart()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"gateway-ledger-{Guid.NewGuid():N}");
+        var path = Path.Combine(directory, "outcomes.json");
+        try
+        {
+            var committed = Operation() with
+            {
+                OperationId = "committed-write",
+                Effect = GatewayOperationEffect.Mutating
+            };
+            var ambiguous = committed with { OperationId = "ambiguous-write" };
+            var firstProcess = new GatewayOutcomeLedger(path);
+            firstProcess.RecordDispatched(committed);
+            firstProcess.RecordTerminal(Tenant, committed.OperationId, GatewayOutcomeState.Committed, 3);
+            firstProcess.RecordDispatched(ambiguous);
+            firstProcess.RecordTerminal(Tenant, ambiguous.OperationId, GatewayOutcomeState.Ambiguous);
+
+            var restarted = new GatewayOutcomeLedger(path);
+            Assert.Equal(
+                GatewayReconnectAction.ReturnRecordedOutcome,
+                restarted.DecideReconnect(Tenant, committed.OperationId));
+            Assert.Equal(3, restarted.Find(Tenant, committed.OperationId)?.RowsProduced);
+            Assert.Equal(
+                GatewayReconnectAction.EscalateAmbiguous,
+                restarted.DecideReconnect(Tenant, ambiguous.OperationId));
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
+        }
+    }
+
     // --------------------------------------------------------------------------- helpers
 
     private static bool Validate(GatewayOperation operation)

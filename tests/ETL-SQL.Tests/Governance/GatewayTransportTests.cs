@@ -276,7 +276,8 @@ public sealed class GatewayTransportTests
         public int Executions { get; private set; }
 
         public Task<GatewayExecutionResult> ExecuteAsync(
-            GatewayResource resource, string? request, IReadOnlyList<string>? parameters,
+            GatewayResource resource, GatewayOperationClass operationClass,
+            string? request, IReadOnlyList<string>? parameters,
             GatewayOperationBounds bounds, CancellationToken cancellationToken)
         {
             Executions++;
@@ -288,7 +289,8 @@ public sealed class GatewayTransportTests
     private sealed class ThrowingExecutor(string message) : IGatewayResourceExecutor
     {
         public Task<GatewayExecutionResult> ExecuteAsync(
-            GatewayResource resource, string? request, IReadOnlyList<string>? parameters,
+            GatewayResource resource, GatewayOperationClass operationClass,
+            string? request, IReadOnlyList<string>? parameters,
             GatewayOperationBounds bounds, CancellationToken cancellationToken) =>
             throw new InvalidOperationException(message);
     }

@@ -18,7 +18,7 @@
 [CmdletBinding(DefaultParameterSetName = "Profile")]
 param(
     [Parameter(ParameterSetName = "Profile")]
-    [ValidateSet("Solo", "Team", "Enterprise", "SaaS", "All")]
+    [ValidateSet("Solo", "Team", "Enterprise", "SaaS", "SharedSaaS", "All")]
     [string]$Profile = "All",
 
     [Parameter(Mandatory = $true, ParameterSetName = "Transition")]
@@ -107,6 +107,18 @@ function Get-ProfilePhases {
                 New-Phase "SaaS Portal runtime isolation" $PortalTests "FullyQualifiedName~SaasTenantRuntimeIsolationTests|FullyQualifiedName~ConfigurationPromotionValidationTests|FullyQualifiedName~ConfigurationExportSecretExclusionTests" "Host-fixed Portal databases, audit outboxes, and security caches reject cross-tenant state while bootstrap validation excludes secrets."
             )
         }
+        "SharedSaaS" {
+            @(
+                New-Phase "Shared tenant database, artifact, cache, and queue isolation" $PortalTests "FullyQualifiedName~SharedTenantStoreIsolationTests|FullyQualifiedName~SharedDatasetTenantIsolationTests|FullyQualifiedName~PortalTenantArtifactStorageTests|FullyQualifiedName~SharedTenantLifecycleEndpointTests" "Hostile tenant identifiers cannot cross shared durable-state, dataset, artifact, or admission boundaries."
+                New-Phase "Shared audit, PII, lineage, and quality isolation" $PortalTests "FullyQualifiedName~SharedAuditTenantIsolationTests|FullyQualifiedName~SharedLineageTenantIsolationTests|FullyQualifiedName~SharedStewardshipTenantIsolationTests|FullyQualifiedName~SharedLineageEndpointTests" "Audit, PII stewardship, lineage, and quality evidence remain tenant-scoped in shared stores and APIs."
+                New-Phase "Shared path, key, and checkpoint isolation" $CoreTests "FullyQualifiedName~TenantStorageCapabilityTests|FullyQualifiedName~KeyMaterialContractTests|FullyQualifiedName~NamedCheckpointResumeTests|FullyQualifiedName~TenantScopedArtifactStorageTests" "Server-derived tenant capabilities fence paths, key namespaces, artifacts, and resumable checkpoints."
+                New-Phase "Shared Gateway and network authority" $CoreTests "FullyQualifiedName~GatewayEnrollmentAndAuthorityTests|FullyQualifiedName~GatewayBindingTests|FullyQualifiedName~GatewayOperationProtocolTests|FullyQualifiedName~GatewayTransportTests" "Gateway identity, binding, grants, typed operations, replay decisions, and outbound transport reject cross-tenant authority."
+                New-Phase "Shared sandbox and resource-exhaustion isolation" $CoreTests "FullyQualifiedName~SandboxExecutionCoordinatorTests|FullyQualifiedName~SandboxWorkloadPolicyResolverTests|FullyQualifiedName~SandboxAdmissionControllerTests|FullyQualifiedName~SaasFleetRolloutSequencerTests" "Hardened placement, tenant admission, resource bounds, and fleet drain never lower isolation or transfer work across tenants."
+                New-Phase "Shared quota, telemetry, and metering isolation" $PortalTests "FullyQualifiedName~TenantExecutionQuotaTests|FullyQualifiedName~TenantMeteringLedgerTests|FullyQualifiedName~TenantUsageStoreTests|FullyQualifiedName~SharedTenantMeteringIntegrationTests" "Noisy-neighbor admission and tenant-attributed telemetry remain bounded and partitioned."
+                New-Phase "Shared support and restore isolation" $PortalTests "FullyQualifiedName~SupportAccessApprovalServiceTests|FullyQualifiedName~SupportBundleTests|FullyQualifiedName~SharedBackupAndRecoveryTests|FullyQualifiedName~SharedBackupSurfaceInventoryTests" "Support access is approved and audited, while backup/restore inventories retain every shared tenant surface."
+                New-Phase "Shared identity boundary" $PortalTests "FullyQualifiedName~SharedTenantHttpBoundaryTests|FullyQualifiedName~SharedTenantCredentialBindingTests|FullyQualifiedName~SharedOidcAuthTests|FullyQualifiedName~SharedIdentityPartitionStoreTests" "Only verified credentials derive tenant context and shared identity state remains partitioned."
+            )
+        }
     }
 }
 
@@ -170,6 +182,9 @@ function Get-TopologyClaim {
         }
         "SaaS" {
             [ordered]@{ lane = $Name; topology = "Managed Dedicated (one host-fixed tenant runtime boundary per tenant)"; claim = "Managed Dedicated"; sharedSaaS = "NotCertified" }
+        }
+        "SharedSaaS" {
+            [ordered]@{ lane = $Name; topology = "Shared tenant-aware control planes with hardened per-run execution"; claim = "Shared SaaS hostile isolation"; sharedSaaS = "Certified" }
         }
         "SoloToTeam" {
             [ordered]@{ lane = $Name; topology = "Solo local state to Team single-node providers"; claim = "Solo to Team" }
@@ -311,7 +326,7 @@ function Update-ReleaseClaimsIndex {
 $laneNames = if ($PSCmdlet.ParameterSetName -eq "Transition") {
     if ($Transition -eq "All") { @("SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS", "SaaSToEnterpriseExit", "Upgrade") } else { @($Transition) }
 } else {
-    if ($Profile -eq "All") { @("Solo", "Team", "Enterprise", "SaaS") } else { @($Profile) }
+    if ($Profile -eq "All") { @("Solo", "Team", "Enterprise", "SaaS", "SharedSaaS") } else { @($Profile) }
 }
 $laneKind = if ($PSCmdlet.ParameterSetName -eq "Transition") { "Transition" } else { "Profile" }
 $phases = New-Object System.Collections.Generic.List[object]

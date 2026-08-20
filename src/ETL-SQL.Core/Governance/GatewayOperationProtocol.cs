@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace ETL_SQL.Core.Governance;
 
 /// <summary>Transport a Gateway session speaks. One versioned operation model over either.</summary>
@@ -145,6 +147,39 @@ public sealed class GatewayOutcomeLedger
 {
     private readonly Dictionary<(string TenantId, string OperationId), GatewayOperationOutcome> _outcomes = new();
     private readonly Lock _gate = new();
+    private readonly string? _persistencePath;
+
+    /// <summary>
+    /// Creates an in-memory ledger for tests, or a restart-durable ledger when an absolute local
+    /// persistence path is supplied. The file is replaced atomically after every state transition.
+    /// </summary>
+    public GatewayOutcomeLedger(string? persistencePath = null)
+    {
+        if (persistencePath is null)
+            return;
+        if (!Path.IsPathFullyQualified(persistencePath))
+            throw new ArgumentException("The Gateway outcome ledger path must be absolute.", nameof(persistencePath));
+
+        _persistencePath = Path.GetFullPath(persistencePath);
+        var directory = Path.GetDirectoryName(_persistencePath)
+            ?? throw new ArgumentException("The Gateway outcome ledger path has no parent directory.", nameof(persistencePath));
+        Directory.CreateDirectory(directory);
+        if (!File.Exists(_persistencePath))
+            return;
+
+        try
+        {
+            var records = JsonSerializer.Deserialize<List<GatewayOperationOutcome>>(
+                File.ReadAllText(_persistencePath)) ?? [];
+            foreach (var record in records)
+                _outcomes[Key(record.TenantId, record.OperationId)] = record;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            throw new GatewayProtocolException(
+                "The durable Gateway outcome ledger could not be loaded; operations are refused to avoid replaying an ambiguous write.");
+        }
+    }
 
     public void RecordDispatched(GatewayOperation operation)
     {
@@ -161,6 +196,7 @@ public sealed class GatewayOutcomeLedger
 
             _outcomes[Key(operation.TenantId, operation.OperationId)] = new GatewayOperationOutcome(
                 operation.OperationId, operation.TenantId, GatewayOutcomeState.InFlight, operation.Effect);
+            PersistLocked();
         }
     }
 
@@ -183,6 +219,7 @@ public sealed class GatewayOutcomeLedger
 
             _outcomes[Key(tenantId, operationId)] =
                 existing with { State = state, RowsProduced = rowsProduced, Detail = detail };
+            PersistLocked();
         }
     }
 
@@ -224,4 +261,23 @@ public sealed class GatewayOutcomeLedger
     // concatenated string: with a string, ("a", "bc") and ("ab", "c") would collide into one
     // another's outcome, and that class of bug cannot occur here.
     private static (string, string) Key(string tenantId, string operationId) => (tenantId, operationId);
+
+    private void PersistLocked()
+    {
+        if (_persistencePath is null)
+            return;
+
+        var temporaryPath = _persistencePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(_outcomes.Values));
+            File.Move(temporaryPath, _persistencePath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            try { File.Delete(temporaryPath); } catch { }
+            throw new GatewayProtocolException(
+                "The durable Gateway outcome ledger could not record the operation; execution is refused.");
+        }
+    }
 }

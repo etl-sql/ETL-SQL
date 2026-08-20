@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Text;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Multitenancy;
@@ -15,7 +16,8 @@ public sealed class GatewayBroker(
     GatewaySessionRegistry sessionRegistry,
     ITenantMeteringLedger? meteringLedger = null,
     int maxFrameBytes = 1 << 20,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    bool allowUnprovenTestIdentities = false)
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private readonly ITenantMeteringLedger? _meteringLedger = meteringLedger;
@@ -55,16 +57,33 @@ public sealed class GatewayBroker(
             return;
         }
 
-        // 3. Acknowledge Hello
-        await SendFrameAsync(socket, new GatewayFrame
+        if (!allowUnprovenTestIdentities)
         {
-            Kind = GatewayFrameKind.HelloAck,
-            TenantId = helloFrame.TenantId,
-            GatewayId = helloFrame.GatewayId,
-            Reason = "Authenticated successfully."
-        }, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(helloFrame.WorkloadPublicKey)
+                || !VerifyThumbprint(helloFrame.WorkloadPublicKey, enrollment.WorkloadPublicKeyThumbprint!))
+            {
+                await SendFrameAsync(socket, GatewayFrame.Fault(null, "Gateway workload-key proof is required."), cancellationToken).ConfigureAwait(false);
+                await CloseSocketAsync(socket, "Authentication failed.", cancellationToken).ConfigureAwait(false);
+                return;
+            }
 
-        // 4. Register session
+            var challenge = RandomNumberGenerator.GetBytes(32);
+            await SendFrameAsync(socket, new GatewayFrame
+            {
+                Kind = GatewayFrameKind.Challenge,
+                Challenge = Convert.ToBase64String(challenge)
+            }, cancellationToken).ConfigureAwait(false);
+            var authentication = await ReceiveFrameAsync(socket, cancellationToken).ConfigureAwait(false);
+            if (!VerifyProof(authentication, helloFrame.WorkloadPublicKey, challenge))
+            {
+                await SendFrameAsync(socket, GatewayFrame.Fault(null, "Gateway workload-key proof is not valid."), cancellationToken).ConfigureAwait(false);
+                await CloseSocketAsync(socket, "Authentication failed.", cancellationToken).ConfigureAwait(false);
+                return;
+            }
+        }
+
+        // 3. Start the operation pump only after the handshake has consumed its authentication
+        // frame, then register before acknowledging so an acknowledged session is immediately routable.
         var nodeId = !string.IsNullOrWhiteSpace(helloFrame.NodeId) ? helloFrame.NodeId : Guid.NewGuid().ToString("N")[..8];
         var session = new ActiveGatewaySession(
             helloFrame.TenantId,
@@ -74,17 +93,28 @@ public sealed class GatewayBroker(
             socket,
             maxFrameBytes,
             _time.GetUtcNow(),
-            _meteringLedger);
+            _meteringLedger,
+            helloFrame.PublishedResources ?? []);
 
         if (!sessionRegistry.TryRegister(session))
         {
             await SendFrameAsync(socket, GatewayFrame.Fault(null, "Another session is already active for this Gateway node."), cancellationToken).ConfigureAwait(false);
             await CloseSocketAsync(socket, "Conflict.", cancellationToken).ConfigureAwait(false);
+            await session.DisposeAsync().ConfigureAwait(false);
             return;
         }
 
         try
         {
+            // 4. Acknowledge only after the session is routable through the registry.
+            await SendFrameAsync(socket, new GatewayFrame
+            {
+                Kind = GatewayFrameKind.HelloAck,
+                TenantId = helloFrame.TenantId,
+                GatewayId = helloFrame.GatewayId,
+                Reason = "Authenticated successfully."
+            }, cancellationToken).ConfigureAwait(false);
+
             // Keep session open until disconnected
             await session.WaitForClosureAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -92,6 +122,38 @@ public sealed class GatewayBroker(
         {
             sessionRegistry.Unregister(session.TenantId, session.GatewayId, session);
             await session.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private static bool VerifyThumbprint(string publicKeyBase64, string expectedThumbprint)
+    {
+        try
+        {
+            var actual = Convert.ToHexString(SHA256.HashData(Convert.FromBase64String(publicKeyBase64)));
+            return CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(actual), Convert.FromHexString(expectedThumbprint));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool VerifyProof(GatewayFrame? authentication, string publicKeyBase64, byte[] challenge)
+    {
+        if (authentication?.Kind != GatewayFrameKind.Authenticate
+            || string.IsNullOrWhiteSpace(authentication.Signature))
+            return false;
+        try
+        {
+            using var publicKey = ECDsa.Create();
+            publicKey.ImportSubjectPublicKeyInfo(Convert.FromBase64String(publicKeyBase64), out _);
+            return publicKey.VerifyData(
+                challenge, Convert.FromBase64String(authentication.Signature), HashAlgorithmName.SHA256);
+        }
+        catch (Exception ex) when (ex is FormatException or CryptographicException)
+        {
+            return false;
         }
     }
 
@@ -161,6 +223,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
     public string WorkloadPublicKeyThumbprint { get; }
     public DateTimeOffset ConnectedUtc { get; }
     public bool IsActive => _socket.State == WebSocketState.Open && !_closeTcs.Task.IsCompleted;
+    public IReadOnlyList<GatewayPublishedResource> PublishedResources { get; }
 
     public ActiveGatewaySession(
         string tenantId,
@@ -170,7 +233,8 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         WebSocket socket,
         int maxFrameBytes,
         DateTimeOffset connectedUtc,
-        ITenantMeteringLedger? meteringLedger = null)
+        ITenantMeteringLedger? meteringLedger = null,
+        IReadOnlyList<GatewayPublishedResource>? publishedResources = null)
     {
         TenantId = tenantId;
         GatewayId = gatewayId;
@@ -180,6 +244,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         _maxFrameBytes = maxFrameBytes;
         ConnectedUtc = connectedUtc;
         _meteringLedger = meteringLedger;
+        PublishedResources = publishedResources ?? [];
         _pumpTask = Task.Run(PumpInboundAsync);
     }
 

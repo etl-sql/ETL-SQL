@@ -154,6 +154,32 @@ public sealed class GatewayEnrollmentAndAuthorityTests
             () => registry.ProposeAsync(SampleResource() with { ResourceId = "../other-tenant" }));
     }
 
+    [Fact]
+    public async Task ProtectedRegistry_SurvivesRestartWithoutPlaintextTargetOrCredential()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"gateway-registry-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "resources.protected");
+        try
+        {
+            var first = new GatewayResourceRegistry(path);
+            await first.ProposeAsync(SampleResource());
+            await first.ApproveAsync(ResourceId);
+
+            var bytes = await File.ReadAllTextAsync(path);
+            Assert.DoesNotContain("myserver", bytes, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("sales-etl-credential", bytes, StringComparison.OrdinalIgnoreCase);
+
+            var restarted = new GatewayResourceRegistry(path);
+            var restored = await restarted.ResolveForExecutionAsync(ResourceId, GatewayOperationClass.Read);
+            Assert.Equal("sqlserver://myserver:1433/Sales", restored.LocalTarget);
+        }
+        finally
+        {
+            try { Directory.Delete(directory, true); } catch { }
+        }
+    }
+
     // --------------------------------------------------------------- D5: all seven clauses agree
 
     [Fact]

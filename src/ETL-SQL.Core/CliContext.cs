@@ -296,8 +296,14 @@ public class CliContext
 
     // gateway commands
     public string? GatewayToken { get; set; }
+    public string? GatewayTenantId { get; set; }
     public string? GatewayId { get; set; }
     public string? GatewayNodeId { get; set; }
     public bool GatewayInstallService { get; set; }
     public bool GatewayNonInteractive { get; set; }
+    public string? GatewayResourceId { get; set; }
+    public string? GatewayConnectorType { get; set; }
+    public string? GatewayLocalTarget { get; set; }
+    public string? GatewayCredentialReference { get; set; }
+    public string? GatewayOperations { get; set; }
 }

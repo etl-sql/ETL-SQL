@@ -12,6 +12,12 @@ public enum GatewayFrameKind
     /// <summary>Cloud → Gateway: session accepted.</summary>
     HelloAck,
 
+    /// <summary>Cloud → Gateway: fresh nonce that the enrolled workload key must sign.</summary>
+    Challenge,
+
+    /// <summary>Gateway → cloud: proof of possession for the public key presented in Hello.</summary>
+    Authenticate,
+
     /// <summary>Cloud → Gateway: a typed operation to execute.</summary>
     Operation,
 
@@ -46,6 +52,10 @@ public sealed record GatewayFrame
     public string? GatewayId { get; init; }
     public string? NodeId { get; init; }
     public string? WorkloadPublicKeyThumbprint { get; init; }
+    public string? WorkloadPublicKey { get; init; }
+    public string? Challenge { get; init; }
+    public string? Signature { get; init; }
+    public IReadOnlyList<GatewayPublishedResource>? PublishedResources { get; init; }
 
     public string? OperationId { get; init; }
     public string? CorrelationId { get; init; }

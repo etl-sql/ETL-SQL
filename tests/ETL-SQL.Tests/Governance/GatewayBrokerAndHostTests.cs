@@ -22,7 +22,7 @@ public sealed class GatewayBrokerAndHostTests
         await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
 
         var registry = new GatewaySessionRegistry();
-        var broker = new GatewayBroker(enrollmentStore, registry);
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
 
         await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
 
@@ -61,7 +61,7 @@ public sealed class GatewayBrokerAndHostTests
         await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
 
         var registry = new GatewaySessionRegistry();
-        var broker = new GatewayBroker(enrollmentStore, registry);
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
 
         await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
 
@@ -121,7 +121,7 @@ public sealed class GatewayBrokerAndHostTests
     {
         var enrollmentStore = new InMemoryGatewayEnrollmentStore();
         var registry = new GatewaySessionRegistry();
-        var broker = new GatewayBroker(enrollmentStore, registry);
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
 
         await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
 
@@ -153,7 +153,7 @@ public sealed class GatewayBrokerAndHostTests
         await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
 
         var registry = new GatewaySessionRegistry();
-        var broker = new GatewayBroker(enrollmentStore, registry);
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
 
         await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
 
@@ -228,6 +228,7 @@ public sealed class GatewayBrokerAndHostTests
     {
         public Task<GatewayExecutionResult> ExecuteAsync(
             GatewayResource resource,
+            GatewayOperationClass operationClass,
             string? request,
             IReadOnlyList<string>? parameters,
             GatewayOperationBounds bounds,

@@ -436,6 +436,59 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.ToTable("FolderAcls");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayEnrollmentEntity", b =>
+                {
+                    b.Property<string>("EnrollmentId")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ConsumedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ExpiresUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GatewayId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkloadPublicKeyThumbprint")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("EnrollmentId");
+
+                    b.HasIndex("TenantId", "GatewayId");
+
+                    b.HasIndex("TenantId", "TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("GatewayEnrollments");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.Group", b =>
                 {
                     b.Property<int>("Id")
