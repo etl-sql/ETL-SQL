@@ -75,7 +75,7 @@ namespace ETL_SQL.Portal.Tests
             {
                 // 1. Start the container
                 _ldapContainer = new ContainerBuilder("osixia/openldap:1.5.0")
-                    .WithName("etl-sql-ldap-portal")
+                    .WithName($"etl-sql-ldap-portal-{Guid.NewGuid():N}")
                     .WithLabel("test-suite", "ETL-SQL.Integration")
                     .WithPortBinding(389, true)
                     .WithEnvironment("LDAP_ORGANISATION", "ETL-SQL")
