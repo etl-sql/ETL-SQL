@@ -39,7 +39,7 @@ let currentFixtureId = null;
 let currentInstance = null;
 let searchQuery = '';
 let activeCategoryFilter = 'all';
-let collapsedCategories = new Set(categoryOrder);
+let collapsedCategories = new Set();
 let stageTheme = 'light'; // 'light' or 'dark'
 
 // Parse URL Hash on initial load
@@ -316,7 +316,7 @@ async function mount() {
   syncUrlHash();
 }
 
-function selectStory(autoExpand = false) {
+function selectStory(autoExpand = true) {
   if (autoExpand && currentStory.category && collapsedCategories.has(currentStory.category)) {
     collapsedCategories.delete(currentStory.category);
   }

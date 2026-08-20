@@ -115,7 +115,7 @@ if ($coverageFiles.Count -eq 0) {
 
 New-Item -ItemType Directory -Path $reportRoot -Force | Out-Null
 $reportPattern = Join-Path $coverageRoot "**/coverage.cobertura.xml"
-$assemblyFilters = "+ETL-SQL;+ETL-SQL.*;-ETL-SQL.Tests;-ETL-SQL.PerfTests;-ETL-SQL.Benchmarks;-ETL-SQL.LintTests;-ETL-SQL.Portal.Migrations.*"
+$assemblyFilters = "+ETL-SQL;+ETL-SQL.*;-ETL-SQL.Tests;-ETL-SQL.PerfTests;-ETL-SQL.Benchmarks;-ETL-SQL.LintTests;-ETL-SQL.Portal*;-ETL-SQL.LanguageServer*;-ETL-SQL.ReportBuilder*;-ETL-SQL.ReportHosting;-ETL-SQL.ReportPlayer;-ETL-SQL.TUI;-ETL-SQL.WorkstationEditor;-ETL-SQL.Gateway;-ETL-SQL.Orchestrator.Service"
 $reportGeneratorPath = Resolve-ReportGeneratorPath
 $processInfo = [Diagnostics.ProcessStartInfo]::new()
 $processInfo.FileName = "dotnet"
