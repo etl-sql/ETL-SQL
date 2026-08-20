@@ -83,6 +83,7 @@ try {
         $env:ASPNETCORE_URLS = "http://127.0.0.1:$LocalPort"
         $env:Portal__ScriptRootPath = Join-Path $root "scripts"
         $env:Portal__DatabasePath = Join-Path $root "portal.db"
+        $env:Orchestrator__DatabasePath = Join-Path $root "orchestrator.db"
         $env:Portal__SnapshotDirectory = Join-Path $root "snapshots"
         $env:Portal__Jwt__Secret = $jwtSecret
         $env:Portal__Dataset__AtRestKey = $atRestKey

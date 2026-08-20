@@ -63,3 +63,17 @@ Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/relea
 - [ ] Open fresh `## [Unreleased]` section in `CHANGELOG.md`.
 - [ ] Re-enable Dependabot schedules in `.github/dependabot.yml`.
 - [ ] Prune merged release branches (`Invoke-Release.ps1 -PruneMergedBranches`).
+
+---
+
+## Release Retrospective & Scripting Lessons Learned
+
+1. **Test Runner Parallelization Safeguards**:
+   - `ETL-SQL.Portal.Tests` requires explicit `xunit.runner.json` with `parallelizeTestCollections: false` (copied to output directory) to guarantee integration tests hosting mock SMTP, Kestrel, or SQLite instances execute serially without resource or port collisions.
+2. **Docker Context & Content Dependencies**:
+   - Multi-stage Dockerfiles (`Dockerfile.sandbox`, `Portal/Dockerfile`, `Orchestrator.Service/Dockerfile`) must copy `deploy/ /deploy/` at root level rather than specific subfolders so project references requiring `deploy/` content items compile cleanly across all container builds.
+3. **Smoke Parity Database Isolation**:
+   - `Invoke-SmokeParity.ps1` must explicitly set `$env:Orchestrator__DatabasePath = Join-Path $root "orchestrator.db"` in addition to Portal DB path to prevent local host runs from picking up ambient developer databases from `%APPDATA%\ETL-SQL\etlsql.db`.
+4. **Secret Scanner Test Fixture Allowlisting**:
+   - High-signal credential scanners should maintain explicit test fixture paths in `ALLOWLIST_PATHS` in `scripts/scan-secrets.js` whenever new test suites introduce mock PEM blocks.
+
