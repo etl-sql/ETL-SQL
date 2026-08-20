@@ -177,6 +177,24 @@ public sealed record ScaleSpec
     public string? Palette { get; init; }         // 'corporate', 'tableau10', 'viridis', etc.
 }
 
+public sealed record FacetSpec
+{
+    public string? By { get; init; }             // 1D wrap partition field (e.g. Region)
+    public int? Columns { get; init; }           // Max columns for 1D wrap
+    public string? Row { get; init; }            // 2D grid matrix row field
+    public string? Column { get; init; }         // 2D grid matrix column field
+    public FacetScalePolicy Scales { get; init; } = FacetScalePolicy.Shared;
+    public bool ShowHeaders { get; init; } = true;
+}
+
+public enum FacetScalePolicy
+{
+    Shared,  // Synchronized domains across all panels (default for accurate comparison)
+    Free,    // Independent X and Y scales per panel
+    FreeX,   // Independent X per panel, synchronized Y
+    FreeY    // Independent Y per panel, synchronized X
+}
+
 public enum CoordinateSpec
 {
     Cartesian,
@@ -251,7 +269,37 @@ CREATE VISUAL ActualVsBudget AS CUSTOM (
 );
 ```
 
-### 7.3 Embedded Vega-Lite Specifications
+### 7.3 Orthogonal Small-Multiples via `FACET`
+
+In the Grammar of Graphics, **Faceting** is an orthogonal operator applicable to any standard visual (`BAR`, `LINE`, `SCATTER`, `COMBO`, etc.) or `CUSTOM` multi-layer visual.
+
+#### 1D Wrapped Small-Multiples:
+```sql
+CREATE VISUAL RegionalMarginTrends AS LINE (
+  SOURCE   = #quarterly_data,
+  MAPPINGS (X = Quarter, Y = MarginPercent, COLOR = Channel),
+  FACET    (BY = Region, COLUMNS = 3, SCALES = SHARED)
+);
+```
+
+#### 2D Matrix Faceting (Row $\times$ Column):
+```sql
+CREATE VISUAL RegionalProductMatrix AS CUSTOM (
+  SOURCE   = #sales_matrix,
+  MAPPINGS (
+    X = Quarter,
+    RECT (Y = Revenue, COLOR = '#1e40af'),
+    LINE (Y = Target, COLOR = '#f59e0b', STROKE = DASHED)
+  ),
+  FACET (
+    ROW     = Region,
+    COLUMN  = ProductLine,
+    SCALES  = SHARED -- SHARED (default) | FREE | FREE_X | FREE_Y
+  )
+);
+```
+
+### 7.4 Embedded Vega-Lite Specifications
 ```sql
 CREATE VISUAL TelemetryPlot AS VEGA_LITE (
   SOURCE = #telemetry_data,

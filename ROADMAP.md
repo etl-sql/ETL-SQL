@@ -284,18 +284,19 @@ The insight driving this track: **the grammar is the differentiator and the rend
 - **Transparent data prep in SQL:** heavy transformations, cumulative sums, moving averages, and statistical aggregations live in SQL `#temp` tables where they are visible, testable, and lineage-tracked; `ChartSpec` focuses strictly on visual layout and mark encodings.
 - **Data delivery tiering:** lightweight **JSON Columnar vectors** for charts enable instant `JSON.parse` with 0 KB library overhead and clean Git diffs; **Apache Arrow IPC** streams are retained for high-density tables (>1,000 rows).
 - **The 8 atomic mark primitives:** all 2D visuals compile into compositions of `RECT`, `LINE`, `AREA`, `POINT`, `RULE`, `ARC`, `TEXT`, and `PATH`.
+- **First-class orthogonal faceting (`FACET (...)`):** any standard visual (`BAR`, `LINE`, `SCATTER`, `COMBO`, etc.) or `CUSTOM` visual can specify a 1D wrap `FACET (BY = Region, COLUMNS = 3, SCALES = SHARED)` or 2D matrix `FACET (ROW = ..., COLUMN = ..., SCALES = ...)` clause, generating coordinated small-multiples with synchronized axes and shared or independent scale domains.
 - **Multi-layer authoring via `CUSTOM` with `SCALES (...)`:** complex composite graphics are authored using `CREATE VISUAL <name> AS CUSTOM (...)` with dedicated spatial ($X, Y, Y_2$) and aesthetic scale blocks.
 - **Native C# static export:** server-side PDF and static report exports compile directly from `ChartSpec` into SVG XML via pure C# geometry and SkiaSharp text metrics, completely retiring `ClearScript.V8` and headless browser dependencies.
 - **Vega-Lite semantic alignment & interchange:** embedded Vega-Lite v5 JSON specifications are supported via `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`.
 - **Phased ECharts retirement via D3 micro-modules:** Tier 2 standard charts migrate to our native vector SVG engine, and Tier 3 complex visuals (Maps, Sankey, Treemap, Network) migrate to lightweight D3 micro-packages (`d3-geo`, `d3-hierarchy`, `d3-sankey`, `d3-force`), achieving a **~35 KB total standalone runtime footprint**.
 
 **Delivery Stages:**
-- **Stage 1: Neutral Spec IR and ECharts Lowering Compiler:** Implement `ChartSpec` record hierarchy; build `SpecDesugarer` for all 17 Tier 2 types; build `SpecToEChartsCompiler`. JSON columnar vectors serialize in `VisualManifest`.
+- **Stage 1: Neutral Spec IR and ECharts Lowering Compiler:** Implement `ChartSpec` record hierarchy (including `FacetSpec`); build `SpecDesugarer` for all 17 Tier 2 types and `TRELLIS`/`MATRIX` sugar lowering; build `SpecToEChartsCompiler`. JSON columnar vectors serialize in `VisualManifest`.
 - **Stage 2: Native C# SVG Static Export Backend:** Implement pure C# scale math (Linear, Band, Time, Log) and SkiaSharp text metrics in `SvgChartCompiler.cs`. Replaces `EChartsSsrRenderer.cs` and powers headless PDF and email exports without V8/Node.js.
-- **Stage 3: `CUSTOM` Multi-Layer Syntax & Vega-Lite Translator:** Add parser and AST support for `CREATE VISUAL ... AS CUSTOM (...)` with `SCALES (...)` block and `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`. *(Note: This stage establishes the `ComponentTooltipSpec` hook for the [Visual and Container Tooltips](#reporting--presentation--visual-and-container-tooltips-viz-in-tooltip) roadmap track).*
-- **Stage 4: Native Vector SVG Micro-Renderer:** Implement lightweight browser SVG/DOM renderer for Tier 2 Cartesian & Circular charts (`BAR`, `LINE`, `SCATTER`, `PIE`, `COMBO`, `WATERFALL`). Conditionally omit ECharts for reports containing only Tier 1 & Tier 2 visuals.
+- **Stage 3: `CUSTOM` Multi-Layer Syntax, `FACET` Operator & Vega-Lite Translator:** Add parser and AST support for `CREATE VISUAL ... AS CUSTOM (...)` with `SCALES (...)` block, orthogonal `FACET (...)` clause on any visual, and `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`. *(Note: This stage establishes the `ComponentTooltipSpec` hook for the [Visual and Container Tooltips](#reporting--presentation--visual-and-container-tooltips-viz-in-tooltip) roadmap track).*
+- **Stage 4: Native Vector SVG Micro-Renderer:** Implement lightweight browser SVG/DOM renderer for Tier 2 Cartesian & Circular charts (`BAR`, `LINE`, `SCATTER`, `PIE`, `COMBO`, `WATERFALL`, faceted panels). Conditionally omit ECharts for reports containing only Tier 1 & Tier 2 visuals.
 - **Stage 5: Complete ECharts Retirement via D3:** Replace remaining Tier 3 complex visuals (`MAP` via `d3-geo`, `TREEMAP`/`SUNBURST` via `d3-hierarchy`, `SANKEY` via `d3-sankey`, `NETWORK` via `d3-force`) with specialized D3 micro-packages. Completely retire `echarts.min.js` from the repository, achieving a ~35 KB total standalone runtime footprint.
-- **Stage 6: Advanced Composite Samples & Cookbook:** Create production-grade sample scripts for high-impact composite visuals (Dumbbell variance plots, Bullet graphs with qualitative zones, Ridgeline distribution plots). Author comprehensive guides: *"How to Build a CUSTOM Chart"*, *"Enhancing Standard Charts with Overlay Layers"*, and add 10+ recipes to the Reporting Cookbook.
+- **Stage 6: Advanced Composite Samples & Cookbook:** Create production-grade sample scripts for high-impact composite visuals (Dumbbell variance plots, Bullet graphs with qualitative zones, Ridgeline distribution plots, and Faceted small-multiples grids). Author comprehensive guides: *"How to Build a CUSTOM Chart"*, *"Enhancing Standard Charts with Overlay Layers & Faceting"*, and add 10+ recipes to the Reporting Cookbook.
 
 ---
 
@@ -337,46 +338,124 @@ CREATE VISUAL CategorySales AS PIE (
 
 ---
 
-### Reporting & Presentation — Data-Bound HTML/SVG Visual Templates
+### Reporting & Presentation — Data-Bound HTML/SVG Templates & Micro-Charts
 
-**Candidate, not scheduled.** Modern analytical reporting frequently demands specialized escape hatches for bespoke infographic KPI cards, micro-visuals, and branded status badges without sacrificing the script-first, Zero-Trust execution model.
+**Candidate, not scheduled.** (Architectural Decision Record: [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md)).
+
+Modern analytical reporting frequently demands specialized escape hatches for bespoke infographic KPI cards, micro-visuals, status badges, and repeater cards, alongside in-cell table sparklines and card background charts, without sacrificing the script-first, Zero-Trust execution model.
 
 **Design Principles and Boundaries:**
 - **Zero-Trust Rendering:** Custom visual extensions remain purely declarative and safe across CLI Player, VS Code, and Portal runtimes. Untrusted JavaScript execution is prohibited; all HTML/SVG templates pass through an AST-based sanitizer (stripping `<script>`, `<iframe>`, inline `on*` handlers, and `javascript:` URIs).
-- **Diffable, Script-First Contracts:** Template definitions remain standard `.rptsql` statements with scoped CSS styling.
-- **Deterministic Export Parity:** Templates compile cleanly to styled DOM elements in browser runtimes and embedded vector SVG in headless PDF exporters.
+- **Three-Tier Composability:** Zero-ceremony sugar for native widgets (`CARD` background sparklines, `TABLE` cell sparklines/progress bars), plus declarative Mustache macro helpers (`{{SPARKLINE(...)}}`, `{{PROGRESS_BAR(...)}}`, `{{BG_CHART(...)}}`) for freeform HTML.
+- **GoG IR Headless SVG Generation:** All micro-visuals compile directly to lightweight `<svg viewBox="...">` markup on the server via `ChartSpec` presets, ensuring instant rendering and 100% parity across browser DOM, headless PDF exports, and HTML email digests.
 
 **Target Syntax Specification:**
 ```sql
--- 1. Data-Bound HTML Template (Single KPI Card)
-CREATE VISUAL ServerHealthCard AS HTML (
-  SOURCE   = #server_metrics,
-  MODE     = SINGLE_ROW,               -- SINGLE_ROW (default) | REPEATER
-  TEMPLATE = '
-    <div class="health-card {{StatusClass}}">
-      <div class="header">{{ServerName}}</div>
-      <div class="metric">{{CpuPercent}}%</div>
-      <button data-action="SET_PARAMETER" data-param="@selected_server" data-value="{{ServerName}}">
+-- 1. KPI Card with subtle background trend chart (Zero-Ceremony Sugar)
+CREATE VISUAL TotalRevenueCard AS CARD (
+  SOURCE   = #current_kpi,
+  MAPPINGS (
+    VALUE      = TotalRevenue FORMAT '$#,##0',
+    TARGET     = TargetRevenue FORMAT '$#,##0',
+    COMPARISON = DeltaPercent FORMAT '+0.0%',
+    SPARKLINE  = #daily_revenue (X = SaleDate, Y = Amount, TYPE = AREA)
+  ),
+  OPTIONS (
+    SPARKLINE_POSITION = BACKGROUND,  -- BACKGROUND | BOTTOM | TOP | INLINE
+    SPARKLINE_COLOR    = '#3b82f6',
+    SPARKLINE_OPACITY  = 0.12
+  )
+);
 
-        Inspect
-      </button>
+-- 2. Data-Bound HTML Template with Embedded Micro-Chart Macros
+CREATE VISUAL NodeClusterStatus AS HTML (
+  SOURCE   = #cluster_nodes,
+  MODE     = REPEATER,                 -- SINGLE_ROW (default) | REPEATER
+  TEMPLATE = '
+    <div class="node-card {{SeverityClass}}">
+      <div class="node-header">
+        <span class="node-name">{{HostName}}</span>
+        <span class="node-badge {{Status}}">{{Status}}</span>
+      </div>
+      <div class="node-metrics">
+        <div class="metric-row">
+          <label>CPU Utilization</label>
+          <span class="metric-val">{{CpuPercent}}%</span>
+          <div class="spark-box">
+            {{SPARKLINE(CpuHistory, TYPE="LINE", COLOR="#3b82f6", HEIGHT=20, WIDTH=70)}}
+          </div>
+        </div>
+        <div class="metric-row">
+          <label>Memory Pressure</label>
+          <div class="prog-box">
+            {{PROGRESS_BAR(MemoryPercent, MAX=100, COLOR="#f59e0b", HEIGHT=6)}}
+          </div>
+        </div>
+      </div>
+      <div class="node-bg-chart">
+        {{BG_CHART(NetworkThroughputHistory, TYPE="AREA", COLOR="#64748b", OPACITY=0.10)}}
+      </div>
+      <div class="node-footer">
+        <button class="action-btn" data-action="SET_PARAMETER" data-param="@selected_node" data-value="{{HostName}}">
+          Inspect Diagnostics →
+        </button>
+      </div>
     </div>
   ',
   STYLE (
     CSS = '
-      .health-card { padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; }
-      .health-card.critical { background: #fee2e2; border-color: #ef4444; }
+      .node-card { position: relative; overflow: hidden; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; }
+      .node-card.critical { border-color: #ef4444; }
+      .node-bg-chart { position: absolute; bottom: 0; left: 0; right: 0; height: 60%; pointer-events: none; z-index: 0; }
+      .node-header, .node-metrics, .node-footer { position: relative; z-index: 1; }
+      .metric-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; }
+      .spark-box { width: 70px; height: 20px; }
+      .prog-box { width: 100px; height: 6px; }
     '
   )
 );
 ```
 
 **Delivery Stages:**
-- AST Parser support for `TEMPLATE`, `MODE = SINGLE_ROW | REPEATER`, and scoped `STYLE (CSS = '...')`.
-- Client-side Mustache-style data interpolation over Arrow row buffers.
-- Interactive event delegation for `data-action="SET_PARAMETER|NAVIGATE_PAGE"` attributes.
-- AST-based HTML/SVG sanitizer (DOMPurify integration).
+- **Stage 1 (Headless SVG Micro-Compiler):** Implement `SvgChartCompiler.GenerateSparklineSvg(...)` and progress bar generator in `ETL-SQL.Core`.
+- **Stage 2 (`CARD` & `TABLE` Sugar Integration):** Add `SPARKLINE` mapping and `SPARKLINE_POSITION` option to `ReportParser.cs` for `CARD`; expand `TABLE` sparklines to support array columns and child sources.
+- **Stage 3 (Template Macro Engine):** Implement Mustache macro parser in `ManifestBuilder.cs` and `report-runtime.js` supporting `{{SPARKLINE}}`, `{{PROGRESS_BAR}}`, `{{BG_CHART}}`, and `{{VISUAL}}`.
+- **Stage 4 (PDF & Email Parity):** Verify pure SVG injection in `PdfExporter` and HTML email templates without external runtime dependencies.
 
+---
+
+### Reporting & Presentation — Full-Fidelity Terminal UI (TUI) Dashboard Parity & Semantic Fallbacks
+
+**Candidate, not scheduled.** While web dashboards are standard for business analysts, terminal-native analytical reporting is having a resurgence across DevOps, SRE, and data engineering. Viewing rich dashboards over SSH, in air-gapped bastions, inside Docker containers, or in local Terminal IDEs without port-forwarding or launching a browser is a massive operational capability.
+
+**Design Principles and Boundaries:**
+- **GoG IR Mark-to-Terminal Lowering:** `TerminalRenderer` lowers neutral `ChartSpec` marks and scales directly to terminal primitives:
+  - `RECT` / `BAR`: Sub-character fractional vertical resolution via Unicode eighth-blocks (` ▂▃▄▅▆▇█`).
+  - `LINE` / `AREA`: High-density `BrailleCanvas` (`⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠤⠶⠛`) providing 4× resolution over standard character grids.
+  - `POINT` / `SCATTER`: Color-coded ASCII/Unicode glyphs (`●`, `▲`, `◆`, `■`, `*`).
+  - `RULE`: Box-drawing reference axes and target threshold labels (`─────── Target ($100k)`).
+  - `ARC` (Pie / Donut / Gauge): Spectre `BreakdownChart` and segmented proportional gauges.
+  - `FACET` (Trellis / Matrix): Multi-panel grid layout with coordinated axis scales.
+- **High-Fidelity Form Controls:** Elevate input controls from generic tag lists into dedicated, beautiful Spectre/Unicode widgets:
+  - `DATEPICKER` / `RELDATEPICKER`: Interactive calendar month grid (`Su Mo Tu We Th Fr Sa`) with highlighted selection.
+  - `SLIDER`: Visual ASCII track with current/min/max readouts (`[────●──────────] $450k`).
+  - `MULTISELECT` & `SLICER`: Interactive checkbox/radio pill buttons (`(•) All  ( ) West` / `[X] Enterprise  [ ] SMB`).
+  - `SEARCH` & `TEXTBOX`: Form input frames with placeholders (`[ 🔍 Search SKU... ]`).
+  - `BUTTON`: 3D/rounded push buttons (`╭──────────╮ \n │ Run ETL  │ \n ╰──────────╯`).
+- **Intelligent Semantic Fallback Engine:** 28 of 36 visuals have full high-fidelity TUI representations. For the remaining 8 complex/spatial visuals that lack a direct terminal equivalent, the renderer provides structured, informative fallbacks rather than broken outputs:
+  - `MAP` $\to$ Region/Country Top-N Bar Breakdown Table.
+  - `SANKEY` $\to$ Stage Transition Flow Table with volume and drop-off deltas.
+  - `TREEMAP` / `SUNBURST` $\to$ Indented Hierarchical Tree Table with proportional bars.
+  - `NETWORK` $\to$ Node Degree & Edge Connection Table.
+  - `IMAGE` $\to$ Filename/URL Asset Badge (`[🖼️ logo.png]`).
+
+**Delivery Stages:**
+- **Stage 1 (GoG IR Terminal Compiler):** Implement `TerminalChartCompiler` lowering `ChartSpec` mark records into Braille canvas, block elements, and Spectre renderables in `ETL-SQL.Reporting`.
+- **Stage 2 (Form Controls Overhaul):** Build high-fidelity Spectre widgets for `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `CHECKBOX`, and `TEXTBOX`.
+- **Stage 3 (Semantic Fallback Engine):** Implement automated fallback tables for `MAP`, `SANKEY`, `TREEMAP`, `SUNBURST`, `NETWORK`, and `IMAGE`.
+- **Stage 4 (Keyboard Navigation & Live Filter Propagation):** Wire interactive keyboard focus, arrow-key selection, and parameter dispatch inside `ETL-SQL.TUI` and `ReportPreviewPanel.cs`.
+
+---
 
 ### Reporting & Presentation — Cascading Parameter Defaults (Dependent Slicers)
 
