@@ -263,14 +263,25 @@ namespace ETL_SQL.LanguageServer.Tests
                 SoftRefreshInterval = TimeSpan.Zero // every read is "stale" → always revalidate
             };
 
-            manager.RegisterConnection("C", "MSSQL", "...");      // warms + first background refresh
-            await WaitUntilAsync(() => tableFetches >= 1);
+            manager.RegisterConnection("C", "MSSQL", "...");
 
-            var before = tableFetches;
-            await manager.GetTablesAsync("C");                    // valid hit → second background refresh
-            await WaitUntilAsync(() => tableFetches > before);
+            // Poll through the public cache-hit path until a second source query occurs. Merely
+            // observing the first query start does not prove its refresh slot has been released;
+            // under load, the old test could issue its one cache hit while that first refresh was
+            // still unwinding and then wait forever without making another triggering read.
+            var observedFetches = await LoadAwareWait.UntilAsync(
+                "a stale metadata cache hit to start a second background refresh",
+                async _ =>
+                {
+                    await manager.GetTablesAsync("C");
+                    return Volatile.Read(ref tableFetches);
+                },
+                count => count >= 2,
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromMilliseconds(20),
+                count => $"table fetches={count}");
 
-            Assert.True(tableFetches > before, "A stale valid cache-hit should trigger another background refresh.");
+            Assert.True(observedFetches >= 2, "A stale valid cache-hit should trigger another background refresh.");
         }
 
         private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)

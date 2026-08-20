@@ -12,7 +12,9 @@ etl-sql gateway <subcommand>
 
 | Subcommand | Description |
 | :--- | :--- |
+| [`resource`](gateway-resource.md) | Administer the protected Gateway-local resource registry |
 | [`setup`](gateway-setup.md) | Configure and enroll this machine as an on-premises Data Gateway node |
+| [`start`](gateway-start.md) | Run the enrolled Gateway daemon in the foreground |
 
 ## References
 

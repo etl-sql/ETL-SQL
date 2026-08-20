@@ -1,11 +1,20 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Functions;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Services;
+using Microsoft.Extensions.Configuration;
+using Moq;
 using Xunit;
 
 namespace ETL_SQL.Tests.Scale;
@@ -25,7 +34,7 @@ public sealed class LiveObjectScaleAssessmentTests
     [Trait("Category", "ScaleAssessment")]
     public async Task LiveObjectsSupportDocumentedScaleMatrix(string objectKind, int count)
     {
-        await using var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        await using var evaluator = CreateEvaluator();
         evaluator.PreviewLimit = 0;
 
         await evaluator.Evaluate(Parse(BuildScript(objectKind, count)));
@@ -40,7 +49,7 @@ public sealed class LiveObjectScaleAssessmentTests
     [InlineData("visual")]
     public async Task ConfiguredLiveObjectCeilingRejectsTheNextDistinctObject(string objectKind)
     {
-        await using var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        await using var evaluator = CreateEvaluator();
         evaluator.PreviewLimit = 0;
         SetLimit(evaluator, objectKind, 2);
 
@@ -49,6 +58,67 @@ public sealed class LiveObjectScaleAssessmentTests
 
         Assert.Contains("limit exceeded (2)", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, Count(evaluator, objectKind));
+    }
+
+    private static Evaluator CreateEvaluator()
+    {
+        var logger = new Mock<ILogger>();
+        var services = new Mock<IServiceProvider>();
+        var functions = new Mock<IFunctionRegistry>();
+        var lineage = new Mock<ILineageTracker>();
+        lineage.SetupGet(item => item.GlobalMetadata)
+            .Returns(new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        var connector = new Mock<IConnector>();
+        connector.SetupGet(item => item.Name).Returns("MOCKDB");
+        connector.SetupGet(item => item.Aliases).Returns(Array.Empty<string>());
+        connector.Setup(item => item.CreateDataSource(
+                It.IsAny<IExecutionContext>(),
+                It.IsAny<string>(),
+                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<IEnumerable<ColumnDefinition>?>()))
+            .Returns(() => CreateDataSource().Object);
+
+        var connectors = new Mock<IConnectorRegistry>();
+        connectors.Setup(item => item.GetConnector("MOCKDB")).Returns(connector.Object);
+
+        var security = new SecurityService(logger.Object) { IsTestMode = true };
+        var sessions = new Mock<SessionStateManager>(
+            logger.Object,
+            security,
+            new Mock<IConfiguration>().Object,
+            new ETL_SQL.Core.Execution.SqliteSessionMetadataStoreFactory(),
+            null);
+
+        var handlers = new List<IStatementHandler>
+        {
+            new CreateConnectionStatementHandler(connectors.Object, logger.Object),
+            new CreateTableStatementHandler(logger.Object),
+            new DeclareStatementHandler(logger.Object),
+            new CreateVisualStatementHandler(logger.Object)
+        };
+        services.Setup(item => item.GetService(typeof(IEnumerable<IStatementHandler>))).Returns(handlers);
+
+        return new Evaluator(
+            handlers,
+            services.Object,
+            functions.Object,
+            lineage.Object,
+            new Mock<IDockerManager>().Object,
+            connectors.Object,
+            sessions.Object,
+            security,
+            logger.Object,
+            new ETL_SQL.Core.Metadata.LanguageHelpRegistry(),
+            new EvaluatorComponentRegistry());
+    }
+
+    private static Mock<IDataSource> CreateDataSource()
+    {
+        var source = new Mock<IDataSource>();
+        source.SetupGet(item => item.ConnectorType).Returns("MOCKDB");
+        source.SetupGet(item => item.Path).Returns("MOCK");
+        return source;
     }
 
     private static Script Parse(string source) => new Parser(new Lexer(source).Tokenize(), source).Parse();

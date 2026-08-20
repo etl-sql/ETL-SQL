@@ -1328,7 +1328,13 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin access-simulate` | Simulate what a user can reach — the access question, answered without a browser | [admin access simulate](reference/cli/admin-access-simulate.md) |
 | `etl-sql admin backup` | Back up portal/orchestrator state into split-custody data and keys archives | [admin backup](reference/cli/admin-backup.md) |
 | `etl-sql admin doctor` | Perform a system health check to verify the environment | [admin doctor](reference/cli/admin-doctor.md) |
+| `etl-sql admin gateway resource approve` | Approve a local Gateway resource | [admin gateway resource approve](reference/cli/admin-gateway-resource-approve.md) |
+| `etl-sql admin gateway resource disable` | Disable a local Gateway resource | [admin gateway resource disable](reference/cli/admin-gateway-resource-disable.md) |
+| `etl-sql admin gateway resource list` | List local Gateway resources without revealing targets or credentials | [admin gateway resource list](reference/cli/admin-gateway-resource-list.md) |
+| `etl-sql admin gateway resource propose` | Propose a local connector resource | [admin gateway resource propose](reference/cli/admin-gateway-resource-propose.md) |
+| `etl-sql admin gateway resource` | Administer the protected Gateway-local resource registry | [admin gateway resource](reference/cli/admin-gateway-resource.md) |
 | `etl-sql admin gateway setup` | Configure and enroll this machine as an on-premises Data Gateway node | [admin gateway setup](reference/cli/admin-gateway-setup.md) |
+| `etl-sql admin gateway start` | Run the enrolled Gateway daemon in the foreground | [admin gateway start](reference/cli/admin-gateway-start.md) |
 | `etl-sql admin gateway` | On-premises Data Gateway administration and setup | [admin gateway](reference/cli/admin-gateway.md) |
 | `etl-sql admin group add-member` | Add a user to a group | [admin group add member](reference/cli/admin-group-add-member.md) |
 | `etl-sql admin group capabilities` | Show a group's Studio capabilities | [admin group capabilities](reference/cli/admin-group-capabilities.md) |
@@ -1427,7 +1433,13 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql enterprise unenroll` | Remove machine enterprise enrollment | [enterprise unenroll](reference/cli/enterprise-unenroll.md) |
 | `etl-sql enterprise` | Manage machine-level enterprise policy enrollment | [enterprise](reference/cli/enterprise.md) |
 | `etl-sql extract-spec` | Extract data dictionary / schema pages from a large PDF specification | [extract spec](reference/cli/extract-spec.md) |
+| `etl-sql gateway resource approve` | Approve a local Gateway resource | [gateway resource approve](reference/cli/gateway-resource-approve.md) |
+| `etl-sql gateway resource disable` | Disable a local Gateway resource | [gateway resource disable](reference/cli/gateway-resource-disable.md) |
+| `etl-sql gateway resource list` | List local Gateway resources without revealing targets or credentials | [gateway resource list](reference/cli/gateway-resource-list.md) |
+| `etl-sql gateway resource propose` | Propose a local connector resource | [gateway resource propose](reference/cli/gateway-resource-propose.md) |
+| `etl-sql gateway resource` | Administer the protected Gateway-local resource registry | [gateway resource](reference/cli/gateway-resource.md) |
 | `etl-sql gateway setup` | Configure and enroll this machine as an on-premises Data Gateway node | [gateway setup](reference/cli/gateway-setup.md) |
+| `etl-sql gateway start` | Run the enrolled Gateway daemon in the foreground | [gateway start](reference/cli/gateway-start.md) |
 | `etl-sql gateway` | On-premises Data Gateway administration and setup | [gateway](reference/cli/gateway.md) |
 | `etl-sql gen-script` | Compile a schema JSON specification into a validated ETL-SQL script template | [gen script](reference/cli/gen-script.md) |
 | `etl-sql generate` | Generate mock data for testing projects | [generate](reference/cli/generate.md) |

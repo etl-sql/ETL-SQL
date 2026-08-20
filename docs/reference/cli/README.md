@@ -12,7 +12,13 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin backup`](admin-backup.md) | Back up portal/orchestrator state into split-custody data and keys archives |
 | [`etl-sql admin doctor`](admin-doctor.md) | Perform a system health check to verify the environment |
 | [`etl-sql admin gateway`](admin-gateway.md) | On-premises Data Gateway administration and setup |
+| [`etl-sql admin gateway resource`](admin-gateway-resource.md) | Administer the protected Gateway-local resource registry |
+| [`etl-sql admin gateway resource approve`](admin-gateway-resource-approve.md) | approve a local Gateway resource |
+| [`etl-sql admin gateway resource disable`](admin-gateway-resource-disable.md) | disable a local Gateway resource |
+| [`etl-sql admin gateway resource list`](admin-gateway-resource-list.md) | List local Gateway resources without revealing targets or credentials |
+| [`etl-sql admin gateway resource propose`](admin-gateway-resource-propose.md) | Propose a local connector resource |
 | [`etl-sql admin gateway setup`](admin-gateway-setup.md) | Configure and enroll this machine as an on-premises Data Gateway node |
+| [`etl-sql admin gateway start`](admin-gateway-start.md) | Run the enrolled Gateway daemon in the foreground |
 | [`etl-sql admin group`](admin-group.md) | Manage Portal groups and their membership |
 | [`etl-sql admin group add-member`](admin-group-add-member.md) | Add a user to a group |
 | [`etl-sql admin group capabilities`](admin-group-capabilities.md) | Show a group's Studio capabilities |
@@ -110,7 +116,13 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql enterprise unenroll`](enterprise-unenroll.md) | Remove machine enterprise enrollment |
 | [`etl-sql extract-spec`](extract-spec.md) | Extract data dictionary / schema pages from a large PDF specification |
 | [`etl-sql gateway`](gateway.md) | On-premises Data Gateway administration and setup |
+| [`etl-sql gateway resource`](gateway-resource.md) | Administer the protected Gateway-local resource registry |
+| [`etl-sql gateway resource approve`](gateway-resource-approve.md) | approve a local Gateway resource |
+| [`etl-sql gateway resource disable`](gateway-resource-disable.md) | disable a local Gateway resource |
+| [`etl-sql gateway resource list`](gateway-resource-list.md) | List local Gateway resources without revealing targets or credentials |
+| [`etl-sql gateway resource propose`](gateway-resource-propose.md) | Propose a local connector resource |
 | [`etl-sql gateway setup`](gateway-setup.md) | Configure and enroll this machine as an on-premises Data Gateway node |
+| [`etl-sql gateway start`](gateway-start.md) | Run the enrolled Gateway daemon in the foreground |
 | [`etl-sql gen-script`](gen-script.md) | Compile a schema JSON specification into a validated ETL-SQL script template |
 | [`etl-sql generate`](generate.md) | Generate mock data for testing projects |
 | [`etl-sql init`](init.md) | Scaffold a starter configuration and first ETL-SQL script for new users |

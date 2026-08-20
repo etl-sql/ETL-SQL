@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-08-20
+
+- Stabilized two full-solution load-sensitive tests. Metadata refresh coverage now waits by repeatedly
+  exercising the public stale-cache path until the previous refresh slot is reusable, and live-object
+  scale coverage uses a minimal private connector/evaluator instead of process-wide application state
+  and asynchronously seeded mock databases.
+- Regenerated the CLI reference for the shipped Gateway daemon and protected resource-administration
+  commands, and restored the active release's explicit Enterprise evidence-checklist contract.
 - Retired completed roadmap entries for deployment profiles, Orchestrator administration, the
   Secure Outbound Gateway, hardened SaaS execution, compound quality rules, native script testing,
   and declarative watermarks. Removed shipped sub-phases from the still-open tenant-portability and

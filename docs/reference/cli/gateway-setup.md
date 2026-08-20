@@ -17,6 +17,7 @@ etl-sql gateway setup [options]
 | `--node-id` | Node machine identifier (default: host machine name). |
 | `--non-interactive, -y` | Run in non-interactive mode without prompting. |
 | `--portal` | Portal URL (e.g. https://portal.company.com). |
+| `--tenant` | Tenant identifier from the Portal enrollment command. |
 | `--token` | One-time enrollment token issued by Portal. |
 
 ## References
