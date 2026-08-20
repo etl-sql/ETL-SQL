@@ -85,4 +85,9 @@ Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/relea
      - Direct packaging: `.\scripts\build-msi.ps1` or `.\scripts\publish-release.ps1`.
      - Smoke parity: `.\scripts\Invoke-SmokeParity.ps1`.
    - Resume the release validation suite with `.\scripts\Test-PreRelease.ps1 -Resume -ForceResume` to skip already-passed phases and pick up directly where it left off.
+6. **Pipeline Phase Granularity & Split Proposals (Post-v0.18.0 Action Items)**:
+   - Split monolithic long-running validation phases in `Test-PreRelease.ps1` to enable finer `-Resume` boundaries:
+     - **Docker Integration Lane**: Split into `Docker Connector Tests` (`ETL-SQL.Tests` Category=Integration) and `Docker Portal Distributed Tests` (`ETL-SQL.Portal.Tests` Category=Integration).
+     - **Engine Lane & Coverage Gate**: Separate raw test execution from Cobertura coverage analysis and report generation so test runs can be resumed independently of coverage gating.
+     - **Sample Scripts**: Add per-pass checkpointing (`Pass 1: Fresh Execution` vs `Pass 2: Idempotency Verification`).
 
