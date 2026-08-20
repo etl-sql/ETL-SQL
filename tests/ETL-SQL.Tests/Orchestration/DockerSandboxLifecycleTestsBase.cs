@@ -271,7 +271,7 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
             default);
         var firstContainer = TrackContainer(firstWorkspace.AssignmentId);
         var firstRun = firstAttempt.RunAsync(default);
-        await WaitForCheckpointAsync(sessionId);
+        await WaitForCheckpointAsync(sessionId, firstRun);
         Assert.Equal(0, (await _docker.RunAsync("docker", ["kill", firstContainer])).ExitCode);
         Assert.Equal(137, (await firstRun).ExitCode);
         await firstAttempt.DestroyAsync(default);
@@ -491,7 +491,7 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
     /// Waits for the checkpoint to be durable on the tenant's session root rather than for a log
     /// line, so the kill below cannot race the write it is supposed to happen after.
     /// </summary>
-    private async Task WaitForCheckpointAsync(string sessionId)
+    private async Task WaitForCheckpointAsync(string sessionId, Task<SandboxExecutionOutcome>? runTask = null)
     {
         // The file appearing is not the checkpoint being finished: killing the sandbox between the
         // store creating its database and finishing the write leaves state the next attempt cannot
@@ -502,6 +502,12 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         var deadline = DateTime.UtcNow.AddSeconds(120);
         while (DateTime.UtcNow < deadline)
         {
+            if (runTask is { IsCompleted: true })
+            {
+                var earlyOutcome = await runTask;
+                Assert.Fail($"The sandbox exited prematurely before checkpointing (exit code {earlyOutcome.ExitCode}): {earlyOutcome.ErrorMessage}\n{earlyOutcome.RawResult?.Output}");
+            }
+
             if (File.Exists(metadata))
             {
                 try
