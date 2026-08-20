@@ -1,5 +1,0 @@
-### Added
-
-- Added `GET /api/admin/policy-authority/impact`, which answers the question asked immediately before pressing activate: what happens when I do? Policy Authority already had every verb — validate, publish, activate, canary, roll back — and no consequence.
-
-  **Fleet impact** separates registered machines from reachable ones: a machine not seen for over 24 hours will not pick a policy up until it checks in, so a large stale count means the rollout is narrower than the fleet count suggests. **Approval state** distinguishes a recorded reviewer from a second pair of eyes — a version whose reviewer is its own author is reported as such. **Collector consequences** warn when activating a policy that requires remote audit delivery against a collector that is not currently healthy, which starts refusing security-sensitive mutations with HTTP 503; both halves of that were already known separately, and this joins them so the answer is not discovered by activating. **Machine links** list the version each machine actually receives — the canary version when it is in the targeted group, the active one otherwise, and none when revoked.

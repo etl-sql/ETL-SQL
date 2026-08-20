@@ -37,6 +37,7 @@ RUN dotnet restore "ETL-SQL.Portal/ETL-SQL.Portal.csproj" -r linux-x64
 
 # Copy the rest of the source
 COPY src/ .
+COPY deploy/ /deploy/
 
 COPY docs/ /docs/
 COPY snippets/ /snippets/

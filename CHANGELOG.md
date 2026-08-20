@@ -12,126 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- No unreleased changes yet.
+
 ## [0.18.0] — 2026-08-20
 
-- Stabilized two full-solution load-sensitive tests. Metadata refresh coverage now waits by repeatedly
-  exercising the public stale-cache path until the previous refresh slot is reusable, and live-object
-  scale coverage uses a minimal private connector/evaluator instead of process-wide application state
-  and asynchronously seeded mock databases.
-- Regenerated the CLI reference for the shipped Gateway daemon and protected resource-administration
-  commands, and restored the active release's explicit Enterprise evidence-checklist contract.
-- Retired completed roadmap entries for deployment profiles, Orchestrator administration, the
-  Secure Outbound Gateway, hardened SaaS execution, compound quality rules, native script testing,
-  and declarative watermarks. Removed shipped sub-phases from the still-open tenant-portability and
-  report-builder fidelity tracks so `ROADMAP.md` now describes only future work.
-- Audited and retired verified completion records from `TODO.md`, and reopened two claims whose
-  implementation evidence was incomplete: production end-to-end Gateway operation and Shared-fleet
-  drain/replacement. Removed the already-delivered Control Plane Dashboard and API load/soak phases
-  from `ROADMAP.md`.
-- Made Portal Gateway enrollments durable on SQLite and PostgreSQL, including one-time token hashes,
-  optimistic-concurrency consumption, tenant partitioning, schema migrations, and backup-surface
-  classification. Added the token-authenticated bootstrap endpoint and the Portal WebSocket broker
-  route.
-- Fixed a Gateway broker race that acknowledged a session before registering it, allowing a client
-  to receive `HelloAck` while the routing registry still reported the Gateway offline.
-- Added restart-durable file persistence to the Gateway outcome ledger. Committed outcomes and
-  ambiguous writes retain their reconnect decisions across daemon recreation.
-- Completed the executable Secure Outbound Gateway path: one-time Portal bootstrap, machine-protected
-  ECDSA workload identity with signed-challenge proof, foreground daemon and OS service packaging,
-  protected local resource administration, bounded connector execution, and authority-evaluated
-  `SHARED:` alias routing over the typed broker data plane.
-- Added a Shared SaaS hostile-isolation certification lane spanning shared state, artifacts, cache,
-  queue, audit, PII/stewardship, lineage, paths, keys, checkpoints, Gateway, sandbox, quotas,
-  telemetry, support, restore, identity, and resource exhaustion. Added fleet drain placement that
-  preserves in-flight tenant work, shifts new work to ready nodes, and cannot lower isolation tiers.
-- Made sandbox fair-share admission cluster-global. Weighted fair ordering was process-local, so on a
-  multi-node deployment whichever node polled first took every freed slot; selection now happens in
-  the durable ledger as weighted fair queuing on virtual time, and a heavier tenant weight buys a
-  proportional share rather than the ability to starve a lighter one.
-- Enforced the sandbox admission and runtime limits that were declared but not applied: CPU cores,
-  block-I/O (on hosts that declare a throttle device, refusing the work where they cannot), connector
-  concurrency, per-attempt processed rows, per-tenant interactive sessions in Shared deployments, and
-  a queue-depth ceiling that now holds across the whole fleet rather than per process.
-- Added capability delivery to sandboxed workloads. Server-issued handles resolve through the
-  governance secret provider, namespaced per tenant, and are bind-mounted read-only into the
-  attempt; a host that cannot resolve a granted capability refuses the work instead of running
-  without it.
-- Added fleet release rollout for Managed Dedicated deployments: eligibility and compatibility
-  planning, deterministic waves, and a sequencer that will not open the next wave while an earlier
-  one is draining or after failures exceed tolerance. Each cutover still requires its own signed,
-  tenant-scoped authorization.
-- Added graceful execution-node drain. A node can now leave rotation without dropping work —
-  in-flight reports finish, new ones are refused, and `/healthz` reports draining — where previously
-  the only way to stop a node cancelled everything it was running.
-- Fixed sandbox checkpoints being unreadable to any later attempt. Session state was sealed with key
-  material generated inside the attempt's own single-use scratch, so a resumed run reported "no saved
-  session found"; the server-mounted per-tenant key is now authoritative, and checkpoint resume across
-  separate sandboxes is verified on a hardened runtime.
-- Added the on-premises Gateway runtime and its typed WebSocket transport in a new
-  `ETL-SQL.Gateway` project. The Gateway dials out and never listens, refuses any scheme but the
-  typed protocol and any non-TLS broker off loopback, bounds inbound frames, narrows cloud-supplied
-  limits by the resource's registered ones, and returns a fixed message when a local provider fails
-  so a host, user, or password in the provider's exception never crosses the wire. The frame model
-  has no field for a host, port, scheme, path, or command, so a compromised cloud side cannot ask the
-  Gateway to reach an arbitrary destination.
-- Added the Gateway typed-operation contract and durable outcome ledger. Operation bounds have no
-  unlimited representation and a resource's registered limits can only narrow them. Reconnect follows
-  one rule: an ambiguous write is never retried blindly nor reported as safely failed, a dropped
-  in-flight write is ambiguous rather than assumed not to have happened, a dropped read may simply
-  re-run, and a committed outcome cannot be downgraded by a late report.
-- Added the Secure Outbound Data Gateway enrollment, resource registry, and authority model. A
-  tenant-issued enrollment is consumable exactly once and stores only a hash of its one-time token,
-  so the record cannot enrol a Gateway; expired, revoked, consumed, and cross-tenant presentations
-  are indistinguishable to a caller. The Gateway-local registry holds the only copy of a resource's
-  target and credential reference, discovery can propose but never approve, and the published
-  projection carries neither. Routing is authorized in one place and only when execution tenant,
-  capability tenant, Gateway identity tenant, catalog binding, resource ownership, actor grant, and
-  policy version all agree; revoking a Gateway or disabling a resource denies on the next evaluation
-  with no grace window.
-- Added the Secure Outbound Data Gateway binding model. A `SHARED:` catalog alias can now resolve to
-  a Gateway binding — connector type plus immutable Gateway and resource IDs — instead of a direct
-  target. A Gateway-bound entry cannot store a physical endpoint or a credential; those stay on the
-  on-premises Gateway, and the catalog store refuses an entry that carries either. Resolving a
-  Gateway-bound alias fails closed while no Gateway data plane runs, rather than falling back to a
-  direct connection, and a script can neither add a binding to a direct alias nor bypass one.
-- Added a non-bypassable infrastructure egress fence. Connectors can no longer reach cloud instance
-  metadata endpoints, link-local node services, the container runtime host bridge, or cluster service
-  discovery in any deployment topology — the default `AllowedHosts: ["*"]`, an unenrolled host, and a
-  mid-run policy change cannot relax it. The fence is applied at connection creation, on every dynamic
-  REST URL including redirects, and again per resolved address at socket-connect time, so obfuscated
-  address forms, DNS rebinding, and port scanning are all covered. Loopback and RFC 1918 private
-  ranges are unchanged. Operators can exempt exact hosts/addresses through
-  `Security:EgressFenceExemptions` or authoritative policy; wildcard exemptions are rejected.
-- Added `Security:DeniedEgressRanges` so an operator can declare this deployment's own off-limits CIDR
-  ranges — hosting control plane, internal management networks, other tenants' subnets. Ranges are
-  enforced at connection creation and per resolved address, across IPv4 and IPv6 at any prefix length,
-  and cannot be exempted. Malformed ranges fail policy validation instead of being dropped silently.
-- Added signed Managed Dedicated tenant upgrades with running-release verification, exclusive
-  boundary locking, scheduler fencing, durable admission drain/reconciliation, atomic capacity
-  assignment, exact rollback snapshots, interrupted-cutover recovery, and idempotent audit receipts.
-- Certified Managed Dedicated data-asset isolation across physically disjoint lineage, quality,
-  scan, cache, outbox, quarantine, report, dataset, snapshot, subscription, share/embed, and export
-  stores, including equal numeric-ID collision tests and tenant-admin/author boundary evidence.
-- Added signed, retention/legal-hold-aware Managed Dedicated tenant deletion with explicit execution,
-  reparse/root safeguards, non-payload boundary digesting, atomic service removal, and an external
-  durable Started/Completed receipt attributed to the platform operator and approval.
-- Added Managed Dedicated split-custody recovery with tenant-bound archive pairs, foreign-tenant row
-  refusal, explicit recovery-environment tenant matching, actual provisioned key/artifact paths, and
-  post-restore job/admission fencing so recovered work cannot silently resume.
-- Added a counts-only tenant usage ledger at the Orchestrator scheduler boundary. Tenant-bound job
-  attempts persist idempotent row, memory, CPU, and duration measures from the immutable job tenant
-  binding without payload content, and metering failure cannot authorize, retry, or alter execution.
-- Added a durable Shared tenant resource registry for alias, gateway, resource, run, object,
-  storage, queue, and index namespaces, with server-derived tenant scope and composite isolation on
-  both SQLite and PostgreSQL.
-- Added Managed Dedicated platform-support approval: a human tenant Admin can grant one named
-  operator short-lived, purpose-bound access to an exact reviewed support disclosure without
-  creating a tenant session or platform superuser; approvals, refusals, and downloads are audited.
-- Fixed concurrent Orchestrator startup against an existing SQLite database so additive schema migrations treat a column added by another process as success instead of stopping the scheduler.
-
-### Breaking
-
-**Machine governance stores are explicit in the admin command path**
+### Breaking Changes
 
 - Ambiguous flat secret and connection commands move under `admin machine`: use
   `admin machine secret set|list|verify|rotate|disable|enable|delete` and
@@ -145,13 +30,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   exact replacement — it differed in five ways at once (statement shape, string-literal vs
   identifier alias, `WITH` vs `AS`, `FROM_ADDRESS` vs `DEFAULT_FROM`, and credential handling), so a
   generic syntax error would have left all of them to guess at.
+
 - `DROP SMTP CONNECTION 'alias'` becomes `DROP CONNECTION [IF EXISTS] <alias>`.
+
 - **Credentials are `SECRET:name` references, never values.** Configuring SMTP is now two steps:
   store the password in the portal secret store, then reference it from the connection. A literal
   password is refused by the catalog rather than stored.
+
 - The `SmtpConnections` table is **dropped with no data migration**. Existing SMTP passwords are
   not carried forward; store each one as a secret and re-reference it. The `api/admin/smtp`
   endpoints are removed — `api/admin/connections` serves every connector type.
+
 - Existence modifiers are canonical for every object kind: `DROP <kind> IF EXISTS <name>`. The
   post-name spelling (`DROP CONNECTION c IF EXISTS`), previously accepted for six kinds, is
   rejected with the canonical form.
@@ -162,10 +51,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   the parser. They previously parsed, linted, and completed successfully, then threw "ALTER not yet
   implemented" at execution — after a report script may already have done half its work. The
   diagnostic names the `CREATE OR REPLACE` form for that kind, spelled the way that kind accepts it.
+
 - Each alterable kind now accepts only the clauses it can patch. `ALTER PAGE p (SOURCE = ...)`,
   `ALTER TEMPLATE t (TITLE = ...)`, and similar previously parsed and were then discarded in the
   handler: the statement reported success having changed nothing. They are now parse errors listing
   the clauses that kind does accept.
+
 - `ALTER PAGE REFRESH` requires a whole number of seconds. `CREATE PAGE` silently treats an
   unparseable interval as "off"; on a patch the same silence would report success while leaving the
   previous interval running.
@@ -177,53 +68,779 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `CREATE IF NOT EXISTS`, `ALTER`, and `DROP IF EXISTS` combinations fail during parsing instead of
   producing statement shapes that cannot execute. Local connection upserts and report-object
   replacement now share the documented semantics.
+
 - Local/report datasets consistently use `&name`; Portal catalog datasets retain quoted identities.
   Publish commands are identity-first (`PUBLISH REPORT|BUNDLE|DATASET <name> FROM <source>`), and
   typed or property-bag object definitions consistently use `AS`.
+
 - Tags and imported lineage are metadata records managed through `INSERT`, `UPDATE`, and `DELETE`.
   Retired `CREATE TAG`, `CREATE LINEAGE`, and bare `TAG ... WITH (...)` forms are rejected, while
   automatically captured lineage remains immutable.
+
 - Row-returning inspection commands are replaced by normal queries over `[connection.]eng.*`.
   `SHOW TAGS`, `SHOW COLUMNS`, `SHOW SCHEMA`, and `DESCRIBE` are retired, and lineage file export is
   now `EXPORT LINEAGE AS OPENLINEAGE TO <path>`.
+
 - Function-style file/email aliases, `FOR EACH`, and conditional `WAITFOR (<condition>)` are
   retired. Use statement-form file/email operations, `FOREACH`, and `WAIT UNTIL`; `WAITFOR DELAY`
   and `WAITFOR TIME` remain supported.
+
 - Portal share/embed expiration uses the structural `EXPIRES <timestamp>` clause, and compound
   resource kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` are reserved for named
   lifecycle-managed resources.
 
-### Security
-
-- Orchestrator management now requires a short-lived Portal-signed caller assertion in addition to
-  the service API key on network-reachable listeners. Durable owner and user/group/service ACLs
-  protect `JOB`, `SCHEDULE`, and `NOTIFICATION` reads and mutations, including catalog statements
-  submitted through the ad-hoc script API. `READ`, `EXECUTE`, variable `OVERRIDE`, and `MANAGE`
-  remain separate capabilities; history, quality, and triage evidence is filtered by job read
-  authority, and mutation security events use the verified human or service principal.
-- Portal SMTP credentials move from an encrypted value in a bespoke table to a `SECRET:` reference
-  in the governed connection catalog, which enforces reference-only credentials on write, encrypts
-  target and options at rest, and carries per-connection use ACLs, ownership, an audit trail and a
-  usage ledger. The Portal no longer materializes the plaintext: subscription and admin-notification
-  delivery scripts carry the reference and the engine resolves it when the connection opens, so the
-  credential is never written into script text that could reach logs, execution history, or error
-  detail. This is a hardening of an exposure that previously required active scrubbing — no exploit
-  path was identified.
-- **Known gap:** because the Portal no longer holds the plaintext, it can no longer redact a
-  credential that an engine error echoes back; pattern-based redaction does not match a bare
-  password in free text. Net exposure is lower than before, but this specific mitigation is absent.
-  Tracked for a fix at the point where `SECRET:` references are resolved.
-- Expanded the security-boundary documentation and pinned its required contracts with
-  `SecurityBoundaryDocTests`.
-
 ### Added
 
-**Transactional file publication**
+- `scripts/Invoke-AcceptanceProfile.ps1` — seeds a small, reproducible acceptance profile into a
+  running Portal and smoke-tests it. A folder, a self-contained report, and one user per role
+  (Viewer, Publisher, DataSteward, OrchestratorManager).
+
+  Everything goes through the public HTTP API, which is the point: the same script runs against
+  `dotnet run`, a container, or a deployed environment, so "it passed locally" and "it passed in the
+  image" become statements about the same checks rather than two scripts that happen to share a
+  name. It needs nothing installed on the target.
+
+  The profile is deliberately small. An acceptance dataset that takes ten minutes to seed is one
+  people stop seeding, and a large one hides the failure it was meant to reveal among rows nobody
+  reads.
+
+  It is idempotent — re-running reports what already exists rather than failing or duplicating —
+  handles the forced first-run password change automatically, and exits `0`/`1`/`2` for
+  passed/failed/unreachable so a pipeline can tell "the Portal is down" from "the Portal is wrong".
+
+  Publishing a report needs the `.rptsql` file under the Portal's script root, which an HTTP client
+  cannot arrange. Pass `-ScriptRootPath` where the root is reachable and the script writes it;
+  where it is not, the report is **skipped rather than failed**, because a check that fails for
+  something the script itself said it could not set up is noise.
+
+  Documented at `docs/administration/portal/acceptance-profile.md`, including the first-run
+  configuration an empty Portal refuses to start without.
+
+- Added an identity access simulator: `GET /api/admin/access-simulator/user/{id}?reportId=&datasetId=` explains what one identity can reach and **why**, composing roles, groups, folder and report ACLs, dataset grants, shared-connection grants, Studio capability, and row-level security into a single answer that names its sources. Each of those was already queryable on its own, which was the problem — reconstructing "why can this person open that report?" meant checking five surfaces and composing them by hand.
+
+  Row-level security is explained by naming the identity tokens the script filters on and the values that would be bound for the user. The report is never run, and a test asserts that no data from it appears anywhere in the response: a tool for auditing who can see data must not become a way to see it.
+
+  The report answer and its explanation are both produced by `FolderPermissionService`, so the diagnostic cannot drift from the enforcement it describes. Reading another identity's effective access is itself a privileged act and is audited as `SIMULATE_ACCESS`.
+
+- `AdminPanelFailureStateTests` drives both panels with only their own request failing, which is
+  the shape the real failure takes: one call rejected, the rest of the page fine.
+
+- `BrowserRouteReachabilityTests` asserts every `/api/...` path the Portal's own JavaScript calls
+  resolves to a route the Portal serves. The client turns a rejected request into a caught error,
+  which renders as "nothing to show" or "temporarily unavailable" — so a renamed or mistyped route
+  produces no symptom a reviewer would notice. It found nothing today; it is a guard, not a
+  discovery, and its scope is deliberately narrow: existence only, not authorization and not the
+  response shape.
+
+- **Approver coverage completes the authorization matrix.** Approving is a *capability* rather than
+  a role, so its rows live with the workflow they govern: approving requires `ReportApprove`,
+  asserted **both ways** — the positive row alone would prove approval works without proving
+  anything stops it — and an approver cannot publish, because reviewing a change and shipping it are
+  separate authorities an organization needs to be able to give to different people.
+
+- **A mechanical staleness audit of `docs/architecture`, recorded in `TODO.md`.** Every `src/…`
+  path and backticked type name was resolved against the tree rather than read for plausibility.
+
+  The wrong-statement rate turned out to be low — of ~16 flagged type references, all but the three
+  above were false positives (role names, framework types, TypeScript classes, test-only types), and
+  every cited source path resolves.
+
+  **The real staleness is omission, and it is concentrated in `Engine.md`**, which documents the
+  v0.10-era engine accurately and has not grown with it. It mentions the external spill engines 69
+  times and the following zero times: data-quality rules, the `Columnar*Plan` fast-path family,
+  row-level security, and `SECRET:`/organization-policy enforcement. All four were confirmed
+  engine-level, not Portal-only.
+
+  That matters more than a stale type name: data-quality rules **pin execution to the local row
+  pipeline** — the columnar fast-path gates deliberately exclude rule-carrying statements — so a
+  reader using `Engine.md` to understand dispatch and fast paths cannot see a constraint governing
+  both.
+
+  `Orchestrator.md`, `Lineage.md`, `Connectors.md`, `Reporting.md` and `Portal.md` were checked and
+  need no action.
+
+- **`Engine.md` now documents artifact storage** — the seam every host writes scripts, snapshots,
+  datasets, maps and key material through, and which had appeared in no architecture page at all.
+  Covers the `ArtifactArea` set, the providers, and the two decorators that carry the guarantees:
+
+  - `Keys` is not just another area. Providers treat it as secret — owner-only permissions on write
+    and no local-copy leasing — so a caller cannot obtain key material on disk the way it can a
+    snapshot.
+  - `GuardedArtifactStorage` enforces the deployment's security guardrails at the single storage
+    boundary, reusing `SecurityService`'s extension lists rather than keeping a second copy.
+  - `FencedArtifactStorage` applies database-backed **write-epoch fencing**. On shared storage
+    without native fencing, a writer must claim the artifact's epoch through `IWriteEpochStore`
+    before a create, replace, move destination or delete; an older token is refused and *the byte
+    write never happens*. This is what stops a node that has lost its lease but not yet noticed from
+    overwriting newer work — and it is why HA needs artifact roots genuinely **shared** rather than
+    merely identical, since two nodes writing to separate directories never contend for the same
+    epoch.
+
+- **`Engine.md` now documents the observability conventions.** `ObservabilityConventions` holds the
+  shared, deliberately low-cardinality tag and metric names. The reason they exist is the part worth
+  writing down: they keep free-form names, file paths, SQL text, parameter values and connection
+  strings *out* of telemetry. That is a cost control — high-cardinality labels are what make a
+  metrics backend expensive — and a disclosure control, because a label travels wherever telemetry
+  goes and is not covered by the redaction applied to logs and support bundles.
+
+  Both gaps were found by `EngineSubsystemCoverageTests` while it was being written, and both are
+  closed by writing the pages rather than by relaxing the inventory. Its known-gap list is now
+  empty; the test pinning it stays, so a future gap has to be added on purpose.
+
+- **`AstRoundTripPropertyTests` — no clause may disappear when a statement is serialized back to
+  SQL.** The round-trip tests that existed were written per feature, by whoever added the feature,
+  so a clause added later had none. That is how `ON FAILURE` came to be dropped entirely by
+  `ToSql()`: the script still parsed and routed its `@fail: 'QUARANTINE'` rows nowhere.
+
+  Rather than compare ASTs — which differ in source positions and would need a bespoke comparer per
+  node — it asserts the weaker but broadly applicable property that every keyword in the input
+  survives serialization, since a dropped clause always loses its keyword. Sixteen statement forms
+  are covered, and reintroducing the original defect makes it report
+  `ToSql() dropped ON, SCRIPT, THROW, TO, WITH`.
+
+  Keywords the serializer legitimately normalizes away (`AS`, `INNER`, `OUTER`, `ROWS`) are listed
+  explicitly with a reason each, so the list cannot quietly grow to silence a real failure. Running
+  it over the sixteen forms found no further dropped clauses.
+
+- Added an operator view of durable remote audit delivery at `GET /api/admin/audit/collector`: queue depth and queued bytes, the age of the oldest undelivered event, terminal failures, last attempt, last success, last error, and the thresholds any of those readings is compared against. These signals already existed in health, Prometheus, and fleet status, which is fine for a dashboard and no use to someone mid-incident deciding whether to raise a threshold or go and fix the collector.
+
+  Fail-closed state is produced by asking `AuditDeliveryGate` itself whether the next mutation would be refused, rather than re-deriving its thresholds. A second copy of that rule would eventually disagree with the one that actually blocks writes, and the operator would be reading a reassurance that is not true.
+
+- Added `POST /api/admin/audit/collector/test-delivery`, which posts a synthetic event to the configured collector through the real delivery path — same endpoint resolution, same authentication, same body shape. A probe that took its own path would prove the probe works, not the delivery. It carries no audit content, reports the endpoint without its query string (which can carry a token), redacts transport failures, and is itself audited.
+
+- An **`Author`** grant on folders and reports, for the person who maintains a report without
+  administering the folder it lives in. An Author may rewrite a report's script, content and
+  metadata, and run it. They may **not** move it to another folder, delete it, publish a new report
+  into the folder, create share links or embed tokens, or change any ACL. Moving a report changes
+  what two folders contain and deleting one changes what a folder contains — neither is an act on
+  the report's content, which is the only thing an Author was given authority over.
+
+  It is available wherever `Read`/`Execute`/`Manage` already were, ordered between Execute and
+  Manage in the pickers.
+
+- `AuthorizationMatrixTests` — the Portal's authorization rules asserted as data, one grant × one
+  operation at a time, so a privilege change cannot ship by accident: a widened grant fails a
+  `denied` row and a narrowed one fails an `allowed` row. The negative rows are the point, since a
+  suite that only proves people can do things proves nothing about what stops them.
+
+  Writing it surfaced two properties of the model that were previously discoverable only by reading
+  about forty enum comparisons plus scattered `[Authorize(Roles=…)]` attributes:
+
+  - **Authorization is two-dimensional.** A *role* decides which class of operation you may perform
+    at all; an *ACL* decides which resources you may perform it on. The axes are not
+    interchangeable, and conflating them is how a grant comes to mean more than intended.
+  - **`Manage` on a folder is authority over the reports in it, not over the folder itself.**
+    Reading or re-granting a folder's ACL, creating a subfolder, and deleting a folder are Admin-role
+    acts. Without that split the highest ACL grant would be self-propagating: whoever held it could
+    hand it out, so the set of people with access could only ever grow.
+
+  The report-scoped case is driven through the real path — request access, admin approves — because
+  there is no endpoint that grants a report ACL directly, and a shortcut through the database would
+  prove the ACL works while proving nothing about how one comes to exist.
+
+- Added an architecture test that inventories every place the Portal compares an object's `CreatedBy`/`OwnerId` against the caller, each with the reason it is safe, and fails the build on any comparison that is not inventoried. Treating authorship as standing permission is what made a v0.17.0 regression leave authors full access to everything they had created after being removed from every group — deprovisioning that did not deprovision. A hand review of that diff cleared it; tests caught it. The inventory can only shrink or change deliberately, and the three known dataset short-circuits are pinned in it as open.
+
+- `SharedAssetLineEndingPinTests` asserts every file under
+  `ETL-SQL.ReportRuntime/Resources/Shared` is pinned to LF, asking `git check-attr` so the answer
+  reflects real attribute resolution. `.gitattributes` already described the rule in a comment; the
+  comment did not stop the omission, and the cost of finding it was a full CI run.
+
+- **`ColumnRuleCatalogPropertyTests` — every `@expect` rule must be able to fail.** The suite was
+  thorough at "does this rule catch bad data" and thin at "is this rule wired up at all", and those
+  look identical from outside: a rule that never runs reports exactly what clean data reports.
+  Three defects in one session had that shape — a composite rule naming an unprojected column
+  skipped every row, `CASTABLE AS` with an unknown type accepted everything, and both per-row rule
+  switches ended in a `default` that returned "passed".
+
+  Each of the eleven rule forms is driven end to end against a row that violates it, and the run
+  must record a failure. A reflection test pins the catalogue, so a new `ColumnRule` record cannot
+  be added without a case and therefore cannot ship silently unenforced — the same shape as
+  `EngineSubsystemCoverageTests`.
+
+  Both halves were verified by sabotage rather than assumed: removing a rule from the catalogue
+  reports it as uncovered, and changing a case's row to one that satisfies its rule reports that the
+  rule recorded no failure.
+
+- **`test-lane.ps1 -Lane spill`** — re-runs the engine and SLT suites with spill, sort and batch
+  thresholds set to a handful of rows.
+
+  This exists because the columnar spill path was unreachable by any lane. The thresholds default to
+  10,000–1,000,000 rows; the fuzzer runs against a three-row table, SLT files insert two to five
+  rows, and unit tests use inline literals. Nothing in the suite was ever large enough to spill, so a
+  spill defect could only be found by a sample or a customer — which is exactly how this one was
+  found. Lowering the thresholds turns every query the corpus already contains into spill coverage.
+
+  `BatchSize` is set to 7: deliberately not round, and not a divisor of the corpus's row counts, so
+  batch boundaries fall *inside* logical groups. Boundaries that always land between groups hide the
+  cross-batch defects the lane is for.
+
+- `ColumnBatchSchemaStabilityTests` states the invariant where it is established — per-batch type
+  inference — rather than where it was previously enforced, which was an exception thrown by the
+  spill writer on data large enough to spill. It covers both ways batches diverge (a wholly NULL
+  column, and a value arriving as text in a later batch) and asserts that adopting the earlier type
+  does not invent values.
+
+- `ColumnBatchAdapter.LogicalSchemaOf` captures a batch's schema for callers that must keep it
+  stable across batches.
+
+- `EveryStudioCapability_AppearsInTheConfigurationReference` guards that last class of drift.
+  Capabilities are granted by typing their name into `Portal:Studio:RoleCapabilities`, and the
+  filter rejects an unknown name rather than storing a typo — so a capability missing from the
+  reference is one nobody can grant deliberately, and nothing anywhere reports it.
+
+- `CriticalSurfaceSnapshotTests` — snapshots of the Portal's critical surfaces, captured as
+  **accessibility trees** rather than pixels.
+
+  An aria snapshot records what a page *is* — headings, landmarks, controls and their accessible
+  names — rather than what it looks like. That choice is deliberate on three counts: it does not
+  churn on fonts, GPU, or platform anti-aliasing, so it runs anywhere without a tolerance nobody can
+  justify; it is a text diff, reviewable in the pull request that causes it rather than by opening
+  two images; and it fails for the changes that matter — a heading that stopped being a heading, a
+  button that lost its name — which is exactly the class of regression a pixel diff reports as a few
+  grey pixels nobody investigates.
+
+  Baselines sit beside the tests. `ETLSQL_UPDATE_SNAPSHOTS=1` regenerates them, and an updated
+  baseline is a claim that the new structure is correct — a review decision, not a mechanical one.
+
+- The Admin dataset permissions panel now shows grants made directly to a user alongside group grants, each labelled with its principal type, and can revoke either. `GET /api/datasets/{id}/acl` carries a `principalKind` on every entry, and `DELETE /api/datasets/{id}/acl/user/{userId}` revokes a direct grant and invalidates that user's sessions. This completes the dataset half of "authorship is not permission": a creator's Owner grant was enforced and revocable in the database, but invisible in the product — a grant an administrator cannot see is a grant they cannot account for.
+
+- **A four-path deployment-profile review for the release.** `Deployment_Profile_Standards.md` has
+  prescribed one since it was written — "a release claim must name the profile and transition it
+  actually proves" — and no release had produced one. `v0.18.0-deployment-profile-review.md` is
+  that review: driven from the release's changelog fragments rather than from memory, grouped into
+  six capability areas, each stating how Solo, Team, Enterprise and SaaS accomplish it.
+
+  The summary is the finding. **v0.18.0 is a Portal and Enterprise release**, and most of what it
+  added has no Solo form because Solo has no Portal. That is a legitimate answer on one condition —
+  the underlying evidence must stay reachable without the Portal — and the release meets it: every
+  governance and quality surface it added reads `eng.*`, which the CLI, Report Player and
+  Orchestrator serve from the same code. The review states where that holds and where it does not,
+  rather than colouring cells green.
+
+  **No matrix cell moved to Green.** The release strengthens evidence behind existing Green cells
+  and adds acceptance lanes that make them re-testable. The SaaS column is unchanged and remains
+  Red for every concern touched; the Enterprise happy path is not evidence for a mutually untrusted
+  tenant boundary.
+
+  Three things it records that were not written down anywhere: the Portal governance dashboard and
+  `eng.stewardship_score` use different scoring models and will not agree — compare them knowingly;
+  recovery custody stays on the host in every profile, however large; and `Portal:Topology:ExpectedMode`
+  defaults to `Auto`, which classifies a Team deployment on PostgreSQL as HA and holds it out of
+  load-balancer rotation until told otherwise.
+
+- Added the end-to-end proof that deprovisioning deprovisions: one identity creates a report, saved views, anonymous share and embed links, and a dataset, then loses its group and finally its account, and every surface it left behind is checked. It runs as a single scenario on purpose — the regression this guards against was not one broken function but five surfaces that each looked reasonable in isolation, so what has to hold is the property across all of them at once. The two phases revoke different things: group removal takes everything reached through the group, including the anonymous links, while a grant made directly to a person survives it and is cascaded away only when the account itself is deleted.
+
+- `ArchitectureDocReconciliationTests` — checks the architecture document's mechanically checkable
+  claims against source: every seeded role, every persisted entity, every named authorization
+  policy, and every API area is documented.
+
+  Deliberately limited to claims that can be verified. Prose about intent cannot be checked from
+  source, and a test that pretended to would either be vacuous or would block every honest
+  rewording. It found substantially more drift than a reading pass had.
+
+- **`CASTABLE AS <type>`** — an `@expect` rule asserting the value would convert, for the ingestion
+  case where everything arrives as text: `CASTABLE AS DATE`, `CASTABLE AS DECIMAL(18,2)`. It runs
+  the engine's own conversion, the one behind `TRY_CAST`, so a value the rule accepts cannot fail a
+  later cast — the two agree by construction rather than by two implementations happening to match.
+
+  Two things the shared converter does not do on its own, and the rule now does:
+
+  - **A declared width is enforced.** `Cast` ignores `DECIMAL(18,2)` and `VARCHAR(50)` widths
+    entirely, so without this the declaration would read as a constraint while checking only "is a
+    number" and "is a string".
+  - **An unknown type name is rejected at parse time.** `Cast` returns the value unchanged for a
+    type it has no converter for, which would have made `CASTABLE AS BANANA` accept every row —
+    a validity rule that reports clean because it never checked anything.
+
+- **`EXISTS WITH (<cols>) IN <table>(<cols>)`** — a composite referential-integrity `@expect` rule.
+  The existing `EXISTS IN table(col)` is single-column, so on any table whose key is only unique
+  within a scope it accepts the rows the check exists to catch: `EXISTS IN dim_customer(CustomerId)`
+  passes a CustomerId that is real but belongs to a *different* TenantId, and reports the load as
+  clean. The two column lists pair positionally, so the reference table's columns need not share the
+  source's names, and a mismatched arity is a parse error rather than a silently truncated check.
+
+  Runtime coverage includes the cross-tenant row itself, a companion test pinning that the
+  single-column form still accepts it (so a regression back to single-column probing fails loudly
+  rather than passing), NULL key parts, and tuple-part collision — `("ab", "c")` must not match a
+  reference tuple of `("a", "bc")`.
+
+- The rule-cost harness now attaches each rule to a column whose values **satisfy** it. Measuring
+  rules that reject every row measured the failure-reporting machinery — describing the failure,
+  allocating the row-failure record, recording a sample — rather than the cost of having the rule.
+  With that corrected, `NOT NULL`, `NOT BLANK`, `LENGTH`, `IN` and `MATCHES` all sit within ~1 MB of
+  a rule-free statement over 50,000 rows; the rules that cost anything are the ones that call the
+  evaluator per row (`BETWEEN` +28 MB, `EXPR` +61 MB) and `UNIQUE`, which spills (+380 MB).
+
+- **`NOT IN (<list>)` and `NOT MATCHES <regex>`** — negative membership and pattern `@expect` rules,
+  for the placeholders an upstream system writes when it does not know (`'UNKNOWN'`, `'N/A'`) and
+  for content that must never reach a rendered surface. Both were expressible with `EXPR`; as named
+  rules the intent carries into lineage, diagnostics and policy review. Great Expectations makes the
+  same pair available.
+
+  Each parses through the same code as its positive form, so an invalid regex or a `NULL` in the
+  list is rejected in either direction rather than only when written positively. `SET CASE_SENSITIVE`
+  applies unchanged.
+
+- **`NOT BLANK`** — an `@expect` rule rejecting empty and whitespace-only strings. Expressible
+  before with a regex or by repeating the column name in `EXPR`; as its own rule the intent is
+  legible in diagnostics, autocomplete and policy review. It skips NULL like every rule except
+  `NOT NULL`, so `'NOT NULL, NOT BLANK'` is the full "a value is required" check.
+
+- **`LENGTH BETWEEN <min> AND <max>`** and `LENGTH >= <n>` (with `<=`, `>`, `<`, `=`) — character
+  count rules, a standard validity category in Great Expectations and Soda. Every form lowers onto
+  one inclusive range, so the runtime carries a single predicate rather than one per operator, and
+  a range no value can satisfy (`LENGTH BETWEEN 10 AND 5`, `LENGTH < 0`) is rejected at parse time
+  rather than quarantining every row. Length is the rendered value's character count, matching
+  `LEN`.
+
+- **`ON FAILURE QUARANTINE TO <table> WITH (HANDLING = SCRIPT)`** — quarantine for rows the running
+  script remediates, reroutes, or discards itself. The rows still leave the main output and still
+  carry their `__dq_*` context, so a later statement in the same run can read the capture table and
+  act on each cause differently; per-run quality metrics still record the counts.
+
+  What the mode removes is the hand-off. No replay manifest is written, so the target does not
+  become a Portal steward-queue item and `REPLAY QUARANTINE` cannot target it; no enclosing section
+  label is required, and the linter stops recommending a durable target. Those three requirements
+  all exist to serve remediation *after* the run — asking someone to remediate rows the script
+  already fixed is worse than not asking.
+
+  `HANDLING = STEWARD` states the existing behavior explicitly; omitting `HANDLING` keeps it.
+  `HANDLING` on a non-QUARANTINE clause is a syntax error, since `WARN` diverts no rows.
+
+  `ON FAILURE` `WITH (...)` now takes several comma-separated options, so `RETENTION` and `HANDLING`
+  can appear together.
+
+- **`BETWEEN <lower> AND <upper>`** — an `@expect` rule whose bounds are full expressions, so a
+  range can be typed or relative: `BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate`. The existing
+  comparison rules accept only decimal literals and can express neither. Bounds are evaluated per
+  row and compared with the engine's type-aware comparison, so dates compare as dates rather than as
+  rendered text.
+
+  A NULL bound makes the range unknown and skips the row, matching SQL's own `BETWEEN`: a rule that
+  failed every row because a variable was unset would report the data as broken when the script is.
+
+  The bound separator is found at parenthesis depth zero, so a lower bound containing its own `AND`
+  — `IIF(a = 1 AND b = 2, …)` — is not cut in half.
+
+- **Draft → review → publish for report scripts**, opt-in behind
+  `Portal:Studio:RequireApprovalToPublish` (default **off**). Saving a script previously wrote
+  straight over the running report, so "save" and "publish" were the same act and review could only
+  ever happen after the fact. A draft is what makes the gap between authoring and publishing
+  representable.
+
+  The proposed script lives in the database rather than the artifact store, deliberately: a draft is
+  not yet a script — nothing should execute it, serve it, or list it beside real ones — and keeping
+  it out of the script directory makes that structural instead of a naming convention everyone has
+  to remember.
+
+  **Separation of duties is absolute.** An author can never approve their own draft, whatever
+  capabilities or roles they hold, **including Admin**. A four-eyes control that the most privileged
+  account can bypass fails exactly when it is needed, because the account that gets compromised or
+  leaned on is the privileged one.
+
+  Three further rules follow from an approval being about *content*, not about a draft id:
+
+  - Editing a draft revokes any approval **and** any review in progress, returning it to the author.
+    Otherwise a trivial change could be approved and the body swapped afterwards, or a reviewer could
+    have content change mid-read — either way a reviewer's name would end up on something they never
+    saw.
+  - Every decision records the script hash it was made against, so "was this reviewed?" is answerable
+    for the version that actually shipped.
+  - Publishing is refused when the live script has moved past the draft's base. The approval was for
+    a change against a version that is no longer there, and publishing anyway would silently discard
+    whatever landed in between.
+
+  Every mutation takes `If-Match` with the draft's version, and the decision trail is append-only —
+  a reviewer who approved and later changed their mind is a different history from one who only ever
+  rejected, and that distinction is what a post-incident review is looking for.
+
+- A `ReportApprove` Studio capability, separate from `ReportPublish` so that reviewing a change and
+  shipping it can be given to different people.
+
+- **`EngineSubsystemCoverageTests` — a guard for the failure mode architecture documentation
+  actually has: omission.** A wrong type name is caught the moment somebody follows it; a subsystem
+  nobody wrote down is invisible. `Engine.md` described the external spill engines 69 times and
+  data-quality rules, columnar plans, row-level security and adaptive execution zero times, for
+  three releases, and nothing reported it.
+
+  It inventories every code-bearing directory under `ETL-SQL.Engine` and `ETL-SQL.Core` and asserts
+  set equality against a declared inventory. A new subsystem fails the build until someone says
+  which page documents it, or records why none is needed. Where coverage is claimed, the named page
+  must still contain a marker for it — so a page dropping a subsystem is caught too.
+
+  **Deliberately not a text search.** Matching directory names against the prose was tried and is
+  useless in both directions: `Data`, `Common` and `Services` match incidental English everywhere,
+  while `Planning` reads as undocumented even though its types are described by name. The test does
+  not infer coverage; it forces a decision.
+
+  It found two undocumented subsystems while being written, now pinned by set equality so they
+  cannot grow quietly: `Core/Observability` (the correlation and trace tags every log scope and
+  audit record is keyed on) and `Core/Storage` (`IArtifactStorage`, the seam every host writes
+  artifacts through and the thing HA requires to be shared).
+
+  Known gaps are recorded rather than failed. Turning existing debt red only invites weakening the
+  inventory to get green, and an inventory that launders omissions into approvals is worse than
+  having none.
+
+- Added the departmental Environments workflow. `GET /api/admin/environments/plan` derives a full deployment plan from an environment id — databases, artifact root, key ring, service identity, service and unit names, the port block, and the per-environment key requirements — following the naming and port conventions in `Departmental_Isolation.md`. Deriving every resource from the id is what makes a plan checkable rather than a document someone has to follow carefully.
+
+  `POST /api/admin/environments/validate` checks a proposed environment against what this Portal can see: its own environment, the environments named for fleet visibility, and the machine registry. Any shared resource is reported as a collision rather than a warning, because sharing one is enough to break isolation.
+
+  Two boundaries are held deliberately. The Portal **generates plans and never applies them** — creating databases, accounts, key rings and endpoints belongs to a separately authorized deployment plane, since an environment able to provision another is not isolated from it, and the plan states that in the artifact rather than leaving it to the reader. Plans are also **secret-free**: keys appear as requirements at named configuration keys, never generated and never valued, so a plan is safe to review, store, and hand to whoever does the provisioning.
+
+- Added `GET /api/admin/environments/current`, which measures this environment against the isolation contract and links to the read-only fleet workspace. Resources the process cannot observe from inside — a shared database login, two environments running under one OS account, whether a key is unique across environments — are reported as **unknown** rather than assumed isolated. A verification that quietly assumes the answer is worse than one that admits the gap.
+
+- Added `EnvironmentIsolationTests`, which runs two deployments and proves the model rather than describing it: catalogs and search do not merge, a resource id from one environment is meaningless in the other, and a token minted in one is refused by the other while still working where it was minted.
+
+- Added the read-only Fleet/Operations workspace at `GET /api/fleet/workspace`: every configured environment polled at once, merged into one report with compatibility metadata, policy/configuration/version divergence findings, migration state, grouping and filtering, plus an upgrade preflight or postflight report. The aggregation had been built but had nothing to aggregate — no configuration named the environments, so it was machinery with no way in. `Portal:Fleet:Environments` is that way in.
+
+  Naming an environment grants visibility, never authority: the workspace issues one scoped read-only `GET /api/fleet/status` per environment and nothing else, and a departmental deployment is not administered from another one's Portal. Per-environment tokens are never echoed, only counted. An unreachable environment is reported as unreachable rather than failing the whole view, because a partial outage is exactly when the view is needed.
+
+- Added a guided configuration export workflow. `GET /api/admin/configuration/export/plan` returns what leaves this Portal, what will not, and what must be moved separately, without the script body — the export endpoint already computed all of that and wrote it only to the audit line, so the only way to learn what an export omitted was to read the file.
+
+  `POST /api/admin/configuration/validate` now returns a per-resource plan of `Create`, `Match`, or `Collision` alongside its findings. Findings carry only collisions, because that is what needs a decision; a plan needs the whole picture, or an operator cannot tell an empty target from an identical one.
+
+  Approval is enforceable rather than advisory: passing `?acknowledgedPlan=<hash>` to the export refuses with `409` when the configuration changed after the plan was reviewed. The hash is derived from the plan contents rather than the script text, so cosmetic churn does not invalidate a review while a real change to what would be promoted always does. The audit records the acknowledged plan, or that none was.
+
+- `FolderPermissionEscalationTests` asserts both directions at the HTTP level — `Author` is refused
+  and `Manage` succeeds — because denying everyone would have satisfied the negative case while
+  removing the feature.
+
+- The Portal governance dashboard is now a durable, authorized, audited surface rather than a visual
+  prototype, and ships as the **Overview** page of the Governance module.
+
+  Eight Portal-owned tables hold governance *workflow* state — findings, decisions, glossary terms,
+  steward badges, asset reviews, suppression categories, scan runs, and scoring settings. Asset
+  metadata deliberately stays where it already lives: `.etlsql`/`.rptsql` sources and the lineage
+  catalog. A dashboard that became the source of truth for ownership or classification would be a
+  second place to change it, outside source control and outside review.
+
+  **Every decision is version-scoped.** Ignoring a finding or accepting a risk records the asset
+  version it was made against; when the asset changes, the suppression stops applying and the finding
+  reopens. Suppression categories can also carry an expiry, so "temporary, removed next sprint" is a
+  promise with a date on it. A suppression that outlives the thing it was granted for is not
+  governance — it is a permanent exemption nobody remembers granting.
+
+  **Scores are explainable.** Each asset returns its deductions alongside its score: the rule key, the
+  points, and the reason. The UI never reconstructs the arithmetic, so it cannot reconstruct it
+  differently.
+
+  **Findings reconcile themselves.** A scan updates existing findings rather than replacing them, so
+  decision history survives; an asset whose newer version passes the rule resolves automatically. No
+  one closes tickets by hand.
+
+  Authorization splits three ways, because these are three different authorities:
+  `GovernanceViewer` and above can read (deliberately wide — a steward blind to other stewards' work
+  cannot cover for them); `DataSteward` and above can decide, review, and assign badges;
+  `GovernanceManager` or `Admin` can run scans and change thresholds, enabled checks, glossary
+  content, and suppression categories. Whoever can lower the bar is not whoever works against it.
+  Every mutation writes an audit row, and settings changes record the value **before** as well as
+  after — "who lowered the threshold" is unanswerable from the new value alone.
+
+- **An HA topology diagram** separating what ETL-SQL coordinates from what the operator's
+  infrastructure provides. During an incident a node returning 503 is usually reporting a failure
+  from the other side of that line, and the document previously described the boundary only in
+  prose.
+
+- **`HaAndSecurityDocReconciliationTests`** guards the claims that can be checked against source:
+  every emitted finding code and `checks` key is documented; every topology and load-balancer
+  setting appears in the configuration reference; every test named in the Automated Coverage Map
+  still exists; and every `ha-soak` subcommand a runbook tells an operator to type is defined by the
+  CLI. A coverage map naming a deleted test claims a certification nobody performed, and a runbook
+  step is followed by typing what it says.
+
+- The `Auto`-mode trap is asserted, not argued:
+  `AutoMode_TreatsAConfiguredKeyRingAsHighAvailability_AndFailsClosedWithoutPostgres` drives the real
+  `/healthz` endpoint through the case.
+
+- **The read-only fleet boundary is now enforced.** The Enterprise Security Review Packet approves
+  fleet aggregation as status polling and explicitly does not approve remote mutation;
+  `FleetAggregation_ExposesNoMutatingRoutes` fails the build if a mutating route is added. A trust
+  boundary stated only in a document lasts until the first convenient `POST`.
+
+- The security review packet's scope and trust-boundary table now cover the Portal authority
+  surfaces this release added — Studio capabilities, the draft review path and protected branches,
+  and the disclosure surfaces (support bundle, configuration export, access simulator, posture
+  endpoints) — each with the evidence that constrains it, plus the review decisions they require.
+
+- Added identity-provider diagnostics at `GET /api/admin/identity/diagnostics`: OIDC reachability and startup validation findings, LDAP configuration, the claim value each provider-managed group expects, how many federated users have landed in no mapped group, and **break-glass readiness** — whether any active local administrator could sign in with the identity provider unreachable. An estate that federates every account, administrators included, is one provider outage away from nobody being able to correct the provider's configuration, and that is worth knowing before it happens rather than during.
+
+  Configured secrets are reported as presence flags. A test asserts the configured client secret appears nowhere in the response at all, not merely that the obvious field omits it.
+
+- Added `POST /api/admin/identity/diagnostics/group-mapping-test`, which resolves claim values against the configured group mappings without anyone signing in and names the values that match nothing. A claim that maps to no group is sign-in working while authorization quietly does not — the kind of gap normally found by a user reporting they cannot see something.
+
+- Added dataset at-rest key posture at `GET /api/admin/datasets/at-rest-key/posture`: the per-version inventory of encrypted caches, a rotation preflight, verification that rotation finished, and rollback guidance. Rotation itself is unchanged.
+
+  Preflight is the reason it exists. A cache encrypted under a key version that is no longer configured can be neither rotated **nor read**, and the only way to discover that was to start the rotation and read the failure list afterwards. Those datasets are now named beforehand, with the reason and the remedy. Key *versions* are non-secret identifiers and are named; key material never appears — a key is reported as configured or not, and a test asserts the configured key value is absent from the entire response.
+
+- Added secret and connection posture at `GET /api/admin/credentials/posture`, which resolves the two against each other: which connections reference which secrets, which references do not resolve, when each secret was last rotated, which secrets nothing references, and which secrets a configuration export would require the promotion target to supply.
+
+  The failure this exists for is invisible on either page alone. A connection referencing a secret that was renamed, disabled, or never created appears healthy in the connections list and healthy in the secrets list; the break lives only in the join between them and surfaces the first time something runs. No secret value is read to build the view — references are matched by name, because resolving them would mean decrypting every secret to render a page.
+
+- `MsiUpgradeHelperTests` pins the guard for the class of bug that broke the gate: a property read
+  resolving to zero or several values now throws with the values printed, instead of returning
+  something a later `-ne` silently mis-handles. Mutation-verified by disabling the guard.
+
+- Added recovery and host-identity posture at `GET /api/admin/operations/posture`, covering backup freshness, restore-drill evidence, and host enrolment consistency in one read-only view.
+
+  Backup custody, the restore itself, and host enrolment all stay outside the running Portal — they own key material and an OS-protected bootstrap the Portal deliberately does not have. What the Portal can now do is notice when the evidence they leave behind is missing, stale, or inconsistent, and every finding names the command that fixes it rather than just reporting a problem.
+
+  Host enrolment is checked by comparing the host's own enrolment against the Portal's machine registration: tenant or enrollment-id drift, a revoked registration, a host enrolled but never registered, a client certificate that is not the one the Portal expects, and certificate expiry with advance warning. Each side looks healthy examined alone, which is exactly why they are compared.
+
+- `etl-sql admin restore` and `--validate` now record their outcome under job-state `admin-restore`, mirroring what `admin backup` already did, so the Portal can show when an archive was last proven readable and not only when one was last written. A backup nobody has ever restored is a hope rather than a recovery plan, so "never proven readable" is reported as a finding instead of a blank.
+
+- `BrowserApiContractTests` — exercises the real endpoints and validates their responses against the
+  same `critical-api-contracts.json` the browser client validates against. The contract already
+  existed and was already enforced, but only *in the user's session*: a server-side rename reached
+  production and a `TypeError` on somebody's screen was the first thing that noticed. The contract
+  file is read rather than restated, because a C# copy of the field list would be a second source of
+  truth that agrees with the browser's until the day it quietly does not.
+
+- `RoleJourneyTests` — Viewer, Publisher, DataSteward and OrchestratorManager journeys through a real
+  browser, asserting in both directions: the surfaces a role can use are offered, and the ones it
+  cannot are absent rather than merely guarded. A navigation that offers what it cannot deliver gets
+  a 403 when pressed and reads as the product being broken rather than as a permission the user
+  lacks. Hiding the entry point is not enough on its own, so navigating directly to `/admin.html` is
+  asserted to be refused too.
+
+- `ContainerBuildContextTests` — guards `.dockerignore` against the Dockerfiles in both directions.
+  Excluding something a Dockerfile copies breaks the image build for whoever builds a container next;
+  failing to exclude something nothing copies costs nothing visible at all, which is why `tests/`
+  had been shipping ~14 GB of fixtures to the Docker daemon on every build.
+
+- Browser sessions now record failed HTTP requests with method and URL. The browser's own console
+  error for a failed request says only "the server responded with 403" — no URL — which is the
+  difference between a finding someone can act on and one they have to reproduce by hand.
+
+- Added `GET /api/admin/policy-authority/impact`, which answers the question asked immediately before pressing activate: what happens when I do? Policy Authority already had every verb — validate, publish, activate, canary, roll back — and no consequence.
+
+  **Fleet impact** separates registered machines from reachable ones: a machine not seen for over 24 hours will not pick a policy up until it checks in, so a large stale count means the rollout is narrower than the fleet count suggests. **Approval state** distinguishes a recorded reviewer from a second pair of eyes — a version whose reviewer is its own author is reported as such. **Collector consequences** warn when activating a policy that requires remote audit delivery against a collector that is not currently healthy, which starts refusing security-sensitive mutations with HTTP 503; both halves of that were already known separately, and this joins them so the answer is not discovered by activating. **Machine links** list the version each machine actually receives — the canary version when it is in the targeted group, the active one otherwise, and none when revoked.
+
+- `js/dialog-a11y.js` — shared dialog behaviour: focus moves in on open, Tab stays inside, focus
+  returns to the opener on close, and Escape dismisses. It watches for the `style`/`class` changes
+  the Portal uses to show a dialog, so a new dialog gets the behaviour without its author needing to
+  know the module exists. This existed as three near-identical copies inside `index.html`,
+  `admin.html`, and `orchestrator.html`, and not at all in `studio.html` — three copies is not
+  redundancy, it is three chances to fix a bug once and still ship it twice.
+
+- `PortalDialogAccessibilityTests` — a source-level sweep over every page and JS module asserting
+  every modal overlay is a semantic, named, modal dialog, that no page presents a dialog without
+  focus management, and that closed dialogs are hidden by `display`/`visibility` rather than by
+  opacity alone. It covers the dialogs no browser test happens to open, which is where this
+  regresses. The detector matches overlay classes by *pattern* rather than by a list of known names:
+  its first version passed with 31 green assertions while three unmarked dialogs sat behind a
+  prefixed class the list did not contain.
+
+- `PortalAccessibilityTests` — a browser lane running every page at both 1440px and 390px, asserting
+  what only a browser can compute: the accessible name of every visible interactive control (derived
+  the way the accessibility tree derives it), no horizontal page overflow at phone width or at 200%
+  text, closed dialogs not tab-reachable, both colour schemes free of text that blends into its
+  background, `prefers-reduced-motion` honoured, forced-colours substitution not opted out of, and no
+  status chip whose meaning is carried only by colour. Every failure names the offending elements,
+  because "3 controls have no accessible name" is a finding nobody can act on.
+
+- `BrowserSession` now records `console.error` output alongside thrown exceptions. The two catch
+  different failures: an exception stops a code path, a console error usually does not — which is
+  exactly why it survives review.
+
+- `StaticAssetCachingTests` pins both halves of the policy, since each is a mistake someone could
+  make in good faith — widening `no-store` back over the assets to be safe, or relaxing the
+  documents to make the app feel faster. It asserts a real conditional request returns `304` rather
+  than trusting the header alone.
+
+- Added an opt-in Playwright browser lane (`scripts/test-lane.ps1 -Lane browser`) covering the critical Portal journey end to end in a real Chromium: first-run sign-in through the forced password change, creating a user, creating a folder, publishing a report into it, and running that report until rendered rows appear. The lane runs against a Kestrel-hosted Portal on a loopback port, fails on any unhandled JavaScript exception, is excluded from the default filter by `Category=Browser`, and is wired into the pre-release gate and CI.
+
+- Added `eng.data_quality_rules(job)` over a `PORTAL` connection, so a steward can ask which `@expect`/`@fail` rules protect each target and column in a job someone else runs, without shell access to the machine that runs it. It projects the same seven columns as the engine-local `eng.data_quality_rules` table, so one SELECT reads the same shape either way, and joins directly against `eng.data_quality_failures` to separate rules that are failing from rules that are protecting silently. The job name is required: rules bind to the statement that declares them, so there is no catalog-wide rule list.
+
+- `js/portal-states.js` — a shared vocabulary for the four states every Portal surface has to
+  render: **loading**, **denied**, **failed**, **empty**, plus `statusChip`.
+
+  They look almost identical on screen — a mostly blank panel — which is exactly why they get
+  conflated, and why the difference has to be carried by wording rather than layout. A user who
+  cannot tell "you may not see this" from "the service is down" from "there is nothing here" reads
+  all three as the last, because it is the only one that needs no action from them. Each state emits
+  a `data-portal-state` marker so a test can assert *which* state a surface reached rather than
+  inferring it from whatever text happens to be present.
+
+  Extracted from the governance module's pattern rather than invented, and guarded by
+  `PortalStateVocabularyTests`.
+
+- Added an online-safe support bundle to the Portal. `GET /api/admin/support-bundle/review` returns every section as a reviewable document — health, deployment identity and versions, migration state, catalog counts, audit-outbox state, and the redacted Portal configuration — together with the redaction note and an explicit list of what it leaves out. `GET /api/admin/support-bundle` downloads it. Both are audited.
+
+  Two properties make it safe to expose: it collects counts, versions and states rather than content — no report data, no dataset rows, no log bodies — and all text passes through the same redactor the CLI bundle uses. Tests assert that a report's name and title, the JWT secret, and the dataset at-rest key are absent from the entire response.
+
+  `?acknowledgedContent=<hash>` refuses with `409` when the disclosure changed after review. The hash covers the deployment and its configuration rather than live counters: reviewing the bundle audits the review, which moves the outbox counts the bundle reports, so hashing everything would make every review stale the instant it was made and the check would degrade into noise an operator learns to bypass.
+
+  The CLI's `etl-sql admin support-bundle` remains the recovery path for when the Portal is unavailable — it reads host files and configuration the Portal cannot.
+
+- **Protected branches for Portal-originated commits.** `Portal:SourceControl:ProtectedBranches`
+  (empty by default; exact names, or a prefix when the pattern ends in `*`) names branches a commit
+  may not land on without an approved draft behind it.
+
+  This is what the draft-approval workflow is *for*. Protecting a branch without a review path only
+  blocks people; providing a review path without protecting anything only asks nicely. Together they
+  mean a change reaching a protected branch has been read by someone other than its author.
+
+  The reviewer is written into a `Reviewed-by:` commit trailer alongside the script hash, so the
+  review outlives the Portal's database — someone auditing the branch a year later reads it from
+  `git log` rather than needing the Portal to answer "who approved this?".
+
+  Three details that decide whether the protection is real:
+
+  - The branch is read **inside the repository lock**, immediately before committing. Checking it
+    outside the lock protects nothing, because it can change in between.
+  - Approval is matched on the **published script hash**, not on recency. A draft that was approved
+    but never published cannot lend its approval to whatever happens to be on disk now.
+  - An unknown branch — detached HEAD, or git unavailable — is treated as unprotected. Failing open
+    here is deliberate and narrow: the commit still passes every other check, and treating "I could
+    not tell" as "protected" would turn a diagnostic gap into an outage.
+
+  Refused commits are audited as `COMMIT_REPORT_SCRIPT_DENIED`. An attempt to put an unreviewed
+  change on a protected branch is exactly the event an operator wants to see, and a bare 409 would
+  leave no trace of it.
+
+- `ColumnQualityCostTests` (Performance lane) reports what each `@expect` rule shape costs against
+  the same statement with no rules, and what `QUALIFY` costs against the same windowed query
+  without it. It reports rather than asserts a budget: the value is knowing which shapes are
+  expensive and catching one that gets much worse.
+
+- **Quarantine preview session startup is now a measured number rather than an intuition.**
+  `QuarantinePreviewStartupMeasurement` times the per-request `ExecutionSession` that
+  `GET /api/data-quality/quarantine/rows` builds: **~0.8 ms median, ~1.2 ms p95**, stable to 0.1 ms
+  across three consecutive runs.
+
+  The number is scoped narrowly on purpose — construct, execute, dispose, excluding the quarantine
+  target's own connector read, because that read is what a preview mostly costs and is not what a
+  reusable session would change.
+
+  It reports rather than gates. Scale certification on this repository has produced a 56% spread
+  between warmed and cold measurements of the same commit, wide enough to swamp any threshold worth
+  setting, so the harness asserts only an order-of-magnitude structural ceiling and writes the real
+  figure into the decision record.
+
+- The Portal data-quality queue can now read the rows behind a quarantine capture, where previously
+  every target was view-only. This means the web tier opens the source connection and returns raw
+  captured data, so it is gated four ways and the queue names the first gate that stops it:
+
+  1. **The capture must have recorded its provenance.** Captures now write the shared-connection
+     alias, connector type, and a catalog-backed flag into the replay manifest at the moment the
+     rows are written. Portal never works out where a target lives after the fact — that would mean
+     opening a production connection on an inference. The fields are nullable and appended, so
+     manifests written by an older engine still deserialize; absent provenance classifies the target
+     as view-only, which is what every pre-existing capture gets.
+  2. **`Portal:DataQuality:AllowConnectionPreview` must be on**, and it defaults to **off**.
+     Upgrading never silently starts opening production connections from the web tier.
+  3. **The caller must hold a grant on that shared connection.** `DataSteward` gates the feature;
+     the connection ACL gates the data. Steward access alone is deliberately not sufficient —
+     quarantined rows are raw source rows carrying whatever the source carried, and letting one
+     capability stand in for a grant creates an authority that accumulates implicitly and cannot be
+     revoked where it was granted.
+  4. **The capture must be self-consistent.** A manifest whose target names one alias while its
+     provenance records another is refused rather than reconciled; picking either one would be wrong.
+
+  The connection Portal opens is the manifest's, resolved as `SHARED:<alias>` — never an alias taken
+  from the request — so policy, secret resolution, and redaction apply exactly as they do to any
+  script using that connection, and the engine's own catalog authorization still runs underneath.
+  A missing, disabled, and ungranted connection share one wording on purpose: the catalog does not
+  disclose the existence of connections a caller cannot use.
+
+  Every successful read is audited as `READ_QUARANTINE_ROWS` with the target, connection, status
+  filter, and row limit. Reading production data is a data-access event, not a page view. The
+  existing row cap, 15-second timeout, caller execution identity (so row-level security and PII
+  controls apply unchanged), and error redaction are all preserved.
+
+  The queue listing and the row endpoint resolve readability through the same code path, so the list
+  cannot offer a row editor that the row endpoint then refuses.
+
+- `GET /api/data-quality/jobs/{jobId}` resolves a submission on the namespace it actually belongs
+  to, and reconciles as it reads: a non-terminal record is refreshed from the job channel and the
+  outcome written back, so the answer outlives the browser that asked for it.
+
+- Both submission paths now write a durable record to job state
+  (`dq:quarantine-submission:<kind>:<target>`) — one per kind per target, bounded on purpose. The
+  audit log remains the history of who submitted what; this answers the operational question, which
+  is whether something is in flight against this target right now and how the last one ended.
+
+- **A forgotten job reports `Unknown`, never `Failed`.** The in-process channel holds job state in
+  memory and answers "Job not found." once the process has restarted. Passing that through would
+  tell a steward their replay failed when it may well have completed, and the natural response to a
+  failed replay is to run it again. `Unknown` is treated as terminal — further polling cannot
+  produce an answer — and is styled as neither success nor failure, because neither was observed.
+  A sandbox fixture covers that state alongside the completed one.
+
+- `SandboxStoryTests` — drives every UI-sandbox story and fixture through a real browser, asserting
+  each mounts without throwing, logs nothing to the console, and renders something into the stage.
+
+  The sandbox already imports the **canonical** component sources, so mounting a story exercises the
+  same file the Portal ships without needing a Portal, a database, or a login. It had only ever been
+  run by a person clicking through it, which meant a broken fixture stayed broken until someone
+  happened to open that one — and the fixtures people open least are the failure states, exactly
+  where a rendering bug is least likely to be noticed and most likely to matter.
+
+- **`GET /api/portal/navigation`** — which top-level entry points to offer *this* caller, computed
+  once on the server from roles, module state and Studio capabilities. Six pages used to derive this
+  from JWT claims in five different spellings of the same decision, and the two destinations above
+  cannot be derived from a claim at all.
+
+- **`js/portal-nav.js`** applies the answer and never computes one. A client-side guess is what it
+  replaces, and a wrong guess that *shows* an entry is worse than one briefly missing, so there is
+  deliberately no fallback rule. It stamps `data-nav-applied` when the answer has been applied —
+  "hidden because you may not have it" and "not decided yet" are identical in the DOM, so without
+  the marker an absence check races the fetch and goes green for the wrong reason.
+
+- **`PortalNavigationVocabularyTests`** keeps it one vocabulary: no page may set a server-decided
+  destination's visibility itself, every page carrying the top bar applies the shared answer, and
+  every destination the server decides has somewhere to land on every page. Copy-paste is the
+  natural thing to do when adding a page, so the invariant is enforced rather than remembered.
+
+- **`NavigationVisibilityTests`** covers the rule server-side and in both directions — including
+  that holding *some* Studio capability is not the same as holding `StudioAccess`, and that hiding
+  Studio unconditionally would fail, since the negative assertion alone would accept exactly that.
+
+- `scripts/Invoke-SmokeParity.ps1` — runs the same acceptance profile against a locally-hosted
+  Portal and the production container image, then **compares the two check by check**.
+
+  Parity is a comparison, not two independent green runs. A container run that quietly skips checks
+  the local run performed would otherwise report success while proving less, and that is invisible
+  in any output which only says "passed". So both sides emit per-check JSON, and any check present
+  in one and absent from the other — or with a different outcome — is a parity failure even when
+  both runs exit zero.
+
+  Both targets get identical configuration and a bind-mounted script root, so a difference in the
+  results is a difference in the product rather than in the harness. The local side is pinned to
+  `ASPNETCORE_ENVIRONMENT=Production`, because `appsettings.Development.json` overrides environment
+  variables and would otherwise have the two sides reading different configuration.
+
+- `Invoke-AcceptanceProfile.ps1` gained `-ResultsPath`, emitting every check and its outcome —
+  including **skips** — as JSON. Recording skips is what lets a comparison notice that one target
+  checked less, which is the failure mode the parity run exists to catch.
+
+  Verified end to end: **7 local checks against 7 container checks, same checks and same outcomes**,
+  including a report that actually executes on both targets.
+
+- `EveryPhysicalTypeTheAdapterCanProduce_HasAColumnBuffer` enumerates the logical-to-physical type
+  map and pushes a value of each through the adapter, so a type added to one side cannot go missing
+  from the other — which is how both this gap and the UUID one arose. Companion round-trip coverage
+  pins negative and over-24-hour spans specifically, since those are the reason the encoding is text.
+
+- A sandbox fixture covering the case that motivated the change: two structured rows differing only
+  in target table, plus one counts-only row. Reproducible without a Portal, a database or a login.
+
+- Studio capabilities can now be granted to a group and to a service account, not only mapped to a role in configuration. Previously changing who may publish, commit, or push meant editing `Portal:Studio:RoleCapabilities` and restarting, and could not be expressed for anything narrower than an entire role.
+
+  `GET` and `PUT /api/admin/groups/{id}/studio-capabilities` manage a group's set and reject an unknown capability name rather than storing a typo that would read as a successful grant and do nothing. Grants are resolved at sign-in and at refresh and carried as `studio_capability` claims, so the per-request check stays a claim lookup; changing a group's capabilities signs its members out, exactly as changing an ACL does, rather than leaving a live session holding authority that was just withdrawn.
+
+  Service accounts carry their own capability set, capped by their owner's at token issue in the same way their roles already were — an account that could exceed its owner would be a way to retain authority the owner had lost.
+
+- Studio authority is now visible where it is reviewed. `GET /api/admin/permissions/effective/user/{id}` reports the user's roles, the Studio deployment mode, and the capabilities those roles resolve to, alongside the folder and report permissions it already returned — Studio authority is a separate axis from resource permission, and folder `Manage` does not imply the right to publish, commit, or push. Capabilities are reported as empty when Studio is disabled, since listing configured grants a deployment cannot honour would overstate what the user can do.
+
+- Audited Studio mutations now record the capability that authorized them, on the audit row, its outbox message, and the outbox payload. Reviewing a publish or a commit no longer means inferring the authority from the route it came in on.
 
 - `TRANSACTIONAL=ON` for `FLATFILE`, `JSON`, `XML`, `EXCEL`, and `PARQUET` now stages every output
   phase beside the target and commits with one replacement rename. Unique stages, cancellation and
   failure cleanup, 24-hour crash-residue reconciliation, and prior-target preservation are covered by
   focused certification and documented in the connector reference/snippets.
+
 - SFTP `ATOMIC_UPLOAD=ON` now uses the server POSIX rename extension, supports execution
   cancellation, and never deletes the prior target before replacement. Servers without the required
   protocol support fail safely instead of silently weakening the guarantee.
@@ -233,24 +850,30 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   server constructs the query; temp previews replay only their read-only materialization prefix.
   Preview results are cancellable, audited, redacted, and bounded by configurable row, byte, and
   wall-clock limits, with provenance shown in the shared results pane.
+
 - Wired Portal Studio to its durable collaborative edit leases. Existing reports acquire and renew a
   five-minute session, show the owner/expiry state, pause saves on contention or disconnect, recover
   after expiry/reconnect, and release on navigation. Atomic lease updates no longer advance the
   report content version, and report authorization plus signed-tenant matching fence lease keys.
+
 - Consolidated all six authenticated Portal headers into `portal-header.js` and migrated the Reports,
   Admin, Orchestrator, Studio, and responsive-drawer focus lifecycles to `dialog-a11y.js`. Server-owned
   navigation gating, branding, identity, themes, status/state vocabulary, keyboard containment,
   Escape dismissal, and focus restoration now attach to one shared shell contract.
+
 - Added an explicit quarantine-preview session startup measurement. Warmed complete session cycles
   measured 0.8 ms median and 1.1 ms p95, so the Portal retains safer single-shot execution rather
   than pooling identity- and policy-bearing preview state; the measurement is the future polling gate.
+
 - Expanded the engine-surface corpus across dataset export/publication/stewardship, OpenLineage
   export, file-sourced `MERGE`, `TRANSFORM`, a real SQLite target, ZIP compression, and Unicode
   flat-file round trips. Corpus files can opt into a minimal Portal registry and assert bounded
   output-file existence/content; all five files also pass under the deterministic spill settings.
+
 - Expanded the shared SQL logic corpus with deterministic math, leap/month/quarter date boundaries,
   Unicode/string, null/type, regex/JSON, and cross-dialect alias/row-limit results. All 45 eligible
   files pass both normally and with the deterministic low-threshold spill configuration.
+
 - Replaced the EBNF conformance smoke check with strict fixed-seed acceptance/rejection assertions,
   unresolved-reference validation, and minimized counterexample reporting. A dedicated cross-platform
   `ebnf` lane is now part of release and pre-release validation without joining smoke/fast; enforcing
@@ -430,6 +1053,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   - `LEN(val)` transpiled to `LENGTH(val)` on Postgres and Oracle targets, and `LENGTH(val)` to `LEN(val)` on MSSQL targets.
   - `SUBSTRING(val, start, len)` transpiled to `SUBSTR(val, start, len)` on Oracle targets.
   - `SYSDATE` function call transpiled to bare `SYSDATE` (without parentheses) on Oracle targets.
+
 - Created `DialectTranslationMatrixTests` to define a regression-preventing compile translation test matrix for Postgres, MSSQL, and Oracle targets.
 
 - Improved the shared visual Designer with searchable grouped visual discovery, clearer neutral
@@ -469,14 +1093,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   execution-job APIs. The API client validates responses before page code consumes them, the
   generator has a drift-check mode, and a dependency-free test proves casing or required-field
   mismatches fail explicitly. Admin Users now consumes and posts the canonical `username` field.
+
 - Added one shared Portal session identity model across Reports, Admin, Docs, and Orchestrator.
   Recognizable username/name/email claims now win over internal JWT subject IDs, role checks share
   one case-insensitive implementation, shell identity elements retain the immutable subject only as
   non-visible metadata, and the Audit table consumes its canonical `username` response field.
+
 - Removed the prototype Governance dashboard from the production route graph. Governance now opens
   the durable Quarantine Queue and exposes only Quarantine and Lineage navigation; overview scores,
   exceptions, badges, glossary terms, and settings backed by static/browser-memory demo records are
   unreachable until authorized durable APIs replace them. A static guard prevents their return.
+
 - Reworked first report execution into one preflight and one Run action. The report identity remains
   visible before a snapshot exists, required parameters are validated with accessible labels before
   enqueue, execution polls through Completed/Failed/Cancelled terminal states, and export or
@@ -484,16 +1111,19 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   date and relative-date pickers, sliders, multi-selects, search fields, checkboxes, text boxes,
   number boxes, and generated parameter forms now expose programmatic accessible names from the
   visual or parameter identity across every synchronized report host.
+
 - Added one responsive global navigation drawer across Reports, Admin, Docs, and Orchestrator. At
   narrow widths it replaces the clipped top navigation, incorporates each workspace sidebar,
   blocks and removes background content from interaction, traps focus, restores focus on close,
   supports Escape and overlay dismissal, and retains identity, theme, and sign-out actions. A
   dedicated 390px UI-sandbox story and dependency-free shell contract pin the behavior.
+
 - Added shared narrow-viewport patterns across Portal workspaces: dynamic tables receive contained
   horizontal scrolling and stacked action cells, forms and command groups collapse without fixed
   minimum widths, Admin and Orchestrator tabs remain scrollable, Orchestrator status cards form a
   two-column grid, and Docs content and tables stay within the viewport. The responsive sandbox
   fixtures exercise tabs, forms, tables, actions, and both sidebar/no-sidebar shells at 390px.
+
 - Added explicit Portal Studio deployment modes and server-side authoring capabilities. `Disabled`
   removes Studio and authoring routes; `CatalogOnly` permits only granted catalog operations and
   forcibly removes external ingress/source operations; `SourceControlled` permits those operations
@@ -502,6 +1132,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   fenced by `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptRun`, `ScriptSave`,
   `ReportPublish`, `ScriptIngress`, `SourceCommit`, and `SourcePush`. Role mappings are empty and
   deny access unless configured; Admin/Publisher names do not bypass capability checks.
+
 - Added a first-class, catalog-scoped Portal Studio home. It groups only authorable reports by
   governed folder, offers equal Code and Design entry lanes, creates new reports through an
   internal catalog artifact rather than raw upload, and never returns the backing script path.
@@ -510,51 +1141,61 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   controls from Administration and routes editing through Studio. The shared designer now presents
   explicit accessible Code/Design tabs, and desktop/mobile UI-sandbox fixtures plus static and
   integration tests pin the workflow and interactive trust boundary.
+
 - Replaced the empty report-library landing state with a consumer home backed by the existing
   favorites, recently viewed, featured, and popular catalog APIs. One fuzzy global search spans
   folders, report metadata, ownership/stewardship, certification, and lineage terms. Compact cards
   now use intentional catalog icons and one latest activity line (`Viewed`, `Updated`, failure,
   cancellation, running, or first-run readiness) instead of repeating three contradictory
   never-run statuses; the same concise presentation is used in folder and catalog lists.
+
 - Added fail-closed deployment-profile certification for Solo, Team, Enterprise, SaaS, supported
   promotion paths, and N → N+1 upgrades. The cross-platform PowerShell runner composes focused
   suites and retains commit-bound JSON/Markdown summaries plus exact phase logs. A versioned journey
   fixture now defines positive and negative proof, portable versus host-owned state, and continuity
   identifiers for pipelines, rebinding, scheduling, quality/stewardship, reports, identity,
   backup/restore, promotion, topology growth, upgrades, SaaS transfer, and tenant isolation.
+
 - Added executable lifecycle drills for N → N+1 in Solo, Team, Enterprise, and SaaS and for every
   supported promotion path. Each drill creates a versioned export/restore point, fences scheduled
   jobs, performs cutover, reconciles artifact hashes plus job/history/quality/lineage continuity,
   and proves rollback into a separate scheduler-fenced store; Portal/Orchestrator upgrade coverage
   also migrates populated N schemas to HEAD and composes coordinated backup/restore proof.
+
 - Checked-in workspace policy now enforces required `SCRIPT` tags and materialized-output `COLUMN`
   tags as local lint errors. Workstation automation returns a non-zero exit before target writes when
   `@owner`, `@steward`, or another required tag is absent, while failing `@expect` rules with
   `@fail: THROW` retain the same non-zero runtime gate; both paths are covered by the Solo
   certification lane.
+
 - Certified the Team/SME quality loop without Portal: real SQLite run history supplies three-run
   `HISTORICAL` baselines, out-of-band `ASSERT JOB` results trigger both SMTP- and WEBHOOK-typed
   notification sinks, and the Team certification lane composes those checks with scheduler retry,
   dispatch, and durable quality-history coverage.
+
 - Added signed organization metadata policy with `REPORT`, `DATASET`, and `COLUMN` required-tag
   scopes. Portal report creation and script replacement now verify the active tenant/environment
   envelope and parsed dataset lineage before catalog mutation, failing closed on missing tags or an
   invalid policy. Enterprise certification proves an OIDC-authenticated Publisher cannot publish a
   dataset missing required `@classification`, and that rejection creates no report row.
+
 - Added secret-safe deployment promotion for the complete currently eligible state surface. The
   Portal bootstrap now preserves folder/report catalog ownership alongside identities, governed
   connections, `SECRET:` references, ACLs, reports, subscriptions, and alerts. The provider-neutral
   `etl-sql.orchestrator-promotion/v1` package exports/imports jobs, schedules, notifications,
   ownership attribution, quality history/failures, lineage, and tags while rejecting raw
   credentials and leaving resolved secrets, tokens, caches, and keys behind.
+
 - Added `admin promotion export`, `validate`, and `import` with repeatable target bindings,
   duplicate/dangling-reference/collision checks, exact historical timestamps, idempotent replay,
   and scheduler-safe disabled jobs at the target. Documented and tested the supported Solo → Team
   and Team → Enterprise journeys, including preflight, backup, fencing, cutover proof, and rollback.
+
 - Added admin-only Portal bootstrap validation at `POST /api/admin/configuration/validate`. It
   applies target bindings in memory and reports parse failures, raw credentials, duplicates, unused
   mappings, and same-name/different-state collisions across identities, folders/owners, governed
   connections, and reports without mutating the target catalog.
+
 - Added direct Solo/Enterprise SaaS tenant onboarding through `admin promotion saas-onboard`.
   Onboarding fixes tenant authority at the host boundary, copies only hashed portable artifacts,
   imports eligible catalog/quality/lineage state with jobs disabled, stages the Portal bootstrap,
@@ -564,126 +1205,913 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   that fixed root and staged bytes are rejected above quota. SaaS certification proves negative
   cross-tenant reads for lineage, quality failures, schema-only PII results, security-event queues,
   Portal audit/outbox rows, and runtime security caches.
+
 - Added `etl-sql admin promotion preflight`, a mutation-free deployment-profile inventory with the
   versioned `etl-sql.deployment-preflight/v1` JSON contract. It hashes portable scripts, policies,
   and operational evidence; identifies exportable catalog state and required `SECRET:`/`SHARED:`
   target bindings; summarizes ephemeral state; records protected files without reading, hashing,
   sizing, or logging their contents; and fails closed on raw credential literals, unsafe traversal,
   unsupported scale, or backward profile transitions.
+
 - Added schema-only `etl-sql scan --pii` for supported local files/directories and cataloged
   database tables through credential-safe `SHARED:` aliases. It applies the nearest
   `etlsql-policy.json`, retains file/line remediation locations, emits a versioned JSON contract,
   enforces bounded recursion/file counts, and never reads or reports row values or credentials.
+
 - Added one versioned, transparent stewardship scoring service shared by CLI scans, local engine
   catalogs, Orchestrator APIs, and remote/Portal consumers. `eng.stewardship_score` exposes global,
   job, and table component numerators, denominators, percentages, counts, timestamps, policy
   weights, and definition version without an opaque composite; `eng.stewardship_gaps` preserves
   source locations and reconciles exactly to every component total. Current lineage wins over
   history and the newest durable remediation wins over older catalog entries.
+
 - Added portable Data Quality Health and Stewardship Scorecard `.rptsql` operator reports over the
   shared `eng.*` contracts, plus a runnable one-person workflow with checked-in policy, tagged and
   quality-gated pipeline, local SQLite Orchestrator schedule, optional transition notifications,
   and a copy-pasteable guide. Shared fixtures cover empty/first/clean/warn/quarantine/critical/stale,
   missing-tag, unowned-protected-data, and recovery states; acceptance tests pin workstation,
   Orchestrator, and Portal count/score parity and the steward-only quarantine boundary.
+
 - Published the normative four-profile deployment standard with Green/Yellow/Red/justified-N/A
   evidence for every required capability, smallest-safe forms for enterprise-oriented features,
   regulated/air-gapped/high-volume/HA/DR/residency overlays, and mandatory feature-design and
   release portability reviews. Current gaps—especially SaaS isolation and incomplete promotion
   certification—remain explicitly Red or Yellow rather than being presented as shipped claims.
+
 - Added the versioned workspace-root `etlsql-policy.json` contract and JSON Schema for required tags
   with scope/exclusions, regex-based protected-data suggestions, and default warning/failure
   thresholds. CLI runs discover the nearest workspace policy and fail with path/line/column
   diagnostics when JSON, scopes, regexes, or threshold relationships are invalid.
+
 - Added `etlsql run --quality-summary` for stable counts-only terminal evidence and
   `--output-json <path>` for a versioned CI artifact containing run totals, normalized rule counts,
   and structured column metrics without failed sample values; errors are secret-redacted.
+
 - Added the no-Portal quality catalog: `eng.data_quality_status` provides canonical current/local
   run identity, timing, status, processed/warned/quarantined totals and percentages, failed-rule
   count, observed freshness, and redacted errors; `eng.data_quality_failures` provides normalized
   counts by run/target/column/rule/action. Both tables are queryable through a remote
   `ORCHESTRATOR` connection, while `eng.job_history` now exposes its persisted quality totals.
+
 - Added `ASSERT JOB ... WITH (FAIL_ON_WARN = TRUE)` so warned rows can fail unattended CLI and
   orchestrated runs with a reliable non-zero exit code without requiring a notification channel.
+
 - Documented and pinned the no-service Task Scheduler/cron/CI quality workflow and the optional
   local SQLite Orchestrator progression for scheduling, history, baselines, managed notifications,
   and recovery state; notifications remain optional for exit codes and queryable evidence.
+
 - Added Windows MSI in-place upgrade certification on `release/**` pushes and version tags. The
   elevated ephemeral runner installs the prior release, writes a sentinel into the registered
   install location, upgrades to the candidate, rejects side-by-side installs, verifies preserved
   data and the installed CLI version, then uninstalls and retains verbose logs plus JSON evidence.
+
 - Added one governed managed-connection lifecycle across Portal and Orchestrator admin blocks,
   including create/alter/test/show/drop dispatch, Orchestrator REST administration, redacted
   configuration inspection, disabled-definition export/import, impact analysis, `WHAT_IF`,
   fail-closed authorization, and redacted security audit. SMTP and WEBHOOK catalog lifecycle and
   Portal-to-Orchestrator notification delivery use the same contract.
+
 - Added the queryable `eng.*` catalog for session state, lineage/tags, governance, data quality,
   connections/tables/variables/views, diagnostics, jobs/history/state/metrics, bundles, Portal
   catalog data, and parameterized catalog functions. The `eng` schema is reserved, connection
   configuration is redacted, `SELECT *` lint is off by default, and completion discovers catalog
   tables after `eng.`.
+
 - Added complete executable-statement `ToSql()` serialization, a generated statement-surface
   inventory, canonical parser → formatter → parser coverage, retired-form rejection tests, and
   production-parser validation for documentation, help, snippets, and samples. Syntax indexes,
   references, administration guides, architecture contracts, migration material, configuration
   export, LSP grammar, and release notes now follow the same canonical contract.
+
 - `DROP BUTTON [IF EXISTS] <name>` and `ALTER BUTTON <name> (...)`. `BUTTON` previously had `CREATE`
   only, even though the engine already removed buttons on `DROP` and `CREATE BUTTON`'s
   duplicate-name error told the author to "use CREATE OR ALTER or DROP BUTTON first" — advice the
   parser then rejected. `ALTER BUTTON` patches `TITLE`, `TOOLTIP`, `OPTIONS`, `ACTIONS`, and `STYLE`,
   and enforces the same `ON_CLICK`-only rule as `CREATE BUTTON`.
+
 - `ALTER PAGE` can patch `VISIBLE` and `REFRESH`; `ALTER CONTAINER` can patch `VISIBLE` and `ICON`.
   These are fields the objects have always had, reachable until now only by redefining the object
   and restating its whole layout.
 
+### Changed
+
+- **The administration docs are readable by deployment profile.** They were a mechanical split of
+  three large manuals and still read like one: 28 files carrying orphaned section numbers that
+  started at `4.1` or `## 6.` with no sections 1–3 anywhere, and content that mixed profiles
+  silently — a Solo reader working through "Secrets and Keys" met the Portal JWT secret and the
+  Orchestrator API key, neither of which exists on a workstation.
+
+  - **All orphaned numbering removed** across 28 files, along with the duplicate `# Title` /
+    `## Title` pairs the numbers were hiding, and the resulting heading-level skips.
+  - **New `docs/administration/by-profile.md`** gives Solo,
+    Team, Enterprise and SaaS each an ordered path through the same task-oriented pages. The docs
+    stay organised by task — a fact still lives in exactly one place — and this is the other axis.
+  - **A `## By deployment profile` band on the eleven pages where behaviour genuinely differs**,
+    saying plainly what each profile does and which are **N/A**. Reference-only pages did not get
+    one; a band that says "same for all profiles" trains readers to skip the band.
+
+- **Fourteen dangling `§` cross-references now point somewhere.** The split left references like
+  "see §9 below" and "(§11.3)" aimed at sections of the old monolithic manual that no longer exist
+  under those numbers — dead navigation that no link checker catches, because they were never
+  links. Each is now a real link or has been reworded.
+
+- **Four genuinely broken anchors fixed**, including a link into a heading that had been deleted as
+  a duplicate.
+
+- **Generated section indexes no longer describe pages by their first heading.** Fifteen pages had
+  no prose between the title and the first section, so the generator quoted things like
+  "## 8. Backup & Maintenance" as the description. Each now opens with a sentence saying what the
+  page is for, which improves the page and the index together.
+
+- **An `@expect` rule the runtime does not implement now fails the statement instead of passing
+  every row.** The two per-row rule switches each ended in a `default` that returned "passed", so a
+  `ColumnRule` record added without its runtime arm would have reported the data clean. The two
+  switches were also full copies of each other — one existed only because `EXPR` needs the
+  evaluator — so they are now one predicate with a thin async wrapper for that single form.
+
+- **`Engine.md` now documents four engine subsystems it had never mentioned** — data-quality rules,
+  the columnar plan family, row-level security, and `SECRET:`/organization-policy enforcement. It
+  had described the v0.10-era engine accurately and stopped growing with it: 69 mentions of the
+  external spill engines, zero of any of these.
+
+  Extended rather than split into new pages. The document is organised by mechanism and these are
+  mechanisms; splitting would have put the fast-path *disqualifiers* in a different file from the
+  fast paths, which is the exact confusion that prompted the work. The new sections explain how the
+  pieces fit and link to `DataQualityRules.md` and `RowLevelSecurity.md` for detail rather than
+  restating it.
+
+- **Removed the governance dashboard's demo fallback and browser-memory workflow state.** The
+  previous module substituted a hard-coded set of assets whenever its API call threw, and kept
+  findings, decisions, glossary terms, badges, and scoring thresholds only in the browser. Both
+  failures are invisible from the outside: the page renders, the numbers look plausible, and nothing
+  on screen marks the estate being described as fictional or the decisions as unsaved.
+
+  The dashboard now renders four states honestly and separately, because collapsing them is how a
+  governance surface lies: **loading** (no claim made yet), **unauthorized** (a view you cannot see,
+  naming the roles that grant it), **failed** (we asked and could not find out — nothing is invented
+  to fill the gap), and **empty** (we asked, and the answer is genuinely nothing). A fifth
+  distinction gets its own banner: **never scanned** is not *no findings*, and a KPI tile reading
+  zero cannot tell those apart on its own.
+
+- Extracted the stewardship posture calculation out of `CatalogController` into
+  `StewardshipProjection`, so the governance scan and the stewardship view answer "is this asset
+  missing metadata?" from one definition. Two copies would let the queue and its findings disagree
+  about the same asset with no way for a steward to tell which is wrong.
+
+- Replaced the 2,200-line governance sandbox story with one that imports the real module and injects
+  a mock API, matching how every other story works. The old story re-implemented the entire UI, so
+  it could look correct while the shipped module was broken — and its fixture data sat in the repo as
+  a ready-made source of fake governance records.
+
+- **Every guide now says who it is for.** A one-line `> **Applies to:**` banner names the deployment
+  profiles the guide covers. Deliberately a line rather than the four-row table the administration
+  docs use: most guides describe the *language*, which is identical from a workstation to SaaS, and
+  a four-row table repeating "same for all profiles" would bury the two guides where it genuinely
+  differs — `portal-user.md` and `catalog-search.md` need a Portal, and each now names the Solo
+  alternative instead of leaving a workstation reader stuck.
+
+- **`data-stewardship-impact.md` no longer requires a Portal it does not need.** Its prerequisites
+  said "Portal or Orchestrator must persist lineage", which reads as *deploy a service first*. The
+  CLI writes lineage on its own during a plain `etl-sql run` — measured, not assumed: running
+  `protected_data_audit.rptsql` through the CLI returns 177 rows on a workstation with no service
+  anywhere. Corrected, and the one genuinely Portal-dependent bullet now says so.
+
+- **Nine guides carried orphaned section numbering** from the same manual split as the
+  administration docs — `sample-guide.md` alone had 39 numbered headings. Removed, along with a
+  duplicate `# VS Code Extension` / `## VS Code Extension` pair.
+
+- **The MSI upgrade gate no longer needs a 26-minute CI run to find a typo.** Its first real
+  execution failed on pure logic — a multi-value read that turned a comparison into an array filter
+  — after twenty-odd minutes of downloading a previous release and building an installer. Nothing
+  about that bug needed an MSI, elevation, or an install.
+
+  - Non-elevated logic moved to `scripts/MsiUpgrade.Helpers.ps1`, side-effect free on load.
+  - **`Test-MsiUpgrade.ps1 -StaticChecksOnly`** runs the upgrade contract — same `UpgradeCode`,
+    ascending `ProductVersion` — with no elevation and no install, in about a second, on any
+    machine. The workflow runs it as its own step before the install sequence, so a failing log says
+    which half broke.
+  - The push trigger is **path-filtered** to the installer, its scripts and `Directory.Build.props`.
+    A documentation change previously paid the full 26 minutes for nothing.
+
+  This matters more than convenience: the elevated half has no local path on Windows Home, where
+  Windows Sandbox and Hyper-V are unavailable. Pushing everything testable out of it is what makes
+  the script maintainable at all.
+
+- `tests/` and `artifacts/` are excluded from the Docker build context. `docs/` and `snippets/` are
+  deliberately not: both images copy them for the embedded runtime help.
+
+- The browser lane shares one Portal host and one Chromium across all its test classes
+  (`ICollectionFixture`) instead of building them per class, and `PortalBrowserFactory` now stops the
+  Kestrel host and waits before disposing it — `IHost.Dispose()` only signals shutdown, so teardown
+  had been racing the deletion of the temp directory it was still using. Both are real fixes; neither
+  resolved the lane's intermittent startup failure, which survives across separate processes and is
+  recorded with the current diagnosis in `docs/releases/flaky-test-stability.md`.
+
+- **Portal static assets are now revalidated rather than re-downloaded.** Every response, static
+  assets included, carried `Cache-Control: no-store`, so each page navigation refetched roughly
+  3.4 MB — about 1.9 MB of it vendored libraries (`echarts`, `tabulator`, `arrow`) that had
+  not changed since install.
+
+  The policy is now split by what a response is. Documents and API responses stay `no-store`: they
+  carry catalog contents, identity and report data, and none of that belongs in a browser cache or
+  an intermediary. The asset roots (`/js/`, `/css/`, `/designer/`, `/img/`, `/maps/`) get
+  `no-cache, must-revalidate`, which is not "do not cache" — it permits storage and requires
+  revalidation on every request, so the browser sends its ETag and receives a 304 instead of the
+  file. Staleness risk is nil: an upgraded Portal returns a new ETag and the browser refetches.
+
+- **Removed 71 inert `?v=0.17.0` cache-busting query strings** from the Portal pages. With
+  `no-store` in force nothing was cacheable, so they had never done anything — they implied a
+  mechanism that was not there. Correspondingly, `Set-Version.ps1` does not need to rewrite them and
+  no version-agreement check is needed.
+
+- Moved the support-bundle redaction rules to `ETL_SQL.Core.Common.SupportBundleRedactor`, with the CLI builder now delegating to them. Two hosts producing support material from two nearly-identical rule sets would eventually diverge, and redaction that is *almost* the same in two places is worse than none: it yields two artifacts that look equally safe and are not. Behaviour is unchanged.
+
+- **The reusable read-only preview path is deliberately not built.** The threshold for revisiting it
+  is a 250 ms median or 500 ms p95 — where per-poll overhead becomes a visible fraction of a
+  one-second poll interval. The measurement is roughly 300× under that, so the optimisation would
+  buy about a millisecond per request while requiring the parsing, linting, policy, RLS, timeout,
+  row-cap and redaction guarantees to be re-established across a shared session. Those guarantees
+  are the whole reason the preview may read raw quarantined rows at all.
+
+  Polling and dashboard refresh are therefore not blocked by session cost. Recorded with its trigger
+  in `DataQualityRules.md` alongside the other demand-triggered scale items.
+
+- Session-local (`#temp`) quarantine targets keep their existing view-only reason. They are the case
+  worth stating: the manifest outlives the run but the table does not, and a preview session
+  auto-creates the table empty — a steward offered a row editor would read "no rows" as "nothing was
+  quarantined".
+
+- **The pre-release gate now states what it actually verifies.** Three phases in
+  `Test-PreRelease.ps1` described their lanes in the abstract while the lanes had grown well past
+  the description — a gate whose coverage you have to infer from test filters is one nobody can
+  review.
+
+  - The **browser lane** phase now names the critical journey, the four non-Admin role journeys,
+    the accessibility and responsive checks at 1440px and 390px, the accessibility-tree snapshots,
+    and the sandbox story mounts.
+  - The **Portal lane** phase now names the release-acceptance journeys it already carried: the
+    role/permission authorization matrix, departmental environment isolation across two
+    deployments, policy authority and distribution, module gating, Studio capabilities, and the
+    browser API contract.
+  - A new **local/container smoke parity** phase runs under `-IncludeDockerIntegration`, comparing
+    the two targets check by check rather than accepting two green runs.
+
+- Hardened the local release gate so independent phases continue after unrelated failures, dependent phases skip when prerequisites fail, formatter drift gives an accurate rerun instruction, and release-process setup documents detached exact-commit validation plus staged-file formatting hooks.
+
+- The three `admin_operations` templates now declare the failure they are supposed to produce when
+  run as shipped — `backup_and_report` because an uninjected variable is an error rather than a
+  silent default, `capacity_report` and `daily_failure_digest` because the SMTP password is still
+  the `ENC:` placeholder. Each asserts its exit code and message, so the guardrail is covered rather
+  than the sample being known-broken.
+
+- Publishing a report by script path requires `Portal:Studio:Mode=SourceControlled` **and** the
+  `ReportPublish` capability; `RequireStudioCapability` answers 404 in any other mode. Without those
+  settings the acceptance profile silently seeds no report, three checks vanish, and the run still
+  exits 0 — documented, because a green run that checked less is the most misleading outcome
+  available.
+
+### Removed
+
+- **Chart.js is no longer bundled.** The library was superseded by Apache ECharts and had since become
+  entirely inert: no `<script>` tag loaded it, and no `new Chart(` or `Chart.register` call site existed
+  anywhere in the tree. It survived only as a 203 KB blob replicated across five host directories by the
+  shared-asset sync, plus entries in the third-party inventory, notices, and SBOM generators.
+
+  Removing it drops 203 KB from every runtime that serves report assets — Portal, ReportPlayer,
+  Workstation editor, and the VS Code extension — and removes a dependency the project was still
+  declaring, and would still have been obliged to audit and patch, without using it.
+
+  The harvested WiX fragment (`src/ETL-SQL.Installer/wwwroot.wxs`) was updated to match. It is
+  regenerated by `heat.exe` on every MSI build, so the entries would have disappeared on their own, but
+  the checked-in copy no longer references files that do not exist.
+
 ### Fixed
+
+- **The folder permissions panel could show one folder's grants under another folder's name.**
+  Opening a folder's permissions sets the heading immediately and then loads the ACL; the table was
+  only written on success, so a failed load left the previous folder's rows in place. The panel was
+  not blank, it was confidently wrong, and wrong about access control specifically — an
+  administrator could read another folder's grants as this one's, and the Revoke buttons still
+  carried the other folder's group ids while the revoke call sent this folder's.
+
+- **A failed group-membership read rendered as a group with no members.** "Nobody is in this group"
+  and "we could not find out" lead an administrator to opposite actions, one of which is deleting
+  the group or granting its access elsewhere.
+
+  Both panels now clear before the request and render the shared `failedState` after one — the
+  four-state vocabulary exists precisely so a failure is never shown as an emptiness.
+
+- **Three dialogs were announced as just "dialog"** — the governance quality-trend modal and two in
+  the data-quality queue (trend and row editor). Each already had a visible `<h2>` title; none was
+  linked to it, so a screen-reader user was told a dialog opened and nothing about which job or
+  target it concerned. All three now use `aria-labelledby`.
+
+  Caught by `PortalDialogAccessibilityTests` on modals added after that guard was written, which is
+  the case it exists for.
+
+- **Three architecture docs named interfaces that no longer exist.** `Engine.md` listed
+  `ICryptoService` and `ISecurityService` for crypto and security — neither is in the tree — and
+  `LanguageServer.md` told contributors to implement `ICodeActionHandler`, which this server does
+  not implement. Corrected to the types that are actually there: `CryptoUtils`, `SecretRedactor`,
+  `ISecretLifecycleProvider` and `IEnterpriseEnrollmentProtector`; and the four OmniSharp handler
+  interfaces the language server really uses.
+
+- **`FolderPermission` comparisons no longer depend on the enum's numeric order.** The values are
+  persisted as integers in every ACL row, so `Author` had to be appended as `3` rather than inserted
+  in its rightful place between `Execute` (1) and `Manage` (2) — inserting it would have renumbered
+  `Manage` and silently reinterpreted every grant already in force, with no migration able to detect
+  it because the rows stay valid and merely mean something else.
+
+  That left declaration order lying about authority. Roughly forty `permission >= FolderPermission.Manage`
+  comparisons would each have granted `Author` everything `Manage` has, and four integer `Max`
+  operations picking the strongest of several grants would have chosen `Author` over `Manage`,
+  *downgrading* anyone who held both.
+
+  `FolderPermissions.Rank()` now defines the ladder (Read < Execute < Author < Manage) independently
+  of the stored value; `AtLeast()` replaces every ordinal comparison and `Max()` every integer max.
+  The conversion was done in two phases — behaviour-preserving first, verified against the full
+  suite, then the deliberate grants one gate at a time — and `FolderPermissionOrderingTests` fails
+  the build if any production file compares permissions ordinally again, because writing `>=` here
+  is the natural thing to do and silently escalates.
+
+- **The MSI upgrade gate could never have passed.** `Get-MsiProperty` in `Test-MsiUpgrade.ps1`
+  returned `Object[]` — `('', '{GUID}', '')` — because two COM calls emitted to the pipeline
+  unsuppressed. PowerShell's `-ne` against an array is a *filter*, not a comparison, so the
+  UpgradeCode check reported "UpgradeCode changed" for two identical codes and failed the run.
+
+  Reproduced against the shipped v0.16.0 and v0.17.0 MSIs rather than inferred from the log: the
+  reader now returns a single trimmed `String`, and identical codes compare equal. This was the
+  gate's first ever execution, which is exactly what it was built to discover — though it found a
+  defect in itself rather than in the installer.
+
+- **`feedback.js` was missing from the `.gitattributes` LF pin list**, so a Windows CI checkout
+  converted it to CRLF, the canonical and host copies stopped being byte-identical, and
+  `sync-assets.js -Check` failed the build for a file whose content was correct. It was the only
+  shared asset not pinned — added when the feedback dialogs were unified, without the matching
+  attribute line. The file's own comment predicted this failure mode in advance.
+
+- **A spilling query could fail when a column's CLR type varied between batches.** Engine rows are
+  dynamically typed, so the same column can hold a `DateTime` in one batch and the same instant as a
+  formatted string in the next — or be entirely NULL in one batch, leaving no type evidence at all.
+  `ColumnBatchAdapter` inferred each batch's types independently from that batch's own values, while
+  the columnar spill writer locks its Arrow schema on the first batch and rejects every later one
+  that disagrees. The result was `Column batch field N ('JoinDate', utf8) does not match spill field
+  'JoinDate' (timestamp)` partway through a large write.
+
+  Both spilling paths now establish the logical schema once for the whole relation and build every
+  later batch against it. Fixes the `flatfile_sink` and `window_sink` samples.
+
+- **Four settings added this release were missing from the configuration reference** — the document
+  an operator actually opens when configuring a deployment. They existed in guides and architecture
+  prose, which is not where anyone looks to set a value:
+
+  - `Studio.RequireApprovalToPublish` — the draft → review → publish workflow
+  - `SourceControl.ProtectedBranches` — branches a Portal commit may not reach unreviewed
+  - `DataQuality.AllowConnectionPreview` — the quarantine row-preview kill switch
+  - `ReportApprove` — the tenth Studio capability, absent from the capability list operators copy
+
+- **The governance dashboard's KPI tiles were unreadable to a screen reader.** Five tiles rendered
+  as sibling `div`s collapsed into one undifferentiated run of text: *"0/0 Governed assets 0% at or
+  above 80 0 Below threshold Need follow-up…"*, with no number attached to any label. Each tile is
+  now a list item carrying its whole meaning in an accessible name.
+
+- **The governance state banners were anonymous bold runs**, so a user navigating by heading could
+  not find the most important sentence on the page — that the estate has never been scanned, or that
+  they are looking at a denial rather than an empty estate. They are now headings.
+
+  Both were found by the new snapshots on their first run, on code added earlier in this release.
+
+- Fixed the PostgreSQL model snapshot, which had not been regenerated since the alert-notification and share-link-name migrations. Any new PostgreSQL migration scaffolded against it re-proposed operations those migrations had already applied — a migration that would have failed against every migrated database — and one entity carried an index over a column it does not have.
+
+- **`docs/architecture/Portal.md` said three Identity roles were seeded. There are eight** — five of
+  them security-relevant, including every governance role. An architecture document that is
+  confidently wrong is worse than a missing one: a missing document sends people to the code, and a
+  wrong one stops them.
+
+  Also corrected there: the authorization model is **two independent axes** (a role decides which
+  class of operation, an ACL decides which resources); folder `Manage` is authority over the reports
+  in a folder, **not** over the folder itself; and `FolderPermission` must never be compared
+  ordinally, because `Author` is stored above `Manage`.
+
+- **Eleven API areas were entirely undocumented** — branding, OIDC, service accounts and tokens,
+  both policy-authority surfaces, configuration promotion, Studio, designer, docs, and fleet — along
+  with the governance, report-draft and data-quality endpoints added this release, and three
+  persisted entities.
+
+- **A composite rule naming a column the statement does not project now fails instead of passing.**
+  Row lookup by name yields NULL for an absent column and a NULL key part skips the rule, so a
+  single typo in `UNIQUE WITH (TenantId, BokingRef)` produced a rule that reported clean because it
+  never ran on any row. Both `UNIQUE WITH` and the new `EXISTS WITH` now reject an unprojected
+  column at statement start, naming the column.
+
+- **`EXISTS IN` probed its reference key set with a linear scan.** The set was built with the right
+  comparer but queried through `Enumerable.Contains` with an explicit comparer, which bypasses the
+  `HashSet` and walks every key — making a dimension lookup O(rows x keys) per statement. It now
+  probes the set's own comparer.
+
+- **`IN`/`NOT IN` rendered the row's value once per candidate.** The pairwise comparison converted
+  both sides on every comparison, so an N-item list materialized the row's value N times per row.
+  Each literal's rendered text and decimal form are now prepared once per rule, and the row's own
+  text at most once per row — and only when some pair actually reaches the string path.
+
+- **The compiled-regex cache for `MATCHES` was keyed by the rule record**, so every lookup hashed
+  the whole pattern string to find an entry that never moves. It is now keyed by rule instance.
+
+Both matter most where rows *fail*: a passing row was already close to free, but a quarantine-heavy
+load runs the comparison to exhaustion on every row.
+
+- **The formatter silently dropped `ON FAILURE` clauses.** `ToSql()` on a quarantining SELECT
+  returned a statement whose `@fail: 'QUARANTINE'` tags routed nowhere, which is a hard error on the
+  next run — the mirror image of the comment-stripping failure the symmetric clause/rule check
+  exists to catch, and just as quiet at the point where it happened. A round-trip test now covers
+  all three clause forms and both `WITH` options.
+
+- **A claim I had recorded about the engine was wrong, and checking the source caught it before it
+  reached the document.** The note said "the columnar fast-path gates exclude rule-carrying
+  statements". They do not. Three `!HasDataQualityRules(...)` guards protect **SQL pushdown** —
+  work sent to a remote database never reaches `ColumnQualityValidator`, so a statement carrying
+  `@expect` is kept local. The native columnar `SELECT … INTO` is guarded separately on
+  `!DataQuality.TracksNullCounts`, because a columnar batch copy never visits the values that
+  null-counting needs. Same principle, two distinct mechanisms.
+
+  Both are recorded as correctness constraints rather than tuning, because removing either to
+  recover throughput silently stops enforcing the feature it protects.
+
+- Two behaviours documented for the first time while verifying the above: `RecordPlanDecision` /
+  `PlanDecisionReasonCodes` record *why* a fast path was declined, so a slow query does not have to
+  be explained by guesswork; and **administrators bypass `HAS_GROUP` / `HAS_ROLE` by default**, so a
+  row-level-security filter does not restrict an admin.
+
+- **`Engine.md` now covers adaptive execution, and says the thing that matters about it.** Nine
+  files under `Core/Adaptive` and no architecture page mentioned them. The accurate statement is
+  narrower than their presence suggests: `AdaptiveExecutionController` computes bounded setpoint
+  advice and `Evaluator` holds an advisor, but **no execution pipeline reads it**, so the subsystem
+  records what it would do without changing how anything runs.
+
+- **`AdaptiveExecutionController.md` said "DRAFT — no implementation yet"** while Slice A was
+  implemented and wired into the evaluator. Corrected against the source, including the part still
+  outstanding: pipelines opting in at safe boundaries.
+
+- Governance mutations reloaded data without redrawing, leaving the steward looking at the state
+  before their change — which reads as the change having failed. Caught by the new browser lane test.
+
+- Five parallel dashboard reads on a cold database raced to create the singleton settings row and
+  returned a 500. The unique index makes the race safe: one insert wins and the losers read the
+  winner's row. Deliberately not serialised behind a process-local lock — Portal runs multi-node, and
+  the other node is not holding your lock.
+
+- **Two Governance views were offered to roles that cannot open them.** *Overview* needs
+  `GovernanceRead` and the *Quarantine Queue* needs `DataQualityStewardAccess`, but both were shown
+  to every signed-in user. Only *Audit Evidence* was gated. Both are now revealed to the roles their
+  APIs accept, matching the pattern Audit already used.
+
+  The Governance section itself stays visible to everyone, and that is deliberate: *Lineage Search*
+  and *Stewardship* are open to any authenticated user, and tracing where a number came from is
+  exactly what a report consumer needs them for.
+
+- **Clicking Governance routed everyone to the quarantine queue** — so a report consumer's first
+  click on the section landed them on the one view they are refused. The landing view is now the
+  first one the user can actually use, resolved in a single place so the top-level link, the bare
+  `#governance` hash, and the sidebar cannot disagree.
+
+- **Deep links to a Governance view a role cannot use now redirect rather than opening.** Hiding a
+  navigation entry does nothing for someone who was sent a link, which is how these URLs mostly get
+  reached.
+
+- **The README generator published non-prose as page descriptions.** It skipped `/*` and `//` but
+  not HTML comments, headings, blockquotes or code fences, so two guides described themselves as
+  `<!-- SearchPortalCatalogStatement -->` (an AST-name marker), several as their first section
+  heading, and one as `ETL-SQL run nightly_load.etlsql --log` — the first line inside a code block.
+  It now skips all of those and tracks fences, which fixes the generated indexes across the whole
+  of `docs/`, not just guides.
+
+- **Half the `/healthz` readiness finding codes were undocumented.**
+  `PortalTopologyReadinessService` emits six; the HA certification document listed three "such as"
+  examples. The three missing ones included `ha-requires-session-affinity` and
+  `ha-requires-orchestrator-postgres` — both of which hold a node out of load-balancer rotation. All
+  six are now documented in a table with cause and remedy, because a finding code is what a 503 says
+  about itself and the string an operator greps for mid-incident.
+
+- **`Portal:Topology:*` was absent from the configuration reference entirely** — five settings that
+  decide whether `/healthz` returns 200, missing from the document an operator opens to configure a
+  deployment. The same class of drift the previous reconciliation found in the Studio settings.
+
+- **`ExpectedMode: Auto` can hold a working node out of rotation, and nothing said so.** `Auto`
+  infers `HighAvailability` from PostgreSQL *or* a configured `Portal:Storage:KeyRingPath`, and never
+  infers `Departmental`. So a single-node SQLite Portal that merely moved its key ring off the
+  default path is classified HA, `RequirePostgresForHa` applies, and `/healthz` returns 503 with
+  `ha-requires-portal-postgres` — a node that is otherwise working, that the load balancer stops
+  routing to. The inference is right (a shared key ring is a multi-node signal) but the contract it
+  turns on is strict, and a departmental deployment on PostgreSQL is the common case. Now stated in
+  the HA certification document, the configuration reference, the HA administration guide, and as a
+  **Required** step in the production-readiness checklist.
+
+- **The Studio capability probe was itself role-gated.** `GET /api/studio/session` exists to answer
+  "what may this user do in Studio?", and the shell calls it on every page load to decide whether to
+  offer Studio at all. It sat behind the controller's `Admin,Publisher` requirement, so for every
+  other role the answer was a 403 rather than an empty capability list — a console error on every
+  sign-in, and a capability check that could not be asked without already holding the capability.
+
+- **The browser test lane's intermittent total failure is root-caused and fixed.** The
+  security-event outbox defaults to a machine-wide SQLite database under `LocalApplicationData`,
+  opened before the host is built. A previous test process still shutting down held it, so the next
+  host failed to start at all and every test reported a millisecond. Each test factory now gets its
+  own file. Worth knowing beyond tests: two Portal or Orchestrator processes on one host share that
+  database in production too.
+
+- **Four search boxes had no accessible name.** The admin user filter, the docs dictionary search,
+  the governance asset filter, and the quarantine queue search all relied on a `placeholder`. A
+  placeholder is not an accessible name — most screen readers announce the control as just "search
+  box", and the hint disappears the moment the user starts typing, so the one clue about what the
+  field searches is gone precisely when it is needed.
+
+- **`studio.html` presented a dialog with no focus management at all.** Opening it left the keyboard
+  user behind it, Tab walked straight out into the page the dialog was supposedly blocking, and
+  closing it dropped focus back at the top of the document.
+
+- **Three governance dialogs were dialogs only to sighted users** — no `role="dialog"`, no
+  `aria-modal`, no accessible name, no focus trap. An overlay marked up as a plain `div` is announced
+  as ordinary page content: the user is never told a dialog opened, and the content behind it stays
+  reachable, so the "modal" blocks a mouse user and nobody else.
+
+- Fixed the forced first-run password change signing the user into a dead session. Changing a password invalidates every session for the account, so the Portal sent the user into the app holding an already-invalidated token and silently bounced them back to the login page — the first thing a new deployment does looked like a failed sign-in. The new password is now exchanged for a fresh session before entering the app, and a failure to re-authenticate says the password *was* changed instead of reporting a password-change error.
+
+- Fixed unhandled promise rejections from the report catalog's view transitions. Navigating faster than the animation skips the in-flight transition, and its rejected `ready`/`finished` promises were left unhandled on the page. A throw inside the update callback still surfaces.
+
+- **The connection catalog showed the same message for a 403 and an unreachable service.** "Could
+  not load connections" reads as a fault to report, when the answer may simply be that this account
+  may not see the catalog. The two are now distinct, and the failure case offers a retry.
+
+- **Escaping in the shared states happened two frames from the interpolation it protected.** Caller
+  values were escaped by an inner helper, which works but is invisible at the call site and would
+  double-escape anything a caller sensibly escaped itself. The rule is now simply: escape at the
+  point of use. `PortalStateVocabularyTests` fails on any caller-supplied value interpolated raw —
+  one unescaped interpolation would be an injection point on every surface that adopts the
+  vocabulary, which is the cost of sharing it.
+
+- **`QUALIFY` re-derived a constant lookup key on every row.** To let `QUALIFY rnk <= 1` reference a
+  windowed column by its alias, the engine bridges each alias to the window-result column. That
+  bridge walked the column's expression tree and serialized the window call back to SQL text, then
+  upper-cased it, once per row per windowed column — arriving at the same constant string every
+  time. It is now resolved once per statement.
+
+  Measured on 50,000 rows over 500 partitions: the allocation `QUALIFY` adds on top of the same
+  windowed query fell from 249 MB to 165 MB (−34%), and total statement allocation from 556 MB to
+  472 MB. Wall time over its own baseline went from ~1.70x to ~1.16x, though timing on this bench
+  carries roughly 15% run-to-run noise while the allocation counters are exact.
+
+- **Plain `UNIQUE` built and spilled a full-row identity string it never read.** The pre-pass writes
+  a per-row identity so `UNIQUE_FIRST`/`UNIQUE_LAST` can break ties on the order key. Plain `UNIQUE`
+  fails every row of a duplicated group, so it never asks which row to keep — but the identity was
+  computed regardless, and it is a rendering of the entire row (a fresh dictionary of the row's
+  columns, sorted by name, concatenated), then written to spill and read back to be discarded.
+
+  Measured on 50,000 rows: `UNIQUE` allocation fell from 636 MB to 483 MB (−24%). `UNIQUE_FIRST` is
+  unchanged, correctly — it is the shape that needs the identity.
+
+- **The pre-pass entry for a `UNIQUE` rule was found by a linear scan, per row.** The scan compared
+  rules by record value, so two rules written identically cost a deep `Expression` comparison on
+  every row. It is now a reference-keyed lookup.
+
+- **Data-quality replay and disposition tracking had never worked.** The queue polled
+  `GET /api/jobs/{id}` — the report-execution namespace, backed by `PortalExecutionJobs` — using a
+  job id that came from `IJobChannel` and was never in that table. Every poll answered 404, the
+  client treated the failure as transient, and it retried once a second for as long as the tab
+  stayed open. No submission ever reached a terminal state on screen; the panel promising that jobs
+  "remain here until their durable execution reaches a terminal state" showed "status temporarily
+  unavailable" forever.
+
+- **A submission's outcome was known only to the browser that made it.** Tracking lived in that
+  browser's session storage, so closing the tab lost it. A second steward looking at the same
+  quarantine target could not tell that a replay was already in flight — and the obvious next move
+  is to submit another replay of the same production load.
+
+- Corrected a stale doc comment on `MarkdownRenderer` that described the embedded chart comment as
+  `<!-- CHART:{...} -->` carrying Chart.js config. The renderer emits `<!-- ECHART:{...} -->` containing
+  ECharts option JSON, and has since the ECharts migration.
+
+- **The VS Code designer sandbox fixture had never worked.** Its webview imported `renderDesigner`
+  from the designer module, which exports `createDesigner`. The import threw and the fixture rendered
+  nothing. Found by the new automation on its first run.
+
+- **The security-event outbox was missing from the departmental isolation contract**, and its
+  default is a **machine-wide** path under `LocalApplicationData` shared by every ETL-SQL process on
+  the host. Two environments on one machine therefore wrote their security events into a single
+  queue — a cross-environment leak of exactly the records isolation exists to keep apart, and the
+  only resource in the contract whose default is *wrong* rather than merely unset.
+
+  It is now:
+
+  - a planned isolated resource in `GET /api/admin/environments/plan`, with the
+    `ETLSQL_SECURITY_EVENT_OUTBOX_PATH` override named;
+  - reported in the current-environment evidence, so an operator can see whether their own
+    deployment has set it;
+  - documented in `Departmental_Isolation.md` and `security-events.md`, including the co-located
+    Portal/Orchestrator case;
+  - pinned by a test, because a plan that lists databases and key rings while omitting this one
+    reads as complete.
+
+  Found empirically rather than by review: it was what made the browser test lane fail whenever two
+  processes started back to back, one unable to open the file the other still held.
+
+- **Studio was offered to every signed-in user, including roles holding no Studio capability.**
+  Pages revealed the entry whenever the Studio capability *probe* succeeded — but that probe was
+  deliberately opened to every authenticated user so that asking "what may I do in Studio?" would
+  stop being an error for the roles that may do nothing. The probe answering is not the answer being
+  yes. A Viewer, DataSteward or OrchestratorManager saw a Studio link that only leads to a 403.
+  Found by a red test across all three roles before anything was changed.
+
+- **The Docs link was offered on deployments where `/docs.html` returns 404.** Whether Documentation
+  is enabled is a server fact with no token claim behind it, so no amount of care in the page could
+  have got this right. Two pages did not even carry the `docsNav` hook the others gated on.
+
+- **Governance nav gating in `docs.html` was one role wider than every other page.** It admitted a
+  role named `Orchestrator`, which does not exist in the Portal's role set — a copy of the rule that
+  had drifted and that nobody could see without diffing six pages against each other.
+
+- **Accessibility-tree snapshot baselines were never committed.** A blanket `*.txt` in `.gitignore`
+  swallowed `tests/ETL-SQL.Portal.BrowserTests/Snapshots/*.snapshot.txt`, so the baselines existed
+  only on whichever machine last generated them. Updating one is supposed to be a review decision
+  visible in a diff; it was invisible. That is how the governance sidebar baseline went stale and
+  stayed stale.
+
+- **Three browser assertions left behind by the governance sidebar rework.** The sidebar snapshot
+  still described the old menu, `RoleJourneyTests` still required a `Stewardship` entry that was
+  deliberately removed, and a dashboard test still clicked an in-page tab strip that no longer
+  renders — so it had been timing out rather than testing anything. All three now match the shipped
+  design.
+
+- **`--silent` printed "Linting failed:" and discarded every reason it failed.** `ILogger.WriteLine`
+  derives its log level from the console colour — red is an error, yellow a warning — and silent
+  mode keeps only errors. The lint reporter wrote its header red and each diagnostic yellow, so a
+  silent run produced a non-zero exit code with no explanation. The colour had quietly become a
+  severity decision.
+
+  The lines explaining a fatal error are now emitted at error level. This also repairs the sample
+  gate's `@expected-error` check, which reads that output and therefore could not verify a lint
+  failure at all — the mechanism existed and silently did not work for the largest class of sample
+  failure.
+
+- **`eng.variables` emitted each variable's raw CLR value**, so the view's `value` column held a
+  number in one row and a string in the next, and any columnar materialization of it —
+  `SELECT … INTO`, or a spill — failed on the first value that did not fit the type inferred from an
+  earlier row. The column is documented as text and already carried `*******` for a masked value, so
+  it is now rendered consistently with invariant formatting; `data_type` still reports the original
+  type. Fixes the `diagnostics_ssh_sink` sample.
+
+- **A `TIME` column aborted a spilling query.** `ColumnBatchAdapter.GetPhysicalType` maps `TIME` to
+  `TimeSpan`, but the columnar spill writer had no case for it and failed the whole write with
+  `Native spill writing does not support 'TimeSpan' columns` — the same shape as the UUID gap fixed
+  earlier. Spans are stored round-trip as text rather than an Arrow time type, because a `TimeSpan`
+  may be negative or exceed 24 hours and Arrow's time types model a time of day. The row-based path
+  also labelled spans `Json`, so they came back as bare strings; they now carry `TIME` and restore
+  as spans. Fixes the `golden_workflow.rptsql` sample.
+
+- **The data-quality trend showed which rules fired but not where.** The target table, the action
+  the rule took and the rule's owner were collected by the engine, persisted, queried, grouped and
+  serialised — and then dropped by the browser, which rendered only column, rule and count.
+
+  The visible cost was worse than missing detail: two columns with the same name in different
+  target tables (`Email` in `warehouse.Customers` and in `warehouse.Leads`) rendered as two
+  identical-looking rows with different numbers, and nothing on screen said which was which.
+
+- **Legacy runs no longer pass as fully recorded.** History written before per-rule capture has only
+  the compact `column:rule=count` string, which cannot express those three fields. Those rows are
+  now marked `countsOnly`: they are never merged with structured rows — summing them would
+  attribute a legacy run's failures to a target table that run never named — and they render as
+  *unavailable* rather than blank, because an empty Owner cell reads as "nobody owns this rule",
+  which is a different and more alarming claim than "this run did not record it".
+
+- **The Studio capability probe still answered 403 to most roles**, despite an earlier attempt to
+  open it. `GET /api/studio/session` exists to answer "what may this user do in Studio?", and the
+  Portal shell calls it on every page load — but an action-level `[Authorize]` does **not** override
+  a class-level `[Authorize(Roles = …)]` in ASP.NET Core; both apply. Only `[AllowAnonymous]` takes
+  an action out of that policy, so the endpoint now uses it and restates the authentication
+  requirement explicitly.
+
+  With that fixed, every non-admin role loads the report library with **no failed requests at all**.
+
+- **`PARTITION BY` returned bucket-wide window values once a partition spilled.** The external
+  window engine hash-partitions rows into buckets, and its partition-replay path scanned a whole
+  bucket once and wrote that single aggregate onto every row in it. That is sound only when a bucket
+  *is* the logical partition. Buckets are hash partitions, so with a `PARTITION BY` of higher
+  cardinality than the bucket count — the ordinary case — one bucket holds many partitions and every
+  row received the bucket's aggregate instead of its own.
+
+  `SELECT COUNT(*) OVER (PARTITION BY customer_id)` over a large table therefore returned silently
+  wrong numbers: no error, no warning. Reached whenever a bucket exceeded `WindowSpillThreshold`
+  (default 10,000 rows) with `COUNT`/`SUM`/`MIN`/`MAX`/`AVG` and no `ORDER BY` or frame.
+
+  Both scan passes now fold one accumulator set per partition key, and the replay pass looks up each
+  row's own key. The columnar fast path builds the key from batch ordinals and declines — falling
+  back to the row scan — when a partition expression is not a plain column it carries, so the
+  optimization is kept rather than traded away for correctness.
+
+  Keys are rendered to text through one shared helper, because the scan may read a value from a
+  column batch while the replay reads it from a materialized row: the same column can come back as
+  `long` one way and `int` the other, and boxed equality would then file one partition under two
+  keys — reintroducing the defect in a subtler form.
+
+- Stabilized two full-solution load-sensitive tests. Metadata refresh coverage now waits by repeatedly
+  exercising the public stale-cache path until the previous refresh slot is reusable, and live-object
+  scale coverage uses a minimal private connector/evaluator instead of process-wide application state
+  and asynchronously seeded mock databases.
+
+- Regenerated the CLI reference for the shipped Gateway daemon and protected resource-administration
+  commands, and restored the active release's explicit Enterprise evidence-checklist contract.
+
+- Retired completed roadmap entries for deployment profiles, Orchestrator administration, the
+  Secure Outbound Gateway, hardened SaaS execution, compound quality rules, native script testing,
+  and declarative watermarks. Removed shipped sub-phases from the still-open tenant-portability and
+  report-builder fidelity tracks so `ROADMAP.md` now describes only future work.
+
+- Audited and retired verified completion records from `TODO.md`, and reopened two claims whose
+  implementation evidence was incomplete: production end-to-end Gateway operation and Shared-fleet
+  drain/replacement. Removed the already-delivered Control Plane Dashboard and API load/soak phases
+  from `ROADMAP.md`.
+
+- Made Portal Gateway enrollments durable on SQLite and PostgreSQL, including one-time token hashes,
+  optimistic-concurrency consumption, tenant partitioning, schema migrations, and backup-surface
+  classification. Added the token-authenticated bootstrap endpoint and the Portal WebSocket broker
+  route.
+
+- Fixed a Gateway broker race that acknowledged a session before registering it, allowing a client
+  to receive `HelloAck` while the routing registry still reported the Gateway offline.
+
+- Added restart-durable file persistence to the Gateway outcome ledger. Committed outcomes and
+  ambiguous writes retain their reconnect decisions across daemon recreation.
+
+- Completed the executable Secure Outbound Gateway path: one-time Portal bootstrap, machine-protected
+  ECDSA workload identity with signed-challenge proof, foreground daemon and OS service packaging,
+  protected local resource administration, bounded connector execution, and authority-evaluated
+  `SHARED:` alias routing over the typed broker data plane.
+
+- Added a Shared SaaS hostile-isolation certification lane spanning shared state, artifacts, cache,
+  queue, audit, PII/stewardship, lineage, paths, keys, checkpoints, Gateway, sandbox, quotas,
+  telemetry, support, restore, identity, and resource exhaustion. Added fleet drain placement that
+  preserves in-flight tenant work, shifts new work to ready nodes, and cannot lower isolation tiers.
+
+- Made sandbox fair-share admission cluster-global. Weighted fair ordering was process-local, so on a
+  multi-node deployment whichever node polled first took every freed slot; selection now happens in
+  the durable ledger as weighted fair queuing on virtual time, and a heavier tenant weight buys a
+  proportional share rather than the ability to starve a lighter one.
+
+- Enforced the sandbox admission and runtime limits that were declared but not applied: CPU cores,
+  block-I/O (on hosts that declare a throttle device, refusing the work where they cannot), connector
+  concurrency, per-attempt processed rows, per-tenant interactive sessions in Shared deployments, and
+  a queue-depth ceiling that now holds across the whole fleet rather than per process.
+
+- Added capability delivery to sandboxed workloads. Server-issued handles resolve through the
+  governance secret provider, namespaced per tenant, and are bind-mounted read-only into the
+  attempt; a host that cannot resolve a granted capability refuses the work instead of running
+  without it.
+
+- Added fleet release rollout for Managed Dedicated deployments: eligibility and compatibility
+  planning, deterministic waves, and a sequencer that will not open the next wave while an earlier
+  one is draining or after failures exceed tolerance. Each cutover still requires its own signed,
+  tenant-scoped authorization.
+
+- Added graceful execution-node drain. A node can now leave rotation without dropping work —
+  in-flight reports finish, new ones are refused, and `/healthz` reports draining — where previously
+  the only way to stop a node cancelled everything it was running.
+
+- Fixed sandbox checkpoints being unreadable to any later attempt. Session state was sealed with key
+  material generated inside the attempt's own single-use scratch, so a resumed run reported "no saved
+  session found"; the server-mounted per-tenant key is now authoritative, and checkpoint resume across
+  separate sandboxes is verified on a hardened runtime.
+
+- Added the on-premises Gateway runtime and its typed WebSocket transport in a new
+  `ETL-SQL.Gateway` project. The Gateway dials out and never listens, refuses any scheme but the
+  typed protocol and any non-TLS broker off loopback, bounds inbound frames, narrows cloud-supplied
+  limits by the resource's registered ones, and returns a fixed message when a local provider fails
+  so a host, user, or password in the provider's exception never crosses the wire. The frame model
+  has no field for a host, port, scheme, path, or command, so a compromised cloud side cannot ask the
+  Gateway to reach an arbitrary destination.
+
+- Added the Gateway typed-operation contract and durable outcome ledger. Operation bounds have no
+  unlimited representation and a resource's registered limits can only narrow them. Reconnect follows
+  one rule: an ambiguous write is never retried blindly nor reported as safely failed, a dropped
+  in-flight write is ambiguous rather than assumed not to have happened, a dropped read may simply
+  re-run, and a committed outcome cannot be downgraded by a late report.
+
+- Added the Secure Outbound Data Gateway enrollment, resource registry, and authority model. A
+  tenant-issued enrollment is consumable exactly once and stores only a hash of its one-time token,
+  so the record cannot enrol a Gateway; expired, revoked, consumed, and cross-tenant presentations
+  are indistinguishable to a caller. The Gateway-local registry holds the only copy of a resource's
+  target and credential reference, discovery can propose but never approve, and the published
+  projection carries neither. Routing is authorized in one place and only when execution tenant,
+  capability tenant, Gateway identity tenant, catalog binding, resource ownership, actor grant, and
+  policy version all agree; revoking a Gateway or disabling a resource denies on the next evaluation
+  with no grace window.
+
+- Added the Secure Outbound Data Gateway binding model. A `SHARED:` catalog alias can now resolve to
+  a Gateway binding — connector type plus immutable Gateway and resource IDs — instead of a direct
+  target. A Gateway-bound entry cannot store a physical endpoint or a credential; those stay on the
+  on-premises Gateway, and the catalog store refuses an entry that carries either. Resolving a
+  Gateway-bound alias fails closed while no Gateway data plane runs, rather than falling back to a
+  direct connection, and a script can neither add a binding to a direct alias nor bypass one.
+
+- Added a non-bypassable infrastructure egress fence. Connectors can no longer reach cloud instance
+  metadata endpoints, link-local node services, the container runtime host bridge, or cluster service
+  discovery in any deployment topology — the default `AllowedHosts: ["*"]`, an unenrolled host, and a
+  mid-run policy change cannot relax it. The fence is applied at connection creation, on every dynamic
+  REST URL including redirects, and again per resolved address at socket-connect time, so obfuscated
+  address forms, DNS rebinding, and port scanning are all covered. Loopback and RFC 1918 private
+  ranges are unchanged. Operators can exempt exact hosts/addresses through
+  `Security:EgressFenceExemptions` or authoritative policy; wildcard exemptions are rejected.
+
+- Added `Security:DeniedEgressRanges` so an operator can declare this deployment's own off-limits CIDR
+  ranges — hosting control plane, internal management networks, other tenants' subnets. Ranges are
+  enforced at connection creation and per resolved address, across IPv4 and IPv6 at any prefix length,
+  and cannot be exempted. Malformed ranges fail policy validation instead of being dropped silently.
+
+- Added signed Managed Dedicated tenant upgrades with running-release verification, exclusive
+  boundary locking, scheduler fencing, durable admission drain/reconciliation, atomic capacity
+  assignment, exact rollback snapshots, interrupted-cutover recovery, and idempotent audit receipts.
+
+- Certified Managed Dedicated data-asset isolation across physically disjoint lineage, quality,
+  scan, cache, outbox, quarantine, report, dataset, snapshot, subscription, share/embed, and export
+  stores, including equal numeric-ID collision tests and tenant-admin/author boundary evidence.
+
+- Added signed, retention/legal-hold-aware Managed Dedicated tenant deletion with explicit execution,
+  reparse/root safeguards, non-payload boundary digesting, atomic service removal, and an external
+  durable Started/Completed receipt attributed to the platform operator and approval.
+
+- Added Managed Dedicated split-custody recovery with tenant-bound archive pairs, foreign-tenant row
+  refusal, explicit recovery-environment tenant matching, actual provisioned key/artifact paths, and
+  post-restore job/admission fencing so recovered work cannot silently resume.
+
+- Added a counts-only tenant usage ledger at the Orchestrator scheduler boundary. Tenant-bound job
+  attempts persist idempotent row, memory, CPU, and duration measures from the immutable job tenant
+  binding without payload content, and metering failure cannot authorize, retry, or alter execution.
+
+- Added a durable Shared tenant resource registry for alias, gateway, resource, run, object,
+  storage, queue, and index namespaces, with server-derived tenant scope and composite isolation on
+  both SQLite and PostgreSQL.
+
+- Added Managed Dedicated platform-support approval: a human tenant Admin can grant one named
+  operator short-lived, purpose-bound access to an exact reviewed support disclosure without
+  creating a tenant session or platform superuser; approvals, refusals, and downloads are audited.
+
+- Fixed concurrent Orchestrator startup against an existing SQLite database so additive schema migrations treat a column added by another process as success instead of stopping the scheduler.
 
 - PostgreSQL Portal migrations now add the report and draft edit-session lease columns used by
   collaborative Studio sessions. Multi-process PostgreSQL startup no longer fails after the SQLite
   lease migration advances the shared model, and a provider-specific migration contract prevents
   future SQLite-only lease changes.
+
 - Optimized `MERGE` now falls back to authoritative SQL equality when its type-strict hash key does
   not find a candidate, preventing compatible cross-representation keys such as integer `2` and CSV
   string `"2"` from being treated as unmatched and inserted as duplicates.
+
 - CI now validates the complete sample library on both Windows and Linux, using each platform's
   native validator for two passes so persistent sample side effects and cross-platform drift are
   caught on ordinary pushes and pull requests rather than only during the Windows pre-release gate.
+
 - **Typed spill persistence now identifies heterogeneous-column failures at the boundary that
   rejects them.** Arrow conversion errors report the chunk, column, one-based row, inferred sink
   type, and actual CLR type without echoing the value; failed buffered flushes still close all
   writer streams.
+
 - **The low-threshold spill lane now completes under bounded memory in deterministic fresh-host
   shards.** It records exact method manifests and per-shard TRX evidence, detects cross-shard test
   identity overlap, and distinguishes execution-time theory expansion from discovery counts. The
   certified run passed all 6,058 engine results plus all 7 SQL logic wrappers without a host crash.
+
 - **`BULK INSERT` no longer silently transposes recognizable header-bearing input.** Complete
   headers map requested targets by name, `MAPPING = 'POSITION'` explicitly selects ordinal mapping,
   forgotten headers fail before writing, and fallback/width ambiguity is counted in the completion
   diagnostic. The file-operations reference now documents the actual parser/runtime contract.
+
 - **Row-invariant data-quality `BETWEEN` bounds are evaluated once per statement.** A conservative
   deterministic-expression classifier keeps row-dependent, volatile, subquery, and unknown-call
   bounds on the per-row path; allocation coverage pins invariant validation near the rule-free
   baseline.
+
 - Portal tenant-boundary startup and tests now agree on server-derived tenant identity: invalid
   tenant credentials receive the structured JWT challenge, first-run administrators inherit the
   configured host tenant, and dataset-root diagnostics name the current configuration key. The
   N-to-N+1 upgrade drill seeds historical schemas directly so it tests migration rather than the
   current model's write requirements.
+
 - Invalid session-save callers now fail explicitly instead of silently discarding state, and the
   low-threshold spill lane uses an isolated session root so checkpoint attempts cannot leak into a
   developer profile or sandbox-denied LocalAppData path.
+
 - **Release coverage and test-lane ownership are now enforceable locally.** CI and both pre-release
   drivers use one fail-closed 70% line-coverage gate instead of duplicating YAML logic or allowing an
   unparseable report to skip enforcement. Engine routing now depends only on explicit categories;
   scale, billion-row, and deployment certification stay in focused release runners. A structural
   audit rejects lane gaps, milestone-era test names, and feature tests stranded at the project root,
   and the existing suite has been reorganized under durable product areas.
+
 - **Sample certification now distinguishes intended failures from regressions.** Samples that
   demonstrate a fail-closed guardrail can declare both an expected exit code and an exact error
   fragment; the Windows and POSIX runners require both to match. Validator processes also use
   isolated session and security-event stores instead of mutating or contending with the user's
   machine state. Native Arrow spill now round-trips `GUID`/`UUID` columns, and the Docker alias
   lifecycle sample uses the matching pause/resume operations.
+
 - **The sample-scripts release gate could never fail.** `Test-AllSamples.ps1` printed per-script
   failures and a red summary, then exited 0; the gate judges a phase by its exit code, so the phase
   reported Passed regardless. The POSIX twin always exited non-zero — only the Windows script the
@@ -691,10 +2119,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   output is gitignored, so a sample that writes to a persistent store passes on a clean checkout and
   fails for anyone who runs it twice, which a single pass structurally cannot detect. The
   pre-release gate runs two passes.
+
 - **A tag comment before a column alias was a syntax error.** `amount /* @d: … */ AS total` — the
   form the lineage reference documents, and the natural reading order — failed to parse for every
   expression shape; only the trailing placement worked. Tags now attach from either side of the
   alias and merge when present on both.
+
 - **`eng.lineage` dropped the transformation on every renamed column.** One hop is observed twice —
   by static analysis at parse time and by the engine as it executes — and each observation knows
   something the other does not: only the engine has resolved connections, so the physical source is
@@ -704,15 +2134,18 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   merged rather than chosen between, into a copy, so rendering a chain cannot rewrite the session's
   recorded lineage. Re-recording a hop also now fills in the physical identifier the earlier
   pre-connection observation lacked.
+
 - **`first + ' ' + last` was classified as arithmetic, not string concatenation.** `+` is
   overloaded and the classifier has no types, so a string literal in the chain is the only evidence
   available — but it was looked for only in the immediate operands, and a left-associative parse
   puts it out of reach in any concatenation of more than two parts.
+
 - **OpenLineage documents read back with a different `transformation_kind` than they were written
   with.** ETL-SQL's twelve kinds map many-to-one onto OpenLineage's subtype vocabulary
   (`StringOperation` and `FunctionCall` both become `FUNCTION`), so import could not recover the
   original. Exports now also carry the exact kind alongside the standard subtype, which standard
   consumers ignore and our own import prefers.
+
 - **SQLite connection declaration and pushdown parameter binding.** Declaring a connection probes it
   for schema, and the columns lookup threw when no table was bound — so `CREATE CONNECTION … AS
   SQLITE(…)` failed outright against a database with no tables, including every new one. Separately,
@@ -720,16 +2153,116 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   by name, so any pushdown carrying a literal was rejected for a missing value. Both date to the
   connector's introduction, and made the shipped SQLite sample unrunnable in v0.14.0 through
   v0.17.0.
+
 - Moved smoke and optional Standard scale certification ahead of the long pre-release test lanes so
   baseline comparisons measure warmed binaries before sustained lane and container activity heats
   or pressures the machine; `Test-PreRelease.ps1 -Explain` reports the same execution order.
+
 - Added a same-worktree commit comparison harness for scale investigations. It measures both refs in
   one directory with interleaved arms, identical copied runner logic, rebuilds and discarded warm-ups
   per sample, restores the original checkout, and reports within-arm spread beside the median delta.
+
 - Removed TUI completion and lint latency that could leave suggestions or diagnostics nearly a
   minute behind typing, and stopped showing the opt-in `SELECT *` warning when it is disabled.
+
 - `docs/reference/visuals-reporting/report/theme.md`, which is embedded as runtime `HELP`,
   documented `DROP THEME corporate IF EXISTS` — a form the parser has never accepted for `THEME`.
+
+### Security
+
+- Report alerts are now re-authorized against their owner before every evaluation, the same way subscription delivery already was. An alert kept firing after its author was deactivated or lost their last grant on the report, and an alert notification carries the value that crossed the threshold — so a departed author's alert went on pushing report data into the channel they had chosen, and disabling the account did not stop it. Unauthorized alerts are now skipped whole rather than evaluated with the dispatch suppressed, so a `TRIGGERED` transition is never recorded against a notification nobody received.
+
+  Found by auditing revocation across connections, subscriptions, alerts, and saved views. The other three were already correct: subscriptions re-authorize at delivery, saved-view routes resolve report permission before narrowing to the caller's own rows, and shared connections have no authorship path at all.
+
+- Dataset access no longer treats authorship as standing permission. `DatasetPermissionService` and `ReportDependencyService` short-circuited on `CreatedBy == userId`, so removing a user from every group — or from the directory — left every dataset they had ever created fully open to them, with no revocation gesture that could undo it. Permission resolution now reads grants only: a dataset's creator, and the author of the report that owns it, receive an explicit `Owner` grant in the new `DatasetUserAcls` table when the dataset is registered, so access can be revoked by deleting a row. Deleting a user cascades their grants away, and transferring ownership before deleting a user now moves the grant along with `CreatedBy`. The migration backfills a grant for every dataset that already has a creator, so nobody loses access on upgrade.
+
+  Per-user dataset grants are a sibling table rather than a nullable `UserId` on `DatasetAcl`, because relaxing that column is an `AlterColumn` — rejected by the rolling-expand migration contract and implemented by SQLite as a table rebuild. The rule and its per-resource mechanisms are recorded in `docs/architecture/decisions/AuthorshipIsNotPermission.md`.
+
+  One behavior change worth knowing: deleting the report that owns a private dataset used to revoke the report author's access, because that access was derived from `OwningReport.CreatedBy`. It no longer does — their grant is durable and explicit. The orphaned dataset therefore stays reachable by its author rather than becoming administrator-only, and the grant can be revoked.
+
+- **An `Author` folder grant conferred `Manage` authority.** `FolderPermissionService.HasPermissionAsync`
+  compared permissions with `>=`, which reads the enum's *storage* value. `Author` is stored as `3`
+  and `Manage` as `2` — Author was appended rather than inserted so that adding it would not
+  renumber every ACL row already in force — while its authority ranks *below* Manage. So
+  `Author >= Manage` was true, and every folder-level check gated on `Manage` admitted an Author.
+
+  Demonstrated before it was fixed: a Publisher-role user holding only `Author` on a folder could
+  `POST /api/studio/reports` into it and receive `201 Created`. Publishing a new report into the
+  folder is one of the acts the Author grant is explicitly defined not to permit. The same check
+  gates dataset moves between folders and several folder routes.
+
+  Fixed by using `AtLeast()`, which ranks rather than compares.
+
+- **The guard that was supposed to prevent this could not see it.**
+  `NoProductionCode_ComparesPermissionsOrdinallyAgainstAnythingAboveRead` matches a *literal*
+  `FolderPermission.Execute|Manage|Author` on the line. The offending comparison was
+  `effective.Value >= required` — two variables, no literal — so it read as clean. A second check
+  now covers variable-to-variable comparisons in any file that deals in folder permissions, and it
+  names the exact line when it fires.
+
+  `DatasetPermission` was checked and is unaffected: its storage order is its authority order, so
+  `>=` is correct there.
+
+- **Cleared four npm advisories across the VS Code extension and its UI package**, which had been
+  failing the CI audit gate. All were transitive **dev** dependencies — the toolchain, not anything
+  the extension ships:
+
+  - `brace-expansion` (high, DoS) — reached through `eslint`→`minimatch` and `mocha`→`minimatch` in
+    the extension, and `eslint`→`minimatch` in the UI package.
+  - `undici` (high, five advisories including response desynchronisation and cross-user information
+    disclosure) — reached through `jsdom`.
+  - `postcss` (moderate, arbitrary `.map` read via attacker-controlled `sourceMappingURL`) — reached
+    through `vite`.
+
+  Fixed in the `overrides` blocks, not just the lockfiles. **The stale overrides were the actual
+  defect**: their floors were set to whatever was current when they were written, and that version
+  is the one that later became vulnerable — `undici: ">=7.28.0"` admits exactly 7.28.0, and
+  `brace-expansion: ">=5.0.6"` admits 5.0.6 through 5.0.8. A lockfile-only fix would have re-broken
+  on the next resolve. Floors are now `>=8.10.0` and `>=5.0.9`.
+
+  No direct dependency was added or changed — only override floors and the resulting lockfile
+  entries — so the third-party inventory is unaffected.
+
+  The UI package's two advisories had never been reported by CI, because the extension audit runs
+  first and failed the job before that step was reached.
+
+  Verified rather than assumed after the bumps — `undici` moved a major version under `jsdom`:
+  extension compile, lint and its 6 integration tests; UI lint, build and its 13 unit tests.
+
+- Orchestrator management now requires a short-lived Portal-signed caller assertion in addition to
+  the service API key on network-reachable listeners. Durable owner and user/group/service ACLs
+  protect `JOB`, `SCHEDULE`, and `NOTIFICATION` reads and mutations, including catalog statements
+  submitted through the ad-hoc script API. `READ`, `EXECUTE`, variable `OVERRIDE`, and `MANAGE`
+  remain separate capabilities; history, quality, and triage evidence is filtered by job read
+  authority, and mutation security events use the verified human or service principal.
+
+- Portal SMTP credentials move from an encrypted value in a bespoke table to a `SECRET:` reference
+  in the governed connection catalog, which enforces reference-only credentials on write, encrypts
+  target and options at rest, and carries per-connection use ACLs, ownership, an audit trail and a
+  usage ledger. The Portal no longer materializes the plaintext: subscription and admin-notification
+  delivery scripts carry the reference and the engine resolves it when the connection opens, so the
+  credential is never written into script text that could reach logs, execution history, or error
+  detail. This is a hardening of an exposure that previously required active scrubbing — no exploit
+  path was identified.
+
+- **Known gap:** because the Portal no longer holds the plaintext, it can no longer redact a
+  credential that an engine error echoes back; pattern-based redaction does not match a bare
+  password in free text. Net exposure is lower than before, but this specific mitigation is absent.
+  Tracked for a fix at the point where `SECRET:` references are resolved.
+
+- Expanded the security-boundary documentation and pinned its required contracts with
+  `SecurityBoundaryDocTests`.
+
+### Known Issues
+
+- `npm audit` fails the VS Code extension job on two high-severity advisories in transitive
+  dependencies (`brace-expansion`, `undici`). Pre-existing dependency drift rather than a code
+  change; Dependabot has branches open. Recorded here so the red build is not mistaken for a
+  regression from this release's work.
+
+- If the MSI job becomes a **required status check**, it needs a companion always-succeeds job. A
+  path-filtered workflow reports *skipped* rather than *success*, and a required check that never
+  reports will block every unrelated pull request. Recorded in `TODO.md` beside the setting itself.
 
 ## [0.17.0] — 2026-07-26
 

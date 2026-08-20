@@ -34,8 +34,7 @@ RUN dotnet restore "ETL-SQL.App/ETL-SQL.App.csproj" -r linux-x64
 
 # Copy the rest of the source
 COPY src/ .
-COPY deploy/docker/docker-compose.ha.yml /deploy/docker/docker-compose.ha.yml
-COPY deploy/docker/environment-ha.env.example /deploy/docker/environment-ha.env.example
+COPY deploy/ /deploy/
 COPY capacity-results/workloads/postgres-ha-sustained.workload.json /capacity-results/workloads/postgres-ha-sustained.workload.json
 COPY certification-results/ha-large-job-soak-scenarios.json /certification-results/ha-large-job-soak-scenarios.json
 COPY certification-results/ha-fault-injection-matrix.json /certification-results/ha-fault-injection-matrix.json

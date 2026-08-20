@@ -13,18 +13,18 @@ Target Release: **v0.18.0**
 Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/release-checklist.md) & [`docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md)
 
 ### Phase 0 — Pre-flight
-- [ ] Working tree is clean and on branch `release/v0.18.0` (`git status`).
-- [ ] `ROADMAP.md` reflects only future work (v0.18.0 items completed or moved).
-- [ ] Deployment-profile portability review verified against [`Deployment_Profile_Standards.md`](docs/architecture/standards/Deployment_Profile_Standards.md).
-- [ ] Secret scan verified: no `SECRET:`, connection strings, or raw API keys in diff.
-- [ ] Pause Dependabot schedules in `.github/dependabot.yml` during release window.
-- [ ] Verify GitHub `refs/tags/v*` tag creation permission is open.
+- [x] Working tree is clean and on branch `release/v0.18.0` (`git status`).
+- [x] `ROADMAP.md` reflects only future work (v0.18.0 items completed or moved).
+- [x] Deployment-profile portability review verified against [`Deployment_Profile_Standards.md`](docs/architecture/standards/Deployment_Profile_Standards.md).
+- [x] Secret scan verified: no `SECRET:`, connection strings, or raw API keys in diff.
+- [x] Pause Dependabot schedules in `.github/dependabot.yml` during release window.
+- [x] Verify GitHub `refs/tags/v*` tag creation permission is open.
 
 ### Phase 1 — Version, Changelog & Release Notes
-- [ ] Run `Set-Version.ps1 -Version 0.18.0` and verify `Directory.Build.props` and `src/etl-sql-vscode/package.json`.
-- [ ] Update `CHANGELOG.md`: Group `[Unreleased]` into `## [0.18.0] — 2026-08-20` (Added / Changed / Fixed / Security).
-- [ ] Author `docs/releases/v0.18.0.md` from `TEMPLATE.md` with all required sections (Summary, Breaking Changes, Highlights, Performance, Security, Upgrade Guide).
-- [ ] Commit version, changelog, and release notes: `git commit -am "chore(release): bump version to 0.18.0 and add release notes"`.
+- [x] Run `Set-Version.ps1 -Version 0.18.0` and verify `Directory.Build.props` and `src/etl-sql-vscode/package.json`.
+- [x] Update `CHANGELOG.md`: Group `[Unreleased]` into `## [0.18.0] — 2026-08-20` (Added / Changed / Fixed / Security).
+- [x] Author `docs/releases/v0.18.0.md` from `TEMPLATE.md` with all required sections (Summary, Breaking Changes, Highlights, Performance, Security, Upgrade Guide).
+- [x] Commit version, changelog, and release notes: `git commit -am "chore(release): bump version to 0.18.0 and add release notes"` (`08739c50`).
 
 ### Phase 2 — Code Review & Security Pass
 - [x] Risk-based diff review complete (`git diff --stat v0.17.0..HEAD -- src`).

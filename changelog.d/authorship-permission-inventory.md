@@ -1,3 +1,0 @@
-### Added
-
-- Added an architecture test that inventories every place the Portal compares an object's `CreatedBy`/`OwnerId` against the caller, each with the reason it is safe, and fails the build on any comparison that is not inventoried. Treating authorship as standing permission is what made a v0.17.0 regression leave authors full access to everything they had created after being removed from every group — deprovisioning that did not deprovision. A hand review of that diff cleared it; tests caught it. The inventory can only shrink or change deliberately, and the three known dataset short-circuits are pinned in it as open.
