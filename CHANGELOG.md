@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Retired completed roadmap entries for deployment profiles, Orchestrator administration, the
+  Secure Outbound Gateway, hardened SaaS execution, compound quality rules, native script testing,
+  and declarative watermarks. Removed shipped sub-phases from the still-open tenant-portability and
+  report-builder fidelity tracks so `ROADMAP.md` now describes only future work.
 - Audited and retired verified completion records from `TODO.md`, and reopened two claims whose
   implementation evidence was incomplete: production end-to-end Gateway operation and Shared-fleet
   drain/replacement. Removed the already-delivered Control Plane Dashboard and API load/soak phases
