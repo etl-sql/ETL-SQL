@@ -1,36 +1,36 @@
 # ETL-SQL Scale Certification Report
 
-Generated: 2026-08-20 15:39:14  |  Tier: **Standard**  |  Row scale: **10x**  |  Samples: **3**
+Generated: 2026-08-20 18:01:00  |  Tier: **Smoke**  |  Row scale: **1x**  |  Samples: **3**
 
 ## Results
 
 | Scenario | Samples | Rows | Rows/s | Elapsed (ms) | Spill Write | Peak WS (MB) | Private (MB) | Heap (MB) | Allocated (MB) | CPU % | GC Pause (ms) | Bound (MB) | Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| CsvIngest_500000 | 3 | 500000 | 1655629.1 | 302 | 0 | 942.8 | 1019.6 | 461 | 531.4 | 16.9 | 127.4 | 4096 | OK |
-| CubeGroupingSets_500000_10x5 | 3 | 500000 | 108131.5 | 4624 | 224000000 | 1304.2 | 1367.5 | 720.8 | 4214.8 | 8.4 | 258.9 | 4096 | OK |
-| ExternalAggregate_1000000_10grps | 3 | 1000000 | 553097.3 | 1808 | 80000000 | 662.9 | 687.5 | 376.8 | 1117.6 | 7.8 | 130.9 | 4096 | OK |
-| ExternalJoin_500000_equality | 3 | 500000 | 174947.5 | 2858 | 88000000 | 865.2 | 958.4 | 337.2 | 3151.5 | 10.1 | 338.9 | 4096 | OK |
-| ExternalSort_500000_DESC | 3 | 500000 | 106292.5 | 4704 | 119997440 | 530.8 | 494.8 | 260.7 | 2081.1 | 6.4 | 133.6 | 4096 | OK |
-| ParquetRoundTrip_500000 | 3 | 500000 | 1845018.5 | 271 | 0 | 979.9 | 1061.5 | 449.2 | 457.4 | 15.5 | 105.1 | 4096 | OK |
-| ReportDatasetSnapshotReload_500000 | 3 | 500000 | 659630.6 | 758 | 0 | 1204.3 | 1280.2 | 867.6 | 1522.5 | 12.5 | 193.1 | 4096 | OK |
-| ScalarSubqueryCache_500000_1000keys | 3 | 500000 | 314861.5 | 1588 | 40000000 | 1335.7 | 1585.1 | 817.5 | 1568.9 | 9.9 | 222.2 | 4096 | OK |
-| SpillCleanupFailure_500000 | 3 | 500000 | 33333333.3 | 15 | 331776 | 1271.5 | 1513.1 | 652.1 | 15.3 | 37.5 | 128.5 | 4096 | OK |
-| SpillCleanupSuccess_500000 | 3 | 500000 | 2232142.9 | 224 | 16257024 | 1290.7 | 1539.6 | 653.1 | 334.1 | 21.8 | 155 | 4096 | OK |
-| StreamingSelect_1000000_cap50000 | 3 | 1000000 | 186185.1 | 5371 | 0 | 761.4 | 852.4 | 221.3 | 66.6 | 0.9 | 54.9 | 4096 | OK |
-| TempTableSpill_500000_SELECT_INTO | 3 | 500000 | 1607717 | 311 | 16257024 | 808.6 | 903 | 330.7 | 334.2 | 14.1 | 83.1 | 4096 | OK |
-| WindowFunction_ROW_NUMBER_500000 | 3 | 500000 | 150829.6 | 3315 | 112000000 | 922.2 | 1006 | 412.2 | 3421.9 | 7.5 | 220.7 | 4096 | OK |
+| CsvIngest_50000 | 3 | 50000 | 1136363.6 | 44 | 0 | 505.9 | 470.9 | 129 | 52 | 3.6 | 0 | 1024 | OK |
+| CubeGroupingSets_50000_10x5 | 3 | 50000 | 23223.4 | 2153 | 22400000 | 383.3 | 320.5 | 94 | 448.4 | 5.9 | 33.5 | 1024 | OK |
+| ExternalAggregate_100000_10grps | 3 | 100000 | 423728.8 | 236 | 8000000 | 423.1 | 393.8 | 95.8 | 121.1 | 4.6 | 0 | 1024 | OK |
+| ExternalJoin_50000_equality | 3 | 50000 | 76219.5 | 656 | 8800000 | 442.2 | 417.5 | 128.8 | 330.4 | 6 | 29.5 | 1024 | OK |
+| ExternalSort_50000_DESC | 3 | 50000 | 224215.2 | 223 | 8000000 | 533.5 | 498.9 | 116.6 | 170.9 | 4.6 | 0 | 1024 | OK |
+| ParquetRoundTrip_50000 | 3 | 50000 | 568181.8 | 88 | 0 | 427.5 | 392 | 97.6 | 54.9 | 4 | 0 | 1024 | OK |
+| ReportDatasetSnapshotReload_50000 | 3 | 50000 | 303030.3 | 165 | 0 | 524.1 | 490.2 | 129 | 171 | 4.2 | 0 | 1024 | OK |
+| ScalarSubqueryCache_50000_1000keys | 3 | 50000 | 93633 | 534 | 4000000 | 481.1 | 445.9 | 117.4 | 281.4 | 5.5 | 7.2 | 1024 | OK |
+| SpillCleanupFailure_50000 | 3 | 50000 | 1923076.9 | 26 | 331776 | 229.9 | 167.6 | 53.1 | 15.9 | 4.6 | 0 | 1024 | OK |
+| SpillCleanupSuccess_50000 | 3 | 50000 | 1612903.2 | 31 | 1327104 | 502 | 467.3 | 127.4 | 39.2 | 5.5 | 0 | 1024 | OK |
+| StreamingSelect_100000_cap50000 | 3 | 100000 | 14300 | 6993 | 0 | 419.5 | 387.8 | 86.9 | 66.4 | 0.9 | 0 | 1024 | OK |
+| TempTableSpill_50000_SELECT_INTO | 3 | 50000 | 177305 | 282 | 1327104 | 225.8 | 167.5 | 45.5 | 40.6 | 5.2 | 0 | 1024 | OK |
+| WindowFunction_ROW_NUMBER_50000 | 3 | 50000 | 35410.8 | 1412 | 11200000 | 409.9 | 365.5 | 98.9 | 350.3 | 5.5 | 17.4 | 1024 | OK |
 
 ## Environment
 
 - OS: Microsoft Windows 11 Home 10.0.26200
 - CPU: Intel(R) Core(TM) Ultra 9 275HX (24 logical cores)
 - RAM: 31.4 GB
-- Disk: NVMe MTFDKBA1T0QGN-1BN1AABGA, 953.9 GB; workspace free 284.7 GB
+- Disk: NVMe MTFDKBA1T0QGN-1BN1AABGA, 953.9 GB; workspace free 284.6 GB
 - Runtime: .NET 10.0.11, X64, Release, server GC enabled: True
 - Engine memory grant: 2048 MB
-- Commit: 0e6e691240ecdff0d9817c0e9f12e0ef8bfaa587 (release/v0.18.0); dirty: True
-- Source fingerprint: c6c0df99621155685addb01e66c11c3228b1976d22c531a24301169970bf35d3
-- Config fingerprint: acd69c240e91629d968545fd90c16a3fe9b3ed1faa50f987de7e3c106ac89266
+- Commit: cfcf5c4d7570f7514e9dbb20b1c6344ea9b825e0 (release/v0.18.0); dirty: True
+- Source fingerprint: e119456906d2c853bec28267cb5c7e3642b5834a35fdda505d1c3ef5dabeca8a
+- Config fingerprint: ccdb168aca26dfd294fc82ed735d51f67f7e43041b979389b822d364dd824e41
 
 ## Operator Status
 
