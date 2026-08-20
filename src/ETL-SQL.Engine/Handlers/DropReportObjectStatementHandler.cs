@@ -91,10 +91,15 @@ public class DropReportObjectStatementHandler(ILogger logger) : IStatementHandle
                         string filePath = context.ResolvePath(Path.Combine(themeDir, fileName));
                         if (File.Exists(filePath))
                         {
+                            if (!filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                                throw new ExecutionException($"Security Violation: Cannot delete non-JSON file via DROP THEME. Target: {filePath}", null, stmt.Line, stmt.Column);
+
                             filePath = new FileSystemPolicyAuthorizer(context.SecurityService)
                                 .Authorize(context, filePath, FileSystemAccessKind.Delete, validateFileType: false)
                                 .CanonicalPath;
+                            context.IncrementOperationCount(OperationType.FileSystem, filePath);
                             File.Delete(filePath);
+                            _logger.Debug("Deleted theme file: {Path}", filePath);
                         }
                     }
                     catch (Exception ex)
