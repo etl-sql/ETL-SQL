@@ -355,6 +355,7 @@
         ══════════════════════════════════════════════════════════════════ -->
         <UI>
             <UIRef Id="WixUI_FeatureTree" />
+            <TextStyle Id="WixUI_Font_Emphasized" FaceName="Tahoma" Size="8" Bold="yes" />
 
             <!-- ── Deployment-profile preset selector ────────────────────── -->
             <Dialog Id="DeployProfileDlg" Width="370" Height="270" Title="[ProductName] Setup">
