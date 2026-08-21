@@ -34,6 +34,7 @@ Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/relea
 - [x] Third-party dependency inventory and licenses verified (`THIRD-PARTY-INVENTORY.md` / `NOTICES.md`).
 
 ### Phase 3 — Validation & Certification Evidence
+- [ ] Enterprise Release Evidence Checklist: Verify all gates from `Enterprise_Release_Evidence_Checklist.md`, `test-lane.ps1`, `Test-PreRelease.ps1`, `Test-EnterpriseHardeningCertification.ps1`, `admin restore --validate`, `ha-soak validate`, and `SecurityBoundaryDocTests`.
 - [ ] Full local pre-release gate: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale`.
 - [ ] Confirm Engine lane and coverage gate passed with line coverage **>= 70%**.
 - [ ] Confirm Test Structure audit passed (0 milestone tests, 0 orphaned root tests).
