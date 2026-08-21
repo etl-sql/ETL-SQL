@@ -49,22 +49,26 @@ coverage, transient-error canvas retention, and host-parity regression suites ar
 Authoritative design:
 [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
 
-- [ ] Define a versioned, immutable, dependency-light `ChartSpec` contract for typed bindings, mark
+- [x] Define a versioned, immutable, dependency-light `ChartSpec` contract for typed bindings, mark
   layers, coordinate and scale intent, formatting, interactions, themes, and accessibility metadata.
-- [ ] Define typed columnar chart data preserving decimals, temporal values and offsets, booleans,
+- [x] Define typed columnar chart data preserving decimals, temporal values and offsets, booleans,
   nominal/ordinal intent, nulls, and raw values separately from formatted display values.
-- [ ] Define the deterministic `PlotPlan` contract for domains, category order, ticks, palettes,
+- [x] Define the deterministic `PlotPlan` contract for domains, category order, ticks, palettes,
   series, legends, null policy, resolved layers, and semantic summaries.
-- [ ] Keep renderer and pixel-emission dependencies out of Core; document the Core/reporting project
+- [x] Keep renderer and pixel-emission dependencies out of Core; document the Core/reporting project
   boundary and enforce it with source-boundary tests.
-- [ ] Add stable serialization/version tests for `ChartSpec`, typed chart data, and `PlotPlan`.
-- [ ] Build the cross-backend conformance harness and initial capability matrix before migrating a
+- [x] Add stable serialization/version tests for `ChartSpec`, typed chart data, and `PlotPlan`.
+- [x] Build the cross-backend conformance harness and initial capability matrix before migrating a
   visual type.
-- [ ] Capture reproducible pre-migration baselines for browser bundle size, cold start, export time,
+- [x] Capture reproducible pre-migration baselines for browser bundle size, fixture build/export time,
   output size, and memory using named fixtures.
 
 **Exit gate:** Contracts serialize deterministically, typed-value tests pass, dependency boundaries are
 enforced, the conformance harness can compare renderer results, and baseline evidence is checked in.
+
+**Completed:** Versioned BCL-only semantic contracts, typed columnar values, deterministic golden
+serialization, source-boundary enforcement, cross-backend semantic projection comparisons, a
+source-backed 36-visual capability matrix, and reproducible named-fixture baseline evidence are green.
 
 ### Phase 3 — Representative GoG Vertical Slice
 

@@ -1,104 +1,55 @@
 <#
 .SYNOPSIS
-    Measures and generates reproducible Phase 2 reporting baselines, bundle sizes, and capability matrix.
+    Validates or regenerates the reproducible Phase 2 reporting baseline evidence.
 
 .DESCRIPTION
-    Executes the reporting baseline harness to measure:
-    - Shared browser runtime asset bundle sizes (raw, gzip, brotli)
-    - Cold-start compile latencies for representative visual fixtures
-    - Multi-format export throughput (Markdown, CSV, SVG)
-    - Memory allocation per fixture
-    - Comprehensive 36-visual-type capability matrix
+    Measures shared runtime bundle sizes, representative report fixture build and
+    export costs, and the source-backed 36-visual capability matrix. Browser paint
+    and heap measurements are explicitly reported as unavailable because this
+    harness does not use browser instrumentation.
 
 .OUTPUTS
-    - docs/benchmarks/reporting-phase2-baselines.md
-    - docs/benchmarks/reporting-phase2-baselines.json
+    docs/benchmarks/reporting-phase2-baselines.md
+    docs/benchmarks/reporting-phase2-baselines.json
 #>
 
 [CmdletBinding()]
-param(
-    [switch]$CheckOnly
-)
+param([switch]$CheckOnly)
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$outputDir = Join-Path $repoRoot "docs\benchmarks"
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+$outputDir = Join-Path $repoRoot 'docs\benchmarks'
+$previousOutputDir = $env:ETLSQL_REPORT_BASELINE_OUTPUT_DIR
+$previousBranch = $env:ETLSQL_REPORT_BASELINE_BRANCH
+$previousVersion = $env:ETLSQL_REPORT_BASELINE_VERSION
 
-if (-not (Test-Path $outputDir)) {
-    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-}
+try {
+    $env:ETLSQL_REPORT_BASELINE_BRANCH = (git -C $repoRoot branch --show-current).Trim()
+    $env:ETLSQL_REPORT_BASELINE_VERSION = '0.19.0-phase2'
 
-Write-Host "Executing Reporting Phase 2 Baseline Measurement Suite..." -ForegroundColor Cyan
+    if ($CheckOnly) {
+        Remove-Item Env:ETLSQL_REPORT_BASELINE_OUTPUT_DIR -ErrorAction SilentlyContinue
+        Write-Host 'Validating Reporting Phase 2 baseline suite without changing evidence files...' -ForegroundColor Cyan
+        dotnet test $testProject --filter 'FullyQualifiedName~ReportingBaselineTests' --verbosity minimal --no-restore
+    }
+    else {
+        $env:ETLSQL_REPORT_BASELINE_OUTPUT_DIR = $outputDir
+        Write-Host 'Measuring and writing Reporting Phase 2 baseline evidence...' -ForegroundColor Cyan
+        dotnet test $testProject --filter 'FullyQualifiedName~FullBaselineHarness_RunsAndGeneratesMarkdownAndJsonReports' --verbosity minimal --no-restore
+    }
 
-# Run the xUnit baseline test suite to ensure fixtures and matrix validate
-$testOutput = dotnet test "$repoRoot\tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" --filter "FullyQualifiedName~ReportingBaselineTests" --verbosity normal
+    if ($LASTEXITCODE -ne 0) {
+        throw "Reporting baseline tests failed with exit code $LASTEXITCODE."
+    }
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Baseline tests failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-# Run a dedicated lightweight C# runner to extract the exact measurements to JSON & Markdown
-$runnerCode = @"
-using System;
-using System.IO;
-using System.Text.Json;
-using System.Threading.Tasks;
-using ETL_SQL.Reporting.Baselines;
-using ETL_SQL.Tests.Reporting.Baselines;
-
-public static class Program
-{
-    public static async Task Main(string[] args)
-    {
-        var repoRoot = args.Length > 0 ? args[0] : Directory.GetCurrentDirectory();
-        var report = await ReportingBaselineMeasurementHarness.RunFullBaselineAsync(repoRoot);
-        
-        var mdPath = Path.Combine(repoRoot, "docs", "benchmarks", "reporting-phase2-baselines.md");
-        var jsonPath = Path.Combine(repoRoot, "docs", "benchmarks", "reporting-phase2-baselines.json");
-        
-        Directory.CreateDirectory(Path.GetDirectoryName(mdPath)!);
-        
-        var mdContent = ReportingBaselineMeasurementHarness.FormatMarkdownReport(report);
-        await File.WriteAllTextAsync(mdPath, mdContent);
-        
-        var jsonContent = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(jsonPath, jsonContent);
-        
-        Console.WriteLine($"Generated baseline report: {mdPath}");
-        Console.WriteLine($"Generated baseline JSON:   {jsonPath}");
+    if (-not $CheckOnly) {
+        Write-Host "Generated: $(Join-Path $outputDir 'reporting-phase2-baselines.md')" -ForegroundColor Green
+        Write-Host "Generated: $(Join-Path $outputDir 'reporting-phase2-baselines.json')" -ForegroundColor Green
     }
 }
-"@
-
-# Execute harness extraction test
-$extractTest = dotnet test "$repoRoot\tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" --filter "FullyQualifiedName~FullBaselineHarness_RunsAndGeneratesMarkdownAndJsonReports"
-
-# Run inline execution script using the compiled test assembly
-$pwshScript = @"
-Add-Type -Path '$repoRoot\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Core.dll'
-Add-Type -Path '$repoRoot\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Reporting.dll'
-Add-Type -Path '$repoRoot\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Engine.dll'
-Add-Type -Path '$repoRoot\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Tests.dll'
-
-`$task = [ETL_SQL.Tests.Reporting.Baselines.ReportingBaselineMeasurementHarness]::RunFullBaselineAsync('$repoRoot')
-`$task.Wait()
-`$report = `$task.Result
-
-`$md = [ETL_SQL.Tests.Reporting.Baselines.ReportingBaselineMeasurementHarness]::FormatMarkdownReport(`$report)
-`$mdPath = Join-Path '$outputDir' 'reporting-phase2-baselines.md'
-[System.IO.File]::WriteAllText(`$mdPath, `$md)
-
-`$jsonOpts = [System.Text.Json.JsonSerializerOptions]::new()
-`$jsonOpts.WriteIndented = `$true
-`$json = [System.Text.Json.JsonSerializer]::Serialize(`$report, `$jsonOpts)
-`$jsonPath = Join-Path '$outputDir' 'reporting-phase2-baselines.json'
-[System.IO.File]::WriteAllText(`$jsonPath, `$json)
-
-Write-Host "Generated: `$mdPath" -ForegroundColor Green
-Write-Host "Generated: `$jsonPath" -ForegroundColor Green
-"@
-
-Invoke-Expression $pwshScript
-
-Write-Host "Reporting Phase 2 Baseline measurements generated successfully." -ForegroundColor Green
+finally {
+    $env:ETLSQL_REPORT_BASELINE_OUTPUT_DIR = $previousOutputDir
+    $env:ETLSQL_REPORT_BASELINE_BRANCH = $previousBranch
+    $env:ETLSQL_REPORT_BASELINE_VERSION = $previousVersion
+}

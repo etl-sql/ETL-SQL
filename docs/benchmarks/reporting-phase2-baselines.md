@@ -1,6 +1,6 @@
 # Phase 2 Reporting & Visuals Baseline Report
 
-> **Timestamp (UTC):** 2026-08-21 11:27:07 | **Branch:** `test/reporting-phase2-baselines` | **Engine Version:** `0.19.0-dev`
+> **Timestamp (UTC):** 2026-08-21 12:23:21 | **Branch:** `feat/reporting-phase2-contracts` | **Engine Version:** `0.19.0-phase2`
 
 ---
 
@@ -26,16 +26,16 @@ Measures physical payload sizes of client-side scripts, CSS styles, and library 
 
 ## 2. Representative Visual Fixture Baselines
 
-Measures cold compilation latency, export throughput (Markdown, CSV, SVG), output payload sizes, and engine memory allocation across the named representative fixtures.
+Measures end-to-end fixture build time, export throughput (Markdown, CSV, SVG), output payload sizes, and process allocations across the named representative fixtures. The first fixture in a fresh test process includes runtime JIT cost. CSV is 0 B for these chart-only fixtures because the CSV renderer exports tabular visuals only.
 
-| Fixture | Visual Type | Cold Compile | Markdown Export | CSV Export | SVG Export | Manifest JSON | Memory Allocated |
+| Fixture | Visual Type | Fixture Build | Markdown Export | CSV Export | SVG Export | Manifest JSON | Process Allocated |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `bar_category_revenue` | `BAR` | 247.89 ms | 166.681 ms (8.8 KB) | 0.433 ms (0 B) | 2.918 ms (1.8 KB) | 3.7 KB | 7.43 MB |
-| `bar_with_goal_rule` | `BAR` | 23.78 ms | 9.702 ms (11.2 KB) | 0.005 ms (0 B) | 0.027 ms (1.9 KB) | 4.6 KB | 6.48 MB |
-| `combo_revenue_margin` | `COMBO` | 8.64 ms | 7.762 ms (12.6 KB) | 0.007 ms (0 B) | 0.190 ms (445 B) | 3.9 KB | 6.40 MB |
-| `donut_market_share` | `DONUT` | 13.22 ms | 6.160 ms (9.2 KB) | 0.004 ms (0 B) | 3.846 ms (1.1 KB) | 3.7 KB | 6.26 MB |
-| `line_timeseries_trend` | `LINE` | 10.41 ms | 5.706 ms (12.1 KB) | 0.005 ms (0 B) | 3.353 ms (2.3 KB) | 3.6 KB | 6.27 MB |
-| `scatter_correlation` | `SCATTER` | 6.52 ms | 4.178 ms (12.4 KB) | 0.004 ms (0 B) | 0.006 ms (439 B) | 3.3 KB | 6.35 MB |
+| `bar_category_revenue` | `BAR` | 231.84 ms | 292.873 ms (8.9 KB) | 0.430 ms (0 B) | 3.136 ms (1.8 KB) | 3.7 KB | 7.46 MB |
+| `bar_with_goal_rule` | `BAR` | 13.06 ms | 9.700 ms (11.2 KB) | 0.006 ms (0 B) | 0.045 ms (1.9 KB) | 4.7 KB | 6.52 MB |
+| `combo_revenue_margin` | `COMBO` | 9.02 ms | 8.599 ms (12.6 KB) | 0.005 ms (0 B) | 0.179 ms (445 B) | 3.9 KB | 6.48 MB |
+| `donut_market_share` | `DONUT` | 10.41 ms | 6.418 ms (9.2 KB) | 0.005 ms (0 B) | 3.751 ms (1.1 KB) | 3.7 KB | 6.31 MB |
+| `line_timeseries_trend` | `LINE` | 6.57 ms | 5.248 ms (12.2 KB) | 0.003 ms (0 B) | 2.184 ms (2.3 KB) | 3.6 KB | 6.35 MB |
+| `scatter_correlation` | `SCATTER` | 6.22 ms | 4.254 ms (12.5 KB) | 0.003 ms (0 B) | 0.006 ms (439 B) | 3.4 KB | 6.40 MB |
 
 ### Explicit Client-Side Unsupported Measurements
 - **Client Browser Paint / V8 Frame Latency**: `N/A (unsupported: requires headless Chrome CDP profiling in browser test runner)`
@@ -43,81 +43,43 @@ Measures cold compilation latency, export throughput (Markdown, CSV, SVG), outpu
 
 ---
 
-## 3. Visual Capability Matrix (All 35 Visual Types)
+## 3. Visual Capability Matrix (All 36 Visual Types)
 
-| Visual Type | Category | Browser Rendering | SVG / Static Export | PDF / Email | Terminal | Interactions | ECharts Dep | Notes |
+| Visual Type | Category | Browser | Static Export | PDF / Email | Terminal | Interactions | ECharts | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: | :--- |
-| `BAR` | Cartesian Chart | ECharts (bar) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (Bar / Braille) | Click, Drill, Cross-filter, Tooltip | Yes | Supports grouped, stacked, overlays, and custom colors |
-| `HBAR` | Cartesian Chart | ECharts (bar, inverted) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (Bar / Braille) | Click, Drill, Cross-filter, Tooltip | Yes | Horizontal layout orientation |
-| `LINE` | Cartesian Chart | ECharts (line) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (BrailleCanvas) | Click, Zoom/Pan, Tooltip | Yes | Supports smooth curves, step lines, area fill, overlays |
-| `SCATTER` | Cartesian Chart | ECharts (scatter) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (BrailleCanvas) | Click, Zoom/Pan, Brush, Tooltip | Yes | Supports X, Y, Size, and Color dimension mappings |
-| `COMBO` | Cartesian (Layered) | ECharts (multi-series bar/line) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (Braille / Text) | Click, Series toggle, Tooltip | Yes | Combines multiple BAR and LINE series with dual axes |
-| `WATERFALL` | Cartesian (Variance) | ECharts (custom bar) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Click, Tooltip | Yes | Step-wise incremental variance breakdown |
-| `BUBBLE` | Cartesian (3D) | ECharts (scatter with symbol size) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (BrailleCanvas) | Zoom/Pan, Hover, Click | Yes | Multi-dimensional bubble chart with coordinate scaling |
-| `CANDLESTICK` | Financial | ECharts (candlestick/k-line) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Zoom/Pan, Data zoom slider, Hover | Yes | Open, Close, High, Low financial visualization |
-| `PIE` | Circular / Polar | ECharts (pie) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (Text / Braille) | Slice select, Legend toggle, Tooltip | Yes | Proportional breakdown with label formatting |
-| `DONUT` | Circular / Polar | ECharts (pie with inner radius) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (Text / Braille) | Slice select, Center metric text, Tooltip | Yes | Donut variation with configurable inner hole radius |
-| `RADAR` | Polar / Multi-axis | ECharts (radar) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Hover, Legend toggle | Yes | Spider / web multi-metric polygon analysis |
-| `SUNBURST` | Hierarchical Radial | ECharts (sunburst) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Multi-level drill-down, Tooltip | Yes | Multi-level hierarchical ring visualization |
-| `BOXPLOT` | Statistical | ECharts (boxplot) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Tooltip (quartiles, outliers, min/max) | Yes | Distribution box and whisker analysis |
-| `HEATMAP` | Matrix / Grid | ECharts (heatmap) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Click, Cell hover, VisualMap filtering | Yes | 2D density / cross-tab color matrix |
-| `FUNNEL` | Flow / Conversion | ECharts (funnel) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Click, Stage select, Tooltip | Yes | Conversion pipeline stage visualization |
-| `TREEMAP` | Hierarchical | ECharts (treemap) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Drill down, Zoom, Breadcrumb navigation | Yes | Proportional nested area partitioning |
-| `SANKEY` | Flow / Network | ECharts (sankey) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Node/Edge highlight, Hover tooltip | Yes | Directed energy/cost/conversion flow mapping |
-| `NETWORK` | Graph / Topology | ECharts (graph with force layout) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Node dragging, Zoom/Pan, Click | Yes | Node-link relational topology diagram |
-| `TRELLIS` | Small Multiples | ECharts (grid multiples) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Synchronized tooltip and crosshair | Yes | Subdivided multi-panel charts partitioned by dimension |
-| `MAP` | Geographic | ECharts (map / geojson) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Region click, Zoom/Pan, GeoJSON binding | Yes | Choropleth and point mapping with bundled GeoJSON files |
-| `GANTT` | Schedule / Timeline | ECharts (custom timeline bar) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Unsupported | Hover, Milestone drill, Zoom | Yes | Project task and schedule timeline visualization |
-| `TABLE` | Tabular | Tabulator / HTML Table | Supported (Markdown / CSV / HTML) | Supported (HTML / Static Table) | Supported (Spectre Table) | Sort, Column filter, Pagination, Row click | No | Client-side sorting, formatting, and pagination via Tabulator |
-| `MATRIX` | Pivot / Matrix | Tabulator / HTML Matrix | Supported (Markdown / CSV / HTML) | Supported (HTML / Static Table) | Supported (Spectre Table) | Row/Column expand, Sorting, Aggregations | No | Cross-tabular pivot view with hierarchically grouped headers |
-| `GAUGE` | Indicator / Radial | ECharts (gauge) | Supported (SvgChartRenderer) | Supported (Chromium / Static) | Supported (Gauge bar) | Parameter binding | Yes | Single-value progress and target threshold indicator |
-| `CARD` | KPI / Metric | Native DOM Card | Supported (SVG / Markdown / HTML) | Supported (HTML / Static Card) | Supported (Spectre Panel) | Click, Navigation link | No | Summary headline number with trend and title |
-| `TEXT` | Content / Narrative | Native DOM (Markdown HTML) | Supported (Markdown / HTML) | Supported (HTML / Markdown) | Supported (Plain text / Spectre) | None | No | Markdown and rich narrative text display |
-| `IMAGE` | Media / Asset | Native DOM (img) | Supported (HTML img tag) | Supported (HTML img tag) | Unsupported | Click link | No | Static or dynamic URL image rendering |
-| `SLICER` | Filter / Control | Native DOM (Buttons/Chips) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Single/Multi selection, Parameter binding | No | Interactive categorical filter control |
-| `DATEPICKER` | Filter / Control | Native DOM (Flatpickr) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Date picker, Parameter binding | No | Interactive calendar date selector |
-| `RELDATEPICKER` | Filter / Control | Native DOM (Relative Date Menu) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Relative preset selection (Today, M-1, etc.) | No | Relative rolling date filter selector |
-| `SLIDER` | Filter / Control | Native DOM (Range input) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Range drag, Parameter binding | No | Numeric slider filter control |
-| `MULTISELECT` | Filter / Control | Native DOM (Dropdown multiselect) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Checkbox selection, Parameter binding | No | Multi-option categorical filter dropdown |
-| `SEARCH` | Filter / Control | Native DOM (Search input) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Text input search, Parameter binding | No | Full-text search box filter |
-| `CHECKBOX` | Filter / Control | Native DOM (Checkbox) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Toggle boolean, Parameter binding | No | Boolean toggle filter control |
-| `TEXTBOX` | Filter / Control | Native DOM (Text input) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Text entry, Parameter binding | No | Arbitrary text input parameter control |
-| `NUMBERBOX` | Filter / Control | Native DOM (Number input) | Unsupported (Omitted in static export) | Unsupported | Unsupported | Numeric entry, Parameter binding | No | Numeric parameter input control |
-
----
-
-## 4. How to Run the Baseline Suite & Regenerate Evidence
-
-### Automated Command (PowerShell / CI)
-To deterministically measure and re-generate `docs/benchmarks/reporting-phase2-baselines.md` and `docs/benchmarks/reporting-phase2-baselines.json`:
-
-```powershell
-pwsh -File ./scripts/Measure-ReportingBaselines.ps1
-```
-
-### Unit Test Discovery & Matrix Validation
-To run the automated xUnit suite that verifies all 36 visual types in the matrix, discovers the named representative fixtures, and validates AST parsing and manifest compilation:
-
-```powershell
-dotnet test tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj --filter "FullyQualifiedName~ReportingPhase2BaselineTests"
-```
-
----
-
-## 5. How to Interpret Baseline Results
-
-1. **Shared Runtime Bundle Size (Section 1)**:
-   - **Baseline:** Shipped browser runtime dependencies currently total **2.65 MB** raw (**760.9 KB** Gzip / **758.3 KB** Brotli), with `echarts.min.js` accounting for **1.07 MB** (~40% of runtime weight).
-   - **Phase 3/4 Target:** As Cartesian, radial, and layered visuals migrate to native static SVG and micro-charts without requiring client-side V8/ECharts, we will track bundle size reductions when rendering pages that do not use complex interactive ECharts widgets.
-
-2. **Cold Compile & Manifest Generation (Section 2)**:
-   - **Baseline:** Cold parse, evaluation, and manifest generation across representative `.rptsql` scripts completes in **6.5 ms – 24.0 ms** (with initial cold JIT compile for `bar_category_revenue` at ~247 ms).
-   - **Memory:** Allocations range from **6.2 MB – 7.5 MB** per cold report compile cycle.
-
-3. **Export Throughput & Output Payloads (Section 2)**:
-   - **Markdown Export:** Generates GFM-compliant markdown with embedded SVG chart blocks in **4.1 ms – 9.7 ms** with payloads ranging from **8.8 KB – 12.6 KB**.
-   - **SVG Chart Export:** Standalone static SVG rendering via `SvgChartRenderer` generates lightweight SVG vector images (**439 B – 2.3 KB**) in sub-millisecond to **3.8 ms** latency.
-
-4. **Multi-Surface Capability Matrix (Section 3)**:
-   - Tracks 36 visual types across Browser, SVG/Static, PDF/Email, Terminal, and Interactive surfaces.
-   - 21 chart types currently require ECharts for browser presentation, 2 utilize Tabulator (tables/matrices), 4 use native DOM layout (cards/text/images), and 9 are interactive form controls.
+| `BAR` | Cartesian | **TemporaryDependency** — ECharts bar | **Native** — SvgChartRenderer | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Click, drill, cross-filter, tooltip | Yes | Native static SVG exists; browser rendering still uses ECharts |
+| `HBAR` | Cartesian | **TemporaryDependency** — ECharts horizontal bar | **Native** — SvgChartRenderer | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Click, drill, cross-filter, tooltip | Yes | Native static SVG exists; browser rendering still uses ECharts |
+| `LINE` | Cartesian | **TemporaryDependency** — ECharts line | **Native** — SvgChartRenderer | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Click, zoom/pan, tooltip | Yes | Native static SVG exists; browser rendering still uses ECharts |
+| `SCATTER` | Cartesian | **TemporaryDependency** — ECharts scatter | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Click, brush, zoom/pan, tooltip | Yes | PlotPlan migration target |
+| `PIE` | Circular | **TemporaryDependency** — ECharts pie | **Native** — SvgChartRenderer | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Slice select, legend toggle, tooltip | Yes | Native static SVG exists; browser rendering still uses ECharts |
+| `DONUT` | Circular | **TemporaryDependency** — ECharts donut | **Native** — SvgChartRenderer | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Slice select, legend toggle, tooltip | Yes | Native static SVG exists; browser rendering still uses ECharts |
+| `BOXPLOT` | Statistical | **TemporaryDependency** — ECharts box plot | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Tooltip | Yes | PlotPlan migration target |
+| `TREEMAP` | Hierarchical | **TemporaryDependency** — ECharts treemap | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **SemanticFallback** — textual summary / placeholder | Drill, zoom, breadcrumb | Yes | PlotPlan migration target |
+| `HEATMAP` | Matrix / Grid | **TemporaryDependency** — ECharts heat map | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Cell click, visual-map filter, tooltip | Yes | PlotPlan migration target |
+| `COMBO` | Layered | **TemporaryDependency** — ECharts bar/line combo | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **SemanticFallback** — textual summary / placeholder | Click, series toggle, tooltip | Yes | PlotPlan migration target |
+| `TABLE` | Tabular | **ThirdPartyDependency** — Tabulator / HTML table | **Native** — Markdown, CSV, and static table exporters | **Native** — static PDF and email attachment formats | **Native** — Spectre table | Sort, filter, pagination, row click | No | Non-ECharts rendering path |
+| `CARD` | KPI | **Native** — native DOM card | **Native** — Markdown and static card exporters | **Native** — static PDF and email attachment formats | **Native** — Spectre panel | Click, navigation | No | Non-ECharts rendering path |
+| `SLICER` | Filter / Control | **Native** — native DOM control | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Selection, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `TEXT` | Narrative | **Native** — native DOM / Markdown | **Native** — Markdown and HTML | **Native** — static PDF and email attachment formats | **Native** — plain text / Spectre | None | No | Non-ECharts rendering path |
+| `GAUGE` | Indicator | **TemporaryDependency** — ECharts gauge | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Tooltip | Yes | PlotPlan migration target |
+| `FUNNEL` | Flow | **TemporaryDependency** — ECharts funnel | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Stage select, tooltip | Yes | PlotPlan migration target |
+| `WATERFALL` | Variance | **TemporaryDependency** — ECharts waterfall | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Click, tooltip | Yes | PlotPlan migration target |
+| `IMAGE` | Media | **Native** — native img element | **Native** — HTML image reference | **Native** — static PDF and email attachment formats | **SemanticFallback** — text placeholder | Click link | No | Non-ECharts rendering path |
+| `BUBBLE` | Cartesian | **TemporaryDependency** — ECharts sized scatter | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Click, zoom/pan, tooltip | Yes | PlotPlan migration target |
+| `RADAR` | Polar | **TemporaryDependency** — ECharts radar | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **SemanticFallback** — textual summary / placeholder | Hover, legend toggle | Yes | PlotPlan migration target |
+| `CANDLESTICK` | Financial | **TemporaryDependency** — ECharts candlestick | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Zoom/pan, tooltip | Yes | PlotPlan migration target |
+| `MAP` | Geographic | **TemporaryDependency** — ECharts map / GeoJSON | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **SemanticFallback** — textual summary / placeholder | Region click, zoom/pan, tooltip | Yes | PlotPlan migration target |
+| `GANTT` | Timeline | **TemporaryDependency** — ECharts custom timeline | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Hover, zoom | Yes | PlotPlan migration target |
+| `DATEPICKER` | Filter / Control | **Native** — native date control | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Date selection, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `RELDATEPICKER` | Filter / Control | **Native** — native relative-date control | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Preset selection, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `SLIDER` | Filter / Control | **Native** — native range control | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Range input, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `MULTISELECT` | Filter / Control | **Native** — native multi-select control | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Selection, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `SEARCH` | Filter / Control | **Native** — native search control | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Text input, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `CHECKBOX` | Filter / Control | **Native** — native checkbox | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Toggle, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `TEXTBOX` | Filter / Control | **Native** — native text input | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Text input, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `NUMBERBOX` | Filter / Control | **Native** — native number input | **Unsupported** — omitted from non-browser exports | **Unsupported** — interactive control is not exported | **Native** — Spectre selection summary | Numeric input, parameter binding | No | Interactive-only visual; terminal shows current selection state |
+| `SANKEY` | Flow / Network | **TemporaryDependency** — ECharts sankey | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **SemanticFallback** — textual summary / placeholder | Node/edge highlight, tooltip | Yes | PlotPlan migration target |
+| `SUNBURST` | Hierarchical | **TemporaryDependency** — ECharts sunburst | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **SemanticFallback** — textual summary / placeholder | Drill, tooltip | Yes | PlotPlan migration target |
+| `NETWORK` | Graph | **TemporaryDependency** — ECharts force graph | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **SemanticFallback** — textual summary / placeholder | Drag, zoom/pan, click | Yes | PlotPlan migration target |
+| `TRELLIS` | Small Multiples | **TemporaryDependency** — ECharts trellis | **TemporaryDependency** — ECharts SSR SVG (SvgChartRenderer emits a semantic placeholder if SSR is unavailable) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre terminal renderer | Synchronized tooltip | Yes | PlotPlan migration target |
+| `MATRIX` | Pivot / Matrix | **Native** — native DOM matrix | **TemporaryDependency** — ECharts SSR matrix (tabular exporters are also available) | **TemporaryDependency** — static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown | **Native** — Spectre matrix | Expand/collapse, sorting, aggregation | Yes | Browser runtime dispatches MATRIX to renderMatrix; the static ECharts renderer still supports it |

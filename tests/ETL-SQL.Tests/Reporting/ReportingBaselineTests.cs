@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Reporting.Baselines;
 using ETL_SQL.Tests.Reporting.Baselines;
 using Xunit;
@@ -12,6 +16,9 @@ namespace ETL_SQL.Tests.Reporting;
 
 public class ReportingBaselineTests
 {
+    private static readonly Lazy<Task<IReadOnlyList<FixtureMeasurement>>> FixtureMeasurements =
+        new(() => ReportingBaselineMeasurementHarness.MeasureRepresentativeFixturesAsync(GetRepoRoot()));
+
     private static string GetRepoRoot()
     {
         var current = AppContext.BaseDirectory;
@@ -40,11 +47,25 @@ public class ReportingBaselineTests
             Assert.NotNull(entry);
             Assert.False(string.IsNullOrWhiteSpace(entry.Name));
             Assert.False(string.IsNullOrWhiteSpace(entry.Category));
-            Assert.False(string.IsNullOrWhiteSpace(entry.BrowserRendering));
-            Assert.False(string.IsNullOrWhiteSpace(entry.SvgStaticExport));
-            Assert.False(string.IsNullOrWhiteSpace(entry.PdfEmailExport));
-            Assert.False(string.IsNullOrWhiteSpace(entry.Terminal));
+            Assert.False(string.IsNullOrWhiteSpace(entry.Browser.Implementation));
+            Assert.False(string.IsNullOrWhiteSpace(entry.StaticExport.Implementation));
+            Assert.False(string.IsNullOrWhiteSpace(entry.PdfEmailExport.Implementation));
+            Assert.False(string.IsNullOrWhiteSpace(entry.Terminal.Implementation));
         }
+    }
+
+    [Fact]
+    public void CapabilityMatrix_TracksSourceBackedRendererBoundaries()
+    {
+        var nativeSvg = new[] { VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Pie, VisualType.Donut };
+        Assert.Equal(nativeSvg.Order(), VisualCapabilityMatrix.NativeSvgVisualTypes.Order());
+
+        Assert.Equal(23, VisualCapabilityMatrix.EChartsVisualTypes.Count);
+        Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Matrix).Browser.Level);
+        Assert.Equal(CapabilityLevel.TemporaryDependency, VisualCapabilityMatrix.Get(VisualType.Matrix).StaticExport.Level);
+        Assert.Equal(CapabilityLevel.SemanticFallback, VisualCapabilityMatrix.Get(VisualType.Map).Terminal.Level);
+        Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Gantt).Terminal.Level);
+        Assert.Equal(CapabilityLevel.Unsupported, VisualCapabilityMatrix.Get(VisualType.Slicer).StaticExport.Level);
     }
 
     [Theory]
@@ -69,14 +90,15 @@ public class ReportingBaselineTests
 
         Assert.NotNull(ast);
         Assert.NotEmpty(ast.Statements);
+        Assert.DoesNotContain(ast.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
 
-        var measurements = await ReportingBaselineMeasurementHarness.MeasureRepresentativeFixturesAsync(repoRoot);
+        var measurements = await FixtureMeasurements.Value;
         var fixtureName = Path.GetFileNameWithoutExtension(fixtureFileName);
         var fixtureMeasure = measurements.FirstOrDefault(m => m.FixtureName.Equals(fixtureName, StringComparison.OrdinalIgnoreCase));
 
         Assert.NotNull(fixtureMeasure);
         Assert.Equal(expectedVisualType.ToUpperInvariant(), fixtureMeasure.VisualType);
-        Assert.True(fixtureMeasure.ColdStartMs > 0);
+        Assert.True(fixtureMeasure.FixtureBuildMs > 0);
         Assert.True(fixtureMeasure.ManifestJsonBytes > 0);
     }
 
@@ -135,5 +157,19 @@ public class ReportingBaselineTests
         Assert.Contains("Phase 2 Reporting & Visuals Baseline Report", md);
         Assert.Contains("Visual Capability Matrix", md);
         Assert.Contains("bar_category_revenue", md);
+
+        var outputDir = Environment.GetEnvironmentVariable("ETLSQL_REPORT_BASELINE_OUTPUT_DIR");
+        if (!string.IsNullOrWhiteSpace(outputDir))
+        {
+            Directory.CreateDirectory(outputDir);
+            await File.WriteAllTextAsync(Path.Combine(outputDir, "reporting-phase2-baselines.md"), md);
+            await File.WriteAllTextAsync(
+                Path.Combine(outputDir, "reporting-phase2-baselines.json"),
+                JsonSerializer.Serialize(report, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    Converters = { new JsonStringEnumConverter() }
+                }));
+        }
     }
 }

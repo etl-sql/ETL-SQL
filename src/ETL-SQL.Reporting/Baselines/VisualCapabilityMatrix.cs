@@ -3,514 +3,161 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Reporting.Baselines;
 
-/// <summary>
-/// Represents the capability and multi-surface rendering status for a specific visual type.
-/// </summary>
-public record VisualCapabilityEntry(
-    VisualType Type,
-    string Name,
-    string Category,
-    string BrowserRendering,
-    string SvgStaticExport,
-    string PdfEmailExport,
-    string Terminal,
-    string Interactions,
-    bool HasEChartsDependency,
-    string Notes);
+public enum CapabilityLevel { Native, SemanticFallback, ThirdPartyDependency, TemporaryDependency, Unsupported }
+
+public sealed record SurfaceCapability(CapabilityLevel Level, string Implementation, string Notes = "");
+
+public sealed record VisualCapabilityEntry(
+    VisualType Type, string Name, string Category,
+    SurfaceCapability Browser, SurfaceCapability StaticExport,
+    SurfaceCapability PdfEmailExport, SurfaceCapability Terminal,
+    string Interactions, bool HasEChartsDependency, string Notes);
 
 /// <summary>
-/// Authoritative capability matrix covering every visual type in ETL-SQL and its current
-/// multi-surface support status (Browser, SVG/Static, PDF/Email, Terminal, Interactions, ECharts).
+/// Source-backed inventory of the current rendering paths. TemporaryDependency
+/// identifies Phase 3 replacement work; it is not a claim of native support.
 /// </summary>
 public static class VisualCapabilityMatrix
 {
-    private static readonly Lazy<IReadOnlyList<VisualCapabilityEntry>> _entries = new(BuildMatrix);
+    private static readonly HashSet<VisualType> NativeSvgCharts =
+    [
+        VisualType.Bar, VisualType.HorizontalBar, VisualType.Line,
+        VisualType.Pie, VisualType.Donut
+    ];
 
-    public static IReadOnlyList<VisualCapabilityEntry> AllCapabilities => _entries.Value;
+    private static readonly HashSet<VisualType> EChartsCharts =
+    [
+        VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Scatter,
+        VisualType.Pie, VisualType.Donut, VisualType.BoxPlot, VisualType.Treemap,
+        VisualType.HeatMap, VisualType.Combo, VisualType.Gauge, VisualType.Funnel,
+        VisualType.Waterfall, VisualType.Bubble, VisualType.Radar, VisualType.Candlestick,
+        VisualType.Map, VisualType.Gantt, VisualType.Sankey, VisualType.Sunburst,
+        VisualType.Network, VisualType.Trellis, VisualType.Matrix
+    ];
+
+    private static readonly HashSet<VisualType> TerminalSemanticFallbacks =
+    [
+        VisualType.Combo, VisualType.Treemap, VisualType.Image, VisualType.Radar,
+        VisualType.Map, VisualType.Sankey, VisualType.Sunburst, VisualType.Network
+    ];
+
+    private static readonly Lazy<IReadOnlyList<VisualCapabilityEntry>> Entries = new(BuildMatrix);
+
+    public static IReadOnlyList<VisualCapabilityEntry> AllCapabilities => Entries.Value;
+    public static IReadOnlySet<VisualType> NativeSvgVisualTypes => NativeSvgCharts;
+    public static IReadOnlySet<VisualType> EChartsVisualTypes => EChartsCharts;
+    public static IReadOnlySet<VisualType> TerminalFallbackVisualTypes => TerminalSemanticFallbacks;
 
     public static VisualCapabilityEntry Get(VisualType type) =>
-        AllCapabilities.FirstOrDefault(e => e.Type == type)
+        AllCapabilities.FirstOrDefault(entry => entry.Type == type)
         ?? throw new KeyNotFoundException($"No capability entry found for VisualType.{type}");
 
     public static string ToMarkdownTable()
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("| Visual Type | Category | Browser Rendering | SVG / Static Export | PDF / Email | Terminal | Interactions | ECharts Dep | Notes |");
-        sb.AppendLine("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: | :--- |");
-
-        foreach (var c in AllCapabilities)
+        var builder = new StringBuilder();
+        builder.AppendLine("| Visual Type | Category | Browser | Static Export | PDF / Email | Terminal | Interactions | ECharts | Notes |");
+        builder.AppendLine("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: | :--- |");
+        foreach (var capability in AllCapabilities)
         {
-            var echartsBadge = c.HasEChartsDependency ? "Yes" : "No";
-            sb.AppendLine($"| `{c.Name}` | {c.Category} | {c.BrowserRendering} | {c.SvgStaticExport} | {c.PdfEmailExport} | {c.Terminal} | {c.Interactions} | {echartsBadge} | {c.Notes} |");
+            builder.AppendLine($"| `{capability.Name}` | {capability.Category} | {Format(capability.Browser)} | {Format(capability.StaticExport)} | {Format(capability.PdfEmailExport)} | {Format(capability.Terminal)} | {capability.Interactions} | {(capability.HasEChartsDependency ? "Yes" : "No")} | {capability.Notes} |");
         }
 
-        return sb.ToString();
+        return builder.ToString();
     }
 
-    public static string ToJson(bool indented = true)
-    {
-        return JsonSerializer.Serialize(AllCapabilities, new JsonSerializerOptions
+    public static string ToJson(bool indented = true) =>
+        JsonSerializer.Serialize(AllCapabilities, new JsonSerializerOptions
         {
             WriteIndented = indented,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            Converters = { new JsonStringEnumConverter() }
         });
-    }
 
-    private static List<VisualCapabilityEntry> BuildMatrix()
+    private static string Format(SurfaceCapability capability) =>
+        $"**{capability.Level}** — {capability.Implementation}" +
+        (string.IsNullOrWhiteSpace(capability.Notes) ? string.Empty : $" ({capability.Notes})");
+
+    private static List<VisualCapabilityEntry> BuildMatrix() =>
+    [
+        Chart(VisualType.Bar, "BAR", "Cartesian", "bar", "Click, drill, cross-filter, tooltip"),
+        Chart(VisualType.HorizontalBar, "HBAR", "Cartesian", "horizontal bar", "Click, drill, cross-filter, tooltip"),
+        Chart(VisualType.Line, "LINE", "Cartesian", "line", "Click, zoom/pan, tooltip"),
+        Chart(VisualType.Scatter, "SCATTER", "Cartesian", "scatter", "Click, brush, zoom/pan, tooltip"),
+        Chart(VisualType.Pie, "PIE", "Circular", "pie", "Slice select, legend toggle, tooltip"),
+        Chart(VisualType.Donut, "DONUT", "Circular", "donut", "Slice select, legend toggle, tooltip"),
+        Chart(VisualType.BoxPlot, "BOXPLOT", "Statistical", "box plot", "Tooltip"),
+        Chart(VisualType.Treemap, "TREEMAP", "Hierarchical", "treemap", "Drill, zoom, breadcrumb"),
+        Chart(VisualType.HeatMap, "HEATMAP", "Matrix / Grid", "heat map", "Cell click, visual-map filter, tooltip"),
+        Chart(VisualType.Combo, "COMBO", "Layered", "bar/line combo", "Click, series toggle, tooltip"),
+        Control(VisualType.Table, "TABLE", "Tabular", "Tabulator / HTML table", "Markdown, CSV, and static table exporters", "Spectre table", "Sort, filter, pagination, row click", browserLevel: CapabilityLevel.ThirdPartyDependency),
+        Control(VisualType.Card, "CARD", "KPI", "native DOM card", "Markdown and static card exporters", "Spectre panel", "Click, navigation"),
+        Control(VisualType.Slicer, "SLICER", "Filter / Control", "native DOM control", "omitted from non-browser exports", "Spectre selection summary", "Selection, parameter binding", false),
+        Control(VisualType.Text, "TEXT", "Narrative", "native DOM / Markdown", "Markdown and HTML", "plain text / Spectre", "None"),
+        Chart(VisualType.Gauge, "GAUGE", "Indicator", "gauge", "Tooltip"),
+        Chart(VisualType.Funnel, "FUNNEL", "Flow", "funnel", "Stage select, tooltip"),
+        Chart(VisualType.Waterfall, "WATERFALL", "Variance", "waterfall", "Click, tooltip"),
+        Control(VisualType.Image, "IMAGE", "Media", "native img element", "HTML image reference", "text placeholder", "Click link"),
+        Chart(VisualType.Bubble, "BUBBLE", "Cartesian", "sized scatter", "Click, zoom/pan, tooltip"),
+        Chart(VisualType.Radar, "RADAR", "Polar", "radar", "Hover, legend toggle"),
+        Chart(VisualType.Candlestick, "CANDLESTICK", "Financial", "candlestick", "Zoom/pan, tooltip"),
+        Chart(VisualType.Map, "MAP", "Geographic", "map / GeoJSON", "Region click, zoom/pan, tooltip"),
+        Chart(VisualType.Gantt, "GANTT", "Timeline", "custom timeline", "Hover, zoom"),
+        Control(VisualType.DatePicker, "DATEPICKER", "Filter / Control", "native date control", "omitted from non-browser exports", "Spectre selection summary", "Date selection, parameter binding", false),
+        Control(VisualType.RelDatePicker, "RELDATEPICKER", "Filter / Control", "native relative-date control", "omitted from non-browser exports", "Spectre selection summary", "Preset selection, parameter binding", false),
+        Control(VisualType.Slider, "SLIDER", "Filter / Control", "native range control", "omitted from non-browser exports", "Spectre selection summary", "Range input, parameter binding", false),
+        Control(VisualType.MultiSelect, "MULTISELECT", "Filter / Control", "native multi-select control", "omitted from non-browser exports", "Spectre selection summary", "Selection, parameter binding", false),
+        Control(VisualType.Search, "SEARCH", "Filter / Control", "native search control", "omitted from non-browser exports", "Spectre selection summary", "Text input, parameter binding", false),
+        Control(VisualType.Checkbox, "CHECKBOX", "Filter / Control", "native checkbox", "omitted from non-browser exports", "Spectre selection summary", "Toggle, parameter binding", false),
+        Control(VisualType.Textbox, "TEXTBOX", "Filter / Control", "native text input", "omitted from non-browser exports", "Spectre selection summary", "Text input, parameter binding", false),
+        Control(VisualType.Numberbox, "NUMBERBOX", "Filter / Control", "native number input", "omitted from non-browser exports", "Spectre selection summary", "Numeric input, parameter binding", false),
+        Chart(VisualType.Sankey, "SANKEY", "Flow / Network", "sankey", "Node/edge highlight, tooltip"),
+        Chart(VisualType.Sunburst, "SUNBURST", "Hierarchical", "sunburst", "Drill, tooltip"),
+        Chart(VisualType.Network, "NETWORK", "Graph", "force graph", "Drag, zoom/pan, click"),
+        Chart(VisualType.Trellis, "TRELLIS", "Small Multiples", "trellis", "Synchronized tooltip"),
+        new(
+            VisualType.Matrix, "MATRIX", "Pivot / Matrix",
+            new(CapabilityLevel.Native, "native DOM matrix"),
+            new(CapabilityLevel.TemporaryDependency, "ECharts SSR matrix", "tabular exporters are also available"),
+            new(CapabilityLevel.TemporaryDependency, "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown"),
+            new(CapabilityLevel.Native, "Spectre matrix"),
+            "Expand/collapse, sorting, aggregation", true,
+            "Browser runtime dispatches MATRIX to renderMatrix; the static ECharts renderer still supports it")
+    ];
+
+    private static VisualCapabilityEntry Chart(VisualType type, string name, string category, string chartKind, string interactions)
     {
-        return new List<VisualCapabilityEntry>
-        {
-            // ── Cartesian Charts ──────────────────────────────────────────────
-            new(
-                VisualType.Bar,
-                "BAR",
-                "Cartesian Chart",
-                "ECharts (bar)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (Bar / Braille)",
-                "Click, Drill, Cross-filter, Tooltip",
-                true,
-                "Supports grouped, stacked, overlays, and custom colors"
-            ),
-            new(
-                VisualType.HorizontalBar,
-                "HBAR",
-                "Cartesian Chart",
-                "ECharts (bar, inverted)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (Bar / Braille)",
-                "Click, Drill, Cross-filter, Tooltip",
-                true,
-                "Horizontal layout orientation"
-            ),
-            new(
-                VisualType.Line,
-                "LINE",
-                "Cartesian Chart",
-                "ECharts (line)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (BrailleCanvas)",
-                "Click, Zoom/Pan, Tooltip",
-                true,
-                "Supports smooth curves, step lines, area fill, overlays"
-            ),
-            new(
-                VisualType.Scatter,
-                "SCATTER",
-                "Cartesian Chart",
-                "ECharts (scatter)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (BrailleCanvas)",
-                "Click, Zoom/Pan, Brush, Tooltip",
-                true,
-                "Supports X, Y, Size, and Color dimension mappings"
-            ),
-            new(
-                VisualType.Combo,
-                "COMBO",
-                "Cartesian (Layered)",
-                "ECharts (multi-series bar/line)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (Braille / Text)",
-                "Click, Series toggle, Tooltip",
-                true,
-                "Combines multiple BAR and LINE series with dual axes"
-            ),
-            new(
-                VisualType.Waterfall,
-                "WATERFALL",
-                "Cartesian (Variance)",
-                "ECharts (custom bar)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Click, Tooltip",
-                true,
-                "Step-wise incremental variance breakdown"
-            ),
-            new(
-                VisualType.Bubble,
-                "BUBBLE",
-                "Cartesian (3D)",
-                "ECharts (scatter with symbol size)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (BrailleCanvas)",
-                "Zoom/Pan, Hover, Click",
-                true,
-                "Multi-dimensional bubble chart with coordinate scaling"
-            ),
-            new(
-                VisualType.Candlestick,
-                "CANDLESTICK",
-                "Financial",
-                "ECharts (candlestick/k-line)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Zoom/Pan, Data zoom slider, Hover",
-                true,
-                "Open, Close, High, Low financial visualization"
-            ),
-
-            // ── Radial / Polar Charts ─────────────────────────────────────────
-            new(
-                VisualType.Pie,
-                "PIE",
-                "Circular / Polar",
-                "ECharts (pie)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (Text / Braille)",
-                "Slice select, Legend toggle, Tooltip",
-                true,
-                "Proportional breakdown with label formatting"
-            ),
-            new(
-                VisualType.Donut,
-                "DONUT",
-                "Circular / Polar",
-                "ECharts (pie with inner radius)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (Text / Braille)",
-                "Slice select, Center metric text, Tooltip",
-                true,
-                "Donut variation with configurable inner hole radius"
-            ),
-            new(
-                VisualType.Radar,
-                "RADAR",
-                "Polar / Multi-axis",
-                "ECharts (radar)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Hover, Legend toggle",
-                true,
-                "Spider / web multi-metric polygon analysis"
-            ),
-            new(
-                VisualType.Sunburst,
-                "SUNBURST",
-                "Hierarchical Radial",
-                "ECharts (sunburst)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Multi-level drill-down, Tooltip",
-                true,
-                "Multi-level hierarchical ring visualization"
-            ),
-
-            // ── Statistical & Distribution ───────────────────────────────────
-            new(
-                VisualType.BoxPlot,
-                "BOXPLOT",
-                "Statistical",
-                "ECharts (boxplot)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Tooltip (quartiles, outliers, min/max)",
-                true,
-                "Distribution box and whisker analysis"
-            ),
-            new(
-                VisualType.HeatMap,
-                "HEATMAP",
-                "Matrix / Grid",
-                "ECharts (heatmap)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Click, Cell hover, VisualMap filtering",
-                true,
-                "2D density / cross-tab color matrix"
-            ),
-            new(
-                VisualType.Funnel,
-                "FUNNEL",
-                "Flow / Conversion",
-                "ECharts (funnel)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Click, Stage select, Tooltip",
-                true,
-                "Conversion pipeline stage visualization"
-            ),
-
-            // ── Hierarchical & Network ────────────────────────────────────────
-            new(
-                VisualType.Treemap,
-                "TREEMAP",
-                "Hierarchical",
-                "ECharts (treemap)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Drill down, Zoom, Breadcrumb navigation",
-                true,
-                "Proportional nested area partitioning"
-            ),
-            new(
-                VisualType.Sankey,
-                "SANKEY",
-                "Flow / Network",
-                "ECharts (sankey)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Node/Edge highlight, Hover tooltip",
-                true,
-                "Directed energy/cost/conversion flow mapping"
-            ),
-            new(
-                VisualType.Network,
-                "NETWORK",
-                "Graph / Topology",
-                "ECharts (graph with force layout)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Node dragging, Zoom/Pan, Click",
-                true,
-                "Node-link relational topology diagram"
-            ),
-            new(
-                VisualType.Trellis,
-                "TRELLIS",
-                "Small Multiples",
-                "ECharts (grid multiples)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Synchronized tooltip and crosshair",
-                true,
-                "Subdivided multi-panel charts partitioned by dimension"
-            ),
-
-            // ── Geographic ───────────────────────────────────────────────────
-            new(
-                VisualType.Map,
-                "MAP",
-                "Geographic",
-                "ECharts (map / geojson)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Region click, Zoom/Pan, GeoJSON binding",
-                true,
-                "Choropleth and point mapping with bundled GeoJSON files"
-            ),
-            new(
-                VisualType.Gantt,
-                "GANTT",
-                "Schedule / Timeline",
-                "ECharts (custom timeline bar)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Unsupported",
-                "Hover, Milestone drill, Zoom",
-                true,
-                "Project task and schedule timeline visualization"
-            ),
-
-            // ── Tabular & Data Grid ───────────────────────────────────────────
-            new(
-                VisualType.Table,
-                "TABLE",
-                "Tabular",
-                "Tabulator / HTML Table",
-                "Supported (Markdown / CSV / HTML)",
-                "Supported (HTML / Static Table)",
-                "Supported (Spectre Table)",
-                "Sort, Column filter, Pagination, Row click",
-                false,
-                "Client-side sorting, formatting, and pagination via Tabulator"
-            ),
-            new(
-                VisualType.Matrix,
-                "MATRIX",
-                "Pivot / Matrix",
-                "Tabulator / HTML Matrix",
-                "Supported (Markdown / CSV / HTML)",
-                "Supported (HTML / Static Table)",
-                "Supported (Spectre Table)",
-                "Row/Column expand, Sorting, Aggregations",
-                false,
-                "Cross-tabular pivot view with hierarchically grouped headers"
-            ),
-
-            // ── Indicators & Structural ───────────────────────────────────────
-            new(
-                VisualType.Gauge,
-                "GAUGE",
-                "Indicator / Radial",
-                "ECharts (gauge)",
-                "Supported (SvgChartRenderer)",
-                "Supported (Chromium / Static)",
-                "Supported (Gauge bar)",
-                "Parameter binding",
-                true,
-                "Single-value progress and target threshold indicator"
-            ),
-            new(
-                VisualType.Card,
-                "CARD",
-                "KPI / Metric",
-                "Native DOM Card",
-                "Supported (SVG / Markdown / HTML)",
-                "Supported (HTML / Static Card)",
-                "Supported (Spectre Panel)",
-                "Click, Navigation link",
-                false,
-                "Summary headline number with trend and title"
-            ),
-            new(
-                VisualType.Text,
-                "TEXT",
-                "Content / Narrative",
-                "Native DOM (Markdown HTML)",
-                "Supported (Markdown / HTML)",
-                "Supported (HTML / Markdown)",
-                "Supported (Plain text / Spectre)",
-                "None",
-                false,
-                "Markdown and rich narrative text display"
-            ),
-            new(
-                VisualType.Image,
-                "IMAGE",
-                "Media / Asset",
-                "Native DOM (img)",
-                "Supported (HTML img tag)",
-                "Supported (HTML img tag)",
-                "Unsupported",
-                "Click link",
-                false,
-                "Static or dynamic URL image rendering"
-            ),
-
-            // ── Interactive Filters & Controls ────────────────────────────────
-            new(
-                VisualType.Slicer,
-                "SLICER",
-                "Filter / Control",
-                "Native DOM (Buttons/Chips)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Single/Multi selection, Parameter binding",
-                false,
-                "Interactive categorical filter control"
-            ),
-            new(
-                VisualType.DatePicker,
-                "DATEPICKER",
-                "Filter / Control",
-                "Native DOM (Flatpickr)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Date picker, Parameter binding",
-                false,
-                "Interactive calendar date selector"
-            ),
-            new(
-                VisualType.RelDatePicker,
-                "RELDATEPICKER",
-                "Filter / Control",
-                "Native DOM (Relative Date Menu)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Relative preset selection (Today, M-1, etc.)",
-                false,
-                "Relative rolling date filter selector"
-            ),
-            new(
-                VisualType.Slider,
-                "SLIDER",
-                "Filter / Control",
-                "Native DOM (Range input)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Range drag, Parameter binding",
-                false,
-                "Numeric slider filter control"
-            ),
-            new(
-                VisualType.MultiSelect,
-                "MULTISELECT",
-                "Filter / Control",
-                "Native DOM (Dropdown multiselect)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Checkbox selection, Parameter binding",
-                false,
-                "Multi-option categorical filter dropdown"
-            ),
-            new(
-                VisualType.Search,
-                "SEARCH",
-                "Filter / Control",
-                "Native DOM (Search input)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Text input search, Parameter binding",
-                false,
-                "Full-text search box filter"
-            ),
-            new(
-                VisualType.Checkbox,
-                "CHECKBOX",
-                "Filter / Control",
-                "Native DOM (Checkbox)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Toggle boolean, Parameter binding",
-                false,
-                "Boolean toggle filter control"
-            ),
-            new(
-                VisualType.Textbox,
-                "TEXTBOX",
-                "Filter / Control",
-                "Native DOM (Text input)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Text entry, Parameter binding",
-                false,
-                "Arbitrary text input parameter control"
-            ),
-            new(
-                VisualType.Numberbox,
-                "NUMBERBOX",
-                "Filter / Control",
-                "Native DOM (Number input)",
-                "Unsupported (Omitted in static export)",
-                "Unsupported",
-                "Unsupported",
-                "Numeric entry, Parameter binding",
-                false,
-                "Numeric parameter input control"
-            )
-        };
+        var nativeSvg = NativeSvgCharts.Contains(type);
+        var terminalFallback = TerminalSemanticFallbacks.Contains(type);
+        return new(
+            type, name, category,
+            new(CapabilityLevel.TemporaryDependency, $"ECharts {chartKind}"),
+            nativeSvg
+                ? new(CapabilityLevel.Native, "SvgChartRenderer")
+                : new(CapabilityLevel.TemporaryDependency, "ECharts SSR SVG", "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"),
+            new(CapabilityLevel.TemporaryDependency, "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown"),
+            terminalFallback
+                ? new(CapabilityLevel.SemanticFallback, "textual summary / placeholder")
+                : new(CapabilityLevel.Native, "Spectre terminal renderer"),
+            interactions, true,
+            nativeSvg ? "Native static SVG exists; browser rendering still uses ECharts" : "PlotPlan migration target");
     }
+
+    private static VisualCapabilityEntry Control(
+        VisualType type, string name, string category, string browser,
+        string staticExport, string terminal, string interactions, bool exported = true,
+        CapabilityLevel browserLevel = CapabilityLevel.Native) =>
+        new(
+            type, name, category,
+            new(browserLevel, browser),
+            new(exported ? CapabilityLevel.Native : CapabilityLevel.Unsupported, staticExport),
+            new(exported ? CapabilityLevel.Native : CapabilityLevel.Unsupported,
+                exported ? "static PDF and email attachment formats" : "interactive control is not exported"),
+            new(TerminalSemanticFallbacks.Contains(type) ? CapabilityLevel.SemanticFallback : CapabilityLevel.Native, terminal),
+            interactions, false,
+            exported ? "Non-ECharts rendering path" : "Interactive-only visual; terminal shows current selection state");
 }

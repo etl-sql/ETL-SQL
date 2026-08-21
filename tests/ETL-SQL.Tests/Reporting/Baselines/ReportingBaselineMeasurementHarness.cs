@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Interfaces;
@@ -38,7 +39,7 @@ public record BundleAssetMeasurement(
 public record FixtureMeasurement(
     string FixtureName,
     string VisualType,
-    double ColdStartMs,
+    double FixtureBuildMs,
     double MarkdownExportMs,
     long MarkdownOutputBytes,
     double CsvExportMs,
@@ -46,7 +47,7 @@ public record FixtureMeasurement(
     double SvgExportMs,
     long SvgOutputBytes,
     long ManifestJsonBytes,
-    long MemoryAllocatedBytes,
+    long ProcessAllocatedBytes,
     string ClientPaintLatency = "N/A (unsupported: requires browser CDP instrumentation)",
     string ClientHeapFootprint = "N/A (unsupported: requires browser CDP instrumentation)");
 
@@ -70,8 +71,10 @@ public class ReportingBaselineMeasurementHarness
 
         return new BaselineReport(
             TimestampUtc: DateTime.UtcNow,
-            GitBranch: "test/reporting-phase2-baselines",
-            EngineVersion: "0.19.0-dev",
+            GitBranch: Environment.GetEnvironmentVariable("ETLSQL_REPORT_BASELINE_BRANCH") ?? "unknown",
+            EngineVersion: Environment.GetEnvironmentVariable("ETLSQL_REPORT_BASELINE_VERSION")
+                ?? typeof(ReportManifest).Assembly.GetName().Version?.ToString()
+                ?? "unknown",
             BundleAssets: bundleAssets,
             TotalBundleRawBytes: bundleAssets.Sum(b => b.RawBytes),
             TotalBundleGzipBytes: bundleAssets.Sum(b => b.GzipBytes),
@@ -137,12 +140,19 @@ public class ReportingBaselineMeasurementHarness
             var fixtureName = Path.GetFileNameWithoutExtension(file);
             var script = await File.ReadAllTextAsync(file);
 
-            // Cold start measurement (Lexer -> Parser -> Evaluator -> ManifestBuilder)
-            long memBefore = GC.GetAllocatedBytesForCurrentThread();
+            // End-to-end fixture build (Lexer -> Parser -> Evaluator -> ManifestBuilder).
+            // The first fixture in a fresh test process also includes runtime JIT costs.
+            long memBefore = GC.GetTotalAllocatedBytes(precise: false);
             var swCold = Stopwatch.StartNew();
 
             var tokens = new Lexer(script).Tokenize();
             var ast = new CoreParser(tokens, script).Parse();
+            var parserErrors = ast.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+            if (parserErrors.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Fixture '{fixtureName}' has parser errors: {string.Join("; ", parserErrors.Select(d => d.Message))}");
+            }
 
             var evaluator = CreateBaselineEvaluator();
             await evaluator.Evaluate(ast);
@@ -150,7 +160,7 @@ public class ReportingBaselineMeasurementHarness
             var manifestBuilder = new ManifestBuilder(evaluator);
             var manifest = await manifestBuilder.BuildAsync(file);
             swCold.Stop();
-            long memAfter = GC.GetAllocatedBytesForCurrentThread();
+            long memAfter = GC.GetTotalAllocatedBytes(precise: false);
 
             // Export measurements
             var swMd = Stopwatch.StartNew();
@@ -187,7 +197,7 @@ public class ReportingBaselineMeasurementHarness
             results.Add(new FixtureMeasurement(
                 FixtureName: fixtureName,
                 VisualType: visualType,
-                ColdStartMs: Math.Round(swCold.Elapsed.TotalMilliseconds, 2),
+                FixtureBuildMs: Math.Round(swCold.Elapsed.TotalMilliseconds, 2),
                 MarkdownExportMs: Math.Round(swMd.Elapsed.TotalMilliseconds, 3),
                 MarkdownOutputBytes: mdBytes,
                 CsvExportMs: Math.Round(swCsv.Elapsed.TotalMilliseconds, 3),
@@ -195,7 +205,7 @@ public class ReportingBaselineMeasurementHarness
                 SvgExportMs: Math.Round(swSvg.Elapsed.TotalMilliseconds, 3),
                 SvgOutputBytes: svgBytes,
                 ManifestJsonBytes: manifestBytes,
-                MemoryAllocatedBytes: Math.Max(0, memAfter - memBefore)));
+                ProcessAllocatedBytes: Math.Max(0, memAfter - memBefore)));
         }
 
         return results;
@@ -281,14 +291,14 @@ public class ReportingBaselineMeasurementHarness
         sb.AppendLine();
         sb.AppendLine("## 2. Representative Visual Fixture Baselines");
         sb.AppendLine();
-        sb.AppendLine("Measures cold compilation latency, export throughput (Markdown, CSV, SVG), output payload sizes, and engine memory allocation across the named representative fixtures.");
+        sb.AppendLine("Measures end-to-end fixture build time, export throughput (Markdown, CSV, SVG), output payload sizes, and process allocations across the named representative fixtures. The first fixture in a fresh test process includes runtime JIT cost. CSV is 0 B for these chart-only fixtures because the CSV renderer exports tabular visuals only.");
         sb.AppendLine();
-        sb.AppendLine("| Fixture | Visual Type | Cold Compile | Markdown Export | CSV Export | SVG Export | Manifest JSON | Memory Allocated |");
+        sb.AppendLine("| Fixture | Visual Type | Fixture Build | Markdown Export | CSV Export | SVG Export | Manifest JSON | Process Allocated |");
         sb.AppendLine("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |");
 
         foreach (var f in report.FixtureMeasurements)
         {
-            sb.AppendLine($"| `{f.FixtureName}` | `{f.VisualType}` | {f.ColdStartMs:F2} ms | {f.MarkdownExportMs:F3} ms ({FormatBytes(f.MarkdownOutputBytes)}) | {f.CsvExportMs:F3} ms ({FormatBytes(f.CsvOutputBytes)}) | {f.SvgExportMs:F3} ms ({FormatBytes(f.SvgOutputBytes)}) | {FormatBytes(f.ManifestJsonBytes)} | {FormatBytes(f.MemoryAllocatedBytes)} |");
+            sb.AppendLine($"| `{f.FixtureName}` | `{f.VisualType}` | {f.FixtureBuildMs:F2} ms | {f.MarkdownExportMs:F3} ms ({FormatBytes(f.MarkdownOutputBytes)}) | {f.CsvExportMs:F3} ms ({FormatBytes(f.CsvOutputBytes)}) | {f.SvgExportMs:F3} ms ({FormatBytes(f.SvgOutputBytes)}) | {FormatBytes(f.ManifestJsonBytes)} | {FormatBytes(f.ProcessAllocatedBytes)} |");
         }
 
         sb.AppendLine();
@@ -298,9 +308,9 @@ public class ReportingBaselineMeasurementHarness
         sb.AppendLine();
         sb.AppendLine("---");
         sb.AppendLine();
-        sb.AppendLine("## 3. Visual Capability Matrix (All 35 Visual Types)");
+        sb.AppendLine($"## 3. Visual Capability Matrix (All {report.CapabilityMatrix.Count} Visual Types)");
         sb.AppendLine();
-        sb.AppendLine(VisualCapabilityMatrix.ToMarkdownTable());
+        sb.Append(VisualCapabilityMatrix.ToMarkdownTable());
 
         return sb.ToString();
     }
