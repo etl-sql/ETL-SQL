@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using ETL_SQL.Reporting.Semantics;
 
 namespace ETL_SQL.Reporting
 {
@@ -182,6 +183,21 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("chartConfig")]
         public string? ChartConfig { get; set; }
 
+        /// <summary>Renderer-neutral author intent for migrated named visuals.</summary>
+        [JsonPropertyName("chartSpec")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ChartSpec? ChartSpec { get; set; }
+
+        /// <summary>Typed chart values retained separately from formatted display rows.</summary>
+        [JsonPropertyName("chartData")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ChartDataSet? ChartData { get; set; }
+
+        /// <summary>Resolved semantic plan consumed by every migrated backend.</summary>
+        [JsonPropertyName("plotPlan")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public PlotPlan? PlotPlan { get; set; }
+
         [JsonPropertyName("defaultValue")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultValue { get; set; }
@@ -221,6 +237,10 @@ namespace ETL_SQL.Reporting
         /// <summary>Data rows — each row is a list of cell values (strings for portability).</summary>
         [JsonPropertyName("rows")]
         public List<List<string?>> Rows { get; set; } = new();
+
+        /// <summary>Original engine values used to build typed chart data; never emitted to clients.</summary>
+        [JsonIgnore]
+        internal List<Dictionary<string, object?>> RawRows { get; } = new();
 
         /// <summary>Deferred row payload for large visuals stored outside the manifest.</summary>
         [JsonPropertyName("rowsSource")]

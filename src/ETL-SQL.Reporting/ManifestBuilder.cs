@@ -504,6 +504,9 @@ namespace ETL_SQL.Reporting
             vm.Columns = newVm.Columns;
             vm.Error = newVm.Error;
             vm.ChartConfig = newVm.ChartConfig;
+            vm.ChartSpec = newVm.ChartSpec;
+            vm.ChartData = newVm.ChartData;
+            vm.PlotPlan = newVm.PlotPlan;
             vm.Options = newVm.Options;
             vm.Actions = newVm.Actions;
             vm.Interactions = newVm.Interactions;

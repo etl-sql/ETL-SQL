@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using ETL_SQL.Reporting.Renderers;
+using ETL_SQL.Reporting.Semantics;
 
 namespace ETL_SQL.Reporting
 {
@@ -12,6 +14,7 @@ namespace ETL_SQL.Reporting
     /// </summary>
     public class SvgChartRenderer
     {
+        private readonly PlotPlanSvgRenderer _plotPlan = new();
         private const int W = 600;
         private const int H = 350;
         private const int PL = 60;   // pad left
@@ -22,8 +25,11 @@ namespace ETL_SQL.Reporting
         private static readonly string[] Colors =
             { "#5470c6", "#91cc75", "#fac858", "#ee6666", "#73c0de", "#3ba272", "#fc8452" };
 
-        public string? Render(VisualManifest v) =>
-            v.VisualType.ToUpperInvariant() switch
+        public string Render(PlotPlan plan) => _plotPlan.Render(plan);
+
+        public string? Render(VisualManifest v) => v.PlotPlan is not null
+            ? _plotPlan.Render(v.PlotPlan)
+            : v.VisualType.ToUpperInvariant() switch
             {
                 "BAR" => RenderBar(v, false),
                 "HBAR" => RenderBar(v, true),

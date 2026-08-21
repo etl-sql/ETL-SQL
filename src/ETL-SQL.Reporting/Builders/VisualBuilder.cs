@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Reporting.Semantics.Runtime;
 
 namespace ETL_SQL.Reporting.Builders
 {
@@ -239,12 +240,20 @@ namespace ETL_SQL.Reporting.Builders
                             CurrentLevel = currentLevel,
                             CanDrillUp = drillState.Path.Count > 0
                         };
+                        // Aggregation changed row shape; rebuild typed values from the resolved display rows.
+                        vm.RawRows.Clear();
                     }
 
                     ResolveActionValues(vm);
                     CalculateSummaries(vStmt, vm);
                     if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
                         ApplyTableMappings(vStmt, vm);
+                    if (NamedVisualChartLowerer.Supports(vStmt.VisualType))
+                    {
+                        vm.ChartSpec = new NamedVisualChartLowerer().Lower(vStmt, vm);
+                        vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
+                        vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData);
+                    }
                     vm.ChartConfig = renderer.Render(vm);
                 }
                 catch (Exception ex)
@@ -510,6 +519,13 @@ namespace ETL_SQL.Reporting.Builders
                 foreach (var row in batch.Rows)
                 {
                     targetRows.Add(vm.Columns.Select(c => row[c]?.ToString()).ToList());
+                    if (targetRows == vm.Rows)
+                    {
+                        vm.RawRows.Add(vm.Columns.ToDictionary(
+                            column => column,
+                            column => row[column],
+                            StringComparer.OrdinalIgnoreCase));
+                    }
 
                     if (targetRows == vm.Rows && vm.RowDetailKeys != null && vStmt.RowDetail != null)
                     {

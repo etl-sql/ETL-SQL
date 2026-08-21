@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ETL_SQL.Reporting.Renderers;
+using ETL_SQL.Reporting.Semantics;
 
 namespace ETL_SQL.Reporting
 {
@@ -19,12 +20,16 @@ namespace ETL_SQL.Reporting
         private readonly StatisticalRenderer _statistical = new();
         private readonly SpecializedRenderer _specialized = new();
         private readonly GeographicRenderer _geographic = new();
+        private readonly PlotPlanEChartsRenderer _plotPlan = new();
+
+        public string Render(PlotPlan plan) => _plotPlan.Render(plan);
 
         /// <summary>
         /// Returns an ECharts option JSON string, or null for non-chart visual types.
         /// </summary>
-        public string? Render(VisualManifest visual) =>
-            visual.VisualType.ToUpperInvariant() switch
+        public string? Render(VisualManifest visual) => visual.PlotPlan is not null
+            ? _plotPlan.Render(visual.PlotPlan)
+            : visual.VisualType.ToUpperInvariant() switch
             {
                 "BAR" => _cartesian.Render(visual, "bar"),
                 "LINE" => _cartesian.Render(visual, "line"),

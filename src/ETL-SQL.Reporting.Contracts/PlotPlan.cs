@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 
 namespace ETL_SQL.Reporting.Semantics;
 
@@ -44,7 +45,11 @@ public sealed record ResolvedMarkLayer(
     MarkKind Mark,
     int ZIndex,
     string? SeriesKey,
-    ImmutableArray<ResolvedDatum> Data);
+    ImmutableArray<ResolvedDatum> Data)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<StyleToken> Style { get; init; }
+}
 
 public sealed record ResolvedNullPolicy(
     NullValuePolicy Default,
@@ -74,6 +79,12 @@ public sealed record PlotPlan(
     string AccessibleSummary,
     SemanticFallback Fallback) : IVersionedChartContract
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CoordinateSpec? Coordinate { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<StyleToken> Style { get; init; }
+
     public static PlotPlan Create(
         string specId,
         PlotBounds bounds,
@@ -85,7 +96,9 @@ public sealed record PlotPlan(
         ResolvedNullPolicy nulls,
         string accessibleSummary,
         SemanticFallback fallback,
-        string? title = null) => new(
+        string? title = null,
+        CoordinateSpec? coordinate = null,
+        ImmutableArray<StyleToken> style = default) => new(
             ChartContractVersions.PlotPlanSchema,
             ChartContractVersions.Current,
             specId,
@@ -98,7 +111,11 @@ public sealed record PlotPlan(
             layers,
             nulls,
             accessibleSummary,
-            fallback);
+            fallback)
+        {
+            Coordinate = coordinate,
+            Style = style
+        };
 
     public void Validate()
     {
@@ -108,6 +125,8 @@ public sealed record PlotPlan(
             throw new InvalidDataException("Plot bounds must have positive width and height.");
         if (string.IsNullOrWhiteSpace(AccessibleSummary))
             throw new InvalidDataException("A PlotPlan must include an accessible summary.");
+        if (!Style.IsDefault)
+            ChartContractValidation.RequireUnique(Style.Select(token => token.Name), "plot style token");
 
         ChartContractValidation.RequireUnique(Scales.Select(scale => scale.Id), "resolved scale id");
         ChartContractValidation.RequireUnique(Series.Select(series => series.Key), "series key");

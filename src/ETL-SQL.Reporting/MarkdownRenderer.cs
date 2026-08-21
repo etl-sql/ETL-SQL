@@ -212,9 +212,11 @@ namespace ETL_SQL.Reporting
                             sb.AppendLine($"<!-- ECHART:{v.ChartConfig} -->");
                             sb.AppendLine();
                         }
-                        // Embed SVG image for static export. Prefer real ECharts (SSR);
-                        // fall back to the static renderer when there's no option or SSR fails.
-                        var svgStr = EChartsSsrRenderer.Shared.RenderSvg(v) ?? _svg.Render(v);
+                        // Migrated visuals use native PlotPlan SVG and never initialize server-side
+                        // V8. Non-migrated visuals retain the compatibility SSR path.
+                        var svgStr = v.PlotPlan is not null
+                            ? _svg.Render(v)
+                            : EChartsSsrRenderer.Shared.RenderSvg(v) ?? _svg.Render(v);
                         if (svgStr != null)
                         {
                             var uri = SvgEmbed.ToDataUri(svgStr);
