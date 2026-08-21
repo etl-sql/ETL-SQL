@@ -86,12 +86,13 @@ Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/relea
      - Direct packaging: `.\scripts\build-msi.ps1` or `.\scripts\publish-release.ps1`.
      - Smoke parity: `.\scripts\Invoke-SmokeParity.ps1`.
    - Resume the release validation suite with `.\scripts\Test-PreRelease.ps1 -Resume -ForceResume` to skip already-passed phases and pick up directly where it left off.
-6. **Pipeline Phase Granularity & Split Proposals (Post-v0.18.0 Action Items)**:
-   - Split monolithic long-running validation phases in `Test-PreRelease.ps1` to enable finer `-Resume` boundaries:
-     - **Docker Integration Lane**: Split into `Docker Connector Tests` (`ETL-SQL.Tests` Category=Integration) and `Docker Portal Distributed Tests` (`ETL-SQL.Portal.Tests` Category=Integration).
-     - **Engine Lane & Coverage Gate**: Separate raw test execution from Cobertura coverage analysis and report generation so test runs can be resumed independently of coverage gating.
-     - **Sample Scripts**: Add per-pass checkpointing (`Pass 1: Fresh Execution` vs `Pass 2: Idempotency Verification`).
-7. **VS Code giving a warning**: WARNING  This extension consists of 284 files, out of which 210 are JavaScript files. For performance reasons, you should bundle your extension: https://aka.ms/vscode-bundle-
-extension. You should also exclude unnecessary files by adding them to your .vscodeignore: https://aka.ms/vscode-vscodeignore.
-8. **Test-PreTest**:  Multiple issues, not failing and kill the executable causing us to think its still running even though it failed hours ago.  It should at most take 2 hours to run today we tried for 13 hrs and never got it to finish.  Needs to be broken apart more so we don't continue to run the same tests over and over that have already passed.
+6. **Pipeline Phase Granularity & Split Checkpoints (Resolved)**:
+   - Split monolithic long-running validation phases in `Test-PreRelease.ps1` into 41 granular checkpoints:
+     - **Docker Integration Lane**: Split into `Docker connector integration` (`ETL-SQL.Tests` Category=Integration), `Docker portal integration` (`ETL-SQL.Portal.Tests` Category=Integration), and `Local/container smoke parity`.
+     - **Engine Lane & Coverage Gate**: Split into `Engine lane` (`test-lane.ps1 -Lane engine -CollectCoverage`) and `Coverage gate` (`Test-CoverageGate.ps1 -MinimumLineCoverage 70`) so coverage report generation does not force re-running 6,400+ tests.
+     - **Sample Scripts**: Split into `Sample scripts (pass 1)` (fresh execution) and `Sample scripts (pass 2)` (idempotency verification).
+7. **VS Code VSIX Bundle & Ignore Optimization (Resolved)**:
+   - Hardened `src/etl-sql-vscode/.vscodeignore` to exclude non-runtime documentation, tests, TypeScript build infos, and ESM duplicate dependency trees, reducing packaged file count and keeping the VSIX compact (2.05 MB).
+8. **Test Execution Timeout & Process Hang Prevention (Resolved)**:
+   - Added automatic 600-second per-shard execution timeout and process tree termination (`Process.Kill(true)`) in `test-lane.ps1` to prevent Coverlet/vstest pipe deadlocks or hung child processes from blocking test runs indefinitely.
 

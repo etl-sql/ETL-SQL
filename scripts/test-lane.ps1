@@ -208,10 +208,23 @@ function Invoke-ShardedEngineTests {
         if ($NoRestore) { $args += "--no-restore" }
         if ($NoBuild) { $args += "--no-build" }
         if ($CollectCoverage) { $args += "--collect:XPlat Code Coverage" }
-        & dotnet @args
-        if ($LASTEXITCODE -ne 0) {
+        $processInfo = [System.Diagnostics.ProcessStartInfo]::new("dotnet")
+        foreach ($a in $args) {
+            $processInfo.ArgumentList.Add($a)
+        }
+        $processInfo.UseShellExecute = $false
+        $process = [System.Diagnostics.Process]::Start($processInfo)
+        $completed = $process.WaitForExit(600000)
+        if (-not $completed) {
+            try { $process.Kill($true) } catch { }
+            Write-Warning "Engine shard $number timed out after 600s and was terminated."
+            $script:LaneFailures += "engine shard $number/$ShardCount (timed out)"
+            $script:LaneExitCode = 1
+            continue
+        }
+        if ($process.ExitCode -ne 0) {
             $script:LaneFailures += "engine shard $number/$ShardCount"
-            $script:LaneExitCode = $LASTEXITCODE
+            $script:LaneExitCode = $process.ExitCode
         }
 
         $trxPath = Join-Path $EvidenceDirectory ("shard-{0:D2}.trx" -f $number)

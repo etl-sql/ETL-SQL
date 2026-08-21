@@ -1,359 +1,448 @@
 # ETL-SQL Product Roadmap
 
-This document tracks high-level product tracks and candidate phases. Their actionable work is
-decomposed in `TODO.md`. Once an initiative is verified, record its notable outcome in
-`CHANGELOG.md` and retire completed TODO and roadmap entries that no longer describe future work.
-Release-specific detail belongs in the release notes under `docs/releases/`.
+This document describes future product outcomes and their sequencing. Detailed architecture belongs
+in the linked decisions and architecture documents, executable release work belongs in `TODO.md`,
+and shipped outcomes belong in `CHANGELOG.md` and the release notes under `docs/releases/`.
 
-The stable deployment-profile topology, provider, binding, state, and authority decisions are defined
-in [`docs/architecture/DeploymentProfiles.md`](docs/architecture/DeploymentProfiles.md). The
-Enterprise operating model and trust hierarchy are defined in
+The stable deployment-profile topology is defined in
+[`docs/architecture/DeploymentProfiles.md`](docs/architecture/DeploymentProfiles.md). The Enterprise
+operating model and trust hierarchy are defined in
 [`docs/architecture/roadmaps/Enterprise_Platform_Strategy.md`](docs/architecture/roadmaps/Enterprise_Platform_Strategy.md).
 
----
+## Roadmap Authoring Contract
 
-## Future Candidate Phases
+Before adding or revising an entry:
 
-### SaaS Multi-Tenancy — Tenant Portability & Migration (Export/Import)
+1. **Verify current reality.** Search source, tests, `TODO.md`, `CHANGELOG.md`, release notes, and
+   authoritative architecture documents. Do not describe an implemented capability as future work.
+2. **Separate outcome from mechanism.** State the user or operator outcome first. Treat libraries,
+   providers, protocols, performance figures, and implementation shapes as candidates unless an ADR
+   has accepted them.
+3. **Declare maturity and horizon.** Every entry must use one status and one horizon from the
+   vocabularies below.
+4. **Keep one coherent initiative per entry.** Split work when parts have different dependencies,
+   security boundaries, delivery horizons, or independent user value.
+5. **Name boundaries and dependencies.** State what the initiative intentionally excludes and which
+   contracts or earlier initiatives it requires.
+6. **Deliver vertical slices.** Stages must produce independently testable product capability, not
+   merely layers of internal plumbing or an exhaustive all-at-once migration.
+7. **Make claims testable.** Exact latency, size, parity, coverage, or visual-count claims require a
+   defined fixture and verification method. Otherwise describe them as targets to measure.
+8. **Preserve sources of truth.** Detailed design belongs in an ADR or architecture document;
+   executable tasks belong in `TODO.md`; shipped outcomes belong in `CHANGELOG.md` and release notes.
+9. **Retire completed work.** When the promised outcome ships and is verified, remove the roadmap
+   entry or rewrite it to describe only the genuinely remaining increment.
+10. **Respect product boundaries.** Roadmap work must preserve script-first authoring, transparent
+    transformation, portability, lineage, Zero-Trust execution, deployment profiles, and the
+    third-party dependency policy.
 
-**Authoritative design:** [`TenantPortability.md`](docs/architecture/TenantPortability.md), which owns
-the bundle, classification, rebinding, import, cutover, rollback, deletion, and customer-exit
-contracts and the remaining delivery scope.
+### Status vocabulary
 
-Customers must be able to enter or leave ETL-SQL SaaS without rewriting pipeline/report logic or
-depending on provider-owned infrastructure. The guarantee is full-fidelity migration of portable
-customer-owned artifacts and eligible tenant metadata, with explicit rebinding of environment-owned
-identities, resources, secrets, keys, and infrastructure. It is deliberately not "zero-loss":
-secrets, ephemeral security material, active sessions, leases, caches, and in-flight operations are
-not transferable as durable tenant ownership, and saying so plainly is more defensible than a claim
-the product cannot keep.
+- **Exploring** — The problem is plausible, but product or architecture decisions remain open.
+- **Accepted** — The outcome and governing architecture are accepted, but work is not scheduled.
+- **Planned** — Delivery is selected for an upcoming milestone and decomposed in `TODO.md`.
+- **In Progress** — Implementation is active; the entry states only remaining scope and risks.
+- **Incremental** — A useful baseline has shipped; the entry describes the next independently
+  valuable expansion.
 
-**Delivery stage.** Large evidence/content exports, incremental deltas, cross-provider scale
-optimization, and Shared-source isolation mature without weakening the initial exit guarantee.
-One unified bundle continues to extend the existing Portal configuration export and Orchestrator
-promotion package; do not introduce a competing packaging model or represent the bundle as an opaque
-database backup.
+### Horizon vocabulary
 
-**Certification gate.** A representative tenant moves SaaS cluster A → SaaS cluster B and SaaS →
-self-hosted Enterprise without changing business logic; export under concurrent activity produces a
-declared consistency point and cutover creates no duplicate schedules; every eligible resource
-reconciles by stable ID, count, hash, ownership, and ACL, with every exclusion visible and justified;
-secret scanners prove no credential, key, capability, or other tenant's record enters the package;
-tampered, replayed, cross-tenant, or oversized packages fail before target activation; and a customer
-can validate and retain the export with published tooling and customer-held keys after source SaaS
-access is gone.
+- **Foundation** — Required before dependent product work can safely proceed.
+- **Next** — A leading candidate for the next planning horizon.
+- **Later** — Valuable but not currently a dependency or launch gate.
+- **Launch Gate** — Required before a named deployment profile or hosted service can make its
+  production claim.
 
-### Platform — Native Object Storage for HA Artifacts
+### Required entry shape
 
-**Candidate, not scheduled.** Current High Availability (HA) deployments rely on shared network file systems (SMB/UNC) for Portal and Orchestrator artifact roots. As the SaaS offering scales, SMB becomes a significant latency bottleneck and a single point of failure (SPOF) due to file-locking contention.
-
-**Delivery stage.** This work introduces native S3 / Azure Blob Storage provider bindings for the Artifact store. It replaces the reliance on durable POSIX file semantics in HA and SaaS environments, ensuring execution checkpoints, datasets, and script histories can scale horizontally without network filesystem lock contention.
-
-### Identity — Service Accounts and M2M API Workflows
-
-**Candidate, not scheduled.** While Enterprise OIDC identity is actively maturing for human users, automated deployments (CI/CD) and integration workflows currently lack hardened Machine-to-Machine (M2M) capabilities.
-
-**Delivery stage.** This introduces formal Service Accounts, long-lived but tightly scoped API tokens, and approval workflows. It enables headless systems to securely publish `.rptsql` artifacts or trigger Orchestrator jobs without assuming a human identity or relying on legacy basic-auth patterns.
-
-### Execution — Lean Worker Profiles and Binary Trimming
-
-**Candidate, not scheduled.** The unified `ETL-SQL.exe` binary provides an excellent developer experience (DX) by bundling the Portal, Admin CLI, and Orchestrator into one drop-in executable. However, loading the entire DI graph and assemblies for these control-plane features adds unnecessary memory footprint and cold-start latency to ephemeral sandboxes.
-
-**Delivery stage.** This work leverages .NET trimming and feature flags to produce a dedicated `ETL-SQL-Engine` binary artifact. It strips out all administrative, portal, and orchestration-hosting code, leaving only the pure script evaluator and connectors. This minimizes the compute cost and attack surface inside Shared SaaS OCI sandboxes.
-
-### SaaS Testing — Chaos Engineering (Fault Injection)
-
-**Candidate, not scheduled.** Shared SaaS High Availability relies on the Orchestrator to handle node and network failures gracefully, but this is difficult to prove without deliberately destructive testing.
-
-**Delivery stage.** This phase integrates automated fault injection (e.g., Chaos Mesh) into the testing pipeline. It ensures the platform survives abrupt worker node reboots, dropped SMB packets, and database disconnects, proving that failed jobs correctly fence themselves and resume from the last valid named checkpoint.
-
-### SaaS Testing — Synthetic Monitoring (Production Canaries)
-
-**Candidate, not scheduled.** Internal staging environments cannot always replicate the specific friction points of production traffic and latency. 
-
-**Delivery stage.** This initiative deploys a persistent "Canary Tenant" in the live production environment. The canary will execute a comprehensive synthetic end-to-end workflow at strict intervals. Any deviation in correctness or latency triggers proactive alerts to platform operations before real tenants experience degradation.
-
-### Tooling & Authoring — Visual Report Builder Round-Trip Fidelity & Trivia Preservation
-
-**In Progress.** The Visual Report Builder provides bi-directional synchronization between the 12-column visual grid and `.rptsql` scripts. To ensure zero loss of developer comments and formatting during visual editing, the authoring surface requires surgical AST serialization and span-patching controls.
-
-**Remaining gaps and risk mitigations:**
-1. **LSP Host Parity (`DesignerLspHandler.cs`):** The VS Code Language Server handler currently uses legacy full-script regeneration (`StateToScript`), which risks overwriting data prep SQL if triggered directly. It must be refactored to delegate to `DesignerScriptPatcher`.
-2. **Multi-Page & CTE Regression Tests:** Expand test suites to cover scripts with multiple `CREATE PAGE` definitions (ensuring mutations on Page 2 do not shift Page 1 character spans) and complex CTE chains (`WITH cte1 AS (...), cte2 AS (...)`).
-3. **Sequential Mutation & Line-Ending Drift:** Implement fuzz/regression tests simulating 50+ consecutive visual card moves and property updates to prove that byte-offset calculations do not accumulate off-by-one errors across Windows CRLF and Linux LF environments.
-4. **Statement Body Trivia:** Harden parser preservation for comments written inside visual bodies (e.g. `-- comments inside MAPPINGS or OPTIONS blocks`).
-5. **Fault-Tolerant Canvas State:** Implement automated UI/LSP assertions verifying that transient syntax errors display inline warning badges without resetting or corrupting the WYSIWYG canvas state.
-
-### Reporting & Presentation — Grammar-of-Graphics Spec IR and Pluggable Chart Backends
-
-**Candidate, not scheduled.** (Architectural Decision Record: [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)).
-
-Visual definitions currently compile straight from the report AST into ECharts-shaped option objects in `ManifestBuilder`. The vendor's option schema has become the de facto internal contract: every downstream consumer — `report-runtime.js`, `EChartsSsrRenderer`, `PdfExporter`, `MarkdownRenderer`/`SvgChartRenderer`, and `TerminalRenderer` — re-derives meaning from it.
-
-The insight driving this track: **the grammar is the differentiator and the renderer is commodity.** A chart specification that is a first-class part of the query language gains lineage tracking, Analysis-tier lint, LSP completion, and reviewable diffs. Pixel emission is a solved problem that should be compiled, not coupled.
-
-**Design Principles and Boundaries:**
-- **Spec first, renderer second:** a neutral grammar-of-graphics IR (`ChartSpec`) representing data bindings, mark layers, scale mappings, coordinate projections, and faceting becomes the canonical contract in `ETL-SQL.Core.Reporting.Spec`.
-- **Type keywords are sugar:** existing `BAR`, `LINE`, `PIE`, `DONUT`, `WATERFALL`, `CANDLESTICK`, etc., remain the zero-friction "easy button" for authors and lower automatically into `ChartSpec`.
-- **Transparent data prep in SQL:** heavy transformations, cumulative sums, moving averages, and statistical aggregations live in SQL `#temp` tables where they are visible, testable, and lineage-tracked; `ChartSpec` focuses strictly on visual layout and mark encodings.
-- **Data delivery tiering:** lightweight **JSON Columnar vectors** for charts enable instant `JSON.parse` with 0 KB library overhead and clean Git diffs; **Apache Arrow IPC** streams are retained for high-density tables (>1,000 rows).
-- **The 8 atomic mark primitives:** all 2D visuals compile into compositions of `RECT`, `LINE`, `AREA`, `POINT`, `RULE`, `ARC`, `TEXT`, and `PATH`.
-- **First-class orthogonal faceting (`FACET (...)`):** any standard visual (`BAR`, `LINE`, `SCATTER`, `COMBO`, etc.) or `CUSTOM` visual can specify a 1D wrap `FACET (BY = Region, COLUMNS = 3, SCALES = SHARED)` or 2D matrix `FACET (ROW = ..., COLUMN = ..., SCALES = ...)` clause, generating coordinated small-multiples with synchronized axes and shared or independent scale domains.
-- **Multi-layer authoring via `CUSTOM` with `SCALES (...)`:** complex composite graphics are authored using `CREATE VISUAL <name> AS CUSTOM (...)` with dedicated spatial ($X, Y, Y_2$) and aesthetic scale blocks.
-- **Native C# static export:** server-side PDF and static report exports compile directly from `ChartSpec` into SVG XML via pure C# geometry and SkiaSharp text metrics, completely retiring `ClearScript.V8` and headless browser dependencies.
-- **Vega-Lite semantic alignment & interchange:** embedded Vega-Lite v5 JSON specifications are supported via `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`.
-- **Phased ECharts retirement via D3 micro-modules:** Tier 2 standard charts migrate to our native vector SVG engine, and Tier 3 complex visuals (Maps, Sankey, Treemap, Network) migrate to lightweight D3 micro-packages (`d3-geo`, `d3-hierarchy`, `d3-sankey`, `d3-force`), achieving a **~35 KB total standalone runtime footprint**.
-
-**Delivery Stages:**
-- **Stage 1: Neutral Spec IR and ECharts Lowering Compiler:** Implement `ChartSpec` record hierarchy (including `FacetSpec`); build `SpecDesugarer` for all 17 Tier 2 types and `TRELLIS`/`MATRIX` sugar lowering; build `SpecToEChartsCompiler`. JSON columnar vectors serialize in `VisualManifest`.
-- **Stage 2: Native C# SVG Static Export Backend:** Implement pure C# scale math (Linear, Band, Time, Log) and SkiaSharp text metrics in `SvgChartCompiler.cs`. Replaces `EChartsSsrRenderer.cs` and powers headless PDF and email exports without V8/Node.js.
-- **Stage 3: `CUSTOM` Multi-Layer Syntax, `FACET` Operator & Vega-Lite Translator:** Add parser and AST support for `CREATE VISUAL ... AS CUSTOM (...)` with `SCALES (...)` block, orthogonal `FACET (...)` clause on any visual, and `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`. *(Note: This stage establishes the `ComponentTooltipSpec` hook for the [Visual and Container Tooltips](#reporting--presentation--visual-and-container-tooltips-viz-in-tooltip) roadmap track).*
-- **Stage 4: Native Vector SVG Micro-Renderer:** Implement lightweight browser SVG/DOM renderer for Tier 2 Cartesian & Circular charts (`BAR`, `LINE`, `SCATTER`, `PIE`, `COMBO`, `WATERFALL`, faceted panels). Conditionally omit ECharts for reports containing only Tier 1 & Tier 2 visuals.
-- **Stage 5: Complete ECharts Retirement via D3:** Replace remaining Tier 3 complex visuals (`MAP` via `d3-geo`, `TREEMAP`/`SUNBURST` via `d3-hierarchy`, `SANKEY` via `d3-sankey`, `NETWORK` via `d3-force`) with specialized D3 micro-packages. Completely retire `echarts.min.js` from the repository, achieving a ~35 KB total standalone runtime footprint.
-- **Stage 6: Advanced Composite Samples & Cookbook:** Create production-grade sample scripts for high-impact composite visuals (Dumbbell variance plots, Bullet graphs with qualitative zones, Ridgeline distribution plots, and Faceted small-multiples grids). Author comprehensive guides: *"How to Build a CUSTOM Chart"*, *"Enhancing Standard Charts with Overlay Layers & Faceting"*, and add 10+ recipes to the Reporting Cookbook.
+Each entry states its status, horizon, authoritative design, problem and intended outcome, why the
+horizon is appropriate, boundaries, dependencies, vertical delivery slices, and acceptance evidence.
+Keep entries concise and link to detailed designs rather than copying them here.
 
 ---
 
-### Reporting & Presentation — Visual & Container Tooltips (Viz-in-Tooltip)
+## Foundation and Next Horizon
 
-**Candidate, not scheduled.** Modern analytical reporting frequently demands on-hover micro-visual drill-ins (e.g. hovering over a region bar or category slice reveals a filtered sparkline, subcategory breakdown bar chart, or a multi-metric KPI summary card).
+### Tooling & Authoring — Lossless Visual Report Builder Editing
 
-**Architecture Decision (Presentation Surface Contract):**
-Tooltips exist as first-class presentation targets rather than plain text strings:
-- **Simple Text (Zero-Ceremony Sugar):** `TOOLTIP (TITLE = ..., CONTENT = ...)` remains concise for standard formatted expressions.
-- **Visual & Container Tooltips:** `TOOLTIP (VISUAL = VisualName, PARAMETERS (...))` or `TOOLTIP (CONTAINER = ContainerName, PARAMETERS (...))` attaches a micro-visual or container to data points.
-- **Instant Client-Side Vector Slicing:** Hovered row values bind directly to child visual parameters in memory over pre-staged columnar vectors, rendering rich micro-visuals in $< 1\text{ ms}$ with zero server round-trip latency.
-- **Viewport Boundary Awareness:** Floating popover anchors to the hovered mark geometry with automatic flip/shift positioning to prevent viewport clipping.
+**Status:** In Progress  
+**Horizon:** Foundation  
+**Authoritative design:** [`docs/guides/tooling/report-builder.md`](docs/guides/tooling/report-builder.md)
 
-**Target Syntax Specification:**
-```sql
--- 1. Mini-chart definition (rendered only within tooltip popovers)
-CREATE VISUAL SubcategoryBreakdown AS BAR (
-  SOURCE   = #subcategory_sales,
-  MAPPINGS (X = SubCategory, Y = Revenue),
-  OPTIONS  (STYLE = COMPACT, HEIGHT = 160)
-);
+An edit to one presentation statement must not alter data-preparation SQL, unrelated presentation
+statements, comments, whitespace, or line endings. This is Gate Zero for expanding the report grammar:
+a visual editor that can overwrite script content breaks ETL-SQL's script-first contract.
 
--- 2. Parent visual binds hover event to the mini-chart with parameter context
-CREATE VISUAL CategorySales AS PIE (
-  SOURCE   = #sales,
-  MAPPINGS (CATEGORY = CategoryName, VALUE = TotalRevenue),
-  TOOLTIP  (
-    VISUAL     = SubcategoryBreakdown,
-    PARAMETERS (@selectedCategory = CategoryName)
-  )
-);
-```
+**Why now:** GoG will add nested presentation syntax. Its authoring and mutation contracts must be
+safe before that grammar broadens.
 
-**Delivery Stages:**
-1. **Spec IR & AST Extension:** Extend `TooltipSpec` in `ETL-SQL.Core.Reporting.Spec` to support `ComponentTooltipSpec(TargetVisualOrContainer, ParameterBindings)`.
-2. **Runtime Popover Host (`report-runtime.js`):** Implement floating tooltip portal mounting target visual/container with sub-pixel bounding-box collision detection.
-3. **Local Vector Cross-Filtering:** Propagate hovered row parameters to child visual dataset vectors instantaneously in browser memory.
+**Boundaries:** This work preserves source text and usable canvas state; it does not redesign the GoG
+grammar or silently normalize an author's script.
 
----
+**Dependencies:** Parser span/trivia support, `DesignerScriptPatcher`, and parity between embedded and
+LSP-hosted designer paths.
 
-### Reporting & Presentation — Data-Bound HTML/SVG Templates & Micro-Charts
+**Delivery slices:** Route the LSP host through surgical patching; add multi-page and CTE coverage;
+exercise repeated CRLF/LF mutations; preserve statement-body trivia; and retain canvas state during
+transient syntax errors. GoG syntax work must extend these same mutation primitives.
 
-**Candidate, not scheduled.** (Architectural Decision Record: [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md)).
+**Acceptance evidence:** Regression and fuzz tests prove that presentation-only mutations leave all
+out-of-scope bytes unchanged and that invalid intermediate edits do not reset the canvas.
 
-Modern analytical reporting frequently demands specialized escape hatches for bespoke infographic KPI cards, micro-visuals, status badges, and repeater cards, alongside in-cell table sparklines and card background charts, without sacrificing the script-first, Zero-Trust execution model.
+### Reporting & Presentation — Native Grammar-of-Graphics Spine
 
-**Design Principles and Boundaries:**
-- **Zero-Trust Rendering:** Custom visual extensions remain purely declarative and safe across CLI Player, VS Code, and Portal runtimes. Untrusted JavaScript execution is prohibited; all HTML/SVG templates pass through an AST-based sanitizer (stripping `<script>`, `<iframe>`, inline `on*` handlers, and `javascript:` URIs).
-- **Three-Tier Composability:** Zero-ceremony sugar for native widgets (`CARD` background sparklines, `TABLE` cell sparklines/progress bars), plus declarative Mustache macro helpers (`{{SPARKLINE(...)}}`, `{{PROGRESS_BAR(...)}}`, `{{BG_CHART(...)}}`) for freeform HTML.
-- **GoG IR Headless SVG Generation:** All micro-visuals compile directly to lightweight `<svg viewBox="...">` markup on the server via `ChartSpec` presets, ensuring instant rendering and 100% parity across browser DOM, headless PDF exports, and HTML email digests.
+**Status:** Accepted  
+**Horizon:** Next  
+**Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
 
-**Target Syntax Specification:**
-```sql
--- 1. KPI Card with subtle background trend chart (Zero-Ceremony Sugar)
-CREATE VISUAL TotalRevenueCard AS CARD (
-  SOURCE   = #current_kpi,
-  MAPPINGS (
-    VALUE      = TotalRevenue FORMAT '$#,##0',
-    TARGET     = TargetRevenue FORMAT '$#,##0',
-    COMPARISON = DeltaPercent FORMAT '+0.0%',
-    SPARKLINE  = #daily_revenue (X = SaleDate, Y = Amount, TYPE = AREA)
-  ),
-  OPTIONS (
-    SPARKLINE_POSITION = BACKGROUND,  -- BACKGROUND | BOTTOM | TOP | INLINE
-    SPARKLINE_COLOR    = '#3b82f6',
-    SPARKLINE_OPACITY  = 0.12
-  )
-);
+ETL-SQL needs its own typed, versioned visual contract so report meaning is not defined by an ECharts
+option object. Named `.rptsql` visual types remain the easy path and lower into a semantic `ChartSpec`;
+a deterministic `PlotPlan` resolves domains, ordering, ticks, palettes, null handling, and legends
+once for every renderer.
 
--- 2. Data-Bound HTML Template with Embedded Micro-Chart Macros
-CREATE VISUAL NodeClusterStatus AS HTML (
-  SOURCE   = #cluster_nodes,
-  MODE     = REPEATER,                 -- SINGLE_ROW (default) | REPEATER
-  TEMPLATE = '
-    <div class="node-card {{SeverityClass}}">
-      <div class="node-header">
-        <span class="node-name">{{HostName}}</span>
-        <span class="node-badge {{Status}}">{{Status}}</span>
-      </div>
-      <div class="node-metrics">
-        <div class="metric-row">
-          <label>CPU Utilization</label>
-          <span class="metric-val">{{CpuPercent}}%</span>
-          <div class="spark-box">
-            {{SPARKLINE(CpuHistory, TYPE="LINE", COLOR="#3b82f6", HEIGHT=20, WIDTH=70)}}
-          </div>
-        </div>
-        <div class="metric-row">
-          <label>Memory Pressure</label>
-          <div class="prog-box">
-            {{PROGRESS_BAR(MemoryPercent, MAX=100, COLOR="#f59e0b", HEIGHT=6)}}
-          </div>
-        </div>
-      </div>
-      <div class="node-bg-chart">
-        {{BG_CHART(NetworkThroughputHistory, TYPE="AREA", COLOR="#64748b", OPACITY=0.10)}}
-      </div>
-      <div class="node-footer">
-        <button class="action-btn" data-action="SET_PARAMETER" data-param="@selected_node" data-value="{{HostName}}">
-          Inspect Diagnostics →
-        </button>
-      </div>
-    </div>
-  ',
-  STYLE (
-    CSS = '
-      .node-card { position: relative; overflow: hidden; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; }
-      .node-card.critical { border-color: #ef4444; }
-      .node-bg-chart { position: absolute; bottom: 0; left: 0; right: 0; height: 60%; pointer-events: none; z-index: 0; }
-      .node-header, .node-metrics, .node-footer { position: relative; z-index: 1; }
-      .metric-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; }
-      .spark-box { width: 70px; height: 20px; }
-      .prog-box { width: 100px; height: 6px; }
-    '
-  )
-);
-```
+**Why now:** This is the common spine for safer advanced authoring, native static export,
+micro-charts, terminal reporting, renderer independence, and eventual ECharts retirement.
 
-**Delivery Stages:**
-- **Stage 1 (Headless SVG Micro-Compiler):** Implement `SvgChartCompiler.GenerateSparklineSvg(...)` and progress bar generator in `ETL-SQL.Core`.
-- **Stage 2 (`CARD` & `TABLE` Sugar Integration):** Add `SPARKLINE` mapping and `SPARKLINE_POSITION` option to `ReportParser.cs` for `CARD`; expand `TABLE` sparklines to support array columns and child sources.
-- **Stage 3 (Template Macro Engine):** Implement Mustache macro parser in `ManifestBuilder.cs` and `report-runtime.js` supporting `{{SPARKLINE}}`, `{{PROGRESS_BAR}}`, `{{BG_CHART}}`, and `{{VISUAL}}`.
-- **Stage 4 (PDF & Email Parity):** Verify pure SVG injection in `PdfExporter` and HTML email templates without external runtime dependencies.
+**Boundaries:** Data transformation remains visible in ETL-SQL and `#temp` tables. ETL-SQL learns
+from Vega-Lite but does not embed Vega-Lite JSON or accept a second runtime reporting language.
+ECharts is a temporary compiler target, not stored semantic state.
 
----
+**Dependencies:** Lossless Report Builder editing and a dependency-light Core contract; renderer and
+pixel-emission dependencies remain in the reporting layer.
 
-### Reporting & Presentation — Full-Fidelity Terminal UI (TUI) Dashboard Parity & Semantic Fallbacks
+**Delivery slices:** First prove `BAR`, `LINE`, `SCATTER`, `PIE` or `DONUT`, `COMBO`, and `RULE` across
+typed columnar data, named-syntax lowering, `PlotPlan`, transient ECharts output, native SVG, and
+terminal output. Follow with `CUSTOM`/faceting language design, broader catalog conversion, specialized
+layouts, and measured ECharts retirement.
 
-**Candidate, not scheduled.** While web dashboards are standard for business analysts, terminal-native analytical reporting is having a resurgence across DevOps, SRE, and data engineering. Viewing rich dashboards over SSH, in air-gapped bastions, inside Docker containers, or in local Terminal IDEs without port-forwarding or launching a browser is a massive operational capability.
+**Acceptance evidence:** Cross-backend golden and semantic conformance tests, a capability matrix,
+typed-value and null tests, and measured bundle, cold-start, export-time, and output-size baselines.
 
-**Design Principles and Boundaries:**
-- **GoG IR Mark-to-Terminal Lowering:** `TerminalRenderer` lowers neutral `ChartSpec` marks and scales directly to terminal primitives:
-  - `RECT` / `BAR`: Sub-character fractional vertical resolution via Unicode eighth-blocks (` ▂▃▄▅▆▇█`).
-  - `LINE` / `AREA`: High-density `BrailleCanvas` (`⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠤⠶⠛`) providing 4× resolution over standard character grids.
-  - `POINT` / `SCATTER`: Color-coded ASCII/Unicode glyphs (`●`, `▲`, `◆`, `■`, `*`).
-  - `RULE`: Box-drawing reference axes and target threshold labels (`─────── Target ($100k)`).
-  - `ARC` (Pie / Donut / Gauge): Spectre `BreakdownChart` and segmented proportional gauges.
-  - `FACET` (Trellis / Matrix): Multi-panel grid layout with coordinated axis scales.
-- **High-Fidelity Form Controls:** Elevate input controls from generic tag lists into dedicated, beautiful Spectre/Unicode widgets:
-  - `DATEPICKER` / `RELDATEPICKER`: Interactive calendar month grid (`Su Mo Tu We Th Fr Sa`) with highlighted selection.
-  - `SLIDER`: Visual ASCII track with current/min/max readouts (`[────●──────────] $450k`).
-  - `MULTISELECT` & `SLICER`: Interactive checkbox/radio pill buttons (`(•) All  ( ) West` / `[X] Enterprise  [ ] SMB`).
-  - `SEARCH` & `TEXTBOX`: Form input frames with placeholders (`[ 🔍 Search SKU... ]`).
-  - `BUTTON`: 3D/rounded push buttons (`╭──────────╮ \n │ Run ETL  │ \n ╰──────────╯`).
-- **Intelligent Semantic Fallback Engine:** 28 of 36 visuals have full high-fidelity TUI representations. For the remaining 8 complex/spatial visuals that lack a direct terminal equivalent, the renderer provides structured, informative fallbacks rather than broken outputs:
-  - `MAP` $\to$ Region/Country Top-N Bar Breakdown Table.
-  - `SANKEY` $\to$ Stage Transition Flow Table with volume and drop-off deltas.
-  - `TREEMAP` / `SUNBURST` $\to$ Indented Hierarchical Tree Table with proportional bars.
-  - `NETWORK` $\to$ Node Degree & Edge Connection Table.
-  - `IMAGE` $\to$ Filename/URL Asset Badge (`[🖼️ logo.png]`).
+### Reporting & Presentation — Native Card and Table Micro-Charts
 
-**Delivery Stages:**
-- **Stage 1 (GoG IR Terminal Compiler):** Implement `TerminalChartCompiler` lowering `ChartSpec` mark records into Braille canvas, block elements, and Spectre renderables in `ETL-SQL.Reporting`.
-- **Stage 2 (Form Controls Overhaul):** Build high-fidelity Spectre widgets for `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `CHECKBOX`, and `TEXTBOX`.
-- **Stage 3 (Semantic Fallback Engine):** Implement automated fallback tables for `MAP`, `SANKEY`, `TREEMAP`, `SUNBURST`, `NETWORK`, and `IMAGE`.
-- **Stage 4 (Keyboard Navigation & Live Filter Propagation):** Wire interactive keyboard focus, arrow-key selection, and parameter dispatch inside `ETL-SQL.TUI` and `ReportPreviewPanel.cs`.
+**Status:** Accepted  
+**Horizon:** Next  
+**Authoritative design:** [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md), subject to the GoG boundary above
+
+Cards and tables should support native sparklines and progress indicators that remain meaningful in
+browser, export, email, and terminal surfaces. Their small geometry surface makes them an early proving
+ground for the native SVG compiler.
+
+**Why now:** They deliver visible user value while exercising typed data, scale resolution, static SVG,
+and semantic fallback without waiting for the complete visual catalog.
+
+**Boundaries:** This entry excludes arbitrary HTML/CSS/SVG templates and recursive template macros.
+The semantic spec remains dependency-light; rendering and SkiaSharp code do not move into Core.
+
+**Dependencies:** The GoG vertical slice and the existing `CARD`/`TABLE` contracts.
+
+**Delivery slices:** Add one card sparkline and one table-cell progress/sparkline path, then export and
+terminal fallbacks, followed by additional native presets justified by repeated use.
+
+**Acceptance evidence:** Geometry goldens, browser/export snapshots, accessible text fallbacks, and
+measured payload/render costs across representative small and tabular datasets.
+
+### Reporting & Presentation — Semantic Terminal Chart Compilation
+
+**Status:** Accepted  
+**Horizon:** Next  
+**Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
+
+Reports should remain useful over SSH, in air-gapped environments, and in terminal workflows by
+lowering chart semantics to blocks, Braille cells, text, tables, and proportional components.
+
+**Why now:** An early terminal backend proves that `ChartSpec` and `PlotPlan` are renderer-neutral
+rather than merely a new browser chart schema.
+
+**Boundaries:** The target is semantic parity, not pixel parity. Rich form controls, full keyboard
+navigation, and elaborate TUI interaction are separate later UI work and do not block this compiler.
+
+**Dependencies:** The representative GoG vertical slice and a shared semantic fallback contract.
+
+**Delivery slices:** Render the first GoG visual set; add informative fallbacks for maps, flows,
+hierarchies, and networks; reuse the summary model for plain-text email and accessibility surfaces.
+
+**Acceptance evidence:** Terminal snapshots at supported widths, semantic assertions for values and
+ordering, fallback tests, and screen-reader/plain-text review fixtures.
+
+### Reporting & Interaction — Cascading Slicers
+
+**Status:** Accepted  
+**Horizon:** Next  
+**Authoritative design:** Not yet decided
+
+Parent filter selections should constrain descendant option sets and update invalid selections
+atomically across offline snapshots, local vectors, and live queries. Filter bindings should declare
+the relationship directly so the compiler can infer a multi-parent dependency graph and detect cycles.
+
+**Why now:** Cascading slicers are a high-value report interaction and establish the parameter-state
+semantics required by bookmarks.
+
+**Boundaries:** The design must define null, All, multi-select, invalid-selection, and offline/live
+behavior before syntax is accepted. It must not hide data transformations or introduce an independent
+control-only query language.
+
+**Dependencies:** Stable typed report data, atomic parameter updates, dependency-graph compilation,
+and Report Builder round-trip support for the accepted syntax.
+
+**Delivery slices:** One parent/child local-vector flow; multiple parents and cycle diagnostics;
+equivalent live-query ordering; offline snapshot conformance.
+
+**Acceptance evidence:** State-transition tests cover invalid descendants, null/All semantics,
+multi-select values, cycles, concurrent changes, and equivalent offline/live results.
 
 ---
 
-### Reporting & Presentation — Cascading Parameter Defaults (Dependent Slicers)
+## Later Reporting and Presentation Work
 
-**Candidate, not scheduled.** In interactive dashboards and parameterized paginated reports, filters often exhibit natural parent-child relationships (e.g. selecting `Country = 'US'` should constrain the `State` dropdown to US states, and picking a `Department` should restrict the `Manager` slicer). Currently, slicers evaluate their source datasets independently at initial report evaluation or require manually written dependent queries.
+### Reporting & Interaction — Author Bookmarks
 
-**Architecture Decision (Visual-Level Contract):**
-Dependency rules belong on the **visual control** (`CREATE VISUAL ... AS SLICER / MULTISELECT`) rather than on `DECLARE @var` or `CREATE PAGE`. This preserves the clean separation between core engine scalar variable storage and presentation-tier dataset projection, while allowing offline `.etlsnap` runtimes to filter option sets client-side from Arrow tables without server round-trips.
+**Status:** Accepted  
+**Horizon:** Later  
+**Authoritative design:** Not yet decided
 
-**Target Syntax Specification:**
-```sql
-CREATE VISUAL StateSlicer AS SLICER (
-  SOURCE     = #geo_hierarchy,
-  MAPPINGS   (VALUE = StateName, FILTER_BY = CountryName),
-  DEPENDS_ON = @country,
-  ON_INVALID = RESET_DEFAULT,   -- RESET_DEFAULT | SELECT_FIRST | CLEAR
-  DEFAULT    = 'All',
-  ACTIONS    (ON_CHANGE = SET_PARAMETER(@state, StateName))
-);
-```
+Authors need source-controlled report states that atomically apply parameters, active page, and
+supported presentation state. A bookmark is distinct from a user-created Portal saved view and from
+transient URL state.
 
-**Delivery Stages:**
-1. **Parser & AST Extension:** Add `DEPENDS_ON = @param` and `ON_INVALID = RESET_DEFAULT | SELECT_FIRST | CLEAR` to `VisualDefinition` and `ReportParser.cs`, plus `FILTER_BY` support in `MAPPINGS`.
-2. **Client-Side Dependency Propagation (`report-runtime.js`):** When `@country` changes, the browser runtime automatically filters the child visual's Arrow dataset by `CountryName == @country`. If the current value of `@state` is not in the filtered options, it evaluates the `ON_INVALID` action immediately with zero server latency.
-3. **Server-Side Re-evaluation (`ReportInteractionRefresher.cs`):** In live query mode, dependent visual queries are refreshed in topological order based on the parameter dependency graph.
-4. **Cycle Detection & Static Linting:** The LSP and AST compiler validate the parameter dependency DAG at authoring time to guarantee termination and prohibit circular parameter dependencies.
+**Why now:** The feature becomes coherent after cascading parameters establish reliable atomic state.
 
-### Reporting & Presentation — Bookmarks & In-Report Saved Visual States
+**Boundaries:** Initial URLs carry only a bookmark identifier; arbitrary parameter values are not
+placed in the hash. Offline snapshots receive a serializable resolved state. References to report
+objects are statically linted and rename-aware.
 
-**Candidate, not scheduled.** While Portal administrators can save parameterized views at the catalog level via `CREATE SAVED VIEW`, report consumers and authors frequently need in-report bookmark presets to switch between curated analytical views, toggled container visibility states, and specific filter configurations during executive presentations or self-service exploration.
+**Dependencies:** Atomic cascading parameter behavior, manifest serialization, and authoring support.
 
-**Architecture Decision (Layered Composition):**
-Rather than building a redundant parameter-snapshot engine, Bookmarks layer cleanly on top of ETL-SQL's existing `CREATE SETS !SetName` primitive:
-- **Layer 1 (Data / Parameters):** `CREATE SETS !Name` encapsulates the raw parameter values in engine memory.
-- **Layer 2 (Presentation Entity):** `CREATE BOOKMARK Name AS (...)` binds parameter sets to presentation metadata (`TITLE`, `DESCRIPTION`, `ICON`), target `PAGE`, and container visibility (`UI_STATE`).
-- **Layer 3 (Triggers & Shell Integration):** Bookmarks automatically populate a dedicated "Bookmarks" dropdown menu in the Report Player / Portal navigation header without wasting 12-column grid canvas space, while in-canvas buttons can invoke `ACTIONS (ON_CLICK = APPLY_BOOKMARK(Name))` or compose multiple actions directly (`ON_CLICK = (Action1, Action2)`).
+**Delivery slices:** Parameter/page bookmarks; supported presentation state; Portal shell and button
+invocation; offline serialization and identifier-only deep links.
 
-**Target Syntax Specification:**
-```sql
--- 1. Parameter State (Engine Tier)
-CREATE SETS !WestCoastRetail BEGIN
-  @region    = 'West',
-  @channel   = 'Retail',
-  @timeframe = 'M-1'
-END;
+**Acceptance evidence:** Atomic-application tests, stale-reference diagnostics, rename tests,
+offline replay, and disclosure tests for generated URLs.
 
--- 2. Bookmark Presentation Object (Report Tier)
-CREATE BOOKMARK WestCoastDeepDive AS (
-  TITLE       = 'West Coast Retail Analysis',
-  DESCRIPTION = 'Pre-filters for Q1 retail stores with anomaly drawer open.',
-  SET         = !WestCoastRetail,
-  PAGE        = StoreDetails,
-  UI_STATE    = ('AnomalyDrawer' = VISIBLE, 'SummaryCard' = COLLAPSED)
-);
+### Reporting & Presentation — Constrained HTML/SVG Templates
 
--- 3. Optional In-Canvas Button Binding
-CREATE BUTTON QuickSwitch AS (
-  LABEL   = 'Switch to West Coast',
-  ACTIONS (ON_CLICK = APPLY_BOOKMARK(WestCoastDeepDive))
-);
-```
+**Status:** Exploring  
+**Horizon:** Later  
+**Authoritative design:** [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md), to be revised before implementation
 
-**Delivery Stages:**
-1. **Parser & AST Extension:** Implement `CreateBookmarkStatement`, `APPLY_BOOKMARK` action AST node, and multi-action composition tuples `(Action1, Action2, ...)` in `ReportParser.cs`.
-2. **Runtime Execution Engine (`report-runtime.js`):** Implement `APPLY_BOOKMARK` to atomically apply parameter sets, transition active pages, update container/visual visibility, and synchronize with slicer controls.
-3. **Portal & Shell Integration:** Automatically render a global "Bookmarks" menu in the Report Player / Portal header bar populated from the `ReportManifest.Bookmarks` catalog.
-4. **URL Hash Synchronization:** Synchronize active bookmarks with browser URL hash fragments (`#bookmark=WestCoastDeepDive`) to enable one-click deep linking into specific report states.
+Authors may eventually need bespoke KPI cards, badges, narrative panels, repeaters, and status
+components beyond the native analytical grammar.
+
+**Why now:** This is useful after native GoG and micro-charts cover analytical graphics; it is not a
+foundation for chart authoring.
+
+**Boundaries:** GoG remains the custom analytical-graphics escape hatch. Templates require parsed
+HTML/CSS/SVG, scoped selectors, element/attribute/property/URL allowlists, node/depth/byte/recursion
+budgets, accessibility rules, and deterministic non-browser fallbacks. Script stripping alone is not
+a sufficient security boundary.
+
+**Dependencies:** A dedicated Zero-Trust threat model, native micro-charts, sanitizer policy, and
+portable fallback contract.
+
+**Delivery slices:** Static single-row components; bounded repeaters; scoped styling; carefully
+allowlisted actions; only then consider composition helpers that cannot recurse.
+
+**Acceptance evidence:** Adversarial sanitizer tests, resource-budget tests, CSS-boundary tests,
+accessibility checks, and deterministic browser/export/email/terminal behavior.
+
+### Reporting & Interaction — Visual Detail Popovers
+
+**Status:** Exploring  
+**Horizon:** Later  
+**Authoritative design:** Not yet decided
+
+Charts may expose rich formatted detail and small semantic micro-charts on click, focus, or hover
+without turning popovers into recursively embedded dashboards.
+
+**Why now:** Useful polish after core chart and parameter interactions are stable.
+
+**Boundaries:** Start with visual targets, formatted text, and bounded micro-charts. Every hover
+interaction needs touch, keyboard, terminal, export, email, and assistive-technology behavior.
+Container targets and arbitrary nested visuals are excluded initially.
+
+**Dependencies:** GoG tooltip semantics, native micro-charts, parameter-cycle detection, accessibility
+contracts, and payload budgets.
+
+**Delivery slices:** Formatted text; click/focus detail popovers; one bounded micro-chart; only then
+evaluate broader target types.
+
+**Acceptance evidence:** Keyboard/touch/accessibility tests, cycle and payload enforcement, viewport
+positioning fixtures, and measured performance on a defined report fixture.
 
 ---
 
-### Governance & Infrastructure — Data Gateway: Interactive Viewer Identity & Row-Level Security Delegation
+## Platform, SaaS, and Governance
 
-**Candidate, not scheduled.** When interactive report dashboards query on-premises data sources via the Data Gateway, queries currently execute under static database or service account credentials configured for the resource. In regulated enterprise environments, target databases (such as SQL Server, PostgreSQL, Snowflake, and Oracle) enforce Row-Level Security (RLS) policies based on the specific end-user viewing the report.
+### Platform — Native Object Storage for Shared Artifacts
 
-**Architecture Decision (Cross-Platform Context Propagation):**
-Rather than relying solely on Windows-only Active Directory Kerberos Constrained Delegation (KCD), the Gateway protocol will support cross-platform **Caller Identity Context Injection**:
-- **Context Envelope:** The Portal passes the authenticated viewer's verified identity (`Email`, `PrincipalId`, `Roles`, `Groups`) inside `GatewayOperationBounds.CallerContext`.
-- **Database Session Setting:** Before executing queries on the target engine, the Gateway executes the appropriate database session context command:
-  - *SQL Server:* `EXEC sp_set_session_context @key=N'UserId', @value=@viewerEmail;`
-  - *PostgreSQL:* `SET LOCAL app.current_user = 'alice@corp.com';` (or `SET LOCAL ROLE ...`)
-  - *Snowflake / Oracle:* Session tag injection / `DBMS_SESSION.SET_CONTEXT`.
-- **Zero-Trust Audit:** All gateway outcome ledger entries and audit outbox records log both the executing service identity and the authenticated caller identity for end-to-end audit compliance.
+**Status:** Accepted  
+**Horizon:** Launch Gate — Shared SaaS  
+**Authoritative design:** Provider contract not yet decided; build on the existing artifact-storage abstraction
 
-**Delivery Stages:**
-1. **Protocol Extension:** Add `CallerContext` (principal key, identity, roles, directory groups) to `GatewayOperation` and `GatewayFrame`.
-2. **Session Context Injection:** Implement connector-specific session context setters in `IGatewayResourceExecutor` for MSSQL, PostgreSQL, Oracle, and Snowflake.
-3. **Portal DirectQuery Binding:** Pass ambient session identity from Portal interactive report controllers through to the Gateway execution dispatcher.
-4. **Optional Kerberos Constrained Delegation (Windows Overlay):** Add Windows-specific `WindowsIdentity.RunImpersonated` support for on-prem Active Directory Windows Integrated Authentication where Kerberos SPNs are configured.
+Shared SaaS needs horizontally scalable artifact storage without assuming SMB or POSIX atomic rename.
+
+**Why now:** Object-native storage must precede broad Shared SaaS scale and large-content portability.
+
+**Boundaries:** Do not emulate atomic rename with an unreliable copy/delete sequence. Shared mutation
+continues to use database-backed leases and fencing.
+
+**Dependencies:** Immutable or content-addressed object naming, conditional-write/version semantics,
+an authoritative commit record, and garbage collection for abandoned staging objects.
+
+**Delivery slices:** Provider-neutral contract and fault model; one object-store provider; second-provider
+conformance; integration with large-content portability and Shared-source isolation.
+
+**Acceptance evidence:** Provider contract certification covers concurrent writers, stale fences,
+partial writes, lost responses, retries, storage outages, reconciliation, and garbage collection.
+
+### SaaS Multi-Tenancy — Tenant Portability Expansion
+
+**Status:** Incremental  
+**Horizon:** Launch Gate — Shared SaaS  
+**Authoritative design:** [`docs/architecture/TenantPortability.md`](docs/architecture/TenantPortability.md)
+
+The minimum signed portability bundle and Managed Dedicated SaaS-to-self-hosted Enterprise exit have
+shipped. The next increment makes exports trustworthy under concurrent activity and practical for
+large content and Shared SaaS without weakening explicit exclusions and rebinding.
+
+**Why now:** A complete, consistent export is a prerequisite for a credible Shared SaaS exit promise.
+
+**Boundaries:** Continue the unified bundle; do not introduce an opaque database backup or competing
+package format. Correctness precedes incremental-export optimization.
+
+**Dependencies:** Cross-system consistency and cutover fencing, complete content inventory,
+object-native large-content storage, and hostile Shared-source isolation evidence.
+
+**Delivery slices:** Declared consistency point; cutover fencing and duplicate-schedule prevention;
+inventory reconciliation; resumable chunked content; standalone validator; incremental deltas;
+cross-provider scale optimization.
+
+**Acceptance evidence:** Concurrent export/cutover journeys reconcile stable IDs, hashes, ownership,
+ACLs, and exclusions; hostile packages fail before activation; interrupted large exports resume; and
+customer-held validation remains possible after source loss.
+
+### Identity — Workload Identity and M2M Hardening
+
+**Status:** Incremental  
+**Horizon:** Later  
+**Authoritative design:** Not yet decided
+
+Service-account administration, client credentials, scopes, ownership, rotation, revocation, audit,
+and Portal/Orchestrator authorization have shipped. The next increment reduces dependence on long-lived
+shared secrets and hardens automated publication and execution.
+
+**Why now:** CI/CD and scheduled workloads should converge on short-lived, audience-bound,
+secretless credentials as hosted and enterprise automation expands.
+
+**Boundaries:** Long-lived API credentials remain a compatibility baseline, not the desired final
+architecture. Workload identity cannot exceed the owning principal, tenant, resource, or approved
+operation.
+
+**Dependencies:** A threat model and policy for federation, token exchange, audiences, credential
+binding, sensitive-operation approvals, and anomaly signals.
+
+**Delivery slices:** One CI OIDC exchange; additional GitHub/GitLab/Azure DevOps federation;
+certificate or `private_key_jwt` authentication; secretless scheduled workloads; approval and
+credential-use anomaly policies.
+
+**Acceptance evidence:** Cross-tenant/audience replay failures, short-lived credential tests,
+revocation and rotation journeys, approval bypass tests, and attributed audit evidence.
+
+### Execution — Measured Lean Worker Profile
+
+**Status:** Exploring  
+**Horizon:** Later  
+**Authoritative design:** Not yet decided
+
+Ephemeral execution workers may benefit from a smaller dependency boundary, faster cold starts, and
+lower working set than the unified executable.
+
+**Why now:** This is an optimization track to pursue only after measurements identify meaningful cost
+or isolation gains.
+
+**Boundaries:** Feature flags alone do not remove assemblies. Trimming must not break reflection, DI,
+dynamic connector discovery, or deployment-profile behavior.
+
+**Dependencies:** Baselines for startup working set, cold-start latency, artifact size, loaded
+assemblies, connector closure, sandbox lifetime, and cost sensitivity.
+
+**Delivery slices:** Measurement report; explicit engine-only entry project and connector/profile
+manifest; trimming experiment; opt-in certified worker artifact if justified.
+
+**Acceptance evidence:** Reproducible before/after measurements and connector, governance,
+cancellation, sandbox, and deployment-profile certification.
+
+### SaaS Reliability — Provider-Neutral Fault Certification
+
+**Status:** Accepted  
+**Horizon:** Launch Gate — Hosted production  
+**Authoritative design:** Not yet decided
+
+Hosted operation must prove safe behavior through process loss, lease races, database and storage
+outages, network partitions, duplicate delivery, clock skew, and disk exhaustion.
+
+**Why now:** Failure certification is required before production claims depend on distributed leases,
+shared storage, and remote workers.
+
+**Boundaries:** Define reusable scenarios before selecting Chaos Mesh or another hosting-specific
+tool. Only workloads with explicit checkpoint semantics may claim checkpoint resume; other work fails
+safely and remains eligible for deliberate retry.
+
+**Dependencies:** Lease fencing, provider fault hooks, durable audit/evidence capture, and documented
+retry/checkpoint contracts.
+
+**Delivery slices:** Local deterministic scenarios; Docker/cloud adapters; lease/storage/database
+fault suites; deployment-profile certification integration.
+
+**Acceptance evidence:** Repeatable fault matrices prove no split-brain mutation, authority reuse,
+silent loss, or false checkpoint-resume claim.
+
+### SaaS Reliability — Production Canaries
+
+**Status:** Accepted  
+**Horizon:** Launch Gate — Hosted production  
+**Authoritative design:** Not yet decided
+
+A hosted fleet needs isolated synthetic journeys that detect correctness and latency regressions in
+reports, jobs, Gateway, export, and notification paths before customers do.
+
+**Why now:** Canaries become operationally necessary when a production SaaS fleet exists; they are not
+an immediate product sprint before that environment exists.
+
+**Boundaries:** Synthetic resources cannot access customer systems. Cost, quota, identity, and failure
+domains remain isolated, and alerts distinguish ETL-SQL failures from synthetic dependency failures.
+
+**Dependencies:** Named SLOs, fleet regions/failure domains, external probe capability, isolated
+synthetic tenants/resources, and credential rotation.
+
+**Delivery slices:** One external health journey; report and job journeys; Gateway/export/notification
+coverage; regional and failure-domain rollout.
+
+**Acceptance evidence:** Fault-injection drills trigger the expected SLO alerts without customer data
+access, cross-tenant effects, or ambiguous dependency attribution.
+
+### Governance & Gateway — Verified Viewer Context Propagation
+
+**Status:** Exploring  
+**Horizon:** Later  
+**Authoritative design:** Threat-model ADR required before connector work
+
+Interactive Gateway queries may need verified viewer attributes for downstream row filtering while
+the database connection continues to use a service credential. This asserted application context is
+not equivalent to OAuth on-behalf-of delegation or Kerberos constrained delegation.
+
+**Why now:** The business requirement is important, but the assurance model must be separated before
+connector-specific behavior is promised.
+
+**Boundaries:** The first stage cannot claim that the database authenticated the viewer. PostgreSQL
+role changes are not derived directly from OIDC roles/groups. Context is parameterized,
+transaction-scoped, cleared before pool reuse, resource-allowlisted, tenant-bound, and fail-closed.
+
+**Dependencies:** Cryptographic Portal-to-Gateway identity, an ADR separating asserted context,
+OAuth delegation, and Kerberos delegation, plus connector session-cleanup contracts.
+
+**Delivery slices:** Threat model and neutral envelope; one asserted-context connector; pool-cleanup
+certification; additional connectors; separately designed delegated-authentication tracks if justified.
+
+**Acceptance evidence:** Forgery, replay, cross-tenant/resource, reserved-key, injection, transaction
+lifetime, and pool-reuse tests; audit records both viewer and executing credential.

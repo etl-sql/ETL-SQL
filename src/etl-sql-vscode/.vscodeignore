@@ -35,3 +35,25 @@ eslint.config.js
 *.vsix
 etl-sql-vscode-*.vsix
 **/*.log
+
+# node_modules non-runtime files
+node_modules/**/README.md
+node_modules/**/README
+node_modules/**/readme.md
+node_modules/**/CHANGELOG.md
+node_modules/**/changelog.md
+node_modules/**/HISTORY.md
+node_modules/**/LICENSE
+node_modules/**/LICENSE.md
+node_modules/**/License.txt
+node_modules/**/thirdpartynotices.txt
+node_modules/**/*.bnf
+node_modules/**/*.tsbuildinfo
+node_modules/**/eslint.config.js
+node_modules/**/metaModel.schema.json
+node_modules/**/test/**
+node_modules/**/tests/**
+node_modules/**/dist/esm/**
+node_modules/**/lib/esm/**
+node_modules/**/lib/browser/**
+node_modules/**/lib/umd/**

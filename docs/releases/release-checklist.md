@@ -61,8 +61,9 @@ Replace `x.y.z` with the target version (current target: **0.18.0**) throughout.
       ```
 - [ ] Add a hand-written `## [x.y.z] — YYYY-MM-DD` section to `CHANGELOG.md`
       (Set-Version intentionally does **not** touch the changelog). Move items out of `[Unreleased]`.
-- [ ] Group changelog entries under **Added / Changed / Fixed / Security** (Keep a Changelog).
-- [ ] Author the curated release notes in `docs/releases/vx.y.z.md`:
+      `CHANGELOG.md` serves as a concise, user-facing summary of breaking changes, key additions, and fixes, linking directly to the full `docs/releases/vx.y.z.md` release notes.
+- [ ] Group changelog entries under standard Keep-a-Changelog categories (**Breaking Changes / Added / Changed / Fixed / Security**).
+- [ ] Author the curated, exhaustive release notes in `docs/releases/vx.y.z.md`:
       1. Copy [`docs/releases/TEMPLATE.md`](TEMPLATE.md) to `docs/releases/vx.y.z.md`.
       2. Fill in every section following the inline guidance comments (delete them as you go).
       3. Cross-reference `docs/architecture/decisions/` and `docs/architecture/roadmaps/` for architectural context on highlights.
@@ -122,9 +123,20 @@ cross-platform and operator-run certifications below.
       ```powershell
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
-- [ ] On a failure, fix it and resume (reuses passed phases only if the source fingerprint matches):
+- [ ] **Fast Targeted Retesting Protocol (Iterate quickly on isolated failures):**
+      Never re-run the entire 40+ phase matrix from scratch while fixing a single test, packaging, or connector issue. Use targeted commands to verify fixes in seconds:
+      - **Targeted Test/Class**: `dotnet test <project> --filter FullyQualifiedName~<Test>` (1–5s)
+      - **Fast Pre-Push Sanity**: `.\scripts\Test-PrePush.ps1` (~60s, checks format, assets, index, and smoke)
+      - **Specific Lane**: `.\scripts\test-lane.ps1 -Lane <smoke|fast|ebnf|portal|browser|slt>`
+      - **Direct Docker/Parity**: `.\scripts\Invoke-SmokeParity.ps1`
+      - **Direct Packaging / MSI**: `.\scripts\build-msi.ps1` or `.\scripts\publish-release.ps1`
+- [ ] On a failure, fix it and resume:
       ```powershell
+      # Standard resume (reuses passed phases if source fingerprint matches):
       .\scripts\Test-PreRelease.ps1 -Resume -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
+
+      # Force resume (skips previously passed phases even after git commits/edits during fix iteration):
+      .\scripts\Test-PreRelease.ps1 -Resume -ForceResume -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
 - [ ] Run the gate detached to avoid terminal interruption during long runs (PowerShell on Windows):
       ```powershell
@@ -145,9 +157,8 @@ cross-platform and operator-run certifications below.
       Set-Location .worktrees\release-gate-x.y.z
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
-- [ ] Confirm the **Engine lane and coverage gate** phase passed with line coverage **>= 70%**.
-      `Test-PreRelease.ps1` invokes the same fail-closed `Test-CoverageGate.ps1` policy as CI; missing
-      or unparseable coverage is a failure. Retain `coverage/report/Summary.txt`, `Cobertura.xml`, and
+- [ ] Confirm the **Engine lane** and **Coverage gate** phases passed with line coverage **>= 70%**.
+      `Test-PreRelease.ps1` runs engine tests across 8 deterministic shards with timeout protection, then invokes `Test-CoverageGate.ps1` to enforce the fail-closed 70% line-coverage threshold. Retain `coverage/report/Summary.txt`, `Cobertura.xml`, and
       `coverage-gate.json` beneath the timestamped release-validation run.
 - [ ] Confirm the **Test structure audit** phase passed. This proves expensive/release-only categories
       still have targeted ownership and that file reorganization did not change lane membership.

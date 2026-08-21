@@ -113,12 +113,14 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Bounded quick-feedback lane: smoke coverage plus language-server tests." })
     $phases.Add([ordered]@{ Phase = "EBNF conformance lane"; Command = ".\scripts\test-lane.ps1 -Lane ebnf"; Reason = "Deterministic grammar generation strictly agrees with execution-parser acceptance and rejection." })
-    $phases.Add([ordered]@{ Phase = "Engine lane and coverage gate"; Command = ".\scripts\Test-CoverageGate.ps1 -RunEngineLane -MinimumLineCoverage 70"; Reason = "Broad engine/parser/evaluator regression coverage is collected once and must meet the fail-closed 70% line-coverage release threshold." })
-    $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API coverage, including the release-acceptance journeys: the role/permission authorization matrix (every grant against every operation, both directions), departmental environment isolation across two deployments, policy authority and distribution, module gating, Studio capabilities, and the browser API contract checked against the same file the browser validates with." })
-    $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "Everything only a real browser can prove: the critical journey (first-run sign-in, user, folder, publish, run); Viewer/Publisher/Steward/Operator role journeys, asserting that surfaces a role cannot use are absent rather than merely guarded; accessibility and responsive checks at 1440px and 390px (computed accessible names, no page overflow at phone width or 200% text, closed dialogs unreachable, both colour schemes, reduced motion, forced colours); accessibility-tree snapshots of critical surfaces; and every UI-sandbox story mounting cleanly." })
-    $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
-    $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1 -Passes 2"; Reason = "Published samples remain runnable, and remain runnable a second time — sample output is gitignored, so a sample that leaves state behind passes on a clean checkout and fails for every user who runs it twice." })
-    $phases.Add([ordered]@{ Phase = "HA soak contract gate"; Command = ".\scripts\Test-HaSoakContracts.ps1"; Reason = "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release." })
+    $phases.Add([ordered]@{ Phase = "Engine lane"; Command = ".\scripts\test-lane.ps1 -Lane engine -CollectCoverage"; Reason = "Broad engine/parser/evaluator regression coverage collected across 8 deterministic shards." })
+    $phases.Add([ordered]@{ Phase = "Coverage gate"; Command = ".\scripts\Test-CoverageGate.ps1 -MinimumLineCoverage 70"; Reason = "Coverage report generation enforcing the fail-closed 70% line-coverage release threshold." })
+    $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API coverage, including the role/permission authorization matrix, departmental environment isolation, policy distribution, and Studio capabilities." })
+    $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "Everything only a real browser can prove: the critical journey, role journeys, accessibility/responsive checks, and UI-sandbox stories." })
+    $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact." })
+    $phases.Add([ordered]@{ Phase = "Sample scripts (pass 1)"; Command = ".\scripts\Test-AllSamples.ps1 -Passes 1"; Reason = "Published samples remain runnable on a clean state." })
+    $phases.Add([ordered]@{ Phase = "Sample scripts (pass 2)"; Command = ".\scripts\Test-AllSamples.ps1 -Passes 1"; Reason = "Published samples remain runnable a second time without failing on pre-existing artifacts." })
+    $phases.Add([ordered]@{ Phase = "HA soak contract gate"; Command = ".\scripts\Test-HaSoakContracts.ps1"; Reason = "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, and evidence validation contracts stay usable." })
 
     if ($IncludeSlt) {
         $phases.Add([ordered]@{ Phase = "SLT lane"; Command = ".\scripts\test-lane.ps1 -Lane slt"; Reason = "SQL logic corpus checks parser/evaluator compatibility." })
@@ -133,13 +135,14 @@ function Get-PlannedPreReleasePhases {
         $phases.Add([ordered]@{ Phase = "VS Code UI lint"; Command = "npm run lint"; Reason = "UI package lint warnings fail the release gate." })
         $phases.Add([ordered]@{ Phase = "VS Code UI build"; Command = "npm run build"; Reason = "UI TypeScript and Vite bundle compile." })
         $phases.Add([ordered]@{ Phase = "VS Code UI unit tests"; Command = "npm run test:unit"; Reason = "UI package unit tests pass before release." })
-        $phases.Add([ordered]@{ Phase = "VS Code VSIX package"; Command = "npx @vscode/vsce package --target win32-x64"; Reason = "VSIX packages cleanly — same vsce step release.yml runs; catches manifest/engine errors before the release build." })
+        $phases.Add([ordered]@{ Phase = "VS Code VSIX package"; Command = "npx @vscode/vsce package --target win32-x64"; Reason = "VSIX packages cleanly." })
         $phases.Add([ordered]@{ Phase = "VS Code unit tests"; Command = "npm run test:unit"; Reason = "Extension unit tests pass." })
     }
 
     if ($EffectiveIncludeDockerIntegration) {
-        $phases.Add([ordered]@{ Phase = "Docker integration lane"; Command = ".\scripts\test-lane.ps1 -Lane integration"; Reason = "External connector boundaries pass against local containers." })
-        $phases.Add([ordered]@{ Phase = "Local/container smoke parity"; Command = ".\scripts\Invoke-SmokeParity.ps1"; Reason = "The same acceptance profile runs against a locally-hosted Portal and the production image, compared check by check. A container that quietly checks less than the local run would otherwise ship looking green -- which is the failure this catches, and it is invisible to any check that only asks whether each side passed." })
+        $phases.Add([ordered]@{ Phase = "Docker connector integration"; Command = "dotnet test tests\ETL-SQL.Tests --filter Category=Integration"; Reason = "External connector boundaries pass against local containers." })
+        $phases.Add([ordered]@{ Phase = "Docker portal integration"; Command = "dotnet test tests\ETL-SQL.Portal.Tests --filter Category=Integration"; Reason = "Portal distributed integration boundaries pass against local containers." })
+        $phases.Add([ordered]@{ Phase = "Local/container smoke parity"; Command = ".\scripts\Invoke-SmokeParity.ps1"; Reason = "The same acceptance profile runs against a locally-hosted Portal and the production image, compared check by check." })
     }
 
     if ($EffectiveBuildInstallers) {
@@ -867,9 +870,14 @@ try {
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "ebnf" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
         $previousPhaseMap $fingerprint $results
 
-    Invoke-LoggedPhase "Engine lane and coverage gate" `
-        ".\scripts\Test-CoverageGate.ps1 -RunEngineLane -CoverageDirectory $CoverageResultsRelative -MinimumLineCoverage 70 -Configuration $Configuration -NoRestore -NoBuild" `
-        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-CoverageGate.ps1" "-RunEngineLane" "-CoverageDirectory" $CoverageResultsRelative "-MinimumLineCoverage" "70" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
+    Invoke-LoggedPhase "Engine lane" `
+        ".\scripts\test-lane.ps1 -Lane engine -Configuration $Configuration -NoRestore -NoBuild -CollectCoverage -ResultsDirectory $CoverageResultsRelative" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "engine" "-Configuration" $Configuration "-NoRestore" "-NoBuild" "-CollectCoverage" "-ResultsDirectory" $CoverageResultsRelative } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "Coverage gate" `
+        ".\scripts\Test-CoverageGate.ps1 -CoverageDirectory $CoverageResultsRelative -ReportDirectory $CoverageReportDir -MinimumLineCoverage 70 -Configuration $Configuration -NoRestore -NoBuild" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-CoverageGate.ps1" "-CoverageDirectory" $CoverageResultsRelative "-ReportDirectory" $CoverageReportDir "-MinimumLineCoverage" "70" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
         $previousPhaseMap $fingerprint $results @(
             (Join-Path $CoverageReportDir "Summary.txt"),
             (Join-Path $CoverageReportDir "coverage-gate.json"),
@@ -894,12 +902,16 @@ try {
         { & dotnet test "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "--filter" "FullyQualifiedName~UpgradePathDrillTests" "--configuration" $Configuration "--no-restore" "--no-build" } `
         $previousPhaseMap $fingerprint $results
 
-    # Two passes, deliberately: sample output is gitignored, so a sample that writes to a persistent
-    # store can pass on a clean checkout and fail for every user who runs it a second time. One pass
-    # cannot see that.
-    Invoke-LoggedPhase "Sample scripts" `
-        ".\scripts\Test-AllSamples.ps1 -Passes 2" `
-        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" "-Passes" "2" } `
+    # Two passes, split into granular checkpoints: sample output is gitignored, so a sample that writes
+    # to a persistent store can pass on a clean checkout and fail for every user who runs it a second time.
+    Invoke-LoggedPhase "Sample scripts (pass 1)" `
+        ".\scripts\Test-AllSamples.ps1 -Passes 1" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" "-Passes" "1" } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "Sample scripts (pass 2)" `
+        ".\scripts\Test-AllSamples.ps1 -Passes 1" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" "-Passes" "1" } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "HA soak contract gate" `
@@ -1017,9 +1029,19 @@ try {
     }
 
     if ($EffectiveIncludeDockerIntegration) {
-        Invoke-LoggedPhase "Docker integration lane" `
-            ".\scripts\test-lane.ps1 -Lane integration -Configuration $Configuration -NoRestore -NoBuild" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "integration" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
+        Invoke-LoggedPhase "Docker connector integration" `
+            "dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter Category=Integration --configuration $Configuration --no-restore --no-build" `
+            { & dotnet test "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "--filter" "Category=Integration" "--configuration" $Configuration "--no-restore" "--no-build" } `
+            $previousPhaseMap $fingerprint $results
+
+        Invoke-LoggedPhase "Docker portal integration" `
+            "dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter Category=Integration --configuration $Configuration --no-restore --no-build" `
+            { & dotnet test "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "--filter" "Category=Integration" "--configuration" $Configuration "--no-restore" "--no-build" } `
+            $previousPhaseMap $fingerprint $results
+
+        Invoke-LoggedPhase "Local/container smoke parity" `
+            ".\scripts\Invoke-SmokeParity.ps1" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Invoke-SmokeParity.ps1" } `
             $previousPhaseMap $fingerprint $results
     }
 
