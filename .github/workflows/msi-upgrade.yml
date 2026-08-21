@@ -116,7 +116,7 @@ jobs:
 
       - name: Restore cached previous MSI
         id: previous-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .upgrade-cache
           key: previous-msi-${{ steps.versions.outputs.previous_tag }}-x64
@@ -170,7 +170,7 @@ jobs:
 
       - name: Upload upgrade evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: msi-upgrade-${{ github.run_id }}
           path: release-validation/msi-upgrade
