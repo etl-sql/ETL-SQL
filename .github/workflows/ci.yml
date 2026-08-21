@@ -195,7 +195,7 @@ jobs:
       # Keyed on the Microsoft.Playwright version in Directory.Packages.props: bumping the package
       # must fetch a matching browser build rather than reuse the previous one.
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~\AppData\Local\ms-playwright
           key: playwright-windows-${{ hashFiles('Directory.Packages.props') }}
