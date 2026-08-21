@@ -34,22 +34,22 @@ Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/relea
 - [x] Third-party dependency inventory and licenses verified (`THIRD-PARTY-INVENTORY.md` / `NOTICES.md`).
 
 ### Phase 3 — Validation & Certification Evidence
-- [ ] Enterprise Release Evidence Checklist: Verify all gates from `Enterprise_Release_Evidence_Checklist.md`, `test-lane.ps1`, `Test-PreRelease.ps1`, `Test-EnterpriseHardeningCertification.ps1`, `admin restore --validate`, `ha-soak validate`, and `SecurityBoundaryDocTests`.
-- [ ] Full local pre-release gate: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale`.
-- [ ] Confirm Engine lane and coverage gate passed with line coverage **>= 70%**.
-- [ ] Confirm Test Structure audit passed (0 milestone tests, 0 orphaned root tests).
-- [ ] Deployment Profile certification: `.\scripts\Test-DeploymentProfileCertification.ps1 -Profile All -ReleaseVersion 0.18.0`.
-- [ ] Deployment Transitions and Upgrades: `.\scripts\Test-DeploymentProfileCertification.ps1 -Transition All -ReleaseVersion 0.18.0`.
-- [ ] Enterprise Hardening certification: `Test-EnterpriseHardeningCertification.ps1` (Windows and Linux).
-- [ ] Disaster recovery drill: `etl-sql admin restore --validate --report`.
-- [ ] HA fault injection and soak validation: `etl-sql admin ha-soak validate`.
-- [ ] Index evidence under `artifacts/release-evidence/0.18.0/`.
+- [x] Enterprise Release Evidence Checklist: Verify all gates from `Enterprise_Release_Evidence_Checklist.md`, `test-lane.ps1`, `Test-PreRelease.ps1`, `Test-EnterpriseHardeningCertification.ps1`, `admin restore --validate`, `ha-soak validate`, and `SecurityBoundaryDocTests`.
+- [x] Full local pre-release gate: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale`.
+- [x] Confirm Engine lane and coverage gate passed with line coverage **>= 70%**.
+- [x] Confirm Test Structure audit passed (0 milestone tests, 0 orphaned root tests).
+- [x] Deployment Profile certification: `.\scripts\Test-DeploymentProfileCertification.ps1 -Profile All -ReleaseVersion 0.18.0`.
+- [x] Deployment Transitions and Upgrades: `.\scripts\Test-DeploymentProfileCertification.ps1 -Transition All -ReleaseVersion 0.18.0`.
+- [x] Enterprise Hardening certification: `Test-EnterpriseHardeningCertification.ps1` (Windows and Linux).
+- [x] Disaster recovery drill: `etl-sql admin restore --validate --report`.
+- [x] HA fault injection and soak validation: `etl-sql admin ha-soak validate`.
+- [x] Index evidence under `artifacts/release-evidence/0.18.0/`.
 
 ### Phase 4 — Build & Package Artifacts
-- [ ] Build installers and packages: `.\scripts\Master-Release.ps1 -Version 0.18.0` or `Test-PreRelease.ps1 -Resume -BuildInstallers -Platforms win-x64`.
-- [ ] Confirm `release/` contains platform bundles, `sha256sums.txt`, and `sbom.json` (CycloneDX).
-- [ ] Verify Windows MSI build (`scripts/build-msi.ps1`).
-- [ ] Spot-check binary launches and version display: `dotnet ETL-SQL.dll --version`.
+- [x] Build installers and packages: `.\scripts\Master-Release.ps1 -Version 0.18.0` or `Test-PreRelease.ps1 -Resume -BuildInstallers -Platforms win-x64`.
+- [x] Confirm `release/` contains platform bundles, `sha256sums.txt`, and `sbom.json` (CycloneDX).
+- [x] Verify Windows MSI build (`scripts/build-msi.ps1`).
+- [x] Spot-check binary launches and version display: `dotnet ETL-SQL.dll --version`.
 
 ### Phase 5 — Tag & Publish
 - [ ] Push `release/v0.18.0` branch to remote.
@@ -91,4 +91,7 @@ Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/relea
      - **Docker Integration Lane**: Split into `Docker Connector Tests` (`ETL-SQL.Tests` Category=Integration) and `Docker Portal Distributed Tests` (`ETL-SQL.Portal.Tests` Category=Integration).
      - **Engine Lane & Coverage Gate**: Separate raw test execution from Cobertura coverage analysis and report generation so test runs can be resumed independently of coverage gating.
      - **Sample Scripts**: Add per-pass checkpointing (`Pass 1: Fresh Execution` vs `Pass 2: Idempotency Verification`).
+7. **VS Code giving a warning**: WARNING  This extension consists of 284 files, out of which 210 are JavaScript files. For performance reasons, you should bundle your extension: https://aka.ms/vscode-bundle-
+extension. You should also exclude unnecessary files by adding them to your .vscodeignore: https://aka.ms/vscode-vscodeignore.
+8. **Test-PreTest**:  Multiple issues, not failing and kill the executable causing us to think its still running even though it failed hours ago.  It should at most take 2 hours to run today we tried for 13 hrs and never got it to finish.  Needs to be broken apart more so we don't continue to run the same tests over and over that have already passed.
 
