@@ -1,0 +1,27 @@
+-- Terminal Semantics Fixture: Layered COMBO Visual
+-- Validates terminal rendering behavior and textual fallback for layered COMBO visuals.
+
+SET REPORT TITLE = 'Terminal COMBO Dual-Layer Representation';
+
+SELECT 'Sprint 1' AS Sprint, 45 AS PlannedVelocity, 42 AS CompletedVelocity INTO #combo_metrics
+UNION ALL SELECT 'Sprint 2', 50, 48
+UNION ALL SELECT 'Sprint 3', 45, 39
+UNION ALL SELECT 'Sprint 4', 55, 55;
+
+CREATE VISUAL VelocityComboVisual AS COMBO (
+    TITLE = 'Sprint Planned vs Completed Velocity',
+    SOURCE = #combo_metrics,
+    MAPPINGS (X = Sprint),
+    SERIES (
+        BAR PlannedVelocity,
+        LINE CompletedVelocity
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE PAGE VelocityDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = VelocityComboVisual)
+    )
+);

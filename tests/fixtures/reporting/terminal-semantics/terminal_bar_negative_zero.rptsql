@@ -1,0 +1,24 @@
+-- Terminal Semantics Fixture: Negative and Zero Values (BAR)
+-- Validates zero-baseline alignment and negative bar length formatting in terminal.
+
+SET REPORT TITLE = 'Terminal Bar with Negative and Zero Values';
+
+SELECT 'Product A' AS Item, 45.0 AS MarginVariance INTO #variance_data
+UNION ALL SELECT 'Product B', -18.5
+UNION ALL SELECT 'Product C', 0.0
+UNION ALL SELECT 'Product D', -32.0
+UNION ALL SELECT 'Product E', 28.5;
+
+CREATE VISUAL VarianceBarVisual AS BAR (
+    TITLE = 'Margin Variance (Net Profit Delta)',
+    SOURCE = #variance_data,
+    MAPPINGS (X = Item, Y = MarginVariance),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE PAGE VarianceDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = VarianceBarVisual)
+    )
+);

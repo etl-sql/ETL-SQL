@@ -1,0 +1,28 @@
+-- Terminal Semantics Fixture: Goal & Average Rule Overlays
+-- Validates terminal rendering of horizontal threshold markers and benchmark lines.
+
+SET REPORT TITLE = 'Terminal Rule Overlays and Benchmarks';
+
+SELECT 'Week 1' AS Wk, 120 AS Volume INTO #weekly_volume
+UNION ALL SELECT 'Week 2', 150
+UNION ALL SELECT 'Week 3', 180
+UNION ALL SELECT 'Week 4', 160
+UNION ALL SELECT 'Week 5', 210;
+
+CREATE VISUAL VolumeWithOverlaysBar AS BAR (
+    TITLE = 'Weekly Output with Goal and Average Rules',
+    SOURCE = #weekly_volume,
+    MAPPINGS (X = Wk, Y = Volume),
+    OVERLAYS (
+        GOAL(175) AS DASHED WITH (COLOR = '#DC2626', LABEL = 'Target Goal (175)'),
+        AVERAGE AS DOTTED WITH (COLOR = '#2563EB', LABEL = 'Historical Average')
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '420px')
+);
+
+CREATE PAGE VolumeDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = VolumeWithOverlaysBar)
+    )
+);
