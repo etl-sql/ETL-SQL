@@ -119,6 +119,9 @@ public sealed class DesignerScriptGenerationService
         else if (!string.IsNullOrWhiteSpace(visual.Dataset))
             AppendLine(sb, $"    SOURCE = {NormalizeDatasetName(visual.Dataset)},", nl);
 
+        if (visual.Options.TryGetValue("advanced_chart", out var advancedChart) && !string.IsNullOrWhiteSpace(advancedChart))
+            AppendLine(sb, $"    {advancedChart.Trim().TrimEnd(',')},", nl);
+
         var mappings = visual.Mappings
             .Where(mapping => !string.IsNullOrWhiteSpace(mapping.Value))
             .Select(mapping => $"{mapping.Key.ToUpperInvariant()} = {mapping.Value}")
@@ -274,6 +277,7 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "cascade", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "advanced_chart", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("action:", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("interaction:", StringComparison.OrdinalIgnoreCase);
 

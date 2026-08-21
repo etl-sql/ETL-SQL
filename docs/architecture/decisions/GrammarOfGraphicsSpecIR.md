@@ -2,9 +2,10 @@
 
 **Status:** Accepted
 **Date:** 2026-08-20
-**Implementation:** Slices 0 and 1 shipped on 2026-08-21; later slices remain planned.
-**Decision scope:** Reporting semantics and renderer boundaries; advanced authoring syntax remains a
-separate language-design decision.
+**Implementation:** Slices 0 and 1 plus Phase 7 native advanced authoring shipped on 2026-08-21;
+standard catalog migration and ECharts retirement remain planned.
+**Decision scope:** Reporting semantics and renderer boundaries. The accepted advanced language is
+recorded in [NativeAdvancedChartAuthoring.md](NativeAdvancedChartAuthoring.md).
 
 ## 1. Context
 
@@ -33,7 +34,7 @@ ETL-SQL will make its own typed, immutable, versioned Grammar-of-Graphics contra
 graphical report meaning. Rendering proceeds through three conceptual levels:
 
 ```text
-.rptsql named visual sugar or future native advanced grammar
+.rptsql named visual sugar or native CUSTOM CHART grammar
                          |
                          v
                  Semantic ChartSpec
@@ -50,10 +51,9 @@ graphical report meaning. Rendering proceeds through three conceptual levels:
 resolved plan and do not redefine report semantics. ECharts configuration is generated transiently
 during migration and is never stored as the canonical semantic report state.
 
-This ADR accepts the architecture and boundaries below. It does not freeze unimplemented `.rptsql`
-grammar. Any new `CUSTOM`, layer, scale, coordinate, or facet syntax must follow the language syntax
-standards, include minimal parser-accepted examples, and preserve Report Builder round-trip fidelity
-before it is documented as supported syntax.
+This ADR accepts the architecture and boundaries below. The Phase 7 `CUSTOM ... CHART` grammar is
+specified separately so future language changes still require parser-tested examples, LSP parity,
+lineage, cross-backend conformance, and Report Builder round-trip fidelity.
 
 ## 3. Semantic `ChartSpec`
 

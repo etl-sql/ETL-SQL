@@ -603,11 +603,44 @@ additional_identifier = letter { letter | digit | "_" } ;
 variable_name = "@" identifier ;
 create_visual_statement = "CREATE" [ "OR" "REPLACE" ] "VISUAL" identifier "AS"
                           ( sourced_visual_type "(" { visual_clause [ "," ] } "SOURCE" [ "=" ] visual_source [ "," ] { visual_clause [ "," ] } ")"
-                          | sourceless_visual_type "(" { ( visual_clause | "SOURCE" [ "=" ] visual_source ) [ "," ] } ")" ) ;
+                          | sourceless_visual_type "(" { ( visual_clause | "SOURCE" [ "=" ] visual_source ) [ "," ] } ")"
+                          | "CUSTOM" "(" { ( visual_clause | "SOURCE" [ "=" ] visual_source | advanced_chart_clause ) [ "," ] } ")" ) ;
 sourced_visual_type = "BAR" | "HBAR" | "LINE" | "SCATTER" | "PIE" | "DONUT" | "COMBO" | "BOXPLOT" | "TREEMAP" | "HEATMAP" | "FUNNEL" | "GAUGE" | "WATERFALL" | "BUBBLE" | "RADAR" | "CANDLESTICK" | "MAP" | "SANKEY" | "SUNBURST" | "NETWORK" | "TRELLIS" | "MATRIX" | "GANTT" | "TABLE" | "CARD" ;
 sourceless_visual_type = "TEXT" | "IMAGE" | "SLICER" | "DATEPICKER" | "RELDATEPICKER" | "SLIDER" | "MULTISELECT" | "SEARCH" | "TEXTBOX" | "NUMBERBOX" | "CHECKBOX" ;
 visual_type = sourced_visual_type | sourceless_visual_type ;
 visual_source = "(" select_statement ")" | temp_table_name | dataset_name | string_literal ;
+advanced_chart_clause = "CHART" "(" advanced_coordinate_clause "," advanced_scales_clause "," advanced_layers_clause
+                        [ "," advanced_facet_clause ] [ "," advanced_resolve_clause ] ")" ;
+advanced_coordinate_clause = "COORDINATE" "(" "TYPE" "=" ( "CARTESIAN" | "TRANSPOSED_CARTESIAN" | "POLAR" )
+                             { "," ( "START_ANGLE" | "END_ANGLE" | "INNER_RADIUS" ) "=" number } ")" ;
+advanced_scales_clause = "SCALES" "(" advanced_scale { "," advanced_scale } ")" ;
+advanced_scale = identifier "=" advanced_scale_kind "(" advanced_scale_option { "," advanced_scale_option } ")" ;
+advanced_scale_kind = "LINEAR" | "LOGARITHMIC" | "TIME" | "BAND" | "POINT" | "ORDINAL" | "IDENTITY" ;
+advanced_scale_option = "CHANNEL" "=" advanced_scale_channel
+                      | "INCLUDE_ZERO" "=" ( "ON" | "OFF" )
+                      | ( "MIN" | "MAX" ) "=" expression
+                      | "ORDER" "=" ( "SOURCE" | "ASCENDING" | "DESCENDING" | "(" expression { "," expression } ")" ) ;
+advanced_scale_channel = "X" | "Y" | "Y2" | "COLOR" | "THETA" | "RADIUS" ;
+advanced_layers_clause = "LAYERS" "(" advanced_layer { "," advanced_layer } ")" ;
+advanced_layer = identifier "=" advanced_mark_kind "(" advanced_layer_clause { "," advanced_layer_clause } ")" ;
+advanced_mark_kind = "RECT" | "LINE" | "AREA" | "POINT" | "RULE" | "ARC" | "TEXT" ;
+advanced_layer_clause = "Z_INDEX" "=" number
+                      | "ENCODINGS" "(" advanced_encoding { "," advanced_encoding } ")"
+                      | "STYLE" "(" advanced_style_item { "," advanced_style_item } ")"
+                      | "CONDITIONS" "(" advanced_condition { "," advanced_condition } ")" ;
+advanced_encoding = advanced_encoding_channel "=" identifier "(" advanced_encoding_option { "," advanced_encoding_option } ")" ;
+advanced_encoding_channel = "X" | "Y" | "Y2" | "COLOR" | "SIZE" | "SHAPE" | "THETA" | "RADIUS" | "TEXT" | "TOOLTIP" | "DETAIL" ;
+advanced_encoding_option = "TYPE" "=" ( "QUANTITATIVE" | "TEMPORAL" | "NOMINAL" | "ORDINAL" )
+                         | "SCALE" "=" identifier
+                         | "AXIS" "=" ( "NONE" | "PRIMARY" | "SECONDARY" )
+                         | "SORT" "=" ( "SOURCE" | "ASCENDING" | "DESCENDING" )
+                         | "FORMAT" "=" string_literal ;
+advanced_style_item = identifier "=" expression ;
+advanced_condition = advanced_condition_channel "WHEN" expression "THEN" expression [ "ELSE" expression ] ;
+advanced_condition_channel = "COLOR" | "OPACITY" | "SIZE" | "SHAPE" | "TEXT" ;
+advanced_facet_clause = "FACET" "(" ( "ROW" | "COLUMN" ) "=" identifier [ "," ( "ROW" | "COLUMN" ) "=" identifier ] ")" ;
+advanced_resolve_clause = "RESOLVE" "(" advanced_resolve_item { "," advanced_resolve_item } ")" ;
+advanced_resolve_item = ( "X" | "Y" | "COLOR" ) "=" ( "SHARED" | "INDEPENDENT" ) ;
 visual_clause = ( "TITLE" | "SUBTITLE" | "CONTENT" | "DEFAULT" | "VALUE" | "PLACEHOLDER" ) [ "=" ] expression
               | "TOOLTIP" [ "=" ] ( string_literal | identifier )
               | "VISIBLE" [ "=" ] ( "ON" | "OFF" )

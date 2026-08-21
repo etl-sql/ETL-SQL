@@ -34,8 +34,12 @@ Architecture tests enforce these boundaries against both project files and contr
 
 `ChartSpec` expresses author intent. It carries a schema URI and integer version plus typed field
 bindings, ordered semantic mark layers, coordinate and scale intent, scale-resolution policy,
-formatting, null behavior, interactions, themes, and accessibility metadata. Mark layers use the
+formatting, null behavior, interactions, themes, accessibility metadata, and typed presentation-only
+conditions. Mark layers use the
 portable vocabulary `Rect`, `Line`, `Area`, `Point`, `Rule`, `Arc`, and `Text`.
+
+The native `CUSTOM ... CHART` language lowers directly into this intent. It adds no renderer-owned
+JSON and no hidden aggregation, filtering, calculation, lookup, window, or statistical transforms.
 
 The contract stores ordering-sensitive data in `ImmutableArray<T>`. Scale, layer, and binding IDs are
 validated before serialization. A binding cannot reference an undeclared scale.
@@ -55,6 +59,7 @@ floating-point values, inconsistent row counts, and display vectors that do not 
 `PlotPlan` is the deterministic, renderer-neutral resolved contract. It carries coordinates and
 portable style tokens plus ordered scales and
 ticks, category order, ordered series, palette assignments, legend entries, ordered resolved layers,
+per-row resolved conditional values, deterministic facet panels with shared or independent scales,
 row-level gaps and skips, an accessible summary, and a semantic fallback. Validation rejects
 nondeterministic series, legend, or layer order and dangling palette/legend references.
 
@@ -91,6 +96,15 @@ named BAR / LINE / SCATTER / PIE / DONUT / COMBO (+ RULE)
               -> transient ECharts | native SVG | terminal | V8-free static PDF
 ```
 
+Phase 7 adds the native authoring path:
+
+```text
+CUSTOM CHART layers / scales / coordinates / conditions / facets
+              -> ChartSpec + typed ChartDataSet
+              -> PlotPlan + resolved facet panels / conditional values
+              -> transient ECharts | native SVG | terminal | accessible fallback
+```
+
 `VisualManifest.ChartConfig` remains a compatibility payload for browser hosts, but for migrated
 visuals it is generated from `PlotPlan` and is not authoritative semantic state. Representative
 fixtures assert shared domains, source ordering, series/palette/legend identity, dual axes, temporal
@@ -100,5 +114,6 @@ The capability matrix identifies every visual that still uses a legacy ECharts-o
 ## References
 
 - [Grammar-of-Graphics ADR](decisions/GrammarOfGraphicsSpecIR.md)
+- [Native Advanced Chart Authoring ADR](decisions/NativeAdvancedChartAuthoring.md)
 - [Source Boundary Standards](standards/Source_Boundary_Standards.md)
 - [Report-SQL Guide](../guides/feature-guides/report-sql.md)

@@ -80,6 +80,7 @@ namespace ETL_SQL.LSP
             // Inject dataset-name suggestions when context is USE DATASET or prefix starts with &
             var datasetItems = GetDatasetCompletions(scriptBefore, prefix, line, startCol, col);
             var snippetItems = GetSnippetCompletions(scriptBefore, prefix, line, startCol, col);
+            var chartItems = GetAdvancedChartCompletions(scriptBefore, prefix, line, startCol, col);
 
             var items = suggestions.Select(s =>
             {
@@ -102,7 +103,39 @@ namespace ETL_SQL.LSP
                 };
             }).ToList();
 
-            return new CompletionList(snippetItems.Concat(items).Concat(datasetItems).ToList());
+            return new CompletionList(snippetItems.Concat(chartItems).Concat(items).Concat(datasetItems)
+                .GroupBy(item => item.Label, StringComparer.OrdinalIgnoreCase).Select(group => group.First()).ToList());
+        }
+
+        private static List<CompletionItem> GetAdvancedChartCompletions(string scriptBefore, string prefix, int line, int startCol, int col)
+        {
+            var chartStart = scriptBefore.LastIndexOf("CHART", StringComparison.OrdinalIgnoreCase);
+            if (chartStart < 0) return [];
+            var scope = scriptBefore[chartStart..];
+            if (scope.Count(character => character == '(') <= scope.Count(character => character == ')')) return [];
+            string[] keywords =
+            [
+                "COORDINATE", "SCALES", "LAYERS", "ENCODINGS", "STYLE", "CONDITIONS", "FACET", "RESOLVE",
+                "CARTESIAN", "TRANSPOSED_CARTESIAN", "POLAR", "RECT", "LINE", "AREA", "POINT", "RULE", "ARC", "TEXT",
+                "LINEAR", "LOGARITHMIC", "TIME", "BAND", "POINT", "ORDINAL", "IDENTITY",
+                "QUANTITATIVE", "TEMPORAL", "NOMINAL", "ORDINAL", "PRIMARY", "SECONDARY", "SHARED", "INDEPENDENT"
+            ];
+            return keywords.Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(keyword => string.IsNullOrEmpty(prefix) || keyword.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(keyword => new CompletionItem
+                {
+                    Label = keyword,
+                    Kind = CompletionItemKind.Keyword,
+                    Detail = "Native CHART keyword",
+                    Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = "Renderer-neutral advanced chart authoring keyword." },
+                    SortText = "0002_" + keyword,
+                    InsertText = keyword,
+                    TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit
+                    {
+                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
+                        NewText = keyword
+                    })
+                }).ToList();
         }
 
         // ── Snippet completions ───────────────────────────────────────────────

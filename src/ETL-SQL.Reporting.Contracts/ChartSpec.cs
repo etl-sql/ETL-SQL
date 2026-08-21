@@ -77,6 +77,27 @@ public enum SortDirection
     Descending
 }
 
+public enum ConditionalEncodingChannel { Color, Opacity, Size, Shape, Text }
+public enum PredicateKind { Comparison, And, Or, Not, IsNull, IsNotNull, Truthy }
+public enum ComparisonKind { Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual }
+public enum PredicateOperandKind { Field, Literal }
+
+public sealed record PredicateOperand(PredicateOperandKind Kind, string? Field, ChartValue? Literal);
+
+public sealed record EncodingPredicate(
+    PredicateKind Kind,
+    PredicateOperand? Left = null,
+    PredicateOperand? Right = null,
+    ComparisonKind? Comparison = null,
+    EncodingPredicate? First = null,
+    EncodingPredicate? Second = null);
+
+public sealed record EncodingConditionSpec(
+    ConditionalEncodingChannel Channel,
+    EncodingPredicate Predicate,
+    ChartValue WhenTrue,
+    ChartValue? WhenFalse = null);
+
 public enum NullValuePolicy
 {
     Gap,
@@ -117,7 +138,10 @@ public sealed record MarkLayerSpec(
     int ZIndex,
     ImmutableArray<FieldBinding> Bindings,
     ImmutableArray<StyleToken> Style,
-    string? LegendTitle = null);
+    string? LegendTitle = null)
+{
+    public ImmutableArray<EncodingConditionSpec> Conditions { get; init; } = [];
+}
 
 public sealed record StyleToken(string Name, string Value);
 
@@ -240,8 +264,17 @@ public sealed record ChartSpec(
 
         if (Layers.IsDefaultOrEmpty)
             throw new InvalidDataException("A ChartSpec must contain at least one mark layer.");
+        if (Coordinate.Kind == CoordinateKind.Polar && Coordinate.InnerRadius is < 0m or >= 1m)
+            throw new InvalidDataException("Polar inner radius must be at least zero and less than one.");
+        if (Facet is not null)
+        {
+            if (string.IsNullOrWhiteSpace(Facet.RowField) && string.IsNullOrWhiteSpace(Facet.ColumnField))
+                throw new InvalidDataException("A facet must declare a row field, column field, or both.");
+            if (Facet.RowField is not null && Facet.RowField.Equals(Facet.ColumnField, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Facet row and column fields must be different.");
+        }
 
-        var scaleIds = Scales.Select(scale => scale.Id).ToHashSet(StringComparer.Ordinal);
+        var scaleIds = Scales.Select(scale => scale.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var scale in Scales)
         {
             ChartContractValidation.RequireName(scale.Id, "scale id");
@@ -249,6 +282,8 @@ public sealed record ChartSpec(
                 throw new InvalidDataException($"Scale '{scale.Id}' category order must be initialized.");
             scale.DomainMinimum?.Validate();
             scale.DomainMaximum?.Validate();
+            if (scale.Kind == ScaleKind.Logarithmic && scale.IncludeZero)
+                throw new InvalidDataException($"Logarithmic scale '{scale.Id}' cannot include zero.");
         }
         foreach (var binding in Bindings.Concat(Layers.SelectMany(layer => layer.Bindings)))
         {
@@ -258,7 +293,35 @@ public sealed record ChartSpec(
         }
 
         foreach (var layer in Layers)
+        {
             if (layer.ZIndex < 0)
                 throw new InvalidDataException($"Layer '{layer.Id}' has a negative z-index.");
+            if (!layer.Style.IsDefault) ChartContractValidation.RequireUnique(layer.Style.Select(token => token.Name), $"style token in layer '{layer.Id}'");
+            if (!layer.Conditions.IsDefaultOrEmpty && layer.Mark is MarkKind.Line or MarkKind.Area)
+                throw new InvalidDataException($"Connected layer '{layer.Id}' cannot use row-level conditional encodings.");
+            if (!layer.Conditions.IsDefault)
+                foreach (var condition in layer.Conditions)
+                {
+                    condition.WhenTrue.Validate();
+                    condition.WhenFalse?.Validate();
+                    ValidatePredicate(condition.Predicate, layer.Id);
+                }
+        }
+    }
+
+    private static void ValidatePredicate(EncodingPredicate predicate, string layerId)
+    {
+        if (predicate.Kind == PredicateKind.Comparison &&
+            (predicate.Comparison is null || predicate.Left is null || predicate.Right is null))
+            throw new InvalidDataException($"Layer '{layerId}' has an incomplete comparison condition.");
+        if (predicate.Kind is PredicateKind.And or PredicateKind.Or &&
+            (predicate.First is null || predicate.Second is null))
+            throw new InvalidDataException($"Layer '{layerId}' has an incomplete logical condition.");
+        if (predicate.Kind == PredicateKind.Not && predicate.First is null)
+            throw new InvalidDataException($"Layer '{layerId}' has an incomplete NOT condition.");
+        predicate.Left?.Literal?.Validate();
+        predicate.Right?.Literal?.Validate();
+        if (predicate.First is not null) ValidatePredicate(predicate.First, layerId);
+        if (predicate.Second is not null) ValidatePredicate(predicate.Second, layerId);
     }
 }

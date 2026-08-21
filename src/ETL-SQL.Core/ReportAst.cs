@@ -73,7 +73,7 @@ public enum VisualType
     Bubble, Radar, Candlestick,
     Map, Gantt,
     Checkbox, Textbox, Numberbox,
-    Sankey, Sunburst, Network, Trellis, Matrix
+    Sankey, Sunburst, Network, Trellis, Matrix, Custom
 }
 
 public enum PageMode
@@ -351,6 +351,7 @@ public record CreateVisualStatement : Statement
     public PrintLayoutOverride? PrintLayout { get; init; }
     public RowDetailDefinition? RowDetail { get; init; }
     public CascadeDefinition? Cascade { get; init; }
+    public AdvancedChartDefinition? AdvancedChart { get; init; }
     public override string ToSql() => AstSerializer.Format(this);
 }
 

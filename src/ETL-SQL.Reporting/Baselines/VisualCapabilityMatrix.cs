@@ -27,13 +27,13 @@ public static class VisualCapabilityMatrix
     private static readonly HashSet<VisualType> NativeSvgCharts =
     [
         VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Scatter,
-        VisualType.Pie, VisualType.Donut, VisualType.Combo
+        VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom
     ];
 
     private static readonly HashSet<VisualType> MigratedPlotPlanCharts =
     [
         VisualType.Bar, VisualType.Line, VisualType.Scatter,
-        VisualType.Pie, VisualType.Donut, VisualType.Combo
+        VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom
     ];
 
     private static readonly HashSet<VisualType> EChartsCharts =
@@ -43,7 +43,7 @@ public static class VisualCapabilityMatrix
         VisualType.HeatMap, VisualType.Combo, VisualType.Gauge, VisualType.Funnel,
         VisualType.Waterfall, VisualType.Bubble, VisualType.Radar, VisualType.Candlestick,
         VisualType.Map, VisualType.Gantt, VisualType.Sankey, VisualType.Sunburst,
-        VisualType.Network, VisualType.Trellis, VisualType.Matrix
+        VisualType.Network, VisualType.Trellis, VisualType.Matrix, VisualType.Custom
     ];
 
     private static readonly HashSet<VisualType> TerminalSemanticFallbacks =
@@ -100,6 +100,7 @@ public static class VisualCapabilityMatrix
         Chart(VisualType.Treemap, "TREEMAP", "Hierarchical", "treemap", "Drill, zoom, breadcrumb"),
         Chart(VisualType.HeatMap, "HEATMAP", "Matrix / Grid", "heat map", "Cell click, visual-map filter, tooltip"),
         Chart(VisualType.Combo, "COMBO", "Layered", "bar/line combo", "Click, series toggle, tooltip"),
+        Chart(VisualType.Custom, "CUSTOM", "Advanced / Layered", "advanced chart", "Click, series toggle, tooltip"),
         Control(VisualType.Table, "TABLE", "Tabular", "Tabulator / HTML table", "Markdown, CSV, and static table exporters", "Spectre table", "Sort, filter, pagination, row click", browserLevel: CapabilityLevel.ThirdPartyDependency),
         Control(VisualType.Card, "CARD", "KPI", "native DOM card", "Markdown and static card exporters", "Spectre panel", "Click, navigation"),
         Control(VisualType.Slicer, "SLICER", "Filter / Control", "native DOM control", "omitted from non-browser exports", "Spectre selection summary", "Selection, parameter binding", false),

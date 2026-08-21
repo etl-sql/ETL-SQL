@@ -498,6 +498,27 @@ public class LineageAnalyzer
                     line: mapping.Line,
                     column: ((AstNode)mapping).Column);
             }
+
+            if (visual.AdvancedChart is { } chart)
+            {
+                foreach (var layer in chart.Layers)
+                {
+                    foreach (var encoding in layer.Encodings)
+                        Tracker.Record(target, sources, "CREATE VISUAL CHART",
+                            targetColumn: $"{layer.Name}.{encoding.Channel.ToString().ToUpperInvariant()}",
+                            sourceColumns: new[] { encoding.Field }, line: encoding.Line, column: encoding.Column);
+                    foreach (var condition in layer.Conditions)
+                        Tracker.Record(target, sources, "CREATE VISUAL CHART CONDITION",
+                            targetColumn: $"{layer.Name}.{condition.Channel.ToString().ToUpperInvariant()}",
+                            sourceColumns: condition.Predicate.GetSourceColumns(), line: condition.Line, column: condition.Column);
+                }
+                if (chart.Facet?.RowField is { } rowField)
+                    Tracker.Record(target, sources, "CREATE VISUAL CHART FACET", targetColumn: "FACET.ROW",
+                        sourceColumns: new[] { rowField }, line: chart.Facet.Line, column: chart.Facet.Column);
+                if (chart.Facet?.ColumnField is { } columnField)
+                    Tracker.Record(target, sources, "CREATE VISUAL CHART FACET", targetColumn: "FACET.COLUMN",
+                        sourceColumns: new[] { columnField }, line: chart.Facet.Line, column: chart.Facet.Column);
+            }
         }
     }
 

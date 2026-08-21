@@ -34,12 +34,17 @@ public sealed record PaletteAssignment(string SeriesKey, string Color);
 public sealed record LegendEntry(string SeriesKey, string Label, int Order, string Color);
 
 public sealed record ResolvedChannelValue(FieldChannel Channel, ChartValue Value, string? DisplayValue);
+public sealed record ResolvedEncodingValue(ConditionalEncodingChannel Channel, ChartValue Value);
 
 public sealed record ResolvedDatum(
     int RowIndex,
     ImmutableArray<ResolvedChannelValue> Channels,
     bool IsGap,
-    string? Tooltip);
+    string? Tooltip)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<ResolvedEncodingValue> Encodings { get; init; } = [];
+}
 
 public sealed record ResolvedMarkLayer(
     string Id,
@@ -57,6 +62,14 @@ public sealed record ResolvedNullPolicy(
     ImmutableArray<FieldNullPolicy> Fields,
     ImmutableArray<int> GapRows,
     ImmutableArray<int> SkippedRows);
+
+public sealed record ResolvedFacetPanel(
+    string Id,
+    string? RowLabel,
+    string? ColumnLabel,
+    PlotBounds Bounds,
+    ImmutableArray<int> RowIndices,
+    ImmutableArray<ResolvedScale> Scales);
 
 public sealed record SemanticFallbackItem(string Label, string Value, int Order)
 {
@@ -100,6 +113,9 @@ public sealed record PlotPlan(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<StyleToken> Style { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<ResolvedFacetPanel> Facets { get; init; } = [];
+
     public static PlotPlan Create(
         string specId,
         PlotBounds bounds,
@@ -113,7 +129,8 @@ public sealed record PlotPlan(
         SemanticFallback fallback,
         string? title = null,
         CoordinateSpec? coordinate = null,
-        ImmutableArray<StyleToken> style = default) => new(
+        ImmutableArray<StyleToken> style = default,
+        ImmutableArray<ResolvedFacetPanel> facets = default) => new(
             ChartContractVersions.PlotPlanSchema,
             ChartContractVersions.Current,
             specId,
@@ -129,7 +146,8 @@ public sealed record PlotPlan(
             fallback)
         {
             Coordinate = coordinate,
-            Style = style
+            Style = style,
+            Facets = facets
         };
 
     public void Validate()
@@ -146,6 +164,7 @@ public sealed record PlotPlan(
         ChartContractValidation.RequireUnique(Scales.Select(scale => scale.Id), "resolved scale id");
         ChartContractValidation.RequireUnique(Series.Select(series => series.Key), "series key");
         ChartContractValidation.RequireUnique(Layers.Select(layer => layer.Id), "resolved layer id");
+        if (!Facets.IsDefault) ChartContractValidation.RequireUnique(Facets.Select(facet => facet.Id), "resolved facet id");
         ChartContractValidation.RequireUnique(Palette.Select(entry => entry.SeriesKey), "palette series key");
         ChartContractValidation.RequireUnique(Legend.Select(entry => entry.SeriesKey), "legend series key");
 
@@ -171,7 +190,12 @@ public sealed record PlotPlan(
             foreach (var tick in scale.Ticks) tick.Value.Validate();
         }
         foreach (var datum in Layers.SelectMany(layer => layer.Data))
+        {
             foreach (var channel in datum.Channels)
                 channel.Value.Validate();
+            if (!datum.Encodings.IsDefault)
+                foreach (var encoding in datum.Encodings)
+                    encoding.Value.Validate();
+        }
     }
 }

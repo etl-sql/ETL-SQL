@@ -62,7 +62,7 @@ internal static class ChartContractValidation
 
     internal static void RequireUnique(IEnumerable<string> values, string field)
     {
-        var duplicate = values.GroupBy(value => value, StringComparer.Ordinal).FirstOrDefault(group => group.Count() > 1);
+        var duplicate = values.GroupBy(value => value, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1);
         if (duplicate is not null) throw new InvalidDataException($"Duplicate {field} '{duplicate.Key}'.");
     }
 }

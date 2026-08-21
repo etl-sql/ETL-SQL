@@ -266,6 +266,10 @@ public sealed class DesignerAnalysisService
         {
             options["cascade"] = v.Cascade.ToSql();
         }
+        if (v.AdvancedChart != null)
+        {
+            options["advanced_chart"] = v.AdvancedChart.ToSql();
+        }
 
         return new DesignerVisualDto(
             $"v_{v.Name}_{idx}",
