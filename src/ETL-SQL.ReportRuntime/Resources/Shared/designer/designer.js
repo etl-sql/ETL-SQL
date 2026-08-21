@@ -5167,7 +5167,8 @@ export function createDesigner(container, opts = {}) {
     async function refreshPreview() {
         setPreviewStatus('Building preview…', 'pending');
         try {
-            const gen = await apiJson('/api/designer/generate', 'POST', { designState: state });
+            const currentScript = scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || null);
+            const gen = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             const script = gen?.script ?? '';
             if (!script.trim()) { setPreviewStatus('Nothing to preview yet.', 'neutral'); return; }
             const manifest = await apiJson('/api/designer/preview', 'POST', { script });
@@ -5890,6 +5891,7 @@ export function createDesigner(container, opts = {}) {
     if (initialMode === 'code') queueMicrotask(() => openScript());
 
     return {
+        applyScriptText,
         dispose: () => {
             leaseDisposed = true;
             void releaseEditLease({ keepalive: true });

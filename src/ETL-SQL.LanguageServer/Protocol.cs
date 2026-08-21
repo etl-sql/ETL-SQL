@@ -119,6 +119,7 @@ namespace ETL_SQL.LSP
     public class DesignerGenerateParams : IRequest<DesignerGenerateResponse>
     {
         public string designStateJson { get; set; } = "";
+        public string? script { get; set; }
     }
 
     public class DesignerGenerateResponse

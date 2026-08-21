@@ -104,10 +104,10 @@ export class ReportDesignerPanel {
                 this._reply(id, { designState });
 
             } else if (msg.url.endsWith('/api/designer/generate')) {
-                const body   = msg.body as { designState: unknown };
+                const body   = msg.body as { designState: unknown; script?: string };
                 const result = await client.sendRequest<{ script: string }>(
                     'etlsql/designerGenerate',
-                    { designStateJson: JSON.stringify(body.designState) }
+                    { designStateJson: JSON.stringify(body.designState), script: body.script }
                 );
                 this._reply(id, { script: result.script });
 
@@ -291,6 +291,7 @@ export class ReportDesignerPanel {
   createDesigner(document.getElementById('designerRoot'), {
     designState,
     reportName:    init.reportName,
+    initialScript: init.scriptText,
     apiBase:       '',
     host:          'vscode',
     authFetch:     window.__vscodeFetch,

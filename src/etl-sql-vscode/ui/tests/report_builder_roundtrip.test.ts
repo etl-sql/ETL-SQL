@@ -24,6 +24,11 @@ describe('Visual Report Builder Round-Trip Fidelity & Trivia Tests', () => {
             setItem: () => {},
             removeItem: () => {},
         };
+        (globalThis as any).ETLSQLFeedback = {
+            notify: () => {},
+            confirm: async () => true,
+            prompt: async () => null,
+        };
 
         // Dynamic import of synced designer module
         const mod = await import('../../media/designer/designer.js');
@@ -189,9 +194,15 @@ describe('Visual Report Builder Round-Trip Fidelity & Trivia Tests', () => {
         // The card exists
         expect(container.querySelectorAll('.etlsql-dsgn-visual-card').length).toBe(1);
 
-        // Open split mode and simulate apply with syntax error
+        await designer.applyScriptText('CREATE VISUAL v1 AS BAR ( TITLE = @@ );');
+
+        // The error is localized to the script surface and the existing canvas remains usable.
         const diagnosticBadge = container.querySelector('#dsgn-diagnostic-badge') as HTMLElement;
         expect(diagnosticBadge).toBeDefined();
+        expect(diagnosticBadge.style.display).toBe('inline-flex');
+        expect(diagnosticBadge.title).toContain('Syntax error at line 4');
+        expect(container.querySelectorAll('.etlsql-dsgn-visual-card').length).toBe(1);
+        expect(container.querySelector('.etlsql-dsgn-vcard-name')?.textContent).toContain('Active Chart');
 
         designer.dispose?.();
     });

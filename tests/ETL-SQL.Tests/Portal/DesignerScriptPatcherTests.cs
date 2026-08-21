@@ -314,4 +314,156 @@ public class DesignerScriptPatcherTests
         Assert.Contains("CREATE VISUAL v_pie AS PIE", patched);
         Assert.Contains("CREATE PAGE [Page1] AS DASHBOARD", patched);
     }
+
+    [Fact]
+    public void UpdatingSecondPage_PreservesFirstPageAndDataPreparationByteForByte()
+    {
+        const string original = """
+            -- data preparation must not move
+            WITH staged AS (
+                SELECT category, amount FROM source.orders
+            )
+            SELECT category, amount INTO #stage FROM staged;
+
+            CREATE VISUAL first_chart AS BAR (
+                TITLE = 'First',
+                SOURCE = &data,
+                MAPPINGS (X = category, Y = amount)
+            );
+
+            CREATE VISUAL second_chart AS LINE (
+                TITLE = 'Second',
+                SOURCE = &data,
+                MAPPINGS (X = category, Y = amount)
+            );
+
+            CREATE PAGE [FirstPage] AS DASHBOARD (
+                -- first page trivia
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = first_chart))
+            );
+
+            CREATE PAGE [SecondPage] AS DASHBOARD (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = second_chart))
+            );
+            """;
+
+        var firstPageEnd = original.IndexOf("CREATE PAGE [SecondPage]", StringComparison.Ordinal);
+        var protectedPrefix = original[..firstPageEnd];
+        var state = State(
+            Page("p1", "FirstPage", Visual("v1", "first_chart", "BAR", 1, 1, 12, 4, "First")),
+            Page("p2", "SecondPage", Visual("v2", "second_chart", "LINE", 7, 1, 6, 4, "Second")));
+
+        var patched = _patcher.Patch(original, state);
+
+        Assert.StartsWith(protectedPrefix, patched, StringComparison.Ordinal);
+        Assert.Contains("STRUCTURE = '. A'", patched, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpdatingVisualTitle_PreservesCteAndNestedBodyTrivia()
+    {
+        const string original = ReportDesignerRoundTripFixtures.NestedClauseTriviaScript;
+        var state = ReportDesignerRoundTripFixtures.NestedClauseTriviaState("After");
+
+        var patched = _patcher.Patch(original, state);
+
+        Assert.Contains("TITLE = 'After'", patched, StringComparison.Ordinal);
+        foreach (var trivia in new[]
+                 {
+                     "-- preserve the complete CTE chain",
+                     "-- category binding stays with the author",
+                     "/* amount binding */",
+                     "-- retain option rationale",
+                     "-- retain action rationale",
+                     "/* selection policy */",
+                     "-- retain sizing rationale"
+                 })
+            Assert.Contains(trivia, patched, StringComparison.Ordinal);
+
+        Assert.StartsWith(original[..original.IndexOf("CREATE VISUAL", StringComparison.Ordinal)], patched, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void FiftySequentialMutations_PreserveLineEndingsAndStableDataBytes(string lineEnding)
+    {
+        var originalLf = """
+            -- immutable preparation
+            SELECT category, amount INTO #stage FROM source.orders;
+
+            CREATE VISUAL chart AS BAR (
+                TITLE = 'Chart 0',
+                SOURCE = &data,
+                MAPPINGS (X = category, Y = amount)
+            );
+
+            CREATE PAGE [Dashboard] AS DASHBOARD (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = chart))
+            );
+            """;
+        var script = ReportDesignerRoundTripFixtures.WithLineEnding(originalLf, lineEnding);
+        var protectedPrefix = script[..script.IndexOf("CREATE VISUAL", StringComparison.Ordinal)];
+
+        for (var iteration = 1; iteration <= 50; iteration++)
+        {
+            var column = iteration % 2 == 0 ? 1 : 7;
+            script = _patcher.Patch(script, State(Page("p1", "Dashboard", Visual(
+                "v1", "chart", "BAR", column, 1, 6, 4, $"Chart {iteration}"))));
+        }
+
+        Assert.StartsWith(protectedPrefix, script, StringComparison.Ordinal);
+        Assert.Contains("TITLE = 'Chart 50'", script, StringComparison.Ordinal);
+        if (lineEnding == "\r\n")
+            Assert.DoesNotMatch("(?<!\\r)\\n", script);
+        else
+            Assert.DoesNotContain("\r", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InvalidIntermediateScript_IsReturnedUnchanged()
+    {
+        const string invalid = """
+            SELECT 1 AS value INTO #stage;
+            CREATE VISUAL chart AS BAR (
+                TITLE = 'unfinished',
+                SOURCE = &data,
+                MAPPINGS (X = category, Y = )
+            """;
+
+        var patched = _patcher.Patch(invalid, State(Page("p1", "Dashboard", Visual(
+            "v1", "chart", "BAR", 1, 1, 12, 4, "Changed"))));
+
+        Assert.Equal(invalid, patched);
+    }
+
+    private static DesignerStateDto State(params DesignerPageDto[] pages) =>
+        new(pages.ToList(), []);
+
+    private static DesignerPageDto Page(string id, string name, params DesignerVisualDto[] visuals) =>
+        new(id, name, "Dashboard", visuals.ToList());
+
+    private static DesignerVisualDto Visual(
+        string id,
+        string name,
+        string type,
+        int column,
+        int row,
+        int columnSpan,
+        int rowSpan,
+        string title,
+        Dictionary<string, string>? mappings = null,
+        Dictionary<string, string>? options = null) =>
+        new(
+            id,
+            name,
+            type,
+            column,
+            row,
+            columnSpan,
+            rowSpan,
+            title,
+            "data",
+            mappings ?? new Dictionary<string, string> { ["X"] = "category", ["Y"] = "amount" },
+            options ?? new Dictionary<string, string>());
 }
