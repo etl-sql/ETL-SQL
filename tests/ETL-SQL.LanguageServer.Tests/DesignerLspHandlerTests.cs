@@ -154,5 +154,35 @@ namespace ETL_SQL.LanguageServer.Tests
 
             Assert.Equal(invalid, response.script);
         }
+
+        [Fact]
+        public async Task Generate_SurgicalEdit_PreservesNativeMicroChartMappings()
+        {
+            const string script = """
+                CREATE VISUAL Kpi AS CARD (
+                  TITLE = 'Before',
+                  SOURCE = &summary,
+                  MAPPINGS (VALUE = total, SPARKLINE = #daily (X = day, Y = amount, TYPE = AREA))
+                );
+                CREATE VISUAL Goals AS TABLE (
+                  SOURCE = &goals,
+                  MAPPINGS (team, SPARKLINE(jan, feb, mar) LINE AS 'Trend', attainment PROGRESS_BAR (MIN = 0, MAX = 1, COLOR = '#16A34A') AS 'Goal')
+                );
+                CREATE PAGE [Overview] AS DASHBOARD (STRUCTURE = 'A B', MAP ('A' = Kpi, 'B' = Goals));
+                """;
+            const string state = """
+                {"pages":[{"id":"p","name":"Overview","mode":"Dashboard","visuals":[
+                  {"id":"k","name":"Kpi","type":"CARD","gridCol":1,"gridRow":1,"gridColSpan":6,"gridRowSpan":4,"title":"After","dataset":"summary","mappings":{"VALUE":"total"},"options":{}},
+                  {"id":"g","name":"Goals","type":"TABLE","gridCol":7,"gridRow":1,"gridColSpan":6,"gridRowSpan":4,"dataset":"goals","mappings":{"TEAM":"team"},"options":{}}
+                ]}],"datasets":[]}
+                """;
+            var response = await new DesignerLspHandler(NullLogger<DesignerLspHandler>.Instance).Handle(
+                new DesignerGenerateParams { designStateJson = state, script = script }, CancellationToken.None);
+
+            Assert.Contains("TITLE = 'After'", response.script);
+            Assert.Contains("SPARKLINE = #daily (X = day, Y = amount, TYPE = AREA)", response.script);
+            Assert.Contains("SPARKLINE(jan, feb, mar) LINE AS 'Trend'", response.script);
+            Assert.Contains("attainment PROGRESS_BAR (MIN = 0, MAX = 1, COLOR = '#16A34A')", response.script);
+        }
     }
 }

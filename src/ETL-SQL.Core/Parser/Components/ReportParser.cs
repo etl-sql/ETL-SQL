@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 
@@ -1761,12 +1762,60 @@ public class ReportParser : ParserComponent
         };
     }
 
+    private VisualMapping ParseCardSparklineMapping()
+    {
+        Advance(); // SPARKLINE
+        Consume(TokenType.EQUALS, "Expected '=' after SPARKLINE");
+        var source = ConsumeIdentifier("Expected a temp table or dataset after SPARKLINE =").Value;
+        Consume(TokenType.LPAREN, "Expected '(' after the CARD sparkline source");
+        string? x = null, y = null;
+        var type = "line";
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var key = ConsumeIdentifier("Expected X, Y, or TYPE in CARD SPARKLINE").Value.ToUpperInvariant();
+            Consume(TokenType.EQUALS, $"Expected '=' after CARD SPARKLINE {key}");
+            if (key == "TYPE")
+            {
+                type = ConsumeIdentifier("Expected LINE, BAR, or AREA after TYPE =").Value.ToLowerInvariant();
+                if (type is not "line" and not "bar" and not "area")
+                    throw new SyntaxException("CARD SPARKLINE TYPE must be LINE, BAR, or AREA", _parser.Previous.Line, _parser.Previous.Column);
+            }
+            else
+            {
+                var column = ConsumeIdentifier($"Expected a column name after {key} =").Value;
+                if (key == "X") x = column;
+                else if (key == "Y") y = column;
+                else throw new SyntaxException($"Unsupported CARD SPARKLINE option '{key}'", _parser.Previous.Line, _parser.Previous.Column);
+            }
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after CARD SPARKLINE options");
+        if (x is null || y is null)
+            throw new SyntaxException("CARD SPARKLINE requires both X and Y mappings", _parser.Current.Line, _parser.Current.Column);
+
+        return new VisualMapping
+        {
+            Role = "SPARKLINE",
+            Column = y,
+            SparklineSource = source,
+            SparklineXColumn = x,
+            SparklineYColumn = y,
+            SparklineType = type
+        };
+    }
+
     private IEnumerable<VisualMapping> ParseMappings()
     {
         var result = new List<VisualMapping>();
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
             // SPARKLINE(col1, col2, ...) [LINE|BAR|AREA] [AS 'alias']
+            if (_parser.Current.Type == TokenType.SPARKLINE && _parser.Peek.Type == TokenType.EQUALS)
+            {
+                result.Add(ParseCardSparklineMapping());
+                Match(TokenType.COMMA);
+                continue;
+            }
             if (_parser.Current.Type == TokenType.SPARKLINE)
             {
                 result.Add(ParseSparklineMapping());
@@ -1794,9 +1843,10 @@ public class ReportParser : ParserComponent
                 //                                [AS 'alias'] [HIDDEN]
                 string? format = null, align = null, displayName = null;
                 string? dataBarColor = null, colorScaleFrom = null, colorScaleTo = null;
-                string? cellRenderer = null, hyperlinkLabel = null;
+                string? cellRenderer = null, hyperlinkLabel = null, progressColor = null;
                 int? imageWidth = null;
-                bool dataBar = false, hidden = false;
+                bool dataBar = false, hidden = false, progressBar = false;
+                decimal? progressMinimum = null, progressMaximum = null;
                 while (!ReportCheck(TokenType.RPAREN) && !ReportCheck(TokenType.COMMA) && !ReportAtEnd())
                 {
                     if (_parser.Current.Type == TokenType.FORMAT ||
@@ -1865,6 +1915,34 @@ public class ReportParser : ParserComponent
                             hyperlinkLabel = Consume(TokenType.STRING_LITERAL, "Expected label string after LABEL").Value;
                         }
                     }
+                    else if (IsCurrentValue("PROGRESS_BAR"))
+                    {
+                        Advance();
+                        progressBar = true;
+                        Consume(TokenType.LPAREN, "Expected '(' after PROGRESS_BAR");
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            var option = ConsumeIdentifier("Expected MIN, MAX, or COLOR in PROGRESS_BAR").Value.ToUpperInvariant();
+                            Consume(TokenType.EQUALS, $"Expected '=' after PROGRESS_BAR {option}");
+                            if (option == "COLOR")
+                            {
+                                progressColor = Consume(TokenType.STRING_LITERAL, "Expected a color string after PROGRESS_BAR COLOR =").Value;
+                            }
+                            else
+                            {
+                                var raw = _parser.Current.Type is TokenType.NUMBER or TokenType.MINUS
+                                    ? ParseSignedNumberText()
+                                    : throw new SyntaxException($"Expected a numeric value after PROGRESS_BAR {option} =", _parser.Current.Line, _parser.Current.Column);
+                                if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var numeric))
+                                    throw new SyntaxException($"Invalid PROGRESS_BAR {option} value '{raw}'", _parser.Previous.Line, _parser.Previous.Column);
+                                if (option == "MIN") progressMinimum = numeric;
+                                else if (option == "MAX") progressMaximum = numeric;
+                                else throw new SyntaxException($"Unsupported PROGRESS_BAR option '{option}'", _parser.Previous.Line, _parser.Previous.Column);
+                            }
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' after PROGRESS_BAR options");
+                    }
                     else if (Match(TokenType.AS))
                     {
                         displayName = _parser.Current.Type == TokenType.STRING_LITERAL
@@ -1887,12 +1965,22 @@ public class ReportParser : ParserComponent
                     CellRenderer = cellRenderer,
                     ImageWidth = imageWidth,
                     HyperlinkLabel = hyperlinkLabel,
+                    ProgressBar = progressBar,
+                    ProgressMinimum = progressMinimum,
+                    ProgressMaximum = progressMaximum,
+                    ProgressColor = progressColor,
                     Hidden = hidden
                 });
             }
             Match(TokenType.COMMA);
         }
         return result;
+    }
+
+    private string ParseSignedNumberText()
+    {
+        var sign = Match(TokenType.MINUS) ? "-" : string.Empty;
+        return sign + Consume(TokenType.NUMBER, "Expected a number").Value;
     }
 
     private IEnumerable<VisualInteraction> ParseInteractions()

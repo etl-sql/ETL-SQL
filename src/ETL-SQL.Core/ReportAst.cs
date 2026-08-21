@@ -129,6 +129,14 @@ public record VisualMapping : AstNode
     // Phase 3B: sparkline virtual column
     public List<string>? SparklineColumns { get; init; }
     public string? SparklineType { get; init; }  // "line" | "bar" | "area"
+    // Phase 4: CARD sparkline source and TABLE progress micro-chart intent.
+    public string? SparklineSource { get; init; }
+    public string? SparklineXColumn { get; init; }
+    public string? SparklineYColumn { get; init; }
+    public bool ProgressBar { get; init; }
+    public decimal? ProgressMinimum { get; init; }
+    public decimal? ProgressMaximum { get; init; }
+    public string? ProgressColor { get; init; }
     public bool Hidden { get; init; }
     public override string ToSql() => AstSerializer.Format(this);
 }

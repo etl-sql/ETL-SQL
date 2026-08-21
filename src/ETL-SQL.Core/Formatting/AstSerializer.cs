@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using ETL_SQL.Core.Data;
@@ -1647,6 +1648,11 @@ public static class AstSerializer
     {
         if (string.Equals(m.Role, "SPARKLINE", StringComparison.OrdinalIgnoreCase))
         {
+            if (!string.IsNullOrWhiteSpace(m.SparklineSource))
+            {
+                var cardSparklineType = (m.SparklineType ?? "line").ToUpperInvariant();
+                return $"SPARKLINE = {m.SparklineSource} (X = {m.SparklineXColumn}, Y = {m.SparklineYColumn}, TYPE = {cardSparklineType})";
+            }
             var cols = m.SparklineColumns != null ? string.Join(", ", m.SparklineColumns) : "";
             var type = m.SparklineType != null ? m.SparklineType.ToUpperInvariant() : "LINE";
             var alias = m.DisplayName != null ? $" AS '{m.DisplayName.Replace("'", "''")}'" : "";
@@ -1687,6 +1693,14 @@ public static class AstSerializer
             sb.Append(" HYPERLINK");
             if (!string.IsNullOrEmpty(m.HyperlinkLabel))
                 sb.Append($" LABEL '{m.HyperlinkLabel.Replace("'", "''")}'");
+        }
+        if (m.ProgressBar)
+        {
+            var options = new List<string>();
+            if (m.ProgressMinimum.HasValue) options.Add($"MIN = {m.ProgressMinimum.Value.ToString(CultureInfo.InvariantCulture)}");
+            if (m.ProgressMaximum.HasValue) options.Add($"MAX = {m.ProgressMaximum.Value.ToString(CultureInfo.InvariantCulture)}");
+            if (!string.IsNullOrEmpty(m.ProgressColor)) options.Add($"COLOR = '{m.ProgressColor.Replace("'", "''")}'");
+            sb.Append($" PROGRESS_BAR ({string.Join(", ", options)})");
         }
         if (!string.IsNullOrEmpty(m.DisplayName))
             sb.Append($" AS '{m.DisplayName.Replace("'", "''")}'");

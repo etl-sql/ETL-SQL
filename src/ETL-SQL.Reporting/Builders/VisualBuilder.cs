@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
@@ -248,6 +250,7 @@ namespace ETL_SQL.Reporting.Builders
                     CalculateSummaries(vStmt, vm);
                     if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
                         ApplyTableMappings(vStmt, vm);
+                    await BuildMicroChartsAsync(vStmt, vm);
                     if (NamedVisualChartLowerer.Supports(vStmt.VisualType))
                     {
                         vm.ChartSpec = new NamedVisualChartLowerer().Lower(vStmt, vm);
@@ -652,7 +655,7 @@ namespace ETL_SQL.Reporting.Builders
             var metas = selected.Select((x, si) =>
             {
                 var m = x.m;
-                var hasAny = m.Format != null || m.Align != null || m.DataBar || m.ColorScaleFrom != null || m.CellRenderer != null || m.SparklineColumns != null || m.Hidden;
+                var hasAny = m.Format != null || m.Align != null || m.DataBar || m.ColorScaleFrom != null || m.CellRenderer != null || m.SparklineColumns != null || m.ProgressBar || m.Hidden;
                 if (!hasAny) return (ColumnMetaManifest?)null;
                 var meta = new ColumnMetaManifest { Format = m.Format, Align = m.Align, Hidden = m.Hidden };
                 if (m.DataBar)
@@ -678,11 +681,89 @@ namespace ETL_SQL.Reporting.Builders
                     meta.CellRenderer = "sparkline";
                     meta.SparklineType = m.SparklineType ?? "line";
                 }
+                if (m.ProgressBar)
+                    meta.CellRenderer = "progress";
                 return (ColumnMetaManifest?)meta;
             }).ToList();
 
             if (metas.Any(m => m != null))
                 vm.ColumnMeta = metas;
+        }
+
+        private async Task BuildMicroChartsAsync(CreateVisualStatement statement, VisualManifest manifest)
+        {
+            var factory = new MicroChartPlanFactory();
+            if (statement.VisualType == VisualType.Table)
+            {
+                for (var columnIndex = 0; columnIndex < manifest.Columns.Count; columnIndex++)
+                {
+                    var mapping = statement.Mappings.FirstOrDefault(candidate =>
+                        (candidate.DisplayName ?? (candidate.SparklineColumns is { Count: > 0 } ? "Trend" : candidate.Column))
+                            .Equals(manifest.Columns[columnIndex], StringComparison.OrdinalIgnoreCase));
+                    if (mapping is null) continue;
+                    for (var rowIndex = 0; rowIndex < manifest.Rows.Count; rowIndex++)
+                    {
+                        var source = manifest.Rows[rowIndex].ElementAtOrDefault(columnIndex);
+                        MicroChartSemanticBundle? bundle = null;
+                        var kind = string.Empty;
+                        if (mapping.SparklineColumns is { Count: > 0 })
+                        {
+                            var vectorValues = ParseVector(source);
+                            bundle = factory.CreateSparkline($"{manifest.Name}-r{rowIndex}-c{columnIndex}", vectorValues,
+                                mapping.SparklineType ?? "line");
+                            kind = "sparkline";
+                        }
+                        else if (mapping.ProgressBar && decimal.TryParse(source, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
+                        {
+                            bundle = factory.CreateProgress($"{manifest.Name}-r{rowIndex}-c{columnIndex}", value,
+                                mapping.ProgressMinimum ?? 0m, mapping.ProgressMaximum ?? 1m, mapping.ProgressColor);
+                            kind = "progress";
+                        }
+                        if (bundle is null) continue;
+                        manifest.MicroCharts ??= [];
+                        manifest.MicroCharts.Add(factory.ToManifest(bundle, kind, "table.cell", rowIndex, columnIndex, source));
+                    }
+                }
+            }
+
+            if (statement.VisualType != VisualType.Card) return;
+            var sparkline = statement.Mappings.FirstOrDefault(mapping => mapping.SparklineSource is not null);
+            if (sparkline?.SparklineSource is null || sparkline.SparklineYColumn is null) return;
+            var sourceStatement = new SelectStatement(
+                [new SelectColumn(new IdentifierExpression("*"))], null,
+                new TableReference(sparkline.SparklineSource), [], null);
+            var values = new List<decimal?>();
+            var labels = new List<string?>();
+            await foreach (var batch in ctx.ExecuteQuery(sourceStatement))
+            {
+                foreach (var row in batch.Rows)
+                {
+                    values.Add(row.TryGetValue(sparkline.SparklineYColumn, out var raw) &&
+                        decimal.TryParse(raw?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var number) ? number : null);
+                    labels.Add(sparkline.SparklineXColumn is not null && row.TryGetValue(sparkline.SparklineXColumn, out var label)
+                        ? label?.ToString() : null);
+                }
+            }
+            var cardBundle = factory.CreateSparkline($"{manifest.Name}-sparkline", values,
+                sparkline.SparklineType ?? "line", labels: labels);
+            manifest.MicroCharts ??= [];
+            manifest.MicroCharts.Add(factory.ToManifest(cardBundle, "sparkline", "card.sparkline"));
+        }
+
+        private static List<decimal?> ParseVector(string? source)
+        {
+            if (string.IsNullOrWhiteSpace(source)) return [];
+            try
+            {
+                using var document = JsonDocument.Parse(source);
+                return document.RootElement.EnumerateArray().Select(item => item.ValueKind == JsonValueKind.Number && item.TryGetDecimal(out var value)
+                    ? (decimal?)value
+                    : decimal.TryParse(item.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed) ? parsed : null).ToList();
+            }
+            catch (JsonException)
+            {
+                return [];
+            }
         }
 
         private void CalculateSummaries(CreateVisualStatement vStmt, VisualManifest vm)
