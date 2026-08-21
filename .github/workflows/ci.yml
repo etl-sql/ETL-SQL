@@ -132,7 +132,6 @@ jobs:
   sample-scripts:
     name: Sample Scripts (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
-    if: github.event_name != 'pull_request' || matrix.platform == 'linux'
     strategy:
       fail-fast: false
       matrix:
@@ -158,11 +157,9 @@ jobs:
         run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug --no-restore
 
       - name: Validate samples (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         shell: pwsh
-        run: |
-          $passes = if ('${{ github.event_name }}' -eq 'pull_request') { 1 } else { 2 }
-          .\scripts\Test-AllSamples.ps1 -Passes $passes
+        run: .\scripts\Test-AllSamples.ps1 -Passes 2
 
       - name: Validate samples (Linux)
         if: runner.os == 'Linux'
