@@ -32,6 +32,7 @@ public sealed class ArchitectureBoundaryTests
         ["Core"] = 0,
         ["Analysis"] = 1,
         ["Engine"] = 1,
+        ["Reporting.Contracts"] = 1,
         ["Reporting"] = 2,
         ["ReportBuilder"] = 2,
         ["ReportRuntime"] = 2,
@@ -169,6 +170,48 @@ public sealed class ArchitectureBoundaryTests
         Assert.True(resolved.Count == 0,
             "Pinned banned package dependencies no longer exist — remove them from KnownBannedPackages:\n"
             + string.Join("\n", resolved.Select(v => $"  {v.Item1} depends on {v.Item2}")));
+    }
+
+    [Fact]
+    public void ReportingContracts_AreBclOnlyAndRendererNeutral()
+    {
+        var projects = Projects();
+        Assert.True(projects.TryGetValue("Reporting.Contracts", out var contracts),
+            "ETL-SQL.Reporting.Contracts project was not found.");
+        Assert.Empty(contracts!.ProjectReferences);
+        Assert.Empty(contracts.PackageReferences);
+
+        var contractRoot = Path.Combine(RepoRoot, "src", "ETL-SQL.Reporting.Contracts");
+        var bannedTerms = new[]
+        {
+            "ETL_SQL.Core", "Microsoft.ClearScript", "SkiaSharp", "using Svg", "PdfSharp",
+            "MigraDoc", "Spectre.Console", "TerminalRenderer"
+        };
+        var violations = Directory.GetFiles(contractRoot, "*.cs", SearchOption.AllDirectories)
+            .SelectMany(file => bannedTerms
+                .Where(term => File.ReadAllText(file).Contains(term, StringComparison.OrdinalIgnoreCase))
+                .Select(term => $"{Path.GetRelativePath(RepoRoot, file)} contains '{term}'"))
+            .ToList();
+
+        Assert.True(violations.Count == 0,
+            "Renderer-neutral reporting contracts contain forbidden dependencies:\n"
+            + string.Join("\n", violations));
+    }
+
+    [Fact]
+    public void Core_DoesNotReferenceReportingContractsOrRendering()
+    {
+        var projects = Projects();
+        Assert.True(projects.TryGetValue("Core", out var core), "ETL-SQL.Core project was not found.");
+        Assert.DoesNotContain(core!.ProjectReferences,
+            reference => reference.StartsWith("Reporting", StringComparison.OrdinalIgnoreCase));
+
+        var coreRoot = Path.Combine(RepoRoot, "src", "ETL-SQL.Core");
+        var reportingNamespaceReferences = Directory.GetFiles(coreRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(file => File.ReadAllText(file).Contains("ETL_SQL.Reporting", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(RepoRoot, file))
+            .ToList();
+        Assert.Empty(reportingNamespaceReferences);
     }
 
     private sealed record ProjectInfo(

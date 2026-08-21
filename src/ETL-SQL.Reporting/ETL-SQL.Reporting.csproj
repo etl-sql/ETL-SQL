@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Reporting.Contracts\ETL-SQL.Reporting.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

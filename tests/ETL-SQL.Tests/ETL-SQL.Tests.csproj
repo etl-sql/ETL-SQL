@@ -54,6 +54,7 @@
     <ProjectReference Include="..\..\src\ETL-SQL.TUI\ETL-SQL.TUI.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Reporting.Contracts\ETL-SQL.Reporting.Contracts.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.ReportHosting\ETL-SQL.ReportHosting.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.WorkstationEditor\ETL-SQL.WorkstationEditor.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Portal\ETL-SQL.Portal.csproj" />

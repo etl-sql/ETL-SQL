@@ -31,6 +31,10 @@ The codebase is split into distinct dependency layers to maintain clean separati
 └────────────────────────────────────────────────────────┘
 ```
 
+`ETL-SQL.Reporting.Contracts` is a BCL-only semantic-contract leaf alongside Core. Reporting depends
+on it; Core does not. It contains renderer-neutral `ChartSpec`, typed chart data, and `PlotPlan`
+contracts, never renderer, export, host, or pixel-emission code.
+
 ---
 
 ## 2. Component Ownership Guidance
@@ -59,6 +63,13 @@ The codebase is split into distinct dependency layers to maintain clean separati
 - **Role**: Dashboard layouts and visual definitions.
 - **Includes**: `ReportManifest` schema validators, visual page and container grids, styling attributes, actions, and chart representations.
 - **Rules**: Reporting projects must remain independent of runtime environments (e.g. they should define what to render, not how to host the HTTP server).
+
+### 2.5.1 `ETL-SQL.Reporting.Contracts` (Renderer-Neutral Reporting Contracts)
+- **Role**: Stable semantic boundary shared by reporting resolvers and output backends.
+- **Includes**: Versioned `ChartSpec`, typed columnar chart data, deterministic `PlotPlan`, and semantic
+  conformance projections.
+- **Rules**: Must remain BCL-only with no project or package references. It must not reference Core,
+  ECharts, SVG/Skia, PDF, terminal presentation, exporters, or host shells.
 
 ### 2.6 `ETL-SQL.ReportHosting` (Report Execution Hosting)
 - **Role**: Reusable dashboard session coordinator.

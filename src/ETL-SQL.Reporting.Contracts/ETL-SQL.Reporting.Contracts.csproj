@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ETL_SQL.Reporting.Semantics</RootNamespace>
+    <Description>Renderer-neutral semantic contracts for ETL-SQL charts and plots.</Description>
+  </PropertyGroup>
+
+</Project>
