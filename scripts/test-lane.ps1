@@ -32,7 +32,7 @@ param(
     # This bounds retained process state and leaves one TRX per shard, while a value of 1 remains
     # available for reproducing behavior in the former all-in-one host.
     [ValidateRange(1, 32)]
-    [int]$EngineShardCount = 8
+    [int]$EngineShardCount = 12
 )
 
 $ErrorActionPreference = "Stop"
@@ -214,10 +214,11 @@ function Invoke-ShardedEngineTests {
         }
         $processInfo.UseShellExecute = $false
         $process = [System.Diagnostics.Process]::Start($processInfo)
-        $completed = $process.WaitForExit(600000)
+        $timeoutMs = if ($CollectCoverage) { 1200000 } else { 900000 }
+        $completed = $process.WaitForExit($timeoutMs)
         if (-not $completed) {
             try { $process.Kill($true) } catch { }
-            Write-Warning "Engine shard $number timed out after 600s and was terminated."
+            Write-Warning "Engine shard $number timed out after $($timeoutMs / 1000)s and was terminated."
             $script:LaneFailures += "engine shard $number/$ShardCount (timed out)"
             $script:LaneExitCode = 1
             continue
