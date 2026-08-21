@@ -257,6 +257,7 @@ namespace ETL_SQL.Reporting.Builders
                         vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData);
                     }
+                    vm.SemanticFallback = VisualSemanticFallbackBuilder.Build(vm);
                     vm.ChartConfig = renderer.Render(vm);
                 }
                 catch (Exception ex)

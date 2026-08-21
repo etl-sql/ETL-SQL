@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using ETL_SQL.Reporting;
+using ETL_SQL.Reporting.Semantics.Runtime;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -164,14 +165,14 @@ namespace ETL_SQL.Reporting.Renderers
                     "CHECKBOX" => RenderCheckbox(visual, manifest),
                     "TEXTBOX" => RenderTextbox(visual, manifest),
                     "NUMBERBOX" => RenderNumberbox(visual, manifest),
-                    "MAP" => RenderMapPlaceholder(visual),
+                    "MAP" => RenderSemanticFallback(visual),
                     "IMAGE" => RenderImagePlaceholder(visual),
                     "COMBO" => RenderComboPlaceholder(visual),
-                    "TREEMAP" => RenderTreemapPlaceholder(visual),
+                    "TREEMAP" => RenderSemanticFallback(visual),
                     "RADAR" => RenderRadarPlaceholder(visual),
-                    "SANKEY" => RenderSankeyPlaceholder(visual),
-                    "SUNBURST" => RenderSunburstPlaceholder(visual),
-                    "NETWORK" => RenderNetworkPlaceholder(visual),
+                    "SANKEY" => RenderSemanticFallback(visual),
+                    "SUNBURST" => RenderSemanticFallback(visual),
+                    "NETWORK" => RenderSemanticFallback(visual),
                     _ => RenderPlaceholder(visual)
                 };
             }
@@ -181,6 +182,17 @@ namespace ETL_SQL.Reporting.Renderers
                     .Header(Markup.Escape(visual.Name))
                     .Border(BoxBorder.Rounded);
             }
+        }
+
+        private static IRenderable RenderSemanticFallback(VisualManifest visual)
+        {
+            var fallback = visual.SemanticFallback ?? VisualSemanticFallbackBuilder.Build(visual);
+            return new Panel(PlotPlanTerminalRenderer.RenderFallback(fallback))
+            {
+                Header = new PanelHeader(Markup.Escape(fallback.Heading)),
+                Border = BoxBorder.Rounded,
+                Expand = false
+            };
         }
 
         private static IRenderable RenderLineChart(VisualManifest visual)

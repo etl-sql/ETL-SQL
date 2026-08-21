@@ -134,20 +134,26 @@ budgets.
 
 ### Phase 5 — Semantic Terminal and Accessibility Fallbacks
 
-- [ ] Lower rectangles/bars to fractional blocks, lines/areas to Braille or block canvases, points to
+- [x] Lower rectangles/bars to fractional blocks, lines/areas to Braille or block canvases, points to
   distinguishable glyphs, rules to labeled references, and arcs to proportional terminal components.
-- [ ] Render coordinated facets at supported terminal widths without changing shared data ordering or
+- [x] Render coordinated facets at supported terminal widths without changing shared data ordering or
   scale meaning.
-- [ ] Add semantic fallbacks: maps to ranked regional breakdowns, Sankey to transition/drop-off
+- [x] Add semantic fallbacks: maps to ranked regional breakdowns, Sankey to transition/drop-off
   tables, treemap/sunburst to proportional hierarchies, and networks to degree/connection summaries.
-- [ ] Reuse one summary/fallback contract for terminal, screen-reader output, and plain-text email.
-- [ ] Add terminal snapshots at supported widths plus semantic assertions for values, series order,
+- [x] Reuse one summary/fallback contract for terminal, screen-reader output, and plain-text email.
+- [x] Add terminal snapshots at supported widths plus semantic assertions for values, series order,
   palette identity where color exists, null handling, and truncation.
-- [ ] Keep rich TUI form controls and full keyboard-navigation redesign out of this phase unless they
+- [x] Keep rich TUI form controls and full keyboard-navigation redesign out of this phase unless they
   are separately approved; they must not delay semantic chart portability.
 
 **Exit gate:** The capability matrix identifies a useful native or semantic fallback for every current
 graphical type, and terminal/accessibility fixtures preserve the analytical meaning of each case.
+
+**Completed:** `PlotPlan` marks now lower to fractional blocks, Braille canvases, distinct point
+glyphs, labeled rules, and proportional components. Facets retain resolved row/category ordering at
+40-, 80-, and 120-column targets. One serialized `SemanticFallback` contract supplies terminal,
+screen-reader/manifest, and Markdown/plain-text delivery for native charts plus ranked maps,
+transition/drop-off flows, proportional hierarchies, and network degree/connection summaries.
 
 ### Phase 6 — Cascading Slicers and Atomic Parameter State
 

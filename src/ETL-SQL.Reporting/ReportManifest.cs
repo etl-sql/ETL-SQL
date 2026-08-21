@@ -198,6 +198,14 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PlotPlan? PlotPlan { get; set; }
 
+        /// <summary>
+        /// Ordered non-graphical interpretation shared by terminals, assistive technology,
+        /// and plain-text/static delivery paths.
+        /// </summary>
+        [JsonPropertyName("semanticFallback")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public SemanticFallback? SemanticFallback { get; set; }
+
         /// <summary>Resolved semantic plans and fallbacks for CARD/TABLE micro-charts.</summary>
         [JsonPropertyName("microCharts")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

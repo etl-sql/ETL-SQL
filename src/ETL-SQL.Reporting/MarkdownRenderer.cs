@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using ETL_SQL.Reporting.Semantics;
+using ETL_SQL.Reporting.Semantics.Runtime;
 
 namespace ETL_SQL.Reporting
 {
@@ -220,15 +222,33 @@ namespace ETL_SQL.Reporting
                         if (svgStr != null)
                         {
                             var uri = SvgEmbed.ToDataUri(svgStr);
-                            sb.AppendLine($"<img src=\"{uri}\" alt=\"{EscapeCell(v.Name)}\" width=\"600\" height=\"350\" />");
+                            var alt = v.SemanticFallback?.Summary ?? v.PlotPlan?.AccessibleSummary ?? v.Name;
+                            sb.AppendLine($"<img src=\"{uri}\" alt=\"{EscapeAttribute(alt)}\" width=\"600\" height=\"350\" />");
                             sb.AppendLine();
                         }
-                        // Fallback data table for readability without images
+                        RenderSemanticFallback(sb, v.SemanticFallback ?? VisualSemanticFallbackBuilder.Build(v));
+                        // Retain the source-shaped GFM table for backwards-compatible exports;
+                        // the semantic table above supplies the shared analytical interpretation.
                         if (v.Rows.Count > 0)
                             RenderTable(sb, v);
                         break;
                     }
             }
+        }
+
+        private static void RenderSemanticFallback(StringBuilder sb, SemanticFallback fallback)
+        {
+            sb.AppendLine($"> {EscapeCell(fallback.Summary ?? fallback.Heading)}");
+            sb.AppendLine();
+            if (fallback.Items.IsDefaultOrEmpty) return;
+            sb.AppendLine("| Item | Value | Meaning |");
+            sb.AppendLine("| --- | ---: | --- |");
+            foreach (var item in fallback.Items.OrderBy(item => item.Order))
+            {
+                var indent = item.Level == 0 ? string.Empty : new string('—', item.Level) + " ";
+                sb.AppendLine($"| {EscapeCell(indent + item.Label)} | {EscapeCell(item.Value)} | {EscapeCell(item.Detail ?? item.Group ?? string.Empty)} |");
+            }
+            sb.AppendLine();
         }
 
         private static void RenderTable(StringBuilder sb, VisualManifest v)

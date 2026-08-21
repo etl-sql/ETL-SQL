@@ -72,6 +72,23 @@ public class ReportingBaselineTests
         Assert.Equal(CapabilityLevel.Unsupported, VisualCapabilityMatrix.Get(VisualType.Slicer).StaticExport.Level);
     }
 
+    [Fact]
+    public void CapabilityMatrix_EveryGraphicalVisualHasUsefulTerminalPath()
+    {
+        foreach (var type in VisualCapabilityMatrix.EChartsVisualTypes)
+        {
+            var terminal = VisualCapabilityMatrix.Get(type).Terminal;
+            Assert.NotEqual(CapabilityLevel.Unsupported, terminal.Level);
+            Assert.DoesNotContain("placeholder", terminal.Implementation, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(terminal.Implementation));
+        }
+
+        Assert.Contains("ranked regional", VisualCapabilityMatrix.Get(VisualType.Map).Terminal.Implementation);
+        Assert.Contains("drop-off", VisualCapabilityMatrix.Get(VisualType.Sankey).Terminal.Implementation);
+        Assert.Contains("hierarchy", VisualCapabilityMatrix.Get(VisualType.Sunburst).Terminal.Implementation);
+        Assert.Contains("node-degree", VisualCapabilityMatrix.Get(VisualType.Network).Terminal.Implementation);
+    }
+
     [Theory]
     [InlineData("bar_category_revenue.rptsql", "Bar")]
     [InlineData("line_timeseries_trend.rptsql", "Line")]

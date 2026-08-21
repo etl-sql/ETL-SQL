@@ -156,8 +156,8 @@ measured payload/render costs across representative small and tabular datasets.
 
 ### Reporting & Presentation — Semantic Terminal Chart Compilation
 
-**Status:** Accepted  
-**Horizon:** Next  
+**Status:** Shipped
+**Horizon:** Current
 **Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
 
 Reports should remain useful over SSH, in air-gapped environments, and in terminal workflows by
@@ -171,8 +171,10 @@ navigation, and elaborate TUI interaction are separate later UI work and do not 
 
 **Dependencies:** The representative GoG vertical slice and a shared semantic fallback contract.
 
-**Delivery slices:** Render the first GoG visual set; add informative fallbacks for maps, flows,
-hierarchies, and networks; reuse the summary model for plain-text email and accessibility surfaces.
+**Delivered:** The first GoG visual set compiles to fractional blocks, Braille, point glyphs, labeled
+rules, and proportional components, with coordinated width-aware facets. Maps, flows, hierarchies,
+and networks expose useful ordered fallbacks through the same serialized contract used by terminal,
+screen-reader, and Markdown/plain-text delivery surfaces.
 
 **Acceptance evidence:** Terminal snapshots at supported widths, semantic assertions for values and
 ordering, fallback tests, and screen-reader/plain-text review fixtures.
