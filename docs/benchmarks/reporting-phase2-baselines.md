@@ -1,6 +1,6 @@
 # Phase 2 Reporting & Visuals Baseline Report
 
-> **Timestamp (UTC):** 2026-08-21 12:23:21 | **Branch:** `feat/reporting-phase2-contracts` | **Engine Version:** `0.19.0-phase2`
+> **Timestamp (UTC):** 2026-08-21 12:25:11 | **Branch:** `release/v0.19.0` | **Engine Version:** `0.19.0-phase2`
 
 ---
 
@@ -30,12 +30,12 @@ Measures end-to-end fixture build time, export throughput (Markdown, CSV, SVG), 
 
 | Fixture | Visual Type | Fixture Build | Markdown Export | CSV Export | SVG Export | Manifest JSON | Process Allocated |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `bar_category_revenue` | `BAR` | 231.84 ms | 292.873 ms (8.9 KB) | 0.430 ms (0 B) | 3.136 ms (1.8 KB) | 3.7 KB | 7.46 MB |
-| `bar_with_goal_rule` | `BAR` | 13.06 ms | 9.700 ms (11.2 KB) | 0.006 ms (0 B) | 0.045 ms (1.9 KB) | 4.7 KB | 6.52 MB |
-| `combo_revenue_margin` | `COMBO` | 9.02 ms | 8.599 ms (12.6 KB) | 0.005 ms (0 B) | 0.179 ms (445 B) | 3.9 KB | 6.48 MB |
-| `donut_market_share` | `DONUT` | 10.41 ms | 6.418 ms (9.2 KB) | 0.005 ms (0 B) | 3.751 ms (1.1 KB) | 3.7 KB | 6.31 MB |
-| `line_timeseries_trend` | `LINE` | 6.57 ms | 5.248 ms (12.2 KB) | 0.003 ms (0 B) | 2.184 ms (2.3 KB) | 3.6 KB | 6.35 MB |
-| `scatter_correlation` | `SCATTER` | 6.22 ms | 4.254 ms (12.5 KB) | 0.003 ms (0 B) | 0.006 ms (439 B) | 3.4 KB | 6.40 MB |
+| `bar_category_revenue` | `BAR` | 211.18 ms | 154.040 ms (8.9 KB) | 0.479 ms (0 B) | 2.669 ms (1.8 KB) | 3.7 KB | 7.44 MB |
+| `bar_with_goal_rule` | `BAR` | 70.52 ms | 9.738 ms (11.2 KB) | 0.005 ms (0 B) | 0.037 ms (1.9 KB) | 4.7 KB | 6.48 MB |
+| `combo_revenue_margin` | `COMBO` | 9.80 ms | 8.476 ms (12.6 KB) | 0.007 ms (0 B) | 0.169 ms (445 B) | 3.9 KB | 6.49 MB |
+| `donut_market_share` | `DONUT` | 9.09 ms | 6.412 ms (9.2 KB) | 0.006 ms (0 B) | 3.660 ms (1.1 KB) | 3.7 KB | 6.29 MB |
+| `line_timeseries_trend` | `LINE` | 6.39 ms | 4.730 ms (12.2 KB) | 0.003 ms (0 B) | 1.990 ms (2.3 KB) | 3.6 KB | 6.34 MB |
+| `scatter_correlation` | `SCATTER` | 5.88 ms | 4.731 ms (12.5 KB) | 0.003 ms (0 B) | 0.005 ms (439 B) | 3.4 KB | 6.39 MB |
 
 ### Explicit Client-Side Unsupported Measurements
 - **Client Browser Paint / V8 Frame Latency**: `N/A (unsupported: requires headless Chrome CDP profiling in browser test runner)`
