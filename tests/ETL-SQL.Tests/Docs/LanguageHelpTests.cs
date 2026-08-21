@@ -70,6 +70,23 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
+        public void Verify_AdvancedChart_HasHoverHelpAndParserTestedExample()
+        {
+            var registry = new LanguageHelpRegistry();
+            var help = registry.GetHelp("CHART");
+            Assert.NotNull(help);
+            Assert.Contains("renderer-neutral", help!, StringComparison.OrdinalIgnoreCase);
+
+            var path = Path.Combine(FindRepoRoot(), "docs", "reference", "visuals-reporting", "visuals", "chart.md");
+            var markdown = File.ReadAllText(path);
+            var example = Regex.Matches(markdown, @"```sql\s*(.*?)```", RegexOptions.Singleline | RegexOptions.IgnoreCase).Cast<Match>()
+                .Select(match => match.Groups[1].Value.Trim())
+                .Single(block => block.StartsWith("SELECT Month", StringComparison.Ordinal));
+            var script = new Parser(new Lexer(example).Tokenize(), example).Parse();
+            Assert.DoesNotContain(script.Diagnostics, diagnostic => diagnostic.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+        }
+
+        [Fact]
         public void ReportHelpSqlExamples_ParseSuccessfully()
         {
             var failures = new List<string>();

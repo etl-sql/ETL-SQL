@@ -280,6 +280,7 @@ public static class AstSerializer
         ExplainStatement s => (s.IsAnalyze ? "EXPLAIN ANALYZE " : "EXPLAIN ") + s.Query.ToSql() + (s.IntoTable != null ? " INTO " + s.IntoTable.ToSql() : ""),
         CreateVisualStatement s => FormatCreateVisual(s),
         CascadeDefinition s => FormatCascade(s),
+        AdvancedChartDefinition s => FormatAdvancedChart(s),
         CreatePageStatement s => FormatCreatePage(s),
         CreateDatasetStatement s => FormatCreateDataset(s),
         CreateContainerStatement s => FormatCreateContainer(s),
@@ -1393,6 +1394,8 @@ public static class AstSerializer
             sb.AppendLine($"    ACTIONS ( {FormatActions(s.Actions)} ),");
         if (s.Cascade != null)
             sb.AppendLine($"    {FormatCascade(s.Cascade)},");
+        if (s.AdvancedChart != null)
+            sb.AppendLine(Indent(FormatAdvancedChart(s.AdvancedChart), 4) + ",");
         if (s.DefaultValue != null && s.VisualType != VisualType.Text)
             sb.AppendLine($"    DEFAULT = {s.DefaultValue.ToSql()},");
         if (s.PrintLayout != null)
@@ -1412,6 +1415,87 @@ public static class AstSerializer
         parts.Add($"ALL_VALUE = {Quote(cascade.AllValue)}");
         parts.Add($"MULTISELECT = {cascade.MultiSelect.ToString().ToUpperInvariant()}");
         return "CASCADE ( " + string.Join(", ", parts) + " )";
+    }
+
+    private static string FormatAdvancedChart(AdvancedChartDefinition chart)
+    {
+        var sections = new List<string>
+        {
+            "COORDINATE ( " + string.Join(", ", CoordinateParts(chart.Coordinate)) + " )",
+            "SCALES (\n" + string.Join(",\n", chart.Scales.Select(scale => Indent(FormatAdvancedScale(scale), 4))) + "\n)",
+            "LAYERS (\n" + string.Join(",\n", chart.Layers.Select(layer => Indent(FormatAdvancedLayer(layer), 4))) + "\n)"
+        };
+        if (chart.Facet != null)
+        {
+            var facets = new List<string>();
+            if (chart.Facet.RowField != null) facets.Add($"ROW = {chart.Facet.RowField}");
+            if (chart.Facet.ColumnField != null) facets.Add($"COLUMN = {chart.Facet.ColumnField}");
+            sections.Add("FACET ( " + string.Join(", ", facets) + " )");
+        }
+        sections.Add($"RESOLVE ( X = {Upper(chart.Resolution.X)}, Y = {Upper(chart.Resolution.Y)}, COLOR = {Upper(chart.Resolution.Color)} )");
+        return "CHART (\n" + string.Join(",\n", sections.Select(section => Indent(section, 4))) + "\n)";
+    }
+
+    private static IEnumerable<string> CoordinateParts(AdvancedChartCoordinate coordinate)
+    {
+        yield return $"TYPE = {Upper(coordinate.Kind)}";
+        if (coordinate.StartAngle.HasValue) yield return $"START_ANGLE = {Number(coordinate.StartAngle.Value)}";
+        if (coordinate.EndAngle.HasValue) yield return $"END_ANGLE = {Number(coordinate.EndAngle.Value)}";
+        if (coordinate.InnerRadius.HasValue) yield return $"INNER_RADIUS = {Number(coordinate.InnerRadius.Value)}";
+    }
+
+    private static string FormatAdvancedScale(AdvancedChartScale scale)
+    {
+        var options = new List<string>
+        {
+            $"CHANNEL = {Upper(scale.Channel)}",
+            $"INCLUDE_ZERO = {(scale.IncludeZero ? "ON" : "OFF")}"
+        };
+        if (scale.Minimum != null) options.Add($"MIN = {scale.Minimum.ToSql()}");
+        if (scale.Maximum != null) options.Add($"MAX = {scale.Maximum.ToSql()}");
+        options.Add(scale.ExplicitOrder.IsDefaultOrEmpty
+            ? $"ORDER = {Upper(scale.Order)}"
+            : "ORDER = (" + string.Join(", ", scale.ExplicitOrder.Select(Format)) + ")");
+        return $"{scale.Name} = {Upper(scale.Kind)} ( {string.Join(", ", options)} )";
+    }
+
+    private static string FormatAdvancedLayer(AdvancedChartLayer layer)
+    {
+        var sections = new List<string> { $"Z_INDEX = {layer.ZIndex}" };
+        sections.Add("ENCODINGS (\n" + string.Join(",\n",
+            layer.Encodings.Select(encoding => Indent(FormatAdvancedEncoding(encoding), 4))) + "\n)");
+        if (!layer.Styles.IsDefaultOrEmpty)
+            sections.Add("STYLE ( " + string.Join(", ", layer.Styles.Select(style => $"{style.Name} = {style.Value.ToSql()}")) + " )");
+        if (!layer.Conditions.IsDefaultOrEmpty)
+            sections.Add("CONDITIONS (\n" + string.Join(",\n", layer.Conditions.Select(condition =>
+                Indent($"{Upper(condition.Channel)} WHEN {condition.Predicate.ToSql()} THEN {condition.WhenTrue.ToSql()}" +
+                    (condition.WhenFalse == null ? string.Empty : $" ELSE {condition.WhenFalse.ToSql()}"), 4))) + "\n)");
+        return $"{layer.Name} = {Upper(layer.Mark)} (\n" +
+            string.Join(",\n", sections.Select(section => Indent(section, 4))) + "\n)";
+    }
+
+    private static string FormatAdvancedEncoding(AdvancedChartEncoding encoding)
+    {
+        var options = new List<string> { $"TYPE = {Upper(encoding.DataKind)}" };
+        if (encoding.Scale != null) options.Add($"SCALE = {encoding.Scale}");
+        if (encoding.Axis != AdvancedChartAxisRole.None) options.Add($"AXIS = {Upper(encoding.Axis)}");
+        if (encoding.Sort != AdvancedChartSortDirection.Source) options.Add($"SORT = {Upper(encoding.Sort)}");
+        if (encoding.Format != null) options.Add($"FORMAT = {Quote(encoding.Format)}");
+        return $"{Upper(encoding.Channel)} = {encoding.Field} ( {string.Join(", ", options)} )";
+    }
+
+    private static string Upper<T>(T value) where T : struct, Enum => value switch
+    {
+        AdvancedChartCoordinateKind.TransposedCartesian => "TRANSPOSED_CARTESIAN",
+        _ => value.ToString().ToUpperInvariant()
+    };
+
+    private static string Number(decimal value) => value.ToString("0.############################", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Indent(string value, int spaces)
+    {
+        var prefix = new string(' ', spaces);
+        return prefix + value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\n" + prefix, StringComparison.Ordinal);
     }
 
     private static string FormatCreatePage(CreatePageStatement s)

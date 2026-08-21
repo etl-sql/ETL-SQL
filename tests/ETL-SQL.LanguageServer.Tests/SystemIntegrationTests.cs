@@ -466,6 +466,35 @@ SET @normal = 'still-visible';
             Assert.Contains(list, i => i.Label == "m.Products");
         }
 
+        [Fact]
+        public async Task Completion_InsideNativeChart_SuggestsAcceptedGrammar()
+        {
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+            var metadata = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, new ETL_SQL.Data.ConnectorRegistry());
+            var help = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            var store = new DocumentStateStore();
+            var provider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store,
+                new LanguageService(metadata, help), new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
+            var uri = DocumentUri.From("untitled:advanced-chart-completion.rptsql");
+            const string script = "CREATE VISUAL Native AS CUSTOM (SOURCE = #data, CHART (";
+            store.UpdateText(uri, script);
+
+            var result = await provider.Handle(new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(0, script.Length),
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
+            }, CancellationToken.None);
+
+            Assert.Contains(result, item => item.Label == "LAYERS");
+            Assert.Contains(result, item => item.Label == "SCALES");
+            Assert.Contains(result, item => item.Label == "FACET");
+            Assert.Contains(result, item => item.Label == "INDEPENDENT");
+        }
+
         private class MockConfiguration : Microsoft.Extensions.Configuration.IConfiguration
         {
             public string this[string key]

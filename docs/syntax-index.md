@@ -881,6 +881,11 @@ CREATE DATASET &name [OPTIONS] AS SELECT ...
 ```sql
 CREATE VISUAL name AS <Type> ( ... )
 ```
+
+Native advanced charts use `CREATE VISUAL name AS CUSTOM (..., CHART (...))` with explicit
+renderer-neutral layers, scales, coordinates, conditional presentation, and row/column facets. See
+[CHART](reference/visuals-reporting/visuals/chart.md). Data transformations remain in preceding
+ETL-SQL statements rather than hidden inside the visual declaration.
 | Section | Option | Description |
 | :--- | :--- | :--- |
 | `SOURCE` | `SOURCE = #dataset / SELECT ...` | Data source definition |

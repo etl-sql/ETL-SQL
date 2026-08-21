@@ -25,16 +25,18 @@ public sealed class PlotPlanResolver
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
         var layers = ResolveLayers(spec, data, columns, categories, series).ToImmutableArray();
         var scales = ResolveScales(spec, columns, categories).ToImmutableArray();
+        var plotBounds = bounds ?? new PlotBounds(0, 0, 600, 350);
+        var facets = ResolveFacets(spec, columns, scales, plotBounds);
         var sourceLayers = layers.Where(layer => layer.Style.IsDefault || !layer.Style.Any(token => token.Name == "overlayType"));
         var gapRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => datum.IsGap).Select(datum => datum.RowIndex).Distinct().Order().ToImmutableArray();
         var usedRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap).Select(datum => datum.RowIndex).ToHashSet();
         var skippedRows = Enumerable.Range(0, data.RowCount).Where(index => !usedRows.Contains(index) && !gapRows.Contains(index)).ToImmutableArray();
         var fallback = BuildFallback(spec, layers, categories);
-        var summary = BuildSummary(spec, data, series, gapRows, skippedRows);
+        var summary = BuildSummary(spec, data, series, layers, facets, gapRows, skippedRows);
 
         var plan = PlotPlan.Create(
             spec.Id,
-            bounds ?? new PlotBounds(0, 0, 600, 350),
+            plotBounds,
             scales,
             series,
             palette,
@@ -45,7 +47,8 @@ public sealed class PlotPlanResolver
             fallback,
             spec.Title,
             spec.Coordinate,
-            spec.Theme.Tokens);
+            spec.Theme.Tokens,
+            facets);
         plan.Validate();
         return plan;
     }
@@ -163,9 +166,14 @@ public sealed class PlotPlanResolver
             }
             var minimum = scale.DomainMinimum is not null ? Number(scale.DomainMinimum) ?? 0m : numbers.DefaultIfEmpty(0m).Min();
             var maximum = scale.DomainMaximum is not null ? Number(scale.DomainMaximum) ?? 1m : numbers.DefaultIfEmpty(1m).Max();
+            if (scale.Kind == ScaleKind.Logarithmic && (minimum <= 0m || maximum <= 0m || numbers.Any(number => number <= 0m)))
+                throw new InvalidOperationException($"Logarithmic scale '{scale.Id}' requires positive values and domain bounds.");
             if (scale.IncludeZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
             if (minimum == maximum) maximum = minimum + 1m;
-            var ticks = Enumerable.Range(0, 5).Select(index => minimum + ((maximum - minimum) * index / 4m)).ToList();
+            var ticks = scale.Kind == ScaleKind.Logarithmic
+                ? Enumerable.Range(0, 5).Select(index => (decimal)Math.Pow(10d,
+                    Math.Log10((double)minimum) + (Math.Log10((double)maximum) - Math.Log10((double)minimum)) * index / 4d)).ToList()
+                : Enumerable.Range(0, 5).Select(index => minimum + ((maximum - minimum) * index / 4m)).ToList();
             yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                 [ChartValue.From(minimum), ChartValue.From(maximum)], [],
                 ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray(),
@@ -221,7 +229,9 @@ public sealed class PlotPlanResolver
         ImmutableArray<string> categories,
         Func<int, bool> include)
     {
-        var layerBindings = layer.Bindings.IsDefaultOrEmpty ? spec.Bindings : layer.Bindings;
+        var layerBindings = layer.Bindings.IsDefaultOrEmpty ? spec.Bindings : layer.Bindings
+            .AddRange(spec.Bindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column &&
+                !layer.Bindings.Any(existing => existing.Channel == binding.Channel && existing.Field.Equals(binding.Field, StringComparison.OrdinalIgnoreCase))));
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
         if (categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
@@ -240,7 +250,7 @@ public sealed class PlotPlanResolver
                         var rowIndex = Enumerable.Range(0, data.RowCount).FirstOrDefault(index => include(index)
                             && ValueKey(categoryColumn.Values[index]) == category
                             && string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field].Values[index]) ?? string.Empty)) == facetKey, -1);
-                        if (rowIndex >= 0) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling));
+                        if (rowIndex >= 0) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions));
                     }
                 return rows.ToImmutableArray();
             }
@@ -250,13 +260,13 @@ public sealed class PlotPlanResolver
                 var rowIndex = Enumerable.Range(0, data.RowCount).FirstOrDefault(index => include(index) && ValueKey(categoryColumn.Values[index]) == category, -1);
                 rows.Add(rowIndex < 0
                     ? GapDatum(categoryIndex, layerBindings, categoryBinding, category)
-                    : Datum(rowIndex, layerBindings, columns, spec.NullHandling));
+                    : Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions));
             }
             return rows.ToImmutableArray();
         }
 
         for (var rowIndex = 0; rowIndex < data.RowCount; rowIndex++)
-            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling));
+            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions));
         return rows.ToImmutableArray();
     }
 
@@ -264,7 +274,8 @@ public sealed class PlotPlanResolver
         int rowIndex,
         ImmutableArray<FieldBinding> bindings,
         IReadOnlyDictionary<string, ChartColumn> columns,
-        NullHandlingSpec nulls)
+        NullHandlingSpec nulls,
+        ImmutableArray<EncodingConditionSpec> conditions)
     {
         var channels = bindings.Where(binding => columns.ContainsKey(binding.Field)).Select(binding =>
         {
@@ -275,7 +286,10 @@ public sealed class PlotPlanResolver
         var requiredNull = channels.Any(channel => channel.Channel is FieldChannel.X or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius
             && channel.Value.Kind == ChartValueKind.Null);
         return new ResolvedDatum(rowIndex, channels, requiredNull && nulls.Default == NullValuePolicy.Gap,
-            string.Join(", ", channels.Select(channel => $"{channel.Channel}: {channel.DisplayValue ?? Display(channel.Value)}")));
+            string.Join(", ", channels.Select(channel => $"{channel.Channel}: {channel.DisplayValue ?? Display(channel.Value)}")))
+        {
+            Encodings = ResolveConditions(conditions, rowIndex, columns)
+        };
     }
 
     private static ResolvedDatum GapDatum(int index, ImmutableArray<FieldBinding> bindings, FieldBinding categoryBinding, string category)
@@ -284,6 +298,75 @@ public sealed class PlotPlanResolver
             binding == categoryBinding ? ChartValue.From(category) : ChartValue.Null(),
             binding == categoryBinding ? category : null)).ToImmutableArray();
         return new ResolvedDatum(index, channels, true, null);
+    }
+
+    private static ImmutableArray<ResolvedEncodingValue> ResolveConditions(
+        ImmutableArray<EncodingConditionSpec> conditions,
+        int rowIndex,
+        IReadOnlyDictionary<string, ChartColumn> columns)
+    {
+        if (conditions.IsDefaultOrEmpty) return [];
+        var result = new List<ResolvedEncodingValue>();
+        foreach (var group in conditions.GroupBy(condition => condition.Channel))
+        {
+            foreach (var condition in group)
+            {
+                var matched = Evaluate(condition.Predicate, rowIndex, columns);
+                var value = matched ? condition.WhenTrue : condition.WhenFalse;
+                if (value is null) continue;
+                result.Add(new ResolvedEncodingValue(condition.Channel, value));
+                break;
+            }
+        }
+        return result.ToImmutableArray();
+    }
+
+    private static bool Evaluate(EncodingPredicate predicate, int rowIndex, IReadOnlyDictionary<string, ChartColumn> columns) => predicate.Kind switch
+    {
+        PredicateKind.And => Evaluate(predicate.First!, rowIndex, columns) && Evaluate(predicate.Second!, rowIndex, columns),
+        PredicateKind.Or => Evaluate(predicate.First!, rowIndex, columns) || Evaluate(predicate.Second!, rowIndex, columns),
+        PredicateKind.Not => !Evaluate(predicate.First!, rowIndex, columns),
+        PredicateKind.IsNull => Resolve(predicate.Left!, rowIndex, columns).Kind == ChartValueKind.Null,
+        PredicateKind.IsNotNull => Resolve(predicate.Left!, rowIndex, columns).Kind != ChartValueKind.Null,
+        PredicateKind.Truthy => Truthy(Resolve(predicate.Left!, rowIndex, columns)),
+        PredicateKind.Comparison => Compare(Resolve(predicate.Left!, rowIndex, columns), Resolve(predicate.Right!, rowIndex, columns), predicate.Comparison!.Value),
+        _ => false
+    };
+
+    private static ChartValue Resolve(PredicateOperand operand, int rowIndex, IReadOnlyDictionary<string, ChartColumn> columns) =>
+        operand.Kind == PredicateOperandKind.Literal
+            ? operand.Literal ?? ChartValue.Null()
+            : operand.Field is not null && columns.TryGetValue(operand.Field, out var column) && rowIndex < column.Values.Length
+                ? column.Values[rowIndex]
+                : ChartValue.Null();
+
+    private static bool Truthy(ChartValue value) => value.Kind switch
+    {
+        ChartValueKind.Null => false,
+        ChartValueKind.Boolean => value.Boolean == true,
+        _ when Number(value) is { } number => number != 0m,
+        _ => !string.IsNullOrEmpty(Display(value))
+    };
+
+    private static bool Compare(ChartValue left, ChartValue right, ComparisonKind comparison)
+    {
+        if (left.Kind == ChartValueKind.Null || right.Kind == ChartValueKind.Null)
+            return comparison == ComparisonKind.Equal ? left.Kind == right.Kind : comparison == ComparisonKind.NotEqual && left.Kind != right.Kind;
+        var leftNumber = Number(left);
+        var rightNumber = Number(right);
+        var order = leftNumber.HasValue && rightNumber.HasValue
+            ? leftNumber.Value.CompareTo(rightNumber.Value)
+            : StringComparer.Ordinal.Compare(Display(left), Display(right));
+        return comparison switch
+        {
+            ComparisonKind.Equal => order == 0,
+            ComparisonKind.NotEqual => order != 0,
+            ComparisonKind.LessThan => order < 0,
+            ComparisonKind.LessThanOrEqual => order <= 0,
+            ComparisonKind.GreaterThan => order > 0,
+            ComparisonKind.GreaterThanOrEqual => order >= 0,
+            _ => false
+        };
     }
 
     private static ResolvedMarkLayer ResolveOverlay(
@@ -327,12 +410,14 @@ public sealed class PlotPlanResolver
                 ?? (index < categories.Length ? categories[index] : $"Row {index + 1}");
             var value = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius);
             var numeric = value is null ? null : Number(value.Value);
+            var conditionDetail = datum.Encodings.IsDefaultOrEmpty ? null : string.Join(", ", datum.Encodings.Select(encoding =>
+                $"conditional {encoding.Channel}: {Display(encoding.Value)}"));
             return new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? Display(value.Value), (layerIndex * 100000) + index)
             {
                 Group = layer.SeriesKey,
-                Detail = datum.IsGap ? "null gap" : layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
+                Detail = datum.IsGap ? "null gap" : conditionDetail ?? (layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
                     ? $"{numeric.Value / total:P1} of total"
-                    : null
+                    : null)
             };
         })).Concat(layers.Where(layer => layer.Mark == MarkKind.Rule).Select((layer, index) =>
         {
@@ -351,8 +436,113 @@ public sealed class PlotPlanResolver
         { Summary = $"{spec.Title ?? spec.Id}: {items.Length} ordered semantic values." };
     }
 
-    private static string BuildSummary(ChartSpec spec, ChartDataSet data, ImmutableArray<ResolvedSeries> series, ImmutableArray<int> gaps, ImmutableArray<int> skipped) =>
-        $"{spec.Title ?? spec.Id}: {data.RowCount} rows, {series.Length} series, {gaps.Length} gaps, {skipped.Length} skipped rows.";
+    private static ImmutableArray<ResolvedFacetPanel> ResolveFacets(
+        ChartSpec spec,
+        IReadOnlyDictionary<string, ChartColumn> columns,
+        ImmutableArray<ResolvedScale> globalScales,
+        PlotBounds bounds)
+    {
+        if (spec.Facet is null) return [];
+        var rowValues = FacetValues(spec.Facet.RowField, columns);
+        var columnValues = FacetValues(spec.Facet.ColumnField, columns);
+        if (rowValues.Count == 0) rowValues.Add(null);
+        if (columnValues.Count == 0) columnValues.Add(null);
+        var panels = new List<ResolvedFacetPanel>();
+        var panelWidth = bounds.Width / columnValues.Count;
+        var panelHeight = bounds.Height / rowValues.Count;
+        for (var rowIndex = 0; rowIndex < rowValues.Count; rowIndex++)
+            for (var columnIndex = 0; columnIndex < columnValues.Count; columnIndex++)
+            {
+                var rowLabel = rowValues[rowIndex];
+                var columnLabel = columnValues[columnIndex];
+                var indices = Enumerable.Range(0, columns.Values.FirstOrDefault()?.Values.Length ?? 0)
+                    .Where(index => MatchesFacet(spec.Facet.RowField, rowLabel, columns, index) &&
+                        MatchesFacet(spec.Facet.ColumnField, columnLabel, columns, index))
+                    .ToImmutableArray();
+                if (indices.IsDefaultOrEmpty) continue;
+                var scales = globalScales.Select(scale => Independent(scale, spec.Facet.Resolution, spec, columns, indices)).ToImmutableArray();
+                panels.Add(new ResolvedFacetPanel(
+                    $"facet-{rowIndex:D2}-{columnIndex:D2}", rowLabel, columnLabel,
+                    new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight),
+                    indices, scales));
+            }
+        return panels.ToImmutableArray();
+    }
+
+    private static List<string?> FacetValues(string? field, IReadOnlyDictionary<string, ChartColumn> columns) =>
+        field is null || !columns.TryGetValue(field, out var column)
+            ? []
+            : column.Values.Select(ValueKey).Distinct(StringComparer.Ordinal).Cast<string?>().ToList();
+
+    private static bool MatchesFacet(string? field, string? value, IReadOnlyDictionary<string, ChartColumn> columns, int index) =>
+        field is null || columns.TryGetValue(field, out var column) && ValueKey(column.Values[index]) == value;
+
+    private static ResolvedScale Independent(
+        ResolvedScale scale,
+        ScaleResolutionSpec resolution,
+        ChartSpec spec,
+        IReadOnlyDictionary<string, ChartColumn> columns,
+        ImmutableArray<int> rows)
+    {
+        var mode = scale.Channel switch
+        {
+            FieldChannel.X => resolution.X,
+            FieldChannel.Y or FieldChannel.Y2 => resolution.Y,
+            FieldChannel.Color => resolution.Color,
+            _ => ScaleResolutionMode.Shared
+        };
+        if (mode == ScaleResolutionMode.Shared) return scale;
+        var bindings = spec.Bindings.Concat(spec.Layers.SelectMany(layer => layer.Bindings))
+            .Where(binding => binding.ScaleId == scale.Id && columns.ContainsKey(binding.Field)).ToList();
+        if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal)
+        {
+            var categories = bindings.SelectMany(binding => rows.Select(index => ValueKey(columns[binding.Field].Values[index])))
+                .Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToImmutableArray();
+            return scale with
+            {
+                Domain = categories.Select(ChartValue.From).ToImmutableArray(),
+                Categories = categories,
+                Ticks = categories.Select(value => new PlotTick(ChartValue.From(value), value)).ToImmutableArray()
+            };
+        }
+        if (scale.Kind == ScaleKind.Time)
+        {
+            var temporal = bindings.SelectMany(binding => rows.Select(index => columns[binding.Field].Values[index]))
+                .Where(value => value.Kind != ChartValueKind.Null)
+                .GroupBy(ValueKey, StringComparer.Ordinal).Select(group => group.First())
+                .OrderBy(ValueKey, StringComparer.Ordinal).ToImmutableArray();
+            return scale with
+            {
+                Domain = temporal,
+                Categories = temporal.Select(Display).ToImmutableArray(),
+                Ticks = temporal.Select(value => new PlotTick(value, Display(value))).ToImmutableArray()
+            };
+        }
+        var values = bindings.SelectMany(binding => rows.Select(index => Number(columns[binding.Field].Values[index])))
+            .Where(value => value.HasValue).Select(value => value!.Value).ToList();
+        if (values.Count == 0) return scale;
+        var minimum = values.Min();
+        var maximum = values.Max();
+        if (scale.Kind == ScaleKind.Logarithmic && minimum <= 0m)
+            throw new InvalidOperationException($"Independent logarithmic scale '{scale.Id}' requires positive values.");
+        if (scale.IncludesZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
+        if (minimum == maximum) maximum = minimum + 1m;
+        var ticks = (scale.Kind == ScaleKind.Logarithmic
+            ? Enumerable.Range(0, 5).Select(index => (decimal)Math.Pow(10d,
+                Math.Log10((double)minimum) + (Math.Log10((double)maximum) - Math.Log10((double)minimum)) * index / 4d))
+            : Enumerable.Range(0, 5).Select(index => minimum + (maximum - minimum) * index / 4m)).ToImmutableArray();
+        return scale with
+        {
+            Domain = [ChartValue.From(minimum), ChartValue.From(maximum)],
+            Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray()
+        };
+    }
+
+    private static string BuildSummary(ChartSpec spec, ChartDataSet data, ImmutableArray<ResolvedSeries> series,
+        ImmutableArray<ResolvedMarkLayer> layers, ImmutableArray<ResolvedFacetPanel> facets,
+        ImmutableArray<int> gaps, ImmutableArray<int> skipped) =>
+        $"{spec.Title ?? spec.Id}: {data.RowCount} rows, {layers.Length} ordered layers, {series.Length} series, " +
+        $"{(facets.IsDefaultOrEmpty ? 1 : facets.Length)} facet panels, {gaps.Length} gaps, {skipped.Length} skipped rows.";
 
     private static string ResolveColor(ChartSpec spec, string key, int index) =>
         spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals($"COLOR:{key}", StringComparison.OrdinalIgnoreCase))?.Value

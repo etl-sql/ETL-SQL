@@ -1993,6 +1993,8 @@ public sealed record IsNullExpression : Expression
         Expression = expression;
         Not = isNot;
     }
+    public override IEnumerable<string> GetSourceTables() => Expression.GetSourceTables();
+    public override IEnumerable<string> GetSourceColumns() => Expression.GetSourceColumns();
 }
 
 /// <summary>

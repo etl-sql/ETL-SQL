@@ -91,8 +91,8 @@ out-of-scope bytes unchanged and that invalid intermediate edits do not reset th
 
 ### Reporting & Presentation — Native Grammar-of-Graphics Spine
 
-**Status:** In progress — representative vertical slice shipped
-**Horizon:** Active
+**Status:** Incremental
+**Horizon:** Foundation
 **Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
 
 ETL-SQL needs its own typed, versioned visual contract so report meaning is not defined by an ECharts
@@ -110,19 +110,21 @@ ECharts is a temporary compiler target, not stored semantic state.
 **Dependencies:** Lossless Report Builder editing and a dependency-light Core contract; renderer and
 pixel-emission dependencies remain in the reporting layer.
 
-**Delivery slices:** First prove `BAR`, `LINE`, `SCATTER`, `PIE` or `DONUT`, `COMBO`, and `RULE` across
-typed columnar data, named-syntax lowering, `PlotPlan`, transient ECharts output, native SVG, and
-terminal output. Follow with `CUSTOM`/faceting language design, broader catalog conversion, specialized
-layouts, and measured ECharts retirement.
+**Delivery slices:** The representative named visuals and native `CUSTOM` authoring grammar are
+delivered across typed columnar data, `PlotPlan`, transient ECharts output, native SVG, and terminal
+output. Remaining slices broaden catalog conversion, evaluate specialized layouts, and retire ECharts
+only after the capability matrix proves no certified path still requires it.
 
 **Acceptance evidence:** Cross-backend golden and semantic conformance tests, a capability matrix,
 typed-value and null tests, and measured bundle, cold-start, export-time, and output-size baselines.
 
 **Current delivery:** `BAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, and `COMBO`, including `RULE`
-annotations, now lower through typed `ChartSpec`/`ChartDataSet` contracts into one deterministic
-`PlotPlan`. Browser ECharts options are compiled transiently from that plan; native SVG, terminal,
-and static PDF consume the same resolved semantics without server-side V8. Remaining catalog types
-stay explicitly classified in the capability matrix for later slices.
+annotations, lower through typed `ChartSpec`/`ChartDataSet` contracts into one deterministic
+`PlotPlan`. Native `CUSTOM`/`CHART` syntax adds ordered layers, named scales, Cartesian/transposed/polar
+coordinates, dual axes, conditional encodings, facets, and shared/independent scale policies while
+keeping transformations visible in ETL-SQL. Browser ECharts options are compiled transiently from
+the plan; native SVG, terminal, and static PDF consume the same semantics without server-side V8.
+Remaining catalog types stay explicitly classified in the capability matrix for later slices.
 
 ### Reporting & Presentation — Native Card and Table Micro-Charts
 

@@ -1,0 +1,98 @@
+{
+  "GeneratedAtUtc": "2026-08-21T14:53:59.509833Z",
+  "GitBranch": "test/reporting-phase7-semantic-readiness",
+  "CapabilityInventory": [
+    {
+      "Concept": "Ordered Multi-Layer Marks (RECT, LINE, POINT, RULE, AREA, ARC)",
+      "Category": "Layer Composition",
+      "IsSupportedInContracts": true,
+      "IsSupportedInRenderers": true,
+      "IsExposedInReportSql": false,
+      "StatusSummary": "Supported in ChartSpec \u0026 PlotPlan contracts; limited to named COMBO and OVERLAYS in Report-SQL syntax",
+      "TechnicalGapDetail": "Report-SQL parser cannot currently declare arbitrary multi-layer specs (e.g. LAYER RECT \u002B LAYER LINE \u002B LAYER POINT in a single visual body)"
+    },
+    {
+      "Concept": "Dual-Axis Bindings (Primary Y vs Secondary Y2)",
+      "Category": "Scales \u0026 Axes",
+      "IsSupportedInContracts": true,
+      "IsSupportedInRenderers": true,
+      "IsExposedInReportSql": true,
+      "StatusSummary": "Supported in contracts and exposed via COMBO (Y on Left, Y2 on Right)",
+      "TechnicalGapDetail": "Fully functional in ChartSpec, ECharts, and SVG renderers; terminal renderer provides placeholder/table fallback"
+    },
+    {
+      "Concept": "Scale Resolution Policies (Shared vs Independent)",
+      "Category": "Faceting \u0026 Resolution",
+      "IsSupportedInContracts": true,
+      "IsSupportedInRenderers": false,
+      "IsExposedInReportSql": false,
+      "StatusSummary": "Declared in ScaleResolutionSpec (Shared vs Independent); multi-facet splitting is not yet implemented in PlotPlanResolver",
+      "TechnicalGapDetail": "PlotPlanResolver currently resolves single-panel bounds and does not split datasets into sub-panel coordinate spaces"
+    },
+    {
+      "Concept": "1D and 2D Facet Grid Specifications",
+      "Category": "Faceting \u0026 Resolution",
+      "IsSupportedInContracts": true,
+      "IsSupportedInRenderers": false,
+      "IsExposedInReportSql": false,
+      "StatusSummary": "FacetSpec model exists in contracts; multi-panel layout resolution pending Phase 7",
+      "TechnicalGapDetail": "Requires facet-aware canvas grid partitioning in SVG and ECharts lowerers"
+    },
+    {
+      "Concept": "Coordinate Systems (Cartesian, Transposed, Polar)",
+      "Category": "Coordinates",
+      "IsSupportedInContracts": true,
+      "IsSupportedInRenderers": true,
+      "IsExposedInReportSql": true,
+      "StatusSummary": "Fully supported across contracts, ECharts, and SVG renderers (BAR, HBAR, PIE, DONUT)",
+      "TechnicalGapDetail": "Complete across contracts and native SVG; terminal renderer maps Polar to proportional Spectre breakdown tables"
+    },
+    {
+      "Concept": "Layer-Level Independent Data Source Overrides",
+      "Category": "Layer Composition",
+      "IsSupportedInContracts": false,
+      "IsSupportedInRenderers": false,
+      "IsExposedInReportSql": false,
+      "StatusSummary": "Absent in contracts; all layers currently bind to the single root dataReference",
+      "TechnicalGapDetail": "MarkLayerSpec does not contain an optional DataReference override property"
+    },
+    {
+      "Concept": "In-Line Binding Expressions \u0026 Transforms",
+      "Category": "Data Transformation",
+      "IsSupportedInContracts": false,
+      "IsSupportedInRenderers": false,
+      "IsExposedInReportSql": false,
+      "StatusSummary": "Absent in contracts; transformations must be pre-staged via SQL queries into #temp tables",
+      "TechnicalGapDetail": "FieldBinding only accepts simple column identifier strings, not scalar expression ASTs"
+    },
+    {
+      "Concept": "Conditional Visual Mark Encodings",
+      "Category": "Encodings \u0026 Styles",
+      "IsSupportedInContracts": false,
+      "IsSupportedInRenderers": false,
+      "IsExposedInReportSql": false,
+      "StatusSummary": "Absent in contracts; mark styles are static StyleToken lists per layer",
+      "TechnicalGapDetail": "No contract model for condition-driven style rules (e.g. IF value \u003C 0 THEN color=\u0027#EF4444\u0027)"
+    },
+    {
+      "Concept": "Accessible Semantic Fallbacks \u0026 Plain-Text Summaries",
+      "Category": "Accessibility \u0026 Governance",
+      "IsSupportedInContracts": true,
+      "IsSupportedInRenderers": true,
+      "IsExposedInReportSql": true,
+      "StatusSummary": "Fully supported via SemanticFallback and AccessibleSummary generation in PlotPlanResolver",
+      "TechnicalGapDetail": "Production-ready: produces deterministic structured text tables and screen-reader narratives"
+    }
+  ],
+  "SurfaceConformanceMatrix": {
+    "ECharts Browser Runtime": "Full support for Cartesian, Transposed, Polar, Multi-Layer, Dual-Axis, and Series Palette.",
+    "Native PlotPlan SVG": "Full support for Native Vector Cartesian, Dual-Axis, Lines, Rects, Points, Rules, Arcs, Micro-Sparklines, and Micro-Progress without browser/V8 dependencies.",
+    "Spectre Terminal Output": "Support for Braille Continuous Curves, Bar Panels, Slicers, and Semantic Plain-Text Breakdown Tables.",
+    "Accessible Screen-Reader Fallbacks": "Deterministic SemanticFallbackItem tables, Summary narratives, and GFM tables."
+  },
+  "ArchitecturalReadinessSummary": [
+    "ChartSpec and PlotPlan provide a robust semantic foundation capable of multi-layer composition, dual-scale coordinates, and rich accessibility.",
+    "Primary semantic gaps for Phase 7 are at the authoring/syntax layer (Report-SQL grammar for layer definitions) and client-side reactive facet splitting.",
+    "Existing rendering pipelines (ECharts and Native SVG) cleanly decouple from Report-SQL syntax and can consume future advanced authoring specs without architectural redesign."
+  ]
+}

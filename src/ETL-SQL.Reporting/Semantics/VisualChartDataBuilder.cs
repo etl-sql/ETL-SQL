@@ -11,7 +11,7 @@ public sealed class VisualChartDataBuilder
 {
     public ChartDataSet Build(ChartSpec spec, VisualManifest manifest)
     {
-        var semanticByField = spec.Bindings
+        var semanticByField = spec.Bindings.Concat(spec.Layers.SelectMany(layer => layer.Bindings))
             .GroupBy(binding => binding.Field, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First().SemanticKind, StringComparer.OrdinalIgnoreCase);
         var columns = new List<ChartColumn>();

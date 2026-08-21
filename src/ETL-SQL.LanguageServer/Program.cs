@@ -172,6 +172,7 @@ namespace ETL_SQL.LSP
                     .WithHandler<TextDocumentHandler>()
                     .WithHandler<HoverProvider>()
                     .WithHandler<DefinitionProvider>()
+                    .WithHandler<AdvancedChartRenameProvider>()
                     .WithHandler<CompletionProvider>()
                     .WithHandler<SignatureHelpProvider>()
                     .WithHandler<FormattingProvider>()

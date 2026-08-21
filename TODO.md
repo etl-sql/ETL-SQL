@@ -181,21 +181,30 @@ regression evidence alongside production conformance tests.
 
 ### Phase 7 — Native Advanced Chart Authoring
 
-- [ ] Write the language proposal for native mark layers, scales, coordinates, conditions, and facets;
+- [x] Write the language proposal for native mark layers, scales, coordinates, conditions, and facets;
   do not add embedded Vega-Lite runtime syntax.
-- [ ] Review the proposal against existing parser behavior, language standards, transformation
+- [x] Review the proposal against existing parser behavior, language standards, transformation
   transparency, lineage, actions/interactions, themes, and accessibility.
-- [ ] Implement parser, immutable AST, formatter, Analysis-tier lint, LSP completion/hover, and rename
+- [x] Implement parser, immutable AST, formatter, Analysis-tier lint, LSP completion/hover, and rename
   support together for each accepted grammar slice.
-- [ ] Extend Report Builder parsing and surgical mutation support with trivia-preserving fixtures for
+- [x] Extend Report Builder parsing and surgical mutation support with trivia-preserving fixtures for
   every accepted nested form.
-- [ ] Add layering and dual-axis support, then conditions and one-dimensional faceting, then
+- [x] Add layering and dual-axis support, then conditions and one-dimensional faceting, then
   two-dimensional composition and shared/independent scale policies.
-- [ ] Keep aggregation, lookup, filtering, calculation, windowing, and statistical preparation in
+- [x] Keep aggregation, lookup, filtering, calculation, windowing, and statistical preparation in
   visible ETL-SQL/`#temp` operations rather than adding hidden visual transforms.
 
 **Exit gate:** Every new grammar form has a minimal working example, parser/LSP/formatter/designer
 coverage, lineage behavior, cross-backend conformance, and no undocumented renderer-specific state.
+
+**Completed:** Accepted renderer-neutral `CUSTOM`/`CHART` syntax now covers ordered mark layers,
+named scales, Cartesian/transposed/polar coordinates, dual axes, conditional encodings, one- and
+two-dimensional facets, and shared/independent scale resolution without embedded Vega-Lite or
+hidden data transforms. Immutable AST and contracts, canonical formatting, Analysis lint and
+lineage, LSP completion/hover/scoped rename, lossless Report Builder preservation, native SVG,
+terminal, transient ECharts compilation, capability inventory, documentation, and parser-tested
+examples share the same contract. Gemini's Phase 7 semantic-readiness suite remains as independent
+regression evidence alongside the production conformance tests.
 
 ### Phase 8 — Standard Catalog Migration and ECharts Retirement
 

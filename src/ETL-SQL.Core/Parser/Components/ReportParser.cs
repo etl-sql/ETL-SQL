@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Globalization;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
@@ -47,6 +48,7 @@ public class ReportParser : ParserComponent
         PrintLayoutOverride? printLayout = null;
         RowDetailDefinition? rowDetail = null;
         CascadeDefinition? cascade = null;
+        AdvancedChartDefinition? advancedChart = null;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -176,6 +178,11 @@ public class ReportParser : ParserComponent
                 Advance();
                 cascade = ParseCascadeDefinition();
             }
+            else if (IsCurrentValue("CHART"))
+            {
+                Advance();
+                advancedChart = ParseAdvancedChartDefinition();
+            }
             else
             {
                 throw new SyntaxException(
@@ -189,6 +196,13 @@ public class ReportParser : ParserComponent
         Match(TokenType.SEMICOLON);
 
         ValidateVisualActionTriggers(visualType, actions, startToken);
+
+        if (visualType == VisualType.Custom && advancedChart == null)
+            throw new SyntaxException($"CUSTOM visual '{name}' requires a CHART clause.", startToken.Line, startToken.Column);
+        if (visualType != VisualType.Custom && advancedChart != null)
+            throw new SyntaxException("CHART is only valid on CUSTOM visuals.", startToken.Line, startToken.Column);
+        if (visualType == VisualType.Custom && (mappings.Count > 0 || typedSeries.Count > 0 || overlays.Count > 0 || formattingRules.Count > 0))
+            throw new SyntaxException("CUSTOM visuals use CHART encodings and cannot use MAPPINGS, SERIES, OVERLAYS, or FORMATTING.", startToken.Line, startToken.Column);
 
         if (source == null)
         {
@@ -241,6 +255,7 @@ public class ReportParser : ParserComponent
             PrintLayout = printLayout,
             RowDetail = rowDetail,
             Cascade = cascade,
+            AdvancedChart = advancedChart,
             Line = startToken.Line,
             Column = startToken.Column
         };
@@ -342,6 +357,480 @@ public class ReportParser : ParserComponent
             MultiSelect = multiSelect
         };
     }
+
+    private AdvancedChartDefinition ParseAdvancedChartDefinition()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after CHART");
+        AdvancedChartCoordinate? coordinate = null;
+        var scales = new List<AdvancedChartScale>();
+        var layers = new List<AdvancedChartLayer>();
+        AdvancedChartFacet? facet = null;
+        var resolution = new AdvancedChartResolution();
+
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            if (IsCurrentValue("COORDINATE"))
+            {
+                Advance();
+                coordinate = ParseAdvancedChartCoordinate();
+            }
+            else if (IsCurrentValue("SCALES"))
+            {
+                Advance();
+                scales.AddRange(ParseAdvancedChartScales());
+            }
+            else if (IsCurrentValue("LAYERS"))
+            {
+                Advance();
+                layers.AddRange(ParseAdvancedChartLayers());
+            }
+            else if (IsCurrentValue("FACET"))
+            {
+                Advance();
+                facet = ParseAdvancedChartFacet();
+            }
+            else if (IsCurrentValue("RESOLVE"))
+            {
+                Advance();
+                resolution = ParseAdvancedChartResolution();
+            }
+            else
+            {
+                throw new SyntaxException($"Unexpected CHART clause '{_parser.Current.Value}'.",
+                    _parser.Current.Line, _parser.Current.Column);
+            }
+            Match(TokenType.COMMA);
+        }
+
+        Consume(TokenType.RPAREN, "Expected ')' to close CHART");
+        if (coordinate == null)
+            throw new SyntaxException("CHART requires COORDINATE.", _parser.Current.Line, _parser.Current.Column);
+        if (scales.Count == 0)
+            throw new SyntaxException("CHART requires at least one SCALE.", _parser.Current.Line, _parser.Current.Column);
+        if (layers.Count == 0)
+            throw new SyntaxException("CHART requires at least one LAYER.", _parser.Current.Line, _parser.Current.Column);
+
+        return new AdvancedChartDefinition
+        {
+            Coordinate = coordinate,
+            Scales = scales.ToImmutableArray(),
+            Layers = layers.ToImmutableArray(),
+            Facet = facet,
+            Resolution = resolution
+        };
+    }
+
+    private AdvancedChartCoordinate ParseAdvancedChartCoordinate()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after COORDINATE");
+        AdvancedChartCoordinateKind? kind = null;
+        decimal? startAngle = null, endAngle = null, innerRadius = null;
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var option = ConsumeAdvancedWord("Expected COORDINATE option").ToUpperInvariant();
+            Consume(TokenType.EQUALS, $"Expected '=' after COORDINATE {option}");
+            if (option == "TYPE")
+            {
+                kind = ConsumeAdvancedWord("Expected coordinate type").ToUpperInvariant() switch
+                {
+                    "CARTESIAN" => AdvancedChartCoordinateKind.Cartesian,
+                    "TRANSPOSED_CARTESIAN" => AdvancedChartCoordinateKind.TransposedCartesian,
+                    "POLAR" => AdvancedChartCoordinateKind.Polar,
+                    var value => throw new SyntaxException($"Unsupported coordinate type '{value}'.",
+                        _parser.Previous.Line, _parser.Previous.Column)
+                };
+            }
+            else
+            {
+                var value = decimal.Parse(ParseSignedNumberText(), CultureInfo.InvariantCulture);
+                switch (option)
+                {
+                    case "START_ANGLE": startAngle = value; break;
+                    case "END_ANGLE": endAngle = value; break;
+                    case "INNER_RADIUS": innerRadius = value; break;
+                    default:
+                        throw new SyntaxException($"Unknown COORDINATE option '{option}'.",
+                        _parser.Previous.Line, _parser.Previous.Column);
+                }
+            }
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after COORDINATE");
+        if (!kind.HasValue)
+            throw new SyntaxException("COORDINATE requires TYPE.", _parser.Current.Line, _parser.Current.Column);
+        return new AdvancedChartCoordinate
+        {
+            Kind = kind.Value,
+            StartAngle = startAngle,
+            EndAngle = endAngle,
+            InnerRadius = innerRadius
+        };
+    }
+
+    private IEnumerable<AdvancedChartScale> ParseAdvancedChartScales()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after SCALES");
+        var scales = new List<AdvancedChartScale>();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var start = _parser.Current;
+            var name = ConsumeIdentifier("Expected scale name").Value;
+            Consume(TokenType.EQUALS, $"Expected '=' after scale '{name}'");
+            var kind = ParseAdvancedScaleKind(ConsumeAdvancedWord("Expected scale type"));
+            Consume(TokenType.LPAREN, $"Expected '(' after scale type for '{name}'");
+            AdvancedChartChannel? channel = null;
+            var includeZero = false;
+            Expression? minimum = null, maximum = null;
+            var order = AdvancedChartSortDirection.Source;
+            var explicitOrder = new List<Expression>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var option = ConsumeAdvancedWord("Expected scale option").ToUpperInvariant();
+                Consume(TokenType.EQUALS, $"Expected '=' after scale option '{option}'");
+                switch (option)
+                {
+                    case "CHANNEL": channel = ParseAdvancedChannel(ConsumeAdvancedWord("Expected scale channel")); break;
+                    case "INCLUDE_ZERO": includeZero = ParseAdvancedOnOff(); break;
+                    case "MIN": minimum = _parser.ParseExpression(); break;
+                    case "MAX": maximum = _parser.ParseExpression(); break;
+                    case "ORDER":
+                        if (Match(TokenType.LPAREN))
+                        {
+                            if (!ReportCheck(TokenType.RPAREN))
+                            {
+                                explicitOrder.Add(_parser.ParseExpression());
+                                while (Match(TokenType.COMMA)) explicitOrder.Add(_parser.ParseExpression());
+                            }
+                            Consume(TokenType.RPAREN, "Expected ')' after explicit scale ORDER");
+                        }
+                        else order = ParseAdvancedSort(ConsumeAdvancedWord("Expected scale ORDER value"));
+                        break;
+                    default:
+                        throw new SyntaxException($"Unknown scale option '{option}'.",
+                        _parser.Previous.Line, _parser.Previous.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+            Consume(TokenType.RPAREN, $"Expected ')' after scale '{name}'");
+            if (!channel.HasValue)
+                throw new SyntaxException($"Scale '{name}' requires CHANNEL.", start.Line, start.Column);
+            scales.Add(new AdvancedChartScale
+            {
+                Name = name,
+                Kind = kind,
+                Channel = channel.Value,
+                IncludeZero = includeZero,
+                Minimum = minimum,
+                Maximum = maximum,
+                Order = order,
+                ExplicitOrder = explicitOrder.ToImmutableArray(),
+                Line = start.Line,
+                Column = start.Column
+            });
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after SCALES");
+        return scales;
+    }
+
+    private IEnumerable<AdvancedChartLayer> ParseAdvancedChartLayers()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after LAYERS");
+        var layers = new List<AdvancedChartLayer>();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var start = _parser.Current;
+            var name = ConsumeIdentifier("Expected layer name").Value;
+            Consume(TokenType.EQUALS, $"Expected '=' after layer '{name}'");
+            var mark = ParseAdvancedMark(ConsumeAdvancedWord("Expected mark type"));
+            Consume(TokenType.LPAREN, $"Expected '(' after mark type for '{name}'");
+            var zIndex = layers.Count;
+            var encodings = new List<AdvancedChartEncoding>();
+            var styles = new List<AdvancedChartStyle>();
+            var conditions = new List<AdvancedChartCondition>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (IsCurrentValue("Z_INDEX"))
+                {
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after Z_INDEX");
+                    zIndex = int.Parse(ParseSignedNumberText(), CultureInfo.InvariantCulture);
+                }
+                else if (IsCurrentValue("ENCODINGS"))
+                {
+                    Advance();
+                    encodings.AddRange(ParseAdvancedChartEncodings());
+                }
+                else if (Match(TokenType.STYLE))
+                {
+                    styles.AddRange(ParseAdvancedChartStyles());
+                }
+                else if (IsCurrentValue("CONDITIONS"))
+                {
+                    Advance();
+                    conditions.AddRange(ParseAdvancedChartConditions());
+                }
+                else
+                {
+                    throw new SyntaxException($"Unexpected option '{_parser.Current.Value}' in layer '{name}'.",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+            Consume(TokenType.RPAREN, $"Expected ')' after layer '{name}'");
+            if (encodings.Count == 0)
+                throw new SyntaxException($"Layer '{name}' requires ENCODINGS.", start.Line, start.Column);
+            layers.Add(new AdvancedChartLayer
+            {
+                Name = name,
+                Mark = mark,
+                ZIndex = zIndex,
+                Encodings = encodings.ToImmutableArray(),
+                Styles = styles.ToImmutableArray(),
+                Conditions = conditions.ToImmutableArray(),
+                Line = start.Line,
+                Column = start.Column
+            });
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after LAYERS");
+        return layers;
+    }
+
+    private IEnumerable<AdvancedChartEncoding> ParseAdvancedChartEncodings()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after ENCODINGS");
+        var encodings = new List<AdvancedChartEncoding>();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var start = _parser.Current;
+            var channel = ParseAdvancedChannel(ConsumeAdvancedWord("Expected encoding channel"));
+            Consume(TokenType.EQUALS, "Expected '=' after encoding channel");
+            var field = ConsumeIdentifier("Expected source column for encoding").Value;
+            Consume(TokenType.LPAREN, "Expected '(' after encoding source column");
+            AdvancedChartDataKind? dataKind = null;
+            string? scale = null, format = null;
+            var axis = AdvancedChartAxisRole.None;
+            var sort = AdvancedChartSortDirection.Source;
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var option = ConsumeAdvancedWord("Expected encoding option").ToUpperInvariant();
+                Consume(TokenType.EQUALS, $"Expected '=' after encoding option '{option}'");
+                switch (option)
+                {
+                    case "TYPE": dataKind = ParseAdvancedDataKind(ConsumeAdvancedWord("Expected encoding TYPE")); break;
+                    case "SCALE": scale = ConsumeIdentifier("Expected scale name").Value; break;
+                    case "AXIS": axis = ParseAdvancedAxis(ConsumeAdvancedWord("Expected AXIS value")); break;
+                    case "SORT": sort = ParseAdvancedSort(ConsumeAdvancedWord("Expected SORT value")); break;
+                    case "FORMAT": format = Consume(TokenType.STRING_LITERAL, "Expected format string").Value; break;
+                    default:
+                        throw new SyntaxException($"Unknown encoding option '{option}'.",
+                        _parser.Previous.Line, _parser.Previous.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after encoding options");
+            if (!dataKind.HasValue)
+                throw new SyntaxException($"Encoding {channel} = {field} requires TYPE.", start.Line, start.Column);
+            encodings.Add(new AdvancedChartEncoding
+            {
+                Channel = channel,
+                Field = field,
+                DataKind = dataKind.Value,
+                Scale = scale,
+                Axis = axis,
+                Sort = sort,
+                Format = format,
+                Line = start.Line,
+                Column = start.Column
+            });
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after ENCODINGS");
+        return encodings;
+    }
+
+    private IEnumerable<AdvancedChartStyle> ParseAdvancedChartStyles()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after layer STYLE");
+        var styles = new List<AdvancedChartStyle>();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var name = ConsumeAdvancedWord("Expected portable style name").ToUpperInvariant();
+            Consume(TokenType.EQUALS, $"Expected '=' after style '{name}'");
+            styles.Add(new AdvancedChartStyle(name, _parser.ParseExpression()));
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after layer STYLE");
+        return styles;
+    }
+
+    private IEnumerable<AdvancedChartCondition> ParseAdvancedChartConditions()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after CONDITIONS");
+        var conditions = new List<AdvancedChartCondition>();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var start = _parser.Current;
+            var channel = ParseAdvancedConditionChannel(ConsumeAdvancedWord("Expected condition channel"));
+            Consume(TokenType.WHEN, "Expected WHEN after condition channel");
+            var predicate = _parser.ParseExpression();
+            Consume(TokenType.THEN, "Expected THEN after condition predicate");
+            var whenTrue = _parser.ParseExpression();
+            Expression? whenFalse = null;
+            if (Match(TokenType.ELSE)) whenFalse = _parser.ParseExpression();
+            conditions.Add(new AdvancedChartCondition
+            {
+                Channel = channel,
+                Predicate = predicate,
+                WhenTrue = whenTrue,
+                WhenFalse = whenFalse,
+                Line = start.Line,
+                Column = start.Column
+            });
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after CONDITIONS");
+        return conditions;
+    }
+
+    private AdvancedChartFacet ParseAdvancedChartFacet()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after FACET");
+        string? row = null, column = null;
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var option = ConsumeAdvancedWord("Expected ROW or COLUMN in FACET").ToUpperInvariant();
+            Consume(TokenType.EQUALS, $"Expected '=' after FACET {option}");
+            var field = ConsumeIdentifier($"Expected source column after FACET {option}").Value;
+            if (option == "ROW") row = field;
+            else if (option == "COLUMN") column = field;
+            else throw new SyntaxException($"Unknown FACET option '{option}'.", _parser.Previous.Line, _parser.Previous.Column);
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after FACET");
+        if (row == null && column == null)
+            throw new SyntaxException("FACET requires ROW or COLUMN.", _parser.Current.Line, _parser.Current.Column);
+        return new AdvancedChartFacet { RowField = row, ColumnField = column };
+    }
+
+    private AdvancedChartResolution ParseAdvancedChartResolution()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after RESOLVE");
+        var x = AdvancedChartResolutionMode.Shared;
+        var y = AdvancedChartResolutionMode.Shared;
+        var color = AdvancedChartResolutionMode.Shared;
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var channel = ConsumeAdvancedWord("Expected X, Y, or COLOR in RESOLVE").ToUpperInvariant();
+            Consume(TokenType.EQUALS, $"Expected '=' after RESOLVE {channel}");
+            var mode = ParseAdvancedResolution(ConsumeAdvancedWord("Expected SHARED or INDEPENDENT"));
+            if (channel == "X") x = mode;
+            else if (channel == "Y") y = mode;
+            else if (channel == "COLOR") color = mode;
+            else throw new SyntaxException($"Unknown RESOLVE channel '{channel}'.", _parser.Previous.Line, _parser.Previous.Column);
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after RESOLVE");
+        return new AdvancedChartResolution { X = x, Y = y, Color = color };
+    }
+
+    private string ConsumeAdvancedWord(string message)
+    {
+        if (ReportAtEnd() || ReportCheck(TokenType.COMMA) || ReportCheck(TokenType.LPAREN) ||
+            ReportCheck(TokenType.RPAREN) || ReportCheck(TokenType.EQUALS))
+            throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
+        return Advance().Value;
+    }
+
+    private bool ParseAdvancedOnOff() => ConsumeAdvancedWord("Expected ON or OFF").ToUpperInvariant() switch
+    {
+        "ON" => true,
+        "OFF" => false,
+        var value => throw new SyntaxException($"Expected ON or OFF, got '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartMarkKind ParseAdvancedMark(string value) => value.ToUpperInvariant() switch
+    {
+        "RECT" => AdvancedChartMarkKind.Rect,
+        "LINE" => AdvancedChartMarkKind.Line,
+        "AREA" => AdvancedChartMarkKind.Area,
+        "POINT" => AdvancedChartMarkKind.Point,
+        "RULE" => AdvancedChartMarkKind.Rule,
+        "ARC" => AdvancedChartMarkKind.Arc,
+        "TEXT" => AdvancedChartMarkKind.Text,
+        _ => throw new SyntaxException($"Unknown advanced mark '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartScaleKind ParseAdvancedScaleKind(string value) => value.ToUpperInvariant() switch
+    {
+        "LINEAR" => AdvancedChartScaleKind.Linear,
+        "LOGARITHMIC" => AdvancedChartScaleKind.Logarithmic,
+        "TIME" => AdvancedChartScaleKind.Time,
+        "BAND" => AdvancedChartScaleKind.Band,
+        "POINT" => AdvancedChartScaleKind.Point,
+        "ORDINAL" => AdvancedChartScaleKind.Ordinal,
+        "IDENTITY" => AdvancedChartScaleKind.Identity,
+        _ => throw new SyntaxException($"Unknown scale type '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartChannel ParseAdvancedChannel(string value) => value.ToUpperInvariant() switch
+    {
+        "X" => AdvancedChartChannel.X,
+        "Y" => AdvancedChartChannel.Y,
+        "Y2" => AdvancedChartChannel.Y2,
+        "COLOR" => AdvancedChartChannel.Color,
+        "SIZE" => AdvancedChartChannel.Size,
+        "SHAPE" => AdvancedChartChannel.Shape,
+        "THETA" => AdvancedChartChannel.Theta,
+        "RADIUS" => AdvancedChartChannel.Radius,
+        "TEXT" => AdvancedChartChannel.Text,
+        "TOOLTIP" => AdvancedChartChannel.Tooltip,
+        "DETAIL" => AdvancedChartChannel.Detail,
+        _ => throw new SyntaxException($"Unknown encoding channel '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartDataKind ParseAdvancedDataKind(string value) => value.ToUpperInvariant() switch
+    {
+        "QUANTITATIVE" => AdvancedChartDataKind.Quantitative,
+        "TEMPORAL" => AdvancedChartDataKind.Temporal,
+        "NOMINAL" => AdvancedChartDataKind.Nominal,
+        "ORDINAL" => AdvancedChartDataKind.Ordinal,
+        _ => throw new SyntaxException($"Unknown encoding type '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartAxisRole ParseAdvancedAxis(string value) => value.ToUpperInvariant() switch
+    {
+        "NONE" => AdvancedChartAxisRole.None,
+        "PRIMARY" => AdvancedChartAxisRole.Primary,
+        "SECONDARY" => AdvancedChartAxisRole.Secondary,
+        _ => throw new SyntaxException($"Unknown axis role '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartSortDirection ParseAdvancedSort(string value) => value.ToUpperInvariant() switch
+    {
+        "SOURCE" => AdvancedChartSortDirection.Source,
+        "ASCENDING" => AdvancedChartSortDirection.Ascending,
+        "DESCENDING" => AdvancedChartSortDirection.Descending,
+        _ => throw new SyntaxException($"Unknown sort direction '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartResolutionMode ParseAdvancedResolution(string value) => value.ToUpperInvariant() switch
+    {
+        "SHARED" => AdvancedChartResolutionMode.Shared,
+        "INDEPENDENT" => AdvancedChartResolutionMode.Independent,
+        _ => throw new SyntaxException($"Unknown resolution mode '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartConditionChannel ParseAdvancedConditionChannel(string value) => value.ToUpperInvariant() switch
+    {
+        "COLOR" => AdvancedChartConditionChannel.Color,
+        "OPACITY" => AdvancedChartConditionChannel.Opacity,
+        "SIZE" => AdvancedChartConditionChannel.Size,
+        "SHAPE" => AdvancedChartConditionChannel.Shape,
+        "TEXT" => AdvancedChartConditionChannel.Text,
+        _ => throw new SyntaxException($"Unknown condition channel '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
 
     // ── CREATE PAGE ───────────────────────────────────────────────────────
 
@@ -1611,6 +2100,7 @@ public class ReportParser : ParserComponent
         if (Match(TokenType.CHECKBOX)) return VisualType.Checkbox;
         if (Match(TokenType.TEXTBOX)) return VisualType.Textbox;
         if (Match(TokenType.NUMBERBOX)) return VisualType.Numberbox;
+        if (IsCurrentValue("CUSTOM")) { Advance(); return VisualType.Custom; }
 
         // MAP token already exists for container MAP() clauses; match it here only when
         // ParseVisualType() is called (i.e. after AS in CREATE VISUAL ... AS MAP).
@@ -1657,6 +2147,7 @@ public class ReportParser : ParserComponent
                 "CHECKBOX" => VisualType.Checkbox,
                 "TEXTBOX" => VisualType.Textbox,
                 "NUMBERBOX" => VisualType.Numberbox,
+                "CUSTOM" => VisualType.Custom,
                 _ => throw new SyntaxException(
                          $"Unknown visual type '{val}'.",
                          _parser.Previous.Line, _parser.Previous.Column)
@@ -1664,7 +2155,7 @@ public class ReportParser : ParserComponent
         }
 
         throw new SyntaxException(
-            $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, GANTT, SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, CHECKBOX, TEXTBOX, NUMBERBOX) but got '{_parser.Current.Value}'",
+            $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, GANTT, SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, CHECKBOX, TEXTBOX, NUMBERBOX, CUSTOM) but got '{_parser.Current.Value}'",
             _parser.Current.Line, _parser.Current.Column);
     }
 

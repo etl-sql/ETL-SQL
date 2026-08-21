@@ -202,7 +202,10 @@ internal static class PlotPlanTerminalRenderer
     private static string DisplayValue(ResolvedDatum datum)
     {
         var channel = datum.Channels.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius);
-        return channel is null ? "" : channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value);
+        var value = channel is null ? "" : channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value);
+        if (datum.Encodings.IsDefaultOrEmpty) return value;
+        return value + " (" + string.Join(", ", datum.Encodings.Select(encoding =>
+            $"{encoding.Channel}={PlotPlanResolver.Display(encoding.Value)}")) + ")";
     }
     private static string? DisplayChannel(ResolvedDatum datum, FieldChannel channel)
     {

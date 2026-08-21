@@ -60,11 +60,13 @@ public class ReportingBaselineTests
         var nativeSvg = new[]
         {
             VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Scatter,
-            VisualType.Pie, VisualType.Donut, VisualType.Combo
+            VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom
         };
         Assert.Equal(nativeSvg.Order(), VisualCapabilityMatrix.NativeSvgVisualTypes.Order());
 
-        Assert.Equal(23, VisualCapabilityMatrix.EChartsVisualTypes.Count);
+        Assert.Equal(24, VisualCapabilityMatrix.EChartsVisualTypes.Count);
+        Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Custom).StaticExport.Level);
+        Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Custom).Terminal.Level);
         Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Matrix).Browser.Level);
         Assert.Equal(CapabilityLevel.TemporaryDependency, VisualCapabilityMatrix.Get(VisualType.Matrix).StaticExport.Level);
         Assert.Equal(CapabilityLevel.SemanticFallback, VisualCapabilityMatrix.Get(VisualType.Map).Terminal.Level);

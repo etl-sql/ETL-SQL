@@ -263,9 +263,11 @@ namespace ETL_SQL.Reporting.Builders
                     if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
                         ApplyTableMappings(vStmt, vm);
                     await BuildMicroChartsAsync(vStmt, vm);
-                    if (NamedVisualChartLowerer.Supports(vStmt.VisualType))
+                    if (vStmt.AdvancedChart is not null || NamedVisualChartLowerer.Supports(vStmt.VisualType))
                     {
-                        vm.ChartSpec = new NamedVisualChartLowerer().Lower(vStmt, vm);
+                        vm.ChartSpec = vStmt.AdvancedChart is not null
+                            ? new AdvancedChartLowerer(ctx).Lower(vStmt, vm)
+                            : new NamedVisualChartLowerer().Lower(vStmt, vm);
                         vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData);
                     }
