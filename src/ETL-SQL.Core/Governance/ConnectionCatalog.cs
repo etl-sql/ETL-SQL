@@ -217,10 +217,27 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         if (!Path.IsPathFullyQualified(rootDirectory))
             throw new InvalidOperationException("Connection catalog root directory must be fully qualified.");
 
-        return Path.Combine(GetRoot(), alias + ".connection");
+        var root = GetRoot();
+        var safeFileName = Path.GetFileName(alias) + ".connection";
+        var fullPath = Path.GetFullPath(Path.Combine(root, safeFileName));
+        var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Invalid alias path: '{alias}'", nameof(alias));
+
+        return fullPath;
     }
 
-    private string GetDisabledPath(string alias) => GetEntryPath(alias) + ".disabled";
+    private string GetDisabledPath(string alias)
+    {
+        var activePath = GetEntryPath(alias);
+        var disabledPath = activePath + ".disabled";
+        var root = GetRoot();
+        var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!disabledPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Invalid alias path: '{alias}'", nameof(alias));
+
+        return disabledPath;
+    }
 
     private string GetRoot() => Path.GetFullPath(rootDirectory);
 }

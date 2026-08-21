@@ -173,8 +173,6 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
         return Task.CompletedTask;
     }
 
-    private string GetDisabledPath(string name) => GetSecretPath(name) + ".disabled";
-
     // Machine scope lets an admin-written secret be read by a differently privileged service
     // account. "DPAPI:" payloads predate machine scoping and stay readable by the account
     // that wrote them; rotating the secret upgrades it to machine scope.
@@ -186,7 +184,26 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
     private string GetSecretPath(string name)
     {
         SecretNameValidator.Validate(name);
-        return Path.Combine(GetRootDirectory(), name + ".secret");
+        var root = GetRootDirectory();
+        var safeFileName = Path.GetFileName(name) + ".secret";
+        var fullPath = Path.GetFullPath(Path.Combine(root, safeFileName));
+        var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Invalid secret path: '{name}'", nameof(name));
+
+        return fullPath;
+    }
+
+    private string GetDisabledPath(string name)
+    {
+        var activePath = GetSecretPath(name);
+        var disabledPath = activePath + ".disabled";
+        var root = GetRootDirectory();
+        var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!disabledPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Invalid secret path: '{name}'", nameof(name));
+
+        return disabledPath;
     }
 
     private string GetRootDirectory()
@@ -297,8 +314,8 @@ public static partial class SecretNameValidator
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Secret name is required.", nameof(name));
-        if (!ValidSecretNameRegex().IsMatch(name))
-            throw new ArgumentException("Secret names may contain only letters, numbers, period, underscore, and hyphen.", nameof(name));
+        if (name == "." || name == ".." || name.Contains("..") || !ValidSecretNameRegex().IsMatch(name))
+            throw new ArgumentException("Secret names may contain only letters, numbers, period, underscore, and hyphen, and cannot be relative path segments.", nameof(name));
     }
 
     [GeneratedRegex(@"^[A-Za-z0-9_.-]+$")]
