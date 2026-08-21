@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using ETL_SQL.Reporting.Semantics;
@@ -8,35 +9,45 @@ using Spectre.Console.Rendering;
 
 namespace ETL_SQL.Reporting.Renderers;
 
+/// <summary>Semantic terminal compiler for renderer-neutral PlotPlans.</summary>
 internal static class PlotPlanTerminalRenderer
 {
-    public static IRenderable Render(PlotPlan plan)
+    private static readonly string[] PointGlyphs = ["●", "◆", "▲", "■", "✚", "○", "◇"];
+    private static readonly char[] Fractions = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
+
+    public static IRenderable Render(PlotPlan plan, int width = 80)
     {
         plan.Validate();
-        var table = new Table().Border(TableBorder.Rounded);
-        table.AddColumn("Mark");
-        table.AddColumn("Series");
-        table.AddColumn("Category / X");
-        table.AddColumn(new TableColumn("Value / Y").RightAligned());
-
-        foreach (var layer in plan.Layers)
+        width = Math.Clamp(width, 40, 120);
+        var facets = ResolveFacets(plan);
+        var content = new List<IRenderable> { new Markup($"[grey]{Markup.Escape(plan.AccessibleSummary)}[/]") };
+        if (facets.Count == 1)
         {
-            var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey)?.Label ?? layer.Id;
-            foreach (var datum in layer.Data)
-            {
-                var x = Channel(datum, FieldChannel.X) ?? Channel(datum, FieldChannel.Theta);
-                var y = Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? Channel(datum, FieldChannel.Radius);
-                table.AddRow(
-                    Markup.Escape(layer.Mark.ToString()),
-                    Markup.Escape(series),
-                    Markup.Escape(x is null ? $"row {datum.RowIndex + 1}" : PlotPlanResolver.Display(x)),
-                    datum.IsGap ? "[grey]gap[/]" : Markup.Escape(y is null ? "" : PlotPlanResolver.Display(y)));
-            }
+            content.Add(RenderFacet(plan, facets[0].Rows, width));
         }
-
-        return new Panel(new Rows(
-            new Markup($"[grey]{Markup.Escape(plan.AccessibleSummary)}[/]"),
-            table))
+        else
+        {
+            var columns = width >= 80 ? 2 : 1;
+            var grid = new Grid();
+            for (var index = 0; index < columns; index++) grid.AddColumn();
+            for (var index = 0; index < facets.Count; index += columns)
+            {
+                var cells = new IRenderable[columns];
+                for (var column = 0; column < columns; column++)
+                {
+                    if (index + column >= facets.Count) { cells[column] = new Text(""); continue; }
+                    var facet = facets[index + column];
+                    cells[column] = new Panel(RenderFacet(plan, facet.Rows, (width / columns) - 4))
+                        .Header(Markup.Escape(facet.Label)).Border(BoxBorder.Square);
+                }
+                grid.AddRow(cells);
+            }
+            content.Add(grid);
+        }
+        if (plan.Legend.Length > 1)
+            content.Add(new Markup(string.Join("  ", plan.Legend.Select(entry =>
+                $"[#{entry.Color.TrimStart('#')}]{PointGlyphs[entry.Order % PointGlyphs.Length]}[/] {Markup.Escape(entry.Label)} [grey]({Markup.Escape(entry.Color)})[/]"))));
+        return new Panel(new Rows(content))
         {
             Header = new PanelHeader(Markup.Escape(plan.Title ?? plan.SpecId)),
             Border = BoxBorder.Rounded,
@@ -44,6 +55,160 @@ internal static class PlotPlanTerminalRenderer
         };
     }
 
-    private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel) =>
-        datum.Channels.FirstOrDefault(item => item.Channel == channel)?.Value;
+    private static IRenderable RenderFacet(PlotPlan plan, HashSet<int> rows, int width)
+    {
+        var content = new List<IRenderable>();
+        foreach (var layer in plan.Layers.Where(item => item.Mark != MarkKind.Arc))
+        {
+            var data = layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList();
+            if (data.Count == 0) continue;
+            var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey);
+            var label = layer.Mark == MarkKind.Rule
+                ? layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value ?? layer.Id
+                : series?.Label ?? layer.Id;
+            var color = series?.Color ?? "#808080";
+            content.Add(layer.Mark switch
+            {
+                MarkKind.Rect => RenderRectangles(data, label, color, width),
+                MarkKind.Line or MarkKind.Area => RenderLine(data, label, color, width, layer.Mark == MarkKind.Area),
+                MarkKind.Point => RenderPoints(data, label, color, series?.Order ?? 0),
+                MarkKind.Rule => RenderRule(data, label, color),
+                _ => RenderFallback(plan.Fallback)
+            });
+        }
+        var arcLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Arc)
+            .Select(layer => (Layer: layer, Data: layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList()))
+            .Where(item => item.Data.Count > 0).ToList();
+        if (arcLayers.Count > 0) content.Add(RenderArcs(plan, arcLayers, width));
+        return content.Count == 0 ? RenderFallback(plan.Fallback) : new Rows(content);
+    }
+
+    private static IRenderable RenderRectangles(IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
+    {
+        var values = data.Select(Value).ToList();
+        var maximum = values.Where(value => value.HasValue).Select(value => Math.Abs(value!.Value)).DefaultIfEmpty(1m).Max();
+        if (maximum == 0m) maximum = 1m;
+        var labelWidth = Math.Clamp(data.Select(Label).DefaultIfEmpty("").Max(label => label.Length), 6, Math.Max(6, width / 3));
+        var barWidth = Math.Max(8, width - labelWidth - 18);
+        var rows = data.Select(datum =>
+        {
+            var label = Truncate(Label(datum), labelWidth).PadRight(labelWidth);
+            if (datum.IsGap) return (IRenderable)new Markup($"{Markup.Escape(label)} [grey]gap[/]");
+            var value = Value(datum) ?? 0m;
+            var bar = FractionalBar(Math.Abs(value) / maximum, barWidth);
+            var sign = value < 0m ? "◀" : value == 0m ? "│" : "▶";
+            return new Markup($"{Markup.Escape(label)} [#{color.TrimStart('#')}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}");
+        }).ToList();
+        rows.Insert(0, new Markup($"[bold]{Markup.Escape(series)}[/] [grey](fractional bars)[/]"));
+        return new Rows(rows);
+    }
+
+    private static IRenderable RenderLine(IReadOnlyList<ResolvedDatum> data, string series, string color, int width, bool area)
+    {
+        var values = data.Select(Value).ToList();
+        var numeric = values.Where(value => value.HasValue).Select(value => value!.Value).ToList();
+        if (numeric.Count == 0) return new Markup($"[bold]{Markup.Escape(series)}[/]: [grey]all values are gaps[/]");
+        var min = numeric.Min(); var max = numeric.Max();
+        if (min == max) max = min + 1m;
+        var canvas = new BrailleCanvas(Math.Clamp(width - 8, 16, 52), 7);
+        (int X, int Y)? previous = null;
+        for (var index = 0; index < data.Count; index++)
+        {
+            if (data[index].IsGap || !values[index].HasValue) { previous = null; continue; }
+            var x = data.Count == 1 ? 0 : index * (canvas.DotWidth - 1) / (data.Count - 1);
+            var y = canvas.DotHeight - 1 - (int)((values[index]!.Value - min) / (max - min) * (canvas.DotHeight - 1));
+            if (previous.HasValue) canvas.Line(previous.Value.X, previous.Value.Y, x, y, color);
+            else canvas.Set(x, y, color);
+            if (area) for (var fill = y + 1; fill < canvas.DotHeight; fill += 2) canvas.Set(x, fill, color);
+            previous = (x, y);
+        }
+        var gaps = data.Count(datum => datum.IsGap);
+        return new Rows(
+            new Markup($"[bold]{Markup.Escape(series)}[/] [grey]({(area ? "Braille area" : "Braille line")}; {gaps} gaps)[/]"),
+            canvas.ToRenderable(),
+            new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"));
+    }
+
+    private static IRenderable RenderPoints(IReadOnlyList<ResolvedDatum> data, string series, string color, int seriesOrder)
+    {
+        var glyph = PointGlyphs[Math.Abs(seriesOrder) % PointGlyphs.Length];
+        var rows = data.Select(datum => datum.IsGap
+            ? (IRenderable)new Markup($"[grey]○ {Markup.Escape(Label(datum))}: gap[/]")
+            : new Markup($"[#{color.TrimStart('#')}]{glyph}[/] {Markup.Escape(Label(datum))}: {Markup.Escape(DisplayValue(datum))}"));
+        return new Rows(new[] { (IRenderable)new Markup($"[bold]{Markup.Escape(series)}[/] [grey](point glyph {glyph})[/]") }.Concat(rows));
+    }
+
+    private static IRenderable RenderRule(IReadOnlyList<ResolvedDatum> data, string label, string color)
+    {
+        var value = data.Select(DisplayValue).FirstOrDefault(item => !string.IsNullOrEmpty(item)) ?? "reference";
+        return new Markup($"[#{color.TrimStart('#')}]────────[/] [bold]{Markup.Escape(label)}[/]: {Markup.Escape(value)}");
+    }
+
+    private static IRenderable RenderArcs(PlotPlan plan,
+        IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data)> layers, int width)
+    {
+        var components = layers.SelectMany(item => item.Data.Select(datum =>
+        {
+            var datumLabel = Label(datum);
+            var series = layers.Count == 1
+                ? plan.Series.FirstOrDefault(candidate => candidate.Key == datumLabel)
+                : plan.Series.FirstOrDefault(candidate => candidate.Key == item.Layer.SeriesKey);
+            var label = layers.Count > 1 && item.Data.Count == 1 ? series?.Label ?? datumLabel : datumLabel;
+            return (Datum: datum, Label: label, Color: series?.Color ?? "#808080", Value: Math.Max(0m, Value(datum) ?? 0m));
+        })).ToList();
+        var total = components.Sum(component => component.Value);
+        var componentWidth = Math.Max(8, width - 28);
+        var rows = components.Select(component =>
+        {
+            var proportion = total == 0m ? 0m : component.Value / total;
+            return (IRenderable)new Markup($"{Markup.Escape(Truncate(component.Label, 18).PadRight(18))} [#{component.Color.TrimStart('#')}]{FractionalBar(proportion, componentWidth)}[/] {proportion:P1} ({Markup.Escape(DisplayValue(component.Datum))})");
+        });
+        return new Rows(new[] { (IRenderable)new Markup("[bold]Proportional breakdown[/] [grey](proportional components)[/]") }.Concat(rows));
+    }
+
+    internal static IRenderable RenderFallback(SemanticFallback fallback)
+    {
+        var table = new Table().Border(TableBorder.Simple).AddColumn("Item").AddColumn(new TableColumn("Value").RightAligned()).AddColumn("Meaning");
+        foreach (var item in fallback.Items.OrderBy(item => item.Order))
+        {
+            var indent = new string(' ', item.Level * 2);
+            table.AddRow(Markup.Escape(indent + item.Label), Markup.Escape(item.Value), Markup.Escape(item.Detail ?? item.Group ?? ""));
+        }
+        return new Rows(new Markup($"[grey]{Markup.Escape(fallback.Summary ?? fallback.Heading)}[/]"), table);
+    }
+
+    private static List<(string Label, HashSet<int> Rows)> ResolveFacets(PlotPlan plan)
+    {
+        var source = plan.Layers.FirstOrDefault(layer => layer.Mark is not MarkKind.Rule)?.Data ?? [];
+        var groups = source.GroupBy(datum =>
+        {
+            var row = Channel(datum, FieldChannel.Row);
+            var column = Channel(datum, FieldChannel.Column);
+            return row is null && column is null ? "All data" : $"{(row is null ? "" : PlotPlanResolver.Display(row))}{(row is not null && column is not null ? " / " : "")}{(column is null ? "" : PlotPlanResolver.Display(column))}";
+        }, StringComparer.Ordinal).Select(group => (group.Key, group.Select(datum => datum.RowIndex).ToHashSet())).ToList();
+        return groups.Count == 0 ? [("All data", plan.Layers.SelectMany(layer => layer.Data).Select(datum => datum.RowIndex).ToHashSet())] : groups;
+    }
+
+    private static string FractionalBar(decimal ratio, int width)
+    {
+        var units = Math.Clamp((int)Math.Round(ratio * width * 8m), 0, width * 8);
+        return new string('█', units / 8) + (units % 8 == 0 ? "" : Fractions[units % 8].ToString());
+    }
+
+    private static string Label(ResolvedDatum datum) =>
+        DisplayChannel(datum, FieldChannel.X) ?? DisplayChannel(datum, FieldChannel.Theta) ?? $"row {datum.RowIndex + 1}";
+    private static decimal? Value(ResolvedDatum datum) =>
+        PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? Channel(datum, FieldChannel.Radius) ?? ChartValue.Null());
+    private static string DisplayValue(ResolvedDatum datum)
+    {
+        var channel = datum.Channels.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius);
+        return channel is null ? "" : channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value);
+    }
+    private static string? DisplayChannel(ResolvedDatum datum, FieldChannel channel)
+    {
+        var resolved = datum.Channels.FirstOrDefault(item => item.Channel == channel);
+        return resolved is null ? null : resolved.DisplayValue ?? PlotPlanResolver.Display(resolved.Value);
+    }
+    private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel) => datum.Channels.FirstOrDefault(item => item.Channel == channel)?.Value;
+    private static string Truncate(string value, int width) => value.Length <= width ? value : value[..Math.Max(1, width - 1)] + "…";
 }

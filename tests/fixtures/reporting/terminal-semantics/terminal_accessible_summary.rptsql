@@ -1,0 +1,30 @@
+-- Terminal Semantics Fixture: Accessible Summary & Fallbacks
+-- Validates KPI headline cards, summary statistics, and accessible plain-text fallbacks.
+
+SET REPORT TITLE = 'Platform Reliability Executive Scorecard';
+SET REPORT DESCRIPTION = 'Executive metrics dashboard highlighting SLA compliance and regional node health.';
+
+SELECT 'US-East' AS Region, 99.95 AS UptimePct, 120000 AS ReqPerSec INTO #health_summary
+UNION ALL SELECT 'US-West', 99.91, 95000
+UNION ALL SELECT 'EU-Central', 99.88, 87000;
+
+CREATE VISUAL ClusterUptimeCard AS CARD (
+    TITLE = 'Global Fleet SLA',
+    SOURCE = (SELECT '99.91%' AS UptimeSLA FROM #health_summary),
+    MAPPINGS (VALUE = UptimeSLA)
+);
+
+CREATE VISUAL RegionalUptimeTable AS TABLE (
+    TITLE = 'Regional Uptime & Throughput',
+    SOURCE = #health_summary
+);
+
+CREATE PAGE ScorecardDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A / B',
+        MAP (
+            'A' = ClusterUptimeCard,
+            'B' = RegionalUptimeTable
+        )
+    )
+);

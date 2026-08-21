@@ -227,6 +227,23 @@ public sealed class PlotPlanResolver
         if (categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
             columns.TryGetValue(categoryBinding.Field, out var categoryColumn) && !categories.IsDefaultOrEmpty)
         {
+            var facetBindings = layerBindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column)
+                .Where(binding => columns.ContainsKey(binding.Field)).ToList();
+            if (facetBindings.Count > 0)
+            {
+                var facetKeys = Enumerable.Range(0, data.RowCount).Where(include)
+                    .Select(index => string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field].Values[index]) ?? string.Empty)))
+                    .Distinct(StringComparer.Ordinal).ToList();
+                foreach (var facetKey in facetKeys)
+                    foreach (var category in categories)
+                    {
+                        var rowIndex = Enumerable.Range(0, data.RowCount).FirstOrDefault(index => include(index)
+                            && ValueKey(categoryColumn.Values[index]) == category
+                            && string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field].Values[index]) ?? string.Empty)) == facetKey, -1);
+                        if (rowIndex >= 0) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling));
+                    }
+                return rows.ToImmutableArray();
+            }
             for (var categoryIndex = 0; categoryIndex < categories.Length; categoryIndex++)
             {
                 var category = categories[categoryIndex];
@@ -300,19 +317,38 @@ public sealed class PlotPlanResolver
 
     private static SemanticFallback BuildFallback(ChartSpec spec, ImmutableArray<ResolvedMarkLayer> layers, ImmutableArray<string> categories)
     {
-        var primary = layers.FirstOrDefault(layer => layer.Mark is not MarkKind.Rule);
-        var items = primary?.Data.Select((datum, index) =>
+        var sourceLayers = layers.Where(layer => layer.Mark is not MarkKind.Rule).ToList();
+        var total = sourceLayers.Where(layer => layer.Mark == MarkKind.Arc).SelectMany(layer => layer.Data)
+            .Select(datum => datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Radius or FieldChannel.Y))
+            .Where(value => value is not null).Sum(value => Math.Max(0m, Number(value!.Value) ?? 0m));
+        var items = sourceLayers.SelectMany((layer, layerIndex) => layer.Data.Select((datum, index) =>
         {
             var label = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.X or FieldChannel.Theta)?.DisplayValue
                 ?? (index < categories.Length ? categories[index] : $"Row {index + 1}");
             var value = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius);
-            return new SemanticFallbackItem(label ?? $"Row {index + 1}", value is null ? "" : value.DisplayValue ?? Display(value.Value), index);
-        }).ToImmutableArray() ?? [];
+            var numeric = value is null ? null : Number(value.Value);
+            return new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? Display(value.Value), (layerIndex * 100000) + index)
+            {
+                Group = layer.SeriesKey,
+                Detail = datum.IsGap ? "null gap" : layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
+                    ? $"{numeric.Value / total:P1} of total"
+                    : null
+            };
+        })).Concat(layers.Where(layer => layer.Mark == MarkKind.Rule).Select((layer, index) =>
+        {
+            var value = layer.Data.SelectMany(datum => datum.Channels)
+                .FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.X);
+            var label = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value
+                ?? layer.Style.FirstOrDefault(token => token.Name == "overlayType")?.Value ?? layer.Id;
+            return new SemanticFallbackItem(label, value is null ? "" : value.DisplayValue ?? Display(value.Value), ((sourceLayers.Count + 1) * 100000) + index)
+            { Detail = "labeled reference rule", Group = "Reference" };
+        })).ToImmutableArray();
         return new SemanticFallback(
             spec.Coordinate.Kind == CoordinateKind.Polar ? SemanticFallbackKind.ProportionalBreakdown :
             spec.Bindings.Any(binding => binding.SemanticKind == DataSemanticKind.Temporal) ? SemanticFallbackKind.TimeSeriesTable : SemanticFallbackKind.RankedTable,
             spec.Title ?? spec.Id,
-            items);
+            items)
+        { Summary = $"{spec.Title ?? spec.Id}: {items.Length} ordered semantic values." };
     }
 
     private static string BuildSummary(ChartSpec spec, ChartDataSet data, ImmutableArray<ResolvedSeries> series, ImmutableArray<int> gaps, ImmutableArray<int> skipped) =>

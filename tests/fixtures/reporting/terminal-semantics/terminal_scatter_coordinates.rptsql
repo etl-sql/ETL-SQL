@@ -1,0 +1,25 @@
+-- Terminal Semantics Fixture: Scatter Coordinates on Terminal Plane
+-- Validates Braille/coordinate plane rendering for bivariate scatter plots in terminal.
+
+SET REPORT TITLE = 'Terminal Scatter Coordinate Mapping';
+
+SELECT 10.0 AS X_Val, 20.0 AS Y_Val INTO #scatter_points
+UNION ALL SELECT 25.0, 45.0
+UNION ALL SELECT 40.0, 30.0
+UNION ALL SELECT 55.0, 70.0
+UNION ALL SELECT 70.0, 60.0
+UNION ALL SELECT 85.0, 90.0;
+
+CREATE VISUAL CoordinateScatterVisual AS SCATTER (
+    TITLE = 'Bivariate Coordinate Distribution',
+    SOURCE = #scatter_points,
+    MAPPINGS (X = X_Val, Y = Y_Val),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE PAGE ScatterDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = CoordinateScatterVisual)
+    )
+);

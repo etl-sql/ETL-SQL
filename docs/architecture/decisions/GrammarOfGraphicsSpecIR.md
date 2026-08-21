@@ -222,6 +222,13 @@ The fallback model is shared with screen-reader summaries, plain-text email, and
 surfaces. Rich terminal form controls and keyboard navigation are worthwhile but form a distinct UI
 initiative and do not block the GoG foundation.
 
+Implementation status (Phase 5): `PlotPlanTerminalRenderer` lowers the representative native marks
+using the forms above and composes first-seen row/column facets at 40-, 80-, and 120-column targets.
+`SemanticFallback` is serialized on each visual manifest and carries ordered items plus optional
+group, hierarchy level, detail, and summary metadata. Terminal output and Markdown/plain-text delivery
+consume that same object; serialized report consumers use it for screen-reader descriptions. Legacy
+maps, Sankey diagrams, treemaps/sunbursts, and networks build specialized fallbacks before rendering.
+
 ## 10. PDF and Email
 
 Native SVG removes the server-side V8 requirement for supported charts, but delivery targets retain

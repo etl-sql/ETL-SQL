@@ -10,6 +10,7 @@ public enum SemanticFallbackKind
     TimeSeriesTable,
     ProportionalBreakdown,
     Hierarchy,
+    TransitionTable,
     NetworkConnections
 }
 
@@ -57,12 +58,26 @@ public sealed record ResolvedNullPolicy(
     ImmutableArray<int> GapRows,
     ImmutableArray<int> SkippedRows);
 
-public sealed record SemanticFallbackItem(string Label, string Value, int Order);
+public sealed record SemanticFallbackItem(string Label, string Value, int Order)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Detail { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Group { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int Level { get; init; }
+}
 
 public sealed record SemanticFallback(
     SemanticFallbackKind Kind,
     string Heading,
-    ImmutableArray<SemanticFallbackItem> Items);
+    ImmutableArray<SemanticFallbackItem> Items)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Summary { get; init; }
+}
 
 public sealed record PlotPlan(
     string Schema,

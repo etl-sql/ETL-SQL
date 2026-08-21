@@ -1,0 +1,27 @@
+-- Terminal Semantics Fixture: Bar Chart Category & Series Ordering
+-- Validates terminal rendering across 40, 80, 120 column viewports with stable ordering.
+
+SET REPORT TITLE = 'Terminal Ordering & Multi-Series Bar';
+
+SELECT 'North' AS Region, 140 AS Actuals, 160 AS Target INTO #regional_sales
+UNION ALL SELECT 'South', 95, 110
+UNION ALL SELECT 'East', 210, 190
+UNION ALL SELECT 'West', 180, 175;
+
+CREATE VISUAL RegionalBarVisual AS BAR (
+    TITLE = 'Regional Performance Comparison',
+    SOURCE = #regional_sales,
+    MAPPINGS (X = Region, Y = Actuals),
+    OPTIONS (
+        AXIS_SORT = ASC,
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE PAGE RegionalDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = RegionalBarVisual)
+    )
+);

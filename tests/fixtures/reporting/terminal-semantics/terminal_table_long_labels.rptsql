@@ -1,0 +1,33 @@
+-- Terminal Semantics Fixture: Long Labels & Deterministic Truncation
+-- Validates column text wrapping, truncation, and layout integrity across widths 40, 80, 120.
+
+SET REPORT TITLE = 'Terminal Long Labels and Column Truncation';
+
+SELECT
+    101 AS CaseId,
+    'Enterprise Cluster Gateway Failover and Secondary Lease Transition' AS SummaryTitle,
+    'Critical Infrastructure Operations Team' AS DepartmentUnit,
+    98.45 AS SLACompliancePct
+INTO #incident_cases
+UNION ALL SELECT
+    102,
+    'Intermittent TLS Handshake Timeout on Edge Routing Ingress Proxy',
+    'Platform Security & Governance Assurance',
+    92.10
+UNION ALL SELECT
+    103,
+    'Database WAL Spill and Disk Memory Pressure Mitigation',
+    'Core Database Architecture & Storage',
+    99.80;
+
+CREATE VISUAL IncidentTableVisual AS TABLE (
+    TITLE = 'Infrastructure Reliability Incident Log',
+    SOURCE = #incident_cases
+);
+
+CREATE PAGE IncidentDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = IncidentTableVisual)
+    )
+);

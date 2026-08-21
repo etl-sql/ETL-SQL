@@ -153,13 +153,23 @@ public static class VisualCapabilityMatrix
             migrated
                 ? new(CapabilityLevel.Native, "PlotPlan semantic terminal renderer")
                 : terminalFallback
-                ? new(CapabilityLevel.SemanticFallback, "textual summary / placeholder")
+                ? new(CapabilityLevel.SemanticFallback, TerminalFallbackDescription(type))
                 : new(CapabilityLevel.Native, "Spectre terminal renderer"),
             interactions, true,
             migrated
                 ? "Phase 3 semantic path; browser retains ECharts only as a transient backend"
                 : nativeSvg ? "Native static SVG exists; browser rendering still uses ECharts" : "PlotPlan migration target");
     }
+
+    private static string TerminalFallbackDescription(VisualType type) => type switch
+    {
+        VisualType.Map => "ranked regional breakdown",
+        VisualType.Sankey => "transition and source drop-off table",
+        VisualType.Treemap or VisualType.Sunburst => "ordered proportional hierarchy",
+        VisualType.Network => "node-degree and connection summary",
+        VisualType.Radar => "ordered dimension/value table",
+        _ => "ordered accessible summary"
+    };
 
     private static VisualCapabilityEntry Control(
         VisualType type, string name, string category, string browser,

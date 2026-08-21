@@ -1,0 +1,28 @@
+-- Terminal Semantics Fixture: Line Chart with Null Gaps & Discontinuous Trends
+-- Validates terminal BrailleCanvas curve rendering and null coordinate skipping.
+
+SET REPORT TITLE = 'Terminal Line Chart with Null Gaps';
+
+SELECT 1 AS StepIndex, 12.5 AS Telemetry INTO #telemetry_series
+UNION ALL SELECT 2, 18.2
+UNION ALL SELECT 3, NULL
+UNION ALL SELECT 4, 24.8
+UNION ALL SELECT 5, NULL
+UNION ALL SELECT 6, 31.0;
+
+CREATE VISUAL TelemetryLineVisual AS LINE (
+    TITLE = 'Telemetry Sequence with Data Gaps',
+    SOURCE = #telemetry_series,
+    MAPPINGS (X = StepIndex, Y = Telemetry),
+    OPTIONS (
+        CONNECT_NULLS = OFF
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE PAGE TelemetryDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = TelemetryLineVisual)
+    )
+);

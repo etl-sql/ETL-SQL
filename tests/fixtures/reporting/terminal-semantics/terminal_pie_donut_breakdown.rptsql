@@ -1,0 +1,26 @@
+-- Terminal Semantics Fixture: Proportional Slices (PIE/DONUT)
+-- Validates textual breakdown tables, percentages, and color identification.
+
+SET REPORT TITLE = 'Terminal Proportional Composition';
+
+SELECT 'Compute' AS ResourceType, 5400 AS CostDollars INTO #cloud_spend
+UNION ALL SELECT 'Storage', 2800
+UNION ALL SELECT 'Networking', 1600
+UNION ALL SELECT 'Security & IAM', 1200;
+
+CREATE VISUAL SpendDonutVisual AS DONUT (
+    TITLE = 'Infrastructure Cost Distribution',
+    SOURCE = #cloud_spend,
+    MAPPINGS (CATEGORY = ResourceType, VALUE = CostDollars),
+    OPTIONS (
+        LEGEND = 'RIGHT'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '380px')
+);
+
+CREATE PAGE SpendDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = SpendDonutVisual)
+    )
+);
