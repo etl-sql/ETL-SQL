@@ -1,0 +1,45 @@
+-- Cascading Slicer Fixture: Rapid Consecutive Parent Changes (Debounce & Coalesce)
+-- Scenario: Rapid sequential mutations (@dept = 'D1' -> 'D2' -> 'D3') to assert deterministic convergence without race conditions.
+
+SET REPORT TITLE = 'Cascading Slicers: Rapid Consecutive State Transitions';
+
+DECLARE @dept VARCHAR(50) = 'D1';
+DECLARE @role VARCHAR(50) = 'R1_Lead';
+
+SELECT 'D1' AS Dept, 'R1_Lead' AS RoleTitle, 100 AS Weight INTO #roles_dim
+UNION ALL SELECT 'D1', 'R1_Senior', 80
+UNION ALL SELECT 'D2', 'R2_Manager', 120
+UNION ALL SELECT 'D2', 'R2_Analyst', 70
+UNION ALL SELECT 'D3', 'R3_Architect', 150
+UNION ALL SELECT 'D3', 'R3_Consultant', 90;
+
+CREATE VISUAL DeptSlicer AS SLICER (
+    TITLE = 'Department',
+    SOURCE = (SELECT DISTINCT Dept FROM #roles_dim),
+    MAPPINGS (CATEGORY = Dept),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@dept, Dept))
+);
+
+CREATE VISUAL RoleSlicer AS SLICER (
+    TITLE = 'Role Title',
+    SOURCE = (SELECT RoleTitle FROM #roles_dim WHERE Dept = @dept),
+    MAPPINGS (CATEGORY = RoleTitle),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@role, RoleTitle))
+);
+
+CREATE VISUAL WeightCard AS CARD (
+    TITLE = 'Role Weight Score',
+    SOURCE = (SELECT Weight FROM #roles_dim WHERE Dept = @dept AND RoleTitle = @role),
+    MAPPINGS (VALUE = Weight)
+);
+
+CREATE PAGE TransitionPage AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B / C C',
+        MAP (
+            'A' = DeptSlicer,
+            'B' = RoleSlicer,
+            'C' = WeightCard
+        )
+    )
+);

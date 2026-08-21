@@ -1,0 +1,39 @@
+-- Cascading Slicer Fixture: Intentionally Cyclic Dependency
+-- Scenario: Slicer A filters on @paramB, while Slicer B filters on @paramA.
+-- Purpose: Design fixture for future cycle detection diagnostics.
+
+SET REPORT TITLE = 'Cascading Slicers: Cyclic Dependency Diagnostic Target';
+
+DECLARE @paramA VARCHAR(50) = 'A1';
+DECLARE @paramB VARCHAR(50) = 'B1';
+
+SELECT 'A1' AS FactorA, 'B1' AS FactorB INTO #cyclic_dim
+UNION ALL SELECT 'A1', 'B2'
+UNION ALL SELECT 'A2', 'B1'
+UNION ALL SELECT 'A2', 'B2';
+
+-- Node A depends on @paramB
+CREATE VISUAL SlicerNodeA AS SLICER (
+    TITLE = 'Factor A (Depends on B)',
+    SOURCE = (SELECT DISTINCT FactorA FROM #cyclic_dim WHERE FactorB = @paramB),
+    MAPPINGS (CATEGORY = FactorA),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@paramA, FactorA))
+);
+
+-- Node B depends on @paramA (Creating cycle A -> B -> A)
+CREATE VISUAL SlicerNodeB AS SLICER (
+    TITLE = 'Factor B (Depends on A)',
+    SOURCE = (SELECT DISTINCT FactorB FROM #cyclic_dim WHERE FactorA = @paramA),
+    MAPPINGS (CATEGORY = FactorB),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@paramB, FactorB))
+);
+
+CREATE PAGE CyclicPage AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP (
+            'A' = SlicerNodeA,
+            'B' = SlicerNodeB
+        )
+    )
+);

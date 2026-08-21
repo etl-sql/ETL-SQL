@@ -1,0 +1,563 @@
+{
+  "GeneratedAtUtc": "2026-08-21T14:10:58.6816346Z",
+  "GitBranch": "test/reporting-phase6-cascading-slicer-baselines",
+  "ExistingTestInventory": [
+    {
+      "Category": "Parameter Declaration \u0026 AST",
+      "TestFile": "tests/ETL-SQL.Tests/Core/Parser/ReportSqlParserTests.cs",
+      "TestName": "Parse_VisualWithActions_SetsParameter",
+      "Description": "Parses SET_PARAMETER actions on BAR and SLICER visuals"
+    },
+    {
+      "Category": "Action Manifest Binding",
+      "TestFile": "tests/ETL-SQL.Tests/Reporting/ReportingEndToEndTests.cs",
+      "TestName": "VisualActions_SetParameter_BindsToManifest",
+      "Description": "Verifies action manifest emission for @Region, @Search, @Limit, @Active"
+    },
+    {
+      "Category": "Designer Roundtrip AST",
+      "TestFile": "tests/ETL-SQL.Tests/Portal/Fixtures/ReportDesignerRoundTripFixtures.cs",
+      "TestName": "Roundtrip_PreservesSetParameterAction",
+      "Description": "Validates that Visual Report Builder script synchronization preserves SET_PARAMETER bindings"
+    },
+    {
+      "Category": "MultiSelect Visual Syntax",
+      "TestFile": "tests/ETL-SQL.Tests/Core/Parser/ReportSqlParserTests.cs",
+      "TestName": "Parse_MultiSelectVisual_ExtractsOptionsSource",
+      "Description": "Parses MULTISELECT visual type with mandatory SOURCE clause"
+    },
+    {
+      "Category": "Offline Snapshot Packaging",
+      "TestFile": "src/ETL-SQL.Reporting/SnapshotPackageService.cs",
+      "TestName": "ReadManifestFromPackageAsync",
+      "Description": "Serializes and deserializes ReportManifest and table data into standalone .etlsnap packages"
+    },
+    {
+      "Category": "Interactive Execution Engine",
+      "TestFile": "src/ETL-SQL.ReportHosting/InteractiveSessionManager.cs",
+      "TestName": "ExecuteInteractionQueryAsync",
+      "Description": "Executes parameterized visual SQL queries during live interactive portal sessions"
+    },
+    {
+      "Category": "Terminal Slicer Rendering",
+      "TestFile": "tests/ETL-SQL.Tests/Reporting/TerminalRendererTests.cs",
+      "TestName": "RenderSlicer_EmitsInteractiveControl",
+      "Description": "Renders interactive slicers in terminal ANSI / Spectre output"
+    }
+  ],
+  "Scenarios": [
+    {
+      "ScenarioId": "SCENARIO_1_PARENT_CHILD",
+      "Title": "One Parent and One Child Cascade (@country -\u003E @state)",
+      "FixtureFile": "parent_child_cascade.rptsql",
+      "InitialState": {
+        "ParameterValues": {
+          "@country": "USA",
+          "@state": "CA"
+        },
+        "EligibleOptionSets": {
+          "@country": [
+            "USA",
+            "Canada"
+          ],
+          "@state": [
+            "CA",
+            "NY",
+            "TX"
+          ]
+        }
+      },
+      "TriggerAction": {
+        "ParameterName": "@country",
+        "NewValue": "Canada"
+      },
+      "ExpectedInvalidatedParameters": [
+        "@state"
+      ],
+      "ExpectedFinalState": {
+        "ParameterValues": {
+          "@country": "Canada",
+          "@state": "ON"
+        },
+        "EligibleOptionSets": {
+          "@country": [
+            "USA",
+            "Canada"
+          ],
+          "@state": [
+            "ON",
+            "BC"
+          ]
+        }
+      },
+      "ExpectedQueryRefreshCount": 2,
+      "ResetPolicy": 0,
+      "IsSupportedToday": true,
+      "StatusExplanation": "Runnable today via sequential query execution; automated reactive client propagation pending Phase 6"
+    },
+    {
+      "ScenarioId": "SCENARIO_2_TWO_PARENTS_ONE_CHILD",
+      "Title": "Two Parents Feeding One Child (@region \u002B @year -\u003E @category)",
+      "FixtureFile": "two_parents_one_child_cascade.rptsql",
+      "InitialState": {
+        "ParameterValues": {
+          "@region": "North America",
+          "@year": "2026",
+          "@category": "Hardware"
+        },
+        "EligibleOptionSets": {
+          "@region": [
+            "North America",
+            "EMEA"
+          ],
+          "@year": [
+            "2025",
+            "2026"
+          ],
+          "@category": [
+            "Hardware",
+            "Cloud Services"
+          ]
+        }
+      },
+      "TriggerAction": {
+        "ParameterName": "@region",
+        "NewValue": "EMEA"
+      },
+      "ExpectedInvalidatedParameters": [
+        "@category"
+      ],
+      "ExpectedFinalState": {
+        "ParameterValues": {
+          "@region": "EMEA",
+          "@year": "2026",
+          "@category": "Hardware"
+        },
+        "EligibleOptionSets": {
+          "@region": [
+            "North America",
+            "EMEA"
+          ],
+          "@year": [
+            "2025",
+            "2026"
+          ],
+          "@category": [
+            "Hardware",
+            "Security"
+          ]
+        }
+      },
+      "ExpectedQueryRefreshCount": 2,
+      "ResetPolicy": 0,
+      "IsSupportedToday": true,
+      "StatusExplanation": "Runnable today; @category remains \u0027Hardware\u0027 as it is eligible in EMEA 2026"
+    },
+    {
+      "ScenarioId": "SCENARIO_3_THREE_LEVEL_CASCADE",
+      "Title": "Three-Level Hierarchy Cascade (@division -\u003E @department -\u003E @team)",
+      "FixtureFile": "three_level_cascade.rptsql",
+      "InitialState": {
+        "ParameterValues": {
+          "@division": "Engineering",
+          "@department": "Core Platform",
+          "@team": "Storage Engine"
+        },
+        "EligibleOptionSets": {
+          "@division": [
+            "Engineering",
+            "Sales"
+          ],
+          "@department": [
+            "Core Platform",
+            "Security"
+          ],
+          "@team": [
+            "Storage Engine",
+            "Query Optimizer"
+          ]
+        }
+      },
+      "TriggerAction": {
+        "ParameterName": "@division",
+        "NewValue": "Sales"
+      },
+      "ExpectedInvalidatedParameters": [
+        "@department",
+        "@team"
+      ],
+      "ExpectedFinalState": {
+        "ParameterValues": {
+          "@division": "Sales",
+          "@department": "Enterprise",
+          "@team": "Strategic Accounts"
+        },
+        "EligibleOptionSets": {
+          "@division": [
+            "Engineering",
+            "Sales"
+          ],
+          "@department": [
+            "Enterprise",
+            "SMB"
+          ],
+          "@team": [
+            "Strategic Accounts"
+          ]
+        }
+      },
+      "ExpectedQueryRefreshCount": 3,
+      "ResetPolicy": 2,
+      "IsSupportedToday": true,
+      "StatusExplanation": "Runnable today via pipeline cascade; atomic multi-level client batching pending Phase 6"
+    },
+    {
+      "ScenarioId": "SCENARIO_4_NULL_AND_ALL",
+      "Title": "Null and All Option Selections (__ALL__ / NULL Wildcards)",
+      "FixtureFile": "null_and_all_selections.rptsql",
+      "InitialState": {
+        "ParameterValues": {
+          "@selected_channel": "__ALL__",
+          "@selected_campaign": "__ALL__"
+        },
+        "EligibleOptionSets": {
+          "@selected_channel": [
+            "__ALL__",
+            "Digital",
+            "Direct",
+            "Partner"
+          ],
+          "@selected_campaign": [
+            "__ALL__",
+            "Search_SEM",
+            "Social_Paid",
+            "Direct_Mail",
+            "Affiliate_Network"
+          ]
+        }
+      },
+      "TriggerAction": {
+        "ParameterName": "@selected_channel",
+        "NewValue": "Digital"
+      },
+      "ExpectedInvalidatedParameters": [
+        "@selected_campaign"
+      ],
+      "ExpectedFinalState": {
+        "ParameterValues": {
+          "@selected_channel": "Digital",
+          "@selected_campaign": "__ALL__"
+        },
+        "EligibleOptionSets": {
+          "@selected_channel": [
+            "__ALL__",
+            "Digital",
+            "Direct",
+            "Partner"
+          ],
+          "@selected_campaign": [
+            "__ALL__",
+            "Search_SEM",
+            "Social_Paid"
+          ]
+        }
+      },
+      "ExpectedQueryRefreshCount": 2,
+      "ResetPolicy": 0,
+      "IsSupportedToday": true,
+      "StatusExplanation": "Runnable today; wildcard pattern matching supported via SQL COALESCE / OR clauses"
+    },
+    {
+      "ScenarioId": "SCENARIO_5_MULTISELECT_PARENT",
+      "Title": "Multi-Select Parent Values (@regions -\u003E @territory)",
+      "FixtureFile": "multiselect_parent_cascade.rptsql",
+      "InitialState": {
+        "ParameterValues": {
+          "@regions": "North,East",
+          "@territory": "Boston"
+        },
+        "EligibleOptionSets": {
+          "@regions": [
+            "North",
+            "East",
+            "West"
+          ],
+          "@territory": [
+            "Boston",
+            "Manchester",
+            "New York City",
+            "Philadelphia"
+          ]
+        }
+      },
+      "TriggerAction": {
+        "ParameterName": "@regions",
+        "NewValue": "West"
+      },
+      "ExpectedInvalidatedParameters": [
+        "@territory"
+      ],
+      "ExpectedFinalState": {
+        "ParameterValues": {
+          "@regions": "West",
+          "@territory": "Seattle"
+        },
+        "EligibleOptionSets": {
+          "@regions": [
+            "North",
+            "East",
+            "West"
+          ],
+          "@territory": [
+            "Seattle",
+            "San Francisco"
+          ]
+        }
+      },
+      "ExpectedQueryRefreshCount": 2,
+      "ResetPolicy": 2,
+      "IsSupportedToday": true,
+      "StatusExplanation": "Runnable today via CSV string matching; native array-typed parameter binding pending Phase 6"
+    },
+    {
+      "ScenarioId": "SCENARIO_6_INVALID_DESCENDANT_RESET",
+      "Title": "Invalid Descendant Selection \u0026 Auto-Reset",
+      "FixtureFile": "invalid_descendant_selection.rptsql",
+      "InitialState": {
+        "ParameterValues": {
+          "@country": "USA",
+          "@state": "TX"
+        },
+        "EligibleOptionSets": {
+          "@country": [
+            "USA",
+            "Germany"
+          ],
+          "@state": [
+            "TX",
+            "CA"
+          ]
+        }
+      },
+      "TriggerAction": {
+        "ParameterName": "@country",
+        "NewValue": "Germany"
+      },
+      "ExpectedInvalidatedParameters": [
+        "@state"
+      ],
+      "ExpectedFinalState": {
+        "ParameterValues": {
+          "@country": "Germany",
+          "@state": "BY"
+        },
+        "EligibleOptionSets": {
+          "@country": [
+            "USA",
+            "Germany"
+          ],
+          "@state": [
+            "BY",
+            "BE"
+          ]
+        }
+      },
+      "ExpectedQueryRefreshCount": 2,
+      "ResetPolicy": 0,
+      "IsSupportedToday": false,
+      "StatusExplanation": "Pending Phase 6; current client keeps stale \u0027@state=TX\u0027 value until manual interaction"
+    },
+    {
+      "ScenarioId": "SCENARIO_7_RAPID_TRANSITIONS",
+      "Title": "Rapid Consecutive Parent Changes (Debounce \u0026 Convergence)",
+      "FixtureFile": "rapid_parent_transitions.rptsql",
+      "InitialState": {
+        "ParameterValues": {
+          "@dept": "D1",
+          "@role": "R1_Lead"
+        },
+        "EligibleOptionSets": {
+          "@dept": [
+            "D1",
+            "D2",
+            "D3"
+          ],
+          "@role": [
+            "R1_Lead",
+            "R1_Senior"
+          ]
+        }
+      },
+      "TriggerAction": {
+        "ParameterName": "@dept",
+        "NewValue": "D3"
+      },
+      "ExpectedInvalidatedParameters": [
+        "@role"
+      ],
+      "ExpectedFinalState": {
+        "ParameterValues": {
+          "@dept": "D3",
+          "@role": "R3_Architect"
+        },
+        "EligibleOptionSets": {
+          "@dept": [
+            "D1",
+            "D2",
+            "D3"
+          ],
+          "@role": [
+            "R3_Architect",
+            "R3_Consultant"
+          ]
+        }
+      },
+      "ExpectedQueryRefreshCount": 2,
+      "ResetPolicy": 2,
+      "IsSupportedToday": false,
+      "StatusExplanation": "Pending Phase 6; debounce and cancellation tokens will coalesce rapid burst queries"
+    },
+    {
+      "ScenarioId": "SCENARIO_8_CYCLIC_DEPENDENCY",
+      "Title": "Cyclic Dependency Cascade (Diagnostic Target)",
+      "FixtureFile": "cyclic_dependency_cascade.rptsql",
+      "InitialState": {
+        "ParameterValues": {
+          "@paramA": "A1",
+          "@paramB": "B1"
+        },
+        "EligibleOptionSets": {
+          "@paramA": [
+            "A1",
+            "A2"
+          ],
+          "@paramB": [
+            "B1",
+            "B2"
+          ]
+        }
+      },
+      "TriggerAction": {
+        "ParameterName": "@paramA",
+        "NewValue": "A2"
+      },
+      "ExpectedInvalidatedParameters": [
+        "@paramB",
+        "@paramA"
+      ],
+      "ExpectedFinalState": {
+        "ParameterValues": {
+          "@paramA": "A2",
+          "@paramB": "B1"
+        },
+        "EligibleOptionSets": {
+          "@paramA": [
+            "A1",
+            "A2"
+          ],
+          "@paramB": [
+            "B1",
+            "B2"
+          ]
+        }
+      },
+      "ExpectedQueryRefreshCount": 0,
+      "ResetPolicy": 4,
+      "IsSupportedToday": false,
+      "StatusExplanation": "Pending Phase 6; future compiler linter will emit diagnostic error on cyclic parameter graph"
+    }
+  ],
+  "DependencyGraphs": {
+    "parent_child_cascade.rptsql": {
+      "TopologicalOrder": [
+        "@country",
+        "@state"
+      ],
+      "HasCycles": false,
+      "Cycles": [],
+      "RootParameters": [
+        "@country"
+      ],
+      "DownstreamMap": {
+        "@country": [
+          "@state"
+        ],
+        "@state": []
+      }
+    },
+    "two_parents_one_child_cascade.rptsql": {
+      "TopologicalOrder": [
+        "@region",
+        "@year",
+        "@category"
+      ],
+      "HasCycles": false,
+      "Cycles": [],
+      "RootParameters": [
+        "@region",
+        "@year"
+      ],
+      "DownstreamMap": {
+        "@region": [
+          "@category"
+        ],
+        "@year": [
+          "@category"
+        ],
+        "@category": []
+      }
+    },
+    "three_level_cascade.rptsql": {
+      "TopologicalOrder": [
+        "@division",
+        "@department",
+        "@team"
+      ],
+      "HasCycles": false,
+      "Cycles": [],
+      "RootParameters": [
+        "@division"
+      ],
+      "DownstreamMap": {
+        "@division": [
+          "@department",
+          "@team"
+        ],
+        "@department": [
+          "@team"
+        ],
+        "@team": []
+      }
+    },
+    "cyclic_dependency_cascade.rptsql": {
+      "TopologicalOrder": [],
+      "HasCycles": true,
+      "Cycles": [
+        [
+          "@paramA",
+          "@paramB",
+          "@paramA"
+        ]
+      ],
+      "RootParameters": [],
+      "DownstreamMap": {
+        "@paramA": [
+          "@paramB",
+          "@paramA"
+        ],
+        "@paramB": [
+          "@paramA",
+          "@paramB"
+        ]
+      }
+    }
+  },
+  "RunnableVsPendingStatus": {
+    "AST Parsing \u0026 Diagnostics": "Runnable Today: All standard Report-SQL slicers parse without error diagnostics.",
+    "Action Manifest Metadata": "Runnable Today: ACTIONS (ON_CHANGE = SET_PARAMETER(@var, val)) correctly recorded on VisualManifest.",
+    "Manual Parameter Ingestion": "Runnable Today: Evaluator correctly accepts and injects external @parameters during live re-execution.",
+    "Reactive Client Graph Propagation": "Pending Phase 6 Design: Client runtime does not automatically cascade parameter changes down the DAG.",
+    "Automatic Descendant State Invalidation": "Pending Phase 6 Design: Invalidation of stale child selections upon parent mutation is not yet automated.",
+    "Compile-Time Cycle Detection": "Pending Phase 6 Design: Compiler currently allows cyclic parameter source queries without diagnostics."
+  }
+}
