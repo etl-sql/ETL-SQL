@@ -4,12 +4,18 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Reporting;
+using ETL_SQL.Reporting.Renderers;
+using ETL_SQL.Reporting.Semantics;
+using ETL_SQL.Reporting.Semantics.Runtime;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting.Conformance;
 
 public class RepresentativeVisualConformanceTests
 {
+    private static readonly VisualType[] MigratedTypes =
+    [VisualType.Bar, VisualType.Line, VisualType.Scatter, VisualType.Pie, VisualType.Donut, VisualType.Combo];
+
     [Theory]
     [InlineData("bar_stable_ordering.rptsql")]
     [InlineData("bar_explicit_domain.rptsql")]
@@ -84,6 +90,26 @@ public class RepresentativeVisualConformanceTests
         var echartsJson = RepresentativeVisualConformanceHarness.RenderEChartsJson(manifest, visual.Name);
         Assert.NotNull(echartsJson);
         Assert.Contains("\"stack\":\"total\"", echartsJson);
+        var plan = Assert.IsType<PlotPlan>(visual.PlotPlan);
+        var y = plan.Scales.Single(scale => scale.Channel == FieldChannel.Y);
+        Assert.Equal(170000m, PlotPlanResolver.Number(y.Domain[^1]));
+        var svg = new SvgChartRenderer().Render(plan);
+        Assert.Contains("#1E3A8A", svg);
+        Assert.Contains("#3B82F6", svg);
+        Assert.Contains("#93C5FD", svg);
+    }
+
+    [Fact]
+    public async Task MigratedVisual_PdfExportSelectsNativePlanPathWithoutServerV8()
+    {
+        var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("combo_dual_axes.rptsql");
+        var visual = manifest.Visuals.Single();
+
+        Assert.True(PdfExporter.UsesNativePlotPlanRendering(visual));
+        var bytes = await new PdfExporter().ExportAsync(manifest);
+
+        Assert.True(bytes.Length > 100);
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
     }
 
     [Fact]
@@ -182,5 +208,82 @@ public class RepresentativeVisualConformanceTests
 
         var terminal = RepresentativeVisualConformanceHarness.RenderTerminal(manifest);
         Assert.NotNull(terminal);
+    }
+
+    [Theory]
+    [InlineData("bar_stable_ordering.rptsql")]
+    [InlineData("bar_explicit_domain.rptsql")]
+    [InlineData("bar_multi_series_stacked.rptsql")]
+    [InlineData("line_temporal_decimals.rptsql")]
+    [InlineData("line_null_gaps.rptsql")]
+    [InlineData("scatter_multi_series_inferred.rptsql")]
+    [InlineData("pie_donut_proportions.rptsql")]
+    [InlineData("combo_dual_axes.rptsql")]
+    [InlineData("rule_statistical_overlays.rptsql")]
+    public async Task MigratedVisuals_AreBuiltAndRenderedFromOnePlotPlan(string fixtureFileName)
+    {
+        var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync(fixtureFileName);
+        foreach (var visual in manifest.Visuals.Where(item =>
+                     Enum.TryParse<VisualType>(item.VisualType, true, out var type) && MigratedTypes.Contains(type)))
+        {
+            Assert.NotNull(visual.ChartSpec);
+            Assert.NotNull(visual.ChartData);
+            Assert.NotNull(visual.PlotPlan);
+            visual.ChartSpec.Validate();
+            visual.ChartData.Validate();
+            visual.PlotPlan.Validate();
+            Assert.Equal(visual.ChartSpec.Id, visual.PlotPlan.SpecId);
+            Assert.Equal(visual.ChartData.RowCount, visual.Rows.Count);
+            Assert.Equal(new EChartsRenderer().Render(visual.PlotPlan), visual.ChartConfig);
+            Assert.Contains("role='img'", new SvgChartRenderer().Render(visual.PlotPlan));
+            Assert.NotNull(TerminalRenderer.RenderVisual(visual));
+        }
+    }
+
+    [Theory]
+    [InlineData("bar_stable_ordering.rptsql")]
+    [InlineData("bar_explicit_domain.rptsql")]
+    [InlineData("bar_multi_series_stacked.rptsql")]
+    [InlineData("line_temporal_decimals.rptsql")]
+    [InlineData("line_null_gaps.rptsql")]
+    [InlineData("scatter_multi_series_inferred.rptsql")]
+    [InlineData("pie_donut_proportions.rptsql")]
+    [InlineData("combo_dual_axes.rptsql")]
+    [InlineData("rule_statistical_overlays.rptsql")]
+    public async Task RegisteredSemanticExpectations_AgreeWithResolvedPlan(string fixtureFileName)
+    {
+        var expected = RepresentativeVisualConformanceHarness.Registry[fixtureFileName];
+        var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync(fixtureFileName);
+        var visual = manifest.Visuals.First();
+        var plan = Assert.IsType<PlotPlan>(visual.PlotPlan);
+
+        if (expected.ExpectedCategories.Count > 0)
+        {
+            var categories = plan.Scales.First(scale => scale.Channel is FieldChannel.X or FieldChannel.Theta).Categories;
+            Assert.Equal(expected.ExpectedCategories, categories);
+        }
+        if (expected.ExpectedSeriesNames.Count > 0)
+            Assert.Equal(expected.ExpectedSeriesNames, plan.Series.Select(series => series.Label));
+        Assert.Equal(expected.HasNullGaps, plan.Nulls.GapRows.Length > 0);
+        Assert.Equal(expected.HasDualAxes, plan.Scales.Any(scale => scale.Channel == FieldChannel.Y2));
+
+        if (expected.HasExplicitDomain)
+        {
+            var y = plan.Scales.First(scale => scale.Channel == FieldChannel.Y);
+            Assert.Equal(0m, PlotPlanResolver.Number(y.Domain[0]));
+            Assert.Equal(500m, PlotPlanResolver.Number(y.Domain[^1]));
+        }
+
+        var overlays = plan.Layers
+            .Where(layer => !layer.Style.IsDefault)
+            .SelectMany(layer => layer.Style)
+            .Where(token => token.Name == "overlayType")
+            .Select(token => Enum.Parse<OverlayType>(token.Value))
+            .ToArray();
+        Assert.Equal(expected.ExpectedOverlays, overlays);
+        foreach (var (series, color) in expected.ExpectedPalette)
+            Assert.Contains(plan.Palette, item => item.SeriesKey == series && item.Color.Equals(color, StringComparison.OrdinalIgnoreCase));
+        Assert.False(string.IsNullOrWhiteSpace(plan.AccessibleSummary));
+        Assert.NotEmpty(plan.Fallback.Items);
     }
 }

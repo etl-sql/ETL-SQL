@@ -41,7 +41,7 @@ public record RepresentativeSemanticProjection(
     IReadOnlyList<OverlayType> ExpectedOverlays,
     IReadOnlyDictionary<string, string> ExpectedPalette,
     string AccessibleSummary,
-    IReadOnlyDictionary<string, string> KnownSurfaceDifferences);
+    IReadOnlyDictionary<string, string> BackendExpectations);
 
 /// <summary>
 /// Harness for discovering, evaluating, and cross-validating representative visual fixtures
@@ -182,11 +182,11 @@ public static class RepresentativeVisualConformanceHarness
                 ExpectedOverlays: [],
                 ExpectedPalette: new Dictionary<string, string>(),
                 AccessibleSummary: "Bar chart with deterministic Alpha, Beta, Gamma, Delta order across Actual and Forecast series",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Renders multi-series grouped bar with legend and categorical x-axis",
-                    ["SVG"] = "SvgChartRenderer currently extracts first 2 column pairs for single-series bar, omitting multi-series groupings",
-                    ["Terminal"] = "TerminalRenderer renders Braille/bar chart using primary numeric column"
+                    ["SVG"] = "Renders all resolved grouped series from the shared PlotPlan",
+                    ["Terminal"] = "Renders the same ordered series and categories as a semantic table"
                 }),
 
             ["bar_explicit_domain.rptsql"] = new(
@@ -200,11 +200,11 @@ public static class RepresentativeVisualConformanceHarness
                 ExpectedOverlays: [],
                 ExpectedPalette: new Dictionary<string, string>(),
                 AccessibleSummary: "Headcount by department with explicit 0 to 500 Y-axis domain",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Applies min=0 and max=500 to yAxis option",
-                    ["SVG"] = "SvgChartRenderer calculates max dynamically from data (max=410) rather than respecting explicit option bounds",
-                    ["Terminal"] = "TerminalRenderer normalizes bar width across available terminal columns"
+                    ["SVG"] = "Uses the resolved 0 to 500 PlotPlan domain",
+                    ["Terminal"] = "Reports values from the plan whose scale retains the explicit domain"
                 }),
 
             ["bar_multi_series_stacked.rptsql"] = new(
@@ -223,11 +223,11 @@ public static class RepresentativeVisualConformanceHarness
                     ["SMB"] = "#93C5FD"
                 },
                 AccessibleSummary: "Quarterly revenue stacked bar partitioned by tier with custom blue color palette",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Applies stack='total' and explicit color map to series list",
-                    ["SVG"] = "SvgChartRenderer renders flat non-stacked bars without custom palette mapping",
-                    ["Terminal"] = "TerminalRenderer renders partitioned series sequentially"
+                    ["SVG"] = "Renders stacked geometry with the resolved custom palette and stacked domain",
+                    ["Terminal"] = "Renders every partitioned series from the same stacked plan"
                 }),
 
             ["line_temporal_decimals.rptsql"] = new(
@@ -241,7 +241,7 @@ public static class RepresentativeVisualConformanceHarness
                 ExpectedOverlays: [],
                 ExpectedPalette: new Dictionary<string, string>(),
                 AccessibleSummary: "Continuous daily time series line tracking high-precision floating point telemetry",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Renders smooth line series with temporal category labels",
                     ["SVG"] = "SvgChartRenderer renders connected polyline vector paths",
@@ -259,11 +259,11 @@ public static class RepresentativeVisualConformanceHarness
                 ExpectedOverlays: [],
                 ExpectedPalette: new Dictionary<string, string>(),
                 AccessibleSummary: "Discontinuous line chart with null values at Day 3 and Day 5",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Emits null entries in series data array, creating line gap when connectNulls is false",
-                    ["SVG"] = "SvgChartRenderer treats null/empty string as 0.0 value rather than discontinuous path gap",
-                    ["Terminal"] = "TerminalRenderer skips null points on Braille canvas"
+                    ["SVG"] = "Breaks native line paths at the plan's explicit gap rows",
+                    ["Terminal"] = "Labels the same null rows as semantic gaps"
                 }),
 
             ["scatter_multi_series_inferred.rptsql"] = new(
@@ -277,11 +277,11 @@ public static class RepresentativeVisualConformanceHarness
                 ExpectedOverlays: [],
                 ExpectedPalette: new Dictionary<string, string>(),
                 AccessibleSummary: "2D scatter plot correlating Velocity and Efficiency across Cohort A and Cohort B",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Renders scatter series with [x, y, size] coordinate tuples",
-                    ["SVG"] = "SvgChartRenderer emits placeholder for multi-series scatter",
-                    ["Terminal"] = "TerminalRenderer plots points on BrailleCanvas coordinate plane"
+                    ["SVG"] = "Renders native points from resolved quantitative X/Y scales",
+                    ["Terminal"] = "Reports both inferred cohorts and their resolved coordinates"
                 }),
 
             ["pie_donut_proportions.rptsql"] = new(
@@ -295,7 +295,7 @@ public static class RepresentativeVisualConformanceHarness
                 ExpectedOverlays: [],
                 ExpectedPalette: new Dictionary<string, string>(),
                 AccessibleSummary: "Proportional lead distribution comparing standard PIE and 50% inner-radius DONUT",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Pie uses radius=[0, '70%']; Donut uses radius=['50%', '70%']",
                     ["SVG"] = "SvgChartRenderer renders SVG wedge arcs and center hole for donut",
@@ -317,11 +317,11 @@ public static class RepresentativeVisualConformanceHarness
                     ["QualityPassRate"] = "#E11D48"
                 },
                 AccessibleSummary: "Dual-axis combo visual with Units Produced bar and Quality Pass Rate line",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Renders dual yAxis array (left value, right value) with distinct series bindings",
-                    ["SVG"] = "SvgChartRenderer emits placeholder for multi-layer COMBO",
-                    ["Terminal"] = "TerminalRenderer renders primary volume series with percentage annotations"
+                    ["SVG"] = "Renders native bar and line layers against their resolved axes",
+                    ["Terminal"] = "Reports both layers and their Y/Y2 values from the shared plan"
                 }),
 
             ["rule_statistical_overlays.rptsql"] = new(
@@ -335,7 +335,7 @@ public static class RepresentativeVisualConformanceHarness
                 ExpectedOverlays: [OverlayType.Goal, OverlayType.Average, OverlayType.MovingAvg],
                 ExpectedPalette: new Dictionary<string, string>(),
                 AccessibleSummary: "Engineering velocity bar chart with GOAL(50), AVERAGE, and MOVING_AVG(2) statistical overlay lines",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Lowers overlays into markLine data items and moving average line series",
                     ["SVG"] = "SvgChartRenderer computes horizontal overlay benchmark lines",
@@ -353,7 +353,7 @@ public static class RepresentativeVisualConformanceHarness
                 ExpectedOverlays: [],
                 ExpectedPalette: new Dictionary<string, string>(),
                 AccessibleSummary: "Accessible sales dashboard with summary KPI card and tabular region breakdown",
-                KnownSurfaceDifferences: new Dictionary<string, string>
+                BackendExpectations: new Dictionary<string, string>
                 {
                     ["ECharts"] = "Renders interactive visual with formatted data labels",
                     ["SVG"] = "SvgChartRenderer embeds vector chart into Markdown with accessible caption",

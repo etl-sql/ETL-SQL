@@ -2,13 +2,14 @@
 
 **Status:** Accepted
 **Date:** 2026-08-20
+**Implementation:** Slices 0 and 1 shipped on 2026-08-21; later slices remain planned.
 **Decision scope:** Reporting semantics and renderer boundaries; advanced authoring syntax remains a
 separate language-design decision.
 
 ## 1. Context
 
-ETL-SQL currently builds `VisualManifest` data and ECharts-shaped chart configuration for browser and
-server consumers. `EChartsRenderer`, `EChartsSsrRenderer`, `PdfExporter`, `MarkdownRenderer`,
+ETL-SQL historically built `VisualManifest` data and ECharts-shaped chart configuration for browser
+and server consumers. `EChartsRenderer`, `EChartsSsrRenderer`, `PdfExporter`, `MarkdownRenderer`,
 `SvgChartRenderer`, and `TerminalRenderer` then render or reinterpret that state. This makes a vendor
 option schema the effective reporting contract and causes separate backends to repeat decisions about
 ordering, scales, colors, nulls, and fallbacks.

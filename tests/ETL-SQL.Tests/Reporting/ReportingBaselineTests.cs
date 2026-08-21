@@ -57,7 +57,11 @@ public class ReportingBaselineTests
     [Fact]
     public void CapabilityMatrix_TracksSourceBackedRendererBoundaries()
     {
-        var nativeSvg = new[] { VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Pie, VisualType.Donut };
+        var nativeSvg = new[]
+        {
+            VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Scatter,
+            VisualType.Pie, VisualType.Donut, VisualType.Combo
+        };
         Assert.Equal(nativeSvg.Order(), VisualCapabilityMatrix.NativeSvgVisualTypes.Order());
 
         Assert.Equal(23, VisualCapabilityMatrix.EChartsVisualTypes.Count);

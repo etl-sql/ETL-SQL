@@ -20,20 +20,28 @@ internal sealed class PlotPlanEChartsRenderer
         {
             ["title"] = new { text = plan.Title ?? plan.SpecId },
             ["tooltip"] = new { trigger = polar ? "item" : "axis" },
-            ["legend"] = new { orient = "horizontal", bottom = "bottom", data = plan.Legend.Select(entry => entry.Label).ToArray() },
+            ["legend"] = Legend(plan),
             ["series"] = series
         };
 
         if (!polar)
         {
             var x = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
-            option["xAxis"] = x?.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal
-                ? new { type = "category", data = x.Categories }
-                : new { type = x?.Kind == ScaleKind.Time ? "time" : "value" };
+            var xAxis = new Dictionary<string, object?>
+            {
+                ["type"] = x?.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal ? "category" : x?.Kind == ScaleKind.Time ? "time" : "value"
+            };
+            if (x?.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal) xAxis["data"] = x.Categories;
+            else if (x is not null && x.Domain.Length > 1 && Number(x.Domain[0]) is { } xMinimum && Number(x.Domain[^1]) is { } xMaximum)
+            {
+                xAxis["min"] = xMinimum;
+                xAxis["max"] = xMaximum;
+            }
+            var xLabel = Style(plan, "axis:x:label");
+            if (xLabel is not null) xAxis["name"] = xLabel;
+            option["xAxis"] = xAxis;
             var yScales = plan.Scales.Where(scale => scale.Channel is FieldChannel.Y or FieldChannel.Y2).ToList();
-            option["yAxis"] = yScales.Count > 1
-                ? yScales.Select((_, index) => new { type = "value", position = index == 0 ? "left" : "right" }).ToArray()
-                : new object[] { new { type = "value" } };
+            option["yAxis"] = yScales.Select((scale, index) => Axis(plan, scale, index)).ToArray();
         }
 
         return JsonSerializer.Serialize(option, JsonOptions);
@@ -43,6 +51,8 @@ internal sealed class PlotPlanEChartsRenderer
     {
         var output = new List<object>();
         var markLines = new List<object>();
+        var xScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
+        var coordinatePairs = xScale?.Kind is ScaleKind.Time or ScaleKind.Linear or ScaleKind.Logarithmic;
         foreach (var layer in plan.Layers)
         {
             if (layer.Mark == MarkKind.Rule)
@@ -68,9 +78,9 @@ internal sealed class PlotPlanEChartsRenderer
             };
             if (layer.Mark == MarkKind.Rect && IsOn(plan, "STACKED")) series["stack"] = "total";
             if (layer.Mark == MarkKind.Line && IsOn(plan, "SMOOTH")) series["smooth"] = true;
-            if (layer.Mark == MarkKind.Point)
+            if (layer.Mark == MarkKind.Point || coordinatePairs)
             {
-                series["data"] = layer.Data.Where(datum => !datum.IsGap).Select(datum => new object?[]
+                series["data"] = layer.Data.Select(datum => datum.IsGap ? null : new object?[]
                 {
                     Scalar(Channel(datum, FieldChannel.X)),
                     Scalar(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2))
@@ -82,6 +92,7 @@ internal sealed class PlotPlanEChartsRenderer
                     ? null
                     : Scalar(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2))).ToArray();
             }
+            if (IsOn(plan, "DATA_LABELS")) series["label"] = new { show = true, position = (Style(plan, "DATA_LABELS:POSITION") ?? "top").ToLowerInvariant() };
             if (layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)) series["yAxisIndex"] = 1;
             output.Add(series);
         }
@@ -127,6 +138,39 @@ internal sealed class PlotPlanEChartsRenderer
     }
 
     private static object? Number(ChartValue value) => PlotPlanResolver.Number(value);
+    private static Dictionary<string, object?> Axis(PlotPlan plan, ResolvedScale scale, int index)
+    {
+        var axis = new Dictionary<string, object?> { ["type"] = "value", ["position"] = index == 0 ? "left" : "right" };
+        if (scale.Domain.Length > 1)
+        {
+            axis["min"] = Number(scale.Domain[0]);
+            axis["max"] = Number(scale.Domain[^1]);
+        }
+        var label = Style(plan, index == 0 ? "axis:y:label" : "axis:y2:label");
+        if (label is not null) axis["name"] = label;
+        return axis;
+    }
+
+    private static Dictionary<string, object?> Legend(PlotPlan plan)
+    {
+        var position = (Style(plan, "LEGEND_POSITION") ?? Style(plan, "LEGEND") ?? "bottom").ToLowerInvariant();
+        var legend = new Dictionary<string, object?> { ["data"] = plan.Legend.Select(entry => entry.Label).ToArray() };
+        if (position is "left" or "right")
+        {
+            legend["orient"] = "vertical";
+            legend[position] = position;
+            legend["top"] = "middle";
+        }
+        else
+        {
+            legend["orient"] = "horizontal";
+            legend[position == "top" ? "top" : "bottom"] = position == "top" ? "top" : "bottom";
+        }
+        return legend;
+    }
+
+    private static string? Style(PlotPlan plan, string name) =>
+        plan.Style.IsDefault ? null : plan.Style.FirstOrDefault(token => token.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
     private static string? Style(ResolvedMarkLayer layer, string name) =>
         layer.Style.IsDefault ? null : layer.Style.FirstOrDefault(token => token.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
     private static bool IsOn(PlotPlan plan, string name) => !plan.Style.IsDefault &&

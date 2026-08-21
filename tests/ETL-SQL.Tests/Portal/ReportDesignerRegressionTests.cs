@@ -19,6 +19,35 @@ public class ReportDesignerRegressionTests
     private readonly DesignerScriptPatcher _patcher = new();
     private readonly DesignerAnalysisService _analysis = new();
 
+    [Theory]
+    [InlineData("BAR", "X = category, Y = amount")]
+    [InlineData("LINE", "X = category, Y = amount")]
+    [InlineData("SCATTER", "X = category, Y = amount")]
+    [InlineData("PIE", "LABEL = category, VALUE = amount")]
+    [InlineData("DONUT", "LABEL = category, VALUE = amount")]
+    [InlineData("COMBO", "X = category, Y = amount, Y2 = rate")]
+    public void Phase3MigratedVisuals_ParseIntoDesignerAndPatchWithoutChangingType(string visualType, string mappings)
+    {
+        var script = $"""
+            SELECT 'A' AS category, 10 AS amount, 0.9 AS rate INTO #stage;
+            CREATE VISUAL chart AS {visualType} (
+                TITLE = 'Before', SOURCE = #stage, MAPPINGS ({mappings})
+            );
+            CREATE PAGE Overview AS DASHBOARD (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = chart))
+            );
+            """;
+        var parsed = _analysis.Parse(script, 100);
+        Assert.Null(parsed.Error);
+        var visual = Assert.Single(Assert.Single(parsed.DesignState.Pages).Visuals);
+        Assert.Equal(visualType, visual.Type);
+
+        var patched = _patcher.Patch(script, parsed.DesignState);
+
+        Assert.Contains($"CREATE VISUAL chart AS {visualType}", patched);
+        Assert.Null(_analysis.Parse(patched, 100).Error);
+    }
+
     // ════════════════════════════════════════════════════════════════════════════
     // 1. MULTI-PAGE MUTATIONS
     // ════════════════════════════════════════════════════════════════════════════

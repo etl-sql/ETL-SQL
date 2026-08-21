@@ -45,6 +45,7 @@ internal sealed class PlotPlanSvgRenderer
         var yScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y);
         var y2Scale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y2);
         var rectLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect).ToList();
+        var stacked = IsEnabled(plan.Style, "STACKED");
 
         foreach (var layer in plan.Layers)
         {
@@ -52,7 +53,7 @@ internal sealed class PlotPlanSvgRenderer
             switch (layer.Mark)
             {
                 case MarkKind.Rect:
-                    RenderRects(builder, layer, rectLayers.IndexOf(layer), Math.Max(1, rectLayers.Count), categories.Length, plotWidth, plotHeight, yScale, color);
+                    RenderRects(builder, layer, rectLayers, stacked, categories.Length, plotWidth, plotHeight, yScale, color);
                     break;
                 case MarkKind.Line:
                     RenderLine(builder, layer, categories.Length, plotWidth, plotHeight,
@@ -84,22 +85,29 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderRects(StringBuilder builder, ResolvedMarkLayer layer, int layerIndex, int layerCount,
+    private static void RenderRects(StringBuilder builder, ResolvedMarkLayer layer, IReadOnlyList<ResolvedMarkLayer> layers, bool stacked,
         int categoryCount, decimal plotWidth, decimal plotHeight, ResolvedScale? scale, string color)
     {
         if (categoryCount == 0 || scale is null) return;
+        var layerIndex = Enumerable.Range(0, layers.Count).First(index => ReferenceEquals(layers[index], layer));
+        var layerCount = Math.Max(1, layers.Count);
         var slot = plotWidth / categoryCount;
         var groupWidth = slot * 0.75m;
-        var barWidth = groupWidth / layerCount;
+        var barWidth = stacked ? groupWidth : groupWidth / layerCount;
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
             var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
             if (datum.IsGap || !value.HasValue) continue;
-            var zeroY = MapY(0m, scale, plotHeight);
-            var valueY = MapY(value.Value, scale, plotHeight);
-            var x = Left + slot * index + (slot - groupWidth) / 2m + layerIndex * barWidth;
-            builder.AppendLine($"<rect x='{N(x)}' y='{N(Math.Min(zeroY, valueY))}' width='{N(Math.Max(1m, barWidth - 1m))}' height='{N(Math.Max(1m, Math.Abs(zeroY - valueY)))}' fill='{Esc(color)}'/>");
+            var start = stacked
+                ? layers.Take(layerIndex).Select(previous => index < previous.Data.Length
+                    ? PlotPlanResolver.Number(Channel(previous.Data[index], FieldChannel.Y) ?? ChartValue.Null()) ?? 0m
+                    : 0m).Where(previous => Math.Sign(previous) == Math.Sign(value.Value)).Sum()
+                : 0m;
+            var startY = MapY(start, scale, plotHeight);
+            var endY = MapY(start + value.Value, scale, plotHeight);
+            var x = Left + slot * index + (slot - groupWidth) / 2m + (stacked ? 0m : layerIndex * barWidth);
+            builder.AppendLine($"<rect x='{N(x)}' y='{N(Math.Min(startY, endY))}' width='{N(Math.Max(1m, barWidth - 1m))}' height='{N(Math.Max(1m, Math.Abs(startY - endY)))}' fill='{Esc(color)}'/>");
         }
     }
 
@@ -206,6 +214,12 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel) => datum.Channels.FirstOrDefault(item => item.Channel == channel)?.Value;
+    private static bool IsEnabled(ImmutableArray<StyleToken> tokens, string name)
+    {
+        var value = tokens.FirstOrDefault(token => token.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
+        return value is not null && !value.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
+            !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0";
+    }
     private static string Point(decimal cx, decimal cy, decimal radius, double angle) => $"{N(cx + radius * (decimal)Math.Cos(angle))} {N(cy + radius * (decimal)Math.Sin(angle))}";
     private static string N(decimal value) => value.ToString("0.###", CultureInfo.InvariantCulture);
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length] + "…";

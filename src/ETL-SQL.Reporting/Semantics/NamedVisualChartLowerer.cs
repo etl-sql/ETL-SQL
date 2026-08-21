@@ -26,7 +26,7 @@ public sealed class NamedVisualChartLowerer
 
         var bindings = BuildBindings(statement).ToImmutableArray();
         var layers = BuildLayers(statement, bindings).ToImmutableArray();
-        var scales = BuildScales(statement, bindings).ToImmutableArray();
+        var scales = BuildScales(statement, bindings, manifest).ToImmutableArray();
         var title = manifest.Options.GetValueOrDefault("title") ?? manifest.Name;
 
         var spec = ChartSpec.Create(
@@ -153,7 +153,8 @@ public sealed class NamedVisualChartLowerer
 
     private static IEnumerable<ScaleSpec> BuildScales(
         CreateVisualStatement statement,
-        ImmutableArray<FieldBinding> bindings)
+        ImmutableArray<FieldBinding> bindings,
+        VisualManifest manifest)
     {
         foreach (var group in bindings.Where(binding => binding.ScaleId is not null).GroupBy(binding => binding.ScaleId!))
         {
@@ -167,7 +168,9 @@ public sealed class NamedVisualChartLowerer
             };
             yield return new ScaleSpec(group.Key, binding.Channel, kind,
                 IncludeZero: binding.Channel is FieldChannel.Y or FieldChannel.Y2 && statement.VisualType != VisualType.Scatter,
-                CategoryOrder: []);
+                CategoryOrder: [],
+                DomainMinimum: ParseDomain(manifest, binding.Channel, "min"),
+                DomainMaximum: ParseDomain(manifest, binding.Channel, "max"));
         }
     }
 
@@ -181,7 +184,13 @@ public sealed class NamedVisualChartLowerer
                 DrillDownAction or DrillInAction => InteractionEffect.Drill,
                 DrillReportAction or NavigatePageAction => InteractionEffect.Navigate,
                 _ => InteractionEffect.Highlight
-            })).ToImmutableArray();
+            }))
+            .Concat(statement.Interactions.Select(interaction => new InteractionBinding(
+                interaction.Key,
+                interaction.Value.Equals("FILTER", StringComparison.OrdinalIgnoreCase)
+                    ? InteractionEffect.Filter
+                    : InteractionEffect.Highlight)))
+            .ToImmutableArray();
         return new InteractionSpec([], bindings);
     }
 
@@ -190,7 +199,6 @@ public sealed class NamedVisualChartLowerer
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .Select(pair => new StyleToken(pair.Key, pair.Value))
             .Concat(manifest.Options
-                .Where(pair => pair.Key is "STACKED" or "SMOOTH" or "AXIS_SORT" || pair.Key.StartsWith("COLOR:", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(pair => new StyleToken(pair.Key, pair.Value)))
             .GroupBy(token => token.Name, StringComparer.OrdinalIgnoreCase)
@@ -230,19 +238,32 @@ public sealed class NamedVisualChartLowerer
         FieldChannel.Y => "y",
         FieldChannel.Y2 => "y2",
         FieldChannel.Color => "color",
-        FieldChannel.Theta or FieldChannel.Radius => "theta",
+        FieldChannel.Theta => "theta",
+        FieldChannel.Radius => "radius",
         _ => null
     };
 
-    private static SortDirection ParseSort(IReadOnlyList<VisualOption> options) =>
-        options.FirstOrDefault(option => option.Key.Equals("AXIS_SORT", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant() switch
+    private static SortDirection ParseSort(IReadOnlyList<VisualOption> options)
+    {
+        var value = options.FirstOrDefault(option => option.Key.Equals("AXIS_SORT", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant();
+        if (value is null) return SortDirection.None;
+        return value switch
         {
             "DESC" or "VALUE_DESC" => SortDirection.Descending,
-            "NONE" => SortDirection.None,
+            "NONE" or "SOURCE" => SortDirection.None,
             _ => SortDirection.Ascending
         };
+    }
 
     private static bool IsPolar(VisualType type) => type is VisualType.Pie or VisualType.Donut;
+    private static ChartValue? ParseDomain(VisualManifest manifest, FieldChannel channel, string bound)
+    {
+        var axis = channel == FieldChannel.X ? "x" : "y";
+        var text = manifest.Options.GetValueOrDefault($"axis:{axis}:{bound}");
+        return decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value)
+            ? ChartValue.From(value)
+            : null;
+    }
     private static decimal ResolveInnerRadius(VisualManifest manifest)
     {
         var text = manifest.Options.GetValueOrDefault("INNER_RADIUS")?.Trim().TrimEnd('%');

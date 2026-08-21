@@ -339,7 +339,7 @@ namespace ETL_SQL.Reporting
         {
             // Migrated visuals render from PlotPlan without loading server-side V8. Non-migrated
             // visuals retain the compatibility SSR path until their capability-matrix phase.
-            var svgStr = v.PlotPlan is not null
+            var svgStr = UsesNativePlotPlanRendering(v)
                 ? _svg.Render(v)
                 : await EChartsSsrRenderer.Shared.RenderSvgAsync(v, cancellationToken: cancellationToken) ?? _svg.Render(v);
             if (svgStr != null)
@@ -367,6 +367,8 @@ namespace ETL_SQL.Reporting
                 nd.Format.Font.Color = _greyMedium;
             }
         }
+
+        internal static bool UsesNativePlotPlanRendering(VisualManifest visual) => visual.PlotPlan is not null;
 
         private static void RenderTable(Section section, VisualManifest v)
         {

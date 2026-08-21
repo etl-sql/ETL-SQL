@@ -25,8 +25,9 @@ public sealed class PlotPlanResolver
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
         var layers = ResolveLayers(spec, data, columns, categories, series).ToImmutableArray();
         var scales = ResolveScales(spec, columns, categories).ToImmutableArray();
-        var gapRows = layers.SelectMany(layer => layer.Data).Where(datum => datum.IsGap).Select(datum => datum.RowIndex).Distinct().Order().ToImmutableArray();
-        var usedRows = layers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap).Select(datum => datum.RowIndex).ToHashSet();
+        var sourceLayers = layers.Where(layer => layer.Style.IsDefault || !layer.Style.Any(token => token.Name == "overlayType"));
+        var gapRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => datum.IsGap).Select(datum => datum.RowIndex).Distinct().Order().ToImmutableArray();
+        var usedRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap).Select(datum => datum.RowIndex).ToHashSet();
         var skippedRows = Enumerable.Range(0, data.RowCount).Where(index => !usedRows.Contains(index) && !gapRows.Contains(index)).ToImmutableArray();
         var fallback = BuildFallback(spec, layers, categories);
         var summary = BuildSummary(spec, data, series, gapRows, skippedRows);
@@ -122,13 +123,44 @@ public sealed class PlotPlanResolver
             var raw = bindings.SelectMany(binding => columns[binding.Field].Values).Where(value => value.Kind != ChartValueKind.Null).ToList();
             if (scale.Kind == ScaleKind.Time)
             {
-                var ordered = raw.Distinct().OrderBy(ValueKey, StringComparer.Ordinal).ToImmutableArray();
-                yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind, ordered, [],
-                    ordered.Select(value => new PlotTick(value, Display(value))).ToImmutableArray(), scale.IncludeZero);
+                var temporalValues = bindings.SelectMany(binding =>
+                {
+                    var column = columns[binding.Field];
+                    return column.Values.Select((value, index) => new
+                    {
+                        Value = value,
+                        Display = column.DisplayValues.IsDefaultOrEmpty ? Display(value) : column.DisplayValues[index] ?? Display(value)
+                    });
+                })
+                    .Where(item => item.Value.Kind != ChartValueKind.Null)
+                    .GroupBy(item => ValueKey(item.Value), StringComparer.Ordinal)
+                    .Select(group => group.First())
+                    .OrderBy(item => ValueKey(item.Value), StringComparer.Ordinal)
+                    .ToImmutableArray();
+                yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
+                    temporalValues.Select(item => item.Value).ToImmutableArray(),
+                    temporalValues.Select(item => item.Display).ToImmutableArray(),
+                    temporalValues.Select(item => new PlotTick(item.Value, item.Display)).ToImmutableArray(), scale.IncludeZero);
                 continue;
             }
 
             var numbers = raw.Select(Number).Where(number => number.HasValue).Select(number => number!.Value).ToList();
+            if (scale.Channel == FieldChannel.Y && IsEnabled(spec.Theme.Tokens, "STACKED"))
+            {
+                var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
+                var yBinding = bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y);
+                if (xBinding is not null && yBinding is not null && columns.TryGetValue(xBinding.Field, out var xColumn))
+                {
+                    numbers = Enumerable.Range(0, xColumn.Values.Length)
+                        .GroupBy(index => ValueKey(xColumn.Values[index]) ?? string.Empty, StringComparer.Ordinal)
+                        .SelectMany(group =>
+                        {
+                            var values = group.Select(index => Number(columns[yBinding.Field].Values[index]) ?? 0m);
+                            return new[] { values.Where(value => value < 0m).Sum(), values.Where(value => value > 0m).Sum() };
+                        })
+                        .ToList();
+                }
+            }
             var minimum = scale.DomainMinimum is not null ? Number(scale.DomainMinimum) ?? 0m : numbers.DefaultIfEmpty(0m).Min();
             var maximum = scale.DomainMaximum is not null ? Number(scale.DomainMaximum) ?? 1m : numbers.DefaultIfEmpty(1m).Max();
             if (scale.IncludeZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
@@ -192,7 +224,8 @@ public sealed class PlotPlanResolver
         var layerBindings = layer.Bindings.IsDefaultOrEmpty ? spec.Bindings : layer.Bindings;
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
-        if (categoryBinding is not null && columns.TryGetValue(categoryBinding.Field, out var categoryColumn) && !categories.IsDefaultOrEmpty)
+        if (categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
+            columns.TryGetValue(categoryBinding.Field, out var categoryColumn) && !categories.IsDefaultOrEmpty)
         {
             for (var categoryIndex = 0; categoryIndex < categories.Length; categoryIndex++)
             {
@@ -288,6 +321,13 @@ public sealed class PlotPlanResolver
     private static string ResolveColor(ChartSpec spec, string key, int index) =>
         spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals($"COLOR:{key}", StringComparison.OrdinalIgnoreCase))?.Value
         ?? PaletteColors[index % PaletteColors.Length];
+
+    private static bool IsEnabled(ImmutableArray<StyleToken> tokens, string name)
+    {
+        var value = tokens.FirstOrDefault(token => token.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
+        return value is not null && !value.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
+            !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0";
+    }
 
     internal static decimal? Number(ChartValue value) => value.Kind switch
     {

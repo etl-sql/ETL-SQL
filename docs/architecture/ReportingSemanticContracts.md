@@ -21,7 +21,7 @@ language, parser, execution types    ChartSpec, ChartDataSet, PlotPlan
 - **`ETL-SQL.Core`** does not reference reporting contracts, renderers, or pixel-emission libraries.
 - **`ETL-SQL.Reporting.Contracts`** is BCL-only. It has no project or package references and cannot
   mention ECharts, SVG/Skia, PDF, terminal UI, or host types.
-- **`ETL-SQL.Reporting`** references both lower layers. It will own named-visual lowering, deterministic
+- **`ETL-SQL.Reporting`** references both lower layers. It owns named-visual lowering, deterministic
   plan resolution, renderer adapters, and export implementations.
 - **Hosts and backends** consume resolved meaning; they do not choose category order, domains, ticks,
   palette identity, legend order, or null behavior independently.
@@ -52,7 +52,8 @@ floating-point values, inconsistent row counts, and display vectors that do not 
 
 ### `PlotPlan`
 
-`PlotPlan` is the deterministic, renderer-neutral resolved contract. It carries ordered scales and
+`PlotPlan` is the deterministic, renderer-neutral resolved contract. It carries coordinates and
+portable style tokens plus ordered scales and
 ticks, category order, ordered series, palette assignments, legend entries, ordered resolved layers,
 row-level gaps and skips, an accessible summary, and a semantic fallback. Validation rejects
 nondeterministic series, legend, or layer order and dangling palette/legend references.
@@ -79,8 +80,22 @@ update the fixtures and compatibility expectations together.
 A backend implements `IPlotPlanSemanticBackend` and projects its effective interpretation into
 `PlotSemanticProjection`. `PlotPlanConformanceHarness` compares that projection with the authoritative
 plan and attributes drift to scales, series order, palette, legend, layers, nulls, accessibility, or
-fallback behavior. Phase 3 renderer adapters will plug into this harness; Phase 2 proves the harness
-itself with conforming ECharts, native-SVG, and terminal probes plus intentional-drift tests.
+fallback behavior.
+
+The representative Phase 3 path is now:
+
+```text
+named BAR / LINE / SCATTER / PIE / DONUT / COMBO (+ RULE)
+              -> ChartSpec + typed ChartDataSet
+              -> deterministic PlotPlan
+              -> transient ECharts | native SVG | terminal | V8-free static PDF
+```
+
+`VisualManifest.ChartConfig` remains a compatibility payload for browser hosts, but for migrated
+visuals it is generated from `PlotPlan` and is not authoritative semantic state. Representative
+fixtures assert shared domains, source ordering, series/palette/legend identity, dual axes, temporal
+values, stacking, gaps, overlays, accessibility fallbacks, and backend consumption of the same plan.
+The capability matrix identifies every visual that still uses a legacy ECharts-only path.
 
 ## References
 
