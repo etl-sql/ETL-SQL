@@ -1,0 +1,28 @@
+-- Payload Crossover Fixture: Nullable Sparse Data
+-- Sparse observation metrics with ~30-40% null occurrences
+
+SET REPORT TITLE = 'Payload Crossover: Nullable Sparse Observations';
+
+SELECT
+    100 + (ROW_NUMBER() OVER()) AS ObservationId,
+    'SensorStation_East' AS StationName,
+    CASE WHEN (ROW_NUMBER() OVER()) % 3 = 0 THEN NULL ELSE 24.5 END AS PrimaryReading,
+    CASE WHEN (ROW_NUMBER() OVER()) % 2 = 0 THEN NULL ELSE 78.2 END AS SecondaryReading,
+    CASE WHEN (ROW_NUMBER() OVER()) % 5 = 0 THEN NULL ELSE 1013.25 END AS PressureHpa,
+    CASE WHEN (ROW_NUMBER() OVER()) % 4 = 0 THEN NULL ELSE 'Normal' END AS StatusNote
+INTO #sparse_data
+FROM (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) a
+CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) b
+CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) c;
+
+CREATE VISUAL SparseObservationsTable AS TABLE (
+    TITLE = 'Environmental Station Telemetry (Sparse)',
+    SOURCE = #sparse_data
+);
+
+CREATE PAGE SparseDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = SparseObservationsTable)
+    )
+);

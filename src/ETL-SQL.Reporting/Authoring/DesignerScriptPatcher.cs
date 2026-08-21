@@ -220,8 +220,30 @@ public sealed class DesignerScriptPatcher
     {
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON)\s+[^\s]+(?:\s+AS\s+[^\s(]+)?");
         foreach (var clause in new[] { "TITLE", "SOURCE", "MAPPINGS", "OPTIONS", "ACTIONS", "INTERACTIONS", "STYLE", "LAYOUT" })
+        {
+            if (clause == "MAPPINGS" && ContainsNativeMicroChartSyntax(original) && !ContainsEquivalentNativeMicroChartSyntax(original, desired))
+                continue;
             patched = PatchClause(patched, desired, clause);
+        }
         return patched;
+    }
+
+    private static bool ContainsNativeMicroChartSyntax(string statement) =>
+        Regex.IsMatch(statement, @"\bSPARKLINE\s*(?:\(|=)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+        Regex.IsMatch(statement, @"\bPROGRESS_BAR\s*\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static bool ContainsEquivalentNativeMicroChartSyntax(string original, string desired)
+    {
+        if (Regex.IsMatch(original, @"\bSPARKLINE\s*=", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) &&
+            !Regex.IsMatch(desired, @"\bSPARKLINE\s*=\s*[^,()]+\(\s*X\s*=", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            return false;
+        if (Regex.IsMatch(original, @"\bSPARKLINE\s*\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) &&
+            !Regex.IsMatch(desired, @"\bSPARKLINE\s*\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            return false;
+        if (Regex.IsMatch(original, @"\bPROGRESS_BAR\s*\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) &&
+            !Regex.IsMatch(desired, @"\bPROGRESS_BAR\s*\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            return false;
+        return true;
     }
 
     private static string PatchPageStatement(string original, string desired)

@@ -1,0 +1,1491 @@
+{
+  "TimestampUtc": "2026-08-21T13:12:33.8565334Z",
+  "GitBranch": "test/reporting-phase4-payload-crossover",
+  "RuntimeEnvironment": {
+    "OSDescription": "Microsoft Windows 10.0.26200",
+    "ProcessArchitecture": "X64",
+    "FrameworkDescription": ".NET 10.0.11",
+    "ProcessorCount": 24,
+    "TotalAvailableMemoryMb": 32129,
+    "IsServerGC": false
+  },
+  "Results": [
+    {
+      "Workload": 0,
+      "RowCount": 500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 32414,
+          "GzipBytes": 11777,
+          "BrotliBytes": 11293,
+          "EncodeTimeMs": 0.705,
+          "EncodeAllocatedBytes": 246864,
+          "DecodeTimeMs": 3.297,
+          "DecodeAllocatedBytes": 214048,
+          "PostParseFilterTimeMs": 1.904,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "41BC09AD0E3D0D8B6EC7BB20E01BD48313332C1C7CFF9E301E746F33788CDD8E"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 25405,
+          "GzipBytes": 10264,
+          "BrotliBytes": 8849,
+          "EncodeTimeMs": 0.382,
+          "EncodeAllocatedBytes": 50224,
+          "DecodeTimeMs": 0.472,
+          "DecodeAllocatedBytes": 97184,
+          "PostParseFilterTimeMs": 2.666,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "41BC09AD0E3D0D8B6EC7BB20E01BD48313332C1C7CFF9E301E746F33788CDD8E"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 24968,
+          "GzipBytes": 13196,
+          "BrotliBytes": 13128,
+          "EncodeTimeMs": 0.344,
+          "EncodeAllocatedBytes": 132424,
+          "DecodeTimeMs": 0.038,
+          "DecodeAllocatedBytes": 4256,
+          "PostParseFilterTimeMs": 1.44,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "41BC09AD0E3D0D8B6EC7BB20E01BD48313332C1C7CFF9E301E746F33788CDD8E"
+        }
+      },
+      "WinnerByRawSize": "ArrowIpcStream",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 0,
+      "RowCount": 2500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 161739,
+          "GzipBytes": 56953,
+          "BrotliBytes": 56443,
+          "EncodeTimeMs": 2.235,
+          "EncodeAllocatedBytes": 1231664,
+          "DecodeTimeMs": 5.131,
+          "DecodeAllocatedBytes": 1069520,
+          "PostParseFilterTimeMs": 3.281,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "830884BBB4CF36A8984FF29030A478DDC9CBB4E185896FDA62B3D33228DC2DF8"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 126730,
+          "GzipBytes": 49537,
+          "BrotliBytes": 42419,
+          "EncodeTimeMs": 1.664,
+          "EncodeAllocatedBytes": 249064,
+          "DecodeTimeMs": 2.155,
+          "DecodeAllocatedBytes": 481184,
+          "PostParseFilterTimeMs": 3.902,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "830884BBB4CF36A8984FF29030A478DDC9CBB4E185896FDA62B3D33228DC2DF8"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 120968,
+          "GzipBytes": 55793,
+          "BrotliBytes": 53964,
+          "EncodeTimeMs": 1.123,
+          "EncodeAllocatedBytes": 565960,
+          "DecodeTimeMs": 0.048,
+          "DecodeAllocatedBytes": 4256,
+          "PostParseFilterTimeMs": 1.434,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "830884BBB4CF36A8984FF29030A478DDC9CBB4E185896FDA62B3D33228DC2DF8"
+        }
+      },
+      "WinnerByRawSize": "ArrowIpcStream",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 0,
+      "RowCount": 10000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 646607,
+          "GzipBytes": 225189,
+          "BrotliBytes": 228333,
+          "EncodeTimeMs": 10.171,
+          "EncodeAllocatedBytes": 4925984,
+          "DecodeTimeMs": 23.549,
+          "DecodeAllocatedBytes": 4278976,
+          "PostParseFilterTimeMs": 12.503,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "568276938023A6FE1769839BE97E66A08A3BA2A7B5D24F60C54C14B4827A843D"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 506598,
+          "GzipBytes": 187450,
+          "BrotliBytes": 167424,
+          "EncodeTimeMs": 6.795,
+          "EncodeAllocatedBytes": 987416,
+          "DecodeTimeMs": 9.195,
+          "DecodeAllocatedBytes": 1921184,
+          "PostParseFilterTimeMs": 16.499,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "568276938023A6FE1769839BE97E66A08A3BA2A7B5D24F60C54C14B4827A843D"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 480776,
+          "GzipBytes": 207853,
+          "BrotliBytes": 203771,
+          "EncodeTimeMs": 4.578,
+          "EncodeAllocatedBytes": 2191011,
+          "DecodeTimeMs": 0.129,
+          "DecodeAllocatedBytes": 4256,
+          "PostParseFilterTimeMs": 5.523,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "568276938023A6FE1769839BE97E66A08A3BA2A7B5D24F60C54C14B4827A843D"
+        }
+      },
+      "WinnerByRawSize": "ArrowIpcStream",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 0,
+      "RowCount": 25000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 1616650,
+          "GzipBytes": 562051,
+          "BrotliBytes": 529319,
+          "EncodeTimeMs": 36.681,
+          "EncodeAllocatedBytes": 12316027,
+          "DecodeTimeMs": 35.971,
+          "DecodeAllocatedBytes": 10698976,
+          "PostParseFilterTimeMs": 19.762,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "7F0CF8253BC921FC546B2CF8CC09BDAEDC5F8890D559B39CF7C1ACFEE00947E0"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 1266641,
+          "GzipBytes": 464079,
+          "BrotliBytes": 403481,
+          "EncodeTimeMs": 24.385,
+          "EncodeAllocatedBytes": 2467464,
+          "DecodeTimeMs": 17.127,
+          "DecodeAllocatedBytes": 4801184,
+          "PostParseFilterTimeMs": 39.45,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "7F0CF8253BC921FC546B2CF8CC09BDAEDC5F8890D559B39CF7C1ACFEE00947E0"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 1200776,
+          "GzipBytes": 509529,
+          "BrotliBytes": 584546,
+          "EncodeTimeMs": 14.059,
+          "EncodeAllocatedBytes": 5442136,
+          "DecodeTimeMs": 0.392,
+          "DecodeAllocatedBytes": 4256,
+          "PostParseFilterTimeMs": 27.841,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "7F0CF8253BC921FC546B2CF8CC09BDAEDC5F8890D559B39CF7C1ACFEE00947E0"
+        }
+      },
+      "WinnerByRawSize": "ArrowIpcStream",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 0,
+      "RowCount": 50000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 3233193,
+          "GzipBytes": 1123263,
+          "BrotliBytes": 1060804,
+          "EncodeTimeMs": 61.64,
+          "EncodeAllocatedBytes": 24632396,
+          "DecodeTimeMs": 52.849,
+          "DecodeAllocatedBytes": 21397462,
+          "PostParseFilterTimeMs": 128.663,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "AA1C3F750DCC2CD21BC311935DB40B193DE6D43D15A89F87504427175320903B"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 2533184,
+          "GzipBytes": 922743,
+          "BrotliBytes": 792070,
+          "EncodeTimeMs": 22.67,
+          "EncodeAllocatedBytes": 4934000,
+          "DecodeTimeMs": 33.954,
+          "DecodeAllocatedBytes": 9601185,
+          "PostParseFilterTimeMs": 79.393,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "AA1C3F750DCC2CD21BC311935DB40B193DE6D43D15A89F87504427175320903B"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 2400776,
+          "GzipBytes": 1012992,
+          "BrotliBytes": 1106175,
+          "EncodeTimeMs": 11.868,
+          "EncodeAllocatedBytes": 10863088,
+          "DecodeTimeMs": 0.624,
+          "DecodeAllocatedBytes": 4256,
+          "PostParseFilterTimeMs": 17.857,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "AA1C3F750DCC2CD21BC311935DB40B193DE6D43D15A89F87504427175320903B"
+        }
+      },
+      "WinnerByRawSize": "ArrowIpcStream",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 0,
+      "RowCount": 100000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 6466073,
+          "GzipBytes": 2245956,
+          "BrotliBytes": 2128145,
+          "EncodeTimeMs": 131.767,
+          "EncodeAllocatedBytes": 49260921,
+          "DecodeTimeMs": 104.758,
+          "DecodeAllocatedBytes": 42794451,
+          "PostParseFilterTimeMs": 119.355,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "48C3F6629E8E6793E8A72B7AF1221969142A182F5356A66A552FBAD918104BC0"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 5066064,
+          "GzipBytes": 1841463,
+          "BrotliBytes": 1562510,
+          "EncodeTimeMs": 47.328,
+          "EncodeAllocatedBytes": 9866880,
+          "DecodeTimeMs": 56.206,
+          "DecodeAllocatedBytes": 19201187,
+          "PostParseFilterTimeMs": 132.899,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "48C3F6629E8E6793E8A72B7AF1221969142A182F5356A66A552FBAD918104BC0"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 4800776,
+          "GzipBytes": 2019363,
+          "BrotliBytes": 2137305,
+          "EncodeTimeMs": 18.389,
+          "EncodeAllocatedBytes": 21699371,
+          "DecodeTimeMs": 1.422,
+          "DecodeAllocatedBytes": 4256,
+          "PostParseFilterTimeMs": 29.053,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "48C3F6629E8E6793E8A72B7AF1221969142A182F5356A66A552FBAD918104BC0"
+        }
+      },
+      "WinnerByRawSize": "ArrowIpcStream",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 1,
+      "RowCount": 500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 36093,
+          "GzipBytes": 6810,
+          "BrotliBytes": 6991,
+          "EncodeTimeMs": 3.809,
+          "EncodeAllocatedBytes": 187600,
+          "DecodeTimeMs": 0.165,
+          "DecodeAllocatedBytes": 237512,
+          "PostParseFilterTimeMs": 0.226,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "411A8D41DEE57875C1538660B6E204A299519C7BA2252221DE75C23C8ECBEAA1"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 30088,
+          "GzipBytes": 3925,
+          "BrotliBytes": 2961,
+          "EncodeTimeMs": 0.133,
+          "EncodeAllocatedBytes": 63064,
+          "DecodeTimeMs": 0.152,
+          "DecodeAllocatedBytes": 156984,
+          "PostParseFilterTimeMs": 0.282,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "411A8D41DEE57875C1538660B6E204A299519C7BA2252221DE75C23C8ECBEAA1"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 32080,
+          "GzipBytes": 8535,
+          "BrotliBytes": 7796,
+          "EncodeTimeMs": 0.206,
+          "EncodeAllocatedBytes": 197880,
+          "DecodeTimeMs": 0.018,
+          "DecodeAllocatedBytes": 5560,
+          "PostParseFilterTimeMs": 0.64,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "411A8D41DEE57875C1538660B6E204A299519C7BA2252221DE75C23C8ECBEAA1"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 1,
+      "RowCount": 2500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 179897,
+          "GzipBytes": 31700,
+          "BrotliBytes": 33425,
+          "EncodeTimeMs": 0.666,
+          "EncodeAllocatedBytes": 934856,
+          "DecodeTimeMs": 0.792,
+          "DecodeAllocatedBytes": 1186664,
+          "PostParseFilterTimeMs": 0.954,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "40950FF0124B544FFE13179051C92B8BFEC282AB0EB9CD22607A8F80A969454A"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 149892,
+          "GzipBytes": 17872,
+          "BrotliBytes": 11492,
+          "EncodeTimeMs": 0.701,
+          "EncodeAllocatedBytes": 310872,
+          "DecodeTimeMs": 0.751,
+          "DecodeAllocatedBytes": 777560,
+          "PostParseFilterTimeMs": 1.226,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "40950FF0124B544FFE13179051C92B8BFEC282AB0EB9CD22607A8F80A969454A"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 154704,
+          "GzipBytes": 38178,
+          "BrotliBytes": 34660,
+          "EncodeTimeMs": 1.051,
+          "EncodeAllocatedBytes": 810976,
+          "DecodeTimeMs": 0.057,
+          "DecodeAllocatedBytes": 5560,
+          "PostParseFilterTimeMs": 0.804,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "40950FF0124B544FFE13179051C92B8BFEC282AB0EB9CD22607A8F80A969454A"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 1,
+      "RowCount": 10000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 719486,
+          "GzipBytes": 124619,
+          "BrotliBytes": 133278,
+          "EncodeTimeMs": 3.822,
+          "EncodeAllocatedBytes": 3738536,
+          "DecodeTimeMs": 5.167,
+          "DecodeAllocatedBytes": 4747096,
+          "PostParseFilterTimeMs": 4.167,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "909E2ABE6B9C8F37D776A4C147971BE5AD4D524A4BE379A525EEFE4983F41E5B"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 599481,
+          "GzipBytes": 65724,
+          "BrotliBytes": 42944,
+          "EncodeTimeMs": 2.697,
+          "EncodeAllocatedBytes": 1240464,
+          "DecodeTimeMs": 4.149,
+          "DecodeAllocatedBytes": 3104696,
+          "PostParseFilterTimeMs": 4.841,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "909E2ABE6B9C8F37D776A4C147971BE5AD4D524A4BE379A525EEFE4983F41E5B"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 614672,
+          "GzipBytes": 145862,
+          "BrotliBytes": 136355,
+          "EncodeTimeMs": 4.491,
+          "EncodeAllocatedBytes": 3163062,
+          "DecodeTimeMs": 0.19,
+          "DecodeAllocatedBytes": 5560,
+          "PostParseFilterTimeMs": 5.963,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "909E2ABE6B9C8F37D776A4C147971BE5AD4D524A4BE379A525EEFE4983F41E5B"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 1,
+      "RowCount": 25000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 1798804,
+          "GzipBytes": 310374,
+          "BrotliBytes": 306590,
+          "EncodeTimeMs": 21.296,
+          "EncodeAllocatedBytes": 9346929,
+          "DecodeTimeMs": 36.454,
+          "DecodeAllocatedBytes": 11868857,
+          "PostParseFilterTimeMs": 44.06,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "5B47241C05C32E26685F9C349D506EDE00514E8F738DBFE9DB4F99CCF7ACC8C2"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 1498799,
+          "GzipBytes": 159250,
+          "BrotliBytes": 156153,
+          "EncodeTimeMs": 7.158,
+          "EncodeAllocatedBytes": 3099776,
+          "DecodeTimeMs": 21.596,
+          "DecodeAllocatedBytes": 7758985,
+          "PostParseFilterTimeMs": 12.695,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "5B47241C05C32E26685F9C349D506EDE00514E8F738DBFE9DB4F99CCF7ACC8C2"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 1534736,
+          "GzipBytes": 370926,
+          "BrotliBytes": 356176,
+          "EncodeTimeMs": 5.724,
+          "EncodeAllocatedBytes": 7864059,
+          "DecodeTimeMs": 0.404,
+          "DecodeAllocatedBytes": 5560,
+          "PostParseFilterTimeMs": 24.566,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "5B47241C05C32E26685F9C349D506EDE00514E8F738DBFE9DB4F99CCF7ACC8C2"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 1,
+      "RowCount": 50000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 3597613,
+          "GzipBytes": 619812,
+          "BrotliBytes": 611422,
+          "EncodeTimeMs": 37.462,
+          "EncodeAllocatedBytes": 18694275,
+          "DecodeTimeMs": 67.08,
+          "DecodeAllocatedBytes": 23738408,
+          "PostParseFilterTimeMs": 59.852,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "41B857FD43BE0BBB39FDE9327643023BE31C0580E6702235F833F417C7C72AEB"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 2997608,
+          "GzipBytes": 313762,
+          "BrotliBytes": 306879,
+          "EncodeTimeMs": 15.879,
+          "EncodeAllocatedBytes": 6198584,
+          "DecodeTimeMs": 39.58,
+          "DecodeAllocatedBytes": 15516139,
+          "PostParseFilterTimeMs": 69.863,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "41B857FD43BE0BBB39FDE9327643023BE31C0580E6702235F833F417C7C72AEB"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 3068304,
+          "GzipBytes": 741048,
+          "BrotliBytes": 749672,
+          "EncodeTimeMs": 13.091,
+          "EncodeAllocatedBytes": 15700774,
+          "DecodeTimeMs": 1.038,
+          "DecodeAllocatedBytes": 6353,
+          "PostParseFilterTimeMs": 14.849,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "41B857FD43BE0BBB39FDE9327643023BE31C0580E6702235F833F417C7C72AEB"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 1,
+      "RowCount": 100000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 7205229,
+          "GzipBytes": 1238767,
+          "BrotliBytes": 1222951,
+          "EncodeTimeMs": 84.78,
+          "EncodeAllocatedBytes": 37476500,
+          "DecodeTimeMs": 119.07,
+          "DecodeAllocatedBytes": 47555414,
+          "PostParseFilterTimeMs": 99.129,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "CB983CF0CB3C1BEA0B87F2D6F58F9B3E65B1B42DBC09926722BD8F281E70C448"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 6005224,
+          "GzipBytes": 620956,
+          "BrotliBytes": 604326,
+          "EncodeTimeMs": 36.526,
+          "EncodeAllocatedBytes": 12406200,
+          "DecodeTimeMs": 81.356,
+          "DecodeAllocatedBytes": 31030416,
+          "PostParseFilterTimeMs": 158.686,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "CB983CF0CB3C1BEA0B87F2D6F58F9B3E65B1B42DBC09926722BD8F281E70C448"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 6135184,
+          "GzipBytes": 1495455,
+          "BrotliBytes": 1539825,
+          "EncodeTimeMs": 23.783,
+          "EncodeAllocatedBytes": 31374758,
+          "DecodeTimeMs": 1.733,
+          "DecodeAllocatedBytes": 5560,
+          "PostParseFilterTimeMs": 23.549,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "CB983CF0CB3C1BEA0B87F2D6F58F9B3E65B1B42DBC09926722BD8F281E70C448"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 2,
+      "RowCount": 500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 27962,
+          "GzipBytes": 6198,
+          "BrotliBytes": 6238,
+          "EncodeTimeMs": 0.128,
+          "EncodeAllocatedBytes": 174624,
+          "DecodeTimeMs": 0.316,
+          "DecodeAllocatedBytes": 185256,
+          "PostParseFilterTimeMs": 0.149,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "4AB6B460C351C27DEF8685F63DDFE42B9D71FDF335D193A6BFDFDC91F645A25B"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 23987,
+          "GzipBytes": 4850,
+          "BrotliBytes": 4591,
+          "EncodeTimeMs": 0.098,
+          "EncodeAllocatedBytes": 48808,
+          "DecodeTimeMs": 0.114,
+          "DecodeAllocatedBytes": 99776,
+          "PostParseFilterTimeMs": 0.197,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "4AB6B460C351C27DEF8685F63DDFE42B9D71FDF335D193A6BFDFDC91F645A25B"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 28000,
+          "GzipBytes": 8463,
+          "BrotliBytes": 7955,
+          "EncodeTimeMs": 0.054,
+          "EncodeAllocatedBytes": 169720,
+          "DecodeTimeMs": 0.013,
+          "DecodeAllocatedBytes": 4320,
+          "PostParseFilterTimeMs": 0.121,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "4AB6B460C351C27DEF8685F63DDFE42B9D71FDF335D193A6BFDFDC91F645A25B"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 2,
+      "RowCount": 2500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 139350,
+          "GzipBytes": 29182,
+          "BrotliBytes": 30116,
+          "EncodeTimeMs": 0.612,
+          "EncodeAllocatedBytes": 870552,
+          "DecodeTimeMs": 0.623,
+          "DecodeAllocatedBytes": 925800,
+          "PostParseFilterTimeMs": 0.724,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "FBCAF7774A25203A9E810ECEE6C39920C2AF77714EC08E2A0832E006BC87FFA9"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 119509,
+          "GzipBytes": 23074,
+          "BrotliBytes": 21413,
+          "EncodeTimeMs": 0.713,
+          "EncodeAllocatedBytes": 240328,
+          "DecodeTimeMs": 0.593,
+          "DecodeAllocatedBytes": 494168,
+          "PostParseFilterTimeMs": 0.955,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "FBCAF7774A25203A9E810ECEE6C39920C2AF77714EC08E2A0832E006BC87FFA9"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 135520,
+          "GzipBytes": 36743,
+          "BrotliBytes": 35367,
+          "EncodeTimeMs": 0.281,
+          "EncodeAllocatedBytes": 757024,
+          "DecodeTimeMs": 0.044,
+          "DecodeAllocatedBytes": 4320,
+          "PostParseFilterTimeMs": 0.552,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "FBCAF7774A25203A9E810ECEE6C39920C2AF77714EC08E2A0832E006BC87FFA9"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 2,
+      "RowCount": 10000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 558134,
+          "GzipBytes": 114867,
+          "BrotliBytes": 119307,
+          "EncodeTimeMs": 2.426,
+          "EncodeAllocatedBytes": 3481136,
+          "DecodeTimeMs": 4.376,
+          "DecodeAllocatedBytes": 3702600,
+          "PostParseFilterTimeMs": 2.637,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "C170968071944C194E73CC7697E430E867E23DAE2BC7AF62FF44EC4862013BE4"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 478793,
+          "GzipBytes": 85170,
+          "BrotliBytes": 81095,
+          "EncodeTimeMs": 2.115,
+          "EncodeAllocatedBytes": 959616,
+          "DecodeTimeMs": 2.748,
+          "DecodeAllocatedBytes": 1973168,
+          "PostParseFilterTimeMs": 3.888,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "C170968071944C194E73CC7697E430E867E23DAE2BC7AF62FF44EC4862013BE4"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 538656,
+          "GzipBytes": 140053,
+          "BrotliBytes": 138558,
+          "EncodeTimeMs": 1.187,
+          "EncodeAllocatedBytes": 2959712,
+          "DecodeTimeMs": 0.157,
+          "DecodeAllocatedBytes": 4320,
+          "PostParseFilterTimeMs": 2.15,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "C170968071944C194E73CC7697E430E867E23DAE2BC7AF62FF44EC4862013BE4"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 2,
+      "RowCount": 25000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 1408766,
+          "GzipBytes": 286645,
+          "BrotliBytes": 277041,
+          "EncodeTimeMs": 14.906,
+          "EncodeAllocatedBytes": 8715526,
+          "DecodeTimeMs": 15.6,
+          "DecodeAllocatedBytes": 9256352,
+          "PostParseFilterTimeMs": 50.474,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "B2FC10688CB41187983DA05EB8988D6EEB8EE11C9FBF3080D1BB0703A487617D"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 1210425,
+          "GzipBytes": 207898,
+          "BrotliBytes": 201258,
+          "EncodeTimeMs": 5.298,
+          "EncodeAllocatedBytes": 2411248,
+          "DecodeTimeMs": 9.006,
+          "DecodeAllocatedBytes": 4931168,
+          "PostParseFilterTimeMs": 41.747,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "B2FC10688CB41187983DA05EB8988D6EEB8EE11C9FBF3080D1BB0703A487617D"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 1344736,
+          "GzipBytes": 345578,
+          "BrotliBytes": 396203,
+          "EncodeTimeMs": 4.716,
+          "EncodeAllocatedBytes": 7367379,
+          "DecodeTimeMs": 0.388,
+          "DecodeAllocatedBytes": 4320,
+          "PostParseFilterTimeMs": 5.578,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "B2FC10688CB41187983DA05EB8988D6EEB8EE11C9FBF3080D1BB0703A487617D"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 2,
+      "RowCount": 50000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 2826227,
+          "GzipBytes": 572855,
+          "BrotliBytes": 551501,
+          "EncodeTimeMs": 45.993,
+          "EncodeAllocatedBytes": 17438472,
+          "DecodeTimeMs": 50.657,
+          "DecodeAllocatedBytes": 18511844,
+          "PostParseFilterTimeMs": 28.054,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "9DD4D2B9E699E2B1F3FC2B3BD37B23818796C2CB1DBFA7CEF866236D1474377C"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 2429552,
+          "GzipBytes": 412929,
+          "BrotliBytes": 402732,
+          "EncodeTimeMs": 11.818,
+          "EncodeAllocatedBytes": 4830368,
+          "DecodeTimeMs": 22.929,
+          "DecodeAllocatedBytes": 9861177,
+          "PostParseFilterTimeMs": 36.753,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "9DD4D2B9E699E2B1F3FC2B3BD37B23818796C2CB1DBFA7CEF866236D1474377C"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 2688544,
+          "GzipBytes": 690836,
+          "BrotliBytes": 763269,
+          "EncodeTimeMs": 8.992,
+          "EncodeAllocatedBytes": 14710504,
+          "DecodeTimeMs": 0.781,
+          "DecodeAllocatedBytes": 4320,
+          "PostParseFilterTimeMs": 10.564,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "9DD4D2B9E699E2B1F3FC2B3BD37B23818796C2CB1DBFA7CEF866236D1474377C"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 2,
+      "RowCount": 100000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 5662563,
+          "GzipBytes": 1145704,
+          "BrotliBytes": 1100747,
+          "EncodeTimeMs": 74.528,
+          "EncodeAllocatedBytes": 34894905,
+          "DecodeTimeMs": 88.774,
+          "DecodeAllocatedBytes": 37031934,
+          "PostParseFilterTimeMs": 208.22,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "97BD77E97D13BAE002FD6DADEA302998C241A5B8E5A1F7668DD0AF16EAA30788"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 4869222,
+          "GzipBytes": 820239,
+          "BrotliBytes": 808204,
+          "EncodeTimeMs": 26.146,
+          "EncodeAllocatedBytes": 9670040,
+          "DecodeTimeMs": 51.702,
+          "DecodeAllocatedBytes": 19721950,
+          "PostParseFilterTimeMs": 103.248,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "97BD77E97D13BAE002FD6DADEA302998C241A5B8E5A1F7668DD0AF16EAA30788"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 5376160,
+          "GzipBytes": 1386092,
+          "BrotliBytes": 1512597,
+          "EncodeTimeMs": 16.46,
+          "EncodeAllocatedBytes": 29398934,
+          "DecodeTimeMs": 1.52,
+          "DecodeAllocatedBytes": 4320,
+          "PostParseFilterTimeMs": 24.669,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "97BD77E97D13BAE002FD6DADEA302998C241A5B8E5A1F7668DD0AF16EAA30788"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 3,
+      "RowCount": 500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 35295,
+          "GzipBytes": 5699,
+          "BrotliBytes": 5055,
+          "EncodeTimeMs": 0.09,
+          "EncodeAllocatedBytes": 150128,
+          "DecodeTimeMs": 0.114,
+          "DecodeAllocatedBytes": 209216,
+          "PostParseFilterTimeMs": 0.144,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "E7E743562A37C6269C033AA3D6B2F6F5CB48C2BAC523CB2F1FC1A9B888EC643A"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 32284,
+          "GzipBytes": 4138,
+          "BrotliBytes": 3055,
+          "EncodeTimeMs": 0.076,
+          "EncodeAllocatedBytes": 53080,
+          "DecodeTimeMs": 0.091,
+          "DecodeAllocatedBytes": 126656,
+          "PostParseFilterTimeMs": 0.171,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "E7E743562A37C6269C033AA3D6B2F6F5CB48C2BAC523CB2F1FC1A9B888EC643A"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 35208,
+          "GzipBytes": 9231,
+          "BrotliBytes": 7383,
+          "EncodeTimeMs": 0.059,
+          "EncodeAllocatedBytes": 227672,
+          "DecodeTimeMs": 0.016,
+          "DecodeAllocatedBytes": 3888,
+          "PostParseFilterTimeMs": 0.11,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "E7E743562A37C6269C033AA3D6B2F6F5CB48C2BAC523CB2F1FC1A9B888EC643A"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 3,
+      "RowCount": 2500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 176118,
+          "GzipBytes": 25800,
+          "BrotliBytes": 25201,
+          "EncodeTimeMs": 0.617,
+          "EncodeAllocatedBytes": 748200,
+          "DecodeTimeMs": 0.547,
+          "DecodeAllocatedBytes": 1045408,
+          "PostParseFilterTimeMs": 0.613,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "A0B679199AE14081FEDB30AB2AD272A1704BE4A61B65433B9BC62FA038071033"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 161107,
+          "GzipBytes": 19320,
+          "BrotliBytes": 11978,
+          "EncodeTimeMs": 0.385,
+          "EncodeAllocatedBytes": 261904,
+          "DecodeTimeMs": 0.451,
+          "DecodeAllocatedBytes": 629056,
+          "PostParseFilterTimeMs": 0.811,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "A0B679199AE14081FEDB30AB2AD272A1704BE4A61B65433B9BC62FA038071033"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 172040,
+          "GzipBytes": 39505,
+          "BrotliBytes": 29880,
+          "EncodeTimeMs": 0.381,
+          "EncodeAllocatedBytes": 1063784,
+          "DecodeTimeMs": 0.054,
+          "DecodeAllocatedBytes": 3888,
+          "PostParseFilterTimeMs": 0.502,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "A0B679199AE14081FEDB30AB2AD272A1704BE4A61B65433B9BC62FA038071033"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 3,
+      "RowCount": 10000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 704231,
+          "GzipBytes": 100669,
+          "BrotliBytes": 100787,
+          "EncodeTimeMs": 3.383,
+          "EncodeAllocatedBytes": 2991032,
+          "DecodeTimeMs": 3.687,
+          "DecodeAllocatedBytes": 4181312,
+          "PostParseFilterTimeMs": 9.216,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "23FE79ADF8EDFA75FB279340E26F681EC6D88804A2C3D018849C324ED74B7B9D"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 644220,
+          "GzipBytes": 70634,
+          "BrotliBytes": 35306,
+          "EncodeTimeMs": 1.649,
+          "EncodeAllocatedBytes": 1045016,
+          "DecodeTimeMs": 2.697,
+          "DecodeAllocatedBytes": 2513056,
+          "PostParseFilterTimeMs": 3.356,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "23FE79ADF8EDFA75FB279340E26F681EC6D88804A2C3D018849C324ED74B7B9D"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 685000,
+          "GzipBytes": 153944,
+          "BrotliBytes": 110081,
+          "EncodeTimeMs": 1.546,
+          "EncodeAllocatedBytes": 4198816,
+          "DecodeTimeMs": 0.198,
+          "DecodeAllocatedBytes": 3888,
+          "PostParseFilterTimeMs": 2.514,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "23FE79ADF8EDFA75FB279340E26F681EC6D88804A2C3D018849C324ED74B7B9D"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 3,
+      "RowCount": 25000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 1760431,
+          "GzipBytes": 250277,
+          "BrotliBytes": 239092,
+          "EncodeTimeMs": 10.332,
+          "EncodeAllocatedBytes": 7476256,
+          "DecodeTimeMs": 34.411,
+          "DecodeAllocatedBytes": 10452619,
+          "PostParseFilterTimeMs": 38.257,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "F7F9886115B677B8581A666264A2DC62E629912CEAA8A1818E7CA46A7217F8E5"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 1610420,
+          "GzipBytes": 171128,
+          "BrotliBytes": 80534,
+          "EncodeTimeMs": 4.064,
+          "EncodeAllocatedBytes": 2611216,
+          "DecodeTimeMs": 13.994,
+          "DecodeAllocatedBytes": 6281057,
+          "PostParseFilterTimeMs": 8.8,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "F7F9886115B677B8581A666264A2DC62E629912CEAA8A1818E7CA46A7217F8E5"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 1710920,
+          "GzipBytes": 379645,
+          "BrotliBytes": 298952,
+          "EncodeTimeMs": 3.225,
+          "EncodeAllocatedBytes": 10468840,
+          "DecodeTimeMs": 0.466,
+          "DecodeAllocatedBytes": 3888,
+          "PostParseFilterTimeMs": 5.097,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "F7F9886115B677B8581A666264A2DC62E629912CEAA8A1818E7CA46A7217F8E5"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 3,
+      "RowCount": 50000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 3520723,
+          "GzipBytes": 499738,
+          "BrotliBytes": 476436,
+          "EncodeTimeMs": 21.106,
+          "EncodeAllocatedBytes": 14952563,
+          "DecodeTimeMs": 42.309,
+          "DecodeAllocatedBytes": 20904897,
+          "PostParseFilterTimeMs": 109.233,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "A3CB29BF33AFC88D443B0EF01E6AEF78AFBD54C6BD6A1DBD5A096856E6DBB977"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 3220712,
+          "GzipBytes": 335761,
+          "BrotliBytes": 152072,
+          "EncodeTimeMs": 9.224,
+          "EncodeAllocatedBytes": 5221504,
+          "DecodeTimeMs": 26.588,
+          "DecodeAllocatedBytes": 12561062,
+          "PostParseFilterTimeMs": 63.037,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "A3CB29BF33AFC88D443B0EF01E6AEF78AFBD54C6BD6A1DBD5A096856E6DBB977"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 3421000,
+          "GzipBytes": 757745,
+          "BrotliBytes": 615172,
+          "EncodeTimeMs": 9.226,
+          "EncodeAllocatedBytes": 20921888,
+          "DecodeTimeMs": 0.942,
+          "DecodeAllocatedBytes": 3888,
+          "PostParseFilterTimeMs": 9.838,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "A3CB29BF33AFC88D443B0EF01E6AEF78AFBD54C6BD6A1DBD5A096856E6DBB977"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 3,
+      "RowCount": 100000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 7041039,
+          "GzipBytes": 998533,
+          "BrotliBytes": 951114,
+          "EncodeTimeMs": 59.137,
+          "EncodeAllocatedBytes": 29900155,
+          "DecodeTimeMs": 100.486,
+          "DecodeAllocatedBytes": 41808238,
+          "PostParseFilterTimeMs": 102.552,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "2520ACCA6DB5A8536928171DDA47DF5B5B8068927C9640384DF4F2300E3C4AF7"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 6441028,
+          "GzipBytes": 666021,
+          "BrotliBytes": 292148,
+          "EncodeTimeMs": 23.171,
+          "EncodeAllocatedBytes": 10441824,
+          "DecodeTimeMs": 60.243,
+          "DecodeAllocatedBytes": 25121078,
+          "PostParseFilterTimeMs": 68.832,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "2520ACCA6DB5A8536928171DDA47DF5B5B8068927C9640384DF4F2300E3C4AF7"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 6840968,
+          "GzipBytes": 1513835,
+          "BrotliBytes": 1204435,
+          "EncodeTimeMs": 16.605,
+          "EncodeAllocatedBytes": 41821024,
+          "DecodeTimeMs": 1.934,
+          "DecodeAllocatedBytes": 3888,
+          "PostParseFilterTimeMs": 40.474,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "2520ACCA6DB5A8536928171DDA47DF5B5B8068927C9640384DF4F2300E3C4AF7"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 4,
+      "RowCount": 500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 85717,
+          "GzipBytes": 2457,
+          "BrotliBytes": 1352,
+          "EncodeTimeMs": 0.072,
+          "EncodeAllocatedBytes": 190256,
+          "DecodeTimeMs": 0.146,
+          "DecodeAllocatedBytes": 306536,
+          "PostParseFilterTimeMs": 0.189,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "595F340CA73A804D18C884431B1E98F3DB3F4A3031DD15B7C548F012F0464A90"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 83706,
+          "GzipBytes": 2384,
+          "BrotliBytes": 867,
+          "EncodeTimeMs": 0.062,
+          "EncodeAllocatedBytes": 104504,
+          "DecodeTimeMs": 0.095,
+          "DecodeAllocatedBytes": 231464,
+          "PostParseFilterTimeMs": 0.56,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "595F340CA73A804D18C884431B1E98F3DB3F4A3031DD15B7C548F012F0464A90"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 85696,
+          "GzipBytes": 7812,
+          "BrotliBytes": 6570,
+          "EncodeTimeMs": 0.104,
+          "EncodeAllocatedBytes": 514064,
+          "DecodeTimeMs": 0.032,
+          "DecodeAllocatedBytes": 3928,
+          "PostParseFilterTimeMs": 0.135,
+          "FilteredRowCount": 250,
+          "ChecksumSha256": "595F340CA73A804D18C884431B1E98F3DB3F4A3031DD15B7C548F012F0464A90"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonColumnar",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 4,
+      "RowCount": 2500,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 428217,
+          "GzipBytes": 9096,
+          "BrotliBytes": 3743,
+          "EncodeTimeMs": 0.353,
+          "EncodeAllocatedBytes": 948760,
+          "DecodeTimeMs": 1.329,
+          "DecodeAllocatedBytes": 1532136,
+          "PostParseFilterTimeMs": 0.854,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "EF26E0CFD58212DCE8B3BE68CE7B2A5D73B041A676DFB3C4DF2185196D8E5DE6"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 418206,
+          "GzipBytes": 9730,
+          "BrotliBytes": 1530,
+          "EncodeTimeMs": 0.317,
+          "EncodeAllocatedBytes": 519000,
+          "DecodeTimeMs": 0.437,
+          "DecodeAllocatedBytes": 1153064,
+          "PostParseFilterTimeMs": 0.885,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "EF26E0CFD58212DCE8B3BE68CE7B2A5D73B041A676DFB3C4DF2185196D8E5DE6"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 424128,
+          "GzipBytes": 36184,
+          "BrotliBytes": 29372,
+          "EncodeTimeMs": 1.522,
+          "EncodeAllocatedBytes": 2463281,
+          "DecodeTimeMs": 0.129,
+          "DecodeAllocatedBytes": 3928,
+          "PostParseFilterTimeMs": 8.36,
+          "FilteredRowCount": 1250,
+          "ChecksumSha256": "EF26E0CFD58212DCE8B3BE68CE7B2A5D73B041A676DFB3C4DF2185196D8E5DE6"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonRowOriented",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 4,
+      "RowCount": 10000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 1712592,
+          "GzipBytes": 33335,
+          "BrotliBytes": 12327,
+          "EncodeTimeMs": 2.118,
+          "EncodeAllocatedBytes": 3793128,
+          "DecodeTimeMs": 7.154,
+          "DecodeAllocatedBytes": 6128136,
+          "PostParseFilterTimeMs": 3.722,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "000E79FE0ACDD3D8D14D14AFEF68240B0B9CD3B81C72C81C0A01BB601C2DAACC"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 1672581,
+          "GzipBytes": 34352,
+          "BrotliBytes": 25002,
+          "EncodeTimeMs": 1.419,
+          "EncodeAllocatedBytes": 2074880,
+          "DecodeTimeMs": 2.615,
+          "DecodeAllocatedBytes": 4609064,
+          "PostParseFilterTimeMs": 8.127,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "000E79FE0ACDD3D8D14D14AFEF68240B0B9CD3B81C72C81C0A01BB601C2DAACC"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 1693504,
+          "GzipBytes": 148046,
+          "BrotliBytes": 119762,
+          "EncodeTimeMs": 2.928,
+          "EncodeAllocatedBytes": 9765401,
+          "DecodeTimeMs": 0.514,
+          "DecodeAllocatedBytes": 3928,
+          "PostParseFilterTimeMs": 15.141,
+          "FilteredRowCount": 5000,
+          "ChecksumSha256": "000E79FE0ACDD3D8D14D14AFEF68240B0B9CD3B81C72C81C0A01BB601C2DAACC"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonRowOriented",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 4,
+      "RowCount": 25000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 4281342,
+          "GzipBytes": 81830,
+          "BrotliBytes": 29615,
+          "EncodeTimeMs": 7.849,
+          "EncodeAllocatedBytes": 9481880,
+          "DecodeTimeMs": 38.056,
+          "DecodeAllocatedBytes": 15320144,
+          "PostParseFilterTimeMs": 55.09,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "60224FDCEFD716FB2B6C547A4DEDDAA0EA584E4C3C0B2B9E54420B02AD9489B8"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 4181331,
+          "GzipBytes": 83866,
+          "BrotliBytes": 61176,
+          "EncodeTimeMs": 3.754,
+          "EncodeAllocatedBytes": 5182128,
+          "DecodeTimeMs": 18.041,
+          "DecodeAllocatedBytes": 11521092,
+          "PostParseFilterTimeMs": 42.616,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "60224FDCEFD716FB2B6C547A4DEDDAA0EA584E4C3C0B2B9E54420B02AD9489B8"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 4232256,
+          "GzipBytes": 371388,
+          "BrotliBytes": 318984,
+          "EncodeTimeMs": 5.964,
+          "EncodeAllocatedBytes": 24373400,
+          "DecodeTimeMs": 1.223,
+          "DecodeAllocatedBytes": 3928,
+          "PostParseFilterTimeMs": 8.956,
+          "FilteredRowCount": 12500,
+          "ChecksumSha256": "60224FDCEFD716FB2B6C547A4DEDDAA0EA584E4C3C0B2B9E54420B02AD9489B8"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonRowOriented",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 4,
+      "RowCount": 50000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 8562592,
+          "GzipBytes": 162547,
+          "BrotliBytes": 57672,
+          "EncodeTimeMs": 14.79,
+          "EncodeAllocatedBytes": 18963128,
+          "DecodeTimeMs": 70.592,
+          "DecodeAllocatedBytes": 30640160,
+          "PostParseFilterTimeMs": 103.1,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "2B7DB2514ECE33623BB97F2809E17ECE407178360BB65F7275DF7D8F986A5E7E"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 8362581,
+          "GzipBytes": 166354,
+          "BrotliBytes": 121178,
+          "EncodeTimeMs": 7.198,
+          "EncodeAllocatedBytes": 10363376,
+          "DecodeTimeMs": 36.019,
+          "DecodeAllocatedBytes": 23041067,
+          "PostParseFilterTimeMs": 122.448,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "2B7DB2514ECE33623BB97F2809E17ECE407178360BB65F7275DF7D8F986A5E7E"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 8463552,
+          "GzipBytes": 747658,
+          "BrotliBytes": 691465,
+          "EncodeTimeMs": 13.799,
+          "EncodeAllocatedBytes": 48720990,
+          "DecodeTimeMs": 2.386,
+          "DecodeAllocatedBytes": 3928,
+          "PostParseFilterTimeMs": 28.564,
+          "FilteredRowCount": 25000,
+          "ChecksumSha256": "2B7DB2514ECE33623BB97F2809E17ECE407178360BB65F7275DF7D8F986A5E7E"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonRowOriented",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    },
+    {
+      "Workload": 4,
+      "RowCount": 100000,
+      "Formats": {
+        "JsonRowOriented": {
+          "Format": 0,
+          "RawBytes": 17175092,
+          "GzipBytes": 323786,
+          "BrotliBytes": 116406,
+          "EncodeTimeMs": 44.107,
+          "EncodeAllocatedBytes": 38375632,
+          "DecodeTimeMs": 144.742,
+          "DecodeAllocatedBytes": 61680158,
+          "PostParseFilterTimeMs": 228.609,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "2FB8DDBE4112BD27A43C94BBD3E646641E0AD85BEF0929A2C55AB240F03A67C1"
+        },
+        "JsonColumnar": {
+          "Format": 1,
+          "RawBytes": 16775081,
+          "GzipBytes": 332477,
+          "BrotliBytes": 194722,
+          "EncodeTimeMs": 18.697,
+          "EncodeAllocatedBytes": 20775880,
+          "DecodeTimeMs": 84.158,
+          "DecodeAllocatedBytes": 46081070,
+          "PostParseFilterTimeMs": 144.127,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "2FB8DDBE4112BD27A43C94BBD3E646641E0AD85BEF0929A2C55AB240F03A67C1"
+        },
+        "ArrowIpcStream": {
+          "Format": 2,
+          "RawBytes": 16926080,
+          "GzipBytes": 1498531,
+          "BrotliBytes": 1380402,
+          "EncodeTimeMs": 33.597,
+          "EncodeAllocatedBytes": 97415030,
+          "DecodeTimeMs": 5.178,
+          "DecodeAllocatedBytes": 3928,
+          "PostParseFilterTimeMs": 30.79,
+          "FilteredRowCount": 50000,
+          "ChecksumSha256": "2FB8DDBE4112BD27A43C94BBD3E646641E0AD85BEF0929A2C55AB240F03A67C1"
+        }
+      },
+      "WinnerByRawSize": "JsonColumnar",
+      "WinnerByGzipSize": "JsonRowOriented",
+      "WinnerByDecodeTime": "ArrowIpcStream",
+      "WinnerByMemory": "ArrowIpcStream"
+    }
+  ],
+  "CrossoverSummaryByWorkload": {
+    "DenseNumeric": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows",
+    "MixedTyped": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows",
+    "NullableSparse": "Raw Size Crossover: ~2500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows",
+    "TemporalEvents": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows",
+    "StringHeavy": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows"
+  }
+}

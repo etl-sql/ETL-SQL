@@ -110,6 +110,10 @@ CREATE VISUAL ActiveUsersCard AS CARD (
 
 `TABLE` mappings support sparklines from multi-column series, pre-aggregated array columns, or normalized child queries:
 
+> **Implemented Phase 4 slice:** multi-column `SPARKLINE(...) LINE|AREA|BAR` and scalar
+> `PROGRESS_BAR(MIN=..., MAX=..., COLOR=...)`. Array-column, normalized-child, bullet,
+> `COLOR_MAP`, and HTML-template forms below remain proposed follow-on syntax and are not parser contracts.
+
 ```sql
 CREATE VISUAL ProductPerformanceTable AS TABLE (
   SOURCE = #products,
@@ -224,49 +228,17 @@ CREATE VISUAL NodeClusterStatus AS HTML (
 
 ## 4. GoG IR Compilation & Vector Generation
 
-Under the hood, all sparklines and micro-visuals compile directly to a minimal `ChartSpec`:
+The implementation keeps the existing assembly boundary: `MicroChartPlanFactory` in
+`ETL-SQL.Reporting` creates a versioned `ChartSpec` and typed `ChartDataSet`, then resolves both through
+`PlotPlanResolver`. `PlotPlanSvgRenderer` consumes that resolved plan. No rendering or SkiaSharp code
+moves into Core, and the browser does not independently recompute geometry.
 
-```csharp
-public static ChartSpec CreateSparklineSpec(
-    DataRef data,
-    MarkType mark,
-    string? color = null,
-    double opacity = 1.0)
-{
-    return new ChartSpec
-    {
-        Data = data,
-        Coordinate = CoordinateSpec.Cartesian,
-        Scales = new Dictionary<Channel, ScaleSpec>
-        {
-            [Channel.X] = new ScaleSpec { Type = ScaleType.Band, Zero = false },
-            [Channel.Y] = new ScaleSpec { Type = ScaleType.Linear, Zero = false }
-        },
-        Layers =
-        [
-            new LayerSpec
-            {
-                Mark = mark,
-                Encodings = new Dictionary<Channel, EncodingSpec>
-                {
-                    [Channel.X] = new EncodingSpec { Field = "x", DataType = ValueType.Ordinal },
-                    [Channel.Y] = new EncodingSpec { Field = "y", DataType = ValueType.Quantitative }
-                },
-                Options = new LayerOptions { Color = color ?? "#3b82f6", Opacity = opacity }
-            }
-        ],
-        Options = new LayoutOptions
-        {
-            Padding = 0,
-            ShowAxes = false,
-            ShowLegend = false,
-            ShowGrid = false
-        }
-    };
-}
-```
+Each published `MicroChartManifest` contains the resolved `PlotPlan`, native SVG, an accessible label,
+and a concise plain-text fallback. Browser, PDF, Markdown/email-image, and terminal adapters consume
+those fields. Table manifests associate a plan with its original row and column; card manifests use the
+`card.sparkline` role. Colors are restricted to safe hexadecimal paint values before SVG generation.
 
-The server-side `SvgChartCompiler` executes pure C# linear spline and polygon math to emit clean, minified SVG path strings:
+The server-side renderer emits declarative SVG paths:
 ```xml
 <svg viewBox="0 0 100 24" class="etl-sparkline" preserveAspectRatio="none">
   <path d="M0,18 L16,14 L33,20 L50,8 L66,12 L83,4 L100,6" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round"/>
@@ -284,3 +256,6 @@ The server-side `SvgChartCompiler` executes pure C# linear spline and polygon ma
 | **Phase 3** | **Template Macro Engine in `HTML` Visuals** | Implement Mustache macro parser in `ManifestBuilder.cs` and `report-runtime.js` supporting `{{SPARKLINE}}`, `{{PROGRESS_BAR}}`, and `{{BG_CHART}}`. |
 | **Phase 4** | **PDF & Email Static Parity** | Verify pure SVG injection in `PdfExporter` and HTML email templates without external runtime dependencies. |
 | **Phase 5** | **Cookbook & Gallery Examples** | Add executive KPI cards and rich infographic node templates to the Reporting Cookbook. |
+
+Phase 4 delivers the Tier 1 native slice only. Tier 2 HTML macros remain deferred because arbitrary
+template expansion would enlarge both the security surface and the static-parity contract.

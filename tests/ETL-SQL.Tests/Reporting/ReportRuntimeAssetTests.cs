@@ -55,6 +55,22 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("input.setAttribute('aria-label', label.textContent)", js);
         }
 
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void SharedRuntime_ConsumesResolvedMicroChartsWithoutBrowserGeometryCompiler()
+        {
+            var root = FindRepoRoot();
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));
+            var css = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.css"));
+
+            Assert.Contains("function findMicroChart", js);
+            Assert.Contains("micro.accessibleLabel", js);
+            Assert.Contains("sparkline.accessibleLabel", js);
+            Assert.DoesNotContain("function buildSparklineSvg", js);
+            Assert.Contains(".card-sparkline svg", css);
+            Assert.Contains("td[role=\"img\"] svg", css);
+        }
+
         private static string FindRepoRoot([CallerFilePath] string sourceFilePath = "")
         {
             foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory(), Path.GetDirectoryName(sourceFilePath) ?? "" })

@@ -1,0 +1,38 @@
+-- Payload Crossover Fixture: Dense Numeric Workload
+-- High-throughput numerical measurements (sensors, telemetry, quantitative trading)
+
+SET REPORT TITLE = 'Payload Crossover: Dense Numeric Telemetry';
+
+SELECT
+    1704067200000 + (ROW_NUMBER() OVER()) * 1000 AS TimestampMs,
+    RAND() * 100.0 AS SensorVoltage,
+    RAND() * 50.0 AS SensorCurrent,
+    RAND() * 5000.0 AS SensorPower,
+    RAND() * 75.0 AS TemperatureC,
+    RAND() * 1000.0 AS VibrationFrequency
+INTO #dense_numeric
+FROM (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) a
+CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) b
+CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) c;
+
+CREATE VISUAL DenseNumericScatter AS SCATTER (
+    TITLE = 'High Frequency Sensor Telemetry',
+    SOURCE = #dense_numeric,
+    MAPPINGS (
+        X = SensorVoltage,
+        Y = SensorPower,
+        SIZE = TemperatureC,
+        COLOR = SensorCurrent
+    ),
+    OPTIONS (
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE DenseNumericDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = DenseNumericScatter)
+    )
+);

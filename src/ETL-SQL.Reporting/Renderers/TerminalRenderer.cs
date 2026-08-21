@@ -646,7 +646,11 @@ namespace ETL_SQL.Reporting.Renderers
             var value = string.IsNullOrEmpty(raw) ? "N/A" : FormatNumericCell(raw);
             var label = GetVisualTitle(visual);
 
-            var panel = new Panel(Align.Center(new Markup($"[bold yellow]{Markup.Escape(value)}[/]"), VerticalAlignment.Middle))
+            var micro = visual.MicroCharts?.FirstOrDefault(item => item.Role == "card.sparkline");
+            var content = micro is null
+                ? $"[bold yellow]{Markup.Escape(value)}[/]"
+                : $"[bold yellow]{Markup.Escape(value)}[/]\n[grey]{Markup.Escape(micro.PlainText)}[/]";
+            var panel = new Panel(Align.Center(new Markup(content), VerticalAlignment.Middle))
             {
                 Header = new PanelHeader(Markup.Escape(label)),
                 Border = BoxBorder.Double,
@@ -669,9 +673,15 @@ namespace ETL_SQL.Reporting.Renderers
                 table.AddColumn(new TableColumn($"[blue]{Markup.Escape(col)}[/]").Centered());
             }
 
-            foreach (var row in visual.Rows)
+            for (var rowIndex = 0; rowIndex < visual.Rows.Count; rowIndex++)
             {
-                table.AddRow(row.Select(c => Markup.Escape(FormatNumericCell(c))).ToArray());
+                var row = visual.Rows[rowIndex];
+                table.AddRow(Enumerable.Range(0, visual.Columns.Count).Select(columnIndex =>
+                {
+                    var micro = visual.MicroCharts?.FirstOrDefault(item => item.Role == "table.cell" &&
+                        item.RowIndex == rowIndex && item.ColumnIndex == columnIndex);
+                    return Markup.Escape(micro?.PlainText ?? FormatNumericCell(columnIndex < row.Count ? row[columnIndex] : null));
+                }).ToArray());
             }
 
             return table;

@@ -126,8 +126,8 @@ stay explicitly classified in the capability matrix for later slices.
 
 ### Reporting & Presentation — Native Card and Table Micro-Charts
 
-**Status:** Accepted  
-**Horizon:** Next  
+**Status:** Shipped
+**Horizon:** Current
 **Authoritative design:** [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md), subject to the GoG boundary above
 
 Cards and tables should support native sparklines and progress indicators that remain meaningful in
@@ -144,6 +144,12 @@ The semantic spec remains dependency-light; rendering and SkiaSharp code do not 
 
 **Delivery slices:** Add one card sparkline and one table-cell progress/sparkline path, then export and
 terminal fallbacks, followed by additional native presets justified by repeated use.
+
+**Current delivery:** `CARD` source-bound sparklines plus `TABLE` wide sparklines and progress
+indicators lower through typed GoG contracts into deterministic `PlotPlan` geometry. Browser, native
+PDF, Markdown/email-image, terminal, screen-reader, and plain-text surfaces consume the resulting
+native SVG or semantic fallback without server-side V8. Representative geometry/export goldens,
+per-row payload budgets, render-cost gates, and JSON-columnar/Arrow crossover evidence are checked in.
 
 **Acceptance evidence:** Geometry goldens, browser/export snapshots, accessible text fallbacks, and
 measured payload/render costs across representative small and tabular datasets.

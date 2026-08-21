@@ -738,6 +738,48 @@ CREATE VISUAL T AS TABLE (
         }
 
         [Fact]
+        public void ParseCardMappings_SparklineSource_PreservesSemanticBinding()
+        {
+            var sql = @"
+CREATE VISUAL Revenue AS CARD (
+    SOURCE = #summary,
+    MAPPINGS (
+        VALUE = total,
+        SPARKLINE = #daily (X = SaleDate, Y = Amount, TYPE = AREA)
+    )
+);";
+            var stmt = Parse(sql).Statements.OfType<CreateVisualStatement>().Single();
+            var sparkline = Assert.Single(stmt.Mappings, mapping => mapping.Role == "SPARKLINE");
+
+            Assert.Equal("#daily", sparkline.SparklineSource);
+            Assert.Equal("SaleDate", sparkline.SparklineXColumn);
+            Assert.Equal("Amount", sparkline.SparklineYColumn);
+            Assert.Equal("area", sparkline.SparklineType);
+            Assert.Contains("SPARKLINE = #daily (X = SaleDate, Y = Amount, TYPE = AREA)", stmt.ToSql());
+        }
+
+        [Fact]
+        public void ParseTableMappings_ProgressBar_PreservesBoundsAndSafeColorIntent()
+        {
+            var sql = @"
+CREATE VISUAL Goals AS TABLE (
+    SOURCE = #goals,
+    MAPPINGS (
+        team,
+        attainment PROGRESS_BAR (MIN = 0, MAX = 1, COLOR = '#16A34A') AS 'Attainment'
+    )
+);";
+            var stmt = Parse(sql).Statements.OfType<CreateVisualStatement>().Single();
+            var progress = stmt.Mappings[1];
+
+            Assert.True(progress.ProgressBar);
+            Assert.Equal(0m, progress.ProgressMinimum);
+            Assert.Equal(1m, progress.ProgressMaximum);
+            Assert.Equal("#16A34A", progress.ProgressColor);
+            Assert.Contains("attainment PROGRESS_BAR (MIN = 0, MAX = 1, COLOR = '#16A34A') AS 'Attainment'", stmt.ToSql());
+        }
+
+        [Fact]
         public void ToSql_TableMappingsWithCellFormatting_PreservesOptions()
         {
             var sql = @"
