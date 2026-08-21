@@ -1,0 +1,46 @@
+-- Cascading Slicer Fixture: Invalid Descendant Selection / Reset Behavior
+-- Scenario: When parent Country (@country) changes from USA to Germany, existing State (@state = 'TX') becomes invalid and must auto-reset.
+
+SET REPORT TITLE = 'Cascading Slicers: Invalid Descendant Reset Handling';
+
+DECLARE @country VARCHAR(50) = 'USA';
+DECLARE @state VARCHAR(50) = 'TX';
+
+SELECT 'USA' AS Country, 'TX' AS StateCode, 'Texas' AS StateName INTO #global_locations
+UNION ALL SELECT 'USA', 'CA', 'California'
+UNION ALL SELECT 'Germany', 'BY', 'Bavaria'
+UNION ALL SELECT 'Germany', 'BE', 'Berlin';
+
+CREATE VISUAL CountryFilter AS SLICER (
+    TITLE = 'Country',
+    SOURCE = (SELECT DISTINCT Country FROM #global_locations),
+    MAPPINGS (CATEGORY = Country),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@country, Country))
+);
+
+CREATE VISUAL StateFilter AS SLICER (
+    TITLE = 'State/Land',
+    SOURCE = (SELECT StateCode, StateName FROM #global_locations WHERE Country = @country),
+    MAPPINGS (CATEGORY = StateName, VALUE = StateCode),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@state, StateCode))
+);
+
+CREATE VISUAL SelectionValidationTable AS TABLE (
+    TITLE = 'Current Filter State',
+    SOURCE = (
+        SELECT @country AS ActiveCountry, @state AS ActiveState,
+               CASE WHEN EXISTS(SELECT 1 FROM #global_locations WHERE Country = @country AND StateCode = @state)
+                    THEN 'VALID' ELSE 'INVALID_DESCENDANT' END AS SelectionStatus
+    )
+);
+
+CREATE PAGE ResetTestPage AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B / C C',
+        MAP (
+            'A' = CountryFilter,
+            'B' = StateFilter,
+            'C' = SelectionValidationTable
+        )
+    )
+);

@@ -106,6 +106,18 @@
         return undefined;
     }
 
+    function parseMultiParameter(value) {
+        if (value == null || String(value).trim() === '') return [];
+        const text = String(value).trim();
+        if (text.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed)) return parsed.map(v => String(v));
+            } catch { /* accept legacy comma-separated values below */ }
+        }
+        return text.split(',').map(v => v.trim()).filter(Boolean);
+    }
+
     function noDataEl(msg) {
         const div = document.createElement('div');
         div.className = 'no-data';
@@ -3334,14 +3346,17 @@
 
             if (paramName && manifest && manifest.parameters) {
                 const current = getParam(manifest.parameters, paramName);
-                if (current !== undefined) select.value = current;
+                if (current !== undefined && select.multiple) {
+                    const selected = new Set(parseMultiParameter(current));
+                    Array.from(select.options).forEach(option => { option.selected = selected.has(option.value); });
+                } else if (current !== undefined) select.value = current;
             }
 
             if (isInteractive) {
                 select.addEventListener('change', () => {
                     let val = select.value;
                     if (select.multiple) {
-                        val = Array.from(select.selectedOptions).map(o => o.value).join(',');
+                        val = JSON.stringify(Array.from(select.selectedOptions).map(o => o.value));
                     }
                     const batch = {};
                     changeActions.forEach(action => {
@@ -3372,7 +3387,7 @@
         const finalValIdx = valIdx >= 0 ? valIdx : 0;
 
         const currentVal = getParam(manifest.parameters, paramName) || '';
-        const selected = new Set(String(currentVal).split(',').map(v => v.trim()).filter(Boolean));
+        const selected = new Set(parseMultiParameter(currentVal));
 
         let updateToggleText = null;
 
@@ -3394,7 +3409,7 @@
 
                 if (updateToggleText) updateToggleText();
 
-                const val = Array.from(selected).join(',');
+                const val = JSON.stringify(Array.from(selected));
                 changeActions.forEach(a => {
                     postParameters({ [a.parameterName]: val }).then(m => { if (m) renderManifest(m); });
                 });
@@ -3910,7 +3925,7 @@
         let currentValues = [];
         if (param && manifest && manifest.parameters) {
             const current = getParam(manifest.parameters, param);
-            if (current) currentValues = String(current).split(',').map(v => v.trim());
+            if (current) currentValues = parseMultiParameter(current);
         }
 
         (visual.rows || []).forEach(row => {
@@ -3937,7 +3952,7 @@
             applyBtn.className   = 'filter-apply';
             applyBtn.textContent = 'Apply';
             applyBtn.addEventListener('click', () => {
-                const selected = Array.from(list.querySelectorAll('.multiselect-cb:checked')).map(cb => cb.value).join(',');
+                const selected = JSON.stringify(Array.from(list.querySelectorAll('.multiselect-cb:checked')).map(cb => cb.value));
                 changeActions.forEach(action => {
                     postParameters({ [action.parameterName]: selected })
                         .then(m => { if (m) renderManifest(m); });

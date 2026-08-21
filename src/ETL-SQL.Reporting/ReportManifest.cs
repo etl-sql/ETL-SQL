@@ -114,6 +114,16 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("parameters")]
         public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Author-time validated cascade graph in stable topological order.</summary>
+        [JsonPropertyName("cascadeGraph")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CascadeGraphManifest? CascadeGraph { get; set; }
+
+        /// <summary>The most recently committed atomic parameter transition.</summary>
+        [JsonPropertyName("cascadeTransaction")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CascadeTransactionManifest? CascadeTransaction { get; set; }
+
         /// <summary>Metadata for report parameters (Phase 3).</summary>
         [JsonPropertyName("parameterMetadata")]
         public Dictionary<string, ParameterMetadataManifest> ParameterMetadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -251,6 +261,11 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("rows")]
         public List<List<string?>> Rows { get; set; } = new();
 
+        /// <summary>Cascade configuration and retained LOCAL option vector.</summary>
+        [JsonPropertyName("cascade")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CascadeVisualManifest? Cascade { get; set; }
+
         /// <summary>Original engine values used to build typed chart data; never emitted to clients.</summary>
         [JsonIgnore]
         internal List<Dictionary<string, object?>> RawRows { get; } = new();
@@ -336,6 +351,50 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("drillState")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public VisualDrillStateManifest? DrillState { get; set; }
+    }
+
+    public sealed class CascadeGraphManifest
+    {
+        [JsonPropertyName("order")]
+        public List<string> Order { get; set; } = new();
+
+        [JsonPropertyName("edges")]
+        public List<CascadeEdgeManifest> Edges { get; set; } = new();
+    }
+
+    public sealed record CascadeEdgeManifest(
+        [property: JsonPropertyName("parentParameter")] string ParentParameter,
+        [property: JsonPropertyName("childParameter")] string ChildParameter);
+
+    public sealed class CascadeVisualManifest
+    {
+        [JsonPropertyName("mode")] public string Mode { get; set; } = "LOCAL";
+        [JsonPropertyName("producedParameter")] public string ProducedParameter { get; set; } = string.Empty;
+        [JsonPropertyName("valueColumn")] public string? ValueColumn { get; set; }
+        [JsonPropertyName("parents")] public List<CascadeParentManifest> Parents { get; set; } = new();
+        [JsonPropertyName("invalid")] public string Invalid { get; set; } = "CLEAR";
+        [JsonPropertyName("null")] public string Null { get; set; } = "ALL";
+        [JsonPropertyName("allValue")] public string AllValue { get; set; } = "*";
+        [JsonPropertyName("multiselect")] public string MultiSelect { get; set; } = "ANY";
+
+        [JsonPropertyName("sourceColumns")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? SourceColumns { get; set; }
+
+        [JsonPropertyName("sourceRows")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<List<string?>>? SourceRows { get; set; }
+    }
+
+    public sealed record CascadeParentManifest(
+        [property: JsonPropertyName("parameter")] string Parameter,
+        [property: JsonPropertyName("column")] string Column);
+
+    public sealed class CascadeTransactionManifest
+    {
+        [JsonPropertyName("committedAt")] public DateTime CommittedAt { get; set; }
+        [JsonPropertyName("changedParameters")] public List<string> ChangedParameters { get; set; } = new();
+        [JsonPropertyName("refreshedVisuals")] public List<string> RefreshedVisuals { get; set; } = new();
     }
 
     public sealed class MicroChartManifest

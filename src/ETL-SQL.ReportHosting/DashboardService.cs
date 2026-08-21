@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -121,6 +122,7 @@ namespace ETL_SQL.ReportHosting
         /// </summary>
         public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false, string? pageName = null)
         {
+            var updateList = updates.ToList();
             // Warm the session on first access so interaction calls have a live evaluator to work with.
             if (_manifest == null || _evaluator == null)
                 await GetManifestAsync();
@@ -128,17 +130,16 @@ namespace ETL_SQL.ReportHosting
             // Only update global context if NOT an interaction
             if (!isInteraction)
             {
-                foreach (var (name, value) in updates)
-                    _parameters[name] = value;
-
                 if (!string.IsNullOrWhiteSpace(pageName) && IsPaginatedPage(pageName))
                 {
+                    foreach (var (name, value) in updateList) _parameters[name] = value;
                     _runPages.Add(pageName);
                     return await RebuildAsync();
                 }
 
                 if (string.IsNullOrWhiteSpace(pageName) && HasPaginatedPages())
                 {
+                    foreach (var (name, value) in updateList) _parameters[name] = value;
                     MarkAllPaginatedPagesRun();
                     return await RebuildAsync();
                 }
@@ -149,20 +150,43 @@ namespace ETL_SQL.ReportHosting
                 await _lock.WaitAsync();
                 try
                 {
+                    var refreshManifest = isInteraction ? _manifest : CloneManifest(_manifest);
+                    int refreshCount = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, refreshManifest, updateList, isInteraction);
                     if (!isInteraction)
                     {
-                        foreach (var (name, value) in updates)
+                        // One reference swap publishes the complete parameter/visual state.
+                        _manifest = refreshManifest;
+                        var committedNames = _manifest.CascadeTransaction?.ChangedParameters
+                            ?? updateList.Select(update => update.Name).ToList();
+                        foreach (var (name, _) in updateList)
+                        {
+                            var normalized = name.StartsWith('@') ? name : '@' + name;
+                            if (_manifest.Parameters.TryGetValue(normalized, out var committedValue))
+                                _parameters[name] = committedValue;
+                        }
+                        foreach (var name in committedNames.Where(committed =>
+                                     !updateList.Any(update => string.Equals(
+                                         update.Name.TrimStart('@'), committed.TrimStart('@'),
+                                         StringComparison.OrdinalIgnoreCase))))
+                        {
+                            var normalized = name.StartsWith('@') ? name : '@' + name;
+                            if (_manifest.Parameters.TryGetValue(normalized, out var committedValue))
+                                _parameters[name.TrimStart('@')] = committedValue;
+                        }
+                        foreach (var name in committedNames)
                         {
                             var varName = name.StartsWith('@') ? name : '@' + name;
-                            _evaluator.ReportContext.BaselineParameters[varName] = value;
+                            if (_manifest.Parameters.TryGetValue(varName, out var value))
+                                _evaluator.ReportContext.BaselineParameters[varName] = value;
                         }
+                        _manifest.BuiltAt = DateTime.UtcNow;
+                        _manifest.IsInteraction = false;
+                        return _manifest;
                     }
-
-                    int refreshCount = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, _manifest, updates, isInteraction);
                     if (refreshCount > 0)
                     {
                         _manifest.BuiltAt = DateTime.UtcNow;
-                        _manifest.IsInteraction = isInteraction;
+                        _manifest.IsInteraction = true;
                         return _manifest;
                     }
                 }
@@ -178,51 +202,11 @@ namespace ETL_SQL.ReportHosting
         /// Updates one parameter and re-evaluates only the affected visuals.
         /// </summary>
         public async Task<ReportManifest> SetParameterAsync(string name, string value, bool isInteraction = false, string? pageName = null)
-        {
-            if (!isInteraction)
-            {
-                _parameters[name] = value;
+            => await SetParametersAsync(new[] { (name, value) }, isInteraction, pageName);
 
-                if (!string.IsNullOrWhiteSpace(pageName) && IsPaginatedPage(pageName))
-                {
-                    _runPages.Add(pageName);
-                    return await RebuildAsync();
-                }
-
-                if (string.IsNullOrWhiteSpace(pageName) && HasPaginatedPages())
-                {
-                    MarkAllPaginatedPagesRun();
-                    return await RebuildAsync();
-                }
-            }
-
-            // If we have an active evaluator and manifest from a previous run, try selective refresh
-            if (_evaluator != null && _manifest != null)
-            {
-                await _lock.WaitAsync();
-                try
-                {
-                    if (!isInteraction)
-                    {
-                        var varName = name.StartsWith('@') ? name : '@' + name;
-                        _evaluator.ReportContext.BaselineParameters[varName] = value;
-                    }
-
-                    int refreshCount = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, _manifest, new[] { (name, value) }, isInteraction);
-                    if (refreshCount > 0)
-                    {
-                        _manifest.BuiltAt = DateTime.UtcNow;
-                        _manifest.IsInteraction = isInteraction;
-                        return _manifest;
-                    }
-                }
-                finally { _lock.Release(); }
-            }
-
-            var result = await RebuildAsync();
-            result.IsInteraction = isInteraction;
-            return result;
-        }
+        private static ReportManifest CloneManifest(ReportManifest manifest) =>
+            JsonSerializer.Deserialize<ReportManifest>(JsonSerializer.Serialize(manifest))
+            ?? throw new InvalidOperationException("Unable to stage the report manifest.");
 
         public async Task<(string Message, bool Refresh)> RunScriptAsync(string scriptPath, Dictionary<string, string> parameters)
         {

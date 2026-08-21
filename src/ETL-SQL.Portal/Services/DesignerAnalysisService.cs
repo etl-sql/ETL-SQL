@@ -262,6 +262,10 @@ public sealed class DesignerAnalysisService
         {
             options[$"interaction:{inter.Key.ToUpper()}"] = inter.Value;
         }
+        if (v.Cascade != null)
+        {
+            options["cascade"] = v.Cascade.ToSql();
+        }
 
         return new DesignerVisualDto(
             $"v_{v.Name}_{idx}",

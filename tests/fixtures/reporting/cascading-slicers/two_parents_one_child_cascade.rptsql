@@ -1,0 +1,56 @@
+-- Cascading Slicer Fixture: Two Parents Feeding One Child
+-- Scenario: Region (@region) AND FiscalYear (@year) together determine eligible Product Categories (@category)
+
+SET REPORT TITLE = 'Cascading Slicers: Two Parents to One Child Cascade';
+
+DECLARE @region VARCHAR(50) = 'North America';
+DECLARE @year INT = 2026;
+DECLARE @category VARCHAR(50) = 'Hardware';
+
+SELECT 'North America' AS Region, 2025 AS FiscalYear, 'Hardware' AS Category, 120 AS SKUCount INTO #catalog_dim
+UNION ALL SELECT 'North America', 2026, 'Hardware', 150
+UNION ALL SELECT 'North America', 2026, 'Cloud Services', 80
+UNION ALL SELECT 'EMEA', 2026, 'Hardware', 90
+UNION ALL SELECT 'EMEA', 2026, 'Security', 40;
+
+-- Parent 1: Region
+CREATE VISUAL RegionSlicer AS SLICER (
+    TITLE = 'Select Region',
+    SOURCE = (SELECT DISTINCT Region FROM #catalog_dim),
+    MAPPINGS (CATEGORY = Region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, Region))
+);
+
+-- Parent 2: Fiscal Year
+CREATE VISUAL YearSlicer AS SLICER (
+    TITLE = 'Select Year',
+    SOURCE = (SELECT DISTINCT FiscalYear FROM #catalog_dim),
+    MAPPINGS (CATEGORY = FiscalYear),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@year, FiscalYear))
+);
+
+-- Child Slicer: Category (Jointly dependent on @region and @year)
+CREATE VISUAL CategorySlicer AS SLICER (
+    TITLE = 'Select Category',
+    SOURCE = (SELECT Category FROM #catalog_dim WHERE Region = @region AND FiscalYear = @year),
+    MAPPINGS (CATEGORY = Category),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@category, Category))
+);
+
+CREATE VISUAL SkuCountCard AS CARD (
+    TITLE = 'Active SKUs in Catalog',
+    SOURCE = (SELECT SKUCount FROM #catalog_dim WHERE Region = @region AND FiscalYear = @year AND Category = @category),
+    MAPPINGS (VALUE = SKUCount)
+);
+
+CREATE PAGE CatalogPage AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B C / D D D',
+        MAP (
+            'A' = RegionSlicer,
+            'B' = YearSlicer,
+            'C' = CategorySlicer,
+            'D' = SkuCountCard
+        )
+    )
+);

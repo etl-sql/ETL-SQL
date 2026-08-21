@@ -13,7 +13,7 @@ public class SnippetLibraryTests
     public void Load_ReturnsAllSnippets()
     {
         var snippets = SnippetLibrary.Instance.GetAll();
-        Assert.Equal(63, snippets.Count);
+        Assert.Equal(64, snippets.Count);
     }
 
     [Fact]
@@ -79,6 +79,7 @@ public class SnippetLibraryTests
     [InlineData("$tag_table")]
     [InlineData("$tag_column")]
     [InlineData("$insert_tag")]
+    [InlineData("$cascade")]
     public void Load_ExpectedTriggerExists(string trigger)
     {
         var snippets = SnippetLibrary.Instance.GetAll();
@@ -137,7 +138,7 @@ public class SnippetLibraryTests
     public void GetByPrefix_JustDollar_ReturnsAll()
     {
         var matches = SnippetLibrary.Instance.GetByPrefix("$").ToList();
-        Assert.Equal(63, matches.Count);
+        Assert.Equal(64, matches.Count);
     }
 
     [Fact]
@@ -216,7 +217,7 @@ public class SnippetLibraryTests
     public void UserSnippets_MissingDirectory_LoadsBuiltInsOnly()
     {
         var lib = new SnippetLibrary(@"C:\nonexistent\path\that\does\not\exist");
-        Assert.Equal(63, lib.GetAll().Count);
+        Assert.Equal(64, lib.GetAll().Count);
     }
 
     [Fact]

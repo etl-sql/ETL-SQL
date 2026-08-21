@@ -1,0 +1,48 @@
+-- Cascading Slicer Fixture: Multi-Select Parent Values
+-- Scenario: Multi-select parent (@regions) filtering child territory slicer (@territory)
+
+SET REPORT TITLE = 'Cascading Slicers: Multi-Select Parent Filter';
+
+DECLARE @regions VARCHAR(200) = 'North,East';
+DECLARE @territory VARCHAR(50) = 'Boston';
+
+SELECT 'North' AS Region, 'Boston' AS Territory, 1200 AS Accounts INTO #territory_dim
+UNION ALL SELECT 'North', 'Manchester', 450
+UNION ALL SELECT 'East', 'New York City', 3400
+UNION ALL SELECT 'East', 'Philadelphia', 1800
+UNION ALL SELECT 'West', 'Seattle', 1600
+UNION ALL SELECT 'West', 'San Francisco', 2900;
+
+CREATE VISUAL RegionMultiSelect AS MULTISELECT (
+    TITLE = 'Select Regions',
+    SOURCE = (SELECT DISTINCT Region FROM #territory_dim),
+    MAPPINGS (CATEGORY = Region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@regions, VALUE))
+);
+
+CREATE VISUAL TerritorySlicer AS SLICER (
+    TITLE = 'Select Territory',
+    SOURCE = (
+        SELECT Territory FROM #territory_dim
+        WHERE CHARINDEX(Region, @regions) > 0 OR @regions IS NULL
+    ),
+    MAPPINGS (CATEGORY = Territory),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@territory, Territory))
+);
+
+CREATE VISUAL AccountCountCard AS CARD (
+    TITLE = 'Territory Account Count',
+    SOURCE = (SELECT Accounts FROM #territory_dim WHERE Territory = @territory),
+    MAPPINGS (VALUE = Accounts)
+);
+
+CREATE PAGE MultiSelectPage AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B / C C',
+        MAP (
+            'A' = RegionMultiSelect,
+            'B' = TerritorySlicer,
+            'C' = AccountCountCard
+        )
+    )
+);

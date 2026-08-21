@@ -279,6 +279,7 @@ public static class AstSerializer
         WaitForStatement s => $"WAITFOR {s.Type.ToString().ToUpper()} {s.Expression.ToSql()};",
         ExplainStatement s => (s.IsAnalyze ? "EXPLAIN ANALYZE " : "EXPLAIN ") + s.Query.ToSql() + (s.IntoTable != null ? " INTO " + s.IntoTable.ToSql() : ""),
         CreateVisualStatement s => FormatCreateVisual(s),
+        CascadeDefinition s => FormatCascade(s),
         CreatePageStatement s => FormatCreatePage(s),
         CreateDatasetStatement s => FormatCreateDataset(s),
         CreateContainerStatement s => FormatCreateContainer(s),
@@ -1390,6 +1391,8 @@ public static class AstSerializer
             sb.AppendLine($"    {axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
         if (s.Actions.Count > 0)
             sb.AppendLine($"    ACTIONS ( {FormatActions(s.Actions)} ),");
+        if (s.Cascade != null)
+            sb.AppendLine($"    {FormatCascade(s.Cascade)},");
         if (s.DefaultValue != null && s.VisualType != VisualType.Text)
             sb.AppendLine($"    DEFAULT = {s.DefaultValue.ToSql()},");
         if (s.PrintLayout != null)
@@ -1397,6 +1400,18 @@ public static class AstSerializer
 
         var result = sb.ToString().TrimEnd().TrimEnd(',');
         return result + "\n);";
+    }
+
+    private static string FormatCascade(CascadeDefinition cascade)
+    {
+        var parts = new List<string> { $"MODE = {cascade.Mode.ToString().ToUpperInvariant()}" };
+        if (cascade.Parents.Count > 0)
+            parts.Add("PARENTS (" + string.Join(", ", cascade.Parents.Select(parent => $"{parent.ParameterName} = {parent.ColumnName}")) + ")");
+        parts.Add($"INVALID = {cascade.InvalidSelection.ToString().ToUpperInvariant()}");
+        parts.Add($"NULL = {cascade.NullSelection.ToString().ToUpperInvariant()}");
+        parts.Add($"ALL_VALUE = {Quote(cascade.AllValue)}");
+        parts.Add($"MULTISELECT = {cascade.MultiSelect.ToString().ToUpperInvariant()}");
+        return "CASCADE ( " + string.Join(", ", parts) + " )";
     }
 
     private static string FormatCreatePage(CreatePageStatement s)

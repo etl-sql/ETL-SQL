@@ -1,0 +1,56 @@
+-- Cascading Slicer Fixture: Three-Level Hierarchy Cascade
+-- Scenario: Division (@division) -> Department (@department) -> Team (@team)
+
+SET REPORT TITLE = 'Cascading Slicers: Three-Level Organizational Hierarchy';
+
+DECLARE @division VARCHAR(50) = 'Engineering';
+DECLARE @department VARCHAR(50) = 'Core Platform';
+DECLARE @team VARCHAR(50) = 'Storage Engine';
+
+SELECT 'Engineering' AS Division, 'Core Platform' AS Department, 'Storage Engine' AS Team, 12 AS Headcount INTO #org_dim
+UNION ALL SELECT 'Engineering', 'Core Platform', 'Query Optimizer', 8
+UNION ALL SELECT 'Engineering', 'Security', 'Identity & IAM', 6
+UNION ALL SELECT 'Sales', 'Enterprise', 'Strategic Accounts', 15
+UNION ALL SELECT 'Sales', 'SMB', 'Inbound Velocity', 22;
+
+-- Level 1: Division
+CREATE VISUAL DivisionSlicer AS SLICER (
+    TITLE = '1. Division',
+    SOURCE = (SELECT DISTINCT Division FROM #org_dim),
+    MAPPINGS (CATEGORY = Division),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@division, Division))
+);
+
+-- Level 2: Department (Dependent on @division)
+CREATE VISUAL DepartmentSlicer AS SLICER (
+    TITLE = '2. Department',
+    SOURCE = (SELECT DISTINCT Department FROM #org_dim WHERE Division = @division),
+    MAPPINGS (CATEGORY = Department),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@department, Department))
+);
+
+-- Level 3: Team (Dependent on @department and @division)
+CREATE VISUAL TeamSlicer AS SLICER (
+    TITLE = '3. Team',
+    SOURCE = (SELECT DISTINCT Team FROM #org_dim WHERE Division = @division AND Department = @department),
+    MAPPINGS (CATEGORY = Team),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@team, Team))
+);
+
+CREATE VISUAL HeadcountCard AS CARD (
+    TITLE = 'Selected Team Headcount',
+    SOURCE = (SELECT Headcount FROM #org_dim WHERE Division = @division AND Department = @department AND Team = @team),
+    MAPPINGS (VALUE = Headcount)
+);
+
+CREATE PAGE OrgHierarchyPage AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B C / D D D',
+        MAP (
+            'A' = DivisionSlicer,
+            'B' = DepartmentSlicer,
+            'C' = TeamSlicer,
+            'D' = HeadcountCard
+        )
+    )
+);

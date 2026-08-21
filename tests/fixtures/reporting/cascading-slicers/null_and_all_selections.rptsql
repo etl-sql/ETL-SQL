@@ -1,0 +1,55 @@
+-- Cascading Slicer Fixture: Null and 'All' Option Selections
+-- Scenario: Support wildcard/ALL selection ('__ALL__' or NULL) falling back to unconstrained query
+
+SET REPORT TITLE = 'Cascading Slicers: Null and All Option Selections';
+
+DECLARE @selected_channel VARCHAR(50) = '__ALL__';
+DECLARE @selected_campaign VARCHAR(50) = '__ALL__';
+
+SELECT 'Digital' AS Channel, 'Search_SEM' AS Campaign, 15000 AS Conversions INTO #marketing_dim
+UNION ALL SELECT 'Digital', 'Social_Paid', 9000
+UNION ALL SELECT 'Direct', 'Direct_Mail', 4000
+UNION ALL SELECT 'Partner', 'Affiliate_Network', 7500;
+
+CREATE VISUAL ChannelSlicer AS SLICER (
+    TITLE = 'Marketing Channel',
+    SOURCE = (
+        SELECT '__ALL__' AS Channel
+        UNION ALL
+        SELECT DISTINCT Channel FROM #marketing_dim
+    ),
+    MAPPINGS (CATEGORY = Channel),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@selected_channel, Channel))
+);
+
+CREATE VISUAL CampaignSlicer AS SLICER (
+    TITLE = 'Campaign Target',
+    SOURCE = (
+        SELECT '__ALL__' AS Campaign
+        UNION ALL
+        SELECT Campaign FROM #marketing_dim
+        WHERE @selected_channel = '__ALL__' OR @selected_channel IS NULL OR Channel = @selected_channel
+    ),
+    MAPPINGS (CATEGORY = Campaign),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@selected_campaign, Campaign))
+);
+
+CREATE VISUAL ConversionsTable AS TABLE (
+    TITLE = 'Filtered Conversions Report',
+    SOURCE = (
+        SELECT Channel, Campaign, Conversions FROM #marketing_dim
+        WHERE (@selected_channel = '__ALL__' OR @selected_channel IS NULL OR Channel = @selected_channel)
+          AND (@selected_campaign = '__ALL__' OR @selected_campaign IS NULL OR Campaign = @selected_campaign)
+    )
+);
+
+CREATE PAGE MarketingPage AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B / C C',
+        MAP (
+            'A' = ChannelSlicer,
+            'B' = CampaignSlicer,
+            'C' = ConversionsTable
+        )
+    )
+);

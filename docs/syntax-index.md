@@ -974,6 +974,7 @@ Specific to `.rptsql` files and the reporting engine.
 | `PRINT_LAYOUT` block | Physical page dimensions, margins, and page breaks | [PRINT_LAYOUT.md](reference/visuals-reporting/report/print-layout.md) |
 | `PAGINATED` (Page Mode) | Print-ready multi-page report layout mode | [PAGE.md](reference/visuals-reporting/report/page.md) |
 | `ROW_DETAIL` | Expandable master/detail table rows | [VISUAL.md](reference/visuals-reporting/report/visual.md) |
+| `CASCADE` | Atomic dependent option sets for slicers and multiselects | [CASCADE.md](reference/visuals-reporting/report/cascade.md) |
 
 Lifecycle: every report object above supports `CREATE OR REPLACE <kind> <name>` and
 `DROP <kind> [IF EXISTS] <name>`. `ALTER <kind> <name> (...)` patches named clauses and is supported
@@ -1988,6 +1989,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | Token | Family | Notes |
 | :--- | :--- | :--- |
 | `ALGORITHM` | General | Canonical language token |
+| `ALL_VALUE` | General | Canonical language token |
 | `ANALYZE` | General | Canonical language token |
 | `BACK` | General | Canonical language token |
 | `BATCHSIZE` | General | Canonical language token |
@@ -1995,6 +1997,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `BOTH` | General | Canonical language token |
 | `BULK` | General | Canonical language token |
 | `BUTTON` | General | Canonical language token |
+| `CASCADE` | General | Canonical language token |
 | `CHAR_LENGTH` | General | Canonical language token |
 | `CHARACTER_LENGTH` | General | Canonical language token |
 | `CLOSE` | General | Canonical language token |
@@ -2032,6 +2035,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `IN` | General | Canonical language token |
 | `INPUT` | General | Canonical language token |
 | `INTEGRITY` | General | Canonical language token |
+| `INVALID` | General | Canonical language token |
 | `KEEP_TOGETHER` | General | Canonical language token |
 | `LEADING` | General | Canonical language token |
 | `LIMIT_TYPE` | General | Canonical language token |
@@ -2048,6 +2052,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `MAX` | General | Canonical language token |
 | `MAXERRORS` | General | Canonical language token |
 | `MIN` | General | Canonical language token |
+| `MODE` | General | Canonical language token |
+| `MULTISELECT` | General | Canonical language token |
 | `NONE` | General | Canonical language token |
 | `NULL_MISSING_COLUMNS` | General | Canonical language token |
 | `NULL_PERCENT` | General | Canonical language token |
@@ -2064,6 +2070,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `PAGE_LAYOUT` | General | Canonical language token |
 | `PAGE_SIZE` | General | Canonical language token |
 | `PARALLEL` | General | Canonical language token |
+| `PARENTS` | General | Canonical language token |
 | `PERSIST` | General | Canonical language token |
 | `PLACING` | General | Canonical language token |
 | `POLL_INTERVAL_MS` | General | Canonical language token |

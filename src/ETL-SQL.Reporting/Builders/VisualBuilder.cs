@@ -57,7 +57,8 @@ namespace ETL_SQL.Reporting.Builders
                         ParentColumn = b.ParentColumn,
                         ChildParameter = b.ChildParameter
                     }).ToList()
-                }
+                },
+                Cascade = BuildCascadeManifest(vStmt)
             };
 
             if (title != null) vm.Options["title"] = title;
@@ -230,6 +231,17 @@ namespace ETL_SQL.Reporting.Builders
                 {
                     await FetchDataAsync(vStmt, vm, interactionValues);
 
+                    if (vm.Cascade is { Mode: "LOCAL" } cascade)
+                    {
+                        cascade.SourceColumns = vm.Columns.ToList();
+                        cascade.SourceRows = vm.Rows.Select(row => row.ToList()).ToList();
+                        var parameters = ctx.VarContext.Variables.ToDictionary(
+                            pair => CascadingFilterGraphCompiler.Normalize(pair.Key),
+                            pair => Convert.ToString(pair.Value, CultureInfo.InvariantCulture) ?? string.Empty,
+                            StringComparer.OrdinalIgnoreCase);
+                        vm.Rows = CascadingFilterState.FilterRows(cascade, parameters);
+                    }
+
                     if (drillState != null && drillState.Path.Count < drillState.Hierarchy.Length)
                     {
                         var currentLevel = drillState.Hierarchy[drillState.Path.Count];
@@ -267,6 +279,25 @@ namespace ETL_SQL.Reporting.Builders
             }
 
             return vm;
+        }
+
+        private static CascadeVisualManifest? BuildCascadeManifest(CreateVisualStatement visual)
+        {
+            if (visual.Cascade == null) return null;
+            var produced = CascadingFilterGraphCompiler.ProducedParameter(visual) ?? string.Empty;
+            return new CascadeVisualManifest
+            {
+                Mode = visual.Cascade.Mode.ToString().ToUpperInvariant(),
+                ProducedParameter = produced,
+                ValueColumn = visual.Mappings.FirstOrDefault(mapping =>
+                    mapping.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase))?.Column,
+                Parents = visual.Cascade.Parents.Select(parent => new CascadeParentManifest(
+                    CascadingFilterGraphCompiler.Normalize(parent.ParameterName), parent.ColumnName)).ToList(),
+                Invalid = visual.Cascade.InvalidSelection.ToString().ToUpperInvariant(),
+                Null = visual.Cascade.NullSelection.ToString().ToUpperInvariant(),
+                AllValue = visual.Cascade.AllValue,
+                MultiSelect = visual.Cascade.MultiSelect.ToString().ToUpperInvariant()
+            };
         }
 
         private void ResolveActionValues(VisualManifest vm)

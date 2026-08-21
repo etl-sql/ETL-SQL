@@ -1,0 +1,53 @@
+-- Cascading Slicer Fixture: One Parent and One Child
+-- Scenario: Selecting Country (@country) filters the eligible options for State (@state)
+
+SET REPORT TITLE = 'Cascading Slicers: Single Parent-Child Cascade';
+
+DECLARE @country VARCHAR(50) = 'USA';
+DECLARE @state VARCHAR(50) = 'CA';
+
+-- Source Data Tables
+SELECT 'USA' AS Country, 'CA' AS StateCode, 'California' AS StateName INTO #geo_dim
+UNION ALL SELECT 'USA', 'NY', 'New York'
+UNION ALL SELECT 'USA', 'TX', 'Texas'
+UNION ALL SELECT 'Canada', 'ON', 'Ontario'
+UNION ALL SELECT 'Canada', 'BC', 'British Columbia';
+
+SELECT 'USA' AS Country, 'CA' AS StateCode, 'Store 101' AS StoreName, 54000 AS Revenue INTO #sales_data
+UNION ALL SELECT 'USA', 'CA', 'Store 102', 62000
+UNION ALL SELECT 'USA', 'NY', 'Store 201', 71000
+UNION ALL SELECT 'Canada', 'ON', 'Store 301', 48000;
+
+-- Parent Slicer: Country
+CREATE VISUAL CountrySlicer AS SLICER (
+    TITLE = 'Select Country',
+    SOURCE = (SELECT DISTINCT Country FROM #geo_dim),
+    MAPPINGS (CATEGORY = Country),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@country, Country))
+);
+
+-- Child Slicer: State (Dependent on @country)
+CREATE VISUAL StateSlicer AS SLICER (
+    TITLE = 'Select State/Province',
+    SOURCE = (SELECT StateCode, StateName FROM #geo_dim WHERE Country = @country),
+    MAPPINGS (CATEGORY = StateName, VALUE = StateCode),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@state, StateCode))
+);
+
+-- Dependent Metric Bar Chart
+CREATE VISUAL RegionalSalesChart AS BAR (
+    TITLE = 'Store Revenue Performance',
+    SOURCE = (SELECT StoreName, Revenue FROM #sales_data WHERE Country = @country AND StateCode = @state),
+    MAPPINGS (X = StoreName, Y = Revenue)
+);
+
+CREATE PAGE CascadePage AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B / C C',
+        MAP (
+            'A' = CountrySlicer,
+            'B' = StateSlicer,
+            'C' = RegionalSalesChart
+        )
+    )
+);

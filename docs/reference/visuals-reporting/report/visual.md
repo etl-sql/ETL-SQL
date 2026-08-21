@@ -20,6 +20,14 @@ CREATE VISUAL <name> AS <TYPE> (
     TARGET = <ChildVisualName>,
     BINDINGS (@childParam = parentCol, ...),
     [LIMIT = <number>]
+  ),]
+  [CASCADE (
+    MODE = LOCAL | LIVE,
+    [PARENTS (@parent = source_column, ...),]
+    [INVALID = CLEAR | FIRST | ERROR,]
+    [NULL = ALL | MATCH,]
+    [ALL_VALUE = '*',]
+    [MULTISELECT = ANY | ALL]
   )]
 );
 ```
@@ -61,6 +69,8 @@ CREATE VISUAL <name> AS <TYPE> (
 - **`CHECKBOX`**: Boolean toggle.
 - **`TEXTBOX`**: Single-line text input.
 - **`NUMBERBOX`**: Numeric input with validation.
+
+Use `CASCADE` on `SLICER` and `MULTISELECT` controls whose option set depends on other controls. `LOCAL` filters a retained option vector and requires explicit `PARENTS`; `LIVE` re-runs an inline source query and infers its parents from referenced parameters. See the [CASCADE reference](cascade.md).
 
 ## Print Layout & Page Breaks (`PRINT_LAYOUT`)
 
@@ -111,6 +121,7 @@ DROP VISUAL IF EXISTS RevenueChart;
 `ALTER VISUAL` patches `SOURCE`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `STYLE`, `TITLE`, `SUBTITLE`, and `TOOLTIP`. The visual type itself is part of the definition — changing `BAR` to `LINE` needs `CREATE OR REPLACE VISUAL`.
 
 References:
+- [CASCADE Reference](cascade.md)
 - [PRINT_LAYOUT Reference](print-layout.md)
 - [PAGE Reference](page.md)
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

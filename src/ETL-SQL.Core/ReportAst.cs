@@ -89,6 +89,24 @@ public enum VisualFetchMode
     OnRun
 }
 
+public enum CascadeMode { Local, Live }
+public enum CascadeInvalidSelectionPolicy { Clear, First, Error }
+public enum CascadeNullSelectionPolicy { All, Match }
+public enum CascadeMultiSelectPolicy { Any, All }
+
+public record CascadeParentBinding(string ParameterName, string ColumnName) : AstNode;
+
+public record CascadeDefinition : AstNode
+{
+    public required CascadeMode Mode { get; init; }
+    public List<CascadeParentBinding> Parents { get; init; } = new();
+    public CascadeInvalidSelectionPolicy InvalidSelection { get; init; } = CascadeInvalidSelectionPolicy.Clear;
+    public CascadeNullSelectionPolicy NullSelection { get; init; } = CascadeNullSelectionPolicy.All;
+    public string AllValue { get; init; } = "*";
+    public CascadeMultiSelectPolicy MultiSelect { get; init; } = CascadeMultiSelectPolicy.Any;
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
 public enum DatasetEncryptionMode
 {
     None,
@@ -332,6 +350,7 @@ public record CreateVisualStatement : Statement
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     public PrintLayoutOverride? PrintLayout { get; init; }
     public RowDetailDefinition? RowDetail { get; init; }
+    public CascadeDefinition? Cascade { get; init; }
     public override string ToSql() => AstSerializer.Format(this);
 }
 

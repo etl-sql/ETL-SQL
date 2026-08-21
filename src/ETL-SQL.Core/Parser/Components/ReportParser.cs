@@ -46,6 +46,7 @@ public class ReportParser : ParserComponent
         var fetchMode = VisualFetchMode.Auto;
         PrintLayoutOverride? printLayout = null;
         RowDetailDefinition? rowDetail = null;
+        CascadeDefinition? cascade = null;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -170,6 +171,11 @@ public class ReportParser : ParserComponent
                 Advance();
                 rowDetail = ParseRowDetailDefinition();
             }
+            else if (IsCurrentValue("CASCADE"))
+            {
+                Advance();
+                cascade = ParseCascadeDefinition();
+            }
             else
             {
                 throw new SyntaxException(
@@ -234,8 +240,106 @@ public class ReportParser : ParserComponent
             Mode = mode,
             PrintLayout = printLayout,
             RowDetail = rowDetail,
+            Cascade = cascade,
             Line = startToken.Line,
             Column = startToken.Column
+        };
+    }
+
+    private CascadeDefinition ParseCascadeDefinition()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after CASCADE");
+        CascadeMode? mode = null;
+        var parents = new List<CascadeParentBinding>();
+        var invalid = CascadeInvalidSelectionPolicy.Clear;
+        var nullSelection = CascadeNullSelectionPolicy.All;
+        var allValue = "*";
+        var multiSelect = CascadeMultiSelectPolicy.Any;
+
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            if (ReportCheck(TokenType.COMMA) || ReportCheck(TokenType.RPAREN) || ReportAtEnd())
+                throw new SyntaxException("Expected CASCADE option.", _parser.Current.Line, _parser.Current.Column);
+            var option = Advance().Value.ToUpperInvariant();
+            if (option == "PARENTS")
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after CASCADE PARENTS");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var parameter = ConsumeIdentifierOrVariable("Expected parent parameter").Value;
+                    if (!parameter.StartsWith('@')) parameter = "@" + parameter;
+                    Consume(TokenType.EQUALS, "Expected '=' between parent parameter and source column");
+                    var column = ConsumeIdentifier("Expected source column for parent parameter").Value;
+                    parents.Add(new CascadeParentBinding(parameter, column));
+                    if (!Match(TokenType.COMMA)) break;
+                }
+                Consume(TokenType.RPAREN, "Expected ')' after CASCADE PARENTS");
+            }
+            else
+            {
+                Consume(TokenType.EQUALS, $"Expected '=' after CASCADE option '{option}'");
+                if (ReportCheck(TokenType.COMMA) || ReportCheck(TokenType.RPAREN) || ReportAtEnd())
+                    throw new SyntaxException($"Expected value for CASCADE option '{option}'.", _parser.Current.Line, _parser.Current.Column);
+                var value = Advance().Value;
+                switch (option)
+                {
+                    case "MODE":
+                        mode = value.ToUpperInvariant() switch
+                        {
+                            "LOCAL" => CascadeMode.Local,
+                            "LIVE" => CascadeMode.Live,
+                            _ => throw new SyntaxException("CASCADE MODE must be LOCAL or LIVE.", _parser.Current.Line, _parser.Current.Column)
+                        };
+                        break;
+                    case "INVALID":
+                        invalid = value.ToUpperInvariant() switch
+                        {
+                            "CLEAR" => CascadeInvalidSelectionPolicy.Clear,
+                            "FIRST" => CascadeInvalidSelectionPolicy.First,
+                            "ERROR" => CascadeInvalidSelectionPolicy.Error,
+                            _ => throw new SyntaxException("CASCADE INVALID must be CLEAR, FIRST, or ERROR.", _parser.Current.Line, _parser.Current.Column)
+                        };
+                        break;
+                    case "NULL":
+                        nullSelection = value.ToUpperInvariant() switch
+                        {
+                            "ALL" => CascadeNullSelectionPolicy.All,
+                            "MATCH" => CascadeNullSelectionPolicy.Match,
+                            _ => throw new SyntaxException("CASCADE NULL must be ALL or MATCH.", _parser.Current.Line, _parser.Current.Column)
+                        };
+                        break;
+                    case "ALL_VALUE": allValue = value; break;
+                    case "MULTISELECT":
+                        multiSelect = value.ToUpperInvariant() switch
+                        {
+                            "ANY" => CascadeMultiSelectPolicy.Any,
+                            "ALL" => CascadeMultiSelectPolicy.All,
+                            _ => throw new SyntaxException("CASCADE MULTISELECT must be ANY or ALL.", _parser.Current.Line, _parser.Current.Column)
+                        };
+                        break;
+                    default:
+                        throw new SyntaxException($"Unknown CASCADE option '{option}'.", _parser.Current.Line, _parser.Current.Column);
+                }
+            }
+            Match(TokenType.COMMA);
+        }
+
+        Consume(TokenType.RPAREN, "Expected ')' to close CASCADE");
+        if (!mode.HasValue)
+            throw new SyntaxException("CASCADE requires MODE = LOCAL or MODE = LIVE.", _parser.Current.Line, _parser.Current.Column);
+        if (mode == CascadeMode.Local && parents.Count == 0)
+            throw new SyntaxException("CASCADE MODE = LOCAL requires PARENTS mappings.", _parser.Current.Line, _parser.Current.Column);
+        if (mode == CascadeMode.Live && parents.Count > 0)
+            throw new SyntaxException("CASCADE PARENTS is only valid with MODE = LOCAL.", _parser.Current.Line, _parser.Current.Column);
+
+        return new CascadeDefinition
+        {
+            Mode = mode.Value,
+            Parents = parents,
+            InvalidSelection = invalid,
+            NullSelection = nullSelection,
+            AllValue = allValue,
+            MultiSelect = multiSelect
         };
     }
 
