@@ -33,6 +33,7 @@ CREATE VISUAL RecentOrders AS TABLE (
 - **`column_name IMAGE [WIDTH n]`**: Render cell value as an `<img>` tag (URL column).
 - **`column_name HYPERLINK [LABEL 'text']`**: Render cell value as a clickable link.
 - **`SPARKLINE(col1, col2, ...) [LINE|BAR|AREA] [AS 'alias']`**: Mini trend chart across columns.
+- **`column_name PROGRESS_BAR (MIN = n, MAX = n, COLOR = '#RRGGBB') [AS 'alias']`** — Native progress indicator using the declared numeric range.
 
 *Note: Mappings are combinable, e.g.:*  
 `column FORMAT 'C2' ALIGN 'right' DATA_BAR COLOR '#4472C4' AS 'Revenue'`
@@ -60,6 +61,19 @@ FORMATTING (
   WHEN condition THEN 'bg-color' [FONT_COLOR 'text-color'],
   ...
 )
+```
+
+## Native Micro-Chart Example
+
+```sql
+CREATE VISUAL GoalStatus AS TABLE (
+  SOURCE = #goals,
+  MAPPINGS (
+    team,
+    SPARKLINE(jan, feb, mar) AREA AS 'Trend',
+    attainment PROGRESS_BAR (MIN = 0, MAX = 1, COLOR = '#16A34A') AS 'Attainment'
+  )
+);
 ```
 
 ## References

@@ -2512,14 +2512,27 @@
                         a.textContent = meta.hyperlinkLabel || href;
                         td.appendChild(a);
                     } else if (meta.cellRenderer === 'sparkline') {
-                        // SPARKLINE: inline SVG mini-chart from JSON array value
-                        const svg = rawVal ? buildSparklineSvg(rawVal, meta.sparklineType || 'line', null) : '';
-                        if (svg) {
-                            td.innerHTML = svg;
+                        // Micro-charts consume the server-resolved PlotPlan SVG; the browser does no geometry work.
+                        const micro = findMicroChart(visual, origIdx, ci, rawVal);
+                        if (micro && micro.svg) {
+                            td.innerHTML = micro.svg;
+                            td.setAttribute('aria-label', micro.accessibleLabel || micro.plainText || 'Trend');
+                            td.setAttribute('role', 'img');
                             td.style.verticalAlign = 'middle';
                             td.style.lineHeight = '0';
                         } else {
-                            td.textContent = '';
+                            td.textContent = micro ? micro.plainText : '';
+                        }
+                    } else if (meta.cellRenderer === 'progress') {
+                        const micro = findMicroChart(visual, origIdx, ci, rawVal);
+                        if (micro && micro.svg) {
+                            td.innerHTML = micro.svg;
+                            td.setAttribute('aria-label', micro.accessibleLabel || micro.plainText || 'Progress');
+                            td.setAttribute('role', 'img');
+                            td.style.verticalAlign = 'middle';
+                            td.style.lineHeight = '0';
+                        } else {
+                            td.textContent = micro ? micro.plainText : fmtVal;
                         }
                     } else {
                         td.textContent = fmtVal;
@@ -3256,6 +3269,17 @@
             (subtitleText ? `<div class="card-subtitle">${escHtml(subtitleText)}</div>` : '') +
             `<div class="card-number">${escHtml(String(displayValue))}</div>` +
             goalLineHtml + goalPctHtml + deltaHtml + progressHtml;
+        const sparkline = Array.isArray(visual.microCharts)
+            ? visual.microCharts.find(micro => micro.role === 'card.sparkline')
+            : null;
+        if (sparkline && sparkline.svg) {
+            const micro = document.createElement('div');
+            micro.className = 'card-sparkline';
+            micro.setAttribute('role', 'img');
+            micro.setAttribute('aria-label', sparkline.accessibleLabel || sparkline.plainText || 'Trend');
+            micro.innerHTML = sparkline.svg;
+            cardEl.appendChild(micro);
+        }
         container.appendChild(cardEl);
     }
 
@@ -4831,35 +4855,12 @@
         return `rgb(${r},${g},${b})`;
     }
 
-    function buildSparklineSvg(valuesJson, type, color) {
-        let vals;
-        try { vals = JSON.parse(valuesJson); } catch { return ''; }
-        vals = vals.map(v => (v === null ? null : parseFloat(v))).filter(v => v !== null && !isNaN(v));
-        if (vals.length < 2) return '';
-        const W = 60, H = 20, PAD = 2;
-        const mn = Math.min(...vals), mx = Math.max(...vals);
-        const range = mx - mn || 1;
-        const c = color || '#4472C4';
-        const pts = vals.map((v, i) => {
-            const x = PAD + (i / (vals.length - 1)) * (W - PAD * 2);
-            const y = H - PAD - ((v - mn) / range) * (H - PAD * 2);
-            return [x.toFixed(1), y.toFixed(1)];
-        });
-        if (type === 'bar') {
-            const bw = Math.max(2, (W - PAD * 2) / vals.length - 1);
-            const bars = pts.map(([x, y]) =>
-                `<rect x="${(parseFloat(x) - bw / 2).toFixed(1)}" y="${y}" width="${bw.toFixed(1)}" height="${(H - PAD - parseFloat(y)).toFixed(1)}" fill="${c}"/>`
-            ).join('');
-            return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${bars}</svg>`;
-        }
-        const ptStr = pts.map(p => p.join(',')).join(' ');
-        if (type === 'area') {
-            const [x0] = pts[0], [xn] = pts[pts.length - 1];
-            const area = `<polygon points="${ptStr} ${xn},${H - PAD} ${x0},${H - PAD}" fill="${c}" fill-opacity="0.2" stroke="none"/>`;
-            const line = `<polyline points="${ptStr}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>`;
-            return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${area}${line}</svg>`;
-        }
-        return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><polyline points="${ptStr}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+    function findMicroChart(visual, rowIndex, columnIndex, sourceValue) {
+        if (!Array.isArray(visual.microCharts)) return null;
+        return visual.microCharts.find(micro => micro.role === 'table.cell' &&
+            micro.columnIndex === columnIndex && micro.rowIndex === rowIndex) ||
+            visual.microCharts.find(micro => micro.role === 'table.cell' &&
+                micro.columnIndex === columnIndex && String(micro.sourceValue ?? '') === String(sourceValue ?? '')) || null;
     }
 
     function formatValue(value, format) {

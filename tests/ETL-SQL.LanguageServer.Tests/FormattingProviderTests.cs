@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Formatting;
@@ -88,6 +89,40 @@ namespace ETL_SQL.LanguageServer.Tests
             {
                 Directory.Delete(tempDir, true);
             }
+        }
+
+        [Fact]
+        public async Task Formatter_PreservesNativeMicroChartMappings()
+        {
+            var store = new DocumentStateStore();
+            var config = new Mock<ILanguageServerConfiguration>();
+            config.Setup(item => item.GetSection(It.IsAny<string>()))
+                .Returns(new ConfigurationBuilder().AddInMemoryCollection().Build().GetSection("etlsql"));
+            var handler = new FormattingProvider(Mock.Of<ILogger<FormattingProvider>>(), store, config.Object);
+            var uri = DocumentUri.From("untitled:microcharts.rptsql");
+            const string script = """
+                CREATE VISUAL Kpi AS CARD (SOURCE = #kpi, MAPPINGS (VALUE = total, SPARKLINE = #daily (X = day, Y = amount, TYPE = AREA)));
+                CREATE VISUAL Goals AS TABLE (SOURCE = #goals, MAPPINGS (team, attainment PROGRESS_BAR (MIN = 0, MAX = 1, COLOR = '#16A34A') AS 'Goal'));
+                """;
+            store.SetState(uri, script, null!, null!);
+
+            var result = await handler.Handle(new DocumentFormattingParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Options = new FormattingOptions()
+            }, CancellationToken.None);
+            var formatted = Assert.Single(result).NewText;
+
+            var ast = new ETL_SQL.Core.Parser.Parser(new ETL_SQL.Core.Parser.Lexer(formatted).Tokenize(), formatted).Parse();
+            var visuals = ast.Statements.OfType<ETL_SQL.Core.CreateVisualStatement>().ToList();
+            var cardMicro = Assert.Single(visuals[0].Mappings, mapping => mapping.SparklineSource is not null);
+            Assert.Equal("#daily", cardMicro.SparklineSource);
+            Assert.Equal("day", cardMicro.SparklineXColumn);
+            Assert.Equal("amount", cardMicro.SparklineYColumn);
+            var progress = Assert.Single(visuals[1].Mappings, mapping => mapping.ProgressBar);
+            Assert.Equal(0m, progress.ProgressMinimum);
+            Assert.Equal(1m, progress.ProgressMaximum);
+            Assert.Equal("#16A34A", progress.ProgressColor);
         }
     }
 }

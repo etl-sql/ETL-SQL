@@ -590,6 +590,49 @@ CREATE NAVIGATION MainNav AS TAB (
 
 ---
 
+## Native Card and Table Micro-Charts
+
+Micro-charts use the same typed `ChartSpec`, `ChartDataSet`, and resolved `PlotPlan` contracts as the
+representative chart set. They render as native SVG in the browser and PDF/Markdown email exports,
+with semantic text in terminals and other non-graphical readers. These supported forms require no V8
+server-side rendering.
+
+```sql
+SELECT 'Revenue' AS label, 42000 AS total INTO #summary;
+SELECT 'Mon' AS day, 10000 AS amount INTO #daily;
+INSERT INTO #daily (day, amount) VALUES ('Tue', 14500), ('Wed', 12800);
+
+CREATE VISUAL RevenueCard AS CARD (
+  SOURCE = #summary,
+  MAPPINGS (
+    LABEL = label,
+    VALUE = total,
+    SPARKLINE = #daily (X = day, Y = amount, TYPE = AREA)
+  )
+);
+```
+
+For tables, a wide sparkline consumes two or more scalar source columns. A progress indicator consumes
+one numeric column. `TYPE` accepts `LINE`, `AREA`, or `BAR`; progress colors accept hexadecimal values.
+
+```sql
+CREATE VISUAL GoalStatus AS TABLE (
+  SOURCE = #goals,
+  MAPPINGS (
+    team,
+    SPARKLINE(jan, feb, mar, apr) LINE AS 'Trend',
+    attainment PROGRESS_BAR (MIN = 0, MAX = 1, COLOR = '#16A34A') AS 'Attainment'
+  )
+);
+```
+
+Null sparkline values become gaps. Progress values are clamped to the declared range for geometry.
+Invalid color strings fall back to the built-in safe palette. Array-column sparklines, normalized child
+queries, conditional color maps, bullet charts, and HTML-template micro-chart macros are not part of
+this syntax slice.
+
+---
+
 ## Best Practices & FAQ
 
 ### How do I create a "Run-to-Data" paginated report?

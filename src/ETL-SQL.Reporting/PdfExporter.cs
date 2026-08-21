@@ -292,8 +292,8 @@ namespace ETL_SQL.Reporting
 
             switch (v.VisualType.ToUpperInvariant())
             {
-                case "TABLE": RenderTable(section, v); break;
-                case "CARD": RenderCard(section, v); break;
+                case "TABLE": await RenderTableAsync(section, v, tempFiles, cancellationToken); break;
+                case "CARD": await RenderCardAsync(section, v, tempFiles, cancellationToken); break;
                 case "TEXT": RenderText(section, v); break;
                 case "IMAGE": await RenderImageAsync(section, v, tempFiles, cancellationToken); break;
 
@@ -357,7 +357,7 @@ namespace ETL_SQL.Reporting
             }
             else if (v.Rows.Count > 0)
             {
-                RenderTable(section, v);
+                await RenderTableAsync(section, v, tempFiles, cancellationToken);
             }
             else
             {
@@ -370,7 +370,7 @@ namespace ETL_SQL.Reporting
 
         internal static bool UsesNativePlotPlanRendering(VisualManifest visual) => visual.PlotPlan is not null;
 
-        private static void RenderTable(Section section, VisualManifest v)
+        private async Task RenderTableAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
         {
             if (v.Columns.Count == 0)
             {
@@ -428,7 +428,19 @@ namespace ETL_SQL.Reporting
                 dRow.Borders.Bottom.Color = _greyLight2;
                 for (int ci = 0; ci < v.Columns.Count; ci++)
                 {
-                    var text = FormatCell(ci < row.Count ? row[ci] : "");
+                    var micro = v.MicroCharts?.FirstOrDefault(item => item.Role == "table.cell" && item.RowIndex == i && item.ColumnIndex == ci);
+                    if (micro is not null)
+                    {
+                        var imagePath = await WriteMicroChartPngAsync(micro, tempFiles, cancellationToken);
+                        if (imagePath is not null)
+                        {
+                            var image = dRow.Cells[ci].AddImage(imagePath);
+                            image.Width = Unit.FromPoint(72);
+                            image.LockAspectRatio = true;
+                            continue;
+                        }
+                    }
+                    var text = micro?.PlainText ?? FormatCell(ci < row.Count ? row[ci] : "");
                     dRow.Cells[ci].AddParagraph(text).Format.Font.Size = Unit.FromPoint(9);
                 }
             }
@@ -437,7 +449,7 @@ namespace ETL_SQL.Reporting
 
         private static string FormatCell(string? raw) => ReportCellFormatter.FormatCellForPdf(raw);
 
-        private static void RenderCard(Section section, VisualManifest v)
+        private async Task RenderCardAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
         {
             if (v.Rows.Count > 0 && v.Rows[0].Count > 0)
             {
@@ -452,6 +464,17 @@ namespace ETL_SQL.Reporting
                 var valuePara = section.AddParagraph(value);
                 valuePara.Format.Font.Size = Unit.FromPoint(22);
                 valuePara.Format.Font.Bold = true;
+                var micro = v.MicroCharts?.FirstOrDefault(item => item.Role == "card.sparkline");
+                if (micro is not null)
+                {
+                    var imagePath = await WriteMicroChartPngAsync(micro, tempFiles, cancellationToken);
+                    if (imagePath is not null)
+                    {
+                        var image = section.AddImage(imagePath);
+                        image.Width = Unit.FromPoint(120);
+                        image.LockAspectRatio = true;
+                    }
+                }
             }
             else
             {
@@ -460,6 +483,16 @@ namespace ETL_SQL.Reporting
                 nd.Format.Font.Italic = true;
                 nd.Format.Font.Color = _greyMedium;
             }
+        }
+
+        private async Task<string?> WriteMicroChartPngAsync(MicroChartManifest micro, List<string> tempFiles, CancellationToken cancellationToken)
+        {
+            var png = SvgToPng(micro.Svg);
+            if (png.Length == 0) return null;
+            var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".png");
+            await File.WriteAllBytesAsync(path, png, cancellationToken);
+            tempFiles.Add(path);
+            return path;
         }
 
         private static void RenderText(Section section, VisualManifest v)

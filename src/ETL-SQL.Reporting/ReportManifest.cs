@@ -198,6 +198,11 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PlotPlan? PlotPlan { get; set; }
 
+        /// <summary>Resolved semantic plans and fallbacks for CARD/TABLE micro-charts.</summary>
+        [JsonPropertyName("microCharts")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<MicroChartManifest>? MicroCharts { get; set; }
+
         [JsonPropertyName("defaultValue")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultValue { get; set; }
@@ -323,6 +328,44 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("drillState")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public VisualDrillStateManifest? DrillState { get; set; }
+    }
+
+    public sealed class MicroChartManifest
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("kind")]
+        public string Kind { get; set; } = string.Empty;
+
+        [JsonPropertyName("role")]
+        public string Role { get; set; } = string.Empty;
+
+        [JsonPropertyName("rowIndex")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? RowIndex { get; set; }
+
+        [JsonPropertyName("columnIndex")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? ColumnIndex { get; set; }
+
+        [JsonPropertyName("sourceValue")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? SourceValue { get; set; }
+
+        /// <summary>Authoritative server-side plan. The browser receives its native SVG projection,
+        /// avoiding one verbose contract payload per table cell.</summary>
+        [JsonIgnore]
+        public PlotPlan PlotPlan { get; set; } = null!;
+
+        [JsonPropertyName("svg")]
+        public string Svg { get; set; } = string.Empty;
+
+        [JsonPropertyName("plainText")]
+        public string PlainText { get; set; } = string.Empty;
+
+        [JsonPropertyName("accessibleLabel")]
+        public string AccessibleLabel { get; set; } = string.Empty;
     }
 
     /// <summary>Lazy row source metadata for large browser-rendered visuals.</summary>

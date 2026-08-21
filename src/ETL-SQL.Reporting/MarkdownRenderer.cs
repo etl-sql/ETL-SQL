@@ -244,7 +244,16 @@ namespace ETL_SQL.Reporting
             for (int i = 0; i < cap; i++)
             {
                 var row = v.Rows[i];
-                var cells = v.Columns.Select((_, ci) => ci < row.Count ? EscapeCell(ReportCellFormatter.FormatCell(row[ci])) : "");
+                var cells = v.Columns.Select((_, ci) =>
+                {
+                    var micro = v.MicroCharts?.FirstOrDefault(item => item.Role == "table.cell" && item.RowIndex == i && item.ColumnIndex == ci);
+                    if (micro is not null)
+                    {
+                        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(micro.Svg));
+                        return $"<img src=\"data:image/svg+xml;base64,{encoded}\" alt=\"{EscapeAttribute(micro.PlainText)}\">";
+                    }
+                    return ci < row.Count ? EscapeCell(ReportCellFormatter.FormatCell(row[ci])) : "";
+                });
                 sb.AppendLine("| " + string.Join(" | ", cells) + " |");
             }
 
@@ -284,10 +293,19 @@ namespace ETL_SQL.Reporting
             }
 
             sb.AppendLine($"> **{EscapeCell(label)}:** {EscapeCell(value)}");
+            var micro = v.MicroCharts?.FirstOrDefault(item => item.Role == "card.sparkline");
+            if (micro is not null)
+            {
+                var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(micro.Svg));
+                sb.AppendLine($"> <img src=\"data:image/svg+xml;base64,{encoded}\" alt=\"{EscapeAttribute(micro.PlainText)}\">");
+            }
             sb.AppendLine();
         }
 
         private static string EscapeCell(string s) =>
             s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+
+        private static string EscapeAttribute(string value) =>
+            value.Replace("&", "&amp;").Replace("\"", "&quot;").Replace("<", "&lt;").Replace(">", "&gt;");
     }
 }

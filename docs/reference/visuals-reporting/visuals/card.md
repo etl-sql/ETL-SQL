@@ -1,13 +1,29 @@
-Type: CARD
+# CARD
+
 A prominent KPI tile showing a single large number with an optional label, trend indicator, goal comparison, status badge, and progress indicator. Ideal for dashboard headlines.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL CardName AS CARD (
+  SOURCE = #summary,
+  MAPPINGS (
+    VALUE = value_column,
+    LABEL = label_column,
+    SPARKLINE = #trend (X = x_column, Y = y_column, TYPE = LINE)
+  )
+);
+```
+
+## Mappings
+
 - **VALUE** - primary metric column (required); displayed large
 - **LABEL** - caption column (optional); falls back to the metric column name
 - **GOAL** - target value column; drives status and optional progress display
 - **DELTA** - prior-period value column; drives trend/delta display
+- **SPARKLINE** - native `LINE`, `AREA`, or `BAR` trend from a named temp table; requires `X` and `Y`.
 
-Options:
+## Options
 - **FORMAT = '.NET format string'** - e.g. 'N0', 'C2', 'P1'
 - **ABBREVIATE = ON|OFF** - shorten large numbers, e.g. 1250000 -> 1.25M
 - **PREFIX = 'text'** - prepend text to the displayed value
@@ -57,6 +73,22 @@ CREATE VISUAL RevKPI AS CARD (
 );
 ```
 
+Native card sparkline:
+
+```sql
+SELECT 'Mon' AS day, 10 AS amount INTO #daily;
+INSERT INTO #daily (day, amount) VALUES ('Tue', 14), ('Wed', 12);
+
+CREATE VISUAL Revenue AS CARD (
+  SOURCE = #kpi,
+  MAPPINGS (
+    VALUE = revenue,
+    LABEL = label,
+    SPARKLINE = #daily (X = day, Y = amount, TYPE = AREA)
+  )
+);
+```
+
 Multiple KPI cards side-by-side (use a PAGE STRUCTURE grid):
 ```sql
 SELECT COUNT(DISTINCT customer_id) AS customers, 'Customers' AS label INTO #c FROM #sales;
@@ -72,5 +104,6 @@ CREATE PAGE Summary AS DASHBOARD (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)
