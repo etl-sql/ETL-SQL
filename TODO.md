@@ -157,19 +157,27 @@ transition/drop-off flows, proportional hierarchies, and network degree/connecti
 
 ### Phase 6 — Cascading Slicers and Atomic Parameter State
 
-- [ ] Write and accept the interaction design for filter bindings, inferred dependencies, multiple
+- [x] Write and accept the interaction design for filter bindings, inferred dependencies, multiple
   parents, null/All behavior, multi-select values, invalid descendant selections, and atomic updates.
-- [ ] Add parser and AST support only after the syntax has minimal parser-accepted examples and
+- [x] Add parser and AST support only after the syntax has minimal parser-accepted examples and
   Report Builder round-trip fixtures.
-- [ ] Implement one parent/child local-vector flow for offline and snapshot use.
-- [ ] Implement multiple-parent dependency graph compilation and author-time cycle diagnostics.
-- [ ] Implement equivalent topologically ordered live-query refresh behavior.
-- [ ] Define and implement invalid-selection policies without observable intermediate parameter states.
-- [ ] Add conformance tests proving equivalent local-vector, offline snapshot, and live-query results.
+- [x] Implement one parent/child local-vector flow for offline and snapshot use.
+- [x] Implement multiple-parent dependency graph compilation and author-time cycle diagnostics.
+- [x] Implement equivalent topologically ordered live-query refresh behavior.
+- [x] Define and implement invalid-selection policies without observable intermediate parameter states.
+- [x] Add conformance tests proving equivalent local-vector, offline snapshot, and live-query results.
 
 **Exit gate:** State-transition tests cover null/All, multi-select, invalid descendants, cycles,
 concurrent changes, and atomic offline/live behavior; accepted syntax is supported by parser, LSP,
 documentation, and lossless designer editing.
+
+**Completed:** Accepted `CASCADE` syntax now compiles LOCAL and LIVE filter DAGs, retains snapshot
+option vectors, applies stable topological refreshes, and commits parameter/visual state through one
+manifest reference swap. CLEAR/FIRST/ERROR, null/All, JSON and legacy multi-select values, multiple
+parents, cycles, rollback, and concurrent requests have production state-transition coverage. Parser,
+formatter, Analysis lint, LSP snippet/hover, Report Builder round trips, runtime assets, and reference
+documentation share the same contract. Gemini's Phase 6 fixture/baseline suite remains as independent
+regression evidence alongside production conformance tests.
 
 ### Phase 7 — Native Advanced Chart Authoring
 

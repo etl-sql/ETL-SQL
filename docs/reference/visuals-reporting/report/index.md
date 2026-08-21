@@ -14,6 +14,7 @@ A report is a sequence of `CREATE` statements. The engine compiles them into a s
 - **`BUTTON`**: Interactive back / refresh / link button.
 - **`STYLE`**: Reusable formatting rules applied to visuals and pages.
 - **`THEME`**: Named light/dark theme referenced by pages and visuals.
+- **`CASCADE`**: Atomic dependency and invalid-selection policy for `SLICER` and `MULTISELECT` option sets.
 
 ## Canonical Layout Rules
 
@@ -62,4 +63,5 @@ Use `HELP REPORT <component>` for details (e.g. `HELP REPORT VISUAL`, `HELP REPO
 Use `HELP VISUAL <type>` for chart-specific options (e.g. `HELP VISUAL BAR`).
 
 References:
+- [CASCADE Reference](cascade.md)
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

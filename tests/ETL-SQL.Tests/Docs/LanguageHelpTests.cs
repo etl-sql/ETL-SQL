@@ -61,7 +61,7 @@ namespace ETL_SQL.Tests
         {
             var registry = new LanguageHelpRegistry();
             var verifier = new HelpDocumentationVerifier(registry);
-            string[] components = { "ACTIONS", "BUTTON", "CONTAINER", "DATASET", "INTERACTIONS", "NAVIGATION", "PAGE", "STYLE", "VISUAL" };
+            string[] components = { "ACTIONS", "BUTTON", "CASCADE", "CONTAINER", "DATASET", "INTERACTIONS", "NAVIGATION", "PAGE", "STYLE", "VISUAL" };
 
             foreach (var check in verifier.VerifyRequiredSubTopics("REPORT", components))
             {

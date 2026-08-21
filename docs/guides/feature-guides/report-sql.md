@@ -175,6 +175,29 @@ See the [RELDATE reference](../../reference/functions/datetime/reldate.md) for t
 
 Use `ACTIONS (ON_CHANGE = SET_PARAMETER(@var, value))` on `SLICER`, `DATEPICKER`, or `SLIDER` visuals to wire user input to a parameter variable. The variable's value is then injected into every visual that references it.
 
+#### Cascading slicers and atomic parameter changes
+
+Add `CASCADE` to a `SLICER` or `MULTISELECT` when its available values depend on parent controls. `MODE = LOCAL` retains and filters the source option vector, so it works in offline and snapshot reports. Map every parent parameter to its source column with `PARENTS`. `MODE = LIVE` requires an inline `SELECT` and infers parent dependencies from the parameters referenced by that query.
+
+All affected controls and visuals update as one transaction. Descendants are processed in dependency order, multiple parents are supported, and the browser receives only the final manifest. Use `INVALID = CLEAR`, `FIRST`, or `ERROR` to choose how an invalid descendant selection is handled. `ERROR` rolls back the entire change. Null, empty, and the default `*` All value mean no parent filter under `NULL = ALL`. Multi-select values use JSON arrays; comma-separated legacy values remain accepted.
+
+```sql
+CREATE VISUAL CityFilter AS SLICER (
+  SOURCE = #city_options,
+  MAPPINGS (VALUE = CityCode, LABEL = CityName),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@City, CityCode)),
+  CASCADE (
+    MODE = LOCAL,
+    PARENTS (@Region = RegionCode, @Segment = SegmentCode),
+    INVALID = CLEAR,
+    NULL = ALL,
+    MULTISELECT = ANY
+  )
+);
+```
+
+For LIVE mode, place the parent predicates in the inline `SOURCE` query and omit `PARENTS`. Cycles, missing parent producers, duplicate producers, and invalid CASCADE visual types are reported by the parser/linter before execution. See the [CASCADE reference](../../reference/visuals-reporting/report/cascade.md).
+
 ```sql
 DECLARE @region VARCHAR = 'All';
 

@@ -147,6 +147,9 @@ public sealed class DesignerScriptGenerationService
         if (interactions.Count > 0)
             AppendLine(sb, $"    INTERACTIONS ({string.Join(", ", interactions)}),", nl);
 
+        if (visual.Options.TryGetValue("cascade", out var cascade) && !string.IsNullOrWhiteSpace(cascade))
+            AppendLine(sb, $"    {cascade.Trim().TrimEnd(',')},", nl);
+
         var styleOptions = new List<string>();
         if (visual.Options.TryGetValue("WIDTH", out var width) && !string.IsNullOrWhiteSpace(width))
             styleOptions.Add($"WIDTH = '{EscapeStr(width)}'");
@@ -270,6 +273,7 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "CONTAINER_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "cascade", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("action:", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("interaction:", StringComparison.OrdinalIgnoreCase);
 

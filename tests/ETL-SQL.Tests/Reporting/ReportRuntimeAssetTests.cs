@@ -57,6 +57,18 @@ namespace ETL_SQL.Tests.Reporting
 
         [Fact]
         [Trait("Category", "Smoke.Reporting")]
+        public void SharedRuntime_UsesCanonicalJsonForMultiSelectParameters()
+        {
+            var root = FindRepoRoot();
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));
+
+            Assert.Contains("function parseMultiParameter", js);
+            Assert.Contains("JSON.stringify(Array.from(selected))", js);
+            Assert.Contains("accept legacy comma-separated values", js);
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
         public void SharedRuntime_ConsumesResolvedMicroChartsWithoutBrowserGeometryCompiler()
         {
             var root = FindRepoRoot();

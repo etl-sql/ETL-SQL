@@ -181,9 +181,9 @@ ordering, fallback tests, and screen-reader/plain-text review fixtures.
 
 ### Reporting & Interaction — Cascading Slicers
 
-**Status:** Accepted  
-**Horizon:** Next  
-**Authoritative design:** Not yet decided
+**Status:** Delivered
+**Horizon:** Delivered
+**Authoritative design:** [Cascading Slicers and Atomic Parameter State](docs/architecture/decisions/CascadingSlicersAndAtomicParameters.md)
 
 Parent filter selections should constrain descendant option sets and update invalid selections
 atomically across offline snapshots, local vectors, and live queries. Filter bindings should declare
@@ -204,6 +204,12 @@ equivalent live-query ordering; offline snapshot conformance.
 
 **Acceptance evidence:** State-transition tests cover invalid descendants, null/All semantics,
 multi-select values, cycles, concurrent changes, and equivalent offline/live results.
+
+**Delivered:** Report-SQL now has explicit LOCAL/LIVE `CASCADE` policies, retained offline option
+vectors, stable multi-parent graph compilation, author-time cycle diagnostics, topologically ordered
+LIVE queries, and atomic manifest publication with CLEAR/FIRST/ERROR rollback semantics. Parser,
+formatter, Analysis, LSP help/snippets, Report Builder round trips, browser JSON multi-select state,
+documentation, Gemini baselines, and production conformance tests use the same contract.
 
 ---
 

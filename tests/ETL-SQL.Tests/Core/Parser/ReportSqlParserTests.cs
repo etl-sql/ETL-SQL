@@ -21,6 +21,61 @@ namespace ETL_SQL.Tests.Core.Parsing
         // ── CREATE VISUAL ────────────────────────────────────────────────────
 
         [Fact]
+        public void ParseCreateVisual_LocalCascade_RoundTripsAllPolicies()
+        {
+            const string sql = """
+CREATE VISUAL City AS MULTISELECT (
+    SOURCE = #options,
+    MAPPINGS (VALUE = CityCode),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@City, CityCode)),
+    CASCADE (
+        MODE = LOCAL,
+        PARENTS (@Region = RegionCode, @Country = CountryCode),
+        INVALID = FIRST,
+        NULL = MATCH,
+        ALL_VALUE = '*',
+        MULTISELECT = ALL
+    )
+);
+""";
+            var script = Parse(sql);
+            Assert.Empty(script.Diagnostics);
+            var statement = script.Statements.OfType<CreateVisualStatement>().Single();
+
+            Assert.Equal(CascadeMode.Local, statement.Cascade!.Mode);
+            Assert.Equal(2, statement.Cascade.Parents.Count);
+            Assert.Equal(CascadeInvalidSelectionPolicy.First, statement.Cascade.InvalidSelection);
+            Assert.Equal(CascadeNullSelectionPolicy.Match, statement.Cascade.NullSelection);
+            Assert.Equal(CascadeMultiSelectPolicy.All, statement.Cascade.MultiSelect);
+
+            var reparsed = Parse(statement.ToSql()).Statements.OfType<CreateVisualStatement>().Single();
+            Assert.Equal(statement.Cascade.Mode, reparsed.Cascade!.Mode);
+            Assert.Equal(statement.Cascade.Parents, reparsed.Cascade.Parents);
+            Assert.Equal(statement.Cascade.InvalidSelection, reparsed.Cascade.InvalidSelection);
+            Assert.Equal(statement.Cascade.NullSelection, reparsed.Cascade.NullSelection);
+            Assert.Equal(statement.Cascade.MultiSelect, reparsed.Cascade.MultiSelect);
+        }
+
+        [Fact]
+        public void ParseCreateVisual_LiveCascade_InfersParentsFromSource()
+        {
+            const string sql = """
+CREATE VISUAL City AS SLICER (
+    SOURCE = (SELECT CityCode FROM #options WHERE CountryCode = @Country),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@City, CityCode)),
+    CASCADE (MODE = LIVE, INVALID = CLEAR)
+);
+""";
+            var script = Parse(sql);
+            Assert.Empty(script.Diagnostics);
+            var statement = script.Statements.OfType<CreateVisualStatement>().Single();
+            Assert.Equal(CascadeMode.Live, statement.Cascade!.Mode);
+            Assert.Empty(statement.Cascade.Parents);
+            Assert.Contains("CASCADE (", statement.ToSql());
+            Assert.Contains("MODE = LIVE", statement.ToSql());
+        }
+
+        [Fact]
         public void ParseCreateVisual_InlineSelect_ReturnsCreateVisualStatement()
         {
             var sql = @"

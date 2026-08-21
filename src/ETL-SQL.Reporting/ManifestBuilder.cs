@@ -277,6 +277,9 @@ namespace ETL_SQL.Reporting
                 return;
 
             ValidateDependencyGraph(visuals);
+            var cascadeGraph = CascadingFilterGraphCompiler.Compile(visuals.Select(v => v.Statement));
+            if (cascadeGraph.OrderedNodes.Count > 0)
+                manifest.CascadeGraph = cascadeGraph.ToManifest();
 
             if (!CanBuildVisualsInParallel(visuals.Count, interactionValues))
             {
@@ -517,8 +520,15 @@ namespace ETL_SQL.Reporting
             vm.Overlays = newVm.Overlays;
             vm.HighlightRows = newVm.HighlightRows;
             vm.DrillState = newVm.DrillState;
+            vm.Cascade = newVm.Cascade;
+            vm.SemanticFallback = newVm.SemanticFallback;
+            vm.MicroCharts = newVm.MicroCharts;
             vm.IsHidden = false; // refreshed visuals are always shown regardless of VISIBLE = OFF
         }
+
+        /// <summary>Builds a detached visual so an interaction transaction can commit it atomically.</summary>
+        public Task<VisualManifest> BuildVisualSnapshotAsync(CreateVisualStatement statement) =>
+            _visualBuilder.BuildAsync(statement.Name, statement);
 
         private VisualActionManifest TranslateAction(VisualAction action)
         {
