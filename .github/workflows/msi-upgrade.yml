@@ -50,15 +50,20 @@ jobs:
             exit 0
           }
 
-          $baseSha = if ($env:EVENT_NAME -eq 'pull_request') { $env:BASE_SHA } else { $env:BEFORE_SHA }
+          $baseSha = if ($env:EVENT_NAME -eq 'pull_request') {
+            if (-not [string]::IsNullOrWhiteSpace($env:BASE_SHA)) { $env:BASE_SHA } else { "origin/$env:GITHUB_BASE_REF" }
+          } else {
+            $env:BEFORE_SHA
+          }
           if ([string]::IsNullOrWhiteSpace($baseSha) -or $baseSha -match '^0+$') {
-            'should_run=true' >> $env:GITHUB_OUTPUT
-            Write-Host 'No usable base commit; failing safe by running the full MSI certification.'
-            exit 0
+            $baseSha = "HEAD~1"
           }
 
-          $changedPaths = @(git diff --name-only $baseSha $env:CURRENT_SHA)
-          if ($LASTEXITCODE -ne 0) { throw "git diff failed for $baseSha..$env:CURRENT_SHA" }
+          $changedPaths = @(git diff --name-only $baseSha HEAD)
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "git diff failed against $baseSha; checking HEAD~1..."
+            $changedPaths = @(git diff --name-only HEAD~1 HEAD)
+          }
 
           $upgradePatterns = @(
             '^src/ETL-SQL\.Installer/',

@@ -57,15 +57,18 @@ jobs:
         shell: pwsh
         run: .\scripts\Get-TestLaneInventory.ps1 -FailOnIssues
 
-      - name: Run smoke lanes
+      - name: Run fast test lanes (Pull Requests)
+        if: github.event_name == 'pull_request'
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
+        run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild
 
-      - name: Run engine tests and enforce coverage
+      - name: Run engine tests and enforce coverage (Main & Release Push)
+        if: github.event_name != 'pull_request'
         shell: pwsh
         run: .\scripts\Test-CoverageGate.ps1 -RunEngineLane -Configuration Release -NoRestore -NoBuild -CoverageDirectory coverage -MinimumLineCoverage 70
 
       - name: Print coverage summary
+        if: github.event_name != 'pull_request'
         run: cat ./coverage/report/Summary.txt
         shell: bash
 
@@ -129,6 +132,7 @@ jobs:
   sample-scripts:
     name: Sample Scripts (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
+    if: github.event_name != 'pull_request' || matrix.platform == 'linux'
     strategy:
       fail-fast: false
       matrix:
@@ -153,15 +157,19 @@ jobs:
       - name: Build application
         run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug --no-restore
 
-      - name: Validate samples twice (Windows)
+      - name: Validate samples (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\scripts\Test-AllSamples.ps1 -Passes 2
+        run: |
+          $passes = if ('${{ github.event_name }}' -eq 'pull_request') { 1 } else { 2 }
+          .\scripts\Test-AllSamples.ps1 -Passes $passes
 
-      - name: Validate samples twice (Linux)
+      - name: Validate samples (Linux)
         if: runner.os == 'Linux'
         shell: bash
-        run: bash ./scripts/test-all-samples.sh 2
+        run: |
+          PASSES="${{ github.event_name == 'pull_request' && '1' || '2' }}"
+          bash ./scripts/test-all-samples.sh "$PASSES"
 
   portal-browser-journey:
     name: Portal Browser Journey
@@ -210,6 +218,7 @@ jobs:
 
   enterprise-certification:
     name: Enterprise Certification (${{ matrix.platform }})
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -247,6 +256,7 @@ jobs:
 
   docker-integration-tests:
     name: Docker Integration Tests
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
