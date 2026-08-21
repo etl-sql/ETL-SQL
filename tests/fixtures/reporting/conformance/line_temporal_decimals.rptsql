@@ -1,0 +1,29 @@
+-- Conformance Fixture: Decimal & Temporal Scales (LINE)
+-- Validates ISO temporal domain parsing and floating-point/decimal metric precision.
+
+SET REPORT TITLE = 'Conformance: Decimal & Temporal Scales';
+
+SELECT '2026-01-01' AS ObservedDate, 98.7452 AS SensorReading INTO #telemetry
+UNION ALL SELECT '2026-01-02', 104.3819
+UNION ALL SELECT '2026-01-03', 101.9205
+UNION ALL SELECT '2026-01-04', 112.5641
+UNION ALL SELECT '2026-01-05', 108.1187;
+
+CREATE VISUAL PrecisionTelemetryLine AS LINE (
+    TITLE = 'High-Precision Daily Sensor Telemetry',
+    SOURCE = #telemetry,
+    MAPPINGS (X = ObservedDate, Y = SensorReading),
+    OPTIONS (
+        SMOOTH = TRUE,
+        X_AXIS (LABEL = 'Observation Timestamp (UTC)'),
+        Y_AXIS (LABEL = 'Calibrated Index (units)')
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '420px')
+);
+
+CREATE PAGE TelemetryDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = PrecisionTelemetryLine)
+    )
+);

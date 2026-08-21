@@ -1,0 +1,34 @@
+-- Conformance Fixture: Multi-Series Stacked Bar & Custom Palette
+-- Validates partitioned series resolution, stacking math, and color mapping.
+
+SET REPORT TITLE = 'Conformance: Multi-Series Stacked Bar & Palette';
+
+SELECT '2026-Q1' AS Quarter, 'Enterprise' AS Tier, 85000 AS Revenue INTO #tier_revenue
+UNION ALL SELECT '2026-Q1', 'Mid-Market', 42000
+UNION ALL SELECT '2026-Q1', 'SMB', 28000
+UNION ALL SELECT '2026-Q2', 'Enterprise', 92000
+UNION ALL SELECT '2026-Q2', 'Mid-Market', 47000
+UNION ALL SELECT '2026-Q2', 'SMB', 31000;
+
+CREATE VISUAL StackedTierBar AS BAR (
+    TITLE = 'Quarterly Tier Revenue Stack',
+    SOURCE = #tier_revenue,
+    MAPPINGS (X = Quarter, Y = Revenue, SERIES = Tier),
+    OPTIONS (
+        STACKED = ON,
+        COLORS (
+            'Enterprise' = '#1E3A8A',
+            'Mid-Market' = '#3B82F6',
+            'SMB' = '#93C5FD'
+        ),
+        LEGEND = 'RIGHT'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE StackDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = StackedTierBar)
+    )
+);

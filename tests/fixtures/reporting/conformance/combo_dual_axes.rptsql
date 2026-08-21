@@ -1,0 +1,36 @@
+-- Conformance Fixture: COMBO Visual with Dual Axes
+-- Validates multi-layer resolution: primary left axis (Bar count) and secondary right axis (Line rate).
+
+SET REPORT TITLE = 'Conformance: COMBO Visual with Dual Y-Axes';
+
+SELECT 'Week 1' AS WeekNum, 450 AS UnitsProduced, 96.2 AS QualityPassRate INTO #factory_metrics
+UNION ALL SELECT 'Week 2', 520, 94.8
+UNION ALL SELECT 'Week 3', 480, 97.1
+UNION ALL SELECT 'Week 4', 610, 98.4;
+
+CREATE VISUAL FactoryPerformanceCombo AS COMBO (
+    TITLE = 'Production Volume vs Quality Pass Rate',
+    SOURCE = #factory_metrics,
+    MAPPINGS (X = WeekNum),
+    SERIES (
+        BAR UnitsProduced,
+        LINE QualityPassRate
+    ),
+    OPTIONS (
+        COLORS (
+            'UnitsProduced' = '#2563EB',
+            'QualityPassRate' = '#E11D48'
+        ),
+        Y_AXIS (LABEL = 'Units Produced (Units)'),
+        SECONDARY_Y_AXIS (LABEL = 'Quality Pass Rate (%)'),
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE FactoryDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = FactoryPerformanceCombo)
+    )
+);
