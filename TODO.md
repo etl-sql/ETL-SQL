@@ -52,17 +52,17 @@ Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/relea
 - [x] Spot-check binary launches and version display: `dotnet ETL-SQL.dll --version`.
 
 ### Phase 5 — Tag & Publish
-- [ ] Push `release/v0.18.0` branch to remote.
-- [ ] Merge `release/v0.18.0` into `main` (`git push origin release/v0.18.0:main`).
-- [ ] Tag `v0.18.0` and push tag: `git tag -s v0.18.0 -m "Release v0.18.0"` && `git push origin v0.18.0`.
-- [ ] Monitor GitHub Actions `release.yml` workflow to green publish.
-- [ ] Create GitHub Release with `v0.18.0.md` notes, `sha256sums.txt`, and `sbom.json`.
-- [ ] Verify SLSA build provenance attestation (`gh attestation verify`).
+- [x] Push `release/v0.18.0` branch to remote.
+- [x] Merge `release/v0.18.0` into `main` (`git push origin release/v0.18.0:main`).
+- [x] Tag `v0.18.0` and push tag: `git tag -s v0.18.0 -m "Release v0.18.0"` && `git push origin v0.18.0`.
+- [x] Monitor GitHub Actions `release.yml` workflow to green publish.
+- [x] Create GitHub Release with `v0.18.0.md` notes, `sha256sums.txt`, and `sbom.json`.
+- [x] Verify SLSA build provenance attestation (`gh attestation verify`).
 
 ### Phase 6 — Post-Release
-- [ ] Confirm `docs/guides/faq.md` and migration baseline reflect `0.18.0`.
-- [ ] Open fresh `## [Unreleased]` section in `CHANGELOG.md`.
-- [ ] Re-enable Dependabot schedules in `.github/dependabot.yml`.
+- [x] Confirm `docs/guides/faq.md` and migration baseline reflect `0.18.0`.
+- [x] Open fresh `## [Unreleased]` section in `CHANGELOG.md`.
+- [x] Re-enable Dependabot schedules in `.github/dependabot.yml`.
 - [ ] Prune merged release branches (`Invoke-Release.ps1 -PruneMergedBranches`).
 
 ---

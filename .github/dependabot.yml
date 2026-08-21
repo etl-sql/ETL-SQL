@@ -1,24 +1,22 @@
 version: 2
-# Temporarily paused for v0.18.0 release window (Phase 0) to avoid competing CI runner capacity.
-# Will be re-enabled in Phase 6.
-updates: []
-# updates:
-#   - package-ecosystem: "github-actions"
-#     directory: "/"
-#     schedule:
-#       interval: "weekly"
-#
-#   - package-ecosystem: "nuget"
-#     directory: "/"
-#     schedule:
-#       interval: "weekly"
-#
-#   - package-ecosystem: "npm"
-#     directory: "/src/etl-sql-vscode"
-#     schedule:
-#       interval: "weekly"
-#
-#   - package-ecosystem: "npm"
-#     directory: "/src/etl-sql-vscode/ui"
-#     schedule:
-#       interval: "weekly"
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/src/etl-sql-vscode"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/src/etl-sql-vscode/ui"
+    schedule:
+      interval: "weekly"
+
