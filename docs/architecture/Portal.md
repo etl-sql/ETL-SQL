@@ -60,6 +60,7 @@ AdminServiceRun         (per-run ledger for the native admin background services
 ServiceAccount          (scoped machine identities, capped by their owner's authority)
 SharedIdentityAuthority (tenant-owned OIDC authority metadata; client secrets remain external)
 PolicyVersionEntity / PolicyMachineEntity   (enterprise policy authority + machine registry)
+GatewayEnrollmentEntity                     (gateway machine enrollment tokens and bootstrap metadata)
 SharedConnectionAcl / SharedConnectionUsage (per-connection use grants and consumers)
 GroupStudioCapability   (deny-by-default Studio capabilities granted to a group)
 DatasetUserAcl          (per-user dataset grant; a sibling table because the rolling-expand
@@ -530,6 +531,12 @@ Entries hold `SECRET:name` references, never credential values; detail responses
 | POST | `/api/admin/gateways/enroll` | Admin | Issue one-time enrollment token for a Gateway instance |
 | GET | `/api/admin/gateways/{gatewayId}` | Admin | Inspect Gateway enrollment state, timestamps, and workload key thumbprint |
 | POST | `/api/admin/gateways/{gatewayId}/revoke` | Admin | Revoke Gateway enrollment token and unregister active session |
+
+### Gateways — Enrollment Bootstrap
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/gateway/enrollment/consume` | Anonymous (One-Time Token) | Consume a one-time enrollment token to bootstrap an on-premises Gateway daemon |
 
 ### Platform — Control Plane
 
