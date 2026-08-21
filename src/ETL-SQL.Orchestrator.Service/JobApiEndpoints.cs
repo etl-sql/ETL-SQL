@@ -1404,10 +1404,10 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
-                var decodedAlias = Uri.UnescapeDataString(alias);
                 var status = await writable.GetStatusAsync(decodedAlias, ct);
                 if (status == SecretLifecycleStatus.NotFound)
                     return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
@@ -1422,11 +1422,12 @@ namespace ETL_SQL.Orchestrator.Service
                 CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
                 var entry = new SharedConnectionDefinition(
-                    Uri.UnescapeDataString(alias),
+                    decodedAlias,
                     request?.ConnectorType ?? "",
                     request?.Target,
                     new Dictionary<string, string>(request?.Options ?? [], StringComparer.OrdinalIgnoreCase),
@@ -1463,12 +1464,12 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
                 try
                 {
-                    var decodedAlias = Uri.UnescapeDataString(alias);
                     await writable.EnableAsync(decodedAlias, ct);
                     EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_ENABLE", decodedAlias, "Status=active");
                     return Results.NoContent();
@@ -1483,12 +1484,12 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
                 try
                 {
-                    var decodedAlias = Uri.UnescapeDataString(alias);
                     await writable.DisableAsync(decodedAlias, ct);
                     EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_DISABLE", decodedAlias, "Status=disabled");
                     return Results.NoContent();
@@ -1504,10 +1505,10 @@ namespace ETL_SQL.Orchestrator.Service
                 ISecretProvider secrets, ETL_SQL.Services.SecurityService security, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
-                var decodedAlias = Uri.UnescapeDataString(alias);
                 var status = await writable.GetStatusAsync(decodedAlias, ct);
                 if (status == SecretLifecycleStatus.NotFound)
                     return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
@@ -1569,10 +1570,10 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, IJobHistoryStore store, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
-                var decodedAlias = Uri.UnescapeDataString(alias);
                 if (await writable.GetStatusAsync(decodedAlias, ct) == SecretLifecycleStatus.NotFound)
                     return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
 
@@ -3137,6 +3138,28 @@ namespace ETL_SQL.Orchestrator.Service
         {
             var value = context.Request.Headers.IfMatch.ToString().Trim().Trim('"');
             return long.TryParse(value, out var version) && version > 0 ? version : null;
+        }
+
+        private static bool TryValidateCatalogAlias(string alias, out string decodedAlias, out IResult? errorResult)
+        {
+            decodedAlias = Uri.UnescapeDataString(alias ?? "");
+            if (string.IsNullOrWhiteSpace(decodedAlias) || decodedAlias.Contains("..") || decodedAlias.Contains('/') || decodedAlias.Contains('\\'))
+            {
+                errorResult = Results.BadRequest(new { Error = $"Invalid connection alias '{decodedAlias}'." });
+                return false;
+            }
+
+            try
+            {
+                SecretNameValidator.Validate(decodedAlias);
+                errorResult = null;
+                return true;
+            }
+            catch (ArgumentException ex)
+            {
+                errorResult = Results.BadRequest(new { Error = ex.Message });
+                return false;
+            }
         }
 
         private sealed record PublishBundleApiRequest(

@@ -211,6 +211,9 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 
     private string GetEntryPath(string alias)
     {
+        if (string.IsNullOrWhiteSpace(alias) || alias.Contains("..") || alias.Contains('/') || alias.Contains('\\'))
+            throw new ArgumentException($"Invalid alias path: '{alias}'", nameof(alias));
+
         SecretNameValidator.Validate(alias);
         if (string.IsNullOrWhiteSpace(rootDirectory))
             throw new ArgumentException("Connection catalog root directory is required.", nameof(rootDirectory));

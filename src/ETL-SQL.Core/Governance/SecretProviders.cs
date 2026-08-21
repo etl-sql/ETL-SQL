@@ -183,6 +183,9 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
 
     private string GetSecretPath(string name)
     {
+        if (string.IsNullOrWhiteSpace(name) || name.Contains("..") || name.Contains('/') || name.Contains('\\'))
+            throw new ArgumentException($"Invalid secret path: '{name}'", nameof(name));
+
         SecretNameValidator.Validate(name);
         var root = GetRootDirectory();
         var safeFileName = Path.GetFileName(name) + ".secret";
