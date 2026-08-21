@@ -1,0 +1,33 @@
+-- Conformance Fixture: Explicit & Inferred Domain Bounds (BAR)
+-- Validates axis scale resolution with explicit MIN, MAX, and tick intervals.
+
+SET REPORT TITLE = 'Conformance: Explicit Axis Domain Bounds';
+
+SELECT 'Dept A' AS Dept, 150 AS Headcount INTO #dept_data
+UNION ALL SELECT 'Dept B', 320
+UNION ALL SELECT 'Dept C', 280
+UNION ALL SELECT 'Dept D', 410;
+
+CREATE VISUAL ExplicitDomainBar AS BAR (
+    TITLE = 'Headcount by Department with Explicit Domain',
+    SOURCE = #dept_data,
+    MAPPINGS (X = Dept, Y = Headcount),
+    OPTIONS (
+        Y_AXIS (
+            MIN = 0,
+            MAX = 500,
+            LABEL = 'Total Headcount'
+        ),
+        X_AXIS (
+            LABEL = 'Department Unit'
+        )
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '420px')
+);
+
+CREATE PAGE DomainDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = ExplicitDomainBar)
+    )
+);

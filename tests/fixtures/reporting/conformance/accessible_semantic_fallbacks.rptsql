@@ -1,0 +1,36 @@
+-- Conformance Fixture: Accessible Summaries & Semantic Fallbacks
+-- Validates rich accessibility metadata, narrative descriptions, and fallback tables.
+
+SET REPORT TITLE = 'Executive Performance Summary';
+SET REPORT DESCRIPTION = 'Executive scorecard with high-level KPI cards and accessible visual breakdown.';
+
+SELECT 'Americas' AS Region, 145000 AS Sales, 1200 AS Accounts INTO #regional_summary
+UNION ALL SELECT 'EMEA', 112000, 890
+UNION ALL SELECT 'APAC', 98000, 740;
+
+CREATE VISUAL RegionalSalesBar AS BAR (
+    TITLE = 'Annual Sales by Geographic Region',
+    SOURCE = #regional_summary,
+    MAPPINGS (X = Region, Y = Sales),
+    OPTIONS (
+        DATA_LABELS = ON WITH (FORMAT = 'C0'),
+        LEGEND = 'OFF'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE VISUAL TotalAccountsCard AS CARD (
+    TITLE = 'Total Active Accounts',
+    SOURCE = (SELECT SUM(Accounts) AS TotalAccounts FROM #regional_summary),
+    MAPPINGS (VALUE = TotalAccounts)
+);
+
+CREATE PAGE ExecutiveDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A / B',
+        MAP (
+            'A' = TotalAccountsCard,
+            'B' = RegionalSalesBar
+        )
+    )
+);

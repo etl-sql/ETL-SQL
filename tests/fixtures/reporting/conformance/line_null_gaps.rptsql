@@ -1,0 +1,29 @@
+-- Conformance Fixture: Null Values & Metric Gaps (LINE)
+-- Validates broken/discontinuous lines, null point representation, and sparse series handling.
+
+SET REPORT TITLE = 'Conformance: Null Values & Line Gaps';
+
+SELECT 'Day 1' AS DayLabel, 10.5 AS Measurement INTO #gapped_series
+UNION ALL SELECT 'Day 2', 14.2
+UNION ALL SELECT 'Day 3', NULL
+UNION ALL SELECT 'Day 4', 18.9
+UNION ALL SELECT 'Day 5', NULL
+UNION ALL SELECT 'Day 6', 22.1;
+
+CREATE VISUAL GappedLineVisual AS LINE (
+    TITLE = 'Discontinuous Telemetry with Missing Values',
+    SOURCE = #gapped_series,
+    MAPPINGS (X = DayLabel, Y = Measurement),
+    OPTIONS (
+        CONNECT_NULLS = OFF,
+        LEGEND = 'OFF'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE PAGE GapsDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = GappedLineVisual)
+    )
+);

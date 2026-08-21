@@ -1,0 +1,35 @@
+-- Conformance Fixture: Multi-Series Scatter & Inferred Domains
+-- Validates automatic domain bounds inference across X and Y continuous domains.
+
+SET REPORT TITLE = 'Conformance: Multi-Series Scatter with Inferred Scales';
+
+SELECT 12.5 AS Velocity, 85.0 AS Efficiency, 30 AS SampleSize, 'Cohort A' AS Cohort INTO #cohort_scatter
+UNION ALL SELECT 18.2, 92.4, 45, 'Cohort A'
+UNION ALL SELECT 24.8, 78.1, 20, 'Cohort A'
+UNION ALL SELECT 15.0, 64.5, 35, 'Cohort B'
+UNION ALL SELECT 22.1, 71.0, 50, 'Cohort B'
+UNION ALL SELECT 29.5, 58.2, 60, 'Cohort B';
+
+CREATE VISUAL InferredScatterVisual AS SCATTER (
+    TITLE = 'Cohort Velocity vs Efficiency Distribution',
+    SOURCE = #cohort_scatter,
+    MAPPINGS (
+        X = Velocity,
+        Y = Efficiency,
+        SIZE = SampleSize,
+        COLOR = Cohort
+    ),
+    OPTIONS (
+        LEGEND = 'TOP',
+        X_AXIS (LABEL = 'Velocity (m/s)'),
+        Y_AXIS (LABEL = 'Efficiency (%)')
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE ScatterDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = InferredScatterVisual)
+    )
+);

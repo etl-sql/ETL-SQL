@@ -1,0 +1,33 @@
+-- Conformance Fixture: Goal, Average, and Moving Average Rules
+-- Validates statistical overlay rule lowering, threshold lines, and trend curves.
+
+SET REPORT TITLE = 'Conformance: Statistical & Goal Overlay Rules';
+
+SELECT 'Sprint 1' AS Sprint, 42 AS Velocity INTO #sprint_metrics
+UNION ALL SELECT 'Sprint 2', 48
+UNION ALL SELECT 'Sprint 3', 39
+UNION ALL SELECT 'Sprint 4', 55
+UNION ALL SELECT 'Sprint 5', 51
+UNION ALL SELECT 'Sprint 6', 62;
+
+CREATE VISUAL VelocityWithRulesBar AS BAR (
+    TITLE = 'Engineering Velocity vs Target Benchmarks',
+    SOURCE = #sprint_metrics,
+    MAPPINGS (X = Sprint, Y = Velocity),
+    OVERLAYS (
+        GOAL(50) AS DASHED WITH (COLOR = '#DC2626', LABEL = 'Target Velocity (50 pts)'),
+        AVERAGE AS DOTTED WITH (COLOR = '#2563EB', LABEL = 'Average (Historical)'),
+        MOVING_AVG(2) AS SOLID WITH (COLOR = '#059669', LABEL = '2-Sprint Moving Avg')
+    ),
+    OPTIONS (
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE VelocityDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = VelocityWithRulesBar)
+    )
+);
