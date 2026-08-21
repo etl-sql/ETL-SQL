@@ -27,10 +27,10 @@ const PANEL_HTML = `
   </div>
 
   <!-- Enroll Gateway Modal -->
-  <div class="modal-overlay" id="gw-enrollModal" style="display:none">
+  <div class="modal-overlay" id="gw-enrollModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="gw-enrollModal-title">
     <div class="modal-card" style="max-width: 580px;">
       <div class="modal-header">
-        <h3>Enroll Data Gateway</h3>
+        <h3 id="gw-enrollModal-title">Enroll Data Gateway</h3>
         <button class="modal-close" id="gw-enrollCloseBtn" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
@@ -84,10 +84,10 @@ const PANEL_HTML = `
   </div>
 
   <!-- Cluster Nodes Modal -->
-  <div class="modal-overlay" id="gw-nodesModal" style="display:none">
+  <div class="modal-overlay" id="gw-nodesModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="gw-nodesModal-title">
     <div class="modal-card" style="max-width: 650px;">
       <div class="modal-header">
-        <h3>Cluster Nodes — <span id="gw-nodesModalGatewayId"></span></h3>
+        <h3 id="gw-nodesModal-title">Cluster Nodes — <span id="gw-nodesModalGatewayId"></span></h3>
         <button class="modal-close" id="gw-nodesCloseBtn" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">

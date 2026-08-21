@@ -23,14 +23,14 @@ verified, update or retire its `ROADMAP.md` entry and record the shipped result 
 These failures were observed during the post-Phase 2 full-solution test run and are unrelated to the
 GoG contract changes.
 
-- [ ] Restore or generate `src/etl-sql-vscode/ui/dist/index.html` before browser-story tests, or make
+- [x] Restore or generate `src/etl-sql-vscode/ui/dist/index.html` before browser-story tests, or make
   the VS Code webview stories self-contained, so the results, preview, preview-sink, designer, and
   visual-flow fixtures do not fail with HTTP 404 responses.
-- [ ] Document the `/api/gateway/enrollment` area exposed by `GatewayBootstrapController.cs` in
+- [x] Document the `/api/gateway/enrollment` area exposed by `GatewayBootstrapController.cs` in
   `docs/architecture/Portal.md` so the API architecture reconciliation test passes.
-- [ ] Add `GatewayEnrollmentEntity` to the persisted-entity summary in
+- [x] Add `GatewayEnrollmentEntity` to the persisted-entity summary in
   `docs/architecture/Portal.md` so the data-model reconciliation test passes.
-- [ ] Give the `gw-enrollModal` overlay in `gateways-admin.js` a semantic, accessible dialog role and
+- [x] Give the `gw-enrollModal` overlay in `gateways-admin.js` a semantic, accessible dialog role and
   name so `PortalDialogAccessibilityTests` passes.
 
 ## Reporting and Authoring Critical Path

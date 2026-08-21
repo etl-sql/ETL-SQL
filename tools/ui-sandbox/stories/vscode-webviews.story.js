@@ -105,15 +105,87 @@ const RESULTS_TRACE = [
   }},
 ];
 
+function selfContainedResultsHtml() {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  ${vscodeShim()}
+  <script>window.VIEW_TYPE='results';</script>
+  <style>
+    body { background: #1e1e1e; color: #cccccc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 12px; margin: 0; }
+    .header { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #ffffff; }
+    .status { font-size: 12px; color: #888888; margin-bottom: 12px; }
+    .message { font-family: monospace; font-size: 11px; padding: 2px 0; }
+    .msg-sys { color: #569cd6; }
+    .msg-info { color: #4ec9b0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+    th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #333333; }
+    th { background: #252526; color: #aaaaaa; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="header">ETL-SQL Execution Results</div>
+    <div id="status" class="status">Initializing...</div>
+    <div id="messages"></div>
+    <div id="tables"></div>
+  </div>
+  <script>
+    window.addEventListener('message', e => {
+      const msg = e.data;
+      if (!msg) return;
+      if (msg.type === 'status') {
+        const el = document.getElementById('status');
+        if (el) el.textContent = 'Status: ' + msg.status;
+      } else if (msg.type === 'message') {
+        const mDiv = document.getElementById('messages');
+        if (mDiv) {
+          const row = document.createElement('div');
+          row.className = 'message msg-' + (msg.level || 'info');
+          row.textContent = msg.text;
+          mDiv.appendChild(row);
+        }
+      } else if (msg.type === 'results') {
+        const tDiv = document.getElementById('tables');
+        if (tDiv && msg.columns && msg.rows) {
+          const tbl = document.createElement('table');
+          const thead = document.createElement('tr');
+          msg.columns.forEach(c => { const th = document.createElement('th'); th.textContent = c; thead.appendChild(th); });
+          tbl.appendChild(thead);
+          msg.rows.forEach(r => {
+            const tr = document.createElement('tr');
+            msg.columns.forEach(c => { const td = document.createElement('td'); td.textContent = r[c] ?? ''; tr.appendChild(td); });
+            tbl.appendChild(tr);
+          });
+          tDiv.appendChild(tbl);
+        }
+      }
+    });
+    try { window.parent.postMessage({ __fromWebview: { type: 'ready' } }, '*'); } catch (e) {}
+  </script>
+</body>
+</html>`;
+}
+
 function renderResults(stage, ctx) {
   let timer = null;
   let started = false;
   let onParentMessage = null;
   const iframe = makeFrame('');  // srcdoc set below once html is fetched
 
-  fetch('/src/etl-sql-vscode/ui/dist/index.html').then(r => r.text()).then(html => {
-    iframe.srcdoc = html.replace('<head>', `<head>${vscodeShim()}<script>window.VIEW_TYPE='results';</script>`);
-  });
+  fetch('/src/etl-sql-vscode/ui/dist/index.html')
+    .then(r => {
+      if (!r.ok) throw new Error('Dist index.html not found: ' + r.status);
+      return r.text();
+    })
+    .then(html => {
+      iframe.srcdoc = html.replace('<head>', `<head>${vscodeShim()}<script>window.VIEW_TYPE='results';</script>`);
+    })
+    .catch(() => {
+      iframe.srcdoc = selfContainedResultsHtml();
+    });
   stage.replaceChildren(iframe);
 
   function startReplay() {
