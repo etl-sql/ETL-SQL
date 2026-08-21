@@ -137,6 +137,9 @@ namespace ETL_SQL.Reporting.Renderers
         {
             try
             {
+                if (visual.PlotPlan is not null)
+                    return PlotPlanTerminalRenderer.Render(visual.PlotPlan);
+
                 return visual.VisualType.ToUpperInvariant() switch
                 {
                     "HBAR" or "HORIZONTALBAR" => RenderBarChart(visual),

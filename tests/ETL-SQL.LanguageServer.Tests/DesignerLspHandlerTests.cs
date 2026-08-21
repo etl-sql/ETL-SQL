@@ -8,6 +8,37 @@ namespace ETL_SQL.LanguageServer.Tests
 {
     public class DesignerLspHandlerTests
     {
+        [Theory]
+        [InlineData("BAR", "\"X\": \"category\", \"Y\": \"amount\"")]
+        [InlineData("LINE", "\"X\": \"category\", \"Y\": \"amount\"")]
+        [InlineData("SCATTER", "\"X\": \"category\", \"Y\": \"amount\"")]
+        [InlineData("PIE", "\"LABEL\": \"category\", \"VALUE\": \"amount\"")]
+        [InlineData("DONUT", "\"LABEL\": \"category\", \"VALUE\": \"amount\"")]
+        [InlineData("COMBO", "\"X\": \"category\", \"Y\": \"amount\", \"Y2\": \"rate\"")]
+        public async Task Generate_Phase3MigratedVisuals_PreservesNamedSyntax(string visualType, string mappings)
+        {
+            var handler = new DesignerLspHandler(NullLogger<DesignerLspHandler>.Instance);
+            var state = $$"""
+                {
+                  "pages": [{
+                    "id": "p1", "name": "Overview", "mode": "Dashboard",
+                    "visuals": [{
+                      "id": "v1", "name": "chart", "type": "{{visualType}}",
+                      "gridCol": 1, "gridRow": 1, "gridColSpan": 12, "gridRowSpan": 4,
+                      "title": "Representative", "dataset": "stage",
+                      "mappings": { {{mappings}} }, "options": {}
+                    }]
+                  }],
+                  "datasets": []
+                }
+                """;
+
+            var response = await handler.Handle(new DesignerGenerateParams { designStateJson = state }, CancellationToken.None);
+
+            Assert.Contains($"CREATE VISUAL chart AS {visualType}", response.script);
+            Assert.Contains("CREATE PAGE [Overview] AS DASHBOARD", response.script);
+        }
+
         [Fact]
         public async Task Generate_NamelessVisuals_UsesIdFallback()
         {

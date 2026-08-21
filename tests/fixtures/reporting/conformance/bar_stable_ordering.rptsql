@@ -1,0 +1,36 @@
+-- Conformance Fixture: Stable Category & Series Ordering (BAR)
+-- Validates deterministic ordering preservation across categorical axes and series partitions.
+
+SET REPORT TITLE = 'Conformance: Stable Category & Series Ordering';
+SET REPORT DESCRIPTION = 'Validates deterministic ordering across categorical domain items and series.';
+
+SELECT 'Alpha' AS Category, 'Actual' AS SeriesName, 120 AS Metric, 1 AS SortOrder INTO #ordered_data
+UNION ALL SELECT 'Beta', 'Actual', 180, 2
+UNION ALL SELECT 'Gamma', 'Actual', 140, 3
+UNION ALL SELECT 'Delta', 'Actual', 210, 4
+UNION ALL SELECT 'Alpha', 'Forecast', 110, 1
+UNION ALL SELECT 'Beta', 'Forecast', 160, 2
+UNION ALL SELECT 'Gamma', 'Forecast', 150, 3
+UNION ALL SELECT 'Delta', 'Forecast', 200, 4;
+
+CREATE VISUAL OrderedCategoryBar AS BAR (
+    TITLE = 'Deterministic Category Ordering',
+    SOURCE = #ordered_data,
+    MAPPINGS (
+        X = Category,
+        Y = Metric,
+        SERIES = SeriesName
+    ),
+    OPTIONS (
+        AXIS_SORT = SOURCE,
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE PAGE OrderingDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = OrderedCategoryBar)
+    )
+);

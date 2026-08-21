@@ -1,0 +1,41 @@
+-- Conformance Fixture: Proportional Slices (PIE & DONUT)
+-- Validates slice theta angles, proportional percentages, and legend positioning.
+
+SET REPORT TITLE = 'Conformance: Proportional Composition (PIE & DONUT)';
+
+SELECT 'Search' AS Channel, 4500 AS Leads INTO #channel_leads
+UNION ALL SELECT 'Direct', 2800
+UNION ALL SELECT 'Referral', 1900
+UNION ALL SELECT 'Organic Social', 1200;
+
+CREATE VISUAL LeadSourcePie AS PIE (
+    TITLE = 'Lead Source Proportions (Pie)',
+    SOURCE = #channel_leads,
+    MAPPINGS (CATEGORY = Channel, VALUE = Leads),
+    OPTIONS (
+        LEGEND = 'RIGHT',
+        DATA_LABELS = ON WITH (FORMAT = 'P0')
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '380px')
+);
+
+CREATE VISUAL LeadSourceDonut AS DONUT (
+    TITLE = 'Lead Source Breakdown (Donut)',
+    SOURCE = #channel_leads,
+    MAPPINGS (CATEGORY = Channel, VALUE = Leads),
+    OPTIONS (
+        INNER_RADIUS = '50%',
+        LEGEND = 'BOTTOM'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '380px')
+);
+
+CREATE PAGE ProportionsDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP (
+            'A' = LeadSourcePie,
+            'B' = LeadSourceDonut
+        )
+    )
+);

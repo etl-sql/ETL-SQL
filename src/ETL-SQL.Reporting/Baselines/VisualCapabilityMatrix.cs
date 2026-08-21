@@ -19,15 +19,21 @@ public sealed record VisualCapabilityEntry(
     string Interactions, bool HasEChartsDependency, string Notes);
 
 /// <summary>
-/// Source-backed inventory of the current rendering paths. TemporaryDependency
-/// identifies Phase 3 replacement work; it is not a claim of native support.
+/// Source-backed inventory of the current rendering paths. TemporaryDependency identifies
+/// visuals whose browser or export path still relies on ECharts after the Phase 3 representative slice.
 /// </summary>
 public static class VisualCapabilityMatrix
 {
     private static readonly HashSet<VisualType> NativeSvgCharts =
     [
-        VisualType.Bar, VisualType.HorizontalBar, VisualType.Line,
-        VisualType.Pie, VisualType.Donut
+        VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Scatter,
+        VisualType.Pie, VisualType.Donut, VisualType.Combo
+    ];
+
+    private static readonly HashSet<VisualType> MigratedPlotPlanCharts =
+    [
+        VisualType.Bar, VisualType.Line, VisualType.Scatter,
+        VisualType.Pie, VisualType.Donut, VisualType.Combo
     ];
 
     private static readonly HashSet<VisualType> EChartsCharts =
@@ -42,7 +48,7 @@ public static class VisualCapabilityMatrix
 
     private static readonly HashSet<VisualType> TerminalSemanticFallbacks =
     [
-        VisualType.Combo, VisualType.Treemap, VisualType.Image, VisualType.Radar,
+        VisualType.Treemap, VisualType.Image, VisualType.Radar,
         VisualType.Map, VisualType.Sankey, VisualType.Sunburst, VisualType.Network
     ];
 
@@ -132,19 +138,27 @@ public static class VisualCapabilityMatrix
     private static VisualCapabilityEntry Chart(VisualType type, string name, string category, string chartKind, string interactions)
     {
         var nativeSvg = NativeSvgCharts.Contains(type);
+        var migrated = MigratedPlotPlanCharts.Contains(type);
         var terminalFallback = TerminalSemanticFallbacks.Contains(type);
         return new(
             type, name, category,
-            new(CapabilityLevel.TemporaryDependency, $"ECharts {chartKind}"),
+            new(CapabilityLevel.TemporaryDependency,
+                migrated ? $"ECharts {chartKind} generated transiently from PlotPlan" : $"ECharts {chartKind}"),
             nativeSvg
-                ? new(CapabilityLevel.Native, "SvgChartRenderer")
+                ? new(CapabilityLevel.Native, migrated ? "PlotPlan native SVG" : "SvgChartRenderer")
                 : new(CapabilityLevel.TemporaryDependency, "ECharts SSR SVG", "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"),
-            new(CapabilityLevel.TemporaryDependency, "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown"),
-            terminalFallback
+            migrated
+                ? new(CapabilityLevel.Native, "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown")
+                : new(CapabilityLevel.TemporaryDependency, "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown"),
+            migrated
+                ? new(CapabilityLevel.Native, "PlotPlan semantic terminal renderer")
+                : terminalFallback
                 ? new(CapabilityLevel.SemanticFallback, "textual summary / placeholder")
                 : new(CapabilityLevel.Native, "Spectre terminal renderer"),
             interactions, true,
-            nativeSvg ? "Native static SVG exists; browser rendering still uses ECharts" : "PlotPlan migration target");
+            migrated
+                ? "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+                : nativeSvg ? "Native static SVG exists; browser rendering still uses ECharts" : "PlotPlan migration target");
     }
 
     private static VisualCapabilityEntry Control(

@@ -337,9 +337,11 @@ namespace ETL_SQL.Reporting
 
         private async Task RenderChartAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
         {
-            // Prefer real ECharts (SSR) so every chart type matches the on-screen report;
-            // fall back to the static SVG renderer when there's no chart option or SSR fails.
-            var svgStr = await EChartsSsrRenderer.Shared.RenderSvgAsync(v, cancellationToken: cancellationToken) ?? _svg.Render(v);
+            // Migrated visuals render from PlotPlan without loading server-side V8. Non-migrated
+            // visuals retain the compatibility SSR path until their capability-matrix phase.
+            var svgStr = UsesNativePlotPlanRendering(v)
+                ? _svg.Render(v)
+                : await EChartsSsrRenderer.Shared.RenderSvgAsync(v, cancellationToken: cancellationToken) ?? _svg.Render(v);
             if (svgStr != null)
             {
                 var png = SvgToPng(svgStr);
@@ -365,6 +367,8 @@ namespace ETL_SQL.Reporting
                 nd.Format.Font.Color = _greyMedium;
             }
         }
+
+        internal static bool UsesNativePlotPlanRendering(VisualManifest visual) => visual.PlotPlan is not null;
 
         private static void RenderTable(Section section, VisualManifest v)
         {

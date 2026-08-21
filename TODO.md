@@ -87,23 +87,29 @@ source-backed 36-visual capability matrix, and reproducible named-fixture baseli
 
 ### Phase 3 — Representative GoG Vertical Slice
 
-- [ ] Lower existing named syntax directly to `ChartSpec` for `BAR`, `LINE`, `SCATTER`, `PIE` or
+- [x] Lower existing named syntax directly to `ChartSpec` for `BAR`, `LINE`, `SCATTER`, `PIE` or
   `DONUT`, and `COMBO`, plus `RULE` annotations.
-- [ ] Resolve the representative set through one `PlotPlan` path with stable domains, ordering,
+- [x] Resolve the representative set through one `PlotPlan` path with stable domains, ordering,
   palettes, legends, ticks, dual axes, gaps, and null behavior.
-- [ ] Generate ECharts options transiently from `PlotPlan`; remove ECharts-shaped state from the
+- [x] Generate ECharts options transiently from `PlotPlan`; remove ECharts-shaped state from the
   semantic contract for migrated visuals.
-- [ ] Implement native SVG output for the representative Cartesian, polar, layered, and annotation
+- [x] Implement native SVG output for the representative Cartesian, polar, layered, and annotation
   cases without adding rendering dependencies to Core.
-- [ ] Implement terminal output for the same representative plans to prove the contract is not a
+- [x] Implement terminal output for the same representative plans to prove the contract is not a
   renamed browser chart schema.
-- [ ] Route at least one PDF or email export path for the representative set without server-side V8.
-- [ ] Preserve current named visual syntax and add parser, LSP, Report Builder, runtime, and export
+- [x] Route at least one PDF or email export path for the representative set without server-side V8.
+- [x] Preserve current named visual syntax and add parser, LSP, Report Builder, runtime, and export
   regression coverage for every migrated type.
 
 **Exit gate:** The representative set passes shared semantic assertions and backend-specific goldens
 across ECharts, native SVG, terminal, and at least one V8-free export path; the capability matrix
 accurately records remaining ECharts-only behavior.
+
+**Completed:** Named `BAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, and `COMBO` syntax now lowers to
+typed data and one deterministic `PlotPlan`, including `RULE` overlays. ECharts is a transient browser
+adapter for these visuals; native SVG, semantic terminal output, and static PDF use the same plan,
+with representative parser, LSP, Report Builder, runtime, export, and cross-backend conformance
+coverage checked in.
 
 ### Phase 4 — Native Static Export and Micro-Charts
 

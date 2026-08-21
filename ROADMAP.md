@@ -91,8 +91,8 @@ out-of-scope bytes unchanged and that invalid intermediate edits do not reset th
 
 ### Reporting & Presentation — Native Grammar-of-Graphics Spine
 
-**Status:** Accepted  
-**Horizon:** Next  
+**Status:** In progress — representative vertical slice shipped
+**Horizon:** Active
 **Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
 
 ETL-SQL needs its own typed, versioned visual contract so report meaning is not defined by an ECharts
@@ -117,6 +117,12 @@ layouts, and measured ECharts retirement.
 
 **Acceptance evidence:** Cross-backend golden and semantic conformance tests, a capability matrix,
 typed-value and null tests, and measured bundle, cold-start, export-time, and output-size baselines.
+
+**Current delivery:** `BAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, and `COMBO`, including `RULE`
+annotations, now lower through typed `ChartSpec`/`ChartDataSet` contracts into one deterministic
+`PlotPlan`. Browser ECharts options are compiled transiently from that plan; native SVG, terminal,
+and static PDF consume the same resolved semantics without server-side V8. Remaining catalog types
+stay explicitly classified in the capability matrix for later slices.
 
 ### Reporting & Presentation — Native Card and Table Micro-Charts
 
