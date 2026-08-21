@@ -1,340 +1,340 @@
-# Architecture Decision Record: Grammar-of-Graphics Spec IR & Pluggable Chart Backends
+# Architecture Decision Record: Native Grammar-of-Graphics Contract and Pluggable Backends
 
-**Status:** Accepted  
-**Date:** 2026-08-19  
-**Context:** Reporting & Presentation Architecture  
+**Status:** Accepted
+**Date:** 2026-08-20
+**Decision scope:** Reporting semantics and renderer boundaries; advanced authoring syntax remains a
+separate language-design decision.
 
----
+## 1. Context
 
-## 1. Context & Problem Statement
+ETL-SQL currently builds `VisualManifest` data and ECharts-shaped chart configuration for browser and
+server consumers. `EChartsRenderer`, `EChartsSsrRenderer`, `PdfExporter`, `MarkdownRenderer`,
+`SvgChartRenderer`, and `TerminalRenderer` then render or reinterpret that state. This makes a vendor
+option schema the effective reporting contract and causes separate backends to repeat decisions about
+ordering, scales, colors, nulls, and fallbacks.
 
-ETL-SQL's presentation tier currently models data visualizations as a catalog of **~25+ discrete visual widgets** (`BAR`, `HBAR`, `LINE`, `SCATTER`, `DONUT`, `WATERFALL`, `CANDLESTICK`, `GAUGE`, etc.). 
+That coupling limits ETL-SQL's product goals:
 
-Under the existing implementation:
-1. `ReportParser.cs` parses widget-specific clauses and keywords.
-2. `ManifestBuilder.cs` translates the AST directly into an **Apache ECharts JSON configuration dictionary**.
-3. Downstream consumers (`report-runtime.js`, `SvgChartRenderer.cs`, `PdfExporter.cs`, terminal renderers) treat the ECharts JSON options schema as the internal data contract, re-deriving meaning from vendor-specific configuration structures.
+- Script-first, reviewable, lineage-aware report definitions.
+- Renderer independence and eventual ECharts retirement.
+- Consistent semantics across browser, terminal, PDF, email, and future presentation surfaces.
+- Native static output without requiring server-side V8.
+- Composite charts without adding a bespoke visual keyword for every combination.
+- Smaller browser and standalone-report payloads where the report's visual catalog permits it.
 
-### The Resulting Bottlenecks:
-- **Combinatorial Explosion:** Each visual type is implemented as a siloed configuration path. Multi-layer composition (e.g., actual bar + forecast line + budget reference band + error intervals) requires hand-building specialized types like `COMBO` or writing bespoke parser branches.
-- **Server-Side Export Trap:** ECharts is fundamentally a browser/DOM-bound charting library. Emitting static SVGs or paginated PDFs on the server currently requires running an embedded ClearScript/V8 JavaScript engine with high memory footprint, cold-start latency, and execution overhead.
-- **Renderer Lock-In:** Upgrading, swapping, or modernizing the browser charting layer requires rewriting the entire presentation pipeline because no neutral intermediate representation exists between query results and pixels.
+ETL-SQL has no external compatibility obligation at the time of this decision. Existing reports and
+rendered behavior remain valuable regression fixtures, but accidental syntax and ECharts-shaped
+internal state are not contracts that must be preserved.
 
----
+## 2. Decision
 
-## 2. Decision & Architectural Principles
+ETL-SQL will make its own typed, immutable, versioned Grammar-of-Graphics contract authoritative for
+graphical report meaning. Rendering proceeds through three conceptual levels:
 
-We adopt a **Grammar-of-Graphics (GoG) Intermediate Representation (IR)** as the canonical contract for all graphical visuals in ETL-SQL.
-
-> **Core Axiom:** *The grammar is the differentiator and the renderer is commodity.* A chart specification that is a first-class citizen of the query language gains lineage tracking, linting, LSP completion, and reviewable diffs. Pixel emission is a swappable compiler target.
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        .rptsql Authoring Layer                         │
-│  • 17 Sugar Types: BAR, LINE, PIE, CANDLESTICK, BOXPLOT, WATERFALL...  │
-│  • Multi-Layer Composition: CREATE VISUAL ... AS CUSTOM (...)          │
-│  • Embedded Vega-Lite: CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')   │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │  SpecDesugarer / Parser
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       Neutral GoG IR (ChartSpec)                       │
-│  • Coordinates: CARTESIAN, TRANSPOSED, POLAR, GEOGRAPHIC               │
-│  • Scales Block: X, Y, Y2, COLOR, SIZE (Linear, Log, Time, Band)       │
-│  • 8 Atomic Marks: RECT, LINE, AREA, POINT, RULE, ARC, TEXT, PATH      │
-│  • Data: JSON Columnar Vectors (Charts) | Arrow IPC (Large Tables)     │
-└───────────────┬───────────────────┬────────────────────┬───────────────┘
-                │                   │                    │
-                ▼                   ▼                    ▼
-    ┌───────────────────────┐┌──────────────┐┌───────────────────────┐
-    │ Native C# SVG Backend ││ Native Vector││ Lightweight D3 Modules│
-    │ (PdfExporter + Email) ││ SVG Micro-   ││ (Tier 3 Complex Charts│
-    │ • Pure C# scale math  ││ Renderer     ││  Maps, Sankey, Tree,  │
-    │ • SkiaSharp text bbox ││ (Cartesian + ││  Network Force Graph) │
-    │ • No ClearScript / V8 ││  Polar)      ││ • ~35 KB runtime total│
-    └───────────────────────┘└──────────────┘└───────────────────────┘
+```text
+.rptsql named visual sugar or future native advanced grammar
+                         |
+                         v
+                 Semantic ChartSpec
+                         |
+                         v
+                  Resolved PlotPlan
+               /          |          \
+              v           v           v
+      ECharts compiler  native SVG  terminal compiler
+        (temporary)      compiler     and fallbacks
 ```
 
-### Architectural Principles:
+`ChartSpec` describes intent. `PlotPlan` resolves shared deterministic choices. Backends consume the
+resolved plan and do not redefine report semantics. ECharts configuration is generated transiently
+during migration and is never stored as the canonical semantic report state.
 
-1. **Spec First, Renderer Second:** A typed, immutable data model (`ChartSpec`) in `ETL-SQL.Core` represents visual semantics (data bindings, mark layers, scale mappings, coordinate projections, and faceting). Renderers compile *from* it and never define it.
-2. **Type Keywords are Sugar:** Existing `.rptsql` visual keywords (`BAR`, `LINE`, `DONUT`, `WATERFALL`, `CANDLESTICK`) remain the primary, zero-friction "easy button" for authors. They lower automatically into standard `ChartSpec` configurations.
-3. **Transparent Data Prep in SQL:** Heavy data transformations, cumulative running totals, moving averages, percentiles, and statistical aggregations belong in **SQL `#temp` tables** where they are 100% visible, debuggable, lineage-tracked, and unit-testable. `ChartSpec` focuses strictly on **Visual Layout & Mark Encodings** (stacking, grouping/dodging, coordinate projections, dual-axis mapping) with zero hidden "black box" calculations.
-4. **Data Delivery Tiering (JSON Columnar + Arrow IPC):**
-   - **Charts & Visual Marks**: Serialized as lightweight **JSON Columnar vectors** (`{ "x": [...], "y": [...] }`), enabling instant browser `JSON.parse` with **0 KB** library overhead, human readability, and clean Git diffs.
-   - **Data Tables (`TABLE`, `MATRIX`)**: Retain **Apache Arrow IPC** streaming for high-density datasets (>1,000 rows) with on-demand lazy library loading (`arrow.min.js`).
-5. **Native C# Static SVG Export:** Server-side PDF and static report exports compile directly from `ChartSpec` into standalone vector SVG XML using pure C# geometry and **SkiaSharp** text measurement, completely retiring `ClearScript.V8` and headless browser dependencies.
-6. **Phased ECharts Retirement via D3 Micro-Modules:** Tier 2 standard charts migrate to our native vector SVG engine, and Tier 3 complex visuals (Maps, Sankey, Treemap, Network) migrate to focused, lightweight D3 micro-libraries (`d3-geo`, `d3-hierarchy`, `d3-sankey`, `d3-force`), achieving a **~35 KB total standalone runtime footprint**.
-7. **Vega-Lite Semantic Alignment:** Standard Vega-Lite v5 JSON specifications can be embedded directly via `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')` and compiled into native `ChartSpec` records.
-8. **Non-Chart Visual Boundaries:**
-   - `PAGE`, `CONTAINER`, `BUTTON`, and `NAVIGATION` remain structural HTML/CSS layout entities (CSS Grid, Flexbox, native DOM buttons).
-   - `TABLE`, `CARD`, `TEXT`, `IMAGE`, and form controls (`SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`) remain lightweight, specialized DOM components.
+This ADR accepts the architecture and boundaries below. It does not freeze unimplemented `.rptsql`
+grammar. Any new `CUSTOM`, layer, scale, coordinate, or facet syntax must follow the language syntax
+standards, include minimal parser-accepted examples, and preserve Report Builder round-trip fidelity
+before it is documented as supported syntax.
 
----
+## 3. Semantic `ChartSpec`
 
-## 3. Visual Catalog Tier Audit
+`ChartSpec` answers what a chart means, independent of output technology. Its contract includes:
 
-ETL-SQL supports **36 visual types** plus report structural primitives. Under the GoG architecture, these divide cleanly into three implementation tiers:
+- A schema/version identifier and stable serialization rules.
+- Typed data references and field bindings.
+- Semantic mark layers and their z-order.
+- Coordinate intent, including Cartesian, transposed, polar, and later geographic coordinates.
+- Scale intent and shared/independent scale policies.
+- Faceting and composition intent.
+- Raw-value formatting and null-handling intent.
+- Tooltip, selection, action, and interaction semantics.
+- Theme tokens, accessibility labels, and semantic fallback metadata.
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 All 36 Visual Types                                    │
-└───────────────┬──────────────────────────┬─────────────────────────────┬───────────────┘
-                │                          │                             │
-                ▼                          ▼                             ▼
-   ┌─────────────────────────┐┌─────────────────────────┐┌──────────────────────────────┐
-   │    Tier 1: HTML / DOM   ││   Tier 2: Native SVG    ││  Tier 3: 3rd-Party / Heavy   │
-   │  (13 Non-Chart Widgets) ││   (17 Standard Charts)  ││    (6 Complex / Spatial)     │
-   │                         ││                         ││                              │
-   │ • Tables & Cards        ││ • Bar, HBar, Line       ││ • GeoJSON Maps               │
-   │ • Text & Image          ││ • Scatter, Bubble       ││ • Network / Force Graphs     │
-   │ • All 9 Form Controls   ││ • Pie, Donut, Gauge     ││ • Sankey Flow Ribbons        │
-   │ • Pages & Containers    ││ • Combo, Waterfall      ││ • Treemap / Sunburst Trees   │
-   │ • Buttons & Navigation  ││ • BoxPlot, Candlestick  ││ • Gantt Timeline Charts      │
-   │                         ││ • HeatMap, Funnel       ││                              │
-   └─────────────────────────┘└─────────────────────────┘└──────────────────────────────┘
-```
+The initial semantic mark vocabulary covers `RECT`, `LINE`, `AREA`, `POINT`, `RULE`, `ARC`, and
+`TEXT`. It may grow through a language decision when a new analytical capability cannot be expressed
+coherently with those marks. Arbitrary SVG `PATH` is a resolved scene primitive, not an initial
+author-facing semantic mark: exposing raw paths would couple authors to pixel geometry and weaken
+portable rendering.
 
-### Tier 1: Native HTML / DOM Controls (13 Visuals + Layout Primitives)
-*Rendered directly as semantic HTML/CSS without charting libraries or vector path mathematics.*
-- **Data & Narrative:** `TABLE` (Tabulator / HTML table), `CARD` (KPI metric tile), `TEXT` (Markdown narrative), `IMAGE` (`<img>`).
-- **Interactive Form Inputs:** `SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`.
-- **Layout & Structure:** `PAGE` (CSS Grid), `CONTAINER` (Tabs / Accordion / Clusters), `BUTTON` (Action triggers), `NAVIGATION` (Header/sidebar nav).
+Named visual types such as `BAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `WATERFALL`, and
+`CANDLESTICK` remain the normal authoring path. They lower into `ChartSpec` presets rather than into
+renderer-specific configuration.
 
-### Tier 2: Native GoG / SVG Engine (17 Visuals)
-*Standard Cartesian (X/Y) or Polar graphics using scale math (Linear, Band, Time, Log) and the 8 atomic SVG mark primitives. Handled by pure C# and JS vector renderers.*
-- **Cartesian Standard:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `COMBO`, `WATERFALL`, `BOXPLOT`, `CANDLESTICK`, `HEATMAP`.
-- **Circular / Polar:** `PIE`, `DONUT`, `GAUGE`, `FUNNEL`, `RADAR`.
-- **Small Multiples / Grid:** `TRELLIS`, `MATRIX`.
+## 4. Resolved `PlotPlan`
 
-### Tier 3: Specialized 3rd-Party / Heavy Layout Engine (6 Visuals)
-*Visuals requiring topological physics simulation, GeoJSON projections, or multi-level space partitioning.*
-- `MAP` — GeoJSON polygon rendering, Mercator/Albers projections (`d3-geo`).
-- `NETWORK` — Force-directed physics simulations (`d3-force`).
-- `SANKEY` — Multi-stage flow layout and curved bezier ribbons (`d3-sankey`).
-- `TREEMAP` — Squarified 2D space partitioning (`d3-hierarchy`).
-- `SUNBURST` — Multi-tier hierarchical polar partitioning (`d3-hierarchy`).
-- `GANTT` — Time-scale task scheduling with dependency snapping.
+`PlotPlan` is a deterministic, renderer-neutral result of combining `ChartSpec`, typed data, theme,
+and requested output constraints. It owns decisions that must not drift between C#, JavaScript, and
+terminal implementations:
 
----
+- Validated data domains and category ordering.
+- Series identity and stable palette assignments.
+- Scale domains, zero policy, and shared/independent facet resolution.
+- Tick locations and formatted labels.
+- Null, gap, interpolation, and invalid-value handling.
+- Legend entries and ordering.
+- Resolved layers, annotations, and accessible summaries.
+- Portable plot bounds and layout decisions where the target surface permits them.
 
-## 4. The 8 Atomic Mark Primitives
+The plan may contain scene-level paths and target-neutral geometry after semantic marks have been
+resolved. It must retain enough semantic information for terminal and accessibility fallbacks rather
+than collapsing immediately into SVG commands.
 
-Every 2D visualization compiles down into compositions of **8 atomic mark types**:
+Layout choices that inherently depend on target font metrics or viewport constraints are expressed as
+explicit backend inputs or bounded backend decisions. They are not allowed to change data ordering,
+scale meaning, palette identity, or null semantics.
 
-1. **`RECT`** *(sugar alias: `BAR`)*: Defined by $(X_1, Y_1) \to (X_2, Y_2)$. Supports `CORNER_RADIUS`, `OPACITY`, `WIDTH` (bar ratio).
-2. **`LINE`**: Connected sequence of $(X_i, Y_i)$ vertices. Supports `STROKE` (`SOLID`, `DASHED`, `DOTTED`), `WIDTH`, `SMOOTH` (Monotone spline), `POINTS` (vertex dots).
-3. **`AREA`** *(sugar alias: `BAND`)*: Filled polygon between baseline $Y_2$ and top line $Y$. Supports `OPACITY`, `COLOR`.
-4. **`POINT`** *(sugar alias: `SCATTER`)*: Discrete glyph at $(X, Y)$. Supports `SIZE`, `SHAPE` (`CIRCLE`, `SQUARE`, `DIAMOND`, `TRIANGLE`), `COLOR`.
-5. **`RULE`**: Reference segment between points or spanning across an axis. Supports literal constants (`Y = 100.0` or `X = '2026-01-01'`), `LABEL`, `COLOR`, `STROKE`.
-6. **`ARC`**: Polar sector defined by $(\theta_{\text{start}}, \theta_{\text{end}}, R_{\text{inner}}, R_{\text{outer}})$. Powers pie, donut, and gauge tracks.
-7. **`TEXT`**: Typography positioned at $(X, Y)$ with `ALIGN`, `BASELINE`, `FONT_SIZE`, `FONT_WEIGHT`, and `FORMAT` pattern.
-8. **`PATH`**: Arbitrary SVG vector path data. Powers funnel trapezoids and custom vector glyphs.
+## 5. Typed Data Contract
 
----
+Chart backends must not infer types independently from string-only rows. The reporting contract
+preserves:
 
-## 5. The `ChartSpec` Intermediate Representation Model
+- Integer, floating-point, and decimal semantics.
+- Dates, times, offsets, and time zones.
+- Booleans.
+- Null separately from zero and empty string.
+- Nominal and ordinal category intent.
+- Raw values separately from formatted display values.
 
-The `ChartSpec` model is defined in `ETL-SQL.Core.Reporting.Spec`:
+Columnar JSON is the preferred first representation for ordinary chart vectors because it is native
+to browsers, easy to inspect, and requires no chart-data decoding library. Arrow IPC remains useful
+for dense `TABLE` and `MATRIX` data. The crossover between representations is selected from measured
+payload, parse, memory, and interaction behavior; this ADR does not establish a permanent row-count
+threshold.
 
-```csharp
-public sealed record ChartSpec
-{
-    public required DataRef Data { get; init; }
-    public CoordinateSpec Coordinate { get; init; } = CoordinateSpec.Cartesian;
-    public Dictionary<Channel, ScaleSpec> Scales { get; init; } = new();
-    public List<LayerSpec> Layers { get; init; } = [];
-    public FacetSpec? Facet { get; init; }
-    public SelectionSpec Selections { get; init; } = new();
-    public LayoutOptions Options { get; init; } = new();
-}
+## 6. Authoring and Transformation Boundary
 
-public sealed record LayerSpec
-{
-    public required MarkType Mark { get; init; } // Rect, Line, Area, Point, Rule, Arc, Text, Path
-    public string? Source { get; init; }          // Optional layer-specific #temp source override
-    public Dictionary<Channel, EncodingSpec> Encodings { get; init; } = new();
-    public LayerOptions Options { get; init; } = new();
-}
+Existing named syntax remains the zero-friction path:
 
-public sealed record EncodingSpec
-{
-    public string? Field { get; init; }
-    public ValueType DataType { get; init; }      // Quantitative, Nominal, Ordinal, Temporal
-    public object? Value { get; init; }           // Constant literal override
-    public string? Format { get; init; }          // Display pattern ('$#,##0.00', '0.0%', 'yyyy-MM-dd')
-    public NullHandlingPolicy NullPolicy { get; init; } = NullHandlingPolicy.Gap; // Gap, Zero, Interpolate
-}
-
-public sealed record ScaleSpec
-{
-    public ScaleType Type { get; init; } = ScaleType.Linear; // Linear, Log, Time, Band, Ordinal, Symlog, Sequential
-    public bool Zero { get; init; } = true;
-    public double? Min { get; init; }
-    public double? Max { get; init; }
-    public string? Title { get; init; }
-    public string? Format { get; init; }
-    public string? Palette { get; init; }         // 'corporate', 'tableau10', 'viridis', etc.
-}
-
-public sealed record FacetSpec
-{
-    public string? By { get; init; }             // 1D wrap partition field (e.g. Region)
-    public int? Columns { get; init; }           // Max columns for 1D wrap
-    public string? Row { get; init; }            // 2D grid matrix row field
-    public string? Column { get; init; }         // 2D grid matrix column field
-    public FacetScalePolicy Scales { get; init; } = FacetScalePolicy.Shared;
-    public bool ShowHeaders { get; init; } = true;
-}
-
-public enum FacetScalePolicy
-{
-    Shared,  // Synchronized domains across all panels (default for accurate comparison)
-    Free,    // Independent X and Y scales per panel
-    FreeX,   // Independent X per panel, synchronized Y
-    FreeY    // Independent Y per panel, synchronized X
-}
-
-public enum CoordinateSpec
-{
-    Cartesian,
-    Transposed,
-    Polar,
-    Geographic
-}
-```
-
----
-
-## 6. Desugaring Matrix for All 17 Tier 2 Visual Types
-
-When a report author uses a sugar keyword, `SpecDesugarer` lowers it automatically into `ChartSpec`:
-
-| Sugar Visual Type | Coordinate | Lowered `ChartSpec` Mark Composition |
-| :--- | :--- | :--- |
-| **`BAR`** | `CARTESIAN` | **1 $\times$ `RECT`**: $X=\text{Nominal}, Y=\text{Quantitative}, \text{Color}=\text{Series}$. |
-| **`HBAR`** | `TRANSPOSED` | **1 $\times$ `RECT`**: $Y=\text{Nominal}, X=\text{Quantitative}, \text{Color}=\text{Series}$. |
-| **`LINE`** | `CARTESIAN` | **1 $\times$ `LINE`**: $X=\text{Temporal/Nominal}, Y=\text{Quantitative}$. *(+ optional `POINT` markers)* |
-| **`SCATTER`** | `CARTESIAN` | **1 $\times$ `POINT`**: $X=\text{Quantitative}, Y=\text{Quantitative}, \text{Color}=\text{Series}$. |
-| **`BUBBLE`** | `CARTESIAN` | **1 $\times$ `POINT`**: $X=\text{Quantitative}, Y=\text{Quantitative}, \text{Size}=\text{SizeCol}$. |
-| **`COMBO`** | `CARTESIAN` | **Multi-Layer**: E.g. Layer 1 = `RECT` (Left Y), Layer 2 = `LINE` (Right $Y_2$). |
-| **`WATERFALL`** | `CARTESIAN` | **1 $\times$ `RECT`**: Floating bars ($Y=\text{Baseline}, Y_2=\text{Target}$) with color conditional on delta ($\Delta \ge 0 \rightarrow \text{Green}, \Delta < 0 \rightarrow \text{Red}$). |
-| **`CANDLESTICK`** | `CARTESIAN` | **2 Layers**:<br>• Layer 1 (`RULE`): High/Low wick ($Y=\text{High}, Y_2=\text{Low}$)<br>• Layer 2 (`RECT`): Candle body ($Y=\text{Open}, Y_2=\text{Close}$, Color = Up/Down). |
-| **`BOXPLOT`** | `CARTESIAN` | **3–4 Layers**:<br>• Layer 1 (`RULE`): Whiskers (Min to Q1, Q3 to Max)<br>• Layer 2 (`RECT`): IQR Box (Q1 to Q3)<br>• Layer 3 (`RULE`): Median line<br>• Layer 4 (`POINT`): Outliers. |
-| **`HEATMAP`** | `CARTESIAN` | **1 $\times$ `RECT`**: $X=\text{Nominal}, Y=\text{Nominal}, \text{Color}=\text{SequentialScale}(\text{Value})$. |
-| **`PIE`** | `POLAR` | **1 $\times$ `ARC`**: $\theta=\text{Value}, R=[0, R_{\text{outer}}], \text{Color}=\text{Category}$. |
-| **`DONUT`** | `POLAR` | **1 $\times$ `ARC`**: $\theta=\text{Value}, R=[R_{\text{inner}}, R_{\text{outer}}]$ + optional center `TEXT` mark. |
-| **`GAUGE`** | `POLAR` | **3 Layers**:<br>• Layer 1 (`ARC`): Background track<br>• Layer 2 (`ARC`): Progress track<br>• Layer 3 (`TEXT`): Center value readout. |
-| **`FUNNEL`** | `CARTESIAN` | **1 $\times$ `PATH` / `RECT`**: Stepped width or trapezoid path sorted descending. |
-| **`RADAR`** | `POLAR` | **2 Layers**:<br>• Layer 1 (`AREA`): Translucent polygon fill ($\theta=\text{Dimension}, r=\text{Value}$)<br>• Layer 2 (`LINE`): Polygon perimeter stroke. |
-| **`TRELLIS` / `MATRIX`** | `CARTESIAN` | **`FacetSpec`**: Multi-panel grid faceting a child `ChartSpec` by Row/Column dimensions. |
-
----
-
-## 7. Authoring Syntax in Report-SQL (`.rptsql`)
-
-### 7.1 The "Easy Button" (Sugar Syntax)
 ```sql
-CREATE VISUAL MonthlyRevenue AS BAR (
-  SOURCE   = #monthly_sales,
-  MAPPINGS (X = Month, Y = Revenue, COLOR = Region)
+CREATE VISUAL Revenue AS BAR (
+  SOURCE = #monthly_revenue,
+  MAPPINGS (X = Month, Y = Revenue)
 );
 ```
 
-### 7.2 Multi-Layer Visuals via `CUSTOM` with `SCALES (...)`
-```sql
-CREATE VISUAL ActualVsBudget AS CUSTOM (
-  SOURCE = #monthly_financials,
-  MAPPINGS (
-    X = Month,
-    RECT (Y = ActualRevenue, COLOR = '#1e40af', WIDTH = 0.6),
-    RECT (Y = BudgetRevenue, COLOR = '#93c5fd', OPACITY = 0.5),
-    LINE (Y2 = TargetGrowth, COLOR = '#f59e0b', STROKE = DASHED, WIDTH = 2),
-    RULE (Y2 = 0.15, COLOR = '#ef4444', STROKE = DOTTED, LABEL = 'Min Growth Floor')
-  ),
-  SCALES (
-    Y  (TITLE = 'Revenue ($)', FORMAT = '$#,##0', ZERO = ON),
-    Y2 (TITLE = 'Growth Rate', FORMAT = '0.0%', ZERO = ON, MIN = 0.0, MAX = 0.4)
-  ),
-  COORDINATE = CARTESIAN,
-  TOOLTIP (
-    TITLE   = Month,
-    CONTENT = 'Actual: ' + FORMAT(ActualRevenue, '$#,##0') + 
-              ' | Budget: ' + FORMAT(BudgetRevenue, '$#,##0') + 
-              ' | Target: ' + FORMAT(TargetGrowth, '0.0%')
-  ),
-  ACTIONS (
-    ON_CLICK = SET_PARAMETER(@selected_month, Month)
-  )
-);
-```
+A later native advanced grammar may add mark layers, scales, coordinates, conditions, and faceting.
+It must remain ETL-SQL syntax with normal linting, completion, lineage, formatting, and designer
+support.
 
-### 7.3 Orthogonal Small-Multiples via `FACET`
+Heavy transformation does not move into the visual grammar. Aggregation, joins, calculated columns,
+running totals, percentiles, moving averages, lookup, filtering, and statistical preparation remain
+visible ETL-SQL operations, preferably staged in `#temp` tables for cross-source work. The visual
+contract handles encoding, composition, and presentation rather than becoming a hidden data engine.
 
-In the Grammar of Graphics, **Faceting** is an orthogonal operator applicable to any standard visual (`BAR`, `LINE`, `SCATTER`, `COMBO`, etc.) or `CUSTOM` multi-layer visual.
+## 7. Vega-Lite Decision
 
-#### 1D Wrapped Small-Multiples:
-```sql
-CREATE VISUAL RegionalMarginTrends AS LINE (
-  SOURCE   = #quarterly_data,
-  MAPPINGS (X = Quarter, Y = MarginPercent, COLOR = Channel),
-  FACET    (BY = Region, COLUMNS = 3, SCALES = SHARED)
-);
-```
+ETL-SQL will not add first-class embedded Vega-Lite runtime syntax or persist Vega-Lite JSON as report
+state. Vega-Lite is a design reference and competitive capability checklist, not a runtime dependency
+or second language inside `.rptsql`.
 
-#### 2D Matrix Faceting (Row $\times$ Column):
-```sql
-CREATE VISUAL RegionalProductMatrix AS CUSTOM (
-  SOURCE   = #sales_matrix,
-  MAPPINGS (
-    X = Quarter,
-    RECT (Y = Revenue, COLOR = '#1e40af'),
-    LINE (Y = Target, COLOR = '#f59e0b', STROKE = DASHED)
-  ),
-  FACET (
-    ROW     = Region,
-    COLUMN  = ProductLine,
-    SCALES  = SHARED -- SHARED (default) | FREE | FREE_X | FREE_Y
-  )
-);
-```
+Embedding it would create a second schema, quoting and diff problems, incomplete ETL-SQL linting and
+lineage, a separate interaction model, hidden transformations, and an ongoing external compatibility
+promise. Partial compatibility would be especially difficult to explain.
 
-### 7.4 Embedded Vega-Lite Specifications
-```sql
-CREATE VISUAL TelemetryPlot AS VEGA_LITE (
-  SOURCE = #telemetry_data,
-  SPEC   = '{
-    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-    "mark": { "type": "point", "tooltip": true },
-    "encoding": {
-      "x": { "field": "Temperature", "type": "quantitative" },
-      "y": { "field": "Vibration", "type": "quantitative" },
-      "color": { "field": "Status", "type": "nominal" }
-    }
-  }'
-);
-```
+ETL-SQL will instead publish a conversion guide mapping common concepts to idiomatic ETL-SQL:
 
----
+| Vega-Lite concept | ETL-SQL-native direction |
+| :--- | :--- |
+| `layer` | Native semantic mark layers |
+| `facet` / `repeat` | Native facet and composition operators |
+| `resolve.scale` | Shared or independent scale policies |
+| Conditional encoding | Native encoding conditions |
+| Selections and parameters | ETL-SQL variables, actions, and interactions |
+| Calculate, aggregate, lookup, window, filter | Visible SQL projections, joins, windows, and `WHERE` |
+| Configuration and themes | Report, page, and visual style contracts |
 
-## 8. Pure C# Static SVG Engine Architecture
+An agent can use that guide to translate a Vega-Lite specification into normal `.rptsql`, explain
+where transforms moved, and call out constructs requiring judgment. Broadly useful missing concepts
+should be added coherently to ETL-SQL rather than hidden in an importer.
 
-To eliminate ClearScript/V8 dependencies on the server, `SvgChartCompiler.cs` compiles `ChartSpec` directly to standalone vector SVG XML:
-1. **Scale Math**: Pure C# `LinearScale`, `LogScale`, `TimeScale`, and `BandScale` implementations.
-2. **Tick Generation**: Extended Wilkinson tick math in C# producing human-friendly axis intervals.
-3. **Path Generation**: `SvgPathBuilder` emitting cubic spline paths (`M ... C ...`) and polar arc geometries (`M ... A ... Z`).
-4. **Text Metrics**: Sub-pixel text bounds measurement using **SkiaSharp** (`SKPaint.MeasureText`), ensuring zero axis-label overlap with automatic 45° rotation and label thinning.
-5. **Direct Consumers**: Emitted SVGs feed directly into `PdfExporter` (via `Svg.Skia`), `MarkdownRenderer`, and HTML email notifications.
+## 8. Backend Strategy
 
----
+### 8.1 Temporary ECharts Compiler
 
-## 9. Delivery Phases
+The first migration backend compiles `PlotPlan` to an ECharts option object. This preserves broad
+browser behavior while severing the semantic dependency on ECharts. No ECharts option becomes part of
+the saved report, AST, or neutral manifest contract.
 
-| Phase | Milestone | Description |
-| :--- | :--- | :--- |
-| **Phase 1** | **Spec IR & ECharts Lowering** | Implement `ChartSpec` record hierarchy in `ETL-SQL.Core.Reporting.Spec`; build `SpecDesugarer` for all 17 Tier 2 types; build `SpecToEChartsCompiler`. JSON columnar vectors serialize in `VisualManifest`. |
-| **Phase 2** | **Native C# Static SVG Backend** | Implement pure C# scale math and SkiaSharp text metrics in `SvgChartCompiler.cs`. Directly replaces `EChartsSsrRenderer.cs`, completely retiring `ClearScript.V8` from the server for PDF/email exports. |
-| **Phase 3** | **`CUSTOM` Syntax & Vega-Lite Import** | Add parser support for `CREATE VISUAL ... AS CUSTOM (...)` with `SCALES (...)` block and `CREATE VISUAL ... AS VEGA_LITE (SPEC = '...')`. Establishes `ComponentTooltipSpec` hook for Visual/Container Tooltips. |
-| **Phase 4** | **Native Vector SVG Micro-Renderer** | Implement lightweight browser SVG/DOM renderer for Tier 2 Cartesian & Circular charts (`BAR`, `LINE`, `SCATTER`, `PIE`, `COMBO`, `WATERFALL`). Conditionally omit ECharts for reports containing only Tier 1 & Tier 2 visuals. |
-| **Phase 5** | **Complete ECharts Retirement via D3** | Replace remaining Tier 3 complex visuals (`MAP` via `d3-geo`, `TREEMAP`/`SUNBURST` via `d3-hierarchy`, `SANKEY` via `d3-sankey`, `NETWORK` via `d3-force`) with specialized D3 micro-packages. Completely retire `echarts.min.js` from the repository, achieving a ~35 KB total standalone runtime footprint. |
-| **Phase 6** | **Advanced Composite Samples & Cookbook** | Create production-grade sample scripts for high-impact composite visuals (Dumbbell variance plots, Bullet graphs with qualitative zones, Ridgeline distribution plots). Author comprehensive guides: *"How to Build a CUSTOM Chart"*, *"Enhancing Standard Charts with Overlay Layers"*, and add 10+ recipes to the Reporting Cookbook. |
+### 8.2 Native SVG Compiler
+
+Native SVG is the canonical static graphical output. Scale and geometry code lives in the reporting
+or rendering layer, not in Core. Text measurement may use the already-approved rendering stack where
+needed, but the semantic contracts remain dependency-light.
+
+The native compiler initially covers representative Cartesian, polar, layered, and annotation cases.
+Standard visual coverage expands from conformance evidence rather than from an all-at-once rewrite.
+
+### 8.3 Browser Renderer
+
+The browser may render standard `PlotPlan` output through a small SVG/DOM implementation. ECharts can
+be omitted only when the report capability matrix proves that every contained visual and interaction
+has a native implementation. Bundle-size targets are measured from bundled, minified, and compressed
+artifacts using a declared fixture.
+
+### 8.4 Specialized Layout Modules
+
+Maps, force networks, Sankey flows, treemaps, and sunbursts may use focused layout modules after the
+native contract is stable. Gantt is evaluated separately because time/band scales, rectangles, rules,
+text, and dependency paths may fit the native engine.
+
+No D3 module or other package is accepted by this ADR. Each dependency must satisfy the third-party
+policy, license inventory, maintenance, transitive-dependency, and necessity checks before adoption.
+Any aggregate runtime-size goal is a measured budget, not an architectural promise.
+
+## 9. Terminal and Accessibility Strategy
+
+The terminal target is semantic parity, not pixel parity:
+
+- Rectangles and bars lower to Unicode fractional blocks.
+- Lines and areas lower to Braille or block canvases.
+- Points lower to distinguishable glyphs.
+- Rules lower to labeled box-drawing references.
+- Arcs lower to proportional components and gauges.
+- Facets lower to coordinated terminal panels where width permits.
+
+Complex visual types receive useful semantic fallbacks:
+
+- Maps become ranked regional breakdowns.
+- Sankey diagrams become transition and drop-off tables.
+- Treemaps and sunbursts become proportional hierarchy trees/tables.
+- Networks become node-degree and connection summaries.
+
+The fallback model is shared with screen-reader summaries, plain-text email, and other non-graphical
+surfaces. Rich terminal form controls and keyboard navigation are worthwhile but form a distinct UI
+initiative and do not block the GoG foundation.
+
+## 10. PDF and Email
+
+Native SVG removes the server-side V8 requirement for supported charts, but delivery targets retain
+different constraints:
+
+- **PDF:** The current export path rasterizes SVG to PNG. Removing V8 does not by itself produce vector
+  PDF. High-resolution raster output is an explicit acceptable interim state; a direct vector-to-PDF
+  bridge can be evaluated separately.
+- **Email:** SVG client support is inconsistent. Charts originate from the canonical SVG compiler and
+  are delivered as PNG/CID or another broadly supported image form, with accessible text or table
+  fallback.
+
+These adapters preserve one semantic compiler without pretending every consumer accepts the same
+physical format.
+
+## 11. Custom HTML/SVG Boundary
+
+GoG and custom presentation templates serve different purposes:
+
+- GoG is the escape hatch for custom analytical graphics.
+- HTML/SVG templates are the escape hatch for bespoke presentation components such as KPI cards,
+  badges, narrative panels, repeaters, and status displays.
+
+Repeated template construction of the same analytical chart indicates a missing mark, encoding,
+coordinate, or composition feature. Arbitrary templates cannot be the normal chart path because they
+cannot automatically provide semantic terminal output, accessible summaries, lineage-aware bindings,
+or reliable PDF/email behavior.
+
+Template support is a separate Zero-Trust boundary. It requires parsed HTML/CSS/SVG, scoped selectors,
+element/attribute/property/URL allowlists, resource and recursion budgets, accessibility rules, and
+deterministic fallbacks. Removing scripts and inline event handlers alone is insufficient.
+
+## 12. Delivery Plan
+
+### Slice 0 — Authoring Safety
+
+Complete lossless Report Builder mutation behavior for current and future nested presentation syntax.
+No new GoG grammar is considered usable until the LSP and embedded authoring paths preserve unrelated
+text, trivia, and line endings.
+
+### Slice 1 — Representative End-to-End Contract
+
+Prove a versioned `ChartSpec`, typed columnar data, deterministic `PlotPlan`, named visual lowering,
+transient ECharts compilation, native SVG, and terminal output with a deliberately varied set:
+
+- `BAR` for band and linear scales.
+- `LINE` for temporal or ordinal values, gaps, and multiple series.
+- `SCATTER` for two quantitative axes and point encoding.
+- `PIE` or `DONUT` for polar coordinates.
+- `COMBO` for layering and dual axes.
+- `RULE` for targets and annotations.
+
+At least one PDF or email export path for the representative set must work without server-side V8.
+
+### Slice 2 — Native Micro-Charts and Static Export
+
+Use the same contracts for card/table sparklines and progress indicators. Expand native SVG coverage
+only with geometry goldens, typed-data conformance, and portable fallbacks.
+
+### Slice 3 — Native Advanced Authoring
+
+Specify and parser-test the ETL-SQL-native advanced grammar for layering, scales, coordinates,
+conditions, and facets. Update LSP, formatter, documentation, samples, and Report Builder mutation
+support together. This slice does not add embedded Vega-Lite.
+
+### Slice 4 — Catalog Expansion and ECharts Retirement
+
+Migrate remaining standard visuals in independently testable groups. Evaluate specialized layout
+modules for complex charts, classify Gantt from evidence, and remove ECharts/ClearScript only after
+the capability matrix, exports, interactions, and regression fixtures no longer require them.
+
+### Slice 5 — Advanced Samples and Conversion Guidance
+
+Add production-grade composite examples and a Vega-Lite-to-ETL-SQL concept guide. Samples keep data
+transformation in visible SQL and demonstrate layering, annotations, conditions, facets, interactions,
+accessibility, and cross-surface fallbacks.
+
+## 13. Acceptance Evidence
+
+The architecture is complete only when evidence covers:
+
+- Serialization/version compatibility for `ChartSpec` and `PlotPlan`.
+- Typed numbers, decimals, temporal values, booleans, categories, nulls, and raw/formatted separation.
+- Shared domain, ordering, tick, palette, legend, and null decisions across backends.
+- Cross-backend semantic conformance plus visual goldens where pixel output matters.
+- Browser, terminal, PDF, email, accessibility, and plain-text fallback fixtures.
+- Report Builder and LSP round-trip preservation for every added grammar form.
+- Measured bundle size, cold start, export time, output size, and memory on declared workloads.
+- A maintained capability matrix classifying native, semantic-fallback, and temporary ECharts paths.
+- Third-party license and inventory compliance for any specialized modules.
+
+ECharts retirement is an outcome of passing this evidence, not a date or size promise embedded in the
+architecture.
+
+## 14. Consequences
+
+### Positive
+
+- ETL-SQL owns its semantic reporting contract and can evolve it with its language, lineage, and
+  governance model.
+- All renderers share deterministic decisions instead of reverse-engineering vendor configuration.
+- Native SVG, terminal reporting, micro-charts, and accessibility summaries become coherent consumers
+  of one plan.
+- Existing named visuals stay simple while advanced composition can grow in native syntax.
+- ECharts can be retired incrementally with measurable capability gates.
+
+### Costs and risks
+
+- `ChartSpec` and `PlotPlan` introduce contracts that require versioning and conformance discipline.
+- Cross-backend layout still needs carefully bounded target-specific behavior.
+- Typed report data changes manifest and serialization assumptions.
+- Advanced grammar expands parser, LSP, formatter, documentation, and designer responsibilities.
+- Native geometry and specialized layouts require sustained testing that a single vendor renderer
+  previously absorbed.
+
+These costs are accepted because a vendor-shaped semantic core would continue to undermine
+portability, script-first authoring, and multi-surface reporting.
