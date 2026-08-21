@@ -1,0 +1,37 @@
+-- Named Representative Fixture: COMBO
+-- Multi-layer Cartesian visual combining BAR (Volume/Revenue) and LINE (Margin %)
+
+SET REPORT TITLE = 'Representative COMBO: Revenue vs Margin %';
+SET REPORT DESCRIPTION = 'Baseline fixture for Layered Cartesian COMBO visual evaluation and GoG benchmarking.';
+
+SELECT '2026-Q1' AS Quarter, 125000 AS Revenue, 34.5 AS MarginPct INTO #financial_summary
+UNION ALL SELECT '2026-Q2', 148000, 36.2
+UNION ALL SELECT '2026-Q3', 139000, 31.8
+UNION ALL SELECT '2026-Q4', 182000, 38.0;
+
+CREATE VISUAL QuarterlyFinancialCombo AS COMBO (
+    TITLE = 'Quarterly Revenue & Gross Margin Performance',
+    SOURCE = #financial_summary,
+    MAPPINGS (X = Quarter),
+    SERIES (
+        BAR Revenue,
+        LINE MarginPct
+    ),
+    OPTIONS (
+        COLORS (
+            'Revenue' = '#2563EB',
+            'MarginPct' = '#10B981'
+        ),
+        LEGEND = 'TOP',
+        X_AXIS (LABEL = 'Fiscal Quarter'),
+        Y_AXIS (LABEL = 'Revenue ($)')
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE MainDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = QuarterlyFinancialCombo)
+    )
+);

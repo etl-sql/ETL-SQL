@@ -1,0 +1,34 @@
+-- Named Representative Fixture: RULE / ANNOTATION BEHAVIOR
+-- Bar chart with statistical and fixed benchmark overlays: GOAL, AVERAGE, and MOVING_AVG
+
+SET REPORT TITLE = 'Representative RULE/OVERLAYS: Monthly Target vs Actuals';
+SET REPORT DESCRIPTION = 'Baseline fixture for RULE and statistical overlay evaluation and GoG benchmarking.';
+
+SELECT 'Jan' AS Period, 120 AS UnitsSold INTO #monthly_units
+UNION ALL SELECT 'Feb', 135
+UNION ALL SELECT 'Mar', 160
+UNION ALL SELECT 'Apr', 145
+UNION ALL SELECT 'May', 190
+UNION ALL SELECT 'Jun', 210;
+
+CREATE VISUAL UnitsWithGoalRules AS BAR (
+    TITLE = 'Monthly Performance vs Statistical Baselines',
+    SOURCE = #monthly_units,
+    MAPPINGS (X = Period, Y = UnitsSold),
+    OVERLAYS (
+        GOAL(150) AS DASHED WITH (COLOR = '#EF4444', LABEL = 'Target Threshold (150)'),
+        AVERAGE AS DOTTED WITH (COLOR = '#3B82F6', LABEL = 'Historical Average'),
+        MOVING_AVG(2) AS SOLID WITH (COLOR = '#10B981', LABEL = '2-Period Moving Trend')
+    ),
+    OPTIONS (
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE MainDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = UnitsWithGoalRules)
+    )
+);

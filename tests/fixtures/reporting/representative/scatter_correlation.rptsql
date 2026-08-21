@@ -1,0 +1,32 @@
+-- Named Representative Fixture: SCATTER
+-- Multi-dimensional correlation analysis with X, Y, Size, and Series color dimensions
+
+SET REPORT TITLE = 'Representative SCATTER: Ad Spend vs Conversions';
+SET REPORT DESCRIPTION = 'Baseline fixture for Cartesian SCATTER visual evaluation and GoG benchmarking.';
+
+SELECT 1500 AS AdSpend, 120 AS Conversions, 45 AS OrderCount, 'Paid Search' AS Channel INTO #campaign_data
+UNION ALL SELECT 2400, 210, 80, 'Paid Search'
+UNION ALL SELECT 800, 45, 20, 'Social Media'
+UNION ALL SELECT 1900, 160, 65, 'Social Media'
+UNION ALL SELECT 3200, 310, 120, 'Influencer'
+UNION ALL SELECT 1100, 90, 35, 'Email Marketing'
+UNION ALL SELECT 2800, 250, 95, 'Affiliate';
+
+CREATE VISUAL CampaignScatter AS SCATTER (
+    TITLE = 'Marketing Spend vs Conversions Correlation',
+    SOURCE = #campaign_data,
+    MAPPINGS (X = AdSpend, Y = Conversions, SIZE = OrderCount, COLOR = Channel),
+    OPTIONS (
+        LEGEND = 'ON',
+        X_AXIS (LABEL = 'Advertising Spend ($)'),
+        Y_AXIS (LABEL = 'Conversions')
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE MainDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = CampaignScatter)
+    )
+);

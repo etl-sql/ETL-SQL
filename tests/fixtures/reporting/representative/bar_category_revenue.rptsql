@@ -1,0 +1,29 @@
+-- Named Representative Fixture: BAR
+-- Cartesian category revenue aggregation with custom styling and labels
+
+SET REPORT TITLE = 'Representative BAR: Category Revenue';
+SET REPORT DESCRIPTION = 'Baseline fixture for Cartesian BAR visual evaluation and GoG benchmarking.';
+
+SELECT 'Electronics' AS Category, 45000 AS Revenue, 'Q1' AS Quarter INTO #category_sales
+UNION ALL SELECT 'Apparel', 28000, 'Q1'
+UNION ALL SELECT 'Home & Garden', 34000, 'Q1'
+UNION ALL SELECT 'Sports & Outdoors', 19500, 'Q1'
+UNION ALL SELECT 'Automotive', 16200, 'Q1';
+
+CREATE VISUAL CategoryRevenueBar AS BAR (
+    TITLE = 'Revenue by Product Category',
+    SOURCE = #category_sales,
+    MAPPINGS (X = Category, Y = Revenue),
+    OPTIONS (
+        LEGEND = 'OFF',
+        DATA_LABELS = ON WITH (POSITION = 'TOP', FORMAT = 'C0')
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '420px')
+);
+
+CREATE PAGE MainDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = CategoryRevenueBar)
+    )
+);

@@ -1,0 +1,29 @@
+-- Named Representative Fixture: PIE / DONUT
+-- Circular proportional composition of market share across segments
+
+SET REPORT TITLE = 'Representative DONUT: Market Share Distribution';
+SET REPORT DESCRIPTION = 'Baseline fixture for Polar/Circular DONUT and PIE visual evaluation and GoG benchmarking.';
+
+SELECT 'Enterprise' AS Segment, 42.5 AS MarketShare INTO #market_data
+UNION ALL SELECT 'Mid-Market', 28.0
+UNION ALL SELECT 'Small Business', 18.5
+UNION ALL SELECT 'Consumer', 11.0;
+
+CREATE VISUAL MarketShareDonut AS DONUT (
+    TITLE = 'Customer Segment Distribution',
+    SOURCE = #market_data,
+    MAPPINGS (CATEGORY = Segment, VALUE = MarketShare),
+    OPTIONS (
+        INNER_RADIUS = '55%',
+        LEGEND = 'RIGHT',
+        DATA_LABELS = ON WITH (POSITION = 'OUTSIDE', FORMAT = 'P1')
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '400px')
+);
+
+CREATE PAGE MainDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = MarketShareDonut)
+    )
+);
