@@ -1,0 +1,32 @@
+-- Named Representative Fixture: LINE
+-- Cartesian time-series trend with multiple series and smooth curves
+
+SET REPORT TITLE = 'Representative LINE: Time Series Trend';
+SET REPORT DESCRIPTION = 'Baseline fixture for Cartesian LINE visual evaluation and GoG benchmarking.';
+
+SELECT '2026-01-01' AS Month, 'North' AS Region, 12000 AS Revenue INTO #monthly_regional
+UNION ALL SELECT '2026-01-01', 'South', 9500
+UNION ALL SELECT '2026-02-01', 'North', 14200
+UNION ALL SELECT '2026-02-01', 'South', 11000
+UNION ALL SELECT '2026-03-01', 'North', 16800
+UNION ALL SELECT '2026-03-01', 'South', 13400
+UNION ALL SELECT '2026-04-01', 'North', 19100
+UNION ALL SELECT '2026-04-01', 'South', 15200;
+
+CREATE VISUAL RegionalRevenueLine AS LINE (
+    TITLE = 'Regional Monthly Revenue Trend',
+    SOURCE = #monthly_regional,
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        SMOOTH = TRUE,
+        LEGEND = 'ON'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '420px')
+);
+
+CREATE PAGE MainDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = RegionalRevenueLine)
+    )
+);
