@@ -1,0 +1,27 @@
+-- Payload Crossover Fixture: String Heavy Text Dataset
+-- Categorical descriptions, free-form text, and multi-tag strings
+
+SET REPORT TITLE = 'Payload Crossover: Text & Categorical Corpus';
+
+SELECT
+    1000 + (ROW_NUMBER() OVER()) AS TicketId,
+    'Support Services' AS Department,
+    'Senior Infrastructure Engineer' AS AssigneeRole,
+    'Investigation of high latency and queue backlog on primary ingress gateway.' AS SummaryDescription,
+    'network,gateway,p1,infrastructure,latency' AS TagList
+INTO #string_heavy
+FROM (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) a
+CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) b
+CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) c;
+
+CREATE VISUAL IncidentTicketsTable AS TABLE (
+    TITLE = 'Engineering Incident Ticket Log',
+    SOURCE = #string_heavy
+);
+
+CREATE PAGE StringHeavyDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = IncidentTicketsTable)
+    )
+);

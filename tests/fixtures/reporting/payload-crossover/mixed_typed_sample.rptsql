@@ -1,0 +1,33 @@
+-- Payload Crossover Fixture: Mixed Typed Business Data
+-- Typical enterprise reporting: identifiers, temporal timestamps, customer categories, currency amounts
+
+SET REPORT TITLE = 'Payload Crossover: Mixed Typed Enterprise Transactions';
+
+SELECT
+    1000 + (ROW_NUMBER() OVER()) AS OrderId,
+    '2026-01-15' AS OrderDate,
+    'Acme Corp' AS CustomerName,
+    'North America' AS Region,
+    15 AS Quantity,
+    149.99 AS UnitPrice,
+    0.15 AS Discount,
+    TRUE AS IsShipped
+INTO #mixed_transactions
+FROM (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) a
+CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) b
+CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) c;
+
+CREATE VISUAL MixedTransactionsTable AS TABLE (
+    TITLE = 'Enterprise Sales Transactions',
+    SOURCE = #mixed_transactions,
+    OPTIONS (
+        PAGE_SIZE = 50
+    )
+);
+
+CREATE PAGE MixedDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = MixedTransactionsTable)
+    )
+);

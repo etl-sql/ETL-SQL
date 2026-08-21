@@ -26,7 +26,7 @@ public class ReportDesignerRegressionTests
     [InlineData("PIE", "LABEL = category, VALUE = amount")]
     [InlineData("DONUT", "LABEL = category, VALUE = amount")]
     [InlineData("COMBO", "X = category, Y = amount, Y2 = rate")]
-    public void Phase3MigratedVisuals_ParseIntoDesignerAndPatchWithoutChangingType(string visualType, string mappings)
+    public void MigratedVisuals_ParseIntoDesignerAndPatchWithoutChangingType(string visualType, string mappings)
     {
         var script = $"""
             SELECT 'A' AS category, 10 AS amount, 0.9 AS rate INTO #stage;

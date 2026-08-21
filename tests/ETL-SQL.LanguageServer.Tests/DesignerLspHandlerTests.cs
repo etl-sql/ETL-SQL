@@ -15,7 +15,7 @@ namespace ETL_SQL.LanguageServer.Tests
         [InlineData("PIE", "\"LABEL\": \"category\", \"VALUE\": \"amount\"")]
         [InlineData("DONUT", "\"LABEL\": \"category\", \"VALUE\": \"amount\"")]
         [InlineData("COMBO", "\"X\": \"category\", \"Y\": \"amount\", \"Y2\": \"rate\"")]
-        public async Task Generate_Phase3MigratedVisuals_PreservesNamedSyntax(string visualType, string mappings)
+        public async Task Generate_MigratedVisuals_PreservesNamedSyntax(string visualType, string mappings)
         {
             var handler = new DesignerLspHandler(NullLogger<DesignerLspHandler>.Instance);
             var state = $$"""
