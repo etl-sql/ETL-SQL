@@ -670,7 +670,7 @@ public static class PayloadCrossoverMeasurementHarness
             var decCrossover = g.FirstOrDefault(r => r.Formats[PayloadFormat.ArrowIpcStream].DecodeTimeMs < r.Formats[PayloadFormat.JsonRowOriented].DecodeTimeMs)?.RowCount;
             var memCrossover = g.FirstOrDefault(r => r.Formats[PayloadFormat.ArrowIpcStream].DecodeAllocatedBytes < r.Formats[PayloadFormat.JsonRowOriented].DecodeAllocatedBytes)?.RowCount;
 
-            summaries[g.Key.ToString()] = $"Raw Size Crossover: ~{rawCrossover?.ToString() ?? "N/A"} rows; Decode Latency Crossover: ~{decCrossover?.ToString() ?? "N/A"} rows; Memory Crossover: ~{memCrossover?.ToString() ?? "N/A"} rows";
+            summaries[g.Key.ToString()] = $"Raw Size Crossover: ~{rawCrossover?.ToString() ?? "N/A"} rows; Decode Latency Crossover: ~{decCrossover?.ToString() ?? "N/A"} rows; Managed Wrapper Allocation Crossover: ~{memCrossover?.ToString() ?? "N/A"} rows";
         }
 
         return summaries;
@@ -701,10 +701,15 @@ public static class PayloadCrossoverMeasurementHarness
             var rawCross = wResults.FirstOrDefault(r => r.Formats[PayloadFormat.ArrowIpcStream].RawBytes < r.Formats[PayloadFormat.JsonRowOriented].RawBytes)?.RowCount.ToString("N0") ?? ">100k";
             var decCross = wResults.FirstOrDefault(r => r.Formats[PayloadFormat.ArrowIpcStream].DecodeTimeMs < r.Formats[PayloadFormat.JsonRowOriented].DecodeTimeMs)?.RowCount.ToString("N0") ?? ">100k";
             var gzWinner = wResults.Last().WinnerByGzipSize;
-            var memWinner = wResults.Last().WinnerByMemory;
-
-            sb.AppendLine($"| **{workload}** | **{rawCross} rows** | `{gzWinner}` | **{decCross} rows** | `{memWinner}` |");
+            sb.AppendLine($"| **{workload}** | **{rawCross} rows** | `{gzWinner}` | **{decCross} rows** | See allocation caveat |");
         }
+
+        sb.AppendLine();
+        sb.AppendLine("The Arrow decode-allocation column measures managed allocations made while opening an IPC stream and reading a record-batch wrapper over the input byte buffer. Arrow retains column buffers rather than materializing row objects, so the very small values are expected, but they are **not** a measurement of total resident payload memory. Use them only as managed materialization-cost evidence; browser heap and resident-set measurements remain necessary before selecting a production transport.");
+        sb.AppendLine();
+        sb.AppendLine("These observations do not justify a permanent row-count switch. Compression changes the winner by workload—especially for repetitive strings—and interaction-query timings vary. A production decision must include browser decode/heap measurements and transport negotiation; the checked-in evidence is a reproducible comparison harness, not a shipping threshold.");
+        sb.AppendLine();
+        sb.AppendLine("The regression suite applies format-neutral, per-row budgets at the 10,000-row representative point: no measured format may exceed 200 raw bytes per row or 40 gzip-compressed bytes per row. Per-row budgets catch payload-shape regressions without turning one sampled row count into a permanent transport switch.");
 
         sb.AppendLine();
         sb.AppendLine("---");
@@ -717,7 +722,7 @@ public static class PayloadCrossoverMeasurementHarness
             sb.AppendLine($"### Workload: `{group.Key}`");
             sb.AppendLine();
             sb.AppendLine("| Rows | Format | Raw Size | Gzip Size | Brotli Size | Encode Time | Decode Time | Decode Memory | Filter Query | Checksum |");
-            sb.AppendLine("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |");
+            sb.AppendLine("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |");
 
             foreach (var r in group)
             {

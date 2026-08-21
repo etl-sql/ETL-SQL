@@ -13,11 +13,26 @@ This benchmark compares **JSON Row-Oriented** (standard ETL-SQL `VisualManifest.
 
 | Workload | Raw Size Crossover | Gzip Compressed Winner | Decode Speed Crossover | Memory Allocation Winner |
 | :--- | :---: | :---: | :---: | :---: |
-| **DenseNumeric** | **500 rows** | `JsonColumnar` | **500 rows** | `ArrowIpcStream` |
-| **MixedTyped** | **500 rows** | `JsonColumnar` | **500 rows** | `ArrowIpcStream` |
-| **NullableSparse** | **2,500 rows** | `JsonColumnar` | **500 rows** | `ArrowIpcStream` |
-| **TemporalEvents** | **500 rows** | `JsonColumnar` | **500 rows** | `ArrowIpcStream` |
-| **StringHeavy** | **500 rows** | `JsonRowOriented` | **500 rows** | `ArrowIpcStream` |
+| **DenseNumeric** | **500 rows** | `JsonColumnar` | **500 rows** | See allocation caveat |
+| **MixedTyped** | **500 rows** | `JsonColumnar` | **500 rows** | See allocation caveat |
+| **NullableSparse** | **2,500 rows** | `JsonColumnar` | **500 rows** | See allocation caveat |
+| **TemporalEvents** | **500 rows** | `JsonColumnar` | **500 rows** | See allocation caveat |
+| **StringHeavy** | **500 rows** | `JsonRowOriented` | **500 rows** | See allocation caveat |
+
+The Arrow decode-allocation column measures managed allocations made while opening an IPC stream and
+reading a record-batch wrapper over the input byte buffer. Arrow retains column buffers rather than
+materializing row objects, so the very small values are expected, but they are **not** a measurement of
+total resident payload memory. Use them only as managed materialization-cost evidence; browser heap and
+resident-set measurements remain necessary before selecting a production transport.
+
+These observations do not justify a permanent row-count switch. Compression changes the winner by
+workload—especially for repetitive strings—and interaction-query timings vary. A production decision
+must include browser decode/heap measurements and transport negotiation; the checked-in evidence is a
+reproducible comparison harness, not a shipping threshold.
+
+The regression suite applies format-neutral, per-row budgets at the 10,000-row representative point:
+no measured format may exceed 200 raw bytes per row or 40 gzip-compressed bytes per row. Per-row budgets
+catch payload-shape regressions without turning one sampled row count into a permanent transport switch.
 
 ---
 
@@ -26,7 +41,7 @@ This benchmark compares **JSON Row-Oriented** (standard ETL-SQL `VisualManifest.
 ### Workload: `DenseNumeric`
 
 | Rows | Format | Raw Size | Gzip Size | Brotli Size | Encode Time | Decode Time | Decode Memory | Filter Query | Checksum |
-| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 500 | `JsonRowOriented` | 31.7 KB | 11.5 KB | 11.0 KB | 0.70 ms | **3.30 ms** | 209.0 KB | 1.90 ms | `41BC09AD` |
 | 500 | `JsonColumnar` | 24.8 KB | 10.0 KB | 8.6 KB | 0.38 ms | **0.47 ms** | 94.9 KB | 2.67 ms | `41BC09AD` |
 | 500 | `ArrowIpcStream` | 24.4 KB | 12.9 KB | 12.8 KB | 0.34 ms | **0.04 ms** | 4.2 KB | 1.44 ms | `41BC09AD` |
@@ -49,7 +64,7 @@ This benchmark compares **JSON Row-Oriented** (standard ETL-SQL `VisualManifest.
 ### Workload: `MixedTyped`
 
 | Rows | Format | Raw Size | Gzip Size | Brotli Size | Encode Time | Decode Time | Decode Memory | Filter Query | Checksum |
-| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 500 | `JsonRowOriented` | 35.2 KB | 6.7 KB | 6.8 KB | 3.81 ms | **0.17 ms** | 231.9 KB | 0.23 ms | `411A8D41` |
 | 500 | `JsonColumnar` | 29.4 KB | 3.8 KB | 2.9 KB | 0.13 ms | **0.15 ms** | 153.3 KB | 0.28 ms | `411A8D41` |
 | 500 | `ArrowIpcStream` | 31.3 KB | 8.3 KB | 7.6 KB | 0.21 ms | **0.02 ms** | 5.4 KB | 0.64 ms | `411A8D41` |
@@ -72,7 +87,7 @@ This benchmark compares **JSON Row-Oriented** (standard ETL-SQL `VisualManifest.
 ### Workload: `NullableSparse`
 
 | Rows | Format | Raw Size | Gzip Size | Brotli Size | Encode Time | Decode Time | Decode Memory | Filter Query | Checksum |
-| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 500 | `JsonRowOriented` | 27.3 KB | 6.1 KB | 6.1 KB | 0.13 ms | **0.32 ms** | 180.9 KB | 0.15 ms | `4AB6B460` |
 | 500 | `JsonColumnar` | 23.4 KB | 4.7 KB | 4.5 KB | 0.10 ms | **0.11 ms** | 97.4 KB | 0.20 ms | `4AB6B460` |
 | 500 | `ArrowIpcStream` | 27.3 KB | 8.3 KB | 7.8 KB | 0.05 ms | **0.01 ms** | 4.2 KB | 0.12 ms | `4AB6B460` |
@@ -95,7 +110,7 @@ This benchmark compares **JSON Row-Oriented** (standard ETL-SQL `VisualManifest.
 ### Workload: `TemporalEvents`
 
 | Rows | Format | Raw Size | Gzip Size | Brotli Size | Encode Time | Decode Time | Decode Memory | Filter Query | Checksum |
-| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 500 | `JsonRowOriented` | 34.5 KB | 5.6 KB | 4.9 KB | 0.09 ms | **0.11 ms** | 204.3 KB | 0.14 ms | `E7E74356` |
 | 500 | `JsonColumnar` | 31.5 KB | 4.0 KB | 3.0 KB | 0.08 ms | **0.09 ms** | 123.7 KB | 0.17 ms | `E7E74356` |
 | 500 | `ArrowIpcStream` | 34.4 KB | 9.0 KB | 7.2 KB | 0.06 ms | **0.02 ms** | 3.8 KB | 0.11 ms | `E7E74356` |
@@ -118,7 +133,7 @@ This benchmark compares **JSON Row-Oriented** (standard ETL-SQL `VisualManifest.
 ### Workload: `StringHeavy`
 
 | Rows | Format | Raw Size | Gzip Size | Brotli Size | Encode Time | Decode Time | Decode Memory | Filter Query | Checksum |
-| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 500 | `JsonRowOriented` | 83.7 KB | 2.4 KB | 1.3 KB | 0.07 ms | **0.15 ms** | 299.4 KB | 0.19 ms | `595F340C` |
 | 500 | `JsonColumnar` | 81.7 KB | 2.3 KB | 867 B | 0.06 ms | **0.10 ms** | 226.0 KB | 0.56 ms | `595F340C` |
 | 500 | `ArrowIpcStream` | 83.7 KB | 7.6 KB | 6.4 KB | 0.10 ms | **0.03 ms** | 3.8 KB | 0.14 ms | `595F340C` |

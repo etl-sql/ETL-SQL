@@ -117,15 +117,15 @@ Authoritative design:
 [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md),
 constrained by the GoG ADR.
 
-- [ ] Harden native SVG scale, tick, path, label, theme, and accessibility behavior for the
+- [x] Harden native SVG scale, tick, path, label, theme, and accessibility behavior for the
   representative chart set.
-- [ ] Add one native `CARD` sparkline backed by the GoG contracts.
-- [ ] Add one native `TABLE` cell sparkline and one progress indicator backed by the same contracts.
-- [ ] Add browser, PDF, email image, terminal, screen-reader, and plain-text fallbacks for each
+- [x] Add one native `CARD` sparkline backed by the GoG contracts.
+- [x] Add one native `TABLE` cell sparkline and one progress indicator backed by the same contracts.
+- [x] Add browser, PDF, email image, terminal, screen-reader, and plain-text fallbacks for each
   micro-chart.
-- [ ] Measure the JSON-columnar/Arrow crossover using representative payload, parse, memory, and
+- [x] Measure the JSON-columnar/Arrow crossover using representative payload, parse, memory, and
   interaction fixtures; do not encode an arbitrary permanent row threshold.
-- [ ] Add geometry goldens, export snapshots, typed-data tests, payload budgets, and render-cost
+- [x] Add geometry goldens, export snapshots, typed-data tests, payload budgets, and render-cost
   measurements.
 
 **Exit gate:** Card/table micro-charts render from the same semantic plan on every supported surface,

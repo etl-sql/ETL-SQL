@@ -1482,10 +1482,10 @@
     }
   ],
   "CrossoverSummaryByWorkload": {
-    "DenseNumeric": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Memory Crossover: ~500 rows",
-    "MixedTyped": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Memory Crossover: ~500 rows",
-    "NullableSparse": "Raw Size Crossover: ~2500 rows; Decode Latency Crossover: ~500 rows; Memory Crossover: ~500 rows",
-    "TemporalEvents": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Memory Crossover: ~500 rows",
-    "StringHeavy": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Memory Crossover: ~500 rows"
+    "DenseNumeric": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows",
+    "MixedTyped": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows",
+    "NullableSparse": "Raw Size Crossover: ~2500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows",
+    "TemporalEvents": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows",
+    "StringHeavy": "Raw Size Crossover: ~500 rows; Decode Latency Crossover: ~500 rows; Managed Wrapper Allocation Crossover: ~500 rows"
   }
 }

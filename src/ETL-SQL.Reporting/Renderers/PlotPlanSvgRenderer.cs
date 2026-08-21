@@ -147,18 +147,23 @@ internal sealed class PlotPlanSvgRenderer
         var layer = plan.Layers.FirstOrDefault();
         var yScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y);
         if (layer is null || yScale is null) return;
-        var points = new List<(decimal X, decimal Y, decimal Value)>();
+        var segments = new List<List<(decimal X, decimal Y, decimal Value)>> { new() };
         var denominator = Math.Max(1, layer.Data.Length - 1);
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
             var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
-            if (datum.IsGap || !value.HasValue) continue;
+            if (datum.IsGap || !value.HasValue)
+            {
+                if (segments[^1].Count > 0) segments.Add(new());
+                continue;
+            }
             var x = pad + (width - 2m * pad) * index / denominator;
             var (minimum, maximum) = Domain(yScale);
             var y = pad + (height - 2m * pad) - (value.Value - minimum) / (maximum - minimum) * (height - 2m * pad);
-            points.Add((x, Math.Clamp(y, pad, height - pad), value.Value));
+            segments[^1].Add((x, Math.Clamp(y, pad, height - pad), value.Value));
         }
+        var points = segments.SelectMany(segment => segment).ToList();
         if (points.Count == 0) return;
         if (layer.Mark == MarkKind.Rect)
         {
@@ -168,10 +173,14 @@ internal sealed class PlotPlanSvgRenderer
                 builder.AppendLine($"<rect x='{N(point.X - slot * .35m)}' y='{N(point.Y)}' width='{N(Math.Max(1m, slot * .7m))}' height='{N(Math.Max(1m, baseline - point.Y))}' rx='1' fill='{Esc(color)}'/>");
             return;
         }
-        var path = "M " + string.Join(" L ", points.Select(point => $"{N(point.X)} {N(point.Y)}"));
-        if (layer.Mark == MarkKind.Area)
-            builder.AppendLine($"<path d='{path} L {N(points[^1].X)} {N(height - pad)} L {N(points[0].X)} {N(height - pad)} Z' fill='{Esc(color)}' fill-opacity='.22'/>");
-        builder.AppendLine($"<path d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>");
+        foreach (var segment in segments.Where(segment => segment.Count > 0))
+        {
+            var path = "M " + string.Join(" L ", segment.Select(point => $"{N(point.X)} {N(point.Y)}"));
+            if (layer.Mark == MarkKind.Area && segment.Count > 1)
+                builder.AppendLine($"<path d='{path} L {N(segment[^1].X)} {N(height - pad)} L {N(segment[0].X)} {N(height - pad)} Z' fill='{Esc(color)}' fill-opacity='.22'/>");
+            if (segment.Count > 1)
+                builder.AppendLine($"<path d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>");
+        }
         builder.AppendLine($"<circle cx='{N(points[0].X)}' cy='{N(points[0].Y)}' r='2' fill='{Esc(color)}'/>");
         if (points.Count > 1) builder.AppendLine($"<circle cx='{N(points[^1].X)}' cy='{N(points[^1].Y)}' r='2' fill='{Esc(color)}'/>");
     }
@@ -196,17 +205,24 @@ internal sealed class PlotPlanSvgRenderer
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
         var denominator = Math.Max(1, categoryCount - 1);
-        var points = layer.Data.Select((datum, index) => new
+        var segments = new List<List<(decimal X, decimal Y)>> { new() };
+        for (var index = 0; index < layer.Data.Length; index++)
         {
-            Datum = datum,
-            X = Left + plotWidth * index / denominator,
-            Value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null())
-        }).Where(item => !item.Datum.IsGap && item.Value.HasValue)
-          .Select(item => (item.X, Y: MapY(item.Value!.Value, scale, plotHeight))).ToList();
-        if (points.Count < 2) return;
-        var path = "M " + string.Join(" L ", points.Select(point => $"{N(point.X)} {N(point.Y)}"));
-        builder.AppendLine($"<path d='{path} L {N(points[^1].X)} {N(Top + plotHeight)} L {N(points[0].X)} {N(Top + plotHeight)} Z' fill='{Esc(color)}' fill-opacity='.2'/>");
-        builder.AppendLine($"<path d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='2'/>");
+            var datum = layer.Data[index];
+            var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
+            if (datum.IsGap || !value.HasValue)
+            {
+                if (segments[^1].Count > 0) segments.Add(new());
+                continue;
+            }
+            segments[^1].Add((Left + plotWidth * index / denominator, MapY(value.Value, scale, plotHeight)));
+        }
+        foreach (var points in segments.Where(segment => segment.Count > 1))
+        {
+            var path = "M " + string.Join(" L ", points.Select(point => $"{N(point.X)} {N(point.Y)}"));
+            builder.AppendLine($"<path d='{path} L {N(points[^1].X)} {N(Top + plotHeight)} L {N(points[0].X)} {N(Top + plotHeight)} Z' fill='{Esc(color)}' fill-opacity='.2'/>");
+            builder.AppendLine($"<path d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='2'/>");
+        }
     }
 
     private static void RenderRects(StringBuilder builder, ResolvedMarkLayer layer, IReadOnlyList<ResolvedMarkLayer> layers, bool stacked,

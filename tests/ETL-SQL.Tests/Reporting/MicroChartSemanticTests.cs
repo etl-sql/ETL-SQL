@@ -13,13 +13,18 @@ public sealed class MicroChartSemanticTests
     public void Sparkline_UsesTypedDataAndResolvedPlotPlan(string type, MarkKind mark)
     {
         var bundle = new MicroChartPlanFactory().CreateSparkline("orders-trend",
-            [10m, 14.5m, null, 18m], type, "#123ABC", ["Mon", "Tue", "Wed", "Thu"]);
+            [10m, 14.5m, null, 16m, 18m], type, "#123ABC", ["Mon", "Tue", "Wed", "Thu", "Fri"]);
 
         Assert.Equal(ChartValueKind.Decimal, bundle.Data.Columns.Single(column => column.Name == "value").ValueKind);
         Assert.Equal(mark, Assert.Single(bundle.Plan.Layers).Mark);
         Assert.Collection(bundle.Plan.Nulls.GapRows, row => Assert.Equal(2, row));
         Assert.Contains("first 10", bundle.PlainText);
         Assert.Contains("last 18", bundle.PlainText);
+        if (type == "line")
+        {
+            var svg = new MicroChartPlanFactory().ToManifest(bundle, "sparkline", "table.cell").Svg;
+            Assert.Equal(2, svg.Split("<path d=", StringSplitOptions.None).Length - 1);
+        }
     }
 
     [Fact]

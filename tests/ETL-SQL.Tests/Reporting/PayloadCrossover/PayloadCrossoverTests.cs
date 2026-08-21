@@ -92,10 +92,10 @@ public class PayloadCrossoverTests
         Assert.Equal(50, countCol);
         Assert.Equal(50, countArrow);
 
-        // Checksums across formats must be valid SHA-256 strings
+        // Equivalent interaction queries must return identical content, not merely valid hashes.
         Assert.NotEmpty(hashRow);
-        Assert.NotEmpty(hashCol);
-        Assert.NotEmpty(hashArrow);
+        Assert.Equal(hashRow, hashCol);
+        Assert.Equal(hashRow, hashArrow);
     }
 
     [Fact]
@@ -115,6 +115,26 @@ public class PayloadCrossoverTests
         Assert.True(mJsonRow.GzipBytes < mJsonRow.RawBytes);
         Assert.True(mJsonRow.BrotliBytes < mJsonRow.RawBytes);
         Assert.True(mArrow.GzipBytes < mArrow.RawBytes || mArrow.GzipBytes > 0);
+    }
+
+    [Theory]
+    [InlineData(WorkloadType.DenseNumeric)]
+    [InlineData(WorkloadType.MixedTyped)]
+    [InlineData(WorkloadType.NullableSparse)]
+    [InlineData(WorkloadType.TemporalEvents)]
+    [InlineData(WorkloadType.StringHeavy)]
+    public void RepresentativePayloads_StayWithinMeasuredPerRowBudgets(WorkloadType workload)
+    {
+        const int rows = 10_000;
+        var data = PayloadCrossoverMeasurementHarness.GenerateWorkloadData(workload, rows);
+        foreach (var format in Enum.GetValues<PayloadFormat>())
+        {
+            var measurement = PayloadCrossoverMeasurementHarness.MeasureFormat(data, format, samples: 1);
+            Assert.True(measurement.RawBytes / (double)rows <= 200d,
+                $"{workload}/{format} raw payload exceeded 200 bytes per row: {measurement.RawBytes / (double)rows:N2}.");
+            Assert.True(measurement.GzipBytes / (double)rows <= 40d,
+                $"{workload}/{format} gzip payload exceeded 40 bytes per row: {measurement.GzipBytes / (double)rows:N2}.");
+        }
     }
 
     [Fact]
