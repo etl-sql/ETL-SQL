@@ -52,6 +52,11 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("setParameterAccessibleName(textInput, visual, param, 'relative date')", js);
             Assert.Contains("setParameterAccessibleName(input, visual, param)", js);
             Assert.Contains("setParameterAccessibleName(cb, visual, param, val)", js);
+            Assert.Contains("function installNativeTooltip", js);
+            Assert.Contains("postParameters({ '@hover_value': value }, true)", js);
+            Assert.DoesNotContain("if (tooltip) card.title = tooltip", js);
+            Assert.Contains("card.style.borderRadius = borderRadius", js);
+            Assert.Contains("card.style.boxShadow", js);
             Assert.Contains("input.setAttribute('aria-label', label.textContent)", js);
         }
 

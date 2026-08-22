@@ -1488,14 +1488,22 @@
         const vstyles = visual.styles || {};
         const width   = getStyle(vstyles, 'WIDTH');
         const height  = getStyle(vstyles, 'HEIGHT');
-        const tooltip = getStyle(vstyles, 'TOOLTIP') || visual.tooltip;
+        const styleTooltip = getStyle(vstyles, 'TOOLTIP');
+        const tooltip = visual.tooltip;
 
         const opacity = getStyle(vstyles, 'OPACITY');
         const bgColor = getStyle(vstyles, 'BACKGROUND-COLOR') || getStyle(vstyles, 'BACKGROUND');
+        const border = getStyle(vstyles, 'BORDER');
+        const borderRadius = getStyle(vstyles, 'BORDER-RADIUS') || getStyle(vstyles, 'BORDER_RADIUS');
+        const shadow = getStyle(vstyles, 'SHADOW');
 
         if (width)   card.style.width   = width;
         if (height)  card.style.height  = height;
         if (opacity) card.style.opacity = opacity;
+        if (border) card.style.border = border;
+        if (borderRadius) card.style.borderRadius = borderRadius;
+        if (isOn(shadow)) card.style.boxShadow = '0 6px 18px rgba(15, 23, 42, 0.16)';
+        else if (shadow && !isOff(shadow)) card.style.boxShadow = shadow;
         if (bgColor) {
             const normalized = bgColor.trim().toLowerCase();
             const isTransparent = normalized === 'transparent' || normalized === 'rgba(0,0,0,0)' || normalized === 'rgba(0, 0, 0, 0)';
@@ -1507,7 +1515,8 @@
                 card.style.backgroundImage = `linear-gradient(${bgColor}, ${bgColor})`;
             }
         }
-        if (tooltip) card.title = tooltip;
+        const tooltipText = styleTooltip || (tooltip && tooltip.type === 'text' ? tooltip.text : null);
+        if (tooltipText) card.title = tooltipText;
         if (isOff(getOption(visual.options, 'VISIBLE'))) {
             card.style.display = 'none';
         }
@@ -1598,9 +1607,9 @@
             case 'TEXTBOX':     renderTextbox(card, visual, manifest);            break;
             case 'NUMBERBOX':   renderNumberbox(card, visual, manifest);          break;
             case 'IMAGE':       renderImage(card, visual);                        break;
-            case 'MATRIX':      visual.nativeSvg ? renderNativeSvg(card, visual) : renderMatrix(card, visual); break;
+            case 'MATRIX':      visual.nativeSvg ? renderNativeSvg(card, visual, manifest, effectiveTheme) : renderMatrix(card, visual); break;
             default:            visual.nativeSvg
-                                    ? renderNativeSvg(card, visual)
+                                    ? renderNativeSvg(card, visual, manifest, effectiveTheme)
                                     : renderChart(card, visual, manifest, effectiveTheme); break;
         }
 
@@ -1734,7 +1743,114 @@
         });
     }
 
-    function renderNativeSvg(container, visual) {
+    function positionChartTooltip(popover, clientX, clientY) {
+        const gap = 14;
+        const margin = 8;
+        const bounds = popover.getBoundingClientRect();
+        popover.style.left = Math.max(margin, Math.min(clientX + gap, window.innerWidth - bounds.width - margin)) + 'px';
+        popover.style.top = Math.max(margin, Math.min(clientY + gap, window.innerHeight - bounds.height - margin)) + 'px';
+    }
+
+    function installNativeTooltip(wrapper, visual, manifest, pageTheme, mappingColumn) {
+        const tooltip = visual.tooltip;
+        if (!tooltip || typeof tooltip !== 'object') return;
+
+        let popover = null;
+        let hoverTimer = null;
+        let requestGeneration = 0;
+        let activeRowIndex = null;
+        let pointer = { x: 0, y: 0 };
+
+        function ensurePopover() {
+            if (popover) return popover;
+            popover = document.createElement('div');
+            popover.className = 'report-chart-tooltip';
+            popover.setAttribute('role', 'tooltip');
+            popover.setAttribute('aria-live', 'polite');
+            document.body.appendChild(popover);
+            return popover;
+        }
+
+        function hidePopover() {
+            activeRowIndex = null;
+            requestGeneration++;
+            if (hoverTimer) clearTimeout(hoverTimer);
+            hoverTimer = null;
+            if (popover) popover.remove();
+            popover = null;
+        }
+
+        function contextElement(value) {
+            const context = document.createElement('div');
+            context.className = 'report-chart-tooltip-context';
+            context.textContent = String(value ?? '');
+            return context;
+        }
+
+        function showTextTooltip(value) {
+            const tip = ensurePopover();
+            tip.replaceChildren(contextElement(value));
+            const body = document.createElement('div');
+            body.className = 'report-chart-tooltip-text';
+            body.textContent = tooltip.text || tooltip.markdown || '';
+            tip.appendChild(body);
+            positionChartTooltip(tip, pointer.x, pointer.y);
+        }
+
+        function showContainerTooltip(value, generation) {
+            const tip = ensurePopover();
+            tip.replaceChildren(contextElement(value));
+            const loading = document.createElement('div');
+            loading.className = 'report-chart-tooltip-loading';
+            loading.textContent = 'Loading details…';
+            tip.appendChild(loading);
+            positionChartTooltip(tip, pointer.x, pointer.y);
+
+            postParameters({ '@hover_value': value }, true).then(refreshed => {
+                if (generation !== requestGeneration || activeRowIndex === null || !popover) return;
+                const sourceManifest = refreshed || manifest;
+                const containerRef = tooltip.containerRef || '';
+                const containerDef = (sourceManifest.containers || []).find(item =>
+                    item.name.toLowerCase() === containerRef.toLowerCase());
+                tip.replaceChildren(contextElement(value));
+                if (!containerDef) {
+                    const unavailable = document.createElement('div');
+                    unavailable.className = 'report-chart-tooltip-loading';
+                    unavailable.textContent = 'Tooltip details are unavailable.';
+                    tip.appendChild(unavailable);
+                } else {
+                    renderContainer(tip, containerDef, sourceManifest, pageTheme);
+                }
+                positionChartTooltip(tip, pointer.x, pointer.y);
+            });
+        }
+
+        wrapper.addEventListener('pointermove', event => {
+            pointer = { x: event.clientX, y: event.clientY };
+            if (popover) positionChartTooltip(popover, pointer.x, pointer.y);
+        });
+        wrapper.addEventListener('pointerover', event => {
+            const mark = event.target.closest('[data-row-index]');
+            if (!mark) return;
+            const rowIndex = Number(mark.dataset.rowIndex);
+            if (!Number.isInteger(rowIndex) || rowIndex === activeRowIndex) return;
+            activeRowIndex = rowIndex;
+            const row = (visual.rows || [])[rowIndex] || [];
+            const columnIndex = (visual.columns || []).findIndex(column =>
+                column.toLowerCase() === String(mappingColumn || '').toLowerCase());
+            const value = row[columnIndex >= 0 ? columnIndex : 0];
+            const generation = ++requestGeneration;
+            if (hoverTimer) clearTimeout(hoverTimer);
+            if (tooltip.type === 'container') {
+                hoverTimer = setTimeout(() => showContainerTooltip(String(value ?? ''), generation), 120);
+            } else {
+                showTextTooltip(value);
+            }
+        });
+        wrapper.addEventListener('pointerleave', hidePopover);
+    }
+
+    function renderNativeSvg(container, visual, manifest, pageTheme) {
         const wrapper = document.createElement('div');
         wrapper.className = 'chart-wrapper native-chart-wrapper';
         const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
@@ -1754,6 +1870,8 @@
             options['mapping:name'] || options['mapping:region'] || options['mapping:y'] ||
             (visual.columns || [])[0];
         let activeRow = null;
+
+        installNativeTooltip(wrapper, visual, manifest, pageTheme, mappingColumn);
 
         wrapper.addEventListener('pointerover', event => {
             const mark = event.target.closest('[data-row-index]');

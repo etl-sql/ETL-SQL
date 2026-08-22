@@ -174,7 +174,7 @@ public sealed class NamedVisualChartLowerer
             var overlay = statement.Overlays[index];
             yield return new MarkLayerSpec(
                 $"rule-{index:D2}-{overlay.OverlayType.ToString().ToLowerInvariant()}",
-                overlay.OverlayType == OverlayType.MovingAvg ? MarkKind.Line : MarkKind.Rule,
+                overlay.OverlayType is OverlayType.Goal or OverlayType.Average ? MarkKind.Rule : MarkKind.Line,
                 100 + index,
                 [],
                 [

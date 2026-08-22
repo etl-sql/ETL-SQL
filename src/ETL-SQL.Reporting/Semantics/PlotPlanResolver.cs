@@ -122,7 +122,9 @@ public sealed class PlotPlanResolver
                     .Distinct(StringComparer.Ordinal).ToImmutableArray();
                 var values = !scale.CategoryOrder.IsDefaultOrEmpty
                     ? scale.CategoryOrder
-                    : !inferred.IsDefaultOrEmpty ? inferred : categories;
+                    : scale.Channel is FieldChannel.X or FieldChannel.Theta && !categories.IsDefaultOrEmpty
+                        ? categories
+                        : !inferred.IsDefaultOrEmpty ? inferred : categories;
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                     values.Select(ChartValue.From).ToImmutableArray(), values,
                     values.Select(value => new PlotTick(ChartValue.From(value), value)).ToImmutableArray(), scale.IncludeZero);
@@ -181,12 +183,31 @@ public sealed class PlotPlanResolver
                         .ToList();
                 }
             }
+            if (scale.Channel is FieldChannel.Y or FieldChannel.Y2)
+            {
+                numbers.AddRange(resolvedLayers
+                    .Where(layer => layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)))
+                    .SelectMany(layer => layer.Data)
+                    .Select(datum => Number(Channel(datum, scale.Channel) ?? ChartValue.Null()))
+                    .Where(number => number.HasValue)
+                    .Select(number => number!.Value));
+            }
             var minimum = scale.DomainMinimum is not null ? Number(scale.DomainMinimum) ?? 0m : numbers.DefaultIfEmpty(0m).Min();
             var maximum = scale.DomainMaximum is not null ? Number(scale.DomainMaximum) ?? 1m : numbers.DefaultIfEmpty(1m).Max();
             if (scale.Kind == ScaleKind.Logarithmic && (minimum <= 0m || maximum <= 0m || numbers.Any(number => number <= 0m)))
                 throw new InvalidOperationException($"Logarithmic scale '{scale.Id}' requires positive values and domain bounds.");
             if (scale.IncludeZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
             if (minimum == maximum) maximum = minimum + 1m;
+            var needsMarkHeadroom = !spec.Theme.Tokens.Any(token => token.Name.Equals("MICRO_CHART", StringComparison.OrdinalIgnoreCase)) &&
+                scale.Channel is FieldChannel.Y or FieldChannel.Y2 && resolvedLayers.Any(layer =>
+                layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point &&
+                !layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)));
+            if (needsMarkHeadroom)
+            {
+                var padding = Math.Max(.01m, (maximum - minimum) * .05m);
+                if (scale.DomainMaximum is null) maximum += padding;
+                if (!scale.IncludeZero && scale.DomainMinimum is null) minimum -= padding;
+            }
             var ticks = scale.Kind == ScaleKind.Logarithmic
                 ? Enumerable.Range(0, 5).Select(index => (decimal)Math.Pow(10d,
                     Math.Log10((double)minimum) + (Math.Log10((double)maximum) - Math.Log10((double)minimum)) * index / 4d)).ToList()
@@ -529,7 +550,9 @@ public sealed class PlotPlanResolver
             "Goal" => Enumerable.Repeat(parameter, Math.Max(1, categories.Length)).Select(value => (decimal?)value).ToList(),
             "Average" => Enumerable.Repeat(yValues.DefaultIfEmpty(0m).Average(), Math.Max(1, categories.Length)).Select(value => (decimal?)value).ToList(),
             "MovingAvg" => MovingAverage(yValues, Math.Max(1, (int)(parameter == 0 ? 3 : parameter))),
-            _ => Enumerable.Repeat((decimal?)0m, Math.Max(1, categories.Length)).ToList()
+            "Linear" => PolynomialRegression(yValues, 1),
+            "Polynomial" => PolynomialRegression(yValues, Math.Max(1, (int)(parameter == 0 ? 2 : parameter))),
+            _ => Enumerable.Repeat((decimal?)null, Math.Max(1, categories.Length)).ToList()
         };
         var data = resolvedValues.Select((value, index) => new ResolvedDatum(index,
             [
@@ -541,6 +564,50 @@ public sealed class PlotPlanResolver
 
     private static List<decimal?> MovingAverage(IReadOnlyList<decimal> values, int window) =>
         values.Select((_, index) => index < window - 1 ? (decimal?)null : values.Skip(index - window + 1).Take(window).Average()).ToList();
+
+    private static List<decimal?> PolynomialRegression(IReadOnlyList<decimal> values, int requestedDegree)
+    {
+        if (values.Count == 0) return [];
+        var degree = Math.Min(requestedDegree, values.Count - 1);
+        var size = degree + 1;
+        var matrix = new decimal[size, size + 1];
+        for (var row = 0; row < size; row++)
+        {
+            for (var column = 0; column < size; column++)
+                matrix[row, column] = Enumerable.Range(0, values.Count).Sum(index => Power(index, row + column));
+            matrix[row, size] = Enumerable.Range(0, values.Count).Sum(index => values[index] * Power(index, row));
+        }
+
+        for (var pivot = 0; pivot < size; pivot++)
+        {
+            var best = Enumerable.Range(pivot, size - pivot)
+                .OrderByDescending(row => Math.Abs(matrix[row, pivot])).First();
+            if (matrix[best, pivot] == 0m) return Enumerable.Repeat((decimal?)null, values.Count).ToList();
+            if (best != pivot)
+                for (var column = pivot; column <= size; column++)
+                    (matrix[pivot, column], matrix[best, column]) = (matrix[best, column], matrix[pivot, column]);
+            var divisor = matrix[pivot, pivot];
+            for (var column = pivot; column <= size; column++) matrix[pivot, column] /= divisor;
+            for (var row = 0; row < size; row++)
+            {
+                if (row == pivot) continue;
+                var factor = matrix[row, pivot];
+                for (var column = pivot; column <= size; column++) matrix[row, column] -= factor * matrix[pivot, column];
+            }
+        }
+
+        var coefficients = Enumerable.Range(0, size).Select(index => matrix[index, size]).ToArray();
+        return Enumerable.Range(0, values.Count)
+            .Select(index => (decimal?)coefficients.Select((coefficient, power) => coefficient * Power(index, power)).Sum())
+            .ToList();
+    }
+
+    private static decimal Power(int value, int exponent)
+    {
+        var result = 1m;
+        for (var index = 0; index < exponent; index++) result *= value;
+        return result;
+    }
 
     private static SemanticFallback BuildFallback(ChartSpec spec, ImmutableArray<ResolvedMarkLayer> layers, ImmutableArray<string> categories)
     {

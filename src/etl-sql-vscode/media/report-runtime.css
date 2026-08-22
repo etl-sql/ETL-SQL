@@ -115,6 +115,46 @@
 
   .chart-wrapper { width: 100%; flex: 1; height: auto; min-height: 0; }
   .native-chart-wrapper svg { display: block; width: 100%; height: 100%; max-width: 100%; }
+  .report-chart-tooltip {
+    position: fixed;
+    z-index: 10000;
+    width: min(300px, calc(100vw - 16px));
+    max-height: min(360px, calc(100vh - 16px));
+    overflow: hidden;
+    padding: 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.22);
+    color: #172033;
+    pointer-events: none;
+  }
+  .report-chart-tooltip-context {
+    padding: 2px 4px 7px;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .report-chart-tooltip-text,
+  .report-chart-tooltip-loading { padding: 8px; font-size: 12px; }
+  .report-chart-tooltip .visual-card {
+    min-height: 0;
+    margin: 0;
+    padding: 10px;
+    border-radius: 6px;
+    box-shadow: none;
+  }
+  .report-chart-tooltip .visual-card h3 { margin: 0 0 6px; font-size: 12px; }
+  .report-chart-tooltip .chart-wrapper { min-height: 150px; }
+  .report-chart-tooltip .visual-tool-btn { display: none; }
+  .theme-dark .report-chart-tooltip,
+  body.theme-dark .report-chart-tooltip {
+    border-color: #475569;
+    background: rgba(30, 41, 59, 0.98);
+    color: #e2e8f0;
+  }
+  .theme-dark .report-chart-tooltip-context,
+  body.theme-dark .report-chart-tooltip-context { color: #cbd5e1; }
   .table-wrapper { overflow: auto; max-height: 500px; display: flex; flex-direction: column; }
   .table-wrapper > table { flex: 1; }
   table { border-collapse: collapse; width: 100%; }

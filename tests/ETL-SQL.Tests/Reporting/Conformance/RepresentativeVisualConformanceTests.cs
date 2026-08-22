@@ -165,6 +165,21 @@ public class RepresentativeVisualConformanceTests
         var movingAvgOverlay = visual.Overlays.FirstOrDefault(o => o.OverlayType.Contains("Moving", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(movingAvgOverlay);
         Assert.Equal(2, movingAvgOverlay.Parameter);
+
+        var plan = Assert.IsType<PlotPlan>(visual.PlotPlan);
+        var svg = new SvgChartRenderer().Render(plan);
+        var firstOverlay = svg.IndexOf("class='plot-overlay'", StringComparison.Ordinal);
+        var lastBar = svg.LastIndexOf("<rect", firstOverlay, StringComparison.Ordinal);
+        Assert.True(firstOverlay > lastBar, "Overlay layers must be emitted after bar marks so they paint on top.");
+        Assert.Contains("data-overlay-type='Goal'", svg);
+        Assert.Contains("stroke='#DC2626'", svg);
+        Assert.Contains("stroke-dasharray='7 5'", svg);
+        Assert.Contains("data-overlay-type='Average'", svg);
+        Assert.Contains("stroke='#2563EB'", svg);
+        Assert.Contains("stroke-dasharray='1 5'", svg);
+        Assert.Contains("data-overlay-type='MovingAvg'", svg);
+        Assert.Contains("stroke='#059669'", svg);
+        Assert.Contains(">2-Sprint Moving Avg</text>", svg);
     }
 
     [Theory]

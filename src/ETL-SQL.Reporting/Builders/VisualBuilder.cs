@@ -16,10 +16,42 @@ namespace ETL_SQL.Reporting.Builders
     {
         public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false, VisualDrillState? drillState = null)
         {
-            var (title, titleMd) = await styleBuilder.ResolveMarkdownAsync(vStmt.Title, vStmt.TitleIsMarkdown);
-            var (subtitle, subtitleMd) = await styleBuilder.ResolveMarkdownAsync(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
-            var (defVal, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.DefaultValue);
-            var (placeholder, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.Placeholder);
+            var expressionBackups = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            string? title;
+            bool titleMd;
+            string? subtitle;
+            bool subtitleMd;
+            string? defVal;
+            string? placeholder;
+            try
+            {
+                foreach (var pair in interactionValues ?? [])
+                {
+                    var variableName = pair.Key.StartsWith('@') ? pair.Key : '@' + pair.Key;
+                    if (!ctx.VarContext.ContainsVariable(variableName)) continue;
+                    expressionBackups[variableName] = ctx.VarContext.GetVariable(variableName);
+                    ctx.VarContext.SetVariable(variableName, pair.Value);
+                }
+
+                (title, titleMd) = await styleBuilder.ResolveMarkdownAsync(vStmt.Title, vStmt.TitleIsMarkdown);
+                (subtitle, subtitleMd) = await styleBuilder.ResolveMarkdownAsync(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
+                (defVal, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.DefaultValue);
+                (placeholder, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.Placeholder);
+            }
+            finally
+            {
+                foreach (var pair in expressionBackups)
+                    ctx.VarContext.SetVariable(pair.Key, pair.Value);
+            }
+
+            return await BuildResolvedAsync(name, vStmt, interactionValues, skipDeferredVisuals, drillState,
+                title, titleMd, subtitle, subtitleMd, defVal, placeholder);
+        }
+
+        private async Task<VisualManifest> BuildResolvedAsync(string name, CreateVisualStatement vStmt,
+            Dictionary<string, string>? interactionValues, bool skipDeferredVisuals, VisualDrillState? drillState,
+            string? title, bool titleMd, string? subtitle, bool subtitleMd, string? defVal, string? placeholder)
+        {
 
             var vm = new VisualManifest
             {
@@ -461,6 +493,10 @@ namespace ETL_SQL.Reporting.Builders
                 ? action.ToUpperInvariant()
                 : null;
             if (vm.VisualType == "TABLE" || vm.VisualType == "SLICER") actionType ??= "FILTER";
+            if (interactionValues?.Keys.Any(name =>
+                    name.TrimStart('@').Equals("hover_value", StringComparison.OrdinalIgnoreCase)
+                    && InteractionVariableApplies(queryStmt, name)) == true)
+                actionType = "FILTER";
             actionType ??= "HIGHLIGHT";
 
             if (interactionValues != null && interactionValues.Count > 0)
