@@ -2,8 +2,8 @@
 
 **Status:** Accepted
 **Date:** 2026-08-20
-**Implementation:** Slices 0 and 1 plus Phase 7 native advanced authoring shipped on 2026-08-21;
-standard catalog migration and ECharts retirement remain planned.
+**Implementation:** Slices 0 and 1, Phase 7 native advanced authoring, and Phase 8 standard-catalog
+migration/runtime retirement are shipped.
 **Decision scope:** Reporting semantics and renderer boundaries. The accepted advanced language is
 recorded in [NativeAdvancedChartAuthoring.md](NativeAdvancedChartAuthoring.md).
 
@@ -43,13 +43,13 @@ graphical report meaning. Rendering proceeds through three conceptual levels:
                   Resolved PlotPlan
                /          |          \
               v           v           v
-      ECharts compiler  native SVG  terminal compiler
-        (temporary)      compiler     and fallbacks
+        browser SVG    static SVG   terminal compiler
+          runtime       compiler     and fallbacks
 ```
 
 `ChartSpec` describes intent. `PlotPlan` resolves shared deterministic choices. Backends consume the
-resolved plan and do not redefine report semantics. ECharts configuration is generated transiently
-during migration and is never stored as the canonical semantic report state.
+resolved plan and do not redefine report semantics. Phase 8 removed the temporary option compiler;
+native SVG is now shared by browser and static output.
 
 This ADR accepts the architecture and boundaries below. The Phase 7 `CUSTOM ... CHART` grammar is
 specified separately so future language changes still require parser-tested examples, LSP parity,
@@ -168,11 +168,11 @@ should be added coherently to ETL-SQL rather than hidden in an importer.
 
 ## 8. Backend Strategy
 
-### 8.1 Temporary ECharts Compiler
+### 8.1 Retired Migration Compiler
 
-The first migration backend compiles `PlotPlan` to an ECharts option object. This preserves broad
-browser behavior while severing the semantic dependency on ECharts. No ECharts option becomes part of
-the saved report, AST, or neutral manifest contract.
+The temporary Phase 3 compiler preserved browser behavior while the semantic contract stabilized.
+Phase 8 deleted it after the standard-catalog conformance gate passed. No vendor option object is part
+of the saved report, AST, manifest contract, or runtime path.
 
 ### 8.2 Native SVG Compiler
 
@@ -180,15 +180,15 @@ Native SVG is the canonical static graphical output. Scale and geometry code liv
 or rendering layer, not in Core. Text measurement may use the already-approved rendering stack where
 needed, but the semantic contracts remain dependency-light.
 
-The native compiler initially covers representative Cartesian, polar, layered, and annotation cases.
-Standard visual coverage expands from conformance evidence rather than from an all-at-once rewrite.
+The native compiler covers the standard Cartesian, circular, polar, statistical, financial,
+timeline, layered, annotation, and faceted catalog. Focused managed modules cover specialized layouts.
 
 ### 8.3 Browser Renderer
 
-The browser may render standard `PlotPlan` output through a small SVG/DOM implementation. ECharts can
-be omitted only when the report capability matrix proves that every contained visual and interaction
-has a native implementation. Bundle-size targets are measured from bundled, minified, and compressed
-artifacts using a declared fixture.
+The browser imports server-generated native SVG and binds row-indexed marks to actions,
+cross-filtering, drill context, and tooltips. The capability matrix proves that every graphical type
+has a native or approved focused implementation. Bundle results are recorded from bundled and
+compressed artifacts using the declared representative harness.
 
 ### 8.4 Specialized Layout Modules
 

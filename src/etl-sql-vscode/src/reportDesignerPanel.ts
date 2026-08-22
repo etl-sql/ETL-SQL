@@ -147,7 +147,6 @@ export class ReportDesignerPanel {
 
         const designerJsUri  = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'designer', 'designer.js'));
         const designerCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'designer', 'designer.css'));
-        const echartsUri     = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'echarts.min.js'));
         const feedbackUri    = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'feedback.js'));
 
         // Safely encode initial script text for inline JSON injection
@@ -266,7 +265,6 @@ export class ReportDesignerPanel {
   window.__INIT__ = ${initJson};
 </script>
 
-<script nonce="${nonce}" src="${echartsUri}"></script>
 
 <!-- Dynamic module import requires cspSource in script-src (already set above) -->
 <script nonce="${nonce}" type="module">

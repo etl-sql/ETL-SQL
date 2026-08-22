@@ -1,0 +1,15 @@
+SELECT 'North' AS Region, 2 AS DeliveryDays INTO #box_data
+UNION ALL SELECT 'North', 4
+UNION ALL SELECT 'North', 6
+UNION ALL SELECT 'North', 8
+UNION ALL SELECT 'South', 1
+UNION ALL SELECT 'South', 3
+UNION ALL SELECT 'South', 5;
+
+CREATE VISUAL DeliveryDistribution AS BOXPLOT (
+  SOURCE = #box_data,
+  MAPPINGS (X = Region, Y = DeliveryDays),
+  OPTIONS (TITLE = 'Delivery Distribution')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = DeliveryDistribution));

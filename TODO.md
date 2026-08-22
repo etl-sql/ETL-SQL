@@ -208,21 +208,21 @@ regression evidence alongside the production conformance tests.
 
 ### Phase 8 — Standard Catalog Migration and ECharts Retirement
 
-- [ ] Group remaining standard visuals by shared semantics and migrate them in independently testable
+- [x] Group remaining standard visuals by shared semantics and migrate them in independently testable
   batches rather than one catalog-wide rewrite.
-- [ ] Expand native Cartesian, polar, statistical, hierarchical, and annotation coverage with shared
+- [x] Expand native Cartesian, polar, statistical, hierarchical, and annotation coverage with shared
   `PlotPlan` conformance and visual goldens.
-- [ ] Evaluate `GANTT` as a native time/band/rect/rule/text/dependency-path composition before
+- [x] Evaluate `GANTT` as a native time/band/rect/rule/text/dependency-path composition before
   classifying it as a specialized layout.
-- [ ] Evaluate focused layout modules for maps, force networks, Sankey, treemap, and sunburst only
+- [x] Evaluate focused layout modules for maps, force networks, Sankey, treemap, and sunburst only
   after the native contract is stable.
-- [ ] Before adding any layout dependency, complete license, maintenance, transitive-dependency,
+- [x] Before adding any layout dependency, complete license, maintenance, transitive-dependency,
   necessity, notices, and inventory checks required by the third-party policy.
-- [ ] Conditionally omit ECharts from reports only when the capability matrix proves every contained
+- [x] Conditionally omit ECharts from reports only when the capability matrix proves every contained
   visual and interaction is native.
-- [ ] Remove `EChartsSsrRenderer`, ClearScript/V8 packages, and ECharts runtime assets only after no
+- [x] Remove `EChartsSsrRenderer`, ClearScript/V8 packages, and ECharts runtime assets only after no
   certified browser, export, interaction, or regression path requires them.
-- [ ] Re-measure bundled/compressed size, cold start, memory, export time, and output size; report
+- [x] Re-measure bundled/compressed size, cold start, memory, export time, and output size; report
   actual results rather than preserving a speculative size promise.
 
 **Exit gate:** All graphical types are native or deliberately use an approved specialized module,

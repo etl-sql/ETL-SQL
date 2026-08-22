@@ -15,6 +15,7 @@ namespace ETL_SQL.Reporting
     public class SvgChartRenderer
     {
         private readonly PlotPlanSvgRenderer _plotPlan = new();
+        private readonly SpecializedNativeSvgRenderer _specialized = new();
         private const int W = 600;
         private const int H = 350;
         private const int PL = 60;   // pad left
@@ -37,6 +38,7 @@ namespace ETL_SQL.Reporting
                 "LINE" => RenderLine(v),
                 "PIE" => RenderPie(v, false),
                 "DONUT" => RenderPie(v, true),
+                "TREEMAP" or "SUNBURST" or "SANKEY" or "NETWORK" or "MAP" or "MATRIX" => _specialized.Render(v),
                 "CARD" => null,    // rendered as text in Markdown
                 "TABLE" => null,    // rendered as GFM table
                 "SLICER" => null,    // interactive-only

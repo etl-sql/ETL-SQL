@@ -24,18 +24,13 @@
     function injectRuntimeOnce() {
       if (runtimeInjected) return;
       runtimeInjected = true;
-      var echarts = document.createElement('script');
-      echarts.src = BASE + 'echarts.min.js';
-      echarts.onload = function () {
-        var rt = document.createElement('script');
-        rt.src = BASE + 'report-runtime.js';
-        document.body.appendChild(rt);
-      };
-      echarts.onerror = function () {
+      var rt = document.createElement('script');
+      rt.src = BASE + 'report-runtime.js';
+      rt.onerror = function () {
         var root = document.getElementById('root');
         if (root) root.innerHTML = '<div class="preview-placeholder">Failed to load the preview runtime.</div>';
       };
-      document.body.appendChild(echarts);
+      document.body.appendChild(rt);
     }
 
     window.addEventListener('message', function (e) {

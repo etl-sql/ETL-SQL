@@ -7,9 +7,9 @@ namespace ETL_SQL.Core;
 public static class ReportingThemeBuilder
 {
     /// <summary>
-    /// Translates Report-SQL theme properties to the ECharts theme JSON structure.
+    /// Translates Report-SQL theme properties to the native theme JSON structure.
     /// </summary>
-    public static JsonObject BuildEChartsTheme(Dictionary<string, string> props)
+    public static JsonObject BuildNativeTheme(Dictionary<string, string> props)
     {
         var theme = new JsonObject();
 

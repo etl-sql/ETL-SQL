@@ -198,10 +198,13 @@ internal static class PlotPlanTerminalRenderer
     private static string Label(ResolvedDatum datum) =>
         DisplayChannel(datum, FieldChannel.X) ?? DisplayChannel(datum, FieldChannel.Theta) ?? $"row {datum.RowIndex + 1}";
     private static decimal? Value(ResolvedDatum datum) =>
-        PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? Channel(datum, FieldChannel.Radius) ?? ChartValue.Null());
+        PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ??
+            Channel(datum, FieldChannel.Radius) ?? Channel(datum, FieldChannel.Median) ??
+            Channel(datum, FieldChannel.Close) ?? Channel(datum, FieldChannel.Size) ?? Channel(datum, FieldChannel.YEnd) ?? ChartValue.Null());
     private static string DisplayValue(ResolvedDatum datum)
     {
-        var channel = datum.Channels.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius);
+        var channel = datum.Channels.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or
+            FieldChannel.Median or FieldChannel.Close or FieldChannel.Size or FieldChannel.YEnd);
         var value = channel is null ? "" : channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value);
         if (datum.Encodings.IsDefaultOrEmpty) return value;
         return value + " (" + string.Join(", ", datum.Encodings.Select(encoding =>

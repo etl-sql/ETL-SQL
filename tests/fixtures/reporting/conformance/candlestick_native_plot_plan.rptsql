@@ -1,0 +1,11 @@
+SELECT 'D1' AS PeriodName, 10 AS OpenPrice, 14 AS HighPrice, 8 AS LowPrice, 12 AS ClosePrice INTO #ohlc_data
+UNION ALL SELECT 'D2', 12, 15, 9, 10
+UNION ALL SELECT 'D3', 10, 16, 10, 15;
+
+CREATE VISUAL PriceHistory AS CANDLESTICK (
+  SOURCE = #ohlc_data,
+  MAPPINGS (X = PeriodName, OPEN = OpenPrice, HIGH = HighPrice, LOW = LowPrice, CLOSE = ClosePrice),
+  OPTIONS (TITLE = 'Price History', COLOR_UP = '#26a69a', COLOR_DOWN = '#ef5350')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = PriceHistory));

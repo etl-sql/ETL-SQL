@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Reporting;
@@ -43,7 +42,7 @@ public class RepresentativeVisualConformanceTests
     }
 
     [Fact]
-    public async Task CategoryAndSeriesOrdering_PreservesOrderInManifestAndECharts()
+    public async Task CategoryAndSeriesOrdering_PreservesOrderInManifestAndNativeSvg()
     {
         var (ast, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("bar_stable_ordering.rptsql");
         var visual = manifest.Visuals.First();
@@ -58,23 +57,18 @@ public class RepresentativeVisualConformanceTests
         Assert.Contains("Actual", seriesValues);
         Assert.Contains("Forecast", seriesValues);
 
-        var echartsJson = RepresentativeVisualConformanceHarness.RenderEChartsJson(manifest, visual.Name);
-        Assert.NotNull(echartsJson);
-        Assert.Contains("\"series\"", echartsJson);
-        Assert.Contains("\"xAxis\"", echartsJson);
+        Assert.Contains("<svg", Assert.IsType<string>(visual.NativeSvg));
     }
 
     [Fact]
-    public async Task ExplicitDomain_PreservedInOptionsAndLoweredToECharts()
+    public async Task ExplicitDomain_PreservedInResolvedPlan()
     {
         var (ast, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("bar_explicit_domain.rptsql");
         var visual = manifest.Visuals.First();
 
         Assert.True(visual.Options.ContainsKey("axis:y:min") || visual.Options.ContainsKey("Y_AXIS") || visual.Min != null);
 
-        var echartsJson = RepresentativeVisualConformanceHarness.RenderEChartsJson(manifest, visual.Name);
-        Assert.NotNull(echartsJson);
-        Assert.Contains("\"yAxis\"", echartsJson);
+        Assert.NotEmpty(Assert.IsType<PlotPlan>(visual.PlotPlan).Scales.Single(scale => scale.Channel == FieldChannel.Y).Domain);
     }
 
     [Fact]
@@ -87,9 +81,6 @@ public class RepresentativeVisualConformanceTests
         Assert.Equal("#1E3A8A", visual.Options["color:Enterprise"]);
         Assert.Equal("#3B82F6", visual.Options["color:Mid-Market"]);
 
-        var echartsJson = RepresentativeVisualConformanceHarness.RenderEChartsJson(manifest, visual.Name);
-        Assert.NotNull(echartsJson);
-        Assert.Contains("\"stack\":\"total\"", echartsJson);
         var plan = Assert.IsType<PlotPlan>(visual.PlotPlan);
         var y = plan.Scales.Single(scale => scale.Channel == FieldChannel.Y);
         Assert.Equal(170000m, PlotPlanResolver.Number(y.Domain[^1]));
@@ -136,9 +127,7 @@ public class RepresentativeVisualConformanceTests
         var nullRows = visual.Rows.Where(r => r[1] == null || string.IsNullOrEmpty(r[1]) || r[1] == "NULL").ToList();
         Assert.Equal(2, nullRows.Count);
 
-        var echartsJson = RepresentativeVisualConformanceHarness.RenderEChartsJson(manifest, visual.Name);
-        Assert.NotNull(echartsJson);
-        Assert.Contains("null", echartsJson);
+        Assert.Equal(2, Assert.IsType<PlotPlan>(visual.PlotPlan).Nulls.GapRows.Length);
     }
 
     [Fact]
@@ -152,10 +141,9 @@ public class RepresentativeVisualConformanceTests
         Assert.Equal("bar", visual.SeriesDefs[0].SeriesType, ignoreCase: true);
         Assert.Equal("line", visual.SeriesDefs[1].SeriesType, ignoreCase: true);
 
-        var echartsJson = RepresentativeVisualConformanceHarness.RenderEChartsJson(manifest, visual.Name);
-        Assert.NotNull(echartsJson);
-        Assert.Contains("\"type\":\"bar\"", echartsJson);
-        Assert.Contains("\"type\":\"line\"", echartsJson);
+        var plan = Assert.IsType<PlotPlan>(visual.PlotPlan);
+        Assert.Contains(plan.Layers, layer => layer.Mark == MarkKind.Rect);
+        Assert.Contains(plan.Layers, layer => layer.Mark == MarkKind.Line);
     }
 
     [Fact]
@@ -190,13 +178,12 @@ public class RepresentativeVisualConformanceTests
     [InlineData("combo_dual_axes.rptsql")]
     [InlineData("rule_statistical_overlays.rptsql")]
     [InlineData("accessible_semantic_fallbacks.rptsql")]
-    public async Task MultiSurfaceRendering_ExecutesAcrossEChartsSvgAndTerminalWithoutThrowing(string fixtureFileName)
+    public async Task MultiSurfaceRendering_ExecutesAcrossNativeSvgAndTerminalWithoutThrowing(string fixtureFileName)
     {
         var (ast, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync(fixtureFileName);
 
         foreach (var visual in manifest.Visuals)
         {
-            var echarts = RepresentativeVisualConformanceHarness.RenderEChartsJson(manifest, visual.Name);
             var svg = RepresentativeVisualConformanceHarness.RenderSvg(manifest, visual.Name);
 
             // Validate SVG output when supported
@@ -234,7 +221,8 @@ public class RepresentativeVisualConformanceTests
             visual.PlotPlan.Validate();
             Assert.Equal(visual.ChartSpec.Id, visual.PlotPlan.SpecId);
             Assert.Equal(visual.ChartData.RowCount, visual.Rows.Count);
-            Assert.Equal(new EChartsRenderer().Render(visual.PlotPlan), visual.ChartConfig);
+            Assert.Null(visual.ChartConfig);
+            Assert.Equal(new SvgChartRenderer().Render(visual.PlotPlan), visual.NativeSvg);
             Assert.Contains("role='img'", new SvgChartRenderer().Render(visual.PlotPlan));
             Assert.NotNull(TerminalRenderer.RenderVisual(visual));
         }

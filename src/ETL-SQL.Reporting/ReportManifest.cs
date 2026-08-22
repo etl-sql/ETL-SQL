@@ -9,7 +9,7 @@ namespace ETL_SQL.Reporting
     // ReportManifest — Phase 9B
     //
     // Serialisable POCOs that describe a fully-evaluated report.
-    // Produced by ManifestBuilder; consumed by EChartsRenderer,
+    // Produced by ManifestBuilder; consumed by browser and export renderers,
     // MarkdownRenderer, SvgChartRenderer, SnapshotStore, and the VS Code preview WebviewPanel.
     // ════════════════════════════════════════════════════════════════════════
 
@@ -155,7 +155,7 @@ namespace ETL_SQL.Reporting
         [property: JsonPropertyName("timestamp")] DateTime Timestamp
     );
 
-    /// <summary>A single visual with its data snapshot and ECharts config.</summary>
+    /// <summary>A single visual with its data snapshot and native rendering payload.</summary>
     public class VisualManifest
     {
         [JsonPropertyName("name")]
@@ -189,7 +189,7 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PrintLayoutOverrideManifest? PrintLayout { get; set; }
 
-        /// <summary>Resolved ECharts option JSON object (as a pre-serialised string).</summary>
+        /// <summary>Legacy generic chart configuration slot; native charts leave this null.</summary>
         [JsonPropertyName("chartConfig")]
         public string? ChartConfig { get; set; }
 
@@ -207,6 +207,15 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("plotPlan")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PlotPlan? PlotPlan { get; set; }
+
+        /// <summary>Native SVG payload used by browser and static delivery surfaces.</summary>
+        [JsonPropertyName("nativeSvg")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? NativeSvg { get; set; }
+
+        /// <summary>Validated engine-resolved custom map path; never serialized to clients.</summary>
+        [JsonIgnore]
+        public string? ResolvedMapFile { get; set; }
 
         /// <summary>
         /// Ordered non-graphical interpretation shared by terminals, assistive technology,
@@ -893,13 +902,13 @@ namespace ETL_SQL.Reporting
         public Dictionary<string, string>? Styles { get; set; }
     }
 
-    /// <summary>A custom ECharts theme registered via CREATE THEME.</summary>
+    /// <summary>A custom report theme registered via CREATE THEME.</summary>
     public class ThemeManifest
     {
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
 
-        /// <summary>Raw ECharts theme JSON object (arbitrary structure).</summary>
+        /// <summary>Raw native theme JSON object.</summary>
         [JsonPropertyName("config")]
         public System.Text.Json.JsonElement Config { get; set; }
     }

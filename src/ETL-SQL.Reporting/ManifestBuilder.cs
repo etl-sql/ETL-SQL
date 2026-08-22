@@ -28,9 +28,8 @@ namespace ETL_SQL.Reporting
         {
             _ctx = ctx;
             _maxVisualParallelism = ResolveMaxVisualParallelism(ctx, maxVisualParallelism);
-            var renderer = new EChartsRenderer();
             _styleBuilder = new StyleBuilder(ctx);
-            _visualBuilder = new VisualBuilder(ctx, renderer, _styleBuilder);
+            _visualBuilder = new VisualBuilder(ctx, _styleBuilder);
             _pageBuilder = new PageBuilder(_styleBuilder);
             _datasetBuilder = new DatasetBuilder();
         }
@@ -241,7 +240,7 @@ namespace ETL_SQL.Reporting
                 manifest.CustomThemes = new();
                 foreach (var (themeName, themeStmt) in _ctx.ReportContext.ThemeDefinitions)
                 {
-                    var themeJson = ThemeBuilder.BuildEChartsTheme(themeStmt.Properties);
+                    var themeJson = ThemeBuilder.BuildNativeTheme(themeStmt.Properties);
                     using var doc = JsonDocument.Parse(themeJson.ToJsonString());
                     manifest.CustomThemes.Add(new ThemeManifest
                     {
@@ -357,7 +356,7 @@ namespace ETL_SQL.Reporting
                     throw new InvalidOperationException("Execution context cannot be forked for parallel visual generation.");
 
                 var styleBuilder = new StyleBuilder(visualContext);
-                var visualBuilder = new VisualBuilder(visualContext, new EChartsRenderer(), styleBuilder);
+                var visualBuilder = new VisualBuilder(visualContext, styleBuilder);
                 var visual = await visualBuilder.BuildAsync(input.Name, input.Statement, interactionValues, skipDeferredVisuals);
                 return new VisualBuildResult(input.Index, visual, null, visualContext);
             }
@@ -485,19 +484,20 @@ namespace ETL_SQL.Reporting
             or VisualType.Image;
 
         /// <summary>
-        /// Clears HighlightRows from a visual and regenerates its ChartConfig without the ghost overlay.
+        /// Clears HighlightRows from a visual and regenerates its native SVG without the ghost overlay.
         /// Does not re-query the data source — uses existing Rows.
         /// </summary>
         public void ClearHighlightRows(VisualManifest vm)
         {
             if (vm.HighlightRows == null) return;
             vm.HighlightRows = null;
-            vm.ChartConfig = new EChartsRenderer().Render(vm);
+            vm.ChartConfig = null;
+            vm.NativeSvg = new SvgChartRenderer().Render(vm);
         }
 
         /// <summary>
         /// Re-queries the data for a specific visual and updates its Row/Column collections.
-        /// Also regenerates the ChartConfig.
+        /// Also regenerates the renderer-neutral plan and native SVG.
         /// </summary>
         public async Task RefreshVisualAsync(CreateVisualStatement vStmt, VisualManifest vm, Dictionary<string, string>? interactionValues = null, VisualDrillState? drillState = null)
         {
@@ -507,6 +507,7 @@ namespace ETL_SQL.Reporting
             vm.Columns = newVm.Columns;
             vm.Error = newVm.Error;
             vm.ChartConfig = newVm.ChartConfig;
+            vm.NativeSvg = newVm.NativeSvg;
             vm.ChartSpec = newVm.ChartSpec;
             vm.ChartData = newVm.ChartData;
             vm.PlotPlan = newVm.PlotPlan;

@@ -60,15 +60,22 @@ public class ReportingBaselineTests
         var nativeSvg = new[]
         {
             VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Scatter,
-            VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom
+            VisualType.Bubble, VisualType.HeatMap, VisualType.Funnel, VisualType.Gauge,
+            VisualType.BoxPlot, VisualType.Waterfall, VisualType.Candlestick,
+            VisualType.Trellis,
+            VisualType.Gantt,
+            VisualType.Radar,
+            VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom,
+            VisualType.Treemap, VisualType.Sunburst, VisualType.Sankey, VisualType.Network,
+            VisualType.Map, VisualType.Matrix
         };
         Assert.Equal(nativeSvg.Order(), VisualCapabilityMatrix.NativeSvgVisualTypes.Order());
 
-        Assert.Equal(24, VisualCapabilityMatrix.EChartsVisualTypes.Count);
+        Assert.Empty(VisualCapabilityMatrix.ExternalChartDependencyVisualTypes);
         Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Custom).StaticExport.Level);
         Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Custom).Terminal.Level);
         Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Matrix).Browser.Level);
-        Assert.Equal(CapabilityLevel.TemporaryDependency, VisualCapabilityMatrix.Get(VisualType.Matrix).StaticExport.Level);
+        Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Matrix).StaticExport.Level);
         Assert.Equal(CapabilityLevel.SemanticFallback, VisualCapabilityMatrix.Get(VisualType.Map).Terminal.Level);
         Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Gantt).Terminal.Level);
         Assert.Equal(CapabilityLevel.Unsupported, VisualCapabilityMatrix.Get(VisualType.Slicer).StaticExport.Level);
@@ -77,7 +84,7 @@ public class ReportingBaselineTests
     [Fact]
     public void CapabilityMatrix_EveryGraphicalVisualHasUsefulTerminalPath()
     {
-        foreach (var type in VisualCapabilityMatrix.EChartsVisualTypes)
+        foreach (var type in VisualCapabilityMatrix.NativeSvgVisualTypes)
         {
             var terminal = VisualCapabilityMatrix.Get(type).Terminal;
             Assert.NotEqual(CapabilityLevel.Unsupported, terminal.Level);
@@ -154,11 +161,7 @@ public class ReportingBaselineTests
 
         Assert.NotEmpty(bundleAssets);
 
-        var echarts = bundleAssets.FirstOrDefault(b => b.RelativePath.EndsWith("echarts.min.js", StringComparison.OrdinalIgnoreCase));
-        Assert.NotNull(echarts);
-        Assert.True(echarts.RawBytes > 100_000, "ECharts bundle size must exceed 100KB");
-        Assert.True(echarts.GzipBytes < echarts.RawBytes, "Gzip size must be smaller than raw size");
-        Assert.True(echarts.BrotliBytes < echarts.RawBytes, "Brotli size must be smaller than raw size");
+        Assert.DoesNotContain(bundleAssets, asset => asset.RelativePath.EndsWith("echarts.min.js", StringComparison.OrdinalIgnoreCase));
 
         var runtimeJs = bundleAssets.FirstOrDefault(b => b.RelativePath.EndsWith("report-runtime.js", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(runtimeJs);

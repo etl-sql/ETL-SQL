@@ -1,0 +1,12 @@
+SELECT 'North' AS Region, 'A' AS CategoryName, 10 AS Revenue INTO #trellis_data
+UNION ALL SELECT 'North', 'B', 20
+UNION ALL SELECT 'South', 'A', 7
+UNION ALL SELECT 'South', 'B', 14;
+
+CREATE VISUAL RevenueTrellis AS TRELLIS (
+  SOURCE = #trellis_data,
+  MAPPINGS (X = CategoryName, Y = Revenue, FACET = Region),
+  OPTIONS (CHART_TYPE = BAR, COLUMNS = 2, SHARED_AXIS = ON, TITLE = 'Revenue by Region')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RevenueTrellis));

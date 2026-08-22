@@ -114,7 +114,7 @@ public sealed record PlotPlan(
     public ImmutableArray<StyleToken> Style { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public ImmutableArray<ResolvedFacetPanel> Facets { get; init; } = [];
+    public ImmutableArray<ResolvedFacetPanel> Facets { get; init; }
 
     public static PlotPlan Create(
         string specId,

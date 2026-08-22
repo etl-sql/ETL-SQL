@@ -15,7 +15,10 @@ the runtime rendering contract, see [Report runtime contract](report-runtime-con
     {
       "name":       "RevenueByRegion",
       "visualType": "Bar",
-      "chartConfig": "{ /* ECharts option object JSON */ }",
+      "chartSpec":   { "schema": "https://etl-sql.org/schemas/reporting/chart-spec/v1", "version": 1, "id": "RevenueByRegion" },
+      "chartData":   { "schema": "https://etl-sql.org/schemas/reporting/chart-data/v1", "version": 1, "name": "inline:RevenueByRegion", "rowCount": 2 },
+      "plotPlan":    { "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v1", "version": 1, "specId": "RevenueByRegion" },
+      "nativeSvg":   "<svg xmlns='http://www.w3.org/2000/svg' ...>...</svg>",
       "columns":  ["region", "revenue"],
       "rows":     [["East", "12000"], ...],
       "options":  {

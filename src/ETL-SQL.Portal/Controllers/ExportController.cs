@@ -160,7 +160,7 @@ public class ExportController(
         byte[] pdfBytes;
         try
         {
-            // Render the already-loaded manifest entirely server-side (charts via ECharts SSR).
+            // Render the already-loaded manifest entirely server-side with native SVG charts.
             // We deliberately do NOT use the browser/high-fidelity path here: it would navigate a
             // headless browser to the live portal and forward the caller's Authorization header via
             // CDP Network.setExtraHTTPHeaders, which has no URL filter — leaking the viewer's bearer

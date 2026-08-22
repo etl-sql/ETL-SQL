@@ -1,0 +1,9 @@
+SELECT 'Model A' AS ModelName, 88 AS Speed, 92 AS Reliability, 75 AS Efficiency, 83 AS Coverage INTO #radar_data
+UNION ALL SELECT 'Model B', 76, 85, 91, 79;
+
+CREATE VISUAL ModelComparison AS RADAR (
+  SOURCE = #radar_data,
+  OPTIONS (MIN = 0, MAX = 100, TITLE = 'Model Comparison')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = ModelComparison));

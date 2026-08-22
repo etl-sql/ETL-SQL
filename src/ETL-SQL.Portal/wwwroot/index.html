@@ -282,7 +282,6 @@
   </div>
 </div>
 
-<script src="/js/echarts.min.js?v=0.18.0"></script>
 <script src="/js/feedback.js?v=0.18.0"></script>
 <script type="module">
 import { adminApi, auth, authApi, catalogApi, dataQualityApi, foldersApi, governanceApi, reportsApi, studioApi, subscriptionsApi } from '/js/api.js?v=0.18.0';
@@ -1393,7 +1392,6 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
 <\/script>
 </head><body style="margin:0" class="${isDark === 'true' ? 'theme-dark' : ''}">
 <div id="root"></div>
-<script src="/js/echarts.min.js?v=0.18.0"><\/script>
 <script src="/js/report-runtime.js?v=0.18.0"><\/script>
 <script>
   if (${isDark} || (window.parent && window.parent.document.body.classList.contains('theme-dark'))) {

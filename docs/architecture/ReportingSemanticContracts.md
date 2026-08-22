@@ -87,13 +87,13 @@ A backend implements `IPlotPlanSemanticBackend` and projects its effective inter
 plan and attributes drift to scales, series order, palette, legend, layers, nulls, accessibility, or
 fallback behavior.
 
-The representative Phase 3 path is now:
+The standard catalog path is now:
 
 ```text
-named BAR / LINE / SCATTER / PIE / DONUT / COMBO (+ RULE)
+named standard visual
               -> ChartSpec + typed ChartDataSet
               -> deterministic PlotPlan
-              -> transient ECharts | native SVG | terminal | V8-free static PDF
+              -> native browser/static SVG | terminal | V8-free static PDF
 ```
 
 Phase 7 adds the native authoring path:
@@ -102,14 +102,14 @@ Phase 7 adds the native authoring path:
 CUSTOM CHART layers / scales / coordinates / conditions / facets
               -> ChartSpec + typed ChartDataSet
               -> PlotPlan + resolved facet panels / conditional values
-              -> transient ECharts | native SVG | terminal | accessible fallback
+              -> native browser/static SVG | terminal | accessible fallback
 ```
 
-`VisualManifest.ChartConfig` remains a compatibility payload for browser hosts, but for migrated
-visuals it is generated from `PlotPlan` and is not authoritative semantic state. Representative
-fixtures assert shared domains, source ordering, series/palette/legend identity, dual axes, temporal
-values, stacking, gaps, overlays, accessibility fallbacks, and backend consumption of the same plan.
-The capability matrix identifies every visual that still uses a legacy ECharts-only path.
+`VisualManifest.NativeSvg` carries browser/static geometry; `ChartConfig` is an obsolete compatibility
+slot and remains null on native manifests. Representative fixtures assert shared domains, source
+ordering, series/palette/legend identity, dual axes, temporal values, stacking, gaps, overlays,
+accessibility fallbacks, and backend consumption of the same plan. The capability matrix contains no
+external chart-runtime dependency.
 
 ## References
 

@@ -337,11 +337,7 @@ namespace ETL_SQL.Reporting
 
         private async Task RenderChartAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
         {
-            // Migrated visuals render from PlotPlan without loading server-side V8. Non-migrated
-            // visuals retain the compatibility SSR path until their capability-matrix phase.
-            var svgStr = UsesNativePlotPlanRendering(v)
-                ? _svg.Render(v)
-                : await EChartsSsrRenderer.Shared.RenderSvgAsync(v, cancellationToken: cancellationToken) ?? _svg.Render(v);
+            var svgStr = _svg.Render(v);
             if (svgStr != null)
             {
                 var png = SvgToPng(svgStr);
@@ -368,7 +364,9 @@ namespace ETL_SQL.Reporting
             }
         }
 
-        internal static bool UsesNativePlotPlanRendering(VisualManifest visual) => visual.PlotPlan is not null;
+        internal static bool UsesNativePlotPlanRendering(VisualManifest visual) =>
+            visual.PlotPlan is not null || visual.NativeSvg is not null;
+
 
         private async Task RenderTableAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
         {

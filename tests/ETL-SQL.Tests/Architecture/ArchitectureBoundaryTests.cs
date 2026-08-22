@@ -223,7 +223,11 @@ public sealed class ArchitectureBoundaryTests
         Assert.True(Directory.Exists(srcDir), $"Expected src directory at {srcDir}");
 
         var result = new Dictionary<string, ProjectInfo>();
-        foreach (var csproj in Directory.GetFiles(srcDir, "ETL-SQL.*.csproj", SearchOption.AllDirectories))
+        foreach (var csproj in Directory.EnumerateFiles(srcDir, "ETL-SQL.*.csproj", new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true
+        }))
         {
             var name = StripName(Path.GetFileNameWithoutExtension(csproj));
             var doc = XDocument.Load(csproj);

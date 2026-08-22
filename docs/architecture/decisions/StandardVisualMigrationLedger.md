@@ -1,10 +1,16 @@
 # Architecture Decision & Migration Ledger: Standard Visual Catalog Migration
 
 ## Status
-Approved / Active Specification for Phase 8
+Implemented / Phase 8 Complete
 
 ## Executive Summary
 This document provides the standard visual catalog migration ledger for ETL-SQL Phase 8. It groups all 24 remaining standard visual types into 6 semantic migration batches, specifies exact grammar contracts, required Grammar of Graphics primitives (`ChartSpec` / `PlotPlan`), cross-channel rendering requirements, and acceptance test criteria.
+
+The batches are now implemented. Standard Cartesian, circular, statistical, polar, financial,
+timeline, and faceted visuals lower through `ChartSpec` and `PlotPlan`. Hierarchical, graph, flow,
+geographic, and matrix layouts use the approved focused `SpecializedNativeSvgRenderer`. The focused
+implementation uses deterministic slice-and-dice treemap, radial partition, layered Sankey,
+circular network, and equirectangular GeoJSON projection algorithms; no new dependency was needed.
 
 ---
 
@@ -206,4 +212,16 @@ Once Batches 1 through 6 pass all conformance and golden rendering tests:
 3. **Remove V8 Server Engine**: Remove `EChartsSsrRenderer.cs` and purge `Microsoft.ClearScript.V8.*` NuGet references from `ETL-SQL.Reporting.csproj` and `Directory.Packages.props`.
 4. **Remove Browser ECharts Bundle**: Delete `echarts.min.js` from `src/ETL-SQL.ReportRuntime/Resources/Shared/`, run `sync-assets.js`, and remove `<script>` tags from all host HTML pages.
 5. **Update SBOM & Legal Notices**: Remove ECharts and ClearScript entries from `THIRD-PARTY-NOTICES.md` and `THIRD-PARTY-INVENTORY.md`.
-6. **Update VisualCapabilityMatrix**: Promote all 36 visual types to 100% `Native` across Browser, StaticExport, and PdfEmailExport.
+6. **Update VisualCapabilityMatrix**: Promote all graphical visual types to `Native` across Browser, StaticExport, and PdfEmailExport; interactive controls remain deliberately unsupported in static exports.
+
+## 4. Completion Evidence
+
+- Standard-batch fixtures live under `tests/fixtures/reporting/conformance/` and are exercised by
+  `StandardCatalogCartesianMigrationTests` and the representative conformance suite.
+- Specialized layouts are covered by `SpecializedNativeSvgRendererTests`.
+- Gantt is implemented as the native time/band/rect/rule composition selected by the evaluation.
+- `ChartRuntimeRetirementTests` prevents ClearScript packages, ECharts assets, renderers, or runtime
+  consumers from returning.
+- Browser assets are synchronized from the canonical ReportRuntime source and the post-retirement
+  footprint/runtime measurements are recorded in
+  [Phase 8 results](../../benchmarks/reporting-phase8-results.md).

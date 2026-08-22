@@ -1112,8 +1112,8 @@
   </div>
 </div>
 
-<script src="/js/echarts.min.js?v=0.18.0"></script>
 <script src="/js/feedback.js?v=0.18.0"></script>
+<script src="/js/native-charts.js?v=0.18.0"></script>
 <script type="module">
 import { auth, authApi } from '/js/api.js?v=0.18.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.18.0';
@@ -1746,7 +1746,7 @@ async function loadNotifications() {
 function renderGantt(jobs) {
   if (!ganttChart) {
     const el = document.getElementById('ganttChart');
-    ganttChart = echarts.init(el);
+    ganttChart = nativeCharts.init(el);
     ganttChart.on('click', params => {
       if (params.componentType === 'series') {
         const name = params.data?.[3];
@@ -2080,7 +2080,7 @@ document.getElementById('sparklineMetricRowsBtn').addEventListener('click', () =
 function renderSparkline(entries) {
   lastSparklineEntries = entries || [];
   const el = document.getElementById('sparklineChart');
-  if (!sparklineChart) sparklineChart = echarts.init(el);
+  if (!sparklineChart) sparklineChart = nativeCharts.init(el);
 
   const style = getComputedStyle(document.body);
   const accentColor = style.getPropertyValue('--portal-accent').trim() || '#2563eb';
@@ -2126,7 +2126,7 @@ async function loadDependencyChain(jobName) {
   container.innerHTML = '<span class="spinner"></span>';
   try {
     const chain = await api.dependencies(jobName);
-    if (!depGraphChart) depGraphChart = echarts.init(container);
+    if (!depGraphChart) depGraphChart = nativeCharts.init(container);
 
     const nodes = (chain.Nodes || chain.nodes || []).map(n => {
       const isCur = n.IsCurrent ?? n.isCurrent;

@@ -111,7 +111,7 @@ public static class WorkstationEditorApp
                 });
             }
 
-            // The report runtime (report-runtime.js/css, echarts, tabulator, maps) sits beside
+            // The report runtime (report-runtime.js/css, tabulator, maps) sits beside
             // designer/ rather than inside it, and the preview iframe needs it. Mount it on its own
             // path instead of layering a second provider over /designer: overlapping mounts at one
             // path make it ambiguous which directory answers a request, and would silently publish
@@ -361,15 +361,10 @@ public static class WorkstationEditorApp
     function injectRuntimeOnce() {
       if (runtimeInjected) return;
       runtimeInjected = true;
-      var echarts = document.createElement('script');
-      echarts.src = '/runtime/echarts.min.js';
-      echarts.onload = function () {
-        var rt = document.createElement('script');
-        rt.src = '/runtime/report-runtime.js';
-        document.body.appendChild(rt);
-      };
-      echarts.onerror = showError;
-      document.body.appendChild(echarts);
+      var rt = document.createElement('script');
+      rt.src = '/runtime/report-runtime.js';
+      rt.onerror = showError;
+      document.body.appendChild(rt);
     }
 
     function showError() {

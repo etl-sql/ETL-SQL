@@ -166,9 +166,10 @@ Follows the identical pattern used for `ETL-SQL.ReportRuntime/Resources/Shared/`
 
 ## 5. Technology Choices
 
-### DAG Visualization — ECharts graph chart
+### DAG Visualization — native SVG graph
 
-ECharts is already a portal dependency (Gantt chart, sparklines). The graph chart type handles directed graphs with node labels, arrow routing, and click events. No new library is required.
+The Portal uses its small dependency-free `native-charts.js` adapter for internal Gantt, sparkline,
+and dependency-graph views. It handles deterministic SVG nodes, links, labels, and click events.
 
 Wrapper function signature (implemented once in `designer.js`, also available standalone):
 
@@ -253,7 +254,7 @@ Deliverables:
 
 ### Phase 2 — DAG Visualization
 
-**Goal**: Read-only DAG graphs in three portal locations using ECharts.
+**Goal**: Read-only native SVG DAG graphs in three portal locations.
 
 Deliverables:
 
@@ -345,5 +346,5 @@ All existing portal APIs (`/api/catalog/lineage`, `/api/reports`, etc.) are cons
 
 For detailed information about adjacent subsystems, refer to the following architecture references:
 - **Portal Host:** [Portal.md](Portal.md) details database entities, authorization schemas, and hosting APIs.
-- **Reporting Engine:** [Reporting.md](Reporting.md) explains layout manifests, ECharts options compilation, and PDF export pipelines.
+- **Reporting Engine:** [Reporting.md](Reporting.md) explains semantic plans, native SVG layouts, and PDF export pipelines.
 - **Orchestrator:** [Orchestrator.md](Orchestrator.md) governs DAG parsing for job step monitoring and execution.

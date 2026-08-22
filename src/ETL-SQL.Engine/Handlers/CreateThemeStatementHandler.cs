@@ -13,8 +13,8 @@ namespace ETL_SQL.Engine.Handlers;
 /// <summary>
 /// Handles CREATE THEME statements.
 /// Registers the theme in memory and saves a JSON file to {TemplatePath}/Themes/.
-/// The JSON file is an ECharts-compatible theme object that can be loaded by
-/// echarts.registerTheme() at report render time.
+/// The JSON file is an native report theme object that can be loaded by
+/// the native report runtime can apply at render time.
 /// </summary>
 public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
 {
@@ -63,14 +63,14 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
 
         context.IncrementOperationCount(OperationType.FileSystem, filePath);
 
-        var themeJson = ReportingThemeBuilder.BuildEChartsTheme(stmt.Properties);
+        var themeJson = ReportingThemeBuilder.BuildNativeTheme(stmt.Properties);
         var options = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(filePath, themeJson.ToJsonString(options));
         _logger.Debug("Persisted theme '{ThemeName}' to {Path}", stmt.Name, filePath);
     }
 
     /// <summary>
-    /// Translates Report-SQL theme properties to the ECharts theme JSON structure.
+    /// Translates Report-SQL theme properties to the native theme JSON structure.
     /// Supported keys (case-insensitive):
     ///   BACKGROUND        → backgroundColor
     ///   TEXT_COLOR        → textStyle.color + title/legend/axis label colors
@@ -81,6 +81,6 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
     ///   BORDER_COLOR      → axis line colors
     /// All other keys are passed through as-is to the root of the theme object.
     /// </summary>
-    public static JsonObject BuildEChartsTheme(Dictionary<string, string> props)
-        => ReportingThemeBuilder.BuildEChartsTheme(props);
+    public static JsonObject BuildNativeTheme(Dictionary<string, string> props)
+        => ReportingThemeBuilder.BuildNativeTheme(props);
 }

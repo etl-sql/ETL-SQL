@@ -1,12 +1,18 @@
 # Architecture Decision & Inventory: ECharts and ClearScript Retirement
 
 ## Status
-Approved / Active Evidence & Inventory for Phase 8
+Implemented / Historical Pre-Retirement Inventory
 
 ## Executive Summary
 ETL-SQL is migrating from third-party JavaScript charting (Apache ECharts 5.x) and server-side V8 script execution (Microsoft.ClearScript.V8) to a native C# Grammar of Graphics pipeline (`ChartSpec` -> `PlotPlan` -> `PlotPlanSvgRenderer`).
 
 This document provides the exhaustive, authoritative inventory of every consumer of ECharts and ClearScript across the entire codebase, classifies each component by retirement timing and prerequisites, and defines the phased deletion sequence.
+
+The inventory below is retained as the pre-retirement audit record. Phase 8 removed every listed
+production consumer, package, generated asset, transient compiler, and server-side script engine.
+Theme construction now emits renderer-neutral tokens, the browser imports native SVG from the
+manifest, and static/PDF output uses the same managed rendering pipeline. The legal inventory and
+SBOM generators no longer enumerate either dependency.
 
 ---
 

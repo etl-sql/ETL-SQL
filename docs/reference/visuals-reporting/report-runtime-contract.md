@@ -44,7 +44,7 @@ All hosts render the report canvas from a fully resolved `ReportManifest`.
 
 The effective manifest should reflect this order, with later layers winning:
 
-1. Built-in runtime defaults and ECharts theme defaults.
+1. Built-in native runtime and theme-token defaults.
 2. Report-level theme and metadata.
 3. Page-level style.
 4. Container-level style.

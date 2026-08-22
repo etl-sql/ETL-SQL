@@ -510,12 +510,6 @@
         root.replaceChildren(); // Clear without reparsing HTML.
         renderHeader(root, manifest);
 
-        // Register custom themes before any echarts.init() calls
-        if (typeof echarts !== 'undefined' && manifest.customThemes) {
-            manifest.customThemes.forEach(t => {
-                if (t.name && t.config) echarts.registerTheme(t.name, t.config);
-            });
-        }
 
         // Cache baseline manifest (the first one with no parameters set)
         if (!baselineManifest && (!manifest.parameters || Object.keys(manifest.parameters).length === 0)) {
@@ -998,7 +992,6 @@
 
     function resizeChartsIn(section) {
         section.querySelectorAll('.chart-wrapper').forEach(w => {
-            if (w._echartsInst) w._echartsInst.resize();
         });
     }
 
@@ -1600,8 +1593,10 @@
             case 'TEXTBOX':     renderTextbox(card, visual, manifest);            break;
             case 'NUMBERBOX':   renderNumberbox(card, visual, manifest);          break;
             case 'IMAGE':       renderImage(card, visual);                        break;
-            case 'MATRIX':      renderMatrix(card, visual);                        break;
-            default:            renderChart(card, visual, manifest, effectiveTheme); break;
+            case 'MATRIX':      visual.nativeSvg ? renderNativeSvg(card, visual) : renderMatrix(card, visual); break;
+            default:            visual.nativeSvg
+                                    ? renderNativeSvg(card, visual)
+                                    : renderChart(card, visual, manifest, effectiveTheme); break;
         }
 
         // DRILL_IN breadcrumb: shown when visual has an active drill state
@@ -1653,7 +1648,7 @@
         container.appendChild(card);
     }
 
-    // ── Chart (ECharts — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──
+    // ── Native SVG chart — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──
 
     // Cross-filter state: { filterValue, filterColumn }. Stored per page section.
     function getPageState(container) {
@@ -1734,282 +1729,49 @@
         });
     }
 
-    function registerMapThenRender(mapKey, mapFile, onReady, wrapper) {
-        if (_registeredMaps.has(mapKey)) { onReady(); return; }
-        const url = mapFile
-            ? `/api/maps/custom?path=${encodeURIComponent(mapFile)}`
-            : `/maps/${mapKey}.geojson`;
-        fetch(url)
-            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-            .then(geojson => {
-                echarts.registerMap(mapKey, geojson);
-                _registeredMaps.add(mapKey);
-                onReady();
-            })
-            .catch(err => {
-                const parent = wrapper.parentElement;
-                if (parent) {
-                    const msg = !isWebMode && vscode
-                        ? 'Maps only work in the Portal'
-                        : 'Map load failed: ' + err.message;
-                    parent.appendChild(noDataEl(msg));
-                }
-            });
-    }
-
-    function renderChart(container, visual, manifest, themeOverride) {
-        console.debug(`[Chart] Rendering ${visual.name} (HighlightRows: ${visual.highlightRows?.length || 0})`);
-        const effectiveTheme = themeOverride || (manifest && manifest.theme) || window.__THEME__ || 'light';
-        if (!visual.chartConfig) {
-            container.appendChild(noDataEl('No chart config available'));
+    function renderNativeSvg(container, visual) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'chart-wrapper native-chart-wrapper';
+        const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
+        const svg = parsed.documentElement;
+        if (!svg || svg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+            container.appendChild(noDataEl('Invalid native chart payload'));
             return;
         }
-
-        let option;
-        try {
-            option = typeof visual.chartConfig === 'string'
-                ? JSON.parse(visual.chartConfig)
-                : visual.chartConfig;
-        } catch (e) {
-            container.appendChild(noDataEl('Invalid chart config: ' + e.message));
-            return;
-        }
-
-        if (typeof echarts === 'undefined') {
-            container.appendChild(noDataEl('ECharts not loaded'));
-            return;
-        }
+        wrapper.appendChild(document.importNode(svg, true));
+        container.appendChild(wrapper);
 
         const clickActions = actionsFor(visual, 'ON_CLICK');
         const interactionMode = ((visual.interactions || {})['ON_SELECT'] || '').toUpperCase();
-        const crossFilter  = !!interactionMode && interactionMode !== 'NONE';
-        const xMappingCol  = (visual.options || {})['mapping:x'];
+        const crossFilter = !!interactionMode && interactionMode !== 'NONE';
+        const options = visual.options || {};
+        const mappingColumn = options['mapping:x'] || options['mapping:label'] ||
+            options['mapping:name'] || options['mapping:region'] || options['mapping:y'] ||
+            (visual.columns || [])[0];
+        let activeRow = null;
 
-        const wrapper = document.createElement('div');
-        wrapper.className = 'chart-wrapper';
-        container.appendChild(wrapper);
-
-        // Extract MAP metadata markers (not valid ECharts properties — delete before setOption)
-        const mapKey  = option.__mapKey;
-        const matchBy = (option.__matchBy || 'NAME').toUpperCase();
-        const mapFile = option.__mapFile;
-        delete option.__mapKey;
-        delete option.__matchBy;
-        delete option.__mapFile;
-
-        // BUBBLE: __bubbleSymbolSize on root option → wire symbolSize function on scatter series
-        if (option.__bubbleSymbolSize) {
-            delete option.__bubbleSymbolSize;
-            (option.series || []).forEach(s => {
-                if (s.type === 'scatter') s.symbolSize = val => val[2];
-            });
-        }
-        // MAP POINTS: __pointsSymbolSize on series object → same treatment
-        (option.series || []).forEach(s => {
-            if (s.__pointsSymbolSize) {
-                delete s.__pointsSymbolSize;
-                if (s.type === 'scatter') s.symbolSize = val => val[2];
+        wrapper.addEventListener('pointerover', event => {
+            const mark = event.target.closest('[data-row-index]');
+            activeRow = mark ? (visual.rows || [])[Number(mark.dataset.rowIndex)] || null : null;
+        });
+        wrapper.addEventListener('click', event => {
+            const mark = event.target.closest('[data-row-index]');
+            if (!mark) return;
+            const index = Number(mark.dataset.rowIndex);
+            const row = (visual.rows || [])[index] || [];
+            if (crossFilter && mappingColumn) {
+                const columnIndex = (visual.columns || []).findIndex(column => column.toLowerCase() === mappingColumn.toLowerCase());
+                const value = row[columnIndex >= 0 ? columnIndex : 0];
+                if (value != null) applyPageCrossFilter(container, String(value), mappingColumn, visual.name, event);
+            } else {
+                clickActions.forEach(action => executeAction(action, row, visual.columns || [], visual.name, visual));
             }
         });
-
-        // GANTT: __ganttRenderItem on root option → wire renderItem function on custom series
-        if (option.__ganttRenderItem) {
-            delete option.__ganttRenderItem;
-            (option.series || []).forEach(s => {
-                if (s.type === 'custom') {
-                    s.renderItem = function(params, api) {
-                        const categoryIndex = api.value(0);
-                        const start = api.coord([api.value(1), categoryIndex]);
-                        const end   = api.coord([api.value(2), categoryIndex]);
-                        const height = api.size([0, 1])[1] * 0.6; // Bar height 60% of category height
-
-                        return {
-                            type: 'rect',
-                            shape: {
-                                x: start[0],
-                                y: start[1] - height / 2,
-                                width: Math.max(end[0] - start[0], 2), // Min 2px width
-                                height: height
-                            },
-                            style: api.style({
-                                fill: api.value(4) || '#5470c6'
-                            })
-                        };
-                    };
-                }
-            });
-        }
-
-        // SCATTER BRUSH: __brushParam → wire brushSelected event to set a parameter
-        const brushParam = option.__brushParam;
-        const brushType  = option.__brushType || 'rect';
-        if (brushParam) {
-            delete option.__brushParam;
-            delete option.__brushType;
-            if (!option.brush) option.brush = {};
-            if (!option.toolbox) option.toolbox = { feature: {} };
-            if (!option.toolbox.feature) option.toolbox.feature = {};
-            option.toolbox.feature.brush = { type: [brushType, 'keep', 'clear'] };
-        }
-
-        // FIPS matching: tell ECharts to use the 'fips' property instead of default 'name'
-        if (matchBy === 'FIPS') {
-            (option.series || []).forEach(s => {
-                if (s.type === 'map') s.nameProperty = 'fips';
-            });
-        }
-
-        function finalize() {
-            // Global tooltip value formatter for decimals
-            if (!option.tooltip) option.tooltip = { show: true };
-            if (option.tooltip.show !== false && !option.tooltip.valueFormatter && !option.tooltip.formatter) {
-                option.tooltip.valueFormatter = (v) => (typeof v === 'number' && !Number.isInteger(v)) ? v.toFixed(2) : v;
-            }
-
-            if (option.series) {
-                option.series.forEach(s => {
-                    if (s.type === 'gauge') {
-                        if (s.detail && (s.detail.formatter === '{value}' || s.detail.formatter === '{value:.1f}')) {
-                            s.detail.formatter = (v) => (typeof v === 'number') ? v.toFixed(1) : v;
-                        }
-                    }
-                    if (s.label && s.label.show && !s.label.formatter) {
-                        s.label.formatter = (params) => {
-                            let v = params.value;
-                            if (Array.isArray(v)) v = v[v.length - 1];
-                            return (typeof v === 'number' && !Number.isInteger(v)) ? v.toFixed(2) : v;
-                        };
-                    }
-                });
-            }
-
-            if (window.__IS_PREVIEW__) {
-                option.tooltip = { show: false };
-                option.toolbox = { show: false };
-                option.animation = false;
-                (option.series || []).forEach(s => { if (s.roam) s.roam = false; });
-            }
-
-            const chart = echarts.init(wrapper, effectiveTheme || null);
-
-            // Auto-resize whenever the wrapper changes dimensions (maximize, restore, window resize).
-            // ResizeObserver is more reliable than the 50ms setTimeout heuristic.
-            if (typeof ResizeObserver !== 'undefined') {
-                const ro = new ResizeObserver(() => chart.resize());
-                ro.observe(wrapper);
-            }
-
-            // Enable universal highlight/downplay support for cross-filtering
-            if (option.series) {
-                option.series.forEach(s => {
-                    if (!s.emphasis) s.emphasis = {};
-                    // Disable hover focus/dimming as per user request
-                    s.emphasis.focus = 'none';
-                });
-            }
-
-            // Cross-highlighting: source chart gets per-item opacity; child HIGHLIGHT charts get ghost overlay.
-            // Note: the card is not yet in the DOM here so getPageState() would fail — iterate all states instead.
-            {
-                let cfState = null;
-                for (const k in _crossFilterStates) {
-                    const s = _crossFilterStates[k];
-                    if (s && s.selections && s.selections.length > 0) { cfState = s; break; }
-                }
-                const isSource = cfState && cfState.selections.some(s => s.visual === visual.name);
-
-                if (isSource) {
-                    applySourceChartOpacity(option, cfState.selections);
-                } else if (visual.highlightRows && visual.highlightRows.length > 0) {
-                    mergeHighlightData(visual, option);
-                } else if (cfState && cfState.selections.length > 0 && !visual.highlightRows && visualCanReflectSelections(visual, cfState.selections)) {
-                    // Cross-filter active but server returned no highlight (dimension mismatch):
-                    // ghost all bars to show the filter is active on this visual too.
-                    applySourceChartOpacity(option, []);
-                }
-            }
-
-            chart.setOption(option);
-            wrapper._echartsInst = chart;
-
-            // SCATTER BRUSH: wire brushSelected to set parameter
-            if (brushParam) {
-                chart.on('brushSelected', function(params) {
-                    const selected = params.batch && params.batch[0] ? params.batch[0].selected : [];
-                    const indices  = selected.flatMap ? selected.flatMap(s => s.dataIndex) : [];
-                    const values   = indices.map(idx => {
-                        const row = (visual.rows || [])[idx];
-                        const xIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === (xMappingCol || '').toLowerCase());
-                        return row ? row[xIdx >= 0 ? xIdx : 0] : null;
-                    }).filter(v => v != null);
-                    setParameter(brushParam, values.join(','));
-                });
-            }
-
-            let lastHoveredRow = null;
-            chart.on('mousemove', params => {
-                const idx = params.dataIndex != null ? params.dataIndex : -1;
-                lastHoveredRow = (visual.rows || [])[idx] || null;
-            });
-
-            if (clickActions.length > 0 || crossFilter) {
-                chart.on('click', params => {
-                    const idx     = params.dataIndex != null ? params.dataIndex : -1;
-                    let rowData   = (visual.rows || [])[idx] || [];
-
-                    // Robust row lookup for charts
-                    if (params.name && visual.rows && visual.rows.length > 0) {
-                        const xIdx = xMappingCol ? (visual.columns || []).findIndex(c => c.toLowerCase() === xMappingCol.toLowerCase()) : 0;
-                        const match = visual.rows.find(r => String(r[xIdx] || '') === String(params.name));
-                        if (match) rowData = match;
-                    }
-
-                    // INTERACTIONS handling
-                    if (crossFilter) {
-                        const clickedValue = params.name || params.value || (rowData.length > 0 ? rowData[0] : null);
-                        const colName = xMappingCol || (visual.columns && visual.columns[0]);
-                        console.debug(`[Chart] Click on ${visual.name} | Value: ${clickedValue} | Col: ${colName}`);
-                        if (clickedValue != null && colName) {
-                            applyPageCrossFilter(container, String(clickedValue), colName, visual.name, params.event?.event);
-                        }
-                    } else {
-                        // ON_CLICK actions (Drill Down, etc)
-                        clickActions.forEach(action => executeAction(action, rowData, visual.columns || [], visual.name, visual));
-                    }
-                });
-            }
-
-            wrapper.addEventListener('contextmenu', e => {
-                const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
-                if (drillDowns.length > 0) {
-                    e.preventDefault();
-                    if (wrapper._echartsInst) wrapper._echartsInst.dispatchAction({ type: 'hideTip' });
-                    showCtxMenu(e.clientX, e.clientY, visual, lastHoveredRow);
-                }
-            });
-
-            // ── Phase 3: Legend Interaction ──
-            chart.on('legendselectchanged', function (params) {
-                // visual.name is passed as a separate argument (not interpolated into the
-                // format string) so a name containing console format specifiers cannot be
-                // reinterpreted as a format directive.
-                console.debug('[Interaction] Legend changed on', visual.name, params);
-                // In ECharts, params.name is the series name that was toggled
-                // We map this to a cross-filter action if possible
-                const seriesName = params.name;
-                const mappingCol = (visual.options || {})['mapping:x'] || (visual.columns && visual.columns[0]);
-
-                // For simple charts, series might correspond to a category
-                // This is a heuristic: if they clicked a legend item, they want to filter by that value
-                applyPageCrossFilter(container, seriesName, mappingCol, visual.name, { ctrlKey: false });
-            });
-        }
-
-        if (mapKey) {
-            registerMapThenRender(mapKey, mapFile, finalize, wrapper);
-        } else {
-            finalize();
-        }
+        wrapper.addEventListener('contextmenu', event => {
+            if (!(visual.actions || []).some(action => action.type === 'DRILL_DOWN')) return;
+            event.preventDefault();
+            showCtxMenu(event.clientX, event.clientY, visual, activeRow);
+        });
     }
 
     // ── CSV export ──────────────────────────────────────────────────────────
@@ -4969,6 +4731,6 @@
     // Test escape hatch: exposes pure functions for automated testing.
     // Harmless in production (just sets a window property that nothing reads).
     if (typeof window !== 'undefined') {
-        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderChart, abbreviateNumber };
+        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, abbreviateNumber };
     }
 })();

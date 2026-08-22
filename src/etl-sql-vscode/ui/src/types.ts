@@ -176,6 +176,7 @@ export interface VisualManifest {
     name: string;
     visualType: string;
     chartConfig?: string;
+    nativeSvg?: string;
     columns: string[];
     rows: unknown[][];
     rowStyles?: (string | null)[];

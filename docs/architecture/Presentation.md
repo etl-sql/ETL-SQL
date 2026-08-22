@@ -175,5 +175,5 @@ Report presentation layers:
 | VS Code progress tree does not update | Confirm JSON mode is active and `progress` packets are emitted during execution. |
 | Variables tab is stale | Confirm `variables` packets are emitted and `ReplManager.onVariablesChange` reaches the sidebar/results UI. |
 | Report preview differs from ReportPlayer | Sync shared runtime assets and verify the generated host copies. |
-| Browser chart is blank | Check `VisualManifest.ChartConfig`, local `echarts.min.js`, and runtime console errors. |
+| Browser chart is blank | Check `VisualManifest.NativeSvg`, the canonical runtime asset sync, and runtime console errors. |
 | CLI output includes protocol JSON | Confirm the app is not running with `--json` or through `ui repl`. |

@@ -66,7 +66,7 @@ The sandbox currently hosts 28 stories categorized by domain:
 ### Lineage & Graphs
 | Story | ID | Component / UI Surface |
 |---|---|---|
-| **Lineage DAG** | `lineage-dag` | Dependency graphs using Apache ECharts (`renderDag()`) |
+| **Lineage DAG** | `lineage-dag` | Dependency graphs using the native SVG `renderDag()` |
 | **Lineage Catalog** | `lineage-catalog` | Asset inventory and search view with lineage chips |
 | **Lineage UI** | `lineage-ui` | Interactive visual pipelines and flow models |
 

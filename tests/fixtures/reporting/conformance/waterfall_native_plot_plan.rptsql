@@ -1,0 +1,12 @@
+SELECT 'Opening' AS ItemName, 50 AS Amount, 1 AS IsTotal INTO #waterfall_data
+UNION ALL SELECT 'Revenue', 30, 0
+UNION ALL SELECT 'Costs', -20, 0
+UNION ALL SELECT 'Closing', 60, 1;
+
+CREATE VISUAL ProfitBridge AS WATERFALL (
+  SOURCE = #waterfall_data,
+  MAPPINGS (NAME = ItemName, VALUE = Amount, TOTAL = IsTotal),
+  OPTIONS (TITLE = 'Profit Bridge')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = ProfitBridge));

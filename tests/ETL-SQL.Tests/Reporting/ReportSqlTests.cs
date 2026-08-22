@@ -95,7 +95,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
 
         [Fact]
         [Trait("Category", "Smoke.Reporting")]
-        public void CreateTheme_BuildEChartsTheme_MapsProperties()
+        public void CreateTheme_BuildNativeTheme_MapsProperties()
         {
             var props = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -105,7 +105,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
                 ["GRID_COLOR"] = "#333333"
             };
 
-            var json = ETL_SQL.Engine.Handlers.CreateThemeStatementHandler.BuildEChartsTheme(props);
+            var json = ETL_SQL.Engine.Handlers.CreateThemeStatementHandler.BuildNativeTheme(props);
 
             Assert.Equal("#1a1a2e", json["backgroundColor"]?.GetValue<string>());
             Assert.Equal("#eeeeee", json["textStyle"]?["color"]?.GetValue<string>());

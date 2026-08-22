@@ -1,0 +1,11 @@
+SELECT 'Leads' AS StageName, 500 AS StageValue INTO #funnel_data
+UNION ALL SELECT 'Qualified', 250
+UNION ALL SELECT 'Won', 80;
+
+CREATE VISUAL SalesFunnel AS FUNNEL (
+  SOURCE = #funnel_data,
+  MAPPINGS (NAME = StageName, VALUE = StageValue),
+  OPTIONS (TITLE = 'Sales Funnel')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = SalesFunnel));

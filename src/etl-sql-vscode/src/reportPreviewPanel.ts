@@ -4,7 +4,7 @@
  * Opens a VS Code WebviewPanel for .rptsql files.
  * Runs `ETL-SQL-Report build --format json` on the active file,
  * injects the resulting ReportManifest as window.__MANIFEST__,
- * and loads the shared report-runtime.js + echarts.min.js for rendering.
+ * and loads the shared report-runtime.js for native SVG rendering.
  *
  * Auto-refreshes when the .rptsql file is saved.
  */
@@ -383,7 +383,6 @@ export class ReportPreviewPanel {
         
         const runtimeJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'report-runtime.js'));
         const runtimeCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'report-runtime.css'));
-        const echartsJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'echarts.min.js'));
         const feedbackJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'feedback.js'));
 
         const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
@@ -451,7 +450,6 @@ export class ReportPreviewPanel {
         window.__MANIFEST__ = ${manifestJson};
     </script>
     <script nonce="${nonce}" src="${feedbackJsUri}"></script>
-    <script nonce="${nonce}" src="${echartsJsUri}"></script>
     <script nonce="${nonce}" src="${runtimeJsUri}"></script>
 </body>
 </html>`;

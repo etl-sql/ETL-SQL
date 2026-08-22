@@ -1,12 +1,15 @@
 # Architecture Decision Evaluation: GANTT Native PlotPlan Composition
 
 ## Status
-Evaluated / Proposed for Phase 8 Migration (Batch 4: Flow & Timeline)
+Accepted and Implemented in Phase 8 (Batch 4: Flow & Timeline)
 
 ## Context
 ETL-SQL provides a native Grammar of Graphics abstraction (`ChartSpec`, `PlotPlan`, and pure C# `PlotPlanSvgRenderer`) designed to replace third-party JavaScript charting dependencies (Apache ECharts 5.x) and server-side V8 engines (Microsoft.ClearScript.V8).
 
-Currently, `GANTT` (Timeline visual) relies on temporary ECharts custom series rendering (`type: 'custom'`, `renderItem: ...`) in the browser and ClearScript V8 SSR during PDF and static SVG export. This evaluation determines whether `GANTT` can be completely expressed using native `PlotPlan` composition without external chart engines or layout solvers.
+Before Phase 8, `GANTT` relied on a temporary browser chart option and server-side script-engine path.
+This evaluation selected a native `PlotPlan` composition, which is now implemented with resolved
+time/band channels, interval rectangles, rules/text, native SVG, and a semantic terminal path. The
+trace below is retained as the migration's historical input.
 
 ---
 

@@ -248,7 +248,6 @@ async function renderPreview(stage, ctx, fixtureId) {
 <body class="vscode-theme">
   <div id="root"></div>
   <script>window.__MANIFEST__ = ${manifestJson};</script>
-  <script src="/src/etl-sql-vscode/media/echarts.min.js"></script>
   <script src="/src/etl-sql-vscode/media/report-runtime.js"></script>
 </body>
 </html>`;

@@ -12,7 +12,7 @@ using ETL_SQL.Reporting.Semantics.Runtime;
 
 namespace ETL_SQL.Reporting.Builders
 {
-    public class VisualBuilder(IExecutionContext ctx, EChartsRenderer renderer, StyleBuilder styleBuilder)
+    public class VisualBuilder(IExecutionContext ctx, StyleBuilder styleBuilder)
     {
         public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false, VisualDrillState? drillState = null)
         {
@@ -215,6 +215,8 @@ namespace ETL_SQL.Reporting.Builders
                     var resolved = ctx.ResolvePath(mapFileOpt.Value);
                     if (!File.Exists(resolved))
                         vm.Error = $"MAP_FILE not found: {mapFileOpt.Value}";
+                    else
+                        vm.ResolvedMapFile = resolved;
                 }
                 catch (Exception ex)
                 {
@@ -272,7 +274,8 @@ namespace ETL_SQL.Reporting.Builders
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData);
                     }
                     vm.SemanticFallback = VisualSemanticFallbackBuilder.Build(vm);
-                    vm.ChartConfig = renderer.Render(vm);
+                    vm.ChartConfig = null;
+                    vm.NativeSvg = new SvgChartRenderer().Render(vm);
                 }
                 catch (Exception ex)
                 {

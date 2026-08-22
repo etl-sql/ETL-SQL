@@ -1,0 +1,16 @@
+SET REPORT TITLE = 'Conformance: Native Bubble';
+
+SELECT 'Market A' AS Market, 10 AS Growth, 20 AS Profit, 1000 AS MarketSize INTO #bubble_data
+UNION ALL SELECT 'Market B', 15, 25, 500
+UNION ALL SELECT 'Market C', 5, 30, 2000;
+
+CREATE VISUAL MarketPosition AS BUBBLE (
+  SOURCE = #bubble_data,
+  TITLE = 'Market Position',
+  MAPPINGS (X = Growth, Y = Profit, SIZE = MarketSize, LABEL = Market)
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+  STRUCTURE = 'A',
+  MAP ('A' = MarketPosition)
+);

@@ -98,7 +98,7 @@ public static class RepresentativeVisualConformanceHarness
     {
         var visual = manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
         if (visual == null) return null;
-        return new EChartsRenderer().Render(visual);
+        return new SvgChartRenderer().Render(visual);
     }
 
     public static string? RenderSvg(ReportManifest manifest, string visualName)

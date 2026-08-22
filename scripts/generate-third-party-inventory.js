@@ -14,12 +14,6 @@ const outputPath = outputArgIndex >= 0 && args[outputArgIndex + 1]
 
 const bundledAssets = [
   {
-    component: 'Apache ECharts',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/echarts.min.js',
-    license: 'Apache-2.0',
-    project: 'https://echarts.apache.org/'
-  },
-  {
     component: 'Tabulator',
     files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.js; src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.css',
     license: 'MIT',
@@ -46,7 +40,6 @@ const npmLicenseFallbacks = {
   '@vscode/test-electron': 'MIT',
   '@vscode/webview-ui-toolkit': 'MIT',
   'clsx': 'MIT',
-  'echarts': 'Apache-2.0',
   'eslint': 'MIT',
   'eslint-plugin-react-hooks': 'MIT',
   'eslint-plugin-react-refresh': 'MIT',
@@ -109,7 +102,10 @@ function writeText(filePath, text) {
 
 function walk(dir, predicate, output = []) {
   if (!fs.existsSync(dir)) return output;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+  catch (error) { if (error?.code === 'EACCES' || error?.code === 'EPERM') return output; throw error; }
+  for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === 'bin'
@@ -117,6 +113,7 @@ function walk(dir, predicate, output = []) {
         || entry.name === 'node_modules'
         || entry.name === '.git'
         || entry.name === '.worktrees'
+        || entry.name === '.vscode-test'
         // Claude Code checks out git worktrees under .claude/worktrees; scanning them
         // duplicates every project reference under a second, non-canonical path.
         || entry.name === '.claude') continue;

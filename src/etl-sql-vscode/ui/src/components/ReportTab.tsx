@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import * as echarts from 'echarts';
 import { RefreshCw, AlertCircle, Calendar, FileText, File, Download, ExternalLink } from 'lucide-react';
 import type { ReportManifest, VisualManifest, ContainerManifest, PageManifest, ReportAction } from '../types';
 import { clsx } from 'clsx';
@@ -457,7 +456,7 @@ const VisualCard: React.FC<{
                                  onParameterChange={onParameterChange} 
                              />
                          )}
-                         {['BAR', 'LINE', 'PIE', 'DONUT', 'SCATTER', 'HBAR', 'HORIZONTALBAR', 'BOXPLOT', 'TREEMAP', 'HEATMAP', 'COMBO', 'GAUGE', 'FUNNEL', 'WATERFALL', 'BUBBLE', 'RADAR', 'CANDLESTICK'].includes(type) && (
+                         {['BAR', 'LINE', 'PIE', 'DONUT', 'SCATTER', 'HBAR', 'HORIZONTALBAR', 'BOXPLOT', 'TREEMAP', 'HEATMAP', 'COMBO', 'GAUGE', 'FUNNEL', 'WATERFALL', 'BUBBLE', 'RADAR', 'CANDLESTICK', 'GANTT', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX', 'MAP', 'CUSTOM'].includes(type) && (
                              <ReportChart 
                                 visual={visual} 
                                 onParameterChange={onParameterChange}
@@ -466,7 +465,6 @@ const VisualCard: React.FC<{
                                 onShowContextMenu={(x, y, data) => onShowContextMenu({ x, y, visual, rowData: data })}
                              />
                          )}
-                         {type === 'MAP' && <ReportMapPlaceholder visual={visual} />}
                     </div>
                 )}
             </div>
@@ -480,170 +478,27 @@ const ReportChart: React.FC<{
     baselineManifest: ReportManifest | null,
     currentManifest: ReportManifest,
     onShowContextMenu: (x: number, y: number, rowData?: unknown[]) => void
-}> = ({ visual, onParameterChange, baselineManifest, currentManifest, onShowContextMenu }) => {
+}> = ({ visual, onParameterChange, onShowContextMenu }) => {
     const chartRef = useRef<HTMLDivElement>(null);
-    const chartInstance = useRef<echarts.ECharts | null>(null);
-    const isDark = true; 
-
     useEffect(() => {
-        if (!chartRef.current || !visual.chartConfig) return;
-
-        if (!chartInstance.current) {
-            chartInstance.current = echarts.init(chartRef.current, isDark ? 'dark' : undefined, {
-                renderer: 'canvas'
-            });
-        }
-
-        try {
-            const option = typeof visual.chartConfig === 'string'
-                ? JSON.parse(visual.chartConfig)
-                : JSON.parse(JSON.stringify(visual.chartConfig));
-
-            // Highlighting logic: Merge Baseline totals with current Filtered values
-            const hasParams = currentManifest.parameters && Object.values(currentManifest.parameters).some(v => v);
-            if (hasParams && baselineManifest) {
-                const baselineVisual = baselineManifest.visuals.find(v => v.name === visual.name);
-                const type = visual.visualType.toUpperCase();
-                if (baselineVisual && (type === 'BAR' || type === 'HBAR' || type === 'HORIZONTALBAR' || type === 'LINE')) {
-                    const xCol = (visual.options?.['mapping:x'] || visual.columns[0]);
-                    const yCol = (visual.options?.['mapping:y'] || visual.columns[1]);
-                    const xIdx = visual.columns.indexOf(xCol);
-                    const yIdx = visual.columns.indexOf(yCol);
-
-                    if (xIdx >= 0 && yIdx >= 0) {
-                        const baselineMap: Record<string, number> = {};
-                        baselineVisual.rows.forEach(r => { baselineMap[String(r[xIdx])] = Number(r[yIdx]) || 0; });
-
-                        const currentMap: Record<string, number> = {};
-                        visual.rows.forEach(r => { currentMap[String(r[xIdx])] = Number(r[yIdx]) || 0; });
-
-                        if (option.series && option.series.length > 0) {
-                            const primarySeries = option.series[0];
-                            const categories: unknown[] = option.xAxis?.data || option.yAxis?.data || [];
-
-                            const filteredData: number[] = [];
-                            const remainingData: number[] = [];
-
-                            categories.forEach((cat) => {
-                                const total = baselineMap[String(cat)] || 0;
-                                const filtered = currentMap[String(cat)] || 0;
-                                filteredData.push(filtered);
-                                remainingData.push(Math.max(0, total - filtered));
-                            });
-
-                            primarySeries.data = filteredData;
-                            primarySeries.stack = 'highlight';
-                            primarySeries.name = 'Filtered';
-
-                            const remainingSeries = JSON.parse(JSON.stringify(primarySeries));
-                            remainingSeries.name = 'Total';
-                            remainingSeries.data = remainingData;
-                            remainingSeries.itemStyle = { opacity: 0.15, color: '#888' };
-                            remainingSeries.emphasis = { disabled: true };
-                            remainingSeries.tooltip = { show: false };
-                            option.series.push(remainingSeries);
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            option.series.forEach((s: any) => {
-                                s.stack = 'highlight';
-                                if (!s.emphasis) s.emphasis = {};
-                                s.emphasis.focus = 'none'; // Disable hover-dimming per user request
-                            });
-                        }
-                    }
-                }
-            } else {
-                // If not filtered, still disable hover-dimming for consistency
-                if (option.series) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    option.series.forEach((s: any) => {
-                        if (!s.emphasis) s.emphasis = {};
-                        s.emphasis.focus = 'none';
-                    });
-                }
+        const root = chartRef.current;
+        if (!root) return;
+        const click = (event: Event) => {
+            const mark = (event.target as Element).closest?.("[data-row-index]") as HTMLElement | null;
+            if (!mark) return;
+            const index = Number(mark.dataset.rowIndex);
+            const row = visual.rows?.[index] || [];
+            const mode = visual.interactions?.ON_SELECT?.toUpperCase();
+            if (mode && mode !== "NONE") {
+                const column = visual.interactions?.MATCHING || visual.options?.["mapping:x"] || visual.columns?.[0];
+                const columnIndex = visual.columns.indexOf(column);
+                onParameterChange("@" + column, String(row[columnIndex >= 0 ? columnIndex : 0] ?? ""), visual.name);
             }
-
-            // BUBBLE/MAP markers...
-            delete option.__bubbleSymbolSize;
-            delete option.__mapKey;
-            delete option.__matchBy;
-            delete option.__mapFile;
-
-            option.backgroundColor = 'transparent';
-            chartInstance.current.setOption(option, true);
-
-            // Handle Interaction Events
-            let lastHoveredRow: unknown[] | null = null;
-            chartInstance.current.on('mousemove', (params) => {
-                const idx = (params as { dataIndex?: number }).dataIndex ?? -1;
-                lastHoveredRow = (idx >= 0 ? (visual.rows || [])[idx] : null) as unknown[] | null;
-            });
-
-            chartInstance.current.on('click', (params) => {
-                const p = params as { name?: string; data?: unknown; seriesIndex?: number; dataIndex?: number };
-                const interactionMode = visual.interactions?.ON_SELECT?.toUpperCase();
-                if (interactionMode && interactionMode !== 'NONE') {
-                    const val = p.name || (Array.isArray(p.data) ? p.data[0] : p.data);
-                    const matchingColumn = visual.interactions?.MATCHING || visual.options?.['mapping:x'] || visual.columns?.[0];
-                    onParameterChange(`@${matchingColumn}`, String(val), visual.name);
-
-                    // Highlight source bar, dim others
-                    chartInstance.current?.dispatchAction({ type: 'downplay' });
-                    chartInstance.current?.dispatchAction({
-                        type: 'highlight',
-                        seriesIndex: p.seriesIndex,
-                        dataIndex: p.dataIndex
-                    });
-                } else {
-                    const clickActions = visual.actions?.filter(a => a.trigger === 'ON_CLICK');
-                    const idx = p.dataIndex ?? -1;
-                    const rowData = (visual.rows || [])[idx] || [];
-                    clickActions?.forEach(action => {
-                        // Handle drill down or other click actions
-                        (window as Window & VsCodeWindow).vscode?.postMessage({
-                            type: 'executeAction',
-                            action,
-                            rowData,
-                            columns: visual.columns
-                        });
-                    });
-                }
-            });
-
-            chartRef.current.addEventListener('contextmenu', (e: MouseEvent) => {
-                const hasDrillDown = visual.actions?.some(a => a.type === 'DRILL_DOWN');
-                if (hasDrillDown) {
-                    e.preventDefault();
-                    onShowContextMenu(e.clientX, e.clientY, lastHoveredRow ?? undefined);
-                }
-            });
-        } catch (e) {
-            console.error('Failed to render chart:', e);
-        }
-
-        const handleResize = () => chartInstance.current?.resize();
-        window.addEventListener('resize', handleResize);
-
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            chartInstance.current?.dispose();
-            chartInstance.current = null;
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chart re-renders on config/theme/baseline change only; visual callbacks intentionally stable
-    }, [visual.chartConfig, isDark, baselineManifest, currentManifest.parameters]);
-
-    return (
-        <div 
-            ref={chartRef} 
-            className="w-full h-full min-h-[350px]" 
-            onContextMenu={e => {
-                const hasDrill = visual.actions?.some(a => a.type === 'DRILL_DOWN');
-                if (hasDrill) {
-                    e.preventDefault();
-                    onShowContextMenu(e.clientX, e.clientY);
-                }
-            }}
-        />
-    );
+        root.addEventListener("click", click);
+        return () => root.removeEventListener("click", click);
+    }, [visual, onParameterChange]);
+    return <div ref={chartRef} className="w-full h-full min-h-[350px]" dangerouslySetInnerHTML={{ __html: visual.nativeSvg || "" }} onContextMenu={event => { if (visual.actions?.some(action => action.type === "DRILL_DOWN")) { event.preventDefault(); onShowContextMenu(event.clientX, event.clientY); } }} />;
 };
 
 function parseHexColor(hex: string): [number, number, number] {
@@ -1207,21 +1062,6 @@ const ReportText: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
     return (
         <div className="w-full h-full min-h-[100px] overflow-y-auto text-[var(--text)] text-sm opacity-90 leading-relaxed font-sans bg-transparent custom-scrollbar pr-4">
             <SimpleMarkdown text={text} />
-        </div>
-    );
-};
-
-const ReportMapPlaceholder: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
-    const mapKey = (visual.options?.['MAP_NAME'] || visual.options?.['map_name'] || '').toUpperCase();
-    const mode   = (visual.options?.['MODE'] || 'CHOROPLETH').toUpperCase();
-    return (
-        <div className="h-full w-full flex flex-col items-center justify-center gap-2 text-center p-4 text-[var(--muted)]">
-            <p className="text-sm font-semibold">Map preview unavailable</p>
-            <p className="text-xs max-w-[320px] leading-relaxed">
-                {mapKey ? `${mapKey} · ${mode}` : 'MAP'} charts require the HTTP server to load GeoJSON.
-                Open the report in <span className="font-mono text-[var(--text)]">Portal</span> or run the
-                script with <span className="font-mono text-[var(--text)]">--ui</span> to see the live map.
-            </p>
         </div>
     );
 };

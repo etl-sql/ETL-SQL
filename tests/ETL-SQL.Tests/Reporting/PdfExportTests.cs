@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
-        public void PdfExporter_RendersChart_ViaEChartsSsr()
+        public void PdfExporter_RendersChart_ViaNativeSvg()
         {
             var manifest = new ReportManifest
             {
@@ -45,7 +45,8 @@ namespace ETL_SQL.Tests
                 Visuals = new List<VisualManifest>
                 {
                     new() { Name = "Bars", VisualType = "BAR",
-                            ChartConfig = "{\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"type\":\"bar\",\"data\":[5,20,36]}]}" },
+                            Columns = ["Category", "Value"],
+                            Rows = [["A", "5"], ["B", "20"], ["C", "36"]] },
                 }
             };
 

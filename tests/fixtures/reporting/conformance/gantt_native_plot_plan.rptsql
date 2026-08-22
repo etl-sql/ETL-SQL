@@ -1,0 +1,11 @@
+SELECT 'Design' AS TaskName, '2026-01-01' AS StartDate, '2026-01-05' AS EndDate, 100 AS ProgressValue, 0 AS IsMilestone, '' AS Predecessor INTO #gantt_data
+UNION ALL SELECT 'Build', '2026-01-06', '2026-01-12', 50, 0, 'Design'
+UNION ALL SELECT 'Launch', '2026-01-13', '2026-01-13', 0, 1, 'Build';
+
+CREATE VISUAL DeliveryPlan AS GANTT (
+  SOURCE = #gantt_data,
+  MAPPINGS (Y = TaskName, START = StartDate, END = EndDate, PROGRESS = ProgressValue, MILESTONE = IsMilestone, DEPENDS_ON = Predecessor),
+  OPTIONS (TITLE = 'Delivery Plan')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = DeliveryPlan));

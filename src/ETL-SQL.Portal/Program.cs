@@ -775,13 +775,6 @@ if (Directory.Exists(app.Environment.WebRootPath))
     }
 }
 
-// Surface server-side chart SSR failures (engine init / per-chart render) to the logger so a
-// missing V8 runtime or a bad chart option is diagnosable instead of silently degrading exports.
-ETL_SQL.Reporting.EChartsSsrRenderer.OnError = (message, ex) =>
-    app.Services.GetRequiredService<ILoggerFactory>()
-        .CreateLogger("ETL_SQL.Reporting.EChartsSsrRenderer")
-        .LogWarning(ex, "{Message}", message);
-
 // Apply EF migrations and startup catalog maintenance. In HA, the full database-mutating startup
 // block must be serialized, not only EF migrations: first-run seed and reconciliation are also
 // shared-catalog writes.

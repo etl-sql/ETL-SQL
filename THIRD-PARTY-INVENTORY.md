@@ -10,7 +10,6 @@ About screens. It is not legal advice.
 
 | Component | Files | License | Project |
 | :--- | :--- | :--- | :--- |
-| Apache ECharts | src/ETL-SQL.ReportRuntime/Resources/Shared/echarts.min.js | Apache-2.0 | https://echarts.apache.org/ |
 | Tabulator | src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.js; src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.css | MIT | https://tabulator.info/ |
 | CodeMirror @codemirror/autocomplete 6.20.3 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
 | CodeMirror @codemirror/commands 6.10.4 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
@@ -43,12 +42,6 @@ About screens. It is not legal advice.
 | Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.9 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.Portal/ETL-SQL.Portal.csproj |
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | 10.0.9 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.Portal/ETL-SQL.Portal.csproj; src/ETL-SQL.Portal.Data/ETL-SQL.Portal.Data.csproj |
 | Microsoft.AspNetCore.Mvc.Testing | 10.0.9 | test | MIT | expression | https://asp.net/ | tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
-| Microsoft.ClearScript.V8 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| Microsoft.ClearScript.V8.Native.linux-arm64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| Microsoft.ClearScript.V8.Native.linux-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| Microsoft.ClearScript.V8.Native.osx-arm64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| Microsoft.ClearScript.V8.Native.osx-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| Microsoft.ClearScript.V8.Native.win-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Microsoft.Data.SqlClient | 7.0.2 | runtime | MIT | expression | https://aka.ms/sqlclientproject | src/ETL-SQL.Connectors.Databases/ETL-SQL.Connectors.Databases.csproj |
 | Microsoft.Data.Sqlite | 10.0.9 | runtime | MIT | expression | https://docs.microsoft.com/dotnet/standard/data/sqlite/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Connectors.Databases/ETL-SQL.Connectors.Databases.csproj; src/ETL-SQL.Engine/ETL-SQL.Engine.csproj; src/ETL-SQL.Infrastructure.Sqlite/ETL-SQL.Infrastructure.Sqlite.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
 | Microsoft.EntityFrameworkCore.Design | 10.0.9 | runtime | MIT | expression | https://docs.microsoft.com/ef/core/ | src/ETL-SQL.Portal/ETL-SQL.Portal.csproj; src/ETL-SQL.Portal.Data/ETL-SQL.Portal.Data.csproj; src/ETL-SQL.Portal.Migrations.Postgres/ETL-SQL.Portal.Migrations.Postgres.csproj |
@@ -134,7 +127,6 @@ About screens. It is not legal advice.
 | @vscode/test-electron | ^2.5.2 | development | MIT | https://github.com/Microsoft/vscode-test.git | src/etl-sql-vscode/package.json |
 | @vscode/webview-ui-toolkit | ^1.4.0 | runtime | MIT | https://github.com/microsoft/vscode-webview-ui-toolkit#readme | src/etl-sql-vscode/ui/package.json |
 | clsx | ^2.1.1 | runtime | MIT | lukeed/clsx | src/etl-sql-vscode/ui/package.json |
-| echarts | ^6.0.0 | runtime | Apache-2.0 | https://echarts.apache.org | src/etl-sql-vscode/ui/package.json |
 | eslint | ^10.6.0 | development | MIT | https://eslint.org | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
 | eslint-plugin-react-hooks | ^7.0.1 | development | MIT | https://react.dev/ | src/etl-sql-vscode/ui/package.json |
 | eslint-plugin-react-refresh | ^0.5.3 | development | MIT | github:ArnaudBarre/eslint-plugin-react-refresh | src/etl-sql-vscode/ui/package.json |

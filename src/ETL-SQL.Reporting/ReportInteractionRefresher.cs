@@ -145,7 +145,8 @@ namespace ETL_SQL.Reporting
                         if (staged.Cascade?.SourceRows == null)
                             throw new InvalidOperationException($"LOCAL cascading visual '{node.Visual.Name}' has no retained option vector.");
                         staged.Rows = CascadingFilterState.FilterRows(staged.Cascade, parameters);
-                        staged.ChartConfig = new EChartsRenderer().Render(staged);
+                        staged.ChartConfig = null;
+                        staged.NativeSvg = new SvgChartRenderer().Render(staged);
                     }
                     else
                     {

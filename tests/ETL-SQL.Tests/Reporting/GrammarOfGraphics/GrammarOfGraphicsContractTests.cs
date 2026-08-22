@@ -14,7 +14,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.ChartSpec();
         var json = ChartContractSerializer.Serialize(value);
 
-        Assert.Equal("ee3ae74f6aa7361c6b259ab84c62b83306400cf231f4ffa35ba159bc2b8686c2", Fingerprint(json));
+        Assert.Equal("9f59d59e9642fd299607c8f32cf18ba9d68e9c71b6a43c8d56667f7aa9738efc", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializeChartSpec(json)));
     }
 
@@ -40,7 +40,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.PlotPlan();
         var json = ChartContractSerializer.Serialize(value);
 
-        Assert.Equal("bb3b48eaede11f34afc3d6431ef3adab0fe22e3f138efcefae27ca9979574aa5", Fingerprint(json));
+        Assert.Equal("71c2f75282e17975a7a16bbb74c022a1c4aeb6cc9599b9912ecfb10a3d5e6f76", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializePlotPlan(json)));
         Assert.Equal(["North", "South"], value.Series.Select(series => series.Key));
         Assert.Equal(["revenue-bars", "target-rule"], value.Layers.Select(layer => layer.Id));

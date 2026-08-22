@@ -19,7 +19,6 @@ UNION ALL SELECT 'HEATMAP', '11_HEATMAP.rptsql', 'Grid-based density'
 UNION ALL SELECT 'FUNNEL', '12_FUNNEL.rptsql', 'Conversion stages'
 UNION ALL SELECT 'WATERFALL', '13_WATERFALL.rptsql', 'Cumulative changes'
 UNION ALL SELECT 'RADAR', '14_RADAR.rptsql', 'Multi-metric spider charts'
-UNION ALL SELECT 'BUBBLE', '32_BUBBLE.rptsql', '3D scatter (X, Y, Size)'
 UNION ALL SELECT 'CANDLESTICK', '15_CANDLESTICK.rptsql', 'Financial OHLC'
 UNION ALL SELECT 'MAP', '16_MAP.rptsql', 'Choropleth and Point maps'
 UNION ALL SELECT 'TABLE', '17_TABLE.rptsql', 'Data grids, summaries, formatting'
@@ -32,8 +31,15 @@ UNION ALL SELECT 'DATEPICKER', '23_DATEPICKER.rptsql', 'Calendar date selection'
 UNION ALL SELECT 'RELDATEPICKER', '24_RELDATEPICKER.rptsql', 'Relative expressions (D-7, M-1)'
 UNION ALL SELECT 'SLIDER', '25_SLIDER.rptsql', 'Numeric range controls'
 UNION ALL SELECT 'SEARCH', '26_SEARCH.rptsql', 'Free-text search'
-UNION ALL SELECT 'INPUTS',  '27_CHECKBOX.rptsql', 'Form-like inputs (Checkbox, Textbox, Numberbox)'
-UNION ALL SELECT 'MATRIX',  '33_MATRIX.rptsql',  'Pivot tables: multi-dimension, multi-value, subtotals, AXIS_SORT';
+UNION ALL SELECT 'CHECKBOX', '27_CHECKBOX.rptsql', 'Toggle boolean inputs'
+UNION ALL SELECT 'TEXTBOX', '28_TEXTBOX.rptsql', 'Freeform text input controls'
+UNION ALL SELECT 'NUMBERBOX', '29_NUMBERBOX.rptsql', 'Numeric precision inputs and bounds'
+UNION ALL SELECT 'INTERACTIONS', '30_INTERACTIONS.rptsql', 'Interactive actions: DRILL_IN, DRILL_DOWN, highlight, filter'
+UNION ALL SELECT 'OVERLAYS', '31_OVERLAYS_ADVANCED.rptsql', 'Advanced regression fits, goal lines, moving averages'
+UNION ALL SELECT 'BUBBLE', '32_BUBBLE.rptsql', '3D scatter (X, Y, Size)'
+UNION ALL SELECT 'MATRIX', '33_MATRIX.rptsql', 'Pivot tables: multi-dimension, multi-value, subtotals, AXIS_SORT'
+UNION ALL SELECT 'GANTT', '36_GANTT.rptsql', 'Project timelines, task duration bars, scheduling'
+UNION ALL SELECT 'SHOWCASE', 'report_kitchen_sink.rptsql', 'Comprehensive multi-page showcase dashboard';
 
 -- 2. Visual for the Index
 CREATE VISUAL VisualIndex AS TABLE (

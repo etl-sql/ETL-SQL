@@ -13,8 +13,18 @@ public enum DataSemanticKind
 public enum FieldChannel
 {
     X,
+    X2,
     Y,
     Y2,
+    YStart,
+    YEnd,
+    Low,
+    Q1,
+    Median,
+    Q3,
+    High,
+    Open,
+    Close,
     Color,
     Size,
     Shape,

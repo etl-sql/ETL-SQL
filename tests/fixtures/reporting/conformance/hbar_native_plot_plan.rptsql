@@ -1,0 +1,17 @@
+SET REPORT TITLE = 'Conformance: Native Horizontal Bar';
+
+SELECT 'North' AS Region, 120 AS Revenue INTO #hbar_data
+UNION ALL SELECT 'South', 90
+UNION ALL SELECT 'West', 150;
+
+CREATE VISUAL RegionalRevenue AS HBAR (
+  SOURCE = #hbar_data,
+  TITLE = 'Revenue by Region',
+  MAPPINGS (X = Region, Y = Revenue),
+  OPTIONS (DATA_LABELS = ON)
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+  STRUCTURE = 'A',
+  MAP ('A' = RegionalRevenue)
+);

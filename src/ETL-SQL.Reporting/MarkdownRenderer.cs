@@ -20,9 +20,8 @@ namespace ETL_SQL.Reporting
     /// <summary>
     /// Converts a <see cref="ReportManifest"/> into a Markdown string.
     ///
-    /// Chart-based visuals get an embedded <c>&lt;!-- ECHART:{...} --&gt;</c> comment
-    /// containing the ECharts option JSON — processed by the VS Code preview
-    /// and <c>etl-sql-report serve</c>.
+    /// Chart-based visuals are embedded as portable native SVG data images for previews,
+    /// <c>etl-sql-report serve</c>, and static delivery.
     ///
     /// TABLE visuals are rendered as GFM pipe tables.
     /// CARD visuals show their value in a blockquote.
@@ -208,17 +207,7 @@ namespace ETL_SQL.Reporting
 
                 default:
                     {
-                        // Embed ECharts option as a comment for tooling / VS Code preview
-                        if (v.ChartConfig != null)
-                        {
-                            sb.AppendLine($"<!-- ECHART:{v.ChartConfig} -->");
-                            sb.AppendLine();
-                        }
-                        // Migrated visuals use native PlotPlan SVG and never initialize server-side
-                        // V8. Non-migrated visuals retain the compatibility SSR path.
-                        var svgStr = v.PlotPlan is not null
-                            ? _svg.Render(v)
-                            : EChartsSsrRenderer.Shared.RenderSvg(v) ?? _svg.Render(v);
+                        var svgStr = _svg.Render(v);
                         if (svgStr != null)
                         {
                             var uri = SvgEmbed.ToDataUri(svgStr);

@@ -14,12 +14,6 @@ const version = (() => {
 
 const bundledAssets = [
   {
-    component: 'Apache ECharts',
-    version: '6.0.0',
-    license: 'Apache-2.0',
-    project: 'https://echarts.apache.org/'
-  },
-  {
     component: 'Tabulator',
     version: '5.5.0',
     license: 'MIT',
@@ -46,7 +40,6 @@ const npmLicenseFallbacks = {
   '@vscode/test-electron': 'MIT',
   '@vscode/webview-ui-toolkit': 'MIT',
   'clsx': 'MIT',
-  'echarts': 'Apache-2.0',
   'eslint': 'MIT',
   'eslint-plugin-react-hooks': 'MIT',
   'eslint-plugin-react-refresh': 'MIT',
@@ -100,14 +93,18 @@ function readCodeMirrorLockAssets() {
 
 function walk(dir, predicate, output = []) {
   if (!fs.existsSync(dir)) return output;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+  catch (error) { if (error?.code === 'EACCES' || error?.code === 'EPERM') return output; throw error; }
+  for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === 'bin'
         || entry.name === 'obj'
         || entry.name === 'node_modules'
         || entry.name === '.git'
-        || entry.name === '.worktrees') continue;
+        || entry.name === '.worktrees'
+        || entry.name === '.vscode-test') continue;
       walk(full, predicate, output);
     } else if (predicate(full)) {
       output.push(full);

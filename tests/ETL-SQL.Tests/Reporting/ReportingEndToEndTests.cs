@@ -543,7 +543,8 @@ CREATE VISUAL SalesChart AS BAR (
                 {
                     var visual = m.Visuals.Single(v => v.Name == "SalesChart");
                     Assert.Equal("BAR", visual.VisualType);
-                    Assert.NotNull(visual.ChartConfig);
+                    Assert.NotNull(visual.PlotPlan);
+                    Assert.NotEmpty(visual.NativeSvg!);
                 })
             };
 
@@ -687,7 +688,7 @@ CREATE PAGE Dashboard AS DASHBOARD (
                 {
                     Assert.Equal("dark", m.Styles!["THEME"]);
                     Assert.NotNull(m.Containers);
-                    Assert.Contains(m.Visuals, v => v.ChartConfig != null);
+                    Assert.Contains(m.Visuals, v => v.PlotPlan != null && !string.IsNullOrWhiteSpace(v.NativeSvg));
                     Assert.Contains(m.Visuals, v => v.RowStyles != null);
                 })
             };

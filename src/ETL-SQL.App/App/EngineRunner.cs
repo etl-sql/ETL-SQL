@@ -1554,7 +1554,7 @@ CREATE PAGE Main AS DASHBOARD (
         private static void ShowThirdPartyNotices(ILogger logger)
         {
             logger.WriteLine("Third-party notices", ConsoleColor.Cyan);
-            logger.WriteLine("Visualizations powered by Apache ECharts. Table views powered by Tabulator. Terminal experience powered by Spectre.Console.");
+            logger.WriteLine("Visualizations use the native ETL-SQL SVG renderer. Table views powered by Tabulator. Terminal experience powered by Spectre.Console.");
 
             var noticesPath = FindRepoFile("THIRD-PARTY-NOTICES.md");
             if (noticesPath is null)

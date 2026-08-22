@@ -17,7 +17,6 @@ candidates for an About screen or small product footer credit:
 
 | Component | Used in | Credit text |
 | :--- | :--- | :--- |
-| Apache ECharts | Portal, Report Player, VS Code report preview | Visualizations powered by Apache ECharts. |
 | Tabulator | Report table/grid views | Table views powered by Tabulator. |
 | Spectre.Console | CLI/TUI terminal rendering | Terminal experience powered by Spectre.Console. |
 | PDFsharp + MigraDoc | PDF report export | PDF export powered by PDFsharp and MigraDoc. |
@@ -32,7 +31,6 @@ license banners in the bundled files when updating them.
 
 | Component | Files | License | Project |
 | :--- | :--- | :--- | :--- |
-| Apache ECharts | `echarts.min.js` | Apache-2.0 | https://echarts.apache.org/ |
 | Tabulator | `tabulator.min.js`, `tabulator.min.css` | MIT | https://tabulator.info/ |
 | CodeMirror 6 packages (`@codemirror/state`, `@codemirror/view`, `@codemirror/commands`, `@codemirror/language`, `@codemirror/search`, `@codemirror/autocomplete`, `@codemirror/lint`) | `designer/codemirror/codemirror-bundle.min.js` | MIT | https://codemirror.net/ |
 | Lezer `@lezer/highlight` | `designer/codemirror/codemirror-bundle.min.js` | MIT | https://lezer.codemirror.net/ |
@@ -62,7 +60,6 @@ projects. License values are taken from local package metadata when available.
 | MailKit | MIT | SMTP/email support. |
 | Microsoft.AspNetCore.Authentication.JwtBearer | MIT | Portal authentication. |
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | MIT | Portal identity storage. |
-| Microsoft.ClearScript.V8 (+ V8.Native.win-x64, .linux-x64, .linux-arm64, .osx-x64, .osx-arm64) | MIT (bundles the V8 engine, BSD-3-Clause) | Hosts ECharts server-side (SSR) for export chart rendering (PDF/Markdown). |
 | Microsoft.Data.SqlClient | MIT | SQL Server connector support. |
 | Microsoft.Data.Sqlite | MIT | SQLite and local storage support. |
 | Microsoft.EntityFrameworkCore.Design | MIT | EF Core migrations/design-time tooling. |
@@ -108,7 +105,6 @@ should be regenerated from npm package metadata before publishing the extension.
 | @tailwindcss/vite | MIT | Tailwind CSS Vite integration. |
 | @vscode/webview-ui-toolkit | MIT | VS Code webview UI components. |
 | clsx | MIT | Conditional class name utility. |
-| echarts | Apache-2.0 | Chart rendering. |
 | framer-motion | MIT | UI animation. |
 | lucide-react | ISC | Icon components. |
 | react | MIT | UI framework. |

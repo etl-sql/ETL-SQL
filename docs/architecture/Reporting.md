@@ -37,8 +37,9 @@ For the user-facing syntax reference, see [docs/guides/report-sql.md](../guides/
 ┌───────────────────────────────────────────────────────────────┐
 │  ETL-SQL.Reporting                                            │
 │  ManifestBuilder   — queries visuals, materializes rows       │
-│  EChartsRenderer   — produces ECharts option JSON             │
-│  SvgChartRenderer  — server-side SVG for PDF export           │
+│  NamedVisualChartLowerer — builds ChartSpec semantics         │
+│  PlotPlanResolver  — resolves scales, marks, and facets        │
+│  SvgChartRenderer  — native SVG for browser/PDF export        │
 │  PdfExporter       — static PDF generation                    │
 │  MarkdownRenderer  — produces GFM output                      │
 │  SnapshotStore     — persists / loads .snapshot.json          │
@@ -62,9 +63,10 @@ build / refresh / serve                Kestrel HTTP + ReportHosting
 |---------|------|
 | `ETL-SQL.Core` | Report-SQL lexer tokens, AST nodes (`ReportAst.cs`), parser (`StatementParser.Report.cs`) |
 | `ETL-SQL.Engine` | Statement handlers that register report definitions, materialize datasets, enforce registry decisions, and perform atomic dataset refresh/export/publish file transitions |
-| `ETL-SQL.Reporting` | Manifest building, ECharts rendering, SVG rendering, PDF/CSV/Markdown/terminal rendering, snapshot persistence, shared interaction refresh semantics |
+| `ETL-SQL.Reporting.Contracts` | Versioned renderer-neutral `ChartSpec`, typed chart data, and resolved `PlotPlan` contracts |
+| `ETL-SQL.Reporting` | Manifest building, semantic lowering, native SVG and specialized layouts, PDF/CSV/Markdown/terminal rendering, snapshot persistence, shared interaction refresh semantics |
 | `ETL-SQL.ReportHosting` | Reusable report sessions, parameter state, selective refresh, manifest caching, background dataset refresh timers, and multi-report manifest factories |
-| `ETL-SQL.ReportRuntime` | Canonical browser runtime assets (`report-runtime.js`, `echarts.min.js`, CSS themes, Tabulator assets) — sync to host projects via `node .\scripts\sync-assets.js` and verify with `node .\scripts\sync-assets.js -Check` |
+| `ETL-SQL.ReportRuntime` | Canonical browser runtime assets (`report-runtime.js`, CSS themes, Tabulator assets, and GeoJSON) — sync to host projects via `node .\scripts\sync-assets.js` and verify with `node .\scripts\sync-assets.js -Check` |
 | `ETL-SQL.ReportBuilder` | Engine-facing `EXPORT REPORT` statement handler compatibility assembly |
 | `ETL-SQL.ReportBuilder.CLI` | `etl-sql-report` CLI — `build`, `refresh`, `serve` sub-commands |
 | `ETL-SQL.ReportPlayer` | Local Kestrel web server, routes, HTML shell, static asset hosting, and report embedding |
@@ -315,7 +317,7 @@ Value — the string value
 - `CreateStyleStatementHandler` registers named style dictionaries.
 - `CreateButtonStatementHandler` registers page-addressable buttons.
 - `CreateTemplateStatementHandler` registers reusable option/style defaults.
-- `CreateThemeStatementHandler` registers custom ECharts themes.
+- `CreateThemeStatementHandler` registers custom renderer-neutral theme tokens.
 - `AlterReportObjectStatementHandler` and `DropReportObjectStatementHandler` mutate or remove existing report definitions.
 
 ### 4.8 `IReportContext` (on `IExecutionContext`)
@@ -368,7 +370,9 @@ ManifestBuilder.BuildAsync(scriptPath)
         │       ├─ Copy axis options as "axis:{x|y}:{key}" options
         │       ├─ Copy action bindings → List<VisualActionManifest>
         │       ├─ ApplyFormatting() — apply FORMAT option to value column
-        │       └─ EChartsRenderer.Render(vm) → ECharts option JSON
+        │       ├─ NamedVisualChartLowerer → ChartSpec + typed ChartData
+        │       ├─ PlotPlanResolver → resolved renderer-neutral PlotPlan
+        │       └─ SvgChartRenderer → native SVG (shared or focused layout)
         │
         ├─ foreach PageDefinitions
         │       └─ Copy structure, slot map, parameter defaults, styles
@@ -414,7 +418,11 @@ Error       — top-level build error when report creation fails
 ```
 Name        — visual identifier
 VisualType  — string ("Bar", "Donut", "HeatMap", etc.)
-ChartConfig — ECharts option JSON string (null for Table / Card / Text / filter types)
+ChartSpec    — versioned renderer-neutral semantic specification for charts
+ChartData    — typed columns with raw and display values
+PlotPlan     — resolved scales, series, marks, facets, style, and fallback semantics
+NativeSvg    — sanitized server-generated SVG used by browser and static exports
+ChartConfig  — obsolete compatibility slot; native manifests leave it null
 TitleIsMarkdown / SubtitleIsMarkdown / IsMarkdown — markdown rendering flags
 IsHidden    — true when VISIBLE = OFF deferred data fetch
 DefaultValue / Min / Max / Decimals / Placeholder / LabelPosition — filter/input metadata
@@ -440,56 +448,34 @@ All numeric data is serialized as strings to avoid JSON type loss.
 
 ### 5.4 `ApplyFormatting`
 
-Before `ChartConfig` is generated, `ApplyFormatting(vm)` applies the `FORMAT` option (a .NET numeric format string such as `N0`, `C2`, `P1`) to the value column of each row. This ensures formatted values appear in TABLE renders and CARD displays.
+Before semantic lowering, `ApplyFormatting(vm)` applies the `FORMAT` option (a .NET numeric format string such as `N0`, `C2`, `P1`) to the value column of each row. This keeps display values consistent across tables, cards, native SVG, and accessible fallbacks.
 
 ---
 
 ## 6. Rendering
 
-### 6.1 `EChartsRenderer`
+### 6.1 Native semantic chart pipeline
 
-Converts a `VisualManifest` into an [Apache ECharts v5](https://echarts.apache.org/) option JSON string.
+Standard charts are lowered by `NamedVisualChartLowerer` into a versioned `ChartSpec` and typed
+`ChartDataSet`. `PlotPlanResolver` resolves scale domains, deterministic series order, null policy,
+facets, mark geometry inputs, palette assignments, accessibility summaries, and semantic fallbacks.
+`PlotPlanSvgRenderer` and `PlotPlanTerminalRenderer` consume that same plan, so browser, static/PDF,
+and terminal surfaces do not independently reinterpret report semantics.
 
-| VisualType | ECharts series type | Key roles |
-|---|---|---|
-| Bar | `bar` | x, y, series |
-| HorizontalBar | `bar` (yAxis = category) | x, y, series |
-| Line | `line` | x, y, series |
-| Scatter | `scatter` | x, y |
-| Pie | `pie` | label, value |
-| Donut | `pie` (radius inner) | label, value |
-| Combo | `bar` + `line` mixed | x, SERIES block |
-| BoxPlot | `boxPlot` | x, value distribution |
-| Treemap | `treemap` | label, value |
-| HeatMap | `heatmap` | x, y, value |
-| Gauge | `gauge` | value, max (optional), label (optional) |
-| Funnel | `funnel` | label, value |
-| Waterfall | stacked `bar` (transparent base + delta) | x, y |
-| Bubble | `scatter` with symbol sizing | x, y, size, series |
-| Radar | `radar` | dimensions, value |
-| Candlestick | `candlestick` | x, open, close, low, high |
-| Map | `map` | region, value |
-| Gantt | custom bar/timeline-style option | task, start, end |
-| Sankey | `sankey` | source, target, value |
-| Sunburst | `sunburst` | hierarchy, value |
-| Network | `graph` | source, target, value/category |
-| Trellis | multiple chart panels | x, y, facet |
-| Matrix | table/matrix runtime rendering | row, column, value |
-| Table | *(none — HTML table with optional FORMATTING rules)* | all columns |
-| Card | *(none — scalar div)* | label, value |
-| Text | *(none — HTML div)* | VALUE option |
-| Image | *(none — image element)* | URL/VALUE option |
-| Slicer / MultiSelect | *(none — `<select>` / checkboxes)* | value |
-| DatePicker / RelDatePicker / Slider / Search | *(none — input controls)* | — |
-| Checkbox / Textbox / Numberbox | *(none — input controls)* | value |
+The shared PlotPlan path covers Cartesian, circular, statistical, polar, financial, timeline, and
+faceted charts. `TREEMAP`, `SUNBURST`, `SANKEY`, `NETWORK`, `MAP`, and `MATRIX` use the approved
+focused `SpecializedNativeSvgRenderer`; it performs deterministic managed-code layout and GeoJSON
+projection without a client chart engine. `TABLE`, `CARD`, narrative, media, and filter controls keep
+their purpose-built DOM/static renderers.
 
-For multi-series charts, rows with a `series` column are pivoted: each distinct series value becomes a separate ECharts dataset. Colors are assigned from a built-in palette or from `COLORS(...)` option entries (`color:{key}` in `vm.Options`).
-
-The `LEGEND_POSITION` flat option in `vm.Options` controls ECharts legend placement (`TOP`, `BOTTOM`, `LEFT`, `RIGHT`).
+Every graphical `VisualManifest` carries `NativeSvg`. The browser imports this SVG into the DOM and
+wires `data-row-index` marks to actions, cross-filtering, drill context, and native `<title>` tooltips.
+No JavaScript option compiler or server-side script engine participates in rendering.
 
 #### Option Key Naming Convention
 
-`VisualManifest.Options` is a `Dictionary<string, string>` shared between `VisualBuilder` (writer) and `EChartsRenderer` / the client runtime (readers). Keys follow a strict two-tier convention:
+`VisualManifest.Options` is a `Dictionary<string, string>` shared between `VisualBuilder` and the
+native renderers/runtime. Keys follow a strict two-tier convention:
 
 | Tier | Case | Written by | Examples |
 |---|---|---|---|
@@ -499,13 +485,14 @@ The `LEGEND_POSITION` flat option in `vm.Options` controls ECharts legend placem
 **Why two tiers?** Parser-supplied keys come directly from the source script (`OPTIONS(STACKED = ON)`), so they are stored as-is in uppercase to match the grammar. Internally-computed keys are synthesized by `VisualBuilder` from structured AST nodes (`AxisOptions`, `MappingHints`, `TypedSeries`) — they use lowercase-with-colon namespace notation to avoid clashing with parser keywords.
 
 **Reading rules:**
-- `EChartsRenderer` must read parser-supplied keys in **UPPERCASE** (e.g., `vm.Options.TryGetValue("TITLE", ...)`).
-- `EChartsRenderer` must read internally-computed keys in **lowercase** (e.g., `vm.Options.TryGetValue("axis:x:label", ...)`).
-- Mixing the cases is a silent bug — the dictionary lookup returns `null` and the option is silently dropped. Three rendering bugs in the project history were caused by this mismatch.
+- Native renderers must read parser-supplied keys in **UPPERCASE** (for example, `TITLE`).
+- Native renderers must read internally computed keys in **lowercase** (for example, `axis:x:label`).
+- Mixing cases silently misses the option because dictionary lookup is exact.
 
 ### 6.2 `SvgChartRenderer`
 
-Server-side SVG generation used by `PdfExporter`. Produces static SVG markup for chart types without requiring a browser.
+Server-side native SVG generation shared by manifests and `PdfExporter`. PlotPlan-backed charts use
+`PlotPlanSvgRenderer`; approved specialized types use `SpecializedNativeSvgRenderer`.
 
 - `Render(VisualManifest vm, int width, int height) → string`
 - Returns SVG XML; the PDF exporter embeds it via QuestPDF's `SvgImage` element
@@ -544,7 +531,7 @@ Layout:
 Produces a static, portable `.md` file:
 
 - Pages become top-level `##` sections
-- Chart visuals: GFM table of raw data (ECharts config is not embedded in Markdown output)
+- Chart visuals: native SVG plus a GFM data fallback
 - Table visuals: GFM pipe table
 - Card visuals: blockquote `> **Label** Value`
 - Slicer / filter visuals: italic note *(interactive only — no static representation)*
@@ -561,7 +548,9 @@ Dual-mode JavaScript file:
 
 `window.__API_BASE__` is injected in multi-report mode as `/reports/{name}/api`. All API calls use `apiBase` as their prefix so the same script works for both single and multi-report deployments.
 
-Chart visuals use `echarts.init(div)` + `chart.setOption(JSON.parse(config))`. Filter controls (`SLICER`, `MULTISELECT`, `DATEPICKER`, `SLIDER`, `SEARCH`) call `POST {apiBase}/parameters` with a batch payload on change.
+Chart visuals import the manifest's `nativeSvg` into the DOM and bind row-indexed SVG marks to report
+actions and cross-filter state. Filter controls (`SLICER`, `MULTISELECT`, `DATEPICKER`, `SLIDER`,
+`SEARCH`) call `POST {apiBase}/parameters` with a batch payload on change.
 
 ---
 
@@ -713,8 +702,8 @@ All filter types use `SET_PARAMETER` in their `ACTIONS` clause to bind the selec
 
 - `report-runtime.js` — client-side rendering runtime
 - `report-runtime.css` — shared report styles
-- `echarts.min.js` — local ECharts bundle copied from `ETL-SQL.ReportRuntime`
 - `tabulator.min.js` / `tabulator.min.css` — table runtime assets copied from `ETL-SQL.ReportRuntime`
+- `maps/*.geojson` — built-in geometry used by native map rendering
 
 ---
 
@@ -736,7 +725,8 @@ Invoked as `etl-sql-report <command>`.
 | Phase | What was built |
 |---|---|
 | **9A** | `ReportAst.cs` — core AST nodes; `StatementParser.Report.cs` — CREATE VISUAL / PAGE / DATASET |
-| **9B** | `ManifestBuilder`, `EChartsRenderer`, `MarkdownRenderer`, `SnapshotStore`, `ReportManifest` POCOs |
+| **9B** | `ManifestBuilder`, original chart renderer, `MarkdownRenderer`, `SnapshotStore`, `ReportManifest` POCOs |
+| **GoG Phase 8** | Renderer-neutral standard catalog, focused native layouts, shared native SVG browser/export path, and external chart-runtime retirement |
 | **9C** | `report-runtime.js` — dual-mode client runtime for VS Code preview and web |
 | **9D** | `ETL-SQL.ReportHosting.DashboardService`, `ETL-SQL.ReportPlayer` Kestrel server, parameter binding, live rebuild |
 | **9E** | Filter visual types (DATEPICKER, SLIDER, MULTISELECT, SEARCH), batch parameter endpoint, responsive layout, page-level THEME |

@@ -75,23 +75,6 @@ function fakeCanvasContext() {
   };
 }
 
-function makeChart() {
-  return {
-    option: { series: [{ zoom: 1, center: [0, 0] }] },
-    handlers: {},
-    setOption(option) { this.option = option; },
-    getOption() { return this.option; },
-    getWidth() { return 900; },
-    getHeight() { return 600; },
-    resize() {},
-    dispose() {},
-    on(name, fn) { this.handlers[name] = fn; },
-    getZr() { return { on() {} }; },
-    dispatchAction() {},
-    convertFromPixel(_, point) { return point; },
-  };
-}
-
 globalThis.document = {
   createElement(tag) { return new Element(tag); },
   createElementNS(_ns, tag) { return new Element(tag); },
@@ -101,9 +84,7 @@ globalThis.document = {
   removeEventListener() {},
 };
 
-globalThis.window = {
-  echarts: { init: () => makeChart() },
-};
+globalThis.window = {};
 
 globalThis.clearTimeout = clearTimeout;
 globalThis.setTimeout = setTimeout;

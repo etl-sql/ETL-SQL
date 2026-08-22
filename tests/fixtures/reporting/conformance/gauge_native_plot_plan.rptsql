@@ -1,0 +1,9 @@
+SELECT 73.5 AS Score, 0 AS MinimumValue, 100 AS MaximumValue, 80 AS GoalValue INTO #gauge_data;
+
+CREATE VISUAL ComplianceGauge AS GAUGE (
+  SOURCE = #gauge_data,
+  MAPPINGS (VALUE = Score, MIN = MinimumValue, MAX = MaximumValue, GOAL = GoalValue),
+  OPTIONS (TITLE = 'SLA Compliance')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = ComplianceGauge));

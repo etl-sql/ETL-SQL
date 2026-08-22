@@ -148,19 +148,12 @@ public sealed class AdvancedAuthoringSemanticReadinessTests
         var data = AdvancedAuthoringSemanticReadinessHarness.CreateMultiLayerDataSet();
         var plan = new PlotPlanResolver().Resolve(spec, data);
 
-        // 1. ECharts Lowering
-        var echartsRenderer = new EChartsRenderer();
-        var echartsJson = echartsRenderer.Render(plan);
-        Assert.NotNull(echartsJson);
-        Assert.Contains("series", echartsJson);
-        Assert.Contains("yAxis", echartsJson);
-
-        // 2. Native SVG Lowering
+        // 1. Native SVG lowering
         var svgStr = new SvgChartRenderer().Render(new VisualManifest { PlotPlan = plan });
         Assert.NotNull(svgStr);
         Assert.Contains("<svg", svgStr);
 
-        // 3. Terminal Lowering
+        // 2. Terminal lowering
         var terminalRenderable = PlotPlanTerminalRenderer.Render(plan);
         Assert.NotNull(terminalRenderable);
 

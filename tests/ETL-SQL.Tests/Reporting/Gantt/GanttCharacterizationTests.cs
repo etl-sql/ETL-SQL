@@ -90,73 +90,6 @@ CREATE VISUAL TechnicalRoadmap AS GANTT (
     }
 
     [Fact]
-    public void EChartsRenderer_GeneratesCustomSeriesWithGanttRenderItemMarker()
-    {
-        var manifest = new VisualManifest
-        {
-            Name = "SprintPlan",
-            VisualType = "GANTT",
-            Columns = new List<string> { "Task", "Start", "End", "Color" },
-            Rows = new List<List<string?>>
-            {
-                new() { "Planning", "2026-01-01", "2026-01-15", "#5470c6" },
-                new() { "Execution", "2026-01-10", "2026-02-15", "#91cc75" },
-                new() { "Review", "2026-02-10", "2026-02-28", "#fac858" }
-            },
-            Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["title"] = "Sprint 1 Timeline",
-                ["mapping:y"] = "Task",
-                ["mapping:start"] = "Start",
-                ["mapping:end"] = "End",
-                ["mapping:color"] = "Color"
-            }
-        };
-
-        var renderer = new EChartsRenderer();
-        var json = renderer.Render(manifest);
-
-        Assert.NotNull(json);
-        Assert.Contains("\"title\":{\"text\":\"Sprint 1 Timeline\"}", json);
-        Assert.Contains("\"xAxis\":{\"type\":\"time\"}", json);
-        Assert.Contains("\"yAxis\":{\"type\":\"category\",\"data\":[\"Planning\",\"Execution\",\"Review\"],\"inverse\":true}", json);
-        Assert.Contains("\"__ganttRenderItem\":true", json);
-        Assert.Contains("\"type\":\"custom\"", json);
-        Assert.Contains("\"encode\":{\"x\":[1,2],\"y\":0}", json);
-        Assert.Contains("[0,\"2026-01-01 00:00:00\",\"2026-01-15 00:00:00\",\"Planning\",\"#5470c6\"]", json);
-        Assert.Contains("[1,\"2026-01-10 00:00:00\",\"2026-02-15 00:00:00\",\"Execution\",\"#91cc75\"]", json);
-        Assert.Contains("[2,\"2026-02-10 00:00:00\",\"2026-02-28 00:00:00\",\"Review\",\"#fac858\"]", json);
-    }
-
-    [Fact]
-    public void EChartsRenderer_UsesPrimaryColorFallback_WhenColorMappingOmitted()
-    {
-        var manifest = new VisualManifest
-        {
-            Name = "DefaultColorGantt",
-            VisualType = "GANTT",
-            Columns = new List<string> { "Task", "Start", "End" },
-            Rows = new List<List<string?>>
-            {
-                new() { "Documentation", "2026-03-01", "2026-03-10" }
-            },
-            Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["mapping:y"] = "Task",
-                ["mapping:start"] = "Start",
-                ["mapping:end"] = "End",
-                ["color:primary"] = "#3ba272"
-            }
-        };
-
-        var renderer = new EChartsRenderer();
-        var json = renderer.Render(manifest);
-
-        Assert.NotNull(json);
-        Assert.Contains("\"#3ba272\"", json);
-    }
-
-    [Fact]
     public void TerminalRenderer_RendersGanttChartWithUnicodeBars()
     {
         var manifest = new VisualManifest
@@ -185,18 +118,18 @@ CREATE VISUAL TechnicalRoadmap AS GANTT (
     }
 
     [Fact]
-    public void VisualCapabilityMatrix_ReflectsGanttCurrentStatus()
+    public void VisualCapabilityMatrix_ReflectsGanttNativeStaticMigration()
     {
         var capability = VisualCapabilityMatrix.Get(VisualType.Gantt);
 
         Assert.NotNull(capability);
         Assert.Equal("GANTT", capability.Name);
         Assert.Equal("Timeline", capability.Category);
-        Assert.Equal(CapabilityLevel.TemporaryDependency, capability.Browser.Level);
-        Assert.Equal(CapabilityLevel.TemporaryDependency, capability.StaticExport.Level);
-        Assert.Equal(CapabilityLevel.TemporaryDependency, capability.PdfEmailExport.Level);
+        Assert.Equal(CapabilityLevel.Native, capability.Browser.Level);
+        Assert.Equal(CapabilityLevel.Native, capability.StaticExport.Level);
+        Assert.Equal(CapabilityLevel.Native, capability.PdfEmailExport.Level);
         Assert.Equal(CapabilityLevel.Native, capability.Terminal.Level);
-        Assert.True(capability.HasEChartsDependency);
+        Assert.False(capability.HasExternalChartDependency);
     }
 
     [Fact]

@@ -145,17 +145,17 @@ Current progress:
 - Serializable report manifest contracts now live in `ETL-SQL.Reporting` under the `ETL_SQL.Reporting` namespace.
 - Manifest and visual builders now live in `ETL-SQL.Reporting`; they still operate over `IExecutionContext` and do not move script execution ownership out of Engine.
 - Style, page, and dataset builder semantics now live in `ETL-SQL.Reporting`; this project references Core for report AST/context contracts.
-- Theme-to-ECharts JSON translation now lives in `ETL-SQL.Reporting`; the Engine `CREATE THEME` handler remains the execution entry point and forwards to the reporting helper.
+- Renderer-neutral theme-token translation now lives in `ETL-SQL.Reporting`; the Engine `CREATE THEME` handler remains the execution entry point and forwards to the reporting helper.
 - Shared report snapshot persistence now lives in `ETL-SQL.Reporting`.
 - Markdown, SVG, PDF, and terminal rendering now live in `ETL-SQL.Reporting`.
-- Shared ECharts chart rendering semantics now live in `ETL-SQL.Reporting` with namespace compatibility retained.
+- Shared native chart rendering semantics now live in `ETL-SQL.Reporting` with namespace compatibility retained.
 - `ETL-SQL.ReportBuilder` references `ETL-SQL.Reporting` and continues to own the engine-facing `EXPORT REPORT` statement handler as the compatibility assembly.
 
 Recommended steps:
 
 1. Introduce the new project or namespace boundary. *(Done: project boundary created; namespace compatibility retained for now.)*
-2. Move manifest, style, visual, page, container, dataset, chart, and action semantics. *(Done for the first-pass boundary: manifest/visual builders, manifest contracts, style/page/dataset builders, theme translation, Markdown/SVG/PDF/terminal rendering, snapshot persistence, and shared ECharts chart semantics moved.)*
-3. Leave compatibility references or forwarding types while hosts migrate. *(Done: `ETL-SQL.ReportBuilder` remains for the engine-facing export handler, and `CreateThemeStatementHandler.BuildEChartsTheme` forwards to the reporting helper.)*
+2. Move manifest, style, visual, page, container, dataset, chart, and action semantics. *(Done for the first-pass boundary: manifest/visual builders, manifest contracts, style/page/dataset builders, theme translation, Markdown/native-SVG/PDF/terminal rendering, and snapshot persistence moved.)*
+3. Leave compatibility references or forwarding types while hosts migrate. *(Done: `ETL-SQL.ReportBuilder` remains for the engine-facing export handler, and `CreateThemeStatementHandler.BuildNativeTheme` forwards to the reporting helper.)*
 4. Update each host separately with smoke coverage. *(Done for current hosts: ReportPlayer, Portal, CLI, Engine, ReportBuilder, and focused reporting/snapshot tests pass.)*
 5. Rename packages/projects only after references are clean.
 

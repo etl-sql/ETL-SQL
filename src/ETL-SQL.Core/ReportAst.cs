@@ -573,7 +573,7 @@ public record CreateTemplateStatement : Statement
 
 /// <summary>
 /// CREATE THEME <name> AS (<style-key-value pairs>)
-/// Theme properties are mapped to an ECharts theme JSON and saved to the themes directory.
+/// Theme properties are mapped to an native theme JSON and saved to the themes directory.
 /// </summary>
 public record CreateThemeStatement : Statement
 {

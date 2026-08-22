@@ -24,7 +24,7 @@ public sealed class PlotPlanResolver
         var palette = series.Select(item => new PaletteAssignment(item.Key, item.Color)).ToImmutableArray();
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
         var layers = ResolveLayers(spec, data, columns, categories, series).ToImmutableArray();
-        var scales = ResolveScales(spec, columns, categories).ToImmutableArray();
+        var scales = ResolveScales(spec, columns, categories, layers).ToImmutableArray();
         var plotBounds = bounds ?? new PlotBounds(0, 0, 600, 350);
         var facets = ResolveFacets(spec, columns, scales, plotBounds);
         var sourceLayers = layers.Where(layer => layer.Style.IsDefault || !layer.Style.Any(token => token.Name == "overlayType"));
@@ -93,7 +93,7 @@ public sealed class PlotPlanResolver
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<string> categories)
     {
-        if (spec.Coordinate.Kind == CoordinateKind.Polar) return categories;
+        if (spec.Coordinate.Kind == CoordinateKind.Polar && spec.Bindings.Any(binding => binding.Channel == FieldChannel.Theta)) return categories;
         var color = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
         if (color is not null && columns.TryGetValue(color.Field, out var colorColumn))
             return colorColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToImmutableArray();
@@ -108,7 +108,8 @@ public sealed class PlotPlanResolver
     private static IEnumerable<ResolvedScale> ResolveScales(
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
-        ImmutableArray<string> categories)
+        ImmutableArray<string> categories,
+        ImmutableArray<ResolvedMarkLayer> resolvedLayers)
     {
         foreach (var scale in spec.Scales)
         {
@@ -116,7 +117,12 @@ public sealed class PlotPlanResolver
                 .Where(binding => binding.ScaleId == scale.Id && columns.ContainsKey(binding.Field)).ToList();
             if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal)
             {
-                var values = scale.CategoryOrder.IsDefaultOrEmpty ? categories : scale.CategoryOrder;
+                var inferred = bindings.SelectMany(binding => columns[binding.Field].Values)
+                    .Select(ValueKey).Where(value => value is not null).Cast<string>()
+                    .Distinct(StringComparer.Ordinal).ToImmutableArray();
+                var values = !scale.CategoryOrder.IsDefaultOrEmpty
+                    ? scale.CategoryOrder
+                    : !inferred.IsDefaultOrEmpty ? inferred : categories;
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                     values.Select(ChartValue.From).ToImmutableArray(), values,
                     values.Select(value => new PlotTick(ChartValue.From(value), value)).ToImmutableArray(), scale.IncludeZero);
@@ -124,6 +130,17 @@ public sealed class PlotPlanResolver
             }
 
             var raw = bindings.SelectMany(binding => columns[binding.Field].Values).Where(value => value.Kind != ChartValueKind.Null).ToList();
+            var layout = spec.Layers.Select(layer => layer.Style.FirstOrDefault(token => token.Name.Equals("layout", StringComparison.OrdinalIgnoreCase))?.Value)
+                .FirstOrDefault(value => value is not null);
+            if (scale.Channel == FieldChannel.Y && layout is "boxplot" or "waterfall")
+            {
+                var channels = layout == "boxplot"
+                    ? new[] { FieldChannel.Low, FieldChannel.Q1, FieldChannel.Median, FieldChannel.Q3, FieldChannel.High }
+                    : new[] { FieldChannel.YStart, FieldChannel.YEnd };
+                raw = resolvedLayers.SelectMany(layer => layer.Data).SelectMany(datum => datum.Channels)
+                    .Where(channel => channels.Contains(channel.Channel) && channel.Value.Kind != ChartValueKind.Null)
+                    .Select(channel => channel.Value).ToList();
+            }
             if (scale.Kind == ScaleKind.Time)
             {
                 var temporalValues = bindings.SelectMany(binding =>
@@ -197,6 +214,23 @@ public sealed class PlotPlanResolver
                 continue;
             }
 
+            var layout = layer.Style.FirstOrDefault(token => token.Name.Equals("layout", StringComparison.OrdinalIgnoreCase))?.Value;
+            if (layout == "boxplot")
+            {
+                yield return ResolveBoxPlot(layer, spec, data, columns, categories);
+                continue;
+            }
+            if (layout == "waterfall")
+            {
+                yield return ResolveWaterfall(layer, spec, data, columns);
+                continue;
+            }
+            if (layout == "radar")
+            {
+                foreach (var radarLayer in ResolveRadar(layer, spec, data, columns, series)) yield return radarLayer;
+                continue;
+            }
+
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
                 ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;
@@ -221,6 +255,112 @@ public sealed class PlotPlanResolver
         }
     }
 
+    private static ResolvedMarkLayer ResolveBoxPlot(
+        MarkLayerSpec layer,
+        ChartSpec spec,
+        ChartDataSet chartData,
+        IReadOnlyDictionary<string, ChartColumn> columns,
+        ImmutableArray<string> categories)
+    {
+        // BOXPLOT supports both the ordinary X/Y form (the engine computes the
+        // five-number summary) and the documented pre-calculated form used by
+        // the kitchen sink (X, LOW, Q1, MEDIAN, Q3, HIGH). Preserve the latter
+        // verbatim; there is no raw Y column to summarise in that form.
+        if (!spec.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
+        {
+            var resolved = ResolveLayerData(layer, spec, chartData, columns, categories, _ => true);
+            return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, resolved)
+            { Style = layer.Style };
+        }
+        var xBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.X);
+        var yBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.Y);
+        var xColumn = columns[xBinding.Field];
+        var yColumn = columns[yBinding.Field];
+        var resolvedData = categories.Select((category, categoryIndex) =>
+        {
+            var rowIndices = Enumerable.Range(0, xColumn.Values.Length)
+                .Where(index => ValueKey(xColumn.Values[index]) == category).ToList();
+            var values = rowIndices.Select(index => Number(yColumn.Values[index])).Where(value => value.HasValue)
+                .Select(value => value!.Value).OrderBy(value => value).ToArray();
+            var low = values.Length == 0 ? 0m : values[0];
+            var q1 = Percentile(values, .25m);
+            var median = Percentile(values, .5m);
+            var q3 = Percentile(values, .75m);
+            var high = values.Length == 0 ? 0m : values[^1];
+            return new ResolvedDatum(rowIndices.FirstOrDefault(categoryIndex),
+            [
+                new ResolvedChannelValue(FieldChannel.X, ChartValue.From(category), category),
+                new ResolvedChannelValue(FieldChannel.Low, ChartValue.From(low), low.ToString(CultureInfo.InvariantCulture)),
+                new ResolvedChannelValue(FieldChannel.Q1, ChartValue.From(q1), q1.ToString(CultureInfo.InvariantCulture)),
+                new ResolvedChannelValue(FieldChannel.Median, ChartValue.From(median), median.ToString(CultureInfo.InvariantCulture)),
+                new ResolvedChannelValue(FieldChannel.Q3, ChartValue.From(q3), q3.ToString(CultureInfo.InvariantCulture)),
+                new ResolvedChannelValue(FieldChannel.High, ChartValue.From(high), high.ToString(CultureInfo.InvariantCulture))
+            ], values.Length == 0, $"{category}: {low}, {q1}, {median}, {q3}, {high}");
+        }).ToImmutableArray();
+        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, resolvedData) { Style = layer.Style };
+    }
+
+    private static decimal Percentile(decimal[] sorted, decimal fraction)
+    {
+        if (sorted.Length == 0) return 0m;
+        var position = fraction * (sorted.Length - 1);
+        var lower = (int)Math.Floor(position);
+        var upper = Math.Min(lower + 1, sorted.Length - 1);
+        return sorted[lower] + (position - lower) * (sorted[upper] - sorted[lower]);
+    }
+
+    private static ResolvedMarkLayer ResolveWaterfall(
+        MarkLayerSpec layer,
+        ChartSpec spec,
+        ChartDataSet data,
+        IReadOnlyDictionary<string, ChartColumn> columns)
+    {
+        var raw = ResolveLayerData(layer, spec, data, columns, [], _ => true);
+        var running = 0m;
+        var output = raw.Select(datum =>
+        {
+            var delta = Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null()) ?? 0m;
+            var total = Truthy(Channel(datum, FieldChannel.Detail) ?? ChartValue.From(false));
+            var start = total ? 0m : running;
+            var end = total ? delta : running + delta;
+            running = end;
+            return datum with
+            {
+                Channels = datum.Channels.Add(new ResolvedChannelValue(FieldChannel.YStart, ChartValue.From(start), start.ToString(CultureInfo.InvariantCulture)))
+                    .Add(new ResolvedChannelValue(FieldChannel.YEnd, ChartValue.From(end), end.ToString(CultureInfo.InvariantCulture)))
+            };
+        }).ToImmutableArray();
+        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, output) { Style = layer.Style };
+    }
+
+    private static IEnumerable<ResolvedMarkLayer> ResolveRadar(
+        MarkLayerSpec layer,
+        ChartSpec spec,
+        ChartDataSet data,
+        IReadOnlyDictionary<string, ChartColumn> columns,
+        ImmutableArray<ResolvedSeries> series)
+    {
+        var seriesBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.Color);
+        var metrics = spec.Bindings.Where(binding => binding.Channel == FieldChannel.Detail).ToList();
+        for (var rowIndex = 0; rowIndex < data.RowCount; rowIndex++)
+        {
+            var key = ValueKey(columns[seriesBinding.Field].Values[rowIndex]) ?? $"Series {rowIndex + 1}";
+            var points = metrics.Select(binding =>
+            {
+                var column = columns[binding.Field];
+                var value = column.Values[rowIndex];
+                return new ResolvedDatum(rowIndex,
+                [
+                    new ResolvedChannelValue(FieldChannel.Theta, ChartValue.From(binding.Field), binding.Field),
+                    new ResolvedChannelValue(FieldChannel.Radius, value,
+                        column.DisplayValues.IsDefaultOrEmpty ? Display(value) : column.DisplayValues[rowIndex])
+                ], value.Kind == ChartValueKind.Null, $"{binding.Field}: {Display(value)}");
+            }).ToImmutableArray();
+            yield return new ResolvedMarkLayer($"{layer.Id}-{rowIndex:D2}", layer.Mark, layer.ZIndex + rowIndex, key, points)
+            { Style = layer.Style };
+        }
+    }
+
     private static ImmutableArray<ResolvedDatum> ResolveLayerData(
         MarkLayerSpec layer,
         ChartSpec spec,
@@ -234,7 +374,9 @@ public sealed class PlotPlanResolver
                 !layer.Bindings.Any(existing => existing.Channel == binding.Channel && existing.Field.Equals(binding.Field, StringComparison.OrdinalIgnoreCase))));
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
-        if (categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
+        var preserveRows = layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
+            && token.Value.Equals("true", StringComparison.OrdinalIgnoreCase));
+        if (!preserveRows && categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
             columns.TryGetValue(categoryBinding.Field, out var categoryColumn) && !categories.IsDefaultOrEmpty)
         {
             var facetBindings = layerBindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column)
@@ -283,7 +425,9 @@ public sealed class PlotPlanResolver
             return new ResolvedChannelValue(binding.Channel, column.Values[rowIndex],
                 column.DisplayValues.IsDefaultOrEmpty ? null : column.DisplayValues[rowIndex]);
         }).ToImmutableArray();
-        var requiredNull = channels.Any(channel => channel.Channel is FieldChannel.X or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius
+        var requiredNull = channels.Any(channel =>
+            (channel.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or
+                FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close)
             && channel.Value.Kind == ChartValueKind.Null);
         return new ResolvedDatum(rowIndex, channels, requiredNull && nulls.Default == NullValuePolicy.Gap,
             string.Join(", ", channels.Select(channel => $"{channel.Channel}: {channel.DisplayValue ?? Display(channel.Value)}")))
@@ -408,7 +552,8 @@ public sealed class PlotPlanResolver
         {
             var label = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.X or FieldChannel.Theta)?.DisplayValue
                 ?? (index < categories.Length ? categories[index] : $"Row {index + 1}");
-            var value = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius);
+            var value = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or
+                FieldChannel.Median or FieldChannel.Close or FieldChannel.Size or FieldChannel.YEnd);
             var numeric = value is null ? null : Number(value.Value);
             var conditionDetail = datum.Encodings.IsDefaultOrEmpty ? null : string.Join(", ", datum.Encodings.Select(encoding =>
                 $"conditional {encoding.Channel}: {Display(encoding.Value)}"));
@@ -577,6 +722,9 @@ public sealed class PlotPlanResolver
         ChartValueKind.Boolean => value.Boolean == true ? "true" : "false",
         _ => ""
     };
+
+    private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel) =>
+        datum.Channels.FirstOrDefault(item => item.Channel == channel)?.Value;
 
     private static string? ValueKey(ChartValue value) => value.Kind == ChartValueKind.Null ? null : Display(value);
 }

@@ -40,7 +40,7 @@ public sealed class AdvancedChartProductionTests
 
         Assert.Equal(MarkKind.Rect, Assert.Single(spec.Layers).Mark);
         Assert.Equal(2, Assert.Single(plan.Layers).Data.Length);
-        Assert.Contains("series", new EChartsRenderer().Render(plan));
+        Assert.Contains("<rect", new SvgChartRenderer().Render(plan));
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public sealed class AdvancedChartProductionTests
             plan.Facets[1].Scales.Single(scale => scale.Id == "y").Domain);
         Assert.Equal("#b91c1c", plan.Layers[0].Data[0].Encodings.Single().Value.Text);
         Assert.Equal("#2563eb", plan.Layers[0].Data[1].Encodings.Single().Value.Text);
-        Assert.Contains("\"grid\"", new EChartsRenderer().Render(plan));
+        Assert.Contains("East", new SvgChartRenderer().Render(plan));
         Assert.Contains("#b91c1c", new SvgChartRenderer().Render(new VisualManifest { PlotPlan = plan }));
         Assert.NotNull(PlotPlanTerminalRenderer.Render(plan));
     }
@@ -152,11 +152,9 @@ public sealed class AdvancedChartProductionTests
         ]);
         var plan = new PlotPlanResolver().Resolve(spec, data);
 
-        var json = new EChartsRenderer().Render(plan);
         var svg = new SvgChartRenderer().Render(new VisualManifest { PlotPlan = plan });
 
-        Assert.Contains("areaStyle", json);
-        Assert.Contains("\"position\":\"bottom\"", json);
+        Assert.Contains("<path", svg);
         Assert.Contains(">high</text>", svg);
         Assert.NotNull(PlotPlanTerminalRenderer.Render(plan));
     }
@@ -185,7 +183,7 @@ public sealed class AdvancedChartProductionTests
         ]);
         var plan = new PlotPlanResolver().Resolve(spec, data);
 
-        Assert.Contains("#b91c1c", new EChartsRenderer().Render(plan));
+        Assert.Contains("#b91c1c", new SvgChartRenderer().Render(plan));
         Assert.Contains("#b91c1c", new SvgChartRenderer().Render(new VisualManifest { PlotPlan = plan }));
         Assert.Contains(plan.Fallback.Items, item => item.Detail?.Contains("conditional Color") == true);
         Assert.NotNull(PlotPlanTerminalRenderer.Render(plan));

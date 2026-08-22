@@ -1,14 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Baselines;
 using ETL_SQL.Tests.Reporting.Baselines;
@@ -16,183 +8,117 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Reporting;
 
-public record ClearScriptPackageMeasurement(
-    string PackageId,
-    string TargetRuntime,
-    string Version,
-    long EstimatedRawBytes,
-    string Description);
-
-public record Phase8BaselineReport(
-    DateTime TimestampUtc,
-    string GitBranch,
-    string EngineVersion,
-    string HostPlatform,
-    string DotNetVersion,
+public sealed record Phase8RetirementResult(
+    DateTime TimestampUtc, string GitBranch, string EngineVersion, string HostPlatform, string DotNetVersion,
+    long BeforeBundleRawBytes, long AfterBundleRawBytes,
+    long BeforeBundleGzipBytes, long AfterBundleGzipBytes,
+    long BeforeBundleBrotliBytes, long AfterBundleBrotliBytes,
+    long RemovedClearScriptPackageBytes, long CurrentClearScriptPackageBytes,
+    double FirstFixtureBuildMs, double MedianFixtureBuildMs, long PeakFixtureAllocatedBytes,
+    double TotalSvgExportMs, long TotalSvgOutputBytes, long TotalManifestJsonBytes,
     IReadOnlyList<BundleAssetMeasurement> BundleAssets,
-    long TotalBundleRawBytes,
-    long TotalBundleGzipBytes,
-    long TotalBundleBrotliBytes,
-    IReadOnlyList<ClearScriptPackageMeasurement> ClearScriptPackages,
-    long TotalClearScriptRawBytes,
     IReadOnlyList<FixtureMeasurement> FixtureMeasurements,
     IReadOnlyList<VisualCapabilityEntry> CapabilityMatrix);
 
 public class Phase8BaselineTests
 {
-    private static string GetRepoRoot()
-    {
-        var current = AppContext.BaseDirectory;
-        while (!string.IsNullOrEmpty(current))
-        {
-            if (File.Exists(Path.Combine(current, "ETL-SQL.slnx")) || Directory.Exists(Path.Combine(current, ".git")))
-            {
-                return current;
-            }
-            current = Path.GetDirectoryName(current);
-        }
-        return Directory.GetCurrentDirectory();
-    }
-
     [Fact]
-    public async Task GeneratePhase8BaselineDocuments()
+    public async Task Phase8RetirementMeasurements_AreValidAndOptionallyWritten()
     {
-        var repoRoot = GetRepoRoot();
-        var baseReport = await ReportingBaselineMeasurementHarness.RunFullBaselineAsync(repoRoot);
+        var repoRoot = RepoRoot();
+        var measurement = await ReportingBaselineMeasurementHarness.RunFullBaselineAsync(repoRoot);
+        var baselinePath = Path.Combine(repoRoot, "docs", "benchmarks", "reporting-phase8-baselines.json");
+        using var baseline = JsonDocument.Parse(await File.ReadAllTextAsync(baselinePath));
+        var root = baseline.RootElement;
+        var fixtures = measurement.FixtureMeasurements;
+        var orderedBuildTimes = fixtures.Select(item => item.FixtureBuildMs).Order().ToArray();
+        var result = new Phase8RetirementResult(
+            DateTime.UtcNow,
+            Environment.GetEnvironmentVariable("ETLSQL_REPORT_BASELINE_BRANCH") ?? "phase8/standard-catalog-native-retirement",
+            typeof(ReportManifest).Assembly.GetName().Version?.ToString() ?? "unknown",
+            Environment.OSVersion.ToString(), Environment.Version.ToString(),
+            root.GetProperty("TotalBundleRawBytes").GetInt64(), measurement.TotalBundleRawBytes,
+            root.GetProperty("TotalBundleGzipBytes").GetInt64(), measurement.TotalBundleGzipBytes,
+            root.GetProperty("TotalBundleBrotliBytes").GetInt64(), measurement.TotalBundleBrotliBytes,
+            root.GetProperty("TotalClearScriptRawBytes").GetInt64(), 0,
+            fixtures.FirstOrDefault()?.FixtureBuildMs ?? 0,
+            orderedBuildTimes.Length == 0 ? 0 : orderedBuildTimes[orderedBuildTimes.Length / 2],
+            fixtures.Select(item => item.ProcessAllocatedBytes).DefaultIfEmpty().Max(),
+            fixtures.Sum(item => item.SvgExportMs), fixtures.Sum(item => item.SvgOutputBytes),
+            fixtures.Sum(item => item.ManifestJsonBytes), measurement.BundleAssets, fixtures,
+            VisualCapabilityMatrix.AllCapabilities);
 
-        var clearScriptPackages = new List<ClearScriptPackageMeasurement>
+        Assert.DoesNotContain(result.BundleAssets, asset => asset.RelativePath.Contains("echarts", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(0, result.CurrentClearScriptPackageBytes);
+        Assert.DoesNotContain(result.CapabilityMatrix, entry => entry.HasExternalChartDependency);
+        Assert.True(result.AfterBundleRawBytes < result.BeforeBundleRawBytes);
+        Assert.All(result.FixtureMeasurements, fixture => Assert.True(fixture.SvgOutputBytes > 0));
+
+        if (!string.Equals(Environment.GetEnvironmentVariable("ETLSQL_WRITE_PHASE8_RESULTS"), "1", StringComparison.Ordinal))
         {
-            new("Microsoft.ClearScript.V8", "Managed (Any CPU)", "7.4.5", 380_000, "Managed V8 bridge interface and type marshaling assembly."),
-            new("Microsoft.ClearScript.V8.Native.win-x64", "win-x64", "7.4.5", 28_400_000, "Native V8 + ClearScript C++ engine dynamic library for Windows 64-bit."),
-            new("Microsoft.ClearScript.V8.Native.win-arm64", "win-arm64", "7.4.5", 25_100_000, "Native V8 + ClearScript C++ engine dynamic library for Windows ARM64."),
-            new("Microsoft.ClearScript.V8.Native.linux-x64", "linux-x64", "7.4.5", 31_200_000, "Native V8 + ClearScript C++ engine dynamic shared library for Linux x64."),
-            new("Microsoft.ClearScript.V8.Native.linux-arm64", "linux-arm64", "7.4.5", 27_800_000, "Native V8 + ClearScript C++ engine dynamic shared library for Linux ARM64."),
-            new("Microsoft.ClearScript.V8.Native.osx-arm64", "osx-arm64", "7.4.5", 24_600_000, "Native V8 + ClearScript C++ engine dynamic shared library for macOS Apple Silicon.")
-        };
+            Assert.True(File.Exists(Path.Combine(repoRoot, "docs", "benchmarks", "reporting-phase8-results.json")));
+            Assert.True(File.Exists(Path.Combine(repoRoot, "docs", "benchmarks", "reporting-phase8-results.md")));
+            return;
+        }
 
-        var phase8Report = new Phase8BaselineReport(
-            TimestampUtc: DateTime.UtcNow,
-            GitBranch: "phase8/gemini-gantt-retirement-audit",
-            EngineVersion: typeof(ReportManifest).Assembly.GetName().Version?.ToString() ?? "0.19.0",
-            HostPlatform: Environment.OSVersion.ToString(),
-            DotNetVersion: Environment.Version.ToString(),
-            BundleAssets: baseReport.BundleAssets,
-            TotalBundleRawBytes: baseReport.TotalBundleRawBytes,
-            TotalBundleGzipBytes: baseReport.TotalBundleGzipBytes,
-            TotalBundleBrotliBytes: baseReport.TotalBundleBrotliBytes,
-            ClearScriptPackages: clearScriptPackages,
-            TotalClearScriptRawBytes: clearScriptPackages.Sum(p => p.EstimatedRawBytes),
-            FixtureMeasurements: baseReport.FixtureMeasurements,
-            CapabilityMatrix: VisualCapabilityMatrix.AllCapabilities);
-
-        var benchmarksDir = Path.Combine(repoRoot, "docs", "benchmarks");
-        Directory.CreateDirectory(benchmarksDir);
-
-        var jsonPath = Path.Combine(benchmarksDir, "reporting-phase8-baselines.json");
-        var json = JsonSerializer.Serialize(phase8Report, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            Converters = { new JsonStringEnumConverter() }
-        });
-        await File.WriteAllTextAsync(jsonPath, json);
-
-        var mdPath = Path.Combine(benchmarksDir, "reporting-phase8-baselines.md");
-        var md = FormatPhase8Markdown(phase8Report);
-        await File.WriteAllTextAsync(mdPath, md);
-
-        Assert.True(File.Exists(jsonPath));
-        Assert.True(File.Exists(mdPath));
+        var options = new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
+        var outputRoot = Path.Combine(repoRoot, "docs", "benchmarks");
+        await File.WriteAllTextAsync(Path.Combine(outputRoot, "reporting-phase8-results.json"), JsonSerializer.Serialize(result, options));
+        await File.WriteAllTextAsync(Path.Combine(outputRoot, "reporting-phase8-results.md"), Markdown(result));
     }
 
-    private static string FormatPhase8Markdown(Phase8BaselineReport report)
+    private static string Markdown(Phase8RetirementResult result)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# Phase 8 Reporting & Visuals Baseline Report");
+        sb.AppendLine("# Phase 8 Standard Catalog Migration and Runtime Retirement Results");
         sb.AppendLine();
-        sb.AppendLine($"> **Timestamp (UTC):** {report.TimestampUtc:yyyy-MM-dd HH:mm:ss} | **Branch:** `{report.GitBranch}` | **Engine Version:** `{report.EngineVersion}`");
-        sb.AppendLine($"> **Host OS:** `{report.HostPlatform}` | **Runtime:** `.NET {report.DotNetVersion}`");
+        sb.AppendLine($"> Measured {result.TimestampUtc:yyyy-MM-dd HH:mm:ss} UTC on `{result.GitBranch}` with ETL-SQL `{result.EngineVersion}` / .NET `{result.DotNetVersion}`.");
         sb.AppendLine();
-        sb.AppendLine("---");
+        sb.AppendLine("These results preserve `reporting-phase8-baselines.*` as the pre-migration record and measure the completed native runtime on the same representative fixture harness. Timings are local-machine observations, not universal performance budgets.");
         sb.AppendLine();
-        sb.AppendLine("## 1. Browser Runtime Bundle Size Baseline");
+        sb.AppendLine("## Footprint");
         sb.AppendLine();
-        sb.AppendLine("Physical payload sizes of client-side scripts, CSS styles, and library dependencies shipped in `src/ETL-SQL.ReportRuntime/Resources/Shared/`.");
+        sb.AppendLine("| Metric | Before | After | Change |");
+        sb.AppendLine("| :--- | ---: | ---: | ---: |");
+        Row(sb, "Shared browser assets (raw)", result.BeforeBundleRawBytes, result.AfterBundleRawBytes);
+        Row(sb, "Shared browser assets (gzip)", result.BeforeBundleGzipBytes, result.AfterBundleGzipBytes);
+        Row(sb, "Shared browser assets (Brotli)", result.BeforeBundleBrotliBytes, result.AfterBundleBrotliBytes);
+        Row(sb, "ClearScript multi-RID package estimate", result.RemovedClearScriptPackageBytes, result.CurrentClearScriptPackageBytes);
         sb.AppendLine();
-        sb.AppendLine("| Asset | Raw Size | Gzip Size | Brotli Size | % of Shared Bundle |");
-        sb.AppendLine("| :--- | :---: | :---: | :---: | :---: |");
-
-        var totalRaw = (double)report.TotalBundleRawBytes;
-        foreach (var b in report.BundleAssets)
-        {
-            var pct = totalRaw > 0 ? (b.RawBytes / totalRaw * 100.0) : 0.0;
-            sb.AppendLine($"| `{b.RelativePath}` | {FormatBytes(b.RawBytes)} | {FormatBytes(b.GzipBytes)} | {FormatBytes(b.BrotliBytes)} | {pct:F1}% |");
-        }
-
-        sb.AppendLine($"| **Total Shared Runtime** | **{FormatBytes(report.TotalBundleRawBytes)}** | **{FormatBytes(report.TotalBundleGzipBytes)}** | **{FormatBytes(report.TotalBundleBrotliBytes)}** | **100.0%** |");
+        sb.AppendLine("## Representative runtime and artifacts");
         sb.AppendLine();
-        sb.AppendLine("> [!IMPORTANT]");
-        var echartsAsset = report.BundleAssets.FirstOrDefault(b => b.RelativePath.Contains("echarts.min.js"));
-        if (echartsAsset != null)
-        {
-            var echartsPct = totalRaw > 0 ? (echartsAsset.RawBytes / totalRaw * 100.0) : 0.0;
-            sb.AppendLine($"> `echarts.min.js` accounts for **{FormatBytes(echartsAsset.RawBytes)} ({echartsPct:F1}%)** of the uncompressed shared browser runtime asset bundle. Removing ECharts eliminates **{FormatBytes(echartsAsset.GzipBytes)}** of gzipped transfer payload per cold browser session.");
-        }
+        sb.AppendLine($"- First fixture build (the harness cold path): **{result.FirstFixtureBuildMs:F2} ms**");
+        sb.AppendLine($"- Median fixture build: **{result.MedianFixtureBuildMs:F2} ms**");
+        sb.AppendLine($"- Maximum per-fixture managed allocation: **{Bytes(result.PeakFixtureAllocatedBytes)}**");
+        sb.AppendLine($"- Combined native SVG export time: **{result.TotalSvgExportMs:F3} ms**");
+        sb.AppendLine($"- Combined native SVG artifact size: **{Bytes(result.TotalSvgOutputBytes)}**");
+        sb.AppendLine($"- Combined representative manifest size: **{Bytes(result.TotalManifestJsonBytes)}**");
         sb.AppendLine();
-        sb.AppendLine("---");
+        sb.AppendLine("| Fixture | Type | Build | SVG export | SVG size | Manifest | Allocated |");
+        sb.AppendLine("| :--- | :---: | ---: | ---: | ---: | ---: | ---: |");
+        foreach (var fixture in result.FixtureMeasurements)
+            sb.AppendLine($"| `{fixture.FixtureName}` | `{fixture.VisualType}` | {fixture.FixtureBuildMs:F2} ms | {fixture.SvgExportMs:F3} ms | {Bytes(fixture.SvgOutputBytes)} | {Bytes(fixture.ManifestJsonBytes)} | {Bytes(fixture.ProcessAllocatedBytes)} |");
         sb.AppendLine();
-        sb.AppendLine("## 2. Server-Side SSR & Package Binary Footprint Baseline");
+        sb.AppendLine("## Capability result");
         sb.AppendLine();
-        sb.AppendLine("Size contribution of ClearScript V8 managed and native platform runtimes in published server artifacts (`src/ETL-SQL.Reporting/`):");
-        sb.AppendLine();
-        sb.AppendLine("| Package / Runtime | Target OS / Arch | Version | Package Size | Description |");
-        sb.AppendLine("| :--- | :---: | :---: | :---: | :--- |");
-
-        foreach (var p in report.ClearScriptPackages)
-        {
-            sb.AppendLine($"| `{p.PackageId}` | `{p.TargetRuntime}` | `{p.Version}` | ~{FormatBytes(p.EstimatedRawBytes)} | {p.Description} |");
-        }
-
-        sb.AppendLine($"| **Total ClearScript V8 Multi-Platform Footprint** | **All Runtimes** | `7.4.5` | **~{FormatBytes(report.TotalClearScriptRawBytes)}** | Complete multi-RID V8 runtime payload |");
-        sb.AppendLine();
-        sb.AppendLine("> [!NOTE]");
-        sb.AppendLine("> On a single published target (e.g., Linux x64 or Windows x64 container), ClearScript adds **~28 MB to ~31 MB** of native unmanaged binary weight and requires V8 process heap initialization (~35 MB working set overhead per node). Retiring ClearScript eliminates native C++ binary dependencies completely.");
-        sb.AppendLine();
-        sb.AppendLine("---");
-        sb.AppendLine();
-        sb.AppendLine("## 3. Representative Visual Fixture Execution Baselines");
-        sb.AppendLine();
-        sb.AppendLine("Measures end-to-end fixture build time (Lexer -> Parser -> Evaluator -> Manifest), export throughput (Markdown, CSV, SVG), output payload sizes, and process allocations across named representative fixtures.");
-        sb.AppendLine();
-        sb.AppendLine("| Fixture | Visual Type | Build Latency | Markdown Export | CSV Export | SVG Export | Manifest JSON | Process Memory |");
-        sb.AppendLine("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |");
-
-        foreach (var f in report.FixtureMeasurements)
-        {
-            sb.AppendLine($"| `{f.FixtureName}` | `{f.VisualType}` | {f.FixtureBuildMs:F2} ms | {f.MarkdownExportMs:F3} ms ({FormatBytes(f.MarkdownOutputBytes)}) | {f.CsvExportMs:F3} ms ({FormatBytes(f.CsvOutputBytes)}) | {f.SvgExportMs:F3} ms ({FormatBytes(f.SvgOutputBytes)}) | {FormatBytes(f.ManifestJsonBytes)} | {FormatBytes(f.ProcessAllocatedBytes)} |");
-        }
-        sb.AppendLine();
-        sb.AppendLine("---");
-        sb.AppendLine();
-        sb.AppendLine("## 4. Cold Start & Server Export Throughput Comparison");
-        sb.AppendLine();
-        sb.AppendLine("| Export Path | Cold Start Engine Init | Warm Render Latency | Memory Overhead | External Runtime Dependencies |");
-        sb.AppendLine("| :--- | :---: | :---: | :---: | :--- |");
-        sb.AppendLine("| **Native PlotPlan Pure C# SVG** | `< 1 ms` | `0.1 ms - 0.8 ms` | `< 15 KB` | **Zero** (Pure managed C# System.Text.StringBuilder) |");
-        sb.AppendLine("| **Legacy ECharts V8 SSR** | `120 ms - 280 ms` | `15 ms - 45 ms` | `~35 MB - 50 MB` | **ClearScript V8 + native C++ shared library + echarts.min.js** |");
-        sb.AppendLine();
-        sb.AppendLine("---");
-        sb.AppendLine();
-        sb.AppendLine($"## 5. Visual Capability Matrix Status (All {report.CapabilityMatrix.Count} Visual Types)");
+        sb.AppendLine("All graphical catalog entries now use the shared renderer-neutral PlotPlan path or an approved focused native SVG layout module. No capability entry requires an external chart runtime.");
         sb.AppendLine();
         sb.Append(VisualCapabilityMatrix.ToMarkdownTable());
-
         return sb.ToString();
     }
 
-    private static string FormatBytes(long bytes)
+    private static void Row(StringBuilder sb, string name, long before, long after)
     {
-        if (bytes < 1024) return $"{bytes} B";
-        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
-        return $"{bytes / (1024.0 * 1024.0):F2} MB";
+        var percent = before == 0 ? 0 : (after - before) * 100d / before;
+        sb.AppendLine($"| {name} | {Bytes(before)} | {Bytes(after)} | {percent:F1}% |");
+    }
+
+    private static string Bytes(long bytes) => bytes < 1024 ? $"{bytes} B" : bytes < 1024 * 1024 ? $"{bytes / 1024d:F1} KB" : $"{bytes / 1024d / 1024d:F2} MB";
+
+    private static string RepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Directory.Build.props"))) directory = directory.Parent;
+        return directory?.FullName ?? throw new InvalidOperationException("Repository root not found.");
     }
 }

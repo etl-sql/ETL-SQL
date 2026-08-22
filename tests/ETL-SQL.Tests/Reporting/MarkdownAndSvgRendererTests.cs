@@ -314,14 +314,13 @@ namespace ETL_SQL.Tests.Reporting
         // ── RenderVisual – chart (default branch) ─────────────────────────────
 
         [Fact]
-        public void Render_BarVisualWithChartConfig_EmitsEchartComment()
+        public void Render_BarVisual_EmbedsNativeSvgImage()
         {
             var v = V("Chart", "BAR", new[] { "Cat", "Val" },
                 new[] { new[] { "A", "10" } });
-            v.ChartConfig = "{\"series\":[]}";
             var m = M(v);
             var md = MD().Render(m);
-            Assert.Contains("<!-- ECHART:", md);
+            Assert.Contains("data:image/svg+xml", md);
         }
 
         [Fact]

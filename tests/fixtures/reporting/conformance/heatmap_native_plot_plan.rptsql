@@ -1,0 +1,12 @@
+SELECT 'Mon' AS DayName, 'AM' AS PeriodName, 12 AS Orders INTO #heatmap_data
+UNION ALL SELECT 'Mon', 'PM', 30
+UNION ALL SELECT 'Tue', 'AM', 18
+UNION ALL SELECT 'Tue', 'PM', 42;
+
+CREATE VISUAL OrderHeatMap AS HEATMAP (
+  SOURCE = #heatmap_data,
+  MAPPINGS (X = PeriodName, Y = DayName, VALUE = Orders),
+  OPTIONS (SHOW_VALUES = ON, TITLE = 'Orders by Period')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = OrderHeatMap));

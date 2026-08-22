@@ -27,15 +27,10 @@
       if (runtimeInjected) return;
       runtimeInjected = true;
       // report-runtime.js boots on load and reads window.__MANIFEST__, so it must be present first.
-      var echarts = document.createElement('script');
-      echarts.src = '/js/echarts.min.js';
-      echarts.onload = function () {
-        var rt = document.createElement('script');
-        rt.src = '/js/report-runtime.js';
-        document.body.appendChild(rt);
-      };
-      echarts.onerror = showError;
-      document.body.appendChild(echarts);
+      var rt = document.createElement('script');
+      rt.src = '/js/report-runtime.js';
+      rt.onerror = showError;
+      document.body.appendChild(rt);
     }
 
     function showError() {

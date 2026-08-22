@@ -16,34 +16,35 @@ public sealed record VisualCapabilityEntry(
     VisualType Type, string Name, string Category,
     SurfaceCapability Browser, SurfaceCapability StaticExport,
     SurfaceCapability PdfEmailExport, SurfaceCapability Terminal,
-    string Interactions, bool HasEChartsDependency, string Notes);
+    string Interactions, bool HasExternalChartDependency, string Notes);
 
 /// <summary>
-/// Source-backed inventory of the current rendering paths. TemporaryDependency identifies
-/// visuals whose browser or export path still relies on ECharts after the Phase 3 representative slice.
+/// Source-backed inventory of current browser, export, and terminal rendering paths.
 /// </summary>
 public static class VisualCapabilityMatrix
 {
     private static readonly HashSet<VisualType> NativeSvgCharts =
     [
         VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Scatter,
-        VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom
+        VisualType.Bubble, VisualType.HeatMap, VisualType.Funnel, VisualType.Gauge,
+        VisualType.BoxPlot, VisualType.Waterfall, VisualType.Candlestick,
+        VisualType.Trellis,
+        VisualType.Gantt,
+        VisualType.Radar,
+        VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom,
+        VisualType.Treemap, VisualType.Sunburst, VisualType.Sankey, VisualType.Network,
+        VisualType.Map, VisualType.Matrix
     ];
 
     private static readonly HashSet<VisualType> MigratedPlotPlanCharts =
     [
-        VisualType.Bar, VisualType.Line, VisualType.Scatter,
-        VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom
-    ];
-
-    private static readonly HashSet<VisualType> EChartsCharts =
-    [
         VisualType.Bar, VisualType.HorizontalBar, VisualType.Line, VisualType.Scatter,
-        VisualType.Pie, VisualType.Donut, VisualType.BoxPlot, VisualType.Treemap,
-        VisualType.HeatMap, VisualType.Combo, VisualType.Gauge, VisualType.Funnel,
-        VisualType.Waterfall, VisualType.Bubble, VisualType.Radar, VisualType.Candlestick,
-        VisualType.Map, VisualType.Gantt, VisualType.Sankey, VisualType.Sunburst,
-        VisualType.Network, VisualType.Trellis, VisualType.Matrix, VisualType.Custom
+        VisualType.Bubble, VisualType.HeatMap, VisualType.Funnel, VisualType.Gauge,
+        VisualType.BoxPlot, VisualType.Waterfall, VisualType.Candlestick,
+        VisualType.Trellis,
+        VisualType.Gantt,
+        VisualType.Radar,
+        VisualType.Pie, VisualType.Donut, VisualType.Combo, VisualType.Custom
     ];
 
     private static readonly HashSet<VisualType> TerminalSemanticFallbacks =
@@ -56,7 +57,7 @@ public static class VisualCapabilityMatrix
 
     public static IReadOnlyList<VisualCapabilityEntry> AllCapabilities => Entries.Value;
     public static IReadOnlySet<VisualType> NativeSvgVisualTypes => NativeSvgCharts;
-    public static IReadOnlySet<VisualType> EChartsVisualTypes => EChartsCharts;
+    public static IReadOnlySet<VisualType> ExternalChartDependencyVisualTypes { get; } = new HashSet<VisualType>();
     public static IReadOnlySet<VisualType> TerminalFallbackVisualTypes => TerminalSemanticFallbacks;
 
     public static VisualCapabilityEntry Get(VisualType type) =>
@@ -66,11 +67,11 @@ public static class VisualCapabilityMatrix
     public static string ToMarkdownTable()
     {
         var builder = new StringBuilder();
-        builder.AppendLine("| Visual Type | Category | Browser | Static Export | PDF / Email | Terminal | Interactions | ECharts | Notes |");
+        builder.AppendLine("| Visual Type | Category | Browser | Static Export | PDF / Email | Terminal | Interactions | External Chart Runtime | Notes |");
         builder.AppendLine("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: | :--- |");
         foreach (var capability in AllCapabilities)
         {
-            builder.AppendLine($"| `{capability.Name}` | {capability.Category} | {Format(capability.Browser)} | {Format(capability.StaticExport)} | {Format(capability.PdfEmailExport)} | {Format(capability.Terminal)} | {capability.Interactions} | {(capability.HasEChartsDependency ? "Yes" : "No")} | {capability.Notes} |");
+            builder.AppendLine($"| `{capability.Name}` | {capability.Category} | {Format(capability.Browser)} | {Format(capability.StaticExport)} | {Format(capability.PdfEmailExport)} | {Format(capability.Terminal)} | {capability.Interactions} | {(capability.HasExternalChartDependency ? "Yes" : "No")} | {capability.Notes} |");
         }
 
         return builder.ToString();
@@ -92,15 +93,15 @@ public static class VisualCapabilityMatrix
     [
         Chart(VisualType.Bar, "BAR", "Cartesian", "bar", "Click, drill, cross-filter, tooltip"),
         Chart(VisualType.HorizontalBar, "HBAR", "Cartesian", "horizontal bar", "Click, drill, cross-filter, tooltip"),
-        Chart(VisualType.Line, "LINE", "Cartesian", "line", "Click, zoom/pan, tooltip"),
-        Chart(VisualType.Scatter, "SCATTER", "Cartesian", "scatter", "Click, brush, zoom/pan, tooltip"),
-        Chart(VisualType.Pie, "PIE", "Circular", "pie", "Slice select, legend toggle, tooltip"),
-        Chart(VisualType.Donut, "DONUT", "Circular", "donut", "Slice select, legend toggle, tooltip"),
+        Chart(VisualType.Line, "LINE", "Cartesian", "line", "Click, cross-filter, tooltip"),
+        Chart(VisualType.Scatter, "SCATTER", "Cartesian", "scatter", "Click, cross-filter, tooltip"),
+        Chart(VisualType.Pie, "PIE", "Circular", "pie", "Slice click, cross-filter, tooltip"),
+        Chart(VisualType.Donut, "DONUT", "Circular", "donut", "Slice click, cross-filter, tooltip"),
         Chart(VisualType.BoxPlot, "BOXPLOT", "Statistical", "box plot", "Tooltip"),
-        Chart(VisualType.Treemap, "TREEMAP", "Hierarchical", "treemap", "Drill, zoom, breadcrumb"),
-        Chart(VisualType.HeatMap, "HEATMAP", "Matrix / Grid", "heat map", "Cell click, visual-map filter, tooltip"),
-        Chart(VisualType.Combo, "COMBO", "Layered", "bar/line combo", "Click, series toggle, tooltip"),
-        Chart(VisualType.Custom, "CUSTOM", "Advanced / Layered", "advanced chart", "Click, series toggle, tooltip"),
+        Chart(VisualType.Treemap, "TREEMAP", "Hierarchical", "treemap", "Rect click, drill context, tooltip"),
+        Chart(VisualType.HeatMap, "HEATMAP", "Matrix / Grid", "heat map", "Cell click, cross-filter, tooltip"),
+        Chart(VisualType.Combo, "COMBO", "Layered", "bar/line combo", "Click, cross-filter, tooltip"),
+        Chart(VisualType.Custom, "CUSTOM", "Advanced / Layered", "advanced chart", "Click, cross-filter, tooltip"),
         Control(VisualType.Table, "TABLE", "Tabular", "Tabulator / HTML table", "Markdown, CSV, and static table exporters", "Spectre table", "Sort, filter, pagination, row click", browserLevel: CapabilityLevel.ThirdPartyDependency),
         Control(VisualType.Card, "CARD", "KPI", "native DOM card", "Markdown and static card exporters", "Spectre panel", "Click, navigation"),
         Control(VisualType.Slicer, "SLICER", "Filter / Control", "native DOM control", "omitted from non-browser exports", "Spectre selection summary", "Selection, parameter binding", false),
@@ -109,11 +110,11 @@ public static class VisualCapabilityMatrix
         Chart(VisualType.Funnel, "FUNNEL", "Flow", "funnel", "Stage select, tooltip"),
         Chart(VisualType.Waterfall, "WATERFALL", "Variance", "waterfall", "Click, tooltip"),
         Control(VisualType.Image, "IMAGE", "Media", "native img element", "HTML image reference", "text placeholder", "Click link"),
-        Chart(VisualType.Bubble, "BUBBLE", "Cartesian", "sized scatter", "Click, zoom/pan, tooltip"),
-        Chart(VisualType.Radar, "RADAR", "Polar", "radar", "Hover, legend toggle"),
-        Chart(VisualType.Candlestick, "CANDLESTICK", "Financial", "candlestick", "Zoom/pan, tooltip"),
-        Chart(VisualType.Map, "MAP", "Geographic", "map / GeoJSON", "Region click, zoom/pan, tooltip"),
-        Chart(VisualType.Gantt, "GANTT", "Timeline", "custom timeline", "Hover, zoom"),
+        Chart(VisualType.Bubble, "BUBBLE", "Cartesian", "sized scatter", "Click, cross-filter, tooltip"),
+        Chart(VisualType.Radar, "RADAR", "Polar", "radar", "Click, tooltip"),
+        Chart(VisualType.Candlestick, "CANDLESTICK", "Financial", "candlestick", "Click, tooltip"),
+        Chart(VisualType.Map, "MAP", "Geographic", "map / GeoJSON", "Region/point click, cross-filter, tooltip"),
+        Chart(VisualType.Gantt, "GANTT", "Timeline", "timeline", "Task click, tooltip"),
         Control(VisualType.DatePicker, "DATEPICKER", "Filter / Control", "native date control", "omitted from non-browser exports", "Spectre selection summary", "Date selection, parameter binding", false),
         Control(VisualType.RelDatePicker, "RELDATEPICKER", "Filter / Control", "native relative-date control", "omitted from non-browser exports", "Spectre selection summary", "Preset selection, parameter binding", false),
         Control(VisualType.Slider, "SLIDER", "Filter / Control", "native range control", "omitted from non-browser exports", "Spectre selection summary", "Range input, parameter binding", false),
@@ -122,18 +123,18 @@ public static class VisualCapabilityMatrix
         Control(VisualType.Checkbox, "CHECKBOX", "Filter / Control", "native checkbox", "omitted from non-browser exports", "Spectre selection summary", "Toggle, parameter binding", false),
         Control(VisualType.Textbox, "TEXTBOX", "Filter / Control", "native text input", "omitted from non-browser exports", "Spectre selection summary", "Text input, parameter binding", false),
         Control(VisualType.Numberbox, "NUMBERBOX", "Filter / Control", "native number input", "omitted from non-browser exports", "Spectre selection summary", "Numeric input, parameter binding", false),
-        Chart(VisualType.Sankey, "SANKEY", "Flow / Network", "sankey", "Node/edge highlight, tooltip"),
-        Chart(VisualType.Sunburst, "SUNBURST", "Hierarchical", "sunburst", "Drill, tooltip"),
-        Chart(VisualType.Network, "NETWORK", "Graph", "force graph", "Drag, zoom/pan, click"),
-        Chart(VisualType.Trellis, "TRELLIS", "Small Multiples", "trellis", "Synchronized tooltip"),
+        Chart(VisualType.Sankey, "SANKEY", "Flow / Network", "sankey", "Link click, tooltip"),
+        Chart(VisualType.Sunburst, "SUNBURST", "Hierarchical", "sunburst", "Arc click, drill context, tooltip"),
+        Chart(VisualType.Network, "NETWORK", "Graph", "network", "Link click, tooltip"),
+        Chart(VisualType.Trellis, "TRELLIS", "Small Multiples", "trellis", "Mark click, tooltip"),
         new(
             VisualType.Matrix, "MATRIX", "Pivot / Matrix",
-            new(CapabilityLevel.Native, "native DOM matrix"),
-            new(CapabilityLevel.TemporaryDependency, "ECharts SSR matrix", "tabular exporters are also available"),
-            new(CapabilityLevel.TemporaryDependency, "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown"),
+            new(CapabilityLevel.Native, "native SVG matrix"),
+            new(CapabilityLevel.Native, "native SVG matrix and tabular exporters"),
+            new(CapabilityLevel.Native, "native SVG to PDF; email attaches PDF/CSV/Markdown"),
             new(CapabilityLevel.Native, "Spectre matrix"),
-            "Expand/collapse, sorting, aggregation", true,
-            "Browser runtime dispatches MATRIX to renderMatrix; the static ECharts renderer still supports it")
+            "Row click", false,
+            "Native SVG matrix with semantic table fallbacks")
     ];
 
     private static VisualCapabilityEntry Chart(VisualType type, string name, string category, string chartKind, string interactions)
@@ -143,23 +144,16 @@ public static class VisualCapabilityMatrix
         var terminalFallback = TerminalSemanticFallbacks.Contains(type);
         return new(
             type, name, category,
-            new(CapabilityLevel.TemporaryDependency,
-                migrated ? $"ECharts {chartKind} generated transiently from PlotPlan" : $"ECharts {chartKind}"),
-            nativeSvg
-                ? new(CapabilityLevel.Native, migrated ? "PlotPlan native SVG" : "SvgChartRenderer")
-                : new(CapabilityLevel.TemporaryDependency, "ECharts SSR SVG", "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"),
-            migrated
-                ? new(CapabilityLevel.Native, "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown")
-                : new(CapabilityLevel.TemporaryDependency, "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown"),
+            new(CapabilityLevel.Native, migrated ? $"PlotPlan native SVG {chartKind}" : $"specialized native SVG {chartKind}"),
+            new(CapabilityLevel.Native, migrated ? "PlotPlan native SVG" : "specialized native SVG renderer"),
+            new(CapabilityLevel.Native, "native SVG to static PDF; email attaches PDF/Markdown"),
             migrated
                 ? new(CapabilityLevel.Native, "PlotPlan semantic terminal renderer")
                 : terminalFallback
                 ? new(CapabilityLevel.SemanticFallback, TerminalFallbackDescription(type))
                 : new(CapabilityLevel.Native, "Spectre terminal renderer"),
-            interactions, true,
-            migrated
-                ? "Phase 3 semantic path; browser retains ECharts only as a transient backend"
-                : nativeSvg ? "Native static SVG exists; browser rendering still uses ECharts" : "PlotPlan migration target");
+            interactions, false,
+            migrated ? "Shared renderer-neutral PlotPlan path" : "Approved focused native layout module");
     }
 
     private static string TerminalFallbackDescription(VisualType type) => type switch
@@ -184,5 +178,5 @@ public static class VisualCapabilityMatrix
                 exported ? "static PDF and email attachment formats" : "interactive control is not exported"),
             new(TerminalSemanticFallbacks.Contains(type) ? CapabilityLevel.SemanticFallback : CapabilityLevel.Native, terminal),
             interactions, false,
-            exported ? "Non-ECharts rendering path" : "Interactive-only visual; terminal shows current selection state");
+            exported ? "Native rendering path" : "Interactive-only visual; terminal shows current selection state");
 }
