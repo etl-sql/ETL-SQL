@@ -1,0 +1,1247 @@
+{
+  "TimestampUtc": "2026-08-22T10:39:04.4236034Z",
+  "GitBranch": "phase8/gemini-gantt-retirement-audit",
+  "EngineVersion": "0.18.0.0",
+  "HostPlatform": "Microsoft Windows NT 10.0.26200.0",
+  "DotNetVersion": "10.0.11",
+  "BundleAssets": [
+    {
+      "RelativePath": "arrow.min.js",
+      "RawBytes": 166184,
+      "GzipBytes": 45897,
+      "BrotliBytes": 45496
+    },
+    {
+      "RelativePath": "designer/codemirror/codemirror-bundle.min.js",
+      "RawBytes": 380406,
+      "GzipBytes": 124342,
+      "BrotliBytes": 125209
+    },
+    {
+      "RelativePath": "designer/designer.css",
+      "RawBytes": 77163,
+      "GzipBytes": 12731,
+      "BrotliBytes": 13779
+    },
+    {
+      "RelativePath": "designer/designer.js",
+      "RawBytes": 284506,
+      "GzipBytes": 63097,
+      "BrotliBytes": 63421
+    },
+    {
+      "RelativePath": "echarts.min.js",
+      "RawBytes": 1117939,
+      "GzipBytes": 367149,
+      "BrotliBytes": 360681
+    },
+    {
+      "RelativePath": "feedback.js",
+      "RawBytes": 11556,
+      "GzipBytes": 3400,
+      "BrotliBytes": 3352
+    },
+    {
+      "RelativePath": "report-runtime.css",
+      "RawBytes": 40573,
+      "GzipBytes": 8606,
+      "BrotliBytes": 9223
+    },
+    {
+      "RelativePath": "report-runtime.js",
+      "RawBytes": 228448,
+      "GzipBytes": 48484,
+      "BrotliBytes": 49229
+    },
+    {
+      "RelativePath": "tabulator.min.css",
+      "RawBytes": 28481,
+      "GzipBytes": 3983,
+      "BrotliBytes": 4216
+    },
+    {
+      "RelativePath": "tabulator.min.js",
+      "RawBytes": 443224,
+      "GzipBytes": 101482,
+      "BrotliBytes": 101758
+    }
+  ],
+  "TotalBundleRawBytes": 2778480,
+  "TotalBundleGzipBytes": 779171,
+  "TotalBundleBrotliBytes": 776364,
+  "ClearScriptPackages": [
+    {
+      "PackageId": "Microsoft.ClearScript.V8",
+      "TargetRuntime": "Managed (Any CPU)",
+      "Version": "7.4.5",
+      "EstimatedRawBytes": 380000,
+      "Description": "Managed V8 bridge interface and type marshaling assembly."
+    },
+    {
+      "PackageId": "Microsoft.ClearScript.V8.Native.win-x64",
+      "TargetRuntime": "win-x64",
+      "Version": "7.4.5",
+      "EstimatedRawBytes": 28400000,
+      "Description": "Native V8 \u002B ClearScript C\u002B\u002B engine dynamic library for Windows 64-bit."
+    },
+    {
+      "PackageId": "Microsoft.ClearScript.V8.Native.win-arm64",
+      "TargetRuntime": "win-arm64",
+      "Version": "7.4.5",
+      "EstimatedRawBytes": 25100000,
+      "Description": "Native V8 \u002B ClearScript C\u002B\u002B engine dynamic library for Windows ARM64."
+    },
+    {
+      "PackageId": "Microsoft.ClearScript.V8.Native.linux-x64",
+      "TargetRuntime": "linux-x64",
+      "Version": "7.4.5",
+      "EstimatedRawBytes": 31200000,
+      "Description": "Native V8 \u002B ClearScript C\u002B\u002B engine dynamic shared library for Linux x64."
+    },
+    {
+      "PackageId": "Microsoft.ClearScript.V8.Native.linux-arm64",
+      "TargetRuntime": "linux-arm64",
+      "Version": "7.4.5",
+      "EstimatedRawBytes": 27800000,
+      "Description": "Native V8 \u002B ClearScript C\u002B\u002B engine dynamic shared library for Linux ARM64."
+    },
+    {
+      "PackageId": "Microsoft.ClearScript.V8.Native.osx-arm64",
+      "TargetRuntime": "osx-arm64",
+      "Version": "7.4.5",
+      "EstimatedRawBytes": 24600000,
+      "Description": "Native V8 \u002B ClearScript C\u002B\u002B engine dynamic shared library for macOS Apple Silicon."
+    }
+  ],
+  "TotalClearScriptRawBytes": 137480000,
+  "FixtureMeasurements": [
+    {
+      "FixtureName": "bar_category_revenue",
+      "VisualType": "BAR",
+      "FixtureBuildMs": 221.27,
+      "MarkdownExportMs": 6.817,
+      "MarkdownOutputBytes": 5878,
+      "CsvExportMs": 0.42,
+      "CsvOutputBytes": 0,
+      "SvgExportMs": 0.116,
+      "SvgOutputBytes": 3184,
+      "ManifestJsonBytes": 16934,
+      "ProcessAllocatedBytes": 7349120,
+      "ClientPaintLatency": "N/A (unsupported: requires browser CDP instrumentation)",
+      "ClientHeapFootprint": "N/A (unsupported: requires browser CDP instrumentation)"
+    },
+    {
+      "FixtureName": "bar_with_goal_rule",
+      "VisualType": "BAR",
+      "FixtureBuildMs": 42.39,
+      "MarkdownExportMs": 1.288,
+      "MarkdownOutputBytes": 7379,
+      "CsvExportMs": 0.003,
+      "CsvOutputBytes": 0,
+      "SvgExportMs": 0.085,
+      "SvgOutputBytes": 3826,
+      "ManifestJsonBytes": 28831,
+      "ProcessAllocatedBytes": 6822552,
+      "ClientPaintLatency": "N/A (unsupported: requires browser CDP instrumentation)",
+      "ClientHeapFootprint": "N/A (unsupported: requires browser CDP instrumentation)"
+    },
+    {
+      "FixtureName": "combo_revenue_margin",
+      "VisualType": "COMBO",
+      "FixtureBuildMs": 6.1,
+      "MarkdownExportMs": 0.188,
+      "MarkdownOutputBytes": 7149,
+      "CsvExportMs": 0.002,
+      "CsvOutputBytes": 0,
+      "SvgExportMs": 0.058,
+      "SvgOutputBytes": 3899,
+      "ManifestJsonBytes": 20537,
+      "ProcessAllocatedBytes": 6575056,
+      "ClientPaintLatency": "N/A (unsupported: requires browser CDP instrumentation)",
+      "ClientHeapFootprint": "N/A (unsupported: requires browser CDP instrumentation)"
+    },
+    {
+      "FixtureName": "donut_market_share",
+      "VisualType": "DONUT",
+      "FixtureBuildMs": 8.27,
+      "MarkdownExportMs": 1.321,
+      "MarkdownOutputBytes": 3279,
+      "CsvExportMs": 0.003,
+      "CsvOutputBytes": 0,
+      "SvgExportMs": 0.047,
+      "SvgOutputBytes": 1223,
+      "ManifestJsonBytes": 15681,
+      "ProcessAllocatedBytes": 6638224,
+      "ClientPaintLatency": "N/A (unsupported: requires browser CDP instrumentation)",
+      "ClientHeapFootprint": "N/A (unsupported: requires browser CDP instrumentation)"
+    },
+    {
+      "FixtureName": "line_timeseries_trend",
+      "VisualType": "LINE",
+      "FixtureBuildMs": 7.04,
+      "MarkdownExportMs": 0.106,
+      "MarkdownOutputBytes": 6260,
+      "CsvExportMs": 0.001,
+      "CsvOutputBytes": 0,
+      "SvgExportMs": 0.046,
+      "SvgOutputBytes": 3252,
+      "ManifestJsonBytes": 23057,
+      "ProcessAllocatedBytes": 6712888,
+      "ClientPaintLatency": "N/A (unsupported: requires browser CDP instrumentation)",
+      "ClientHeapFootprint": "N/A (unsupported: requires browser CDP instrumentation)"
+    },
+    {
+      "FixtureName": "scatter_correlation",
+      "VisualType": "SCATTER",
+      "FixtureBuildMs": 5.71,
+      "MarkdownExportMs": 0.822,
+      "MarkdownOutputBytes": 6759,
+      "CsvExportMs": 0.002,
+      "CsvOutputBytes": 0,
+      "SvgExportMs": 0.076,
+      "SvgOutputBytes": 3235,
+      "ManifestJsonBytes": 29076,
+      "ProcessAllocatedBytes": 6740512,
+      "ClientPaintLatency": "N/A (unsupported: requires browser CDP instrumentation)",
+      "ClientHeapFootprint": "N/A (unsupported: requires browser CDP instrumentation)"
+    }
+  ],
+  "CapabilityMatrix": [
+    {
+      "Type": "Bar",
+      "Name": "BAR",
+      "Category": "Cartesian",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts bar generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Click, drill, cross-filter, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "HorizontalBar",
+      "Name": "HBAR",
+      "Category": "Cartesian",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts horizontal bar generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Click, drill, cross-filter, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Line",
+      "Name": "LINE",
+      "Category": "Cartesian",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts line generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Click, zoom/pan, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Scatter",
+      "Name": "SCATTER",
+      "Category": "Cartesian",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts scatter generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Click, brush, zoom/pan, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Pie",
+      "Name": "PIE",
+      "Category": "Circular",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts pie generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Slice select, legend toggle, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Donut",
+      "Name": "DONUT",
+      "Category": "Circular",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts donut generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Slice select, legend toggle, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "BoxPlot",
+      "Name": "BOXPLOT",
+      "Category": "Statistical",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts box plot",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Treemap",
+      "Name": "TREEMAP",
+      "Category": "Hierarchical",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts treemap",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "SemanticFallback",
+        "Implementation": "ordered proportional hierarchy",
+        "Notes": ""
+      },
+      "Interactions": "Drill, zoom, breadcrumb",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "HeatMap",
+      "Name": "HEATMAP",
+      "Category": "Matrix / Grid",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts heat map generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Cell click, visual-map filter, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Combo",
+      "Name": "COMBO",
+      "Category": "Layered",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts bar/line combo generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Click, series toggle, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Custom",
+      "Name": "CUSTOM",
+      "Category": "Advanced / Layered",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts advanced chart generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Click, series toggle, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Table",
+      "Name": "TABLE",
+      "Category": "Tabular",
+      "Browser": {
+        "Level": "ThirdPartyDependency",
+        "Implementation": "Tabulator / HTML table",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "Markdown, CSV, and static table exporters",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "static PDF and email attachment formats",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre table",
+        "Notes": ""
+      },
+      "Interactions": "Sort, filter, pagination, row click",
+      "HasEChartsDependency": false,
+      "Notes": "Non-ECharts rendering path"
+    },
+    {
+      "Type": "Card",
+      "Name": "CARD",
+      "Category": "KPI",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native DOM card",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "Markdown and static card exporters",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "static PDF and email attachment formats",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre panel",
+        "Notes": ""
+      },
+      "Interactions": "Click, navigation",
+      "HasEChartsDependency": false,
+      "Notes": "Non-ECharts rendering path"
+    },
+    {
+      "Type": "Slicer",
+      "Name": "SLICER",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native DOM control",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Selection, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "Text",
+      "Name": "TEXT",
+      "Category": "Narrative",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native DOM / Markdown",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "Markdown and HTML",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "static PDF and email attachment formats",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "plain text / Spectre",
+        "Notes": ""
+      },
+      "Interactions": "None",
+      "HasEChartsDependency": false,
+      "Notes": "Non-ECharts rendering path"
+    },
+    {
+      "Type": "Gauge",
+      "Name": "GAUGE",
+      "Category": "Indicator",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts gauge generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Funnel",
+      "Name": "FUNNEL",
+      "Category": "Flow",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts funnel generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Stage select, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Waterfall",
+      "Name": "WATERFALL",
+      "Category": "Variance",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts waterfall",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Click, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Image",
+      "Name": "IMAGE",
+      "Category": "Media",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native img element",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "HTML image reference",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "static PDF and email attachment formats",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "SemanticFallback",
+        "Implementation": "text placeholder",
+        "Notes": ""
+      },
+      "Interactions": "Click link",
+      "HasEChartsDependency": false,
+      "Notes": "Non-ECharts rendering path"
+    },
+    {
+      "Type": "Bubble",
+      "Name": "BUBBLE",
+      "Category": "Cartesian",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts sized scatter generated transiently from PlotPlan",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan native SVG",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Native",
+        "Implementation": "PlotPlan SVG to static PDF; email attaches V8-free PDF/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "PlotPlan semantic terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Click, zoom/pan, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "Phase 3 semantic path; browser retains ECharts only as a transient backend"
+    },
+    {
+      "Type": "Radar",
+      "Name": "RADAR",
+      "Category": "Polar",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts radar",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "SemanticFallback",
+        "Implementation": "ordered dimension/value table",
+        "Notes": ""
+      },
+      "Interactions": "Hover, legend toggle",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Candlestick",
+      "Name": "CANDLESTICK",
+      "Category": "Financial",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts candlestick",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Zoom/pan, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Map",
+      "Name": "MAP",
+      "Category": "Geographic",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts map / GeoJSON",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "SemanticFallback",
+        "Implementation": "ranked regional breakdown",
+        "Notes": ""
+      },
+      "Interactions": "Region click, zoom/pan, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Gantt",
+      "Name": "GANTT",
+      "Category": "Timeline",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts custom timeline",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Hover, zoom",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "DatePicker",
+      "Name": "DATEPICKER",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native date control",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Date selection, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "RelDatePicker",
+      "Name": "RELDATEPICKER",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native relative-date control",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Preset selection, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "Slider",
+      "Name": "SLIDER",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native range control",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Range input, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "MultiSelect",
+      "Name": "MULTISELECT",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native multi-select control",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Selection, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "Search",
+      "Name": "SEARCH",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native search control",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Text input, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "Checkbox",
+      "Name": "CHECKBOX",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native checkbox",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Toggle, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "Textbox",
+      "Name": "TEXTBOX",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native text input",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Text input, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "Numberbox",
+      "Name": "NUMBERBOX",
+      "Category": "Filter / Control",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native number input",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "Unsupported",
+        "Implementation": "omitted from non-browser exports",
+        "Notes": ""
+      },
+      "PdfEmailExport": {
+        "Level": "Unsupported",
+        "Implementation": "interactive control is not exported",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre selection summary",
+        "Notes": ""
+      },
+      "Interactions": "Numeric input, parameter binding",
+      "HasEChartsDependency": false,
+      "Notes": "Interactive-only visual; terminal shows current selection state"
+    },
+    {
+      "Type": "Sankey",
+      "Name": "SANKEY",
+      "Category": "Flow / Network",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts sankey",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "SemanticFallback",
+        "Implementation": "transition and source drop-off table",
+        "Notes": ""
+      },
+      "Interactions": "Node/edge highlight, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Sunburst",
+      "Name": "SUNBURST",
+      "Category": "Hierarchical",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts sunburst",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "SemanticFallback",
+        "Implementation": "ordered proportional hierarchy",
+        "Notes": ""
+      },
+      "Interactions": "Drill, tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Network",
+      "Name": "NETWORK",
+      "Category": "Graph",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts force graph",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "SemanticFallback",
+        "Implementation": "node-degree and connection summary",
+        "Notes": ""
+      },
+      "Interactions": "Drag, zoom/pan, click",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Trellis",
+      "Name": "TRELLIS",
+      "Category": "Small Multiples",
+      "Browser": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts trellis",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR SVG",
+        "Notes": "SvgChartRenderer emits a semantic placeholder if SSR is unavailable"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre terminal renderer",
+        "Notes": ""
+      },
+      "Interactions": "Synchronized tooltip",
+      "HasEChartsDependency": true,
+      "Notes": "PlotPlan migration target"
+    },
+    {
+      "Type": "Matrix",
+      "Name": "MATRIX",
+      "Category": "Pivot / Matrix",
+      "Browser": {
+        "Level": "Native",
+        "Implementation": "native DOM matrix",
+        "Notes": ""
+      },
+      "StaticExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "ECharts SSR matrix",
+        "Notes": "tabular exporters are also available"
+      },
+      "PdfEmailExport": {
+        "Level": "TemporaryDependency",
+        "Implementation": "static PDF uses ECharts SSR; email attaches PDF/CSV/Markdown",
+        "Notes": ""
+      },
+      "Terminal": {
+        "Level": "Native",
+        "Implementation": "Spectre matrix",
+        "Notes": ""
+      },
+      "Interactions": "Expand/collapse, sorting, aggregation",
+      "HasEChartsDependency": true,
+      "Notes": "Browser runtime dispatches MATRIX to renderMatrix; the static ECharts renderer still supports it"
+    }
+  ]
+}
