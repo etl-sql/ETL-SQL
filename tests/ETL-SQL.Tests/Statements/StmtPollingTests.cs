@@ -31,17 +31,17 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestWaitFor_PollingCondition()
         {
             var eval = await GetEvaluator();
+            eval.DeclareVariable("@ready", 0);
 
-            // Background task to update a variable after 1.5 seconds.
+            // Background task to update a variable after 300ms.
             // Note: This relies on Evaluator variable thread-safety (resolved in TQ-4).
             _ = Task.Run(async () =>
             {
-                await Task.Delay(1500);
+                await Task.Delay(300);
                 eval.SetVariable("@ready", 1);
             });
 
             var sql = @"
-                DECLARE @ready INT = 0;
                 WAIT UNTIL @ready = 1;
                 SELECT 'Done' AS Status;
             ";
@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Statements
             await eval.Evaluate(Parse(sql));
             var duration = DateTime.Now - startTime;
 
-            Assert.True(duration >= TimeSpan.FromSeconds(1.5), $"Wait duration was too short: {duration}");
+            Assert.True(duration >= TimeSpan.FromMilliseconds(200), $"Wait duration was too short: {duration}");
             Assert.Equal("Done", eval.LastResult.Rows[0]["Status"]);
         }
 
@@ -58,16 +58,16 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestWaitUntil_Syntax()
         {
             var eval = await GetEvaluator();
+            eval.DeclareVariable("@signal", 0);
 
-            // Background task to set a variable after 1 second
+            // Background task to set a variable after 300ms
             _ = Task.Run(async () =>
             {
-                await Task.Delay(1000);
+                await Task.Delay(300);
                 eval.SetVariable("@signal", 1);
             });
 
             var sql = @"
-                DECLARE @signal INT = 0;
                 WAIT UNTIL (SELECT COUNT(*) FROM DIRECTORY('../../../../Docs') WHERE 1=0) = 0; -- Immediate true
                 WAIT UNTIL @signal = 1;
                 SELECT 'Signal Received' AS msg;

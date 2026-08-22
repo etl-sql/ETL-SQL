@@ -1,0 +1,38 @@
+{
+  "editor": {
+    "gutter": "#4c566a",
+    "selection": "black on #88c0d0",
+    "secondaryCursor": "reverse"
+  },
+  "syntax": {
+    "string": "#a3be8c",
+    "bracket": "#88c0d0",
+    "variable": "#d8dee9",
+    "docker": "#bf616a",
+    "dmlKeyword": "bold #81a1c1",
+    "ddlKeyword": "bold #b48ead",
+    "controlFlow": "bold #81a1c1",
+    "joinKeyword": "bold #8fbcbb",
+    "operatorKeyword": "bold #81a1c1",
+    "otherKeyword": "#81a1c1",
+    "dataType": "#88c0d0",
+    "function": "#88c0d0",
+    "comment": "#4c566a",
+    "commentTag": "#b48ead",
+    "commentValue": "#a3be8c",
+    "alias": "#b48ead",
+    "table": "#88c0d0"
+  },
+  "ui": {
+    "statusBackground": "white on #3b4252",
+    "helpBackground": "white on #2e3440",
+    "editorFocusedBorder": "#88c0d0",
+    "editorUnfocusedBorder": "#434c5e",
+    "panelFocusedBorder": "#81a1c1",
+    "panelUnfocusedBorder": "#434c5e",
+    "compareFocusedBorder": "#b48ead",
+    "compareUnfocusedBorder": "#434c5e",
+    "resultsFocusedBorder": "#a3be8c",
+    "resultsUnfocusedBorder": "#8fbcbb"
+  }
+}

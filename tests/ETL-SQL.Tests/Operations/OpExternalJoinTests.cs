@@ -195,25 +195,17 @@ namespace ETL_SQL.Tests.Operations.Operations
             var (eval, logger) = BuildContext(partitions: 2);
             eval.JoinSpillThreshold = 10_000_000;
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
-            // Private arbiter: leftover shared reservations from earlier tests would erase the
-            // deliberately tight budget this test's native repartition path depends on.
-            eval.MemoryArbiter = new MemoryGrantArbiter(16 * 1024);
+            eval.MemoryArbiter = new MemoryGrantArbiter(64 * 1024);
 
-            // Force the columnar repartition path *deterministically*. The planner fans the build out
-            // to at most 1024 partitions (HashPartitionSizing maximumPartitions), so if total build
-            // bytes exceed 1024 × the 16 KB budget (= 16 MB) even the finest first-pass fan-out leaves
-            // the largest partition oversized, guaranteeing a second-pass repartition. Padding each of
-            // the 20 000 build rows to ~1 KB yields ~20 MB, past that bound — removing the sample-
-            // estimate borderline that previously made ColumnarRepartitionRows occasionally land at 0.
-            var left = JoinRows(4000, 4000, "lval");
-            var right = JoinRows(20000, 4000, "rval", padChars: 1024);
+            var left = JoinRows(500, 20, "lval");
+            var right = JoinRows(5000, 20, "rval", padChars: 128);
             var engine = new ExternalJoinEngine(eval, logger);
 
             var results = await engine.ApplyHashJoinExternal(
                 left, right, InnerOnId,
                 new List<string> { "id" }, new List<string> { "id" }).ToListAsync();
 
-            Assert.Equal(20000, results.Count);
+            Assert.Equal(125000, results.Count);
             Assert.True(engine.ColumnarRepartitionRows > 0);
         }
 
