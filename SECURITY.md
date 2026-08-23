@@ -327,6 +327,11 @@ ETL-SQL utilizes the Apache Arrow columnar format to govern large payloads and o
 - **On-Demand Lazy Loading**: Visuals with large row counts (exceeding 10,000 rows) are serialized as binary Apache Arrow IPC streams inside the encrypted snapshot. The web dashboard loads only a lightweight manifest; row segments are lazy-loaded on-demand, minimizing server and client memory overhead and reducing the risk of bulk memory extraction.
 - **Engine Temp Table Spilling**: To protect the host from memory exhaustion, active `#temp` tables that exceed memory ceilings are automatically spilled to the host filesystem as columnar Apache Arrow IPC packages, subject to path protection rules.
 
+### 8.4 Native Vector Rendering & Zero-Scripting Execution
+Report-SQL rendering employs a 100% managed C# Grammar of Graphics pipeline (`PlotPlan` $\to$ SVG vector output):
+- **Elimination of Embedded Scripting Engines**: Unlike visualization platforms that run embedded JavaScript engines (V8 / ClearScript) or headless browsers to render server-side charts, ETL-SQL compiles and renders all chart layouts directly in managed .NET code. This eliminates the remote code execution (RCE), prototype pollution, memory corruption, and SSRF risks associated with embedded browser runtimes.
+- **Sanitized SVG Generation**: All generated SVG outputs strictly emit clean vector geometry (`<svg>`, `<path>`, `<rect>`, `<text>`, `<line>`) with no inline executable `<script>` elements, unvetted external resource references, or HTML event handlers (`onload`, `onclick`).
+
 Operational cautions:
 
 - Treat `.rptsql` files as executable scripts, not passive dashboard definitions.
@@ -445,5 +450,5 @@ Where possible, include a minimal reproduction, the affected version, and an imp
 ---
 
 **Policy Version**: 0.18.0
-**Last Review Date**: 2026-07-18
+**Last Review Date**: 2026-08-23
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.
