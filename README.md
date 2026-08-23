@@ -57,6 +57,7 @@ ELT is attractive because it centralizes execution in a warehouse, but it often 
 | Built-in lineage and tags | Attach metadata where transformations happen, then query, diagram, or export lineage instead of reconstructing it after the fact. |
 | Secure tool extensibility | Register and run external Python scripts or hardened OCI containers (`CREATE TOOL` / `EXECUTE TOOL`) with `EXPECT SCHEMA` validation and network isolation. |
 | Report-SQL | Define data preparation and interactive dashboards together in a `.rptsql` file. |
+| Native Grammar of Graphics | 100% managed C# visualization engine (`PlotPlan` -> native SVG / ANSI terminal) with layered marks, named scales, coordinates, and facets — zero external JavaScript charting runtimes (ECharts retired), zero ClearScript/V8 binaries, and zero browser automation dependencies. |
 | Resumable sessions | Use labels, `--session`, and `--resume` to continue checkpointed workflows after a failure. |
 | Fuzzy matching | Use `FUZZY JOIN`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and related engine functions. |
 | Relative dates | Express engine-side date parameters such as `D-7` and `M-1` without embedding a database-specific date function. |
@@ -280,9 +281,11 @@ etl-sql-report build sales_dashboard.rptsql --format json
 ### Reporting & Portal
 
 - Build live dashboards from `.rptsql` scripts using `CREATE VISUAL`, `CREATE PAGE`, `CREATE CONTAINER`, `CREATE NAVIGATION`, and shared datasets.
-- Render charts, tables, cards, text, filters, inputs, maps, Sankey, Sunburst, Network, Matrix, Gantt, and other visual types.
-- Use slicers, multi-select filters, date pickers, sliders, search boxes, drill-downs, cross-highlighting, saved views, alerts, subscriptions, and portal administration commands.
-- Export report outputs as Markdown, JSON manifests, SVG/PDF assets, and paginated reports.
+- Native Grammar of Graphics engine (`PlotPlan`): composite visual authoring via `CREATE VISUAL ... AS CUSTOM` with mark layers (`RECT`, `LINE`, `POINT`, `AREA`, `BAR`, `RULE`, `TEXT`), named scales, Cartesian/polar/transposed coordinate systems, and facets.
+- 100% managed rendering pipeline: renders directly to native SVG vector output and ANSI/Unicode terminal matrix grids with zero external JavaScript charting runtimes (ECharts retired) and zero headless browser requirements.
+- Render charts, tables, cards, text, filters, inputs, choropleth maps, Sankey, Sunburst, Network, Matrix, Gantt, and other visual types.
+- Use slicers, cascading filters, multi-select dropdowns, date pickers, sliders, search boxes, drill-downs, saved views, alerts, subscriptions, and portal administration commands.
+- Export report outputs as Markdown, JSON manifests, native SVG vector graphics, PDF documents, and multi-page paginated print reports.
 
 ### Developer Experience
 
@@ -318,17 +321,20 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | :--- | :--- |
 | [ETL-SQL Goals](GOALS.md) | Core product vision, language goals, and engineering principles. |
 | [Documentation Home](docs/README.md) | Main documentation map for guides, reference, cookbooks, architecture, and releases. |
+| [5-Minute Quickstart](docs/guides/onboarding/QUICKSTART.md) | Fast terminal setup and zero-dependency `MOCKDB` starter pipeline. |
 | [Getting Started](docs/guides/onboarding/getting-started.md) | Pipeline mental model, connections, variables, control flow, and debugging. |
-| [ETL Notebook Guide](docs/guides/tooling/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense. |
-| [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) | `.rptsql` syntax, visuals, filters, dashboards, drill-downs, and report hosting. |
+| [Report-SQL & Dashboards](docs/guides/reporting/README.md) | Focused guides: authoring dashboards, parameters, cascading slicers, RLS, and themes. |
+| [Data Quality & Governance](docs/guides/data-quality/README.md) | Value rules (`@expect`), quarantine remediation, cross-table checks, and impact analysis. |
+| [ETL Pipelines & Orchestration](docs/guides/pipelines/README.md) | Staged vs. streaming ingestion, modular scripts, parallel runs, DAGs, and unit testing. |
 | [Pattern Cookbook](docs/cookbooks/etl/README.md) | Self-contained ETL recipes for common production workflows. |
-| [Sample Guide](docs/guides/patterns/sample-guide.md) | Inventory of sample scripts in the `samples/` folder. |
+| [Sample Guide](docs/guides/patterns/sample-guide.md) | Inventory of 160+ sample scripts in the `samples/` folder. |
 
 ### Reference
 
 | Document | Description |
 | :--- | :--- |
 | [Syntax Index](docs/syntax-index.md) | Searchable map of commands, functions, options, visual types, and syntax forms. |
+| [Task Index](docs/task-index.md) | Goal-oriented "How do I..." locator for common pipeline, quality, and reporting tasks. |
 | [Statement Reference](docs/reference/statements/README.md) | Focused pages for DDL, DML, query syntax, control flow, and session commands. |
 | [Standard Library](docs/reference/functions/README.md) | Built-in functions: string, date, math, regex, window, JSON/XML, and more. |
 | [Data Connectors](docs/reference/connectors/README.md) | Connector types, options, authentication patterns, and examples. |
@@ -345,6 +351,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | [Connector Architecture](docs/architecture/Connectors.md) | Connector interfaces, lifecycle, pushdown, and security boundaries. |
 | [Lineage Architecture](docs/architecture/Lineage.md) | Lineage capture, history queries, export formats, and orchestration integration. |
 | [VS Code Extension](docs/architecture/VSCodeExtension.md) | LSP, REPL channels, notebook controller, results panel, and report preview. |
+| [Contributor Testing Guides](docs/guides/testing/README.md) | Test lanes (`test-lane.ps1`), golden scenarios, and enterprise security certification. |
 | [Connector Certification Matrix](docs/architecture/standards/Connector_Certification_Matrix.md) | Connector test classes, certification tiers, and release gate coverage. |
 | [Release Workflows](docs/architecture/roadmaps/Release_Workflows.md) | Local-first release validation and packaging workflow. |
 | [Security Policy](SECURITY.md) | Zero-trust sandbox, cryptographic architecture, and audit policy. |
@@ -356,7 +363,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 ETL-SQL moves and transforms real data, so we have tried to test as much of it as we reasonably can. No software is bug-free — but a great deal of effort goes into validating behavior, and the suite grows with every change:
 
-- **Over 3,500 automated unit and integration tests** (xUnit) spanning the parser, evaluator, expression and type system, connectors, security guardrails, reporting engine, language server, and Portal.
+- **Over 6,900 automated unit and integration tests** (xUnit) spanning the parser, evaluator, expression and type system, connectors, security guardrails, native reporting engine, language server, and Portal.
 - **Over 11,500 SQL-correctness checks.** The dedicated SQLite [`sqllogictest`](https://www.sqlite.org/sqllogictest/) lane currently runs 42 active files containing 9,375 query records and 2,160 statement records. The excluded index-optimization corpus relies on indexing physical tables, while ETL-SQL currently supports indexes on in-memory `#temp` tables.
 - **71 VS Code extension and UI unit tests** (Vitest), plus separate Node-based smoke checks for report designer and portal components.
 - **Layered connector integration coverage** using disposable containers where practical (including MSSQL, Postgres, MySQL, Oracle, SFTP, Kafka, MongoDB, Neo4j, S3/MinIO, Azure Blob/Azurite, SMTP/MailPit, Portal, and Orchestrator), provider emulators for BigQuery and Snowflake, and local files or loopback services for connectors such as Parquet, Avro, REST, and SharePoint. See the [Connector Certification Matrix](docs/architecture/standards/Connector_Certification_Matrix.md) for provider-specific coverage and remaining external-provider gaps.
