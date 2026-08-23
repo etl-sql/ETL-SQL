@@ -307,7 +307,263 @@ accessibility, and cross-surface tests pass with fail-closed behavior.
 **Exit gate:** Keyboard, touch, accessibility, cycle, payload, positioning, disclosure, and measured
 performance tests pass for the deliberately constrained feature set.
 
-### Phase 12 — Reporting Samples, Conversion Guidance, and Closure
+### Phase 12 — Declarative Encoding, Geometry, and Layout Refinements
+
+This phase adopts the useful visual-grammar lessons identified by the Vega-Lite and ggplot2
+comparisons without adding either syntax, runtime, statistical engine, or hidden data
+transformations. SQL and `#temp` staging remain the transformation boundary. `ChartSpec` owns visual
+meaning, `PlotPlan` owns deterministic resolved geometry, and renderers consume the plan without
+inferring semantics from layer names or data rows.
+
+#### Binding-source contract
+
+- [ ] Record the accepted binding-source design in the native GoG ADR before changing grammar:
+  field bindings read a source column, `DATUM(...)` supplies a typed constant in the data domain and
+  passes through a scale, and `VALUE(...)` supplies a typed visual-range value without a data scale.
+  Keep the existing bare-column form as the canonical field syntax; do not require `FIELD(...)` in
+  ordinary reports.
+- [ ] Accept canonical constant and parameter syntax such as
+  `X = DATUM(1500) (TYPE = QUANTITATIVE, SCALE = revenue)`,
+  `Y = DATUM(@Target) (TYPE = QUANTITATIVE)`, and `COLOR = VALUE('#c62828')`.
+  Initially allow only typed scalar literals and declared variables inside `DATUM`/`VALUE`; reject
+  column references, aggregates, function calls, and arbitrary expressions so the chart grammar
+  does not become a hidden transformation engine.
+- [ ] Replace the field-only `AdvancedChartEncoding`/`FieldBinding` assumption with an immutable,
+  serializable discriminated binding source in the AST and `ChartSpec`. Preserve typed `ChartValue`
+  values through lowering, serialization, parameter refresh, snapshot replay, and every backend.
+- [ ] Define channel legality for each source kind. Positional `DATUM` values may use compatible
+  scales; visual `VALUE` bindings bypass scales; field bindings retain existing data-kind, sort,
+  axis, format, and scale behavior. Reject meaningless combinations such as a scaled `VALUE` or a
+  visual-range color literal on a quantitative position channel.
+- [ ] Extend Analysis and contract validation to type-check literal and parameter bindings against
+  the declared encoding type, scale kind, channel, and parameter metadata. Undeclared variables,
+  incompatible values, nulls on unsupported channels, and secret-bearing parameters must fail
+  closed with actionable diagnostics.
+- [ ] Keep provenance categories distinct: fields create column-lineage edges, literal datums create
+  no column lineage, and parameter datums/values create parameter-dependency metadata. Never invent
+  a source column for a constant, and never expose secret values in `ChartSpec`, `PlotPlan`, logs,
+  tooltips, accessibility text, URLs, snapshots, or export metadata.
+
+#### Global encoding inheritance
+
+- [ ] Add an optional top-level `ENCODINGS (...)` block inside `CHART (...)` whose bindings are
+  inherited by layers. Keep inheritance a compile-time authoring convenience: lower every layer to
+  a complete, explicit binding set before constructing the serialized `ChartSpec` so renderers and
+  downstream consumers never implement inheritance independently.
+- [ ] Define deterministic merge rules by channel: a layer binding overrides the inherited binding
+  for the same channel, non-conflicting inherited bindings remain, and duplicate bindings at either
+  scope are errors. Apply mark-specific required-channel and compatibility validation only after the
+  effective layer binding set has been computed.
+- [ ] Add `INHERIT_ENCODINGS = ON | OFF` to layers, defaulting to `ON`. `OFF` creates an isolated
+  layer and must not retain any global field, datum, value, scale, axis, sort, format, stack, or
+  offset binding implicitly.
+- [ ] Make scale inference and explicit-scale validation operate on effective bindings after
+  inheritance. A layer override must not accidentally leave an incompatible inherited scale or axis
+  association attached to the replacement binding.
+- [ ] Extend the formatter, LSP, scoped rename, lineage, and Report Builder mutation model so global
+  bindings remain global during round trips and field/parameter renames update inherited consumers
+  without expanding boilerplate into every layer.
+- [ ] Add inheritance tests for full inheritance, per-channel override, opt-out, datum/value sources,
+  incompatible marks, duplicate channels, scale conflicts, formatter stability, rename, and lossless
+  Report Builder edits.
+
+#### Explicit placement, stacking, offsets, and mark sizing
+
+- [ ] Remove renderer-dependent layout meaning, including checks of layer identifiers such as
+  `Id.Contains("actual")`. Renaming a layer must never alter geometry. Move every grouped, stacked,
+  normalized, overlaid, or bullet-band decision into typed `ChartSpec` semantics resolved by
+  `PlotPlanResolver`.
+- [ ] Add `STACK = NONE | ZERO | NORMALIZE` to compatible quantitative position encodings. Start
+  CUSTOM authoring with the deterministic default `NONE`; named `BAR`, `HBAR`, `AREA`, `LINE`, and
+  other presets must lower their existing behavior into an explicit stack mode rather than relying
+  on renderer-global `STACKED` style flags.
+- [ ] Define stack validation and resolution for Cartesian, transposed Cartesian, and polar channels.
+  Specify grouping keys, positive/negative baselines, null handling, stable stack order, zero-domain
+  behavior, and shared/independent facet scales. `NORMALIZE` changes resolved geometry while retaining
+  raw values for labels, tooltips, actions, accessible summaries, and semantic fallbacks.
+- [ ] Add typed `X_OFFSET` and `Y_OFFSET` encoding channels for dodged/grouped placement. Offset
+  bindings must be nominal or ordinal, use stable source/explicit ordering, participate in scale
+  resolution, and produce deterministic slot allocation across facets and output sizes.
+- [ ] Add an orientation-neutral, relative `BAND_SIZE` mark property with a validated range greater
+  than zero and at most one. Use it for full-band qualitative backgrounds, narrower foreground bars,
+  grouped marks, and category-local ticks. Do not make fixed browser pixels part of the initial
+  cross-surface semantic contract.
+- [ ] Keep placement dimensions orthogonal: `Z_INDEX` controls paint order, `STACK` controls
+  accumulation, offset channels control dodging, and `BAND_SIZE` controls thickness within a band.
+  Reject ambiguous or incompatible combinations rather than choosing a renderer heuristic.
+- [ ] Lower existing standard and CUSTOM charts into the new placement contract monotonically, with
+  focused regression batches for vertical bars, horizontal bars, stacked/normalized bars, stacked
+  areas, grouped series, bullet charts, overlays, dual-axis composites, and facets.
+
+#### Interval and range geometry
+
+- [ ] Expose the existing semantic `Y_START`/`Y_END` channel pair to advanced authoring for floating
+  AREA ribbons and vertical RULE spans instead of adding competing `Y_MIN`/`Y_MAX` names. Add the
+  symmetric `X_START`/`X_END` contract only when delivering horizontal ribbons and spans; do not
+  overload waterfall-specific resolver heuristics as general interval behavior.
+- [ ] Define AREA semantics explicitly: ordinary `Y` remains a baseline area, while paired
+  `Y_START`/`Y_END` creates a floating ribbon. Require both endpoints, preserve source order and gap
+  behavior, include both endpoints in scale-domain resolution, and reject ambiguous mixtures unless
+  a documented mark form requires them.
+- [ ] Define RULE interval semantics for X plus `Y_START`/`Y_END`, Y plus
+  `X_START`/`X_END`, and explicitly ranged X/X2 or Y/Y2 forms. Specify whether category-local caps use
+  TICK layers rather than silently turning RULE into an error-bar composite.
+- [ ] Keep confidence bounds, forecast quantiles, and other interval calculations in SQL. The visual
+  grammar receives already-computed endpoint columns and performs no confidence, interpolation, or
+  statistical estimation.
+- [ ] Add ribbon and range validation for numeric/temporal compatibility, null endpoints, reversed
+  endpoints, log-scale restrictions, shared/independent facets, clipping, tooltips, selection hit
+  regions, accessible summaries, terminal fallbacks, and PDF/email rendering.
+
+#### Deterministic position adjustments
+
+- [ ] Add typed layer-level position adjustments rather than encoding them as free-form STYLE:
+  `POSITION = IDENTITY`, `POSITION = JITTER(...)`, and `POSITION = NUDGE(...)`. Keep DODGE and STACK
+  represented by the explicit offset and stack encoding contracts above rather than creating a
+  second way to express the same geometry.
+- [ ] Define JITTER in scale/band-relative units with explicit X/Y amplitudes, a required stable key
+  field, and an optional fixed seed. Generate offsets from a documented deterministic hash of chart,
+  layer, key, channel, and seed; never call `RAND()`, depend on process-random hash codes, or mutate
+  source values. Duplicate or null keys must have specified stable behavior or fail lint.
+- [ ] Preserve unjittered raw values for axes, domains, tooltips, actions, selections, lineage,
+  accessibility, and exports that expose data. Store only resolved display coordinates or offsets in
+  `PlotPlan`, ensuring repeated renders and every backend receive identical placement.
+- [ ] Define NUDGE units explicitly rather than accepting ambiguous numbers. Support data-domain
+  offsets where both axes are continuous and relative `BAND`/`EM` offsets for category-local marks
+  and TEXT labels. Reject device-pixel semantics in the portable contract and resolve target bounds
+  only in `PlotPlanResolver`.
+- [ ] Specify composition order with datum scaling, stacking, offsets, facets, and clipping. Position
+  adjustments must occur after domains and stack baselines are resolved but before final mark bounds
+  and label collision handling, with no feedback into scale domains.
+- [ ] Add deterministic snapshots proving the same jitter and nudge results across processes,
+  browser/static SVG, terminal fallback, PDF/email, resize, facet layout, layer rename, row reorder
+  with stable keys, and offline replay.
+
+#### Deterministic scale inference
+
+- [ ] Make `SCALES (...)` optional for CUSTOM charts while keeping encoding `TYPE` mandatory. Do not
+  infer semantic types by sampling row values or by allowing individual backends to inspect strings.
+- [ ] Define and version one inference table shared by linting and lowering: positional quantitative
+  uses linear, positional temporal uses time, nominal/ordinal RECT and TICK positions use band,
+  nominal/ordinal POINT/LINE positions use point, nominal/ordinal color/shape uses ordinal, and
+  quantitative size uses linear. Add an explicit decision for every supported channel/type/mark
+  combination and reject combinations outside that table.
+- [ ] Generate stable inferred scale identities from resolution scope, coordinate, axis, and channel.
+  Compatible layers sharing a channel must share the same inferred scale; incompatible semantic
+  kinds or scale requirements must produce a lint error requiring explicit named scales.
+- [ ] Preserve explicit `SCALES` for logarithmic/identity scales, domain bounds, zero policy, explicit
+  category ordering, named cross-layer sharing, and other overrides. A binding with `SCALE = name`
+  must still reference a declared scale; omission requests inference rather than a partially declared
+  scale.
+- [ ] Serialize the inferred scales into the resolved `ChartSpec` and `PlotPlan` so SVG, browser,
+  terminal, PDF, email, snapshots, accessibility, and future backends consume identical domains,
+  ordering, ticks, and palette decisions.
+
+#### Continuous and diverging color ranges
+
+- [ ] Extend `ScaleSpec` with a typed color-range contract for continuous COLOR encodings. Treat the
+  linear/logarithmic scale kind as the data-domain transform and the gradient as its output range;
+  do not introduce `GRADIENT` as a competing domain-scale kind.
+- [ ] Accept canonical explicit forms for sequential and diverging ranges, for example
+  `RANGE = GRADIENT(LOW = '#...', HIGH = '#...')` and
+  `RANGE = DIVERGING(LOW = '#...', MID = '#...', HIGH = '#...', MIDPOINT = 0)`. Reserve an extensible
+  stop-list representation for a later multi-stop form without requiring it in the first delivery.
+- [ ] Specify and version color parsing, interpolation color space, clamping/out-of-domain behavior,
+  midpoint placement, null color, opacity interaction, and deterministic rounding. Use a small
+  dependency-free managed implementation unless a third-party library passes the repository's
+  license, maintenance, transitive-dependency, and necessity gates.
+- [ ] Validate that continuous/diverging ranges bind only to compatible quantitative COLOR channels;
+  require an in-domain midpoint or document deliberate asymmetric rescaling; reject malformed,
+  unsupported, or non-portable color values before rendering.
+- [ ] Add a resolved continuous color legend/colorbar contract with formatted ticks, accessible
+  minimum/midpoint/maximum descriptions, terminal bins, grayscale/high-contrast fallbacks, and
+  deterministic PDF/email output. Do not represent a continuous ramp as a misleading list of
+  unrelated categorical legend entries.
+- [ ] Add visual and accessibility fixtures for sequential metrics, zero-centered variance,
+  asymmetric diverging domains, nulls, clipped values, heatmaps, points, rectangles, light/dark
+  themes, and color-vision-deficiency-safe palettes.
+
+#### Facet wrapping and coordinate aspect
+
+- [ ] Add a distinct one-dimensional wrap form such as `FACET (WRAP = Region, COLUMNS = 3)`.
+  Initially make WRAP mutually exclusive with ROW/COLUMN grid facets, require a positive bounded
+  column count, and retain stable source or explicit category ordering.
+- [ ] Resolve wrap panels in deterministic row-major order with bounded panel count, minimum usable
+  panel dimensions, predictable incomplete-last-row alignment, shared/independent scale behavior,
+  repeated/outer axes, strip labels, keyboard order, and responsive overflow behavior.
+- [ ] Define cross-surface degradation for wrap facets: browser and static layouts use the same
+  resolved panel order and bounds; terminal/plain-text outputs paginate or serialize panels without
+  silently dropping categories; PDF/email use deterministic page breaking or a documented fallback.
+- [ ] Enforce facet cardinality and render-work budgets before allocating panels. Report actionable
+  diagnostics when `COLUMNS`, output bounds, label size, or category count would create unreadable or
+  unsafe output rather than squeezing an arbitrary number of panels into one row.
+- [ ] Add numeric `ASPECT_RATIO` to Cartesian coordinates, defined as the physical Y-unit/X-unit
+  ratio after scale domains are resolved; `ASPECT_RATIO = 1` preserves equal X and Y unit lengths.
+  Prefer this unambiguous numeric form over a `1:1` token and reject non-positive or non-finite values.
+- [ ] Resolve fixed aspect by fitting and aligning a maximal plot rectangle inside the available
+  bounds, preserving domains and leaving deliberate padding instead of stretching either axis.
+  Specify alignment, axis/legend/title space, resize behavior, and clipping in the resolved plan.
+- [ ] Define and validate interactions with temporal/discrete axes, log scales, transposed Cartesian
+  coordinates, secondary axes, facets, geographic coordinates, and very small containers. Start
+  with two continuous primary Cartesian axes and reject unsupported combinations until each has a
+  portable meaning.
+- [ ] Add parity-scatter, unit-circle, slope-reference, resized-container, facet, PDF, terminal, and
+  accessibility fixtures proving fixed-aspect meaning remains stable across supported surfaces.
+
+#### Dedicated TICK mark
+
+- [ ] Add `TICK` as a semantic mark distinct from `RULE`: RULE represents a plot-spanning reference
+  or ranged segment, while TICK represents a short category-local quantitative observation or target.
+- [ ] Define portable TICK properties for orientation, relative `BAND_SIZE`, and bounded thickness;
+  specify valid channels, datum/field behavior, default orientation, scale behavior, tooltips,
+  actions, accessibility wording, and terminal/plain-text fallbacks.
+- [ ] Implement TICK through lexer/parser, immutable AST, formatter, contract/versioning, advanced
+  lowering, `PlotPlanResolver`, native SVG, browser interactions, terminal rendering, static export,
+  snapshots, LSP, Report Builder preservation/editing, help, snippets, and capability inventory.
+- [ ] Add representative bullet-target, strip-plot, and barcode-style examples. Confirm that RULE
+  remains the correct primitive for thresholds that span the full plot or an explicit ranged extent.
+
+#### Cross-surface delivery and acceptance evidence
+
+- [ ] Bump the appropriate versioned `ChartSpec`/`PlotPlan` contracts and add backward-compatible
+  readers or a deliberate migration for existing serialized reports and `.etlsnap` packages. Do not
+  silently reinterpret an old layer-name or global-stack heuristic as the new contract.
+- [ ] Update parser, canonical formatter, Analysis lint, LSP completion/hover/scoped rename, syntax
+  index, focused help, snippets, Report-SQL guide, and lossless Report Builder round-trip support in
+  the same delivery. Every new syntax form must have a minimal parser-tested example.
+- [ ] Add contract tests for binding-source serialization and type preservation, literal/parameter
+  reevaluation, lineage classification, secret rejection/redaction, stack validation, positive and
+  negative stacking, normalization, offsets, band sizing, inferred-scale identities, incompatible
+  scale errors, inherited encodings, interval channels, deterministic jitter/nudge, continuous color
+  ranges, facet wrapping, fixed aspect, and TICK semantics.
+- [ ] Add cross-backend semantic conformance and deterministic visual goldens for browser/native SVG,
+  terminal, PDF/email adapters, accessibility summaries, and offline replay. Include renamed layers
+  in the fixtures to prove geometry is independent of identifiers.
+- [ ] Add production recipes covering constant quadrant thresholds, parameter-driven target rules,
+  grouped and stacked bars, full-band bullet backgrounds with narrow actual bars, normalized stacks,
+  inherited encodings, forecast ribbons, error ranges, deterministic strip plots, nudged labels,
+  wrapped regional small multiples, parity scatter plots, continuous/diverging color ramps, and TICK
+  targets without projecting constants onto every source row.
+- [ ] Measure resolver cost, manifest size, native SVG size, render time, and memory on declared
+  representative workloads. Record actual results and prevent inferred-scale or offset resolution
+  from introducing data-size-dependent renderer work.
+- [ ] Update the Vega-Lite conversion guide to map `field`, `datum`, `value`, `stack`, offset channels,
+  relative band sizing, inferred scales, and tick marks to the shipped ETL-SQL syntax while keeping
+  calculate, aggregate, lookup, window, fold, and other data transformations in visible SQL.
+- [ ] Add a ggplot2-to-ETL-SQL concept guide covering global aesthetic inheritance, layer overrides,
+  facet grid/wrap, interval ribbons and rules, identity/jitter/nudge position adjustments, fixed
+  Cartesian aspect, continuous/diverging color ranges, and the deliberate rule that `stat_*`
+  calculations remain visible SQL transformations.
+
+**Exit gate:** CUSTOM charts can express field, datum, and visual-value bindings; grouped, stacked,
+normalized, overlaid, and bullet geometry is explicit and independent of layer names; ordinary
+scales infer deterministically without type sampling; inherited encodings, interval geometry,
+deterministic position adjustments, continuous color ranges, wrapped facets, fixed aspect, and TICK
+have portable semantics; lineage and secret boundaries remain intact; and parser, formatter, lint,
+LSP, Report Builder, snapshots, browser, terminal, export, accessibility, documentation, performance,
+and visual-golden evidence all pass from the same versioned contracts.
+
+### Phase 13 — Reporting Samples, Conversion Guidance, and Closure
 
 - [ ] Publish production-grade composite examples demonstrating layers, annotations, conditions,
   facets, interactions, accessibility, and cross-surface fallbacks with transformations visible in

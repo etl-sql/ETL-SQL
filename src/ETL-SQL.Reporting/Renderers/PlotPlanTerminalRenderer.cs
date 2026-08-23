@@ -58,29 +58,130 @@ internal static class PlotPlanTerminalRenderer
     private static IRenderable RenderFacet(PlotPlan plan, HashSet<int> rows, int width)
     {
         var content = new List<IRenderable>();
-        foreach (var layer in plan.Layers.Where(item => item.Mark != MarkKind.Arc))
-        {
-            var data = layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList();
-            if (data.Count == 0) continue;
-            var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey);
-            var label = layer.Mark == MarkKind.Rule
-                ? layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value ?? layer.Id
-                : series?.Label ?? layer.Id;
-            var color = series?.Color ?? "#808080";
-            content.Add(layer.Mark switch
+        var activeLayers = plan.Layers.Where(item => item.Mark != MarkKind.Arc)
+            .Select(layer =>
             {
-                MarkKind.Rect => RenderRectangles(data, label, color, width),
-                MarkKind.Line or MarkKind.Area => RenderLine(data, label, color, width, layer.Mark == MarkKind.Area),
-                MarkKind.Point => RenderPoints(data, label, color, series?.Order ?? 0),
-                MarkKind.Rule => RenderRule(data, label, color),
-                _ => RenderFallback(plan.Fallback)
-            });
+                var data = layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList();
+                var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey);
+                var label = layer.Mark == MarkKind.Rule
+                    ? layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value ?? layer.Id
+                    : series?.Label ?? layer.Id;
+                var color = ResolveLayerColor(layer, plan);
+                return (Layer: layer, Data: data, Series: series, Label: label, Color: color);
+            })
+            .Where(item => item.Data.Count > 0)
+            .ToList();
+
+        var rectLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rect).ToList();
+        var continuousLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point).ToList();
+        var ruleLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rule).ToList();
+
+        if (rectLayers.Count > 0)
+        {
+            foreach (var item in rectLayers)
+                content.Add(RenderRectangles(item.Data, item.Label, item.Color, width));
+            foreach (var item in ruleLayers)
+                content.Add(RenderRule(item.Data, item.Label, item.Color));
+            foreach (var item in continuousLayers)
+                content.Add(item.Layer.Mark == MarkKind.Point
+                    ? RenderPoints(item.Data, item.Label, item.Color, item.Series?.Order ?? 0)
+                    : RenderLine(item.Data, item.Label, item.Color, width, item.Layer.Mark == MarkKind.Area));
         }
+        else if (continuousLayers.Any(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area))
+        {
+            content.Add(RenderCompositeContinuous(plan, continuousLayers, ruleLayers, width));
+        }
+        else
+        {
+            foreach (var item in activeLayers)
+            {
+                content.Add(item.Layer.Mark switch
+                {
+                    MarkKind.Rect => RenderRectangles(item.Data, item.Label, item.Color, width),
+                    MarkKind.Line or MarkKind.Area => RenderLine(item.Data, item.Label, item.Color, width, item.Layer.Mark == MarkKind.Area),
+                    MarkKind.Point => RenderPoints(item.Data, item.Label, item.Color, item.Series?.Order ?? 0),
+                    MarkKind.Rule => RenderRule(item.Data, item.Label, item.Color),
+                    _ => RenderFallback(plan.Fallback)
+                });
+            }
+        }
+
         var arcLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Arc)
             .Select(layer => (Layer: layer, Data: layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList()))
             .Where(item => item.Data.Count > 0).ToList();
         if (arcLayers.Count > 0) content.Add(RenderArcs(plan, arcLayers, width));
         return content.Count == 0 ? RenderFallback(plan.Fallback) : new Rows(content);
+    }
+
+    private static IRenderable RenderCompositeContinuous(
+        PlotPlan plan,
+        IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data, ResolvedSeries? Series, string Label, string Color)> layers,
+        IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data, ResolvedSeries? Series, string Label, string Color)> ruleLayers,
+        int width)
+    {
+        var allNumeric = layers.SelectMany(l => l.Data.Select(Value)).Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        var ruleNumeric = ruleLayers.SelectMany(r => r.Data.Select(Value)).Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        var combinedNumeric = allNumeric.Concat(ruleNumeric).ToList();
+        if (combinedNumeric.Count == 0) return new Markup("[grey]all values are gaps[/]");
+        var min = combinedNumeric.Min();
+        var max = combinedNumeric.Max();
+        if (min == max) max = min + 1m;
+
+        var canvas = new BrailleCanvas(Math.Clamp(width - 8, 16, 52), 7);
+        var headerParts = new List<string>();
+
+        foreach (var item in layers)
+        {
+            var values = item.Data.Select(Value).ToList();
+            var ansi = SafeAnsiColor(item.Color);
+            headerParts.Add($"[{ansi}]●[/] [bold]{Markup.Escape(item.Label)}[/]");
+
+            (int X, int Y)? previous = null;
+            for (var index = 0; index < item.Data.Count; index++)
+            {
+                if (item.Data[index].IsGap || !values[index].HasValue) { previous = null; continue; }
+                var x = item.Data.Count == 1 ? 0 : index * (canvas.DotWidth - 1) / (item.Data.Count - 1);
+                var y = canvas.DotHeight - 1 - (int)((values[index]!.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                if (item.Layer.Mark == MarkKind.Point)
+                {
+                    canvas.Set(x, y, ansi);
+                }
+                else
+                {
+                    if (previous.HasValue) canvas.Line(previous.Value.X, previous.Value.Y, x, y, ansi);
+                    else canvas.Set(x, y, ansi);
+                    if (item.Layer.Mark == MarkKind.Area)
+                        for (var fill = y + 1; fill < canvas.DotHeight; fill += 2) canvas.Set(x, fill, ansi);
+                }
+                previous = (x, y);
+            }
+        }
+
+        foreach (var rule in ruleLayers)
+        {
+            var ansi = SafeAnsiColor(rule.Color);
+            headerParts.Add($"[{ansi}]──[/] [bold]{Markup.Escape(rule.Label)}[/]");
+            var val = rule.Data.Select(Value).FirstOrDefault(v => v.HasValue);
+            if (val.HasValue)
+            {
+                var y = canvas.DotHeight - 1 - (int)((val.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                if (y >= 0 && y < canvas.DotHeight)
+                {
+                    for (var x = 0; x < canvas.DotWidth; x += 2)
+                        canvas.Set(x, y, ansi);
+                }
+            }
+        }
+
+        var totalGaps = layers.Sum(l => l.Data.Count(d => d.IsGap));
+        var isArea = layers.Any(l => l.Layer.Mark == MarkKind.Area);
+        var typeLabel = isArea ? "Braille area" : "Braille line";
+        var headerSuffix = $" [grey]({typeLabel}; {totalGaps} gaps)[/]";
+
+        return new Rows(
+            new Markup(string.Join("  ", headerParts) + headerSuffix),
+            canvas.ToRenderable(),
+            new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"));
     }
 
     private static IRenderable RenderRectangles(IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
@@ -90,6 +191,7 @@ internal static class PlotPlanTerminalRenderer
         if (maximum == 0m) maximum = 1m;
         var labelWidth = Math.Clamp(data.Select(Label).DefaultIfEmpty("").Max(label => label.Length), 6, Math.Max(6, width / 3));
         var barWidth = Math.Max(8, width - labelWidth - 18);
+        var ansi = SafeAnsiColor(color);
         var rows = data.Select(datum =>
         {
             var label = Truncate(Label(datum), labelWidth).PadRight(labelWidth);
@@ -97,7 +199,7 @@ internal static class PlotPlanTerminalRenderer
             var value = Value(datum) ?? 0m;
             var bar = FractionalBar(Math.Abs(value) / maximum, barWidth);
             var sign = value < 0m ? "◀" : value == 0m ? "│" : "▶";
-            return new Markup($"{Markup.Escape(label)} [#{color.TrimStart('#')}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}");
+            return new Markup($"{Markup.Escape(label)} [{ansi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}");
         }).ToList();
         rows.Insert(0, new Markup($"[bold]{Markup.Escape(series)}[/] [grey](fractional bars)[/]"));
         return new Rows(rows);
@@ -111,20 +213,21 @@ internal static class PlotPlanTerminalRenderer
         var min = numeric.Min(); var max = numeric.Max();
         if (min == max) max = min + 1m;
         var canvas = new BrailleCanvas(Math.Clamp(width - 8, 16, 52), 7);
+        var ansi = SafeAnsiColor(color);
         (int X, int Y)? previous = null;
         for (var index = 0; index < data.Count; index++)
         {
             if (data[index].IsGap || !values[index].HasValue) { previous = null; continue; }
             var x = data.Count == 1 ? 0 : index * (canvas.DotWidth - 1) / (data.Count - 1);
             var y = canvas.DotHeight - 1 - (int)((values[index]!.Value - min) / (max - min) * (canvas.DotHeight - 1));
-            if (previous.HasValue) canvas.Line(previous.Value.X, previous.Value.Y, x, y, color);
-            else canvas.Set(x, y, color);
-            if (area) for (var fill = y + 1; fill < canvas.DotHeight; fill += 2) canvas.Set(x, fill, color);
+            if (previous.HasValue) canvas.Line(previous.Value.X, previous.Value.Y, x, y, ansi);
+            else canvas.Set(x, y, ansi);
+            if (area) for (var fill = y + 1; fill < canvas.DotHeight; fill += 2) canvas.Set(x, fill, ansi);
             previous = (x, y);
         }
         var gaps = data.Count(datum => datum.IsGap);
         return new Rows(
-            new Markup($"[bold]{Markup.Escape(series)}[/] [grey]({(area ? "Braille area" : "Braille line")}; {gaps} gaps)[/]"),
+            new Markup($"[{ansi}]●[/] [bold]{Markup.Escape(series)}[/] [grey]({(area ? "Braille area" : "Braille line")}; {gaps} gaps)[/]"),
             canvas.ToRenderable(),
             new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"));
     }
@@ -132,16 +235,36 @@ internal static class PlotPlanTerminalRenderer
     private static IRenderable RenderPoints(IReadOnlyList<ResolvedDatum> data, string series, string color, int seriesOrder)
     {
         var glyph = PointGlyphs[Math.Abs(seriesOrder) % PointGlyphs.Length];
+        var ansi = SafeAnsiColor(color);
         var rows = data.Select(datum => datum.IsGap
             ? (IRenderable)new Markup($"[grey]○ {Markup.Escape(Label(datum))}: gap[/]")
-            : new Markup($"[#{color.TrimStart('#')}]{glyph}[/] {Markup.Escape(Label(datum))}: {Markup.Escape(DisplayValue(datum))}"));
+            : new Markup($"[{ansi}]{glyph}[/] {Markup.Escape(Label(datum))}: {Markup.Escape(DisplayValue(datum))}"));
         return new Rows(new[] { (IRenderable)new Markup($"[bold]{Markup.Escape(series)}[/] [grey](point glyph {glyph})[/]") }.Concat(rows));
     }
 
     private static IRenderable RenderRule(IReadOnlyList<ResolvedDatum> data, string label, string color)
     {
         var value = data.Select(DisplayValue).FirstOrDefault(item => !string.IsNullOrEmpty(item)) ?? "reference";
-        return new Markup($"[#{color.TrimStart('#')}]────────[/] [bold]{Markup.Escape(label)}[/]: {Markup.Escape(value)}");
+        var ansi = SafeAnsiColor(color);
+        return new Markup($"[{ansi}]────────[/] [bold]{Markup.Escape(label)}[/]: [{ansi}]{Markup.Escape(value)}[/]");
+    }
+
+    private static string ResolveLayerColor(ResolvedMarkLayer layer, PlotPlan plan)
+    {
+        var styleColor = layer.Style.FirstOrDefault(token => token.Name.Equals("color", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (!string.IsNullOrWhiteSpace(styleColor)) return styleColor;
+        var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey);
+        if (!string.IsNullOrWhiteSpace(series?.Color)) return series.Color;
+        var paletteColor = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color;
+        if (!string.IsNullOrWhiteSpace(paletteColor)) return paletteColor;
+        return "#5470c6";
+    }
+
+    private static string SafeAnsiColor(string? color)
+    {
+        if (string.IsNullOrWhiteSpace(color)) return "grey";
+        var trimmed = color.Trim();
+        return trimmed.StartsWith('#') ? $"#{trimmed.TrimStart('#')}" : trimmed.ToLowerInvariant();
     }
 
     private static IRenderable RenderArcs(PlotPlan plan,
