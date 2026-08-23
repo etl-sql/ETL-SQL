@@ -91,7 +91,7 @@ internal static class PlotPlanTerminalRenderer
                     ? RenderPoints(item.Data, item.Label, item.Color, item.Series?.Order ?? 0)
                     : RenderLine(item.Data, item.Label, item.Color, width, item.Layer.Mark == MarkKind.Area));
         }
-        else if (continuousLayers.Any(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area))
+        else if (continuousLayers.Count > 0)
         {
             content.Add(RenderCompositeContinuous(plan, continuousLayers, ruleLayers, width));
         }
@@ -131,12 +131,19 @@ internal static class PlotPlanTerminalRenderer
         var max = combinedNumeric.Max();
         if (min == max) max = min + 1m;
 
+        var allX = layers.SelectMany(l => l.Data.Select(XValue)).Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        var hasNumericX = allX.Count > 0;
+        var minX = hasNumericX ? allX.Min() : 0m;
+        var maxX = hasNumericX ? allX.Max() : 1m;
+        if (minX == maxX) maxX = minX + 1m;
+
         var canvas = new BrailleCanvas(Math.Clamp(width - 8, 16, 52), 7);
         var headerParts = new List<string>();
 
         foreach (var item in layers)
         {
             var values = item.Data.Select(Value).ToList();
+            var xValues = item.Data.Select(XValue).ToList();
             var ansi = SafeAnsiColor(item.Color);
             headerParts.Add($"[{ansi}]●[/] [bold]{Markup.Escape(item.Label)}[/]");
 
@@ -144,8 +151,19 @@ internal static class PlotPlanTerminalRenderer
             for (var index = 0; index < item.Data.Count; index++)
             {
                 if (item.Data[index].IsGap || !values[index].HasValue) { previous = null; continue; }
-                var x = item.Data.Count == 1 ? 0 : index * (canvas.DotWidth - 1) / (item.Data.Count - 1);
+                int x;
+                if (hasNumericX && xValues[index].HasValue)
+                {
+                    x = (int)((xValues[index]!.Value - minX) / (maxX - minX) * (canvas.DotWidth - 1));
+                }
+                else
+                {
+                    x = item.Data.Count == 1 ? 0 : index * (canvas.DotWidth - 1) / (item.Data.Count - 1);
+                }
+                x = Math.Clamp(x, 0, canvas.DotWidth - 1);
                 var y = canvas.DotHeight - 1 - (int)((values[index]!.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                y = Math.Clamp(y, 0, canvas.DotHeight - 1);
+
                 if (item.Layer.Mark == MarkKind.Point)
                 {
                     canvas.Set(x, y, ansi);
@@ -178,14 +196,18 @@ internal static class PlotPlanTerminalRenderer
         }
 
         var totalGaps = layers.Sum(l => l.Data.Count(d => d.IsGap));
+        var isScatter = layers.All(l => l.Layer.Mark == MarkKind.Point);
         var isArea = layers.Any(l => l.Layer.Mark == MarkKind.Area);
-        var typeLabel = isArea ? "Braille area" : "Braille line";
-        var headerSuffix = $" [grey]({typeLabel}; {totalGaps} gaps)[/]";
+        var typeLabel = isScatter ? "point glyph ●" : isArea ? "Braille area" : "Braille line";
+        var headerSuffix = isScatter ? $" [grey]({typeLabel})[/]" : $" [grey]({typeLabel}; {totalGaps} gaps)[/]";
+        var axisRange = hasNumericX
+            ? $"[grey]X: {minX.ToString(CultureInfo.InvariantCulture)} … {maxX.ToString(CultureInfo.InvariantCulture)}  │  Y: {min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"
+            : $"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]";
 
         return new Rows(
             new Markup(string.Join("  ", headerParts) + headerSuffix),
             canvas.ToRenderable(),
-            new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"));
+            new Markup(axisRange));
     }
 
     private static IRenderable RenderCompositeBarLine(
@@ -364,8 +386,33 @@ internal static class PlotPlanTerminalRenderer
     {
         if (string.IsNullOrWhiteSpace(color)) return "grey";
         var trimmed = color.Trim();
-        return trimmed.StartsWith('#') ? $"#{trimmed.TrimStart('#')}" : trimmed.ToLowerInvariant();
+        if (trimmed.StartsWith('#')) return $"#{trimmed.TrimStart('#')}";
+        return trimmed.ToLowerInvariant() switch
+        {
+            "red" => "red",
+            "blue" => "blue",
+            "green" => "green",
+            "yellow" => "yellow",
+            "white" => "white",
+            "black" => "black",
+            "grey" or "gray" => "grey",
+            "orange" => "#FFA500",
+            "purple" => "#800080",
+            "cyan" => "#00FFFF",
+            "magenta" => "#FF00FF",
+            "lime" => "#00FF00",
+            "pink" => "#FFC0CB",
+            "brown" => "#A52A2A",
+            "gold" => "#FFD700",
+            "teal" => "#008080",
+            "indigo" => "#4B0082",
+            "violet" => "#EE82EE",
+            _ => trimmed.ToLowerInvariant()
+        };
     }
+
+    private static decimal? XValue(ResolvedDatum datum) =>
+        PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
 
     private static IRenderable RenderArcs(PlotPlan plan,
         IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data)> layers, int width)

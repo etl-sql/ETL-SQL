@@ -226,4 +226,23 @@ public sealed class AdvancedChartProductionTests
         Assert.Contains("Jan", text);
         Assert.Contains("Apr", text);
     }
+
+    [Fact]
+    public async Task KitchenSink04_Scatter_RendersAllFourVisualsInTerminal()
+    {
+        var scriptPath = @"C:\Users\chuck\scratch\ETL-SQL\samples\10_Kitchen_Sinks\04_SCATTER.rptsql";
+        await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+        var manifest = await service.GetManifestAsync();
+        Assert.NotNull(manifest);
+
+        foreach (var visual in manifest.Visuals)
+        {
+            var plan = Assert.IsType<PlotPlan>(visual.PlotPlan);
+            var renderable = PlotPlanTerminalRenderer.Render(plan, 80);
+            var text = ETL_SQL.Tests.Reporting.TerminalSemantics.TerminalSnapshotHarness.CaptureSnapshot(renderable, 80).NormalizedText;
+            Assert.NotNull(text);
+            Assert.NotEmpty(text);
+            Assert.DoesNotContain("Error", text);
+        }
+    }
 }
