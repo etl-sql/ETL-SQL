@@ -7,7 +7,13 @@ For enterprise security review and full-suite release evidence, use
 [Enterprise Security Review Packet](../../architecture/decisions/Enterprise_Security_Review_Packet.md) and
 [Enterprise Release Evidence Checklist](../../architecture/decisions/Enterprise_Release_Evidence_Checklist.md).
 
-> **Applies to:** contributors to this repository, not deployments. For validating *your own* pipelines, see [validating data quality](data-quality.md).
+> [!TIP]
+> **Looking for focused guides?** See the modular [Contributor Testing Guides](../testing/README.md):
+> - [Test Lanes & Execution](../testing/test-lanes-and-execution.md)
+> - [Golden Scenarios & SQL Logic Tests](../testing/golden-scenarios-and-slt.md)
+> - [Enterprise Certification Testing](../testing/enterprise-certification-testing.md)
+
+> **Applies to:** contributors to this repository, not deployments. For validating *your own* pipelines, see [Pipeline Unit Testing & Mocking](../pipelines/pipeline-unit-testing.md) and [Validating Data Quality](../data-quality/column-quality-rules.md).
 
 ## Current Release-Confidence Status
 

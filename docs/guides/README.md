@@ -94,11 +94,26 @@ Work with visual editors, IDE extensions, notebooks, and Web Portal interfaces.
 
 ## 7. Patterns & Troubleshooting
 
-Operational recipes, sample maps, and troubleshooting diagnostics.
+Operational recipes, sample maps, and domain troubleshooting diagnostics.
 
 | Guide | Description |
 | :--- | :--- |
 | [Troubleshooting: Syntax & Dialect](patterns/troubleshooting-syntax-and-dialect.md) | Solutions for dialect mismatches (`TOP` vs `LIMIT`), function availability, and polling loops. |
+| [Troubleshooting: Connections & Security](patterns/troubleshooting-connections-and-security.md) | Authentication conflicts, `ENC:` credential resolution, `CREATE SETS`, and safe zone limits. |
 | [Troubleshooting: Report-SQL](patterns/troubleshooting-reporting.md) | Solutions for `RELDATE` casting errors, Tier 2 traps, cascading slicers, and action bindings. |
+| [Troubleshooting: Performance](patterns/troubleshooting-performance.md) | Resolving slow cross-source joins, streaming massive files, and memory spill optimization. |
 | [ETL-SQL FAQ](patterns/faq.md) | Searchable Q&A covering connections, security, operations, and scripting. |
 | [Sample Guide](patterns/sample-guide.md) | Comprehensive map of 160+ runnable `.etlsql` and `.rptsql` scripts in `/samples/`. |
+
+---
+
+## 8. Contributor Testing
+
+Test execution lanes, golden scenarios, and enterprise certification for codebase contributors.
+
+| Guide | Description |
+| :--- | :--- |
+| [Test Lanes & Execution](testing/test-lanes-and-execution.md) | PowerShell lane runners (`test-lane.ps1`, `test-smoke.ps1`), pre-push validation, and execution times. |
+| [Golden Scenarios & SQL Logic Tests](testing/golden-scenarios-and-slt.md) | Multi-step pipeline golden tests and ANSI SQL compliance testing with SLT. |
+| [Enterprise Certification Testing](testing/enterprise-certification-testing.md) | Zero-trust security certification and dual-platform (Windows / Linux) compliance. |
+
