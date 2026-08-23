@@ -150,6 +150,22 @@ namespace ETL_SQL.ReportHosting
                 await _lock.WaitAsync();
                 try
                 {
+                    if (!isInteraction && updateList.Count == 0 && _manifest.IsInteraction)
+                    {
+                        var resetBuilder = new ManifestBuilder(_evaluator);
+                        foreach (var visualDef in _evaluator.ReportContext.VisualDefinitions.Values)
+                        {
+                            var visual = _manifest.Visuals.FirstOrDefault(item =>
+                                item.Name.Equals(visualDef.Name, StringComparison.OrdinalIgnoreCase));
+                            if (visual == null) continue;
+                            _drillStates.TryGetValue(visual.Name, out var drillState);
+                            await resetBuilder.RefreshVisualAsync(visualDef, visual, drillState: drillState);
+                        }
+                        _manifest.BuiltAt = DateTime.UtcNow;
+                        _manifest.IsInteraction = false;
+                        return _manifest;
+                    }
+
                     var refreshManifest = isInteraction ? _manifest : CloneManifest(_manifest);
                     int refreshCount = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, refreshManifest, updateList, isInteraction);
                     if (!isInteraction)

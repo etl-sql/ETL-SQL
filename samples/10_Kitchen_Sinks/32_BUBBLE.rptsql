@@ -1,26 +1,57 @@
--- Kitchen Sink: BUBBLE Visual
--- This script demonstrates the BUBBLE visual type.
+-- Kitchen Sink: BUBBLE Visual (3D/4D Scatter Plot)
+-- This script demonstrates the BUBBLE visual type for multi-dimensional data analysis.
 
 SET REPORT TITLE = 'Kitchen Sink: BUBBLE Visual';
+SET REPORT DESCRIPTION = 'Demonstration of BUBBLE charts showing X/Y positions, bubble magnitude sizing, and series categorical grouping.';
 
--- 1. Mock Data Generation
-SELECT 'Market A' AS Market, 10 AS Growth, 20 AS Profit, 1000 AS Size INTO #bubbles
-UNION ALL SELECT 'Market B', 15, 25, 500
-UNION ALL SELECT 'Market C', 5, 30, 2000
-UNION ALL SELECT 'Market D', 20, 10, 800;
+-- 1. Mock Data Generation (Market Segments: Growth vs Profit vs Revenue)
+SELECT 'Cloud' AS Segment, 'Tech' AS Sector, 28 AS GrowthRate, 22 AS MarginPct, 4500 AS Revenue INTO #bubbles
+UNION ALL SELECT 'Hardware', 'Tech', 8, 12, 3200
+UNION ALL SELECT 'Biotech', 'Healthcare', 35, 18, 2100
+UNION ALL SELECT 'Pharma', 'Healthcare', 12, 28, 6000
+UNION ALL SELECT 'Retail Banking', 'Finance', 6, 15, 5200
+UNION ALL SELECT 'Fintech', 'Finance', 42, 10, 1800
+UNION ALL SELECT 'Renewables', 'Energy', 24, 14, 2900
+UNION ALL SELECT 'Oil & Gas', 'Energy', 4, 30, 7500;
 
--- 2. Basic Bubble Chart
+-- 2. Basic Bubble Chart (Single Series)
 CREATE VISUAL BasicBubble AS BUBBLE (
     SOURCE = #bubbles,
-    TITLE = 'Market Growth vs Profit (Bubble size = Market Size)',
-    MAPPINGS (X = Growth, Y = Profit, SIZE = Size, LABEL = Market)
+    TITLE = 'Market Growth vs Profit Margin (Bubble Size = Revenue)',
+    MAPPINGS (
+        X     = GrowthRate,
+        Y     = MarginPct,
+        SIZE  = Revenue,
+        LABEL = Segment
+    ),
+    OPTIONS (
+        X_AXIS (LABEL = 'Growth Rate (%)'),
+        Y_AXIS (LABEL = 'Profit Margin (%)')
+    )
 );
 
--- 3. Multi-Series Bubble
+-- 3. Multi-Series Bubble (Grouped by Sector)
 CREATE VISUAL MultiBubble AS BUBBLE (
     SOURCE = #bubbles,
-    TITLE = 'Multi-Series Bubble',
-    MAPPINGS (X = Growth, Y = Profit, SIZE = Size, SERIES = Market)
+    TITLE = 'Sector Distribution (Color = Sector, Size = Revenue)',
+    MAPPINGS (
+        X      = GrowthRate,
+        Y      = MarginPct,
+        SIZE   = Revenue,
+        SERIES = Sector,
+        LABEL  = Segment
+    ),
+    OPTIONS (
+        COLORS (
+            'Tech'       = '#4e79a7',
+            'Healthcare' = '#59a14f',
+            'Finance'    = '#f28e2b',
+            'Energy'     = '#e15759'
+        ),
+        LEGEND_POSITION = RIGHT,
+        X_AXIS (LABEL = 'YoY Growth (%)'),
+        Y_AXIS (LABEL = 'EBITDA Margin (%)')
+    )
 );
 
 -- Page Layout

@@ -1,0 +1,68 @@
+-- Kitchen Sink: TRELLIS Visual (Small Multiples)
+-- This script demonstrates the TRELLIS visual type for faceted small-multiple charts.
+
+SET REPORT TITLE = 'Kitchen Sink: TRELLIS Visual';
+SET REPORT DESCRIPTION = 'Demonstration of small multiples (faceted charts) with shared axes and multiple chart types.';
+
+-- 1. Mock Data Generation (Sales by Region, Category, and Quarter)
+SELECT 'North' AS Region, 'Electronics' AS Category, 'Q1' AS Quarter, 120 AS Revenue INTO #trellis
+UNION ALL SELECT 'North', 'Electronics', 'Q2', 150
+UNION ALL SELECT 'North', 'Furniture', 'Q1', 80
+UNION ALL SELECT 'North', 'Furniture', 'Q2', 95
+UNION ALL SELECT 'North', 'Clothing', 'Q1', 60
+UNION ALL SELECT 'North', 'Clothing', 'Q2', 75
+UNION ALL SELECT 'South', 'Electronics', 'Q1', 140
+UNION ALL SELECT 'South', 'Electronics', 'Q2', 170
+UNION ALL SELECT 'South', 'Furniture', 'Q1', 110
+UNION ALL SELECT 'South', 'Furniture', 'Q2', 130
+UNION ALL SELECT 'South', 'Clothing', 'Q1', 90
+UNION ALL SELECT 'South', 'Clothing', 'Q2', 105
+UNION ALL SELECT 'West', 'Electronics', 'Q1', 180
+UNION ALL SELECT 'West', 'Electronics', 'Q2', 210
+UNION ALL SELECT 'West', 'Furniture', 'Q1', 130
+UNION ALL SELECT 'West', 'Furniture', 'Q2', 145
+UNION ALL SELECT 'West', 'Clothing', 'Q1', 100
+UNION ALL SELECT 'West', 'Clothing', 'Q2', 125;
+
+-- 2. Faceted Bar Trellis (Faceted by Region, 3 Columns, Shared Axis)
+CREATE VISUAL TrellisBars AS TRELLIS (
+    SOURCE = #trellis,
+    TITLE = 'Revenue by Category — Faceted by Region (Bar)',
+    MAPPINGS (
+        X     = Category,
+        Y     = Revenue,
+        FACET = Region
+    ),
+    OPTIONS (
+        CHART_TYPE  = BAR,
+        COLUMNS     = 3,
+        SHARED_AXIS = ON
+    )
+);
+
+-- 3. Faceted Line Trellis (Faceted by Category across Quarters)
+CREATE VISUAL TrellisLines AS TRELLIS (
+    SOURCE = #trellis,
+    TITLE = 'Quarterly Trends — Faceted by Category (Line)',
+    MAPPINGS (
+        X     = Quarter,
+        Y     = Revenue,
+        FACET = Category
+    ),
+    OPTIONS (
+        CHART_TYPE  = LINE,
+        COLUMNS     = 3,
+        SHARED_AXIS = ON
+    )
+);
+
+-- Page Layout
+CREATE PAGE TrellisKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B',
+    MAP (
+        'A' = TrellisBars,
+        'B' = TrellisLines
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TrellisKitchenSink, PAGES (TrellisKitchenSink));

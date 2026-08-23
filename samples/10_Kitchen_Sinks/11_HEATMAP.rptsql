@@ -1,46 +1,69 @@
 -- Kitchen Sink: HEATMAP Visual
--- This script demonstrates the HEATMAP visual type.
+-- This script demonstrates the HEATMAP visual type for 2D density grids and correlation matrices.
 
 SET REPORT TITLE = 'Kitchen Sink: HEATMAP Visual';
-SET REPORT DESCRIPTION = 'Demonstration of HEATMAP grid visualization capabilities.';
+SET REPORT DESCRIPTION = 'Demonstration of HEATMAP grid visualization capabilities, including data labels and custom color gradients.';
 
--- 1. Mock Data Generation (Heatmap of Hour vs Weekday)
-SELECT 'Mon' AS Day, '00:00' AS Hour, 5 AS ActiveUsers INTO #heat
-UNION ALL SELECT 'Mon', '04:00', 2
-UNION ALL SELECT 'Mon', '08:00', 25
-UNION ALL SELECT 'Mon', '12:00', 45
+-- 1. Mock Data Generation (Active Users across Weekday vs Hour)
+SELECT 'Mon' AS Day, '08:00' AS Hour, 25 AS ActiveUsers INTO #heat
+UNION ALL SELECT 'Mon', '12:00', 65
 UNION ALL SELECT 'Mon', '16:00', 50
-UNION ALL SELECT 'Tue', '00:00', 4
-UNION ALL SELECT 'Tue', '08:00', 28
-UNION ALL SELECT 'Tue', '12:00', 42
-UNION ALL SELECT 'Wed', '12:00', 55;
+UNION ALL SELECT 'Mon', '20:00', 15
+UNION ALL SELECT 'Tue', '08:00', 30
+UNION ALL SELECT 'Tue', '12:00', 70
+UNION ALL SELECT 'Tue', '16:00', 55
+UNION ALL SELECT 'Tue', '20:00', 18
+UNION ALL SELECT 'Wed', '08:00', 35
+UNION ALL SELECT 'Wed', '12:00', 85
+UNION ALL SELECT 'Wed', '16:00', 60
+UNION ALL SELECT 'Wed', '20:00', 20
+UNION ALL SELECT 'Thu', '08:00', 28
+UNION ALL SELECT 'Thu', '12:00', 75
+UNION ALL SELECT 'Thu', '16:00', 58
+UNION ALL SELECT 'Thu', '20:00', 22
+UNION ALL SELECT 'Fri', '08:00', 20
+UNION ALL SELECT 'Fri', '12:00', 50
+UNION ALL SELECT 'Fri', '16:00', 40
+UNION ALL SELECT 'Fri', '20:00', 10;
 
 -- 2. Basic Heatmap
 CREATE VISUAL BasicHeatmap AS HEATMAP (
     SOURCE = #heat,
-    TITLE = 'User Activity Heatmap (Day vs Hour)',
+    TITLE = 'User Activity Density (Day vs Hour)',
     MAPPINGS (X = Hour, Y = Day, VALUE = ActiveUsers)
 );
 
--- 3. Styled Heatmap
+-- 3. Heatmap with Data Labels
+CREATE VISUAL LabeledHeatmap AS HEATMAP (
+    SOURCE = #heat,
+    TITLE = 'Activity Grid with In-Cell Counts',
+    MAPPINGS (X = Hour, Y = Day, VALUE = ActiveUsers),
+    OPTIONS (
+        DATA_LABELS = ON
+    )
+);
+
+-- 4. Styled Heatmap (Warm Amber/Red Gradient)
 CREATE VISUAL StyledHeatmap AS HEATMAP (
     SOURCE = #heat,
-    TITLE = 'Styled Heatmap',
+    TITLE = 'High-Intensity Heatmap (Custom Palette)',
     MAPPINGS (X = Hour, Y = Day, VALUE = ActiveUsers),
     OPTIONS (
         COLORS (
-            'min' = '#f7fbff',
-            'max' = '#08306b'
-        )
+            'min' = '#fff7bc',
+            'max' = '#d95f0e'
+        ),
+        DATA_LABELS = ON
     )
 );
 
 -- Page Layout
 CREATE PAGE HeatmapKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B',
+    STRUCTURE = 'A B / C .',
     MAP (
         'A' = BasicHeatmap,
-        'B' = StyledHeatmap
+        'B' = LabeledHeatmap,
+        'C' = StyledHeatmap
     )
 );
 

@@ -1,42 +1,57 @@
 -- Kitchen Sink: FUNNEL Visual
--- This script demonstrates the FUNNEL visual type.
+-- This script demonstrates the FUNNEL visual type for pipeline and conversion drop-off analysis.
 
 SET REPORT TITLE = 'Kitchen Sink: FUNNEL Visual';
-SET REPORT DESCRIPTION = 'Demonstration of FUNNEL conversion visualization.';
+SET REPORT DESCRIPTION = 'Demonstration of FUNNEL conversion visualization, stage palettes, and data labels.';
 
--- 1. Mock Data Generation
-SELECT 'Prospects' AS Stage, 1000 AS Count INTO #funnel
-UNION ALL SELECT 'Qualified', 600
-UNION ALL SELECT 'Proposal', 300
-UNION ALL SELECT 'Negotiation', 150
-UNION ALL SELECT 'Closed Won', 80;
+-- 1. Mock Data Generation (Sales Pipeline Stages)
+SELECT '1. Prospects' AS Stage, 1000 AS Count INTO #funnel
+UNION ALL SELECT '2. Qualified', 600
+UNION ALL SELECT '3. Proposal', 300
+UNION ALL SELECT '4. Negotiation', 150
+UNION ALL SELECT '5. Closed Won', 80;
 
 -- 2. Basic Funnel
 CREATE VISUAL BasicFunnel AS FUNNEL (
     SOURCE = (SELECT Stage, Count FROM #funnel ORDER BY Count DESC),
-    TITLE = 'Sales Conversion Funnel',
+    TITLE = 'Sales Conversion Funnel (Volume by Stage)',
     MAPPINGS (LABEL = Stage, VALUE = Count)
 );
 
--- 3. Styled Funnel
+-- 3. Funnel with Data Labels and Value Counts
+CREATE VISUAL LabeledFunnel AS FUNNEL (
+    SOURCE = (SELECT Stage, Count FROM #funnel ORDER BY Count DESC),
+    TITLE = 'Conversion Funnel with Explicit Counts',
+    MAPPINGS (LABEL = Stage, VALUE = Count),
+    OPTIONS (
+        DATA_LABELS = ON
+    )
+);
+
+-- 4. Styled Funnel with Custom Stage Colors
 CREATE VISUAL StyledFunnel AS FUNNEL (
     SOURCE = (SELECT Stage, Count FROM #funnel ORDER BY Count DESC),
-    TITLE = 'Styled Funnel',
+    TITLE = 'Styled Pipeline (Brand Colors)',
     MAPPINGS (LABEL = Stage, VALUE = Count),
     OPTIONS (
         COLORS (
-            'Prospects' = '#4e79a7',
-            'Closed Won' = '#59a14f'
-        )
+            '1. Prospects'   = '#4e79a7',
+            '2. Qualified'   = '#76b7b2',
+            '3. Proposal'    = '#f28e2b',
+            '4. Negotiation' = '#e15759',
+            '5. Closed Won'  = '#59a14f'
+        ),
+        DATA_LABELS = ON
     )
 );
 
 -- Page Layout
 CREATE PAGE FunnelKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B',
+    STRUCTURE = 'A B / C .',
     MAP (
         'A' = BasicFunnel,
-        'B' = StyledFunnel
+        'B' = LabeledFunnel,
+        'C' = StyledFunnel
     )
 );
 

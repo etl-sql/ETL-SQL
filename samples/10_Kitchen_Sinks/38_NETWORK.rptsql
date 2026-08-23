@@ -1,0 +1,40 @@
+-- Kitchen Sink: NETWORK Visual (Relationship Graph)
+-- This script demonstrates the NETWORK visual type for node-link graphs and relationship networks.
+
+SET REPORT TITLE = 'Kitchen Sink: NETWORK Visual';
+SET REPORT DESCRIPTION = 'Demonstration of node-link relationship graphs with weighted edges.';
+
+-- 1. Mock Data Generation (Team Collaboration Network)
+SELECT 'Alice' AS SourceNode, 'Bob' AS TargetNode, 15 AS SharedDeals INTO #network
+UNION ALL SELECT 'Alice', 'Charlie', 8
+UNION ALL SELECT 'Bob', 'Charlie', 12
+UNION ALL SELECT 'Bob', 'David', 6
+UNION ALL SELECT 'Charlie', 'Eve', 18
+UNION ALL SELECT 'David', 'Eve', 10
+UNION ALL SELECT 'Eve', 'Frank', 14
+UNION ALL SELECT 'Frank', 'Alice', 5;
+
+-- 2. Basic Network Graph
+CREATE VISUAL CollaborationNetwork AS NETWORK (
+    SOURCE = #network,
+    TITLE = 'Sales Team Cross-Collaboration Graph',
+    MAPPINGS (
+        FROM  = SourceNode,
+        TO    = TargetNode,
+        VALUE = SharedDeals
+    ),
+    OPTIONS (
+        LAYOUT = FORCE,
+        REPULSION = 500
+    )
+);
+
+-- Page Layout
+CREATE PAGE NetworkKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A .',
+    MAP (
+        'A' = CollaborationNetwork
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = NetworkKitchenSink, PAGES (NetworkKitchenSink));

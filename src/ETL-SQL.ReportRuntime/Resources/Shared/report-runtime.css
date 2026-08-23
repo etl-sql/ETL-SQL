@@ -110,6 +110,10 @@
 
   .chart-wrapper { width: 100%; flex: 1; height: auto; min-height: 0; }
   .native-chart-wrapper svg { display: block; width: 100%; height: 100%; max-width: 100%; }
+  .native-chart-wrapper [data-row-index].cross-dimmed { opacity: 0.2; }
+  .native-chart-wrapper [data-row-index].cross-highlighted { opacity: 1; }
+  .native-chart-wrapper .cross-highlight-universe { opacity: 0.28; }
+  .native-chart-wrapper .cross-highlight-selection { opacity: 1; }
   .report-chart-tooltip {
     position: fixed;
     z-index: 10000;

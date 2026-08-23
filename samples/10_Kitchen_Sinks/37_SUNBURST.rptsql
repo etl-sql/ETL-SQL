@@ -1,0 +1,39 @@
+-- Kitchen Sink: SUNBURST Visual (Concentric Radial Hierarchy)
+-- This script demonstrates the SUNBURST visual type for multi-level hierarchical breakdown.
+
+SET REPORT TITLE = 'Kitchen Sink: SUNBURST Visual';
+SET REPORT DESCRIPTION = 'Demonstration of multi-level hierarchical breakdown using radial rings.';
+
+-- 1. Mock Data Generation (Multi-level revenue breakdown: Category › Region › Product)
+SELECT 'Electronics' AS Level1, 'North' AS Level2, 'Laptops' AS Level3, 3500 AS Revenue INTO #sunburst
+UNION ALL SELECT 'Electronics', 'North', 'Monitors', 1800
+UNION ALL SELECT 'Electronics', 'South', 'Laptops', 2800
+UNION ALL SELECT 'Electronics', 'South', 'Monitors', 1400
+UNION ALL SELECT 'Furniture',   'North', 'Desks',   2100
+UNION ALL SELECT 'Furniture',   'North', 'Chairs',  1200
+UNION ALL SELECT 'Furniture',   'South', 'Desks',   1600
+UNION ALL SELECT 'Furniture',   'South', 'Chairs',   900
+UNION ALL SELECT 'Clothing',    'North', 'Jackets', 1500
+UNION ALL SELECT 'Clothing',    'South', 'Jackets', 1100;
+
+-- 2. Sunburst Chart (Level-based Mappings)
+CREATE VISUAL CategorySunburst AS SUNBURST (
+    SOURCE = #sunburst,
+    TITLE = 'Revenue Sunburst (Category › Region › Product)',
+    MAPPINGS (
+        LEVEL1 = Level1,
+        LEVEL2 = Level2,
+        LEVEL3 = Level3,
+        VALUE  = Revenue
+    )
+);
+
+-- Page Layout
+CREATE PAGE SunburstKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A .',
+    MAP (
+        'A' = CategorySunburst
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = SunburstKitchenSink, PAGES (SunburstKitchenSink));

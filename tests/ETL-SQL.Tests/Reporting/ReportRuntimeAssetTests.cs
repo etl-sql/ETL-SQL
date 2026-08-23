@@ -29,6 +29,11 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("collapsedRows", js);
             Assert.Contains("collapsedCols", js);
             Assert.Contains("matrix-toggle", js);
+            Assert.Contains("case 'MATRIX':      renderMatrix(card, visual)", js);
+            Assert.Contains("visual.highlightRows.map(rowKey)", js);
+            Assert.Contains("function applyNativeHighlight", js);
+            Assert.Contains("const hasCrossHighlights", js);
+            Assert.Contains("cross-highlight-selection", js);
 
             Assert.Contains(".visual-card.visual-maximized", css);
             Assert.Contains("body.visual-maximize-active", css);
@@ -37,6 +42,9 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains(".nav-btn", css);
             Assert.Contains(".matrix-toggle", css);
             Assert.Contains(".matrix-group-row", css);
+            Assert.Contains(".cross-dimmed", css);
+            Assert.Contains(".cross-highlight-universe", css);
+            Assert.Contains(".cross-highlight-selection", css);
         }
 
         [Fact]

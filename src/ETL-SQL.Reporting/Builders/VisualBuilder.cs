@@ -264,6 +264,7 @@ namespace ETL_SQL.Reporting.Builders
                 try
                 {
                     await FetchDataAsync(vStmt, vm, interactionValues);
+                    var chartStatement = vStmt;
 
                     if (vm.Cascade is { Mode: "LOCAL" } cascade)
                     {
@@ -290,6 +291,13 @@ namespace ETL_SQL.Reporting.Builders
                         };
                         // Aggregation changed row shape; rebuild typed values from the resolved display rows.
                         vm.RawRows.Clear();
+                        chartStatement = vStmt with
+                        {
+                            Mappings = vStmt.Mappings.Select(mapping =>
+                                mapping.Role.Equals("X", StringComparison.OrdinalIgnoreCase)
+                                    ? mapping with { Column = currentLevel }
+                                    : mapping).ToList()
+                        };
                     }
 
                     ResolveActionValues(vm);
@@ -297,16 +305,18 @@ namespace ETL_SQL.Reporting.Builders
                     if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
                         ApplyTableMappings(vStmt, vm);
                     await BuildMicroChartsAsync(vStmt, vm);
-                    if (vStmt.AdvancedChart is not null || NamedVisualChartLowerer.Supports(vStmt.VisualType))
+                    if (chartStatement.AdvancedChart is not null || NamedVisualChartLowerer.Supports(chartStatement.VisualType))
                     {
-                        vm.ChartSpec = vStmt.AdvancedChart is not null
-                            ? new AdvancedChartLowerer(ctx).Lower(vStmt, vm)
-                            : new NamedVisualChartLowerer().Lower(vStmt, vm);
+                        vm.ChartSpec = chartStatement.AdvancedChart is not null
+                            ? new AdvancedChartLowerer(ctx).Lower(chartStatement, vm)
+                            : new NamedVisualChartLowerer().Lower(chartStatement, vm);
                         vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData);
                     }
                     vm.SemanticFallback = VisualSemanticFallbackBuilder.Build(vm);
-                    vm.ChartConfig = null;
+                    vm.ChartConfig = vStmt.VisualType == VisualType.Matrix
+                        ? MatrixPivotBuilder.Build(vm)
+                        : null;
                     vm.NativeSvg = new SvgChartRenderer().Render(vm);
                 }
                 catch (Exception ex)

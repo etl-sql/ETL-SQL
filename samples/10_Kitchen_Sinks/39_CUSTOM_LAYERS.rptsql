@@ -1,0 +1,56 @@
+-- Kitchen Sink: CUSTOM Visual (Grammar of Graphics Multi-Layer Composition)
+-- This script demonstrates the CUSTOM visual type for direct Grammar of Graphics multi-layer authoring.
+
+SET REPORT TITLE = 'Kitchen Sink: CUSTOM Visual';
+SET REPORT DESCRIPTION = 'Demonstration of composable multi-layer charts combining RECT bars, POINT markers, and conditional encodings.';
+
+-- 1. Mock Data Generation (Revenue and Margin with Target Flags)
+SELECT 'Jan' AS Month, 120000 AS Revenue, 0.28 AS MarginPct, 0 AS IsForecast INTO #performance
+UNION ALL SELECT 'Feb', 145000, 0.32, 0
+UNION ALL SELECT 'Mar', 130000, 0.25, 0
+UNION ALL SELECT 'Apr', 160000, -0.05, 0
+UNION ALL SELECT 'May', 175000, 0.35, 1
+UNION ALL SELECT 'Jun', 190000, 0.38, 1;
+
+-- 2. Custom Multi-Layer Composite Chart (Dual Axis Bars + Conditional Margin Points)
+CREATE VISUAL PerformanceOverview AS CUSTOM (
+    TITLE = 'Revenue & Profitability Multi-Layer Composite',
+    SOURCE = #performance,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            months  = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+            revenue = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0),
+            margin  = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = OFF)
+        ),
+        LAYERS (
+            revenue_bars = RECT (
+                ENCODINGS (
+                    X = Month (TYPE = ORDINAL, SCALE = months),
+                    Y = Revenue (TYPE = QUANTITATIVE, SCALE = revenue, AXIS = PRIMARY)
+                )
+            ),
+            margin_points = POINT (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    X = Month (TYPE = ORDINAL, SCALE = months),
+                    Y2 = MarginPct (TYPE = QUANTITATIVE, SCALE = margin, AXIS = SECONDARY)
+                ),
+                CONDITIONS (
+                    COLOR WHEN MarginPct < 0 THEN '#C0392B' ELSE '#2E86C1',
+                    OPACITY WHEN IsForecast = 1 THEN 0.45 ELSE 1
+                )
+            )
+        )
+    )
+);
+
+-- Page Layout
+CREATE PAGE CustomKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A .',
+    MAP (
+        'A' = PerformanceOverview
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = CustomKitchenSink, PAGES (CustomKitchenSink));

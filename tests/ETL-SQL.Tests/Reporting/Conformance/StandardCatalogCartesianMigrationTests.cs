@@ -267,6 +267,22 @@ public sealed class StandardCatalogCartesianMigrationTests
     }
 
     [Fact]
+    public async Task Custom_OrdinalPointsUseSecondaryScaleAndConditionalEncodings()
+    {
+        var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("custom_ordinal_secondary_points.rptsql");
+        var plan = Assert.IsType<PlotPlan>(Assert.Single(manifest.Visuals).PlotPlan);
+        var pointLayer = plan.Layers.Single(layer => layer.Mark == MarkKind.Point);
+
+        Assert.All(pointLayer.Data, datum =>
+            Assert.Contains(datum.Channels, channel => channel.Channel == FieldChannel.Y2));
+        var svg = new SvgChartRenderer().Render(plan);
+        Assert.Equal(3, CountOccurrences(svg, "class='plot-point'"));
+        Assert.Contains("fill='#C0392B' fill-opacity='0.45'", svg);
+        Assert.Contains("fill='#2E86C1' fill-opacity='1'", svg);
+        Assert.Contains(">-0.07</text>", svg);
+    }
+
+    [Fact]
     public async Task HeatMap_PreservesBothCategoryDomainsAndEveryCell()
     {
         var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("heatmap_native_plot_plan.rptsql");
@@ -275,7 +291,18 @@ public sealed class StandardCatalogCartesianMigrationTests
         Assert.Equal(4, Assert.Single(plan.Layers).Data.Length);
         Assert.Equal(new[] { "AM", "PM" }, plan.Scales.Single(scale => scale.Channel == FieldChannel.X).Categories);
         Assert.Equal(new[] { "Mon", "Tue" }, plan.Scales.Single(scale => scale.Channel == FieldChannel.Y).Categories);
-        Assert.Equal(4, CountOccurrences(new SvgChartRenderer().Render(plan), "data-row-index="));
+        var styled = plan with
+        {
+            Style = plan.Style
+                .Add(new StyleToken("COLOR:min", "#fff7bc"))
+                .Add(new StyleToken("COLOR:max", "#d95f0e"))
+                .Add(new StyleToken("DATA_LABELS", "ON"))
+        };
+        var svg = new SvgChartRenderer().Render(styled);
+        Assert.Equal(4, CountOccurrences(svg, "class='plot-heat-cell'"));
+        Assert.DoesNotContain("fill='#2563eb'", svg);
+        Assert.Matches("fill='#[A-F0-9]{6}' data-row-index='0'", svg);
+        Assert.Contains(">12</text>", svg);
     }
 
     [Fact]
@@ -287,7 +314,9 @@ public sealed class StandardCatalogCartesianMigrationTests
         Assert.Equal("funnel", Assert.Single(plan.Layers).Style.Single(token => token.Name == "layout").Value);
         var svg = new SvgChartRenderer().Render(plan);
         Assert.Equal(3, CountOccurrences(svg, "<polygon"));
-        Assert.Contains("Leads · 500", svg);
+        Assert.Contains(">Leads</text>", svg);
+        Assert.Equal(3, CountOccurrences(svg, "text-anchor='start'"));
+        Assert.Equal(3, CountOccurrences(svg, "fill='none' stroke='#9ca3af'"));
     }
 
     [Fact]

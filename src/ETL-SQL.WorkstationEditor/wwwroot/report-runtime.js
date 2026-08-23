@@ -588,7 +588,9 @@
         // - Non-interaction rebuild (slicer/param change): clear all selection state.
         // - Interaction rebuild (chart click): re-apply dimming/source CSS so the visual
         //   feedback survives the full DOM rebuild that renderManifest does.
-        if (!manifest.isInteraction) {
+        const hasCrossHighlights = (manifest.visuals || []).some(visual =>
+            Array.isArray(visual.highlightRows) && visual.highlightRows.length > 0);
+        if (!manifest.isInteraction && !hasCrossHighlights) {
             for (let k in _crossFilterStates) delete _crossFilterStates[k];
         } else {
             reApplyCrossFilterStyling();
@@ -1607,7 +1609,9 @@
             case 'TEXTBOX':     renderTextbox(card, visual, manifest);            break;
             case 'NUMBERBOX':   renderNumberbox(card, visual, manifest);          break;
             case 'IMAGE':       renderImage(card, visual);                        break;
-            case 'MATRIX':      visual.nativeSvg ? renderNativeSvg(card, visual, manifest, effectiveTheme) : renderMatrix(card, visual); break;
+            // MATRIX is an interactive pivot table, not a chart. Its HTML renderer preserves
+            // nested headers, subtotals, scrolling, and expand/collapse behavior.
+            case 'MATRIX':      renderMatrix(card, visual);                       break;
             default:            visual.nativeSvg
                                     ? renderNativeSvg(card, visual, manifest, effectiveTheme)
                                     : renderChart(card, visual, manifest, effectiveTheme); break;
@@ -1871,6 +1875,8 @@
             (visual.columns || [])[0];
         let activeRow = null;
 
+        applyNativeHighlight(wrapper, visual, mappingColumn);
+
         installNativeTooltip(wrapper, visual, manifest, pageTheme, mappingColumn);
 
         wrapper.addEventListener('pointerover', event => {
@@ -1894,6 +1900,65 @@
             if (!(visual.actions || []).some(action => action.type === 'DRILL_DOWN')) return;
             event.preventDefault();
             showCtxMenu(event.clientX, event.clientY, visual, activeRow);
+        });
+    }
+
+    function applyNativeHighlight(wrapper, visual, mappingColumn) {
+        if (!Array.isArray(visual.highlightRows)) return;
+        const columns = visual.columns || [];
+        const mappingIndex = columns.findIndex(column =>
+            column.toLowerCase() === String(mappingColumn || '').toLowerCase());
+        const valueColumn = (visual.options || {})['mapping:y'];
+        const valueIndex = columns.findIndex(column =>
+            column.toLowerCase() === String(valueColumn || '').toLowerCase());
+        const rowKey = row => mappingIndex >= 0
+            ? String(row?.[mappingIndex] ?? '')
+            : JSON.stringify(row || []);
+        const highlighted = new Set(visual.highlightRows.map(rowKey));
+        const type = String(visual.visualType || '').toUpperCase();
+        const barType = type === 'BAR' || type === 'HBAR' || type === 'HORIZONTALBAR';
+
+        if (barType && valueIndex >= 0) {
+            const selectedValues = new Map();
+            visual.highlightRows.forEach(row => {
+                const value = Number.parseFloat(row?.[valueIndex]);
+                if (!Number.isFinite(value)) return;
+                const key = rowKey(row);
+                selectedValues.set(key, (selectedValues.get(key) || 0) + value);
+            });
+            wrapper.querySelectorAll('rect[data-row-index]').forEach(mark => {
+                const row = (visual.rows || [])[Number(mark.dataset.rowIndex)] || [];
+                const universeValue = Number.parseFloat(row?.[valueIndex]);
+                const selectedValue = selectedValues.get(rowKey(row));
+                mark.classList.add('cross-highlight-universe');
+                if (!Number.isFinite(universeValue) || selectedValue === undefined) return;
+
+                const ratio = universeValue === 0 ? 0 : Math.max(0, Math.min(1, selectedValue / universeValue));
+                const overlay = mark.cloneNode(false);
+                overlay.removeAttribute('data-row-index');
+                overlay.classList.remove('cross-highlight-universe');
+                overlay.classList.add('cross-highlight-selection');
+                overlay.setAttribute('pointer-events', 'none');
+                overlay.setAttribute('aria-hidden', 'true');
+                if (type === 'BAR') {
+                    const fullHeight = Number.parseFloat(mark.getAttribute('height')) || 0;
+                    const fullY = Number.parseFloat(mark.getAttribute('y')) || 0;
+                    overlay.setAttribute('height', String(fullHeight * ratio));
+                    overlay.setAttribute('y', String(fullY + fullHeight * (1 - ratio)));
+                } else {
+                    const fullWidth = Number.parseFloat(mark.getAttribute('width')) || 0;
+                    overlay.setAttribute('width', String(fullWidth * ratio));
+                }
+                mark.parentNode.insertBefore(overlay, mark.nextSibling);
+            });
+            return;
+        }
+
+        wrapper.querySelectorAll('[data-row-index]').forEach(mark => {
+            const row = (visual.rows || [])[Number(mark.dataset.rowIndex)] || [];
+            const selected = highlighted.has(rowKey(row));
+            mark.classList.toggle('cross-highlighted', selected);
+            mark.classList.toggle('cross-dimmed', !selected);
         });
     }
 

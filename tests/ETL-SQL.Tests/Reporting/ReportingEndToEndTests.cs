@@ -208,9 +208,17 @@ CREATE VISUAL DetailByCategory AS BAR (
     INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
+CREATE VISUAL DetailRows AS TABLE (
+    SOURCE = (
+        SELECT Region, Category, Sales
+        FROM #Sales
+        WHERE @Category = 'All' OR Category = @Category
+    )
+);
+
 CREATE PAGE Main AS DASHBOARD (
-    STRUCTURE = 'A B',
-    MAP('A' = BarByRegion, 'B' = DetailByCategory)
+    STRUCTURE = 'A B / C C',
+    MAP('A' = BarByRegion, 'B' = DetailByCategory, 'C' = DetailRows)
 );
 ");
 
@@ -228,6 +236,95 @@ CREATE PAGE Main AS DASHBOARD (
                 Assert.NotNull(detail.HighlightRows);
                 Assert.Single(detail.HighlightRows!);
                 Assert.Equal("Hardware", detail.HighlightRows![0][0]);
+                Assert.Single(manifest.Visuals.Single(v => v.Name == "DetailRows").Rows);
+
+                var cleared = await service.SetParametersAsync([], isInteraction: false);
+                Assert.False(cleared.IsInteraction);
+                Assert.All(cleared.Visuals, visual => Assert.Null(visual.HighlightRows));
+                Assert.Equal(2, cleared.Visuals.Single(v => v.Name == "DetailRows").Rows.Count);
+            }
+            finally
+            {
+                if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            }
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public async Task DrillIn_RebindsNativeChartToCurrentHierarchyLevel()
+        {
+            string scriptPath = Path.Combine(Path.GetTempPath(), $"drill_in_native_{Guid.NewGuid()}.rptsql");
+            File.WriteAllText(scriptPath, @"
+SELECT 'Electronics' AS Category, 'North' AS Region, 'Alice' AS Salesperson, 100 AS Revenue INTO #Sales;
+INSERT INTO #Sales (Category, Region, Salesperson, Revenue) VALUES ('Electronics', 'South', 'Bob', 80);
+INSERT INTO #Sales (Category, Region, Salesperson, Revenue) VALUES ('Software', 'North', 'Alice', 60);
+
+CREATE VISUAL RevenueDrill AS BAR (
+    SOURCE = (SELECT Category, Region, Salesperson, Revenue FROM #Sales),
+    MAPPINGS (X = Category, Y = Revenue),
+    ACTIONS (ON_CLICK = DRILL_IN(HIERARCHY = (Category, Region, Salesperson)))
+);
+
+CREATE PAGE Main AS DASHBOARD (
+    STRUCTURE = 'A',
+    MAP('A' = RevenueDrill)
+);
+");
+
+            try
+            {
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                await service.GetManifestAsync();
+
+                var drilled = await service.DrillInAsync("RevenueDrill", "Electronics");
+                var visual = Assert.Single(drilled!.Visuals);
+
+                Assert.Equal("Region", visual.Options["mapping:x"]);
+                Assert.Equal(2, visual.Rows.Count);
+                Assert.Contains("data-row-index='0'", visual.NativeSvg);
+                Assert.Contains("data-row-index='1'", visual.NativeSvg);
+                Assert.Contains("North", visual.NativeSvg);
+                Assert.Contains("South", visual.NativeSvg);
+            }
+            finally
+            {
+                if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            }
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public async Task Matrix_BuildsInteractivePivotPayloadAlongsideStaticSvg()
+        {
+            string scriptPath = Path.Combine(Path.GetTempPath(), $"matrix_pivot_{Guid.NewGuid()}.rptsql");
+            File.WriteAllText(scriptPath, @"
+SELECT 'North' AS Region, 'Q1' AS Quarter, 100 AS Revenue INTO #Sales;
+INSERT INTO #Sales (Region, Quarter, Revenue) VALUES ('North', 'Q2', 120);
+INSERT INTO #Sales (Region, Quarter, Revenue) VALUES ('South', 'Q1', 90);
+
+CREATE VISUAL RevenueMatrix AS MATRIX (
+    SOURCE = #Sales,
+    MAPPINGS (ROW = Region, COL = Quarter, VALUE = Revenue),
+    OPTIONS (AGGREGATE = SUM, GRAND_TOTAL = ON)
+);
+
+CREATE PAGE Main AS DASHBOARD (
+    STRUCTURE = 'A',
+    MAP('A' = RevenueMatrix)
+);
+");
+
+            try
+            {
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                var manifest = await service.GetManifestAsync();
+                var visual = Assert.Single(manifest.Visuals);
+
+                Assert.NotNull(visual.NativeSvg);
+                Assert.Contains("\"__matrix\":true", visual.ChartConfig);
+                Assert.Contains("\"rowHeaders\":[\"Region\"]", visual.ChartConfig);
+                Assert.Contains("\"colHeaders\":[\"Quarter\"]", visual.ChartConfig);
+                Assert.Contains("\"grandTotals\"", visual.ChartConfig);
             }
             finally
             {

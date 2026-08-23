@@ -1,0 +1,41 @@
+-- Kitchen Sink: SANKEY Visual (Flow Diagram)
+-- This script demonstrates the SANKEY visual type for directional flows and transitions.
+
+SET REPORT TITLE = 'Kitchen Sink: SANKEY Visual';
+SET REPORT DESCRIPTION = 'Demonstration of multi-stage flow transitions (e.g. Budget Allocation / Customer Journey).';
+
+-- 1. Mock Data Generation (Multi-Stage Budget & Cost Flow)
+SELECT 'Total Budget' AS FlowFrom, 'Engineering' AS FlowTo, 450 AS FlowValue INTO #sankey
+UNION ALL SELECT 'Total Budget', 'Marketing', 250
+UNION ALL SELECT 'Total Budget', 'Operations', 200
+UNION ALL SELECT 'Total Budget', 'Sales', 300
+UNION ALL SELECT 'Engineering', 'Infrastructure', 180
+UNION ALL SELECT 'Engineering', 'Product Dev', 220
+UNION ALL SELECT 'Engineering', 'Security', 50
+UNION ALL SELECT 'Marketing', 'Digital Ads', 150
+UNION ALL SELECT 'Marketing', 'Events', 100
+UNION ALL SELECT 'Operations', 'Facilities', 120
+UNION ALL SELECT 'Operations', 'Compliance', 80
+UNION ALL SELECT 'Sales', 'Direct Sales', 200
+UNION ALL SELECT 'Sales', 'Channel Partners', 100;
+
+-- 2. Basic Sankey Flow
+CREATE VISUAL BudgetFlow AS SANKEY (
+    SOURCE = #sankey,
+    TITLE = 'Enterprise Budget Flow: Organization → Department → Function',
+    MAPPINGS (
+        FROM  = FlowFrom,
+        TO    = FlowTo,
+        VALUE = FlowValue
+    )
+);
+
+-- Page Layout
+CREATE PAGE SankeyKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A .',
+    MAP (
+        'A' = BudgetFlow
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = SankeyKitchenSink, PAGES (SankeyKitchenSink));

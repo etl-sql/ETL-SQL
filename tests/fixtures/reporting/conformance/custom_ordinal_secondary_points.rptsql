@@ -1,0 +1,37 @@
+SELECT 'Jan' AS Month, 120 AS Revenue, CAST(0.28 AS DECIMAL) AS MarginPct, 0 AS IsForecast INTO #performance
+UNION ALL SELECT 'Feb', 145, CAST(0.32 AS DECIMAL), 0
+UNION ALL SELECT 'Mar', 130, CAST(-0.05 AS DECIMAL), 1;
+
+CREATE VISUAL PerformanceOverview AS CUSTOM (
+  TITLE = 'Revenue and Margin',
+  SOURCE = #performance,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      months = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+      revenue = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0),
+      margin = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = OFF)
+    ),
+    LAYERS (
+      revenue_bars = RECT (
+        ENCODINGS (
+          X = Month (TYPE = ORDINAL, SCALE = months),
+          Y = Revenue (TYPE = QUANTITATIVE, SCALE = revenue, AXIS = PRIMARY)
+        )
+      ),
+      margin_points = POINT (
+        Z_INDEX = 1,
+        ENCODINGS (
+          X = Month (TYPE = ORDINAL, SCALE = months),
+          Y2 = MarginPct (TYPE = QUANTITATIVE, SCALE = margin, AXIS = SECONDARY)
+        ),
+        CONDITIONS (
+          COLOR WHEN MarginPct < 0 THEN '#C0392B' ELSE '#2E86C1',
+          OPACITY WHEN IsForecast = 1 THEN 0.45 ELSE 1
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = PerformanceOverview));

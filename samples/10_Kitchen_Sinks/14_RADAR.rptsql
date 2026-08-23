@@ -1,27 +1,29 @@
 -- Kitchen Sink: RADAR Visual
--- This script demonstrates the RADAR (Spider) visual type.
+-- This script demonstrates the RADAR (Spider) visual type for multi-dimensional comparisons.
 
 SET REPORT TITLE = 'Kitchen Sink: RADAR Visual';
-SET REPORT DESCRIPTION = 'Demonstration of RADAR (Spider) chart capabilities for multi-dimensional metrics.';
+SET REPORT DESCRIPTION = 'Demonstration of RADAR (Spider) chart capabilities for multi-dimensional performance and skill metrics.';
 
--- 1. Mock Data Generation
--- First column: Series Name
--- Other columns: Metric Axes
+-- 1. Mock Data Generation (Product Benchmark Metrics)
 SELECT 'Product A' AS Name, 80 AS Quality, 70 AS Speed, 90 AS Support, 60 AS Value, 85 AS UX INTO #radar
 UNION ALL SELECT 'Product B', 60, 90, 70, 80, 65
 UNION ALL SELECT 'Product C', 90, 60, 85, 50, 95;
 
--- 2. Basic Radar Chart
--- No MAPPINGS required; engine uses all columns.
+-- 2. Mock Data Generation (Engineering Skill Profiles)
+SELECT 'DevOps' AS Role, 95 AS Cloud, 85 AS Automation, 70 AS Coding, 60 AS Architecture, 90 AS Monitoring INTO #skills
+UNION ALL SELECT 'FullStack', 70, 75, 95, 80, 65
+UNION ALL SELECT 'Architect', 85, 65, 75, 95, 75;
+
+-- 3. Basic Radar Chart
 CREATE VISUAL BasicRadar AS RADAR (
     SOURCE = #radar,
-    TITLE = 'Product Performance Radar'
+    TITLE = 'Product Performance Benchmark'
 );
 
--- 3. Styled Radar
+-- 4. Styled Radar with Custom Colors and Legend
 CREATE VISUAL StyledRadar AS RADAR (
     SOURCE = #radar,
-    TITLE = 'Styled Radar Chart',
+    TITLE = 'Styled Radar Chart (Product Comparison)',
     OPTIONS (
         COLORS (
             'Product A' = '#4e79a7',
@@ -32,12 +34,28 @@ CREATE VISUAL StyledRadar AS RADAR (
     )
 );
 
+-- 5. Filled Area Skills Radar
+CREATE VISUAL SkillsRadar AS RADAR (
+    SOURCE = #skills,
+    TITLE = 'Role Skill Competency Matrix (Filled Area)',
+    OPTIONS (
+        FILL = ON,
+        COLORS (
+            'DevOps'    = '#3ba272',
+            'FullStack' = '#5470c6',
+            'Architect' = '#fac858'
+        ),
+        LEGEND_POSITION = RIGHT
+    )
+);
+
 -- Page Layout
 CREATE PAGE RadarKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B',
+    STRUCTURE = 'A B / C C',
     MAP (
         'A' = BasicRadar,
-        'B' = StyledRadar
+        'B' = StyledRadar,
+        'C' = SkillsRadar
     )
 );
 

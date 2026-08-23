@@ -1,35 +1,45 @@
 -- Kitchen Sink: WATERFALL Visual
--- This script demonstrates the WATERFALL visual type.
+-- This script demonstrates the WATERFALL visual type for cumulative changes and financial bridge charts.
 
 SET REPORT TITLE = 'Kitchen Sink: WATERFALL Visual';
-SET REPORT DESCRIPTION = 'Demonstration of WATERFALL cumulative change visualization.';
+SET REPORT DESCRIPTION = 'Demonstration of WATERFALL cumulative change visualization, financial bridge charts, and custom delta colors.';
 
--- 1. Mock Data Generation
-SELECT 'Opening Balance' AS Period, 1000 AS Delta INTO #cashflow
-UNION ALL SELECT 'Sales', 500
-UNION ALL SELECT 'Refunds', -50
-UNION ALL SELECT 'Marketing', -200
-UNION ALL SELECT 'Payroll', -400
-UNION ALL SELECT 'Rent', -150
-UNION ALL SELECT 'Closing Balance', 700; -- Note: Waterfall usually calculates the net, but here we provide deltas.
+-- 1. Mock Data Generation (Cash Flow Bridge)
+SELECT 'Opening Cash' AS Period, 1000 AS Delta INTO #cashflow
+UNION ALL SELECT 'Revenue Inflow', 600
+UNION ALL SELECT 'Refunds', -80
+UNION ALL SELECT 'Payroll', -450
+UNION ALL SELECT 'Marketing', -180
+UNION ALL SELECT 'Facilities', -120
+UNION ALL SELECT 'Net Closing', 770;
 
--- 2. Basic Waterfall
+-- 2. Mock Data Generation (Corporate P&L Bridge)
+SELECT 'Gross Revenue' AS LineItem, 5000 AS Amount INTO #pnl
+UNION ALL SELECT 'COGS', -1800
+UNION ALL SELECT 'Operating Exp', -1200
+UNION ALL SELECT 'R&D', -600
+UNION ALL SELECT 'Tax', -400
+UNION ALL SELECT 'Net Income', 1000;
+
+-- 3. Basic Waterfall
 CREATE VISUAL BasicWaterfall AS WATERFALL (
     SOURCE = #cashflow,
-    TITLE = 'Cash Flow Waterfall',
+    TITLE = 'Cash Flow Waterfall Bridge',
     MAPPINGS (X = Period, Y = Delta)
 );
 
--- 3. Styled Waterfall (Custom Colors for Positive/Negative)
+-- 4. Styled Waterfall (Custom Positive/Negative Colors & Axis Labels)
 CREATE VISUAL StyledWaterfall AS WATERFALL (
-    SOURCE = #cashflow,
-    TITLE = 'Styled Waterfall with Custom Colors',
-    MAPPINGS (X = Period, Y = Delta),
+    SOURCE = #pnl,
+    TITLE = 'Income Statement Waterfall (P&L Bridge)',
+    MAPPINGS (X = LineItem, Y = Amount),
     OPTIONS (
         COLORS (
-            positive = '#28a745',
-            negative = '#dc3545'
-        )
+            positive = '#2e7d32',
+            negative = '#c62828',
+            total    = '#1565c0'
+        ),
+        Y_AXIS (LABEL = 'Amount ($ USD)')
     )
 );
 

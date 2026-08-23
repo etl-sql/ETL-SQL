@@ -181,6 +181,12 @@ namespace ETL_SQL.Reporting
                     var index = manifest.Visuals.FindIndex(v => v.Name.Equals(pair.Key, StringComparison.OrdinalIgnoreCase));
                     if (index >= 0) manifest.Visuals[index] = pair.Value;
                 }
+                foreach (var visual in manifest.Visuals.Where(visual => visual.HighlightRows != null))
+                {
+                    builder.ClearHighlightRows(visual);
+                    if (!refreshed.Contains(visual.Name, StringComparer.OrdinalIgnoreCase))
+                        refreshed.Add(visual.Name);
+                }
                 foreach (var parameter in parameters) manifest.Parameters[parameter.Key] = parameter.Value;
                 manifest.CascadeGraph = graph.OrderedNodes.Count > 0 ? graph.ToManifest() : null;
                 manifest.CascadeTransaction = new CascadeTransactionManifest
