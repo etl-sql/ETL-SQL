@@ -218,8 +218,9 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 ### 📊 See Your Dashboard Before You Ship It
 
 - **Live `.rptsql` Preview** — open a report file and watch the interactive dashboard render side-by-side with your code. Every save refreshes the preview.
-- **Interactive Preview** — slicers, date pickers, drill-downs, parameter overrides, and cross-highlighting work in the preview pane.
-- **One-Click Export** — export your rendered report to PDF or Markdown directly from the preview panel.
+- **Native Grammar of Graphics Engine** — 100% managed rendering pipeline (`PlotPlan`) generating native SVG vector graphics with layered marks (`RECT`, `LINE`, `POINT`, `AREA`, `BAR`, `RULE`, `TEXT`), named scales, coordinates, and facets — zero external JavaScript charting runtimes (ECharts retired).
+- **Interactive Preview** — slicers, cascading filters, date pickers, sliders, search boxes, drill-downs, parameter overrides, and cross-highlighting work in the preview pane.
+- **One-Click Export** — export your rendered report to native SVG, PDF, or Markdown directly from the preview panel.
 
 ### 📓 Notebooks for Iterative Development (`.etlnb`)
 
@@ -242,7 +243,7 @@ Browse all active connections, catalog schemas, declared `@variables`, and live 
 
 ETL-SQL keeps governance metadata in the script instead of a separate after-the-fact catalog. Inline tags such as `/* @pii; @classification: confidential; @owner: finance_ops */` travel with columns through joins, aggregations, and derived expressions, so lineage stays connected to the transformations that created the data.
 
-After a script runs, lineage is queryable with `LINEAGE` and tag metadata is queryable through `eng.tags`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/lineage.md) for the full tag catalog and examples.
+After a script runs, lineage is queryable with `LINEAGE` and tag metadata is queryable through `eng.tags`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/session-control/lineage.md) for the full tag catalog and examples.
 
 ---
 
@@ -344,11 +345,15 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 
 | Resource | Description |
 | :--- | :--- |
-| [Getting Started](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/getting-started.md) | Core paradigms, connections, variables, control flow, and debugging |
+| [5-Minute Quickstart](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/QUICKSTART.md) | Zero-dependency starter pipeline and environment verification |
+| [Getting Started](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/getting-started.md) | Core paradigms, connections, variables, control flow, and debugging |
+| [Report-SQL & Dashboards](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/reporting/README.md) | Dashboards, cascading slicers, parameters, RLS, and custom theming |
+| [Data Quality & Governance](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/data-quality/README.md) | Value rules (`@expect`), quarantine remediation, cross-table checks, and impact analysis |
+| [ETL Pipelines & Orchestration](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/pipelines/README.md) | Staged vs. streaming ingestion, modular scripts, parallel runs, and unit testing |
 | [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md) | 29 production-grade, copy-pasteable ETL recipes |
-| [Report-SQL Guide](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/report-sql.md) | Visuals, filters, dashboards, drill-downs, and hosting |
-| [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/lineage.md) | Tags, inheritance rules, `SHOW LINEAGE`, `LINEAGE_TAGS`, OpenLineage export |
+| [Task Index](https://github.com/etl-sql/ETL-SQL/blob/main/docs/task-index.md) | Goal-oriented "How do I..." locator for common tasks |
+| [Syntax Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/syntax-index.md) | Complete language syntax reference and function signatures |
+| [Data Connectors](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/connectors/README.md) | Every connector, its options, and authentication patterns |
+| [Lineage Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/session-control/lineage.md) | Tags, inheritance rules, `SHOW LINEAGE`, `LINEAGE_TAGS`, OpenLineage export |
 | [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md) | Full guide to the AI spec extraction + `gen-script` workflow |
-| [Data Connectors](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/administration.md) | Every connector, its options, and authentication patterns |
-| [Grammar Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/getting-started.md) | Complete language syntax reference |
-| [Notebook Guide](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense |
+| [Notebook Guide](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/tooling/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense |
