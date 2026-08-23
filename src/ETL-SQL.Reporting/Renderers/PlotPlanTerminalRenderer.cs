@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
 using Spectre.Console;
@@ -83,7 +84,7 @@ internal static class PlotPlanTerminalRenderer
         else if (rectLayers.Count > 0)
         {
             foreach (var item in rectLayers)
-                content.Add(RenderRectangles(item.Data, item.Label, item.Color, width));
+                content.Add(RenderRectangles(plan, item.Data, item.Label, item.Color, width));
             foreach (var item in ruleLayers)
                 content.Add(RenderRule(item.Data, item.Label, item.Color));
             foreach (var item in continuousLayers)
@@ -101,7 +102,7 @@ internal static class PlotPlanTerminalRenderer
             {
                 content.Add(item.Layer.Mark switch
                 {
-                    MarkKind.Rect => RenderRectangles(item.Data, item.Label, item.Color, width),
+                    MarkKind.Rect => RenderRectangles(plan, item.Data, item.Label, item.Color, width),
                     MarkKind.Line or MarkKind.Area => RenderLine(item.Data, item.Label, item.Color, width, item.Layer.Mark == MarkKind.Area),
                     MarkKind.Point => RenderPoints(item.Data, item.Label, item.Color, item.Series?.Order ?? 0),
                     MarkKind.Rule => RenderRule(item.Data, item.Label, item.Color),
@@ -137,7 +138,7 @@ internal static class PlotPlanTerminalRenderer
         var maxX = hasNumericX ? allX.Max() : 1m;
         if (minX == maxX) maxX = minX + 1m;
 
-        var canvas = new BrailleCanvas(Math.Clamp(width - 8, 16, 52), 7);
+        var canvas = new BrailleCanvas(Math.Clamp(width - 16, 16, 48), 7);
         var headerParts = new List<string>();
 
         foreach (var item in layers)
@@ -206,7 +207,7 @@ internal static class PlotPlanTerminalRenderer
 
         return new Rows(
             new Markup(string.Join("  ", headerParts) + headerSuffix),
-            canvas.ToRenderable(),
+            canvas.ToRenderableWithAxis(min, max),
             new Markup(axisRange));
     }
 
@@ -231,7 +232,7 @@ internal static class PlotPlanTerminalRenderer
         var max = allValues.Max();
         if (min == max) max = min + 1m;
 
-        var cellW = Math.Clamp((width - 8) / 2, 16, 50);
+        var cellW = Math.Clamp((width - 16) / 2, 16, 48);
         var canvas = new BrailleCanvas(cellW, 8);
         var headerParts = new List<string>();
 
@@ -302,17 +303,53 @@ internal static class PlotPlanTerminalRenderer
 
         return new Rows(
             new Markup(string.Join("  ", headerParts)),
-            canvas.ToRenderable(),
+            canvas.ToRenderableWithAxis(min, max),
             new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]  [bold]{Markup.Escape(catAxis)}[/]"));
     }
 
-    private static IRenderable RenderRectangles(IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
+    private static IRenderable RenderRectangles(PlotPlan plan, IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
     {
         var values = data.Select(Value).ToList();
         var maximum = values.Where(value => value.HasValue).Select(value => Math.Abs(value!.Value)).DefaultIfEmpty(1m).Max();
         if (maximum == 0m) maximum = 1m;
         var labelWidth = Math.Clamp(data.Select(Label).DefaultIfEmpty("").Max(label => label.Length), 6, Math.Max(6, width / 3));
         var barWidth = Math.Max(8, width - labelWidth - 18);
+
+        var hasSeries = data.Any(d => DisplayChannel(d, FieldChannel.Color) != null || (!d.Encodings.IsDefaultOrEmpty && d.Encodings.Any(e => e.Channel == ConditionalEncodingChannel.Color)));
+        if (hasSeries)
+        {
+            var groups = data.GroupBy(Label).ToList();
+            var subRows = new List<IRenderable>
+            {
+                new Markup($"[bold]{Markup.Escape(series)}[/] [grey](grouped fractional bars)[/]")
+            };
+            foreach (var group in groups)
+            {
+                subRows.Add(new Markup($"[bold]{Markup.Escape(group.Key)}[/]"));
+                foreach (var datum in group)
+                {
+                    var seriesName = DisplayChannel(datum, FieldChannel.Color)
+                        ?? (datum.Encodings.FirstOrDefault(e => e.Channel == ConditionalEncodingChannel.Color) is { } enc ? PlotPlanResolver.Display(enc.Value) : null)
+                        ?? "default";
+                    var seriesColor = plan.Series.FirstOrDefault(s => s.Key == seriesName)?.Color
+                        ?? plan.Palette.FirstOrDefault(p => p.SeriesKey == seriesName)?.Color
+                        ?? color;
+                    var seriesAnsi = SafeAnsiColor(seriesColor);
+                    var subLabel = Truncate(seriesName, labelWidth).PadRight(labelWidth);
+                    if (datum.IsGap)
+                    {
+                        subRows.Add(new Markup($"  {Markup.Escape(subLabel)} [grey]gap[/]"));
+                        continue;
+                    }
+                    var value = Value(datum) ?? 0m;
+                    var bar = FractionalBar(Math.Abs(value) / maximum, barWidth);
+                    var sign = value < 0m ? "◀" : value == 0m ? "│" : "▶";
+                    subRows.Add(new Markup($"  {Markup.Escape(subLabel)} [{seriesAnsi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}"));
+                }
+            }
+            return new Rows(subRows);
+        }
+
         var ansi = SafeAnsiColor(color);
         var rows = data.Select(datum =>
         {
@@ -334,7 +371,7 @@ internal static class PlotPlanTerminalRenderer
         if (numeric.Count == 0) return new Markup($"[bold]{Markup.Escape(series)}[/]: [grey]all values are gaps[/]");
         var min = numeric.Min(); var max = numeric.Max();
         if (min == max) max = min + 1m;
-        var canvas = new BrailleCanvas(Math.Clamp(width - 8, 16, 52), 7);
+        var canvas = new BrailleCanvas(Math.Clamp(width - 16, 16, 48), 7);
         var ansi = SafeAnsiColor(color);
         (int X, int Y)? previous = null;
         for (var index = 0; index < data.Count; index++)
@@ -350,8 +387,32 @@ internal static class PlotPlanTerminalRenderer
         var gaps = data.Count(datum => datum.IsGap);
         return new Rows(
             new Markup($"[{ansi}]●[/] [bold]{Markup.Escape(series)}[/] [grey]({(area ? "Braille area" : "Braille line")}; {gaps} gaps)[/]"),
-            canvas.ToRenderable(),
+            canvas.ToRenderableWithAxis(min, max),
             new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"));
+    }
+
+    private static readonly char[] SparklineBlocks = [' ', ' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+    public static string Sparkline(IEnumerable<decimal?> values, string color = "#5470c6")
+    {
+        var list = values.ToList();
+        var numeric = list.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        if (numeric.Count == 0) return "";
+        var min = numeric.Min();
+        var max = numeric.Max();
+        var span = max == min ? 1m : max - min;
+        var ansi = SafeAnsiColor(color);
+        var sb = new StringBuilder();
+        sb.Append($"[{ansi}]");
+        foreach (var val in list)
+        {
+            if (!val.HasValue) { sb.Append(' '); continue; }
+            var ratio = (val.Value - min) / span;
+            var index = Math.Clamp((int)Math.Round(ratio * 7m) + 1, 1, 8);
+            sb.Append(SparklineBlocks[index]);
+        }
+        sb.Append("[/]");
+        return sb.ToString();
     }
 
     private static IRenderable RenderPoints(IReadOnlyList<ResolvedDatum> data, string series, string color, int seriesOrder)

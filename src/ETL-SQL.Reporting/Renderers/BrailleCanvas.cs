@@ -91,5 +91,50 @@ namespace ETL_SQL.Reporting.Renderers
             }
             return new Rows(rows);
         }
+
+        public IRenderable ToRenderableWithAxis(decimal min, decimal max, int labelWidth = 6)
+        {
+            var rows = new List<IRenderable>();
+            var mid = (min + max) / 2m;
+            for (int cy = 0; cy < _cellH; cy++)
+            {
+                var sb = new StringBuilder();
+                if (cy == 0)
+                {
+                    sb.Append($"[grey]{FormatTick(max, labelWidth)} ┼[/] ");
+                }
+                else if (cy == _cellH / 2)
+                {
+                    sb.Append($"[grey]{FormatTick(mid, labelWidth)} ┼[/] ");
+                }
+                else if (cy == _cellH - 1)
+                {
+                    sb.Append($"[grey]{FormatTick(min, labelWidth)} ┼[/] ");
+                }
+                else
+                {
+                    sb.Append($"[grey]{new string(' ', labelWidth)} │[/] ");
+                }
+
+                for (int cx = 0; cx < _cellW; cx++)
+                {
+                    byte b = _bits[cx, cy];
+                    if (b == 0) { sb.Append(' '); continue; }
+                    char ch = (char)(0x2800 + b);
+                    string? token = _color[cx, cy];
+                    sb.Append(token == null ? ch.ToString() : $"[{token}]{ch}[/]");
+                }
+                rows.Add(new Markup(sb.ToString()));
+            }
+            return new Rows(rows);
+        }
+
+        private static string FormatTick(decimal value, int width)
+        {
+            var formatted = Math.Abs(value) >= 1000m && Math.Abs(value) < 1_000_000m && value % 100 == 0
+                ? (value / 1000m).ToString("G", System.Globalization.CultureInfo.InvariantCulture) + "k"
+                : value.ToString("G4", System.Globalization.CultureInfo.InvariantCulture);
+            return formatted.Length > width ? formatted[..width] : formatted.PadLeft(width);
+        }
     }
 }
