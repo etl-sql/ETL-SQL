@@ -6,6 +6,13 @@ Published Orchestrator bundles require literal `RUN SCRIPT 'child.etlsql'` depen
 
 ---
 
+> [!TIP]
+> **Looking for focused guides?** See the modular [ETL Pipeline & Orchestration Guides](../pipelines/README.md):
+> - [Staged vs. Streaming Ingestion](../pipelines/staged-vs-streaming-ingestion.md) · [Modular Scripts & Parameters](../pipelines/modular-scripts-and-parameters.md)
+> - [Parallel Execution](../pipelines/parallel-execution.md) · [DAG Dependencies & Signals](../pipelines/dag-dependencies-and-signals.md)
+> - [Error Handling, Alerting & Retries](../pipelines/error-handling-and-retries.md) · [Script Resilience & Checkpoints](../pipelines/script-resilience-and-checkpoints.md)
+> - [Pipeline Unit Testing & Mocking](../pipelines/pipeline-unit-testing.md)
+
 > **Applies to:** every deployment profile. The control flow is identical everywhere; only *how the pipeline is triggered* changes — OS scheduler on Solo, durable schedules on Team and up. See [job scheduling](../../administration/orchestration/job-scheduling.md).
 
 ## Modularizing with `RUN SCRIPT`

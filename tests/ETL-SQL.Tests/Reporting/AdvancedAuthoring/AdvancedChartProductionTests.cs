@@ -191,10 +191,25 @@ public sealed class AdvancedChartProductionTests
         Assert.NotNull(PlotPlanTerminalRenderer.Render(plan));
     }
 
+    private static string GetSamplePath(string relativePath)
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "AGENTS.md"))
+                && Directory.Exists(Path.Combine(current.FullName, "samples")))
+            {
+                return Path.Combine(current.FullName, relativePath);
+            }
+            current = current.Parent;
+        }
+        throw new DirectoryNotFoundException("Could not locate repository root from test output directory.");
+    }
+
     [Fact]
     public async Task KitchenSink39_RendersAllThreeCustomVisuals()
     {
-        var scriptPath = @"C:\Users\chuck\scratch\ETL-SQL\samples\10_Kitchen_Sinks\39_CUSTOM_LAYERS.rptsql";
+        var scriptPath = GetSamplePath(Path.Combine("samples", "10_Kitchen_Sinks", "39_CUSTOM_LAYERS.rptsql"));
         await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
         var manifest = await service.GetManifestAsync();
         Assert.NotNull(manifest);
@@ -212,7 +227,7 @@ public sealed class AdvancedChartProductionTests
     [Fact]
     public async Task KitchenSink01_OverlayBar_RendersCompositeTerminalOutput()
     {
-        var scriptPath = @"C:\Users\chuck\scratch\ETL-SQL\samples\10_Kitchen_Sinks\01_BAR.rptsql";
+        var scriptPath = GetSamplePath(Path.Combine("samples", "10_Kitchen_Sinks", "01_BAR.rptsql"));
         await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
         var manifest = await service.GetManifestAsync();
         Assert.NotNull(manifest);
@@ -230,7 +245,7 @@ public sealed class AdvancedChartProductionTests
     [Fact]
     public async Task KitchenSink04_Scatter_RendersAllFourVisualsInTerminal()
     {
-        var scriptPath = @"C:\Users\chuck\scratch\ETL-SQL\samples\10_Kitchen_Sinks\04_SCATTER.rptsql";
+        var scriptPath = GetSamplePath(Path.Combine("samples", "10_Kitchen_Sinks", "04_SCATTER.rptsql"));
         await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
         var manifest = await service.GetManifestAsync();
         Assert.NotNull(manifest);
@@ -249,7 +264,7 @@ public sealed class AdvancedChartProductionTests
     [Fact]
     public async Task KitchenSink11_Heatmap_RendersAllThreeVisualsInTerminal()
     {
-        var scriptPath = @"C:\Users\chuck\scratch\ETL-SQL\samples\10_Kitchen_Sinks\11_HEATMAP.rptsql";
+        var scriptPath = GetSamplePath(Path.Combine("samples", "10_Kitchen_Sinks", "11_HEATMAP.rptsql"));
         await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
         var manifest = await service.GetManifestAsync();
         Assert.NotNull(manifest);

@@ -8,7 +8,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Reporting;
 
-public sealed record Phase8RetirementResult(
+public sealed record ReportingNativeCatalogRetirementResult(
     DateTime TimestampUtc, string GitBranch, string EngineVersion, string HostPlatform, string DotNetVersion,
     long BeforeBundleRawBytes, long AfterBundleRawBytes,
     long BeforeBundleGzipBytes, long AfterBundleGzipBytes,
@@ -20,10 +20,10 @@ public sealed record Phase8RetirementResult(
     IReadOnlyList<FixtureMeasurement> FixtureMeasurements,
     IReadOnlyList<VisualCapabilityEntry> CapabilityMatrix);
 
-public class Phase8BaselineTests
+public class ReportingNativeCatalogBaselineTests
 {
     [Fact]
-    public async Task Phase8RetirementMeasurements_AreValidAndOptionallyWritten()
+    public async Task ReportingNativeCatalogMeasurements_AreValidAndOptionallyWritten()
     {
         var repoRoot = RepoRoot();
         var measurement = await ReportingBaselineMeasurementHarness.RunFullBaselineAsync(repoRoot);
@@ -32,7 +32,7 @@ public class Phase8BaselineTests
         var root = baseline.RootElement;
         var fixtures = measurement.FixtureMeasurements;
         var orderedBuildTimes = fixtures.Select(item => item.FixtureBuildMs).Order().ToArray();
-        var result = new Phase8RetirementResult(
+        var result = new ReportingNativeCatalogRetirementResult(
             DateTime.UtcNow,
             Environment.GetEnvironmentVariable("ETLSQL_REPORT_BASELINE_BRANCH") ?? "phase8/standard-catalog-native-retirement",
             typeof(ReportManifest).Assembly.GetName().Version?.ToString() ?? "unknown",
@@ -67,10 +67,10 @@ public class Phase8BaselineTests
         await File.WriteAllTextAsync(Path.Combine(outputRoot, "reporting-phase8-results.md"), Markdown(result));
     }
 
-    private static string Markdown(Phase8RetirementResult result)
+    private static string Markdown(ReportingNativeCatalogRetirementResult result)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# Phase 8 Standard Catalog Migration and Runtime Retirement Results");
+        sb.AppendLine("# Standard Catalog Migration and Native Runtime Retirement Results");
         sb.AppendLine();
         sb.AppendLine($"> Measured {result.TimestampUtc:yyyy-MM-dd HH:mm:ss} UTC on `{result.GitBranch}` with ETL-SQL `{result.EngineVersion}` / .NET `{result.DotNetVersion}`.");
         sb.AppendLine();

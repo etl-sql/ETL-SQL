@@ -11,7 +11,12 @@ presentation-only conditions, dual axes, and one- or two-dimensional facets. It 
 embedded Vega-Lite and hidden visual transforms are intentionally unsupported, so aggregation,
 filtering, lookup, calculation, windowing, and statistical preparation remain reviewable ETL-SQL.
 
----
+> [!TIP]
+> **Looking for focused guides?** See the modular [Report-SQL & Dashboard Guides](../reporting/README.md):
+> - [Authoring Dashboards](../reporting/authoring-dashboards.md) · [Report Parameters & Filters](../reporting/report-parameters-and-filters.md)
+> - [Cascading Slicers](../reporting/cascading-slicers.md) · [Row-Level Security (RLS)](../reporting/report-row-level-security.md)
+> - [Paginated & Print-Ready Reports](../reporting/paginated-and-print-reports.md) · [Micro-Charts & KPI Cards](../reporting/micro-charts-and-kpis.md)
+> - [Custom Theming & Branding](../reporting/custom-theming-and-branding.md) · [Report Badges & Trust](../reporting/report-badges-and-trust.md)
 
 > **Applies to:** every deployment profile. The same `.rptsql` runs under the CLI, the Report Player, the Orchestrator and the Portal without modification.
 

@@ -2,6 +2,11 @@
 
 This guide outlines the best practices for script authors and operations teams when designing resilient, secure, and performant pipelines (`.etlsql`) and dashboard reports (`.rptsql`) in ETL-SQL.
 
+> [!TIP]
+> **Looking for focused guides?** See our dedicated guide sections:
+> - **Pipelines**: [Staged vs. Streaming Ingestion](../pipelines/staged-vs-streaming-ingestion.md) · [Script Resilience & Checkpoints](../pipelines/script-resilience-and-checkpoints.md) · [Error Handling & Retries](../pipelines/error-handling-and-retries.md)
+> - **Reporting**: [Authoring Dashboards](../reporting/authoring-dashboards.md) · [Report Parameters & Filters](../reporting/report-parameters-and-filters.md) · [Cascading Slicers](../reporting/cascading-slicers.md)
+
 ---
 
 ## 1. The Core Mental Model

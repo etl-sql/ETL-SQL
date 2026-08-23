@@ -1,60 +1,104 @@
-# User and Operator Guides
+# ETL-SQL User and Operator Guides
 
-[« Back to parent](../README.md)
+[« Back to Documentation Hub](../README.md)
 
-ETL-SQL narrative guides are organized by audience and stage: onboarding, core features, tool integrations, and operational patterns.
+ETL-SQL documentation follows a Single Responsibility Principle (SRP) approach with focused, task-oriented guides containing practical, copy-pasteable examples.
 
 ---
 
 ## 1. Onboarding
 
-Getting started with the engine, writing your first pipeline, or migrating from a legacy layout.
+Get started with the engine, understand the pipeline mental model, and review version migrations.
 
-| Page | Description |
+| Guide | Description |
 | :--- | :--- |
-| [ETL-SQL User Manual: Thinking in Pipelines](onboarding/getting-started.md) | Welcome to ETL-SQL. Narrative onboarding for transitioning from single-database SQL to multi-context data flows. |
-| [Quickstart Guide](onboarding/QUICKSTART.md) | Standard quickstart runbook for terminal and local installations. |
-| [ETL-SQL Migration Guide (v0.18.0)](onboarding/migration-guide.md) | Migration baseline and compatibility notes for upgrading deployment configurations to v0.18.0. |
+| [5-Minute Quickstart](onboarding/QUICKSTART.md) | Verify installation and execute your first zero-dependency pipeline with `MOCKDB`. |
+| [Thinking in Pipelines](onboarding/getting-started.md) | Transition from single-database SQL to multi-context data orchestration. |
+| [Migration Guide](onboarding/migration-guide.md) | Baseline notes and upgrade checklist for scripts and deployment configs. |
 
 ---
 
-## 2. Feature Guides
+## 2. ETL Pipelines & Orchestration
 
-Deep dives into the capabilities, syntax extensions, and execution behaviors of the engine.
+Design resilient, multi-source ingestion and transformation pipelines.
 
-| Page | Description |
+| Guide | Description |
 | :--- | :--- |
-| [Validating Data Quality](feature-guides/data-quality.md) | Declare inline row-value rules using `@expect`/`@fail` and route failed rows with `ON FAILURE`. |
-| [Orchestrating Pipelines & DAGs](feature-guides/pipelines-and-dags.md) | Coordinate multi-source tasks using `RUN SCRIPT`, `PARALLEL`, loops, try-catch, and scheduling. |
-| [Report-SQL Scripting Guide](feature-guides/report-sql.md) | Author `.rptsql` dashboards, visuals, grids, actions, bindings, and portal publishing hooks. |
-| [Data Stewardship and Impact Analysis](feature-guides/data-stewardship-impact.md) | Extract, query, and inspect lineage metadata and metadata tags before pushing changes. |
-| [Report Ownership & Data Freshness Badges](feature-guides/report-badges-freshness.md) | Configure trust, ownership, and freshness badges in report headers and Portal catalog cards. |
-| [Testing Guide](feature-guides/testing.md) | Strategy for engine contributors, testing mock connectors, and running verification suites. |
+| [Staged vs. Streaming Ingestion](pipelines/staged-vs-streaming-ingestion.md) | In-memory `#temp` staging vs. direct single-pass streams comparison and tradeoffs. |
+| [Modular Scripts & Parameters](pipelines/modular-scripts-and-parameters.md) | Decompose pipelines into sub-scripts using `RUN SCRIPT` with `INPUT` and `OUTPUT` variables. |
+| [Parallel Execution](pipelines/parallel-execution.md) | Execute tasks concurrently across worker threads with `PARALLEL(n)` throttling. |
+| [DAG Dependencies & Signals](pipelines/dag-dependencies-and-signals.md) | Model complex workflow DAGs, conditional branches, and file trigger signals. |
+| [Error Handling, Alerting & Retries](pipelines/error-handling-and-retries.md) | Catch failures with `TRY...CATCH`, dispatch alerts, and configure automated job retries. |
+| [Script Resilience & Checkpoints](pipelines/script-resilience-and-checkpoints.md) | Dry runs with `SET WHAT_IF ON`, transaction safety, and label-based session recovery (`--session`/`--resume`). |
+| [Pipeline Unit Testing & Mocking](pipelines/pipeline-unit-testing.md) | Write fast, zero-dependency unit tests using `MOCKDB` and `ASSERT`. |
 
 ---
 
-## 3. Tooling & Integrations
+## 3. Data Quality & Governance
 
-IDE integrations, VS Code extensions, web designers, and portal user guides.
+Ensure data integrity with inline column validation, quarantine triage, and lineage stewardship.
 
-| Page | Description |
+| Guide | Description |
 | :--- | :--- |
-| [VS Code Extension](tooling/vscode-extension.md) | Configure autocomplete, syntax validation, and hover help powered by the Language Server Protocol. |
-| [ETL-SQL Notebooks (.etlnb)](tooling/notebook-guide.md) | Run stateful interactive markdown cells and scratch scripts directly inside VS Code. |
-| [Visual Report Builder Guide](tooling/report-builder.md) | Use the drag-and-drop WYSIWYG editor and 12-column grid to assemble Report-SQL layouts. |
-| [ETL-SQL Portal: User Guide](tooling/portal-user.md) | Consume, run, filter, favorite, subscribe to, and share published reports. |
-| [Catalog Search & Discovery Guide](tooling/catalog-search.md) | Search the Portal metadata catalog for tables, reports, tags, and lineage paths. |
+| [Column Quality Rules](data-quality/column-quality-rules.md) | Declare inline `@expect` / `@fail` rules for null checks, regex patterns, ranges, and castability. |
+| [Quarantine & Remediation](data-quality/quarantine-and-remediation.md) | Divert bad rows to durable tables, inspect `__dq_*` metadata, and reprocess with `REPLAY QUARANTINE`. |
+| [Multi-Row & Cross-Table Rules](data-quality/multi-row-and-cross-table-rules.md) | Deduplicate with `UNIQUE_FIRST BY`, validate cross-table `EXISTS IN`, and enforce tenant boundaries. |
+| [Run-Level Assertions (`ASSERT JOB`)](data-quality/run-level-assertions.md) | Assert batch volume against historical baselines, column freshness, and notification transitions. |
+| [Automating Quality Gates](data-quality/automating-quality-gates.md) | Run quality checks in GitHub Actions, Task Scheduler, and Cron with `etlsql-policy.json`. |
+| [Data Stewardship & Impact Analysis](data-quality/data-stewardship-and-impact.md) | Script-first tags, metadata gap detection, protected data audits, and lineage impact queries. |
 
 ---
 
-## 4. Patterns & Best Practices
+## 4. Report-SQL & Dashboards
 
-Standard recipes, operational playbooks, and troubleshooting diagnostics.
+Author interactive analytical dashboards and print-ready paginated reports.
 
-| Page | Description |
+| Guide | Description |
 | :--- | :--- |
-| [ETL-SQL Best Practices Guide](patterns/etl-sql-best-practices.md) | Script authoring conventions, transactional blocks, transaction safe zones, and coding style. |
-| [One-Person Quality Loop](patterns/one-person-quality-loop.md) | Complete local workflow mapping policy, CLI tests, schedules, local reports, and notifications. |
-| [Logging and Performance Tuning](patterns/logging-and-performance.md) | Engine logger targets, detail level settings, disk spill thresholds, and performance debug parameters. |
-| [ETL-SQL FAQ & Troubleshooting Guide](patterns/faq.md) | Frequently asked questions, common syntax gotchas, and error remediation steps. |
-| [ETL-SQL Sample Guide](patterns/sample-guide.md) | Map of the `samples/` directory files covering basics, connectors, and reports. |
+| [Authoring Dashboards](reporting/authoring-dashboards.md) | Three-tier architecture, pages, containers, layout grid, and dashboard examples. |
+| [Report Parameters & Filters](reporting/report-parameters-and-filters.md) | Wire `INPUT` variables, `RELDATE` expressions, dropdown slicers, and numeric sliders. |
+| [Cascading Slicers](reporting/cascading-slicers.md) | Configure dependent parent-child filter hierarchies with atomic parameter updates. |
+| [Row-Level Security (RLS)](reporting/report-row-level-security.md) | Secure datasets using `@@CURRENT_USER`, `HAS_GROUP()`, and dynamic permission mappings. |
+| [Paginated & Print-Ready Reports](reporting/paginated-and-print-reports.md) | Multi-page documents, Letter/A4 layouts, page breaks, table splitting, and deferred runs. |
+| [Micro-Charts & KPI Cards](reporting/micro-charts-and-kpis.md) | In-cell sparklines, attainment progress bars, and standalone KPI cards. |
+| [Custom Theming & Branding](reporting/custom-theming-and-branding.md) | Global shell branding, CSS overrides, and custom action buttons. |
+| [Report Badges & Trust](reporting/report-badges-and-trust.md) | Ownership, stewardship, certification tier, and freshness indicators. |
+
+---
+
+## 5. Operations & Performance
+
+Run, log, and optimize workloads in development and production environments.
+
+| Guide | Description |
+| :--- | :--- |
+| [Configuring Script Logging](operations/configuring-script-logging.md) | CLI logging flags, directory routing, file rotation, and credential redaction. |
+| [Tuning Pipeline Performance](operations/tuning-pipeline-performance.md) | Buffer batch sizing (`--batch-size`), phase metrics (`--perf`), and profiling (`SET PROFILING ON`). |
+| [One-Person Quality Loop](operations/one-person-quality-loop.md) | Complete workstation runbook: workspace policy, CLI validation, local schedules, and reports. |
+
+---
+
+## 6. Tooling & Designers
+
+Work with visual editors, IDE extensions, notebooks, and Web Portal interfaces.
+
+| Guide | Description |
+| :--- | :--- |
+| [Visual Report Builder Guide](tooling/report-builder.md) | 12-column drag-and-drop WYSIWYG designer, keyboard ergonomics, and bi-directional script sync. |
+| [Web Portal User Guide](tooling/portal-user.md) | Browse folders, execute reports, supply parameters, export PDF/CSV, and manage subscriptions. |
+| [Catalog Search & Discovery](tooling/catalog-search.md) | Fuzzy, typo-tolerant metadata search across reports, datasets, owners, stewards, and metrics. |
+| [ETL-SQL Notebooks (.etlnb)](tooling/notebook-guide.md) | Stateful interactive cell execution in VS Code for data exploration. |
+| [VS Code Extension](tooling/vscode-extension.md) | Language Server Protocol (LSP) features: syntax highlighting, inline linting, and execution trees. |
+
+---
+
+## 7. Patterns & Troubleshooting
+
+Operational recipes, sample maps, and troubleshooting diagnostics.
+
+| Guide | Description |
+| :--- | :--- |
+| [Troubleshooting: Syntax & Dialect](patterns/troubleshooting-syntax-and-dialect.md) | Solutions for dialect mismatches (`TOP` vs `LIMIT`), function availability, and polling loops. |
+| [Troubleshooting: Report-SQL](patterns/troubleshooting-reporting.md) | Solutions for `RELDATE` casting errors, Tier 2 traps, cascading slicers, and action bindings. |
+| [ETL-SQL FAQ](patterns/faq.md) | Searchable Q&A covering connections, security, operations, and scripting. |
+| [Sample Guide](patterns/sample-guide.md) | Comprehensive map of 160+ runnable `.etlsql` and `.rptsql` scripts in `/samples/`. |

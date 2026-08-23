@@ -3,6 +3,11 @@
 Where ETL-SQL writes its logs, how to turn up detail when something is wrong, and the levers that
 change how a slow script uses memory and disk.
 
+> [!TIP]
+> **Looking for focused guides?** See:
+> - [Configuring Script Logging](../operations/configuring-script-logging.md)
+> - [Tuning Pipeline Performance](../operations/tuning-pipeline-performance.md)
+
 > **Applies to:** every deployment profile. Log destinations differ by how you host, but the tuning levers are the same.
 
 ## Logging

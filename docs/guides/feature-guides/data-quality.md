@@ -8,6 +8,12 @@ themselves and deciding what happens when a row breaks one.
 For the full rule and clause syntax, see the
 [Data Quality Rules reference](../../reference/statements/dml/data-quality-rules.md).
 
+> [!TIP]
+> **Looking for focused guides?** See the modular [Data Quality & Governance Guides](../data-quality/README.md):
+> - [Column Quality Rules](../data-quality/column-quality-rules.md) · [Quarantine & Remediation](../data-quality/quarantine-and-remediation.md)
+> - [Multi-Row & Cross-Table Rules](../data-quality/multi-row-and-cross-table-rules.md) · [Run-Level Assertions](../data-quality/run-level-assertions.md)
+> - [Automating Quality Gates](../data-quality/automating-quality-gates.md) · [Data Stewardship & Impact Analysis](../data-quality/data-stewardship-and-impact.md)
+
 > **Applies to:** every deployment profile. Rules, quarantine and `ASSERT JOB` are engine features and need no Portal — see [running unattended without Portal](#running-unattended-without-portal). Team and above add durable history; Enterprise adds the Portal steward queue.
 
 ## Workspace policy

@@ -1,82 +1,101 @@
-================================================================================
-  ETL-SQL v0.18.0 Quickstart Guide
-================================================================================
+# ETL-SQL 5-Minute Quickstart
 
-Welcome to ETL-SQL, the script-first data orchestration engine for SQL, APIs,
-files, transfers, scheduling, governance, and reporting.
+Welcome to ETL-SQL, the script-first data orchestration and reporting engine. This guide walks you through verifying your installation and running your first pipeline in under five minutes with zero external dependencies.
 
-WHAT MAKES IT DIFFERENT
---------------------------------------------------------------------------------
-ETL-SQL keeps pipelines and dashboards in plain-text .etlsql and .rptsql files
-that can be reviewed, diffed, tested, packaged, and run from the CLI, VS Code,
-notebooks, Report Portal, Orchestrator, or CI/CD.
+---
 
-It puts the T back in the middle of ETL. Stage rows in engine-managed #temp
-tables, validate and transform them there, attach lineage tags and governance
-metadata, then load or publish the result. Compatible SQL can still be pushed
-down to a database, but cross-source work stays portable and explicit instead
-of being locked inside one warehouse dialect or spread across separate tools.
+> **Applies to:** every deployment profile (Solo, Team, Enterprise, SaaS).
 
-1. FIRST STEPS
---------------------------------------------------------------------------------
-Open a terminal in the folder where you extracted the binaries and run:
-  
-  ./ETL-SQL doctor
+## Prerequisites
 
-This command will verify that your OS, .NET runtime, and disk permissions are 
-correctly configured for operation.
+- [.NET 8.0 SDK / Runtime](https://dotnet.microsoft.com/download) or higher
+- The ETL-SQL binary or CLI tool installed
 
-2. RUNNING A SCRIPT
---------------------------------------------------------------------------------
-To run a standard ETL-SQL script:
+Verify your environment configuration:
 
-  ./ETL-SQL run path/to/your_script.etlsql
+```bash
+etl-sql doctor
+```
 
-Useful flags:
-  --perf     Display performance metrics after execution.
-  --verbose  Show detailed execution tracking.
-  --log      Save execution logs to the /logs directory.
+This verifies that your operating system, .NET runtime, directory permissions, and temp paths are properly configured.
 
-3. THE TERMINAL IDE (TUI)
---------------------------------------------------------------------------------
-If you prefer a windowed environment for editing and running scripts:
+---
 
-  ./ETL-SQL-TUI
+## Step 1: Run Your First Pipeline
 
-This starts the modern terminal IDE with syntax highlighting and F5 execution.
+Create a file named `hello_pipeline.etlsql`:
 
-4. REPORTING (Report-SQL)
---------------------------------------------------------------------------------
-To compile a .rptsql file into a dashboard manifest:
+```sql
+-- hello_pipeline.etlsql
+PRINT 'Initializing demo pipeline...';
 
-  ./ETL-SQL-Report path/to/report.rptsql
+-- 1. Connect to built-in in-memory mock database
+CREATE CONNECTION demo AS MOCKDB();
 
-Then, host the report using the portal player:
+-- 2. Extract into engine #temp workspace
+SELECT Region, Amount
+INTO #staged_orders
+FROM demo.Orders;
 
-  ./ETL-SQL-Portal
+-- 3. Validate with an inline assertion
+ASSERT (SELECT COUNT(*) FROM #staged_orders) > 0, 'Orders table should contain rows';
 
-REPORT PORTAL QUICKSTART:
-  1. Set a 32-char 'Portal__Jwt__Secret' env var.
-  2. Run ./ETL-SQL-Portal and login at http://localhost:5001.
-  3. Admin login: user 'admin'; password = Portal__FirstRun__AdminPassword if set,
-     otherwise generated and printed once in the startup log. (Change on first login!)
-  4. Detailed guide in Docs/ReportPortal_Guide.txt.
+-- 4. Transform in engine memory
+SELECT 
+    Region, 
+    COUNT(*) AS OrderCount, 
+    SUM(Amount) AS TotalRevenue
+INTO #regional_summary
+FROM #staged_orders
+GROUP BY Region;
 
-5. CONNECTORS
---------------------------------------------------------------------------------
-ETL-SQL supports:
-  - SQL: MSSQL, Postgres, MySQL, Oracle, SQLite, ODBC, Snowflake, BigQuery
-  - Files: CSV, JSON, XML, Parquet, Avro, Excel
-  - REST/API: Native HTTP/API connector, MongoDB, Kafka, Active Directory
-  - Transfers: SFTP, FTP, Azure Blob, S3, SharePoint
+-- 5. Output results
+SELECT * FROM #regional_summary ORDER BY TotalRevenue DESC;
+```
 
-6. DOCUMENTATION
---------------------------------------------------------------------------------
-For the full language reference, visit the Docs/ folder in the repository 
-or the official documentation site.
+Run the pipeline from your terminal:
 
-https://github.com/etl-sql/ETL-SQL
+```bash
+etl-sql run hello_pipeline.etlsql
+```
 
-Enjoy your data integration!
-- The ETL-SQL Team
-================================================================================
+---
+
+## Step 2: Pass Dynamic Parameters from the CLI
+
+Add an `INPUT` parameter to filter dynamically:
+
+```sql
+DECLARE @minAmount DECIMAL INPUT = 100.00;
+
+CREATE CONNECTION demo AS MOCKDB();
+
+SELECT * 
+FROM demo.Orders 
+WHERE Amount >= @minAmount;
+```
+
+Run with parameter overrides:
+
+```bash
+etl-sql run hello_pipeline.etlsql --var @minAmount=250.00
+```
+
+---
+
+## Step 3: Launch the Terminal User Interface (TUI)
+
+If you prefer an interactive windowed terminal editor with syntax highlighting, F5 execution, and result grids:
+
+```bash
+etl-sql-tui
+```
+
+---
+
+## Next Steps
+
+- [Thinking in Pipelines](getting-started.md) — Understand the multi-context engine model.
+- [Authoring Dashboards](../reporting/authoring-dashboards.md) — Build interactive visual reports.
+- [Data Quality Column Rules](../data-quality/column-quality-rules.md) — Add `@expect` validation rules.
+- [Data Connectors Reference](../../reference/connectors/README.md) — Connect to PostgreSQL, SQL Server, SFTP, and APIs.
