@@ -41,6 +41,7 @@ statement = select_statement
           | create_navigation_statement
           | create_button_statement
           | create_style_statement
+          | create_bookmark_statement
           | set_report_metadata_statement
           | merge_statement
           | merge_files_statement
@@ -158,7 +159,7 @@ insert_lineage_statement = "INSERT" "LINEAGE" "FOR" "TABLE" table_reference "FRO
 delete_lineage_statement = "DELETE" "LINEAGE" "FOR" "TABLE" table_reference ";" ;
 
 update_statement = "UPDATE" table_reference "SET" assignment_list [ output_clause ]
-                   [ "FROM" from_reference { join_clause } ] [ "WHERE" expression ] ;
+                   [ "FROM" table_reference { join_clause } ] [ "WHERE" expression ] ;
 assignment_list = assignment { "," assignment } ;
 assignment = assignment_target "=" expression ;
 assignment_target = identifier { "." identifier } ;
@@ -327,7 +328,8 @@ export_statement = "EXPORT" "SCRIPT" string_literal "TO" string_literal
                  | "EXPORT" "REPORT" expression "FORMAT" ( "CSV" | "MARKDOWN" ) "TO" expression
                  | "EXPORT" "LINEAGE" [ "FOR" ( "REPORT" identifier | "DATASET" dataset_name | [ "TABLE" ] table_reference [ "COLUMN" identifier ] ) ]
                    "AS" ( "OPENLINEAGE" | "MARKDOWN" | "MERMAID" ) "TO" string_literal ;
-export_report_option = ( "PDF_MODE" | "HOST" | "BROWSER_PATH" ) "=" expression ;
+export_report_option = "PDF_MODE" "=" ( "STATIC" | "AUTO" | "HOSTED" | "BROWSER" | string_literal )
+                     | ( "HOST" | "BROWSER_PATH" ) "=" expression ;
 dataset_transport_options = "ENCRYPT" [ "=" ] ( "PASSWORD" | "KEYFILE" )
                             [ "PASSWORD" [ "=" ] string_literal ] [ "KEYFILE" [ "=" ] string_literal ] ;
 job_control_statement = ( "ENABLE" | "DISABLE" | "TRIGGER" ) "JOB" identifier [ "AT" identifier ]
@@ -337,7 +339,7 @@ grant_statement = "GRANT" identifier "ON" "BINDING" identifier "TO" ( "USER" | "
                 | "GRANT" ( "VIEWER" | "REFRESH" | "EDITOR" | "OWNER" ) "ON" "DATASET" string_literal "IN" "FOLDER" string_literal "TO" "GROUP" string_literal ;
 revoke_statement = "REVOKE" identifier "ON" "BINDING" identifier "FROM" ( "USER" | "GROUP" ) string_literal
                  | "REVOKE" ( "READ" | "EXECUTE" | "MANAGE" ) "ON" "FOLDER" string_literal "FROM" "GROUP" string_literal
-                 | "REVOKE" ( "VIEWER" | "REFRESH" | "EDITOR" | "OWNER" | "READ" ) "ON" "DATASET" string_literal "IN" "FOLDER" string_literal "FROM" "GROUP" string_literal
+                 | "REVOKE" ( "VIEWER" | "REFRESH" | "EDITOR" | "OWNER" ) "ON" "DATASET" string_literal "IN" "FOLDER" string_literal "FROM" "GROUP" string_literal
                  | "REVOKE" "TOKENS" "FOR" "USER" string_literal
                  | "REVOKE" ( "SHARE" "LINK" | "EMBED" "TOKEN" ) string_literal "FOR" "REPORT" string_literal ;
 publish_statement = "PUBLISH" "REPORT" string_literal "FROM" string_literal "IN" "FOLDER" string_literal [ "WITH" metadata_options ]
@@ -372,7 +374,7 @@ create_ssh_key_pair_statement = "CREATE" "SSH_KEY_PAIR" ( "(" expression [ "," e
 ssh_key_option = ( "BITS" | "ALGORITHM" | "PASSPHRASE" | "COMMENT" ) "=" expression ;
 create_pgp_key_pair_statement = "CREATE" "PGP_KEY_PAIR" string_literal ;
 create_sets_statement = "CREATE" "SETS" "!" identifier "BEGIN"
-                        { ( variable_name "=" expression | set_option_statement ) [ "," | ";" ] } "END" ;
+                        { ( variable_name "=" expression [ "," | ";" ] | "SET" "WITH_PROMPT" ( "ON" | "OFF" ) [ ";" ] ) } "END" ;
 create_template_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "TEMPLATE" identifier "AS" "(" identifier "=" report_option_value { "," identifier "=" report_option_value } ")" ;
 create_theme_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "THEME" identifier "AS" "(" identifier "=" report_option_value { "," identifier "=" report_option_value } ")" ;
 report_option_value = identifier | string_literal | number | "ON" | "OFF" | "TRUE" | "FALSE" ;
@@ -396,7 +398,7 @@ create_share_link_statement = "CREATE" "SHARE" "LINK" string_literal "FOR" "REPO
 create_embed_token_statement = "CREATE" "EMBED" "TOKEN" string_literal "FOR" "REPORT" string_literal [ "EXPIRES" string_literal ] [ "INTO" temp_table_name ] ;
 create_saved_view_statement = "CREATE" "SAVED" "VIEW" string_literal "FOR" "REPORT" string_literal [ "DEFAULT" ]
                               [ "PARAMETERS" "(" subscription_parameter_assignments ")"
-                              | "WITH" "(" "PARAMETERS" "=" ( string_literal | subscription_parameter_assignments ) ")" ] [ "INTO" temp_table_name ] ;
+                              | "WITH" "(" "PARAMETERS" "=" string_literal ")" ] [ "INTO" temp_table_name ] ;
 create_alert_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "ALERT" identifier "FOR" "REPORT" string_literal
                          "WHEN" "VISUAL" identifier alert_comparison_operator number [ "WITH" metadata_options ] ;
 alert_comparison_operator = ">" | ">=" | "<" | "<=" | "=" | "!=" | "<>" ;
@@ -604,7 +606,7 @@ variable_name = "@" identifier ;
 create_visual_statement = "CREATE" [ "OR" "REPLACE" ] "VISUAL" identifier "AS"
                           ( sourced_visual_type "(" { visual_clause [ "," ] } "SOURCE" [ "=" ] visual_source [ "," ] { visual_clause [ "," ] } ")"
                           | sourceless_visual_type "(" { ( visual_clause | "SOURCE" [ "=" ] visual_source ) [ "," ] } ")"
-                          | "CUSTOM" "(" { ( visual_clause | "SOURCE" [ "=" ] visual_source | advanced_chart_clause ) [ "," ] } ")" ) ;
+                          | "CUSTOM" "(" { visual_clause [ "," ] } "SOURCE" [ "=" ] visual_source [ "," ] { visual_clause [ "," ] } advanced_chart_clause [ "," ] { visual_clause [ "," ] } ")" ) ;
 sourced_visual_type = "BAR" | "HBAR" | "LINE" | "SCATTER" | "PIE" | "DONUT" | "COMBO" | "BOXPLOT" | "TREEMAP" | "HEATMAP" | "FUNNEL" | "GAUGE" | "WATERFALL" | "BUBBLE" | "RADAR" | "CANDLESTICK" | "MAP" | "SANKEY" | "SUNBURST" | "NETWORK" | "TRELLIS" | "MATRIX" | "GANTT" | "TABLE" | "CARD" ;
 sourceless_visual_type = "TEXT" | "IMAGE" | "SLICER" | "DATEPICKER" | "RELDATEPICKER" | "SLIDER" | "MULTISELECT" | "SEARCH" | "TEXTBOX" | "NUMBERBOX" | "CHECKBOX" ;
 visual_type = sourced_visual_type | sourceless_visual_type ;
@@ -614,23 +616,22 @@ advanced_chart_clause = "CHART" "(" advanced_coordinate_clause "," advanced_scal
 advanced_coordinate_clause = "COORDINATE" "(" "TYPE" "=" ( "CARTESIAN" | "TRANSPOSED_CARTESIAN" | "POLAR" )
                              { "," ( "START_ANGLE" | "END_ANGLE" | "INNER_RADIUS" ) "=" number } ")" ;
 advanced_scales_clause = "SCALES" "(" advanced_scale { "," advanced_scale } ")" ;
-advanced_scale = identifier "=" advanced_scale_kind "(" advanced_scale_option { "," advanced_scale_option } ")" ;
+advanced_scale = identifier "=" advanced_scale_kind "(" "CHANNEL" "=" advanced_scale_channel { "," advanced_scale_option } ")" ;
 advanced_scale_kind = "LINEAR" | "LOGARITHMIC" | "TIME" | "BAND" | "POINT" | "ORDINAL" | "IDENTITY" ;
-advanced_scale_option = "CHANNEL" "=" advanced_scale_channel
-                      | "INCLUDE_ZERO" "=" ( "ON" | "OFF" )
+advanced_scale_option = "INCLUDE_ZERO" "=" ( "ON" | "OFF" )
                       | ( "MIN" | "MAX" ) "=" expression
                       | "ORDER" "=" ( "SOURCE" | "ASCENDING" | "DESCENDING" | "(" expression { "," expression } ")" ) ;
 advanced_scale_channel = "X" | "Y" | "Y2" | "COLOR" | "THETA" | "RADIUS" ;
 advanced_layers_clause = "LAYERS" "(" advanced_layer { "," advanced_layer } ")" ;
-advanced_layer = identifier "=" advanced_mark_kind "(" advanced_layer_clause { "," advanced_layer_clause } ")" ;
+advanced_layer = identifier "=" advanced_mark_kind "(" [ "Z_INDEX" "=" number "," ] "ENCODINGS" "(" advanced_encoding { "," advanced_encoding } ")" { "," advanced_layer_option } ")" ;
 advanced_mark_kind = "RECT" | "LINE" | "AREA" | "POINT" | "RULE" | "ARC" | "TEXT" ;
-advanced_layer_clause = "Z_INDEX" "=" number
-                      | "ENCODINGS" "(" advanced_encoding { "," advanced_encoding } ")"
+advanced_layer_option = "Z_INDEX" "=" number
                       | "STYLE" "(" advanced_style_item { "," advanced_style_item } ")"
                       | "CONDITIONS" "(" advanced_condition { "," advanced_condition } ")" ;
-advanced_encoding = advanced_encoding_channel "=" identifier "(" advanced_encoding_option { "," advanced_encoding_option } ")" ;
+advanced_encoding = advanced_encoding_channel "=" identifier "(" "TYPE" "=" advanced_encoding_type { "," advanced_encoding_option } ")" ;
+advanced_encoding_type = "QUANTITATIVE" | "TEMPORAL" | "NOMINAL" | "ORDINAL" ;
 advanced_encoding_channel = "X" | "Y" | "Y2" | "COLOR" | "SIZE" | "SHAPE" | "THETA" | "RADIUS" | "TEXT" | "TOOLTIP" | "DETAIL" ;
-advanced_encoding_option = "TYPE" "=" ( "QUANTITATIVE" | "TEMPORAL" | "NOMINAL" | "ORDINAL" )
+advanced_encoding_option = "TYPE" "=" advanced_encoding_type
                          | "SCALE" "=" identifier
                          | "AXIS" "=" ( "NONE" | "PRIMARY" | "SECONDARY" )
                          | "SORT" "=" ( "SOURCE" | "ASCENDING" | "DESCENDING" )
@@ -649,6 +650,9 @@ visual_clause = ( "TITLE" | "SUBTITLE" | "CONTENT" | "DEFAULT" | "VALUE" | "PLAC
               | "OPTIONS" "(" [ report_option { "," report_option } ] ")"
               | "ACTIONS" "(" report_action_binding { "," report_action_binding } ")"
               | "INTERACTIONS" "(" identifier "=" identifier { "," identifier "=" identifier } ")"
+              | "CASCADE" "(" cascade_option { "," cascade_option } ")"
+              | "OVERLAYS" "(" overlay_item { "," overlay_item } ")"
+              | "FORMATTING" "(" formatting_item { "," formatting_item } ")"
               | "SERIES" "(" report_series { "," report_series } ")"
               | "SUMMARY" "(" summary_item { "," summary_item } ")"
               | "STYLE" ( "=" identifier | style_body )
@@ -656,7 +660,26 @@ visual_clause = ( "TITLE" | "SUBTITLE" | "CONTENT" | "DEFAULT" | "VALUE" | "PLAC
               | ( "MIN" | "MAX" | "DECIMALS" ) [ "=" ] number
               | ( "PAGE_LAYOUT" | "PRINT_LAYOUT" ) "(" report_option { "," report_option } ")"
               | "ROW_DETAIL" "(" row_detail_clause { "," row_detail_clause } ")" ;
-visual_mapping = [ "COLUMN" ] identifier [ "=" ( identifier | string_literal ) | "AS" ( identifier | string_literal ) ] ;
+cascade_option = "MODE" "=" ( "LOCAL" | "LIVE" )
+               | "PARENTS" "(" cascade_parent { "," cascade_parent } ")"
+               | "INVALID" "=" ( "CLEAR" | "FIRST" | "ERROR" )
+               | "NULL" "=" ( "ALL" | "MATCH" )
+               | "MULTISELECT" "=" ( "ANY" | "ALL" )
+               | "ALL_VALUE" "=" string_literal ;
+cascade_parent = ( variable_name | identifier ) [ "=" ] ( identifier | string_literal ) ;
+overlay_item = overlay_type "AS" ( "SOLID" | "DASHED" | "DOTTED" ) [ "WITH" "(" overlay_with_option { "," overlay_with_option } ")" ] ;
+overlay_type = ( "GOAL" | "MOVING_AVG" | "POLYNOMIAL" ) "(" number ")"
+             | "AVERAGE" | "LINEAR" | "EXPONENTIAL" | "LOGARITHMIC" | "POWER" ;
+overlay_with_option = ( "COLOR" | "LABEL" ) "=" string_literal ;
+formatting_item = expression "THEN" string_literal [ "FONT_COLOR" string_literal ] ;
+visual_mapping = [ "COLUMN" ] identifier [ table_column_modifier ] [ "=" ( identifier | string_literal | temp_table_name [ "(" visual_mapping_param { "," visual_mapping_param } ")" ] ) | "AS" ( identifier | string_literal ) ]
+               | "SPARKLINE" [ "=" temp_table_name [ "(" visual_mapping_param { "," visual_mapping_param } ")" ]
+                             | "(" column_list ")" [ "LINE" | "BAR" | "AREA" ] [ "AS" ( identifier | string_literal ) ] ] ;
+table_column_modifier = "PROGRESS_BAR" "(" [ progress_bar_option { "," progress_bar_option } ] ")"
+                      | "IMAGE" [ "WIDTH" number ]
+                      | "HYPERLINK" [ "LABEL" string_literal ] ;
+progress_bar_option = ( "MIN" | "MAX" ) "=" number | "COLOR" "=" string_literal ;
+visual_mapping_param = ( identifier | "TYPE" | "X" | "Y" ) "=" ( identifier | string_literal | expression ) ;
 row_detail_clause = "TARGET" [ "=" ] ( identifier | string_literal )
                   | ( "BINDINGS" | "MAPPINGS" | "MAP" ) "(" variable_name [ "=" ] ( identifier | string_literal ) { "," variable_name [ "=" ] ( identifier | string_literal ) } ")"
                   | "LIMIT" [ "=" ] number ;
@@ -667,11 +690,20 @@ report_action_binding = ( "ON_CLICK" | "ON_CHANGE" ) "=" report_action ;
 report_action = "SET_PARAMETER" "(" variable_name "," ( identifier | "VALUE" ) ")"
               | "RUN_SCRIPT" "(" ( identifier | string_literal ) [ "," variable_name "=" identifier { "," variable_name "=" identifier } ] ")"
               | "CLEAR_FILTERS" | "APPLY_PARAMETERS"
+              | "APPLY_BOOKMARK" "(" identifier ")"
               | "DRILL_DOWN" "(" identifier "=" identifier "," identifier "=" ( identifier | "(" column_list ")" ) ")"
               | "DRILL_REPORT" "(" identifier "=" ( identifier | string_literal ) [ "," identifier "(" parameter_assignments ")" ] ")"
               | "DRILL_IN" "(" "HIERARCHY" "=" "(" column_list ")" ")"
               | "REFRESH_VISUALS" "(" column_list ")"
               | identifier ;
+create_bookmark_statement = "CREATE" "BOOKMARK" identifier "AS" "(" { bookmark_clause [ "," ] } ")" ;
+bookmark_clause = "TITLE" [ "=" ] expression
+                | "PAGE" [ "=" ] identifier
+                | "DEFAULT" [ "=" ] ( "ON" | "OFF" | "TRUE" | "FALSE" | identifier )
+                | "PARAMETERS" "(" [ bookmark_parameter { "," bookmark_parameter } ] ")"
+                | "STATE" "(" [ bookmark_state_entry { "," bookmark_state_entry } ] ")" ;
+bookmark_parameter = ( variable_name | identifier ) "=" ( expression | string_literal | number ) ;
+bookmark_state_entry = identifier { "." identifier } "=" ( identifier | string_literal | number ) ;
 
 create_page_statement = "CREATE" "PAGE" identifier "AS" page_type "("
                         { page_clause [ "," ] }

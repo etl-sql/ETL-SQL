@@ -1628,7 +1628,7 @@ public static class DefaultGrammar
             "TABLE", "VIEW", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER",
             "NAVIGATION", "JOB", "SCHEDULE", "NOTIFICATION", "DIRECTORY", "PROCEDURE", "FUNCTION",
             "INDEX", "TAG", "LINEAGE", "FOLDER", "USER", "GROUP", "REFRESH", "SUBSCRIPTION",
-            "SHARE", "EMBED", "SAVED", "ALERT", "BUTTON", "TEMPLATE", "THEME", "SSH_KEYPAIR",
+            "SHARE", "EMBED", "SAVED", "ALERT", "BUTTON", "BOOKMARK", "TEMPLATE", "THEME", "SSH_KEYPAIR",
             "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "UNIQUE", "TOOL", "BINDING"
         };
 
@@ -1640,7 +1640,7 @@ public static class DefaultGrammar
 
         var createOrReplaceKeywords = new[] {
             "CONNECTION", "TABLE", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
-            "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE", "NAVIGATION", "TEMPLATE",
+            "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "BOOKMARK", "STYLE", "NAVIGATION", "TEMPLATE",
             "THEME", "ALERT", "TOOL", "BINDING"
         };
 

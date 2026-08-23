@@ -160,7 +160,7 @@ internal sealed class PlotPlanSvgRenderer
                     RenderPoints(builder, plan, layer, categories.Length, plotWidth, plotHeight, xScale, pointScale, color);
                     break;
                 case MarkKind.Rule:
-                    RenderRule(builder, layer, plotWidth, plotHeight, yScale, overlayLabels);
+                    RenderRule(builder, layer, plotWidth, plotHeight, xScale, yScale, overlayLabels);
                     break;
                 case MarkKind.Text:
                     RenderText(builder, layer, categories.Length, plotWidth, plotHeight,
@@ -216,6 +216,7 @@ internal sealed class PlotPlanSvgRenderer
         var stacked = IsEnabled(plan.Style, "STACKED");
         var slot = plotHeight / Math.Max(1, categories.Length);
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
+        var isGrouped = rectLayers.Count > 1 && rectLayers.Any(l => LayerStyle(l, "series") is not null);
         builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
         builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
         foreach (var layer in plan.Layers)
@@ -224,7 +225,9 @@ internal sealed class PlotPlanSvgRenderer
                 ? plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y2)
                 : plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
             if (scale is null) continue;
-            var color = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6";
+            var defaultColor = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6";
+            var color = SafePaint(LayerStyle(layer, "fill") ?? LayerStyle(layer, "color"), defaultColor);
+            var layerOpacity = decimal.TryParse(LayerStyle(layer, "opacity"), NumberStyles.Any, CultureInfo.InvariantCulture, out var o) ? o : 1m;
             var points = new List<string>();
             var pointCoordinates = new List<(decimal X, decimal Y)>();
             for (var index = 0; index < layer.Data.Length; index++)
@@ -235,6 +238,7 @@ internal sealed class PlotPlanSvgRenderer
                 var x = MapHorizontal(value.Value, scale, plotWidth);
                 var y = Top + slot * (index + .5m);
                 var datumColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
+                var datumOpacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? layerOpacity;
                 if (layer.Mark == MarkKind.Rect)
                 {
                     var layerIndex = Math.Max(0, rectLayers.IndexOf(layer));
@@ -246,16 +250,42 @@ internal sealed class PlotPlanSvgRenderer
                     var startX = MapHorizontal(start, scale, plotWidth);
                     var endX = MapHorizontal(start + value.Value, scale, plotWidth);
                     var groupHeight = slot * .72m;
-                    var barHeight = stacked ? groupHeight : groupHeight / Math.Max(1, rectLayers.Count);
-                    var top = y - groupHeight / 2m + (stacked ? 0m : layerIndex * barHeight);
+                    decimal barHeight;
+                    decimal top;
+                    if (stacked)
+                    {
+                        barHeight = groupHeight;
+                        top = y - groupHeight / 2m;
+                    }
+                    else if (isGrouped)
+                    {
+                        barHeight = groupHeight / Math.Max(1, rectLayers.Count);
+                        top = y - groupHeight / 2m + layerIndex * barHeight;
+                    }
+                    else if (rectLayers.Count > 1 && (layer.Id.Contains("actual", StringComparison.OrdinalIgnoreCase) || layerIndex == rectLayers.Count - 1))
+                    {
+                        barHeight = groupHeight * 0.42m;
+                        top = y - barHeight / 2m;
+                    }
+                    else
+                    {
+                        barHeight = groupHeight;
+                        top = y - groupHeight / 2m;
+                    }
                     var barLeft = Math.Min(startX, endX);
                     var barWidth = Math.Max(1m, Math.Abs(endX - startX));
-                    builder.AppendLine($"<rect x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(Math.Max(1m, barHeight - 1m))}' fill='{Esc(datumColor)}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></rect>");
+                    builder.AppendLine($"<rect x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(Math.Max(1m, barHeight - 1m))}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></rect>");
                     if (showLabels)
                         builder.AppendLine($"<text x='{N(endX + (value.Value >= 0m ? 4m : -4m))}' y='{N(y + 3m)}' text-anchor='{(value.Value >= 0m ? "start" : "end")}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333"))}'>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</text>");
                 }
                 else if (layer.Mark == MarkKind.Rule)
-                    builder.AppendLine($"<line x1='{N(x)}' y1='{N(Top)}' x2='{N(x)}' y2='{N(Top + plotHeight)}' stroke='{Esc(datumColor)}' stroke-dasharray='6 4'/>");
+                {
+                    var ruleHeight = slot * .75m;
+                    var y1 = y - ruleHeight / 2m;
+                    var y2 = y + ruleHeight / 2m;
+                    var strokeWidth = LayerStyle(layer, "stroke_width") ?? LayerStyle(layer, "width") ?? "3";
+                    builder.AppendLine($"<line x1='{N(x)}' y1='{N(y1)}' x2='{N(x)}' y2='{N(y2)}' stroke='{Esc(datumColor)}' stroke-width='{Esc(strokeWidth)}'/>");
+                }
                 else if (layer.Mark == MarkKind.Text)
                 {
                     var text = EncodingText(datum, ConditionalEncodingChannel.Text)
@@ -995,18 +1025,35 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static void RenderRule(StringBuilder builder, ResolvedMarkLayer layer, decimal plotWidth,
-        decimal plotHeight, ResolvedScale? scale, ICollection<OverlayLabel> overlayLabels)
+        decimal plotHeight, ResolvedScale? xScale, ResolvedScale? yScale, ICollection<OverlayLabel> overlayLabels)
     {
-        if (scale is null) return;
-        var value = layer.Data.Select(datum => Channel(datum, FieldChannel.Y)).FirstOrDefault(item => item is not null && item.Kind != ChartValueKind.Null);
-        if (value is null) return;
-        var y = MapY(PlotPlanResolver.Number(value) ?? 0m, scale, plotHeight);
-        var color = SafePaint(layer.Style.FirstOrDefault(token => token.Name.Equals("color", StringComparison.OrdinalIgnoreCase))?.Value, "#888888");
-        var label = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value;
+        var xVal = layer.Data.Select(datum => Channel(datum, FieldChannel.X)).FirstOrDefault(item => item is not null && item.Kind != ChartValueKind.Null);
+        var yVal = layer.Data.Select(datum => Channel(datum, FieldChannel.Y)).FirstOrDefault(item => item is not null && item.Kind != ChartValueKind.Null);
+        var color = SafePaint(LayerStyle(layer, "color") ?? LayerStyle(layer, "fill") ?? LayerStyle(layer, "stroke"), "#888888");
+        var label = LayerStyle(layer, "label");
+        var strokeWidth = LayerStyle(layer, "stroke_width") ?? LayerStyle(layer, "width") ?? "2";
         var dashAttributes = LineStyleAttributes(LayerStyle(layer, "lineStyle"));
-        builder.AppendLine($"<line x1='{N(Left)}' y1='{N(y)}' x2='{N(Left + plotWidth)}' y2='{N(y)}' stroke='{Esc(color)}' stroke-width='2'{dashAttributes}/>");
-        if (!string.IsNullOrWhiteSpace(label))
-            overlayLabels.Add(new OverlayLabel(Left + plotWidth, y, label, color, layer.ZIndex));
+
+        if (yVal is not null && yScale is not null)
+        {
+            var yNum = PlotPlanResolver.Number(yVal);
+            if (yNum.HasValue)
+            {
+                var y = MapY(yNum.Value, yScale, plotHeight);
+                builder.AppendLine($"<line x1='{N(Left)}' y1='{N(y)}' x2='{N(Left + plotWidth)}' y2='{N(y)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}/>");
+                if (!string.IsNullOrWhiteSpace(label))
+                    overlayLabels.Add(new OverlayLabel(Left + plotWidth, y, label, color, layer.ZIndex));
+            }
+        }
+        else if (xVal is not null && xScale is not null)
+        {
+            var xNum = PlotPlanResolver.Number(xVal);
+            if (xNum.HasValue)
+            {
+                var x = MapX(xNum.Value, xScale, plotWidth);
+                builder.AppendLine($"<line x1='{N(x)}' y1='{N(Top)}' x2='{N(x)}' y2='{N(Top + plotHeight)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}/>");
+            }
+        }
     }
 
     private static void RenderOverlayLabels(StringBuilder builder, IReadOnlyCollection<OverlayLabel> labels, decimal plotHeight)

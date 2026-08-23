@@ -231,41 +231,41 @@ inventories and runtime assets are synchronized.
 
 ### Phase 9 — Author Bookmarks
 
-- [ ] Record the accepted three-part model: `CREATE BOOKMARK` defines shared, source-controlled report
+- [x] Record the accepted three-part model: `CREATE BOOKMARK` defines shared, source-controlled report
   state; Portal saved views are private per-user snapshots; URL state is only an identifier pointing
   to one of those definitions. Keep `CREATE SETS !name` exclusively for engine/environment
   configuration. Bookmark parameter assignments may reuse its parsing/evaluation infrastructure but
   not its syntax, namespace, activation behavior, or secret-bearing state.
-- [ ] Accept canonical author syntax around `CREATE BOOKMARK BookmarkName AS (...)`, with typed
+- [x] Accept canonical author syntax around `CREATE BOOKMARK BookmarkName AS (...)`, with typed
   `PARAMETERS (...)`, `PAGE = PageName`, optional `DEFAULT = ON`, and an initially constrained
   `STATE (...)` block. Add `APPLY_BOOKMARK(BookmarkName)` as the in-canvas action. Reject duplicate
   bookmark identifiers and more than one author default.
-- [ ] Define a versioned, serializable resolved bookmark state. The first delivery includes typed
+- [x] Define a versioned, serializable resolved bookmark state. The first delivery includes typed
   parameter/control values, active page, and named-object `VISIBLE`/`COLLAPSED` state. Cross-filter
   selections are durable only when represented by declared parameters. Defer hover/tooltips,
   animation, scroll position, maximized visuals, table paging/search, arbitrary CSS mutations,
   matrix expansion, sort state, and drill paths until each has a stable cross-surface contract.
-- [ ] Establish launch precedence: explicit URL bookmark, explicitly selected Portal saved view,
+- [x] Establish launch precedence: explicit URL bookmark, explicitly selected Portal saved view,
   the user's default Portal saved view, the author default bookmark, then declared parameter and
   navigation defaults. A stale personal view must never prevent the base report from opening.
-- [ ] Add parser, immutable AST, formatter, manifest, Analysis lint, LSP completion/hover/snippet,
+- [x] Add parser, immutable AST, formatter, manifest, Analysis lint, LSP completion/hover/snippet,
   rename, documentation, syntax-index, and Report Builder round-trip support. Author bookmark page,
   visual, container, and parameter references must be statically safe and rename-aware.
-- [ ] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
+- [x] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
   validate all references and typed values, stage parameter reconciliation and affected visuals,
   validate page/presentation state, publish one manifest, and roll back the entire application on
   failure. Do not apply parameters through sequential browser requests.
-- [ ] Add Report Player and Portal bookmark pickers plus button/action invocation. The Portal picker
+- [x] Add Report Player and Portal bookmark pickers plus button/action invocation. The Portal picker
   must distinguish author bookmarks from `My saved views`, and support save-as, update, make-default,
   delete, reset-to-report-default, and actual application of the user's default view.
-- [ ] Converge Portal saved views on the same versioned resolved-state envelope while retaining
+- [x] Converge Portal saved views on the same versioned resolved-state envelope while retaining
   backward compatibility for existing `ParametersJson`/`FiltersJson`. Persist the report revision or
   script hash used to create the view and reconcile unknown/deleted state with warnings.
-- [ ] Support author-bookmark replay in offline snapshots and identifier-only URL hashes. Never place
+- [x] Support author-bookmark replay in offline snapshots and identifier-only URL hashes. Never place
   arbitrary parameter, filter, search, drill, or presentation values in browser history, referrers,
   logs, or generated share URLs. Re-check report and saved-view ownership when resolving Portal
   identifiers.
-- [ ] Add parser/formatter/round-trip, duplicate/default, stale-reference, rename, type validation,
+- [x] Add parser/formatter/round-trip, duplicate/default, stale-reference, rename, type validation,
   cascade reconciliation, atomic rollback, launch precedence, Portal ownership, report-revision
   drift, default-view restore, offline replay, accessibility, and URL-disclosure tests.
 

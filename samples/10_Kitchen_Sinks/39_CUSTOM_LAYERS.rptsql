@@ -1,10 +1,14 @@
 -- Kitchen Sink: CUSTOM Visual (Grammar of Graphics Multi-Layer Composition)
--- This script demonstrates the CUSTOM visual type for direct Grammar of Graphics multi-layer authoring.
+-- This script demonstrates the CUSTOM visual type for direct Grammar of Graphics authoring.
+-- Showcases:
+--   1. Dual-Axis Layering (RECT bars + POINT margin markers + CONDITIONS)
+--   2. Bullet & Target Performance Cards (Qualitative RECT bands + actual bar + RULE target)
+--   3. Marginal Scatter Quadrants (POINT scatter + horizontal & vertical RULE thresholds)
 
 SET REPORT TITLE = 'Kitchen Sink: CUSTOM Visual';
-SET REPORT DESCRIPTION = 'Demonstration of composable multi-layer charts combining RECT bars, POINT markers, and conditional encodings.';
+SET REPORT DESCRIPTION = 'Demonstration of composable multi-layer Grammar of Graphics charts without black-box widgets.';
 
--- 1. Mock Data Generation (Revenue and Margin with Target Flags)
+-- ── 1. Mock Data: Revenue & Margin Performance ───────────────────────────────
 SELECT 'Jan' AS Month, 120000 AS Revenue, 0.28 AS MarginPct, 0 AS IsForecast INTO #performance
 UNION ALL SELECT 'Feb', 145000, 0.32, 0
 UNION ALL SELECT 'Mar', 130000, 0.25, 0
@@ -12,7 +16,23 @@ UNION ALL SELECT 'Apr', 160000, -0.05, 0
 UNION ALL SELECT 'May', 175000, 0.35, 1
 UNION ALL SELECT 'Jun', 190000, 0.38, 1;
 
--- 2. Custom Multi-Layer Composite Chart (Dual Axis Bars + Conditional Margin Points)
+-- ── 2. Mock Data: Bullet KPI Performance (Normalized 0-100%) ────────────────
+SELECT 'Revenue' AS Metric, 92 AS Actual, 83 AS Target, 50 AS BadRange, 75 AS SatRange, 100 AS MaxRange INTO #bullet_data
+UNION ALL SELECT 'Profit Margin', 80, 92, 50, 75, 100
+UNION ALL SELECT 'New Logos', 90, 80, 50, 75, 100
+UNION ALL SELECT 'NPS Score', 78, 80, 50, 70, 100;
+
+-- ── 3. Mock Data: Customer CAC vs LTV Quadrants ──────────────────────────────
+SELECT 'Acme Corp' AS Account, 1200 AS CAC, 8500 AS LTV, 1500 AS CAC_Benchmark, 5000 AS LTV_Benchmark, 0 AS IsRisk INTO #customer_scatter
+UNION ALL SELECT 'Beta LLC', 800, 3200, 1500, 5000, 0
+UNION ALL SELECT 'Gamma Inc', 2400, 4100, 1500, 5000, 1
+UNION ALL SELECT 'Delta Co', 450, 1900, 1500, 5000, 0
+UNION ALL SELECT 'Epsilon Ltd', 1600, 9200, 1500, 5000, 0
+UNION ALL SELECT 'Zeta Apps', 3100, 2800, 1500, 5000, 1
+UNION ALL SELECT 'Eta Tech', 650, 5400, 1500, 5000, 0
+UNION ALL SELECT 'Theta Bio', 2100, 11500, 1500, 5000, 0;
+
+-- ── Visual 1: Dual-Axis Revenue & Margin Composite ───────────────────────────
 CREATE VISUAL PerformanceOverview AS CUSTOM (
     TITLE = 'Revenue & Profitability Multi-Layer Composite',
     SOURCE = #performance,
@@ -45,11 +65,109 @@ CREATE VISUAL PerformanceOverview AS CUSTOM (
     )
 );
 
--- Page Layout
+-- ── Visual 2: Bullet & Target Performance Cards ──────────────────────────────
+CREATE VISUAL BulletKpiCards AS CUSTOM (
+    TITLE = 'Department KPI Bullet Cards (% Attainment vs Ranges & Target)',
+    SOURCE = #bullet_data,
+    CHART (
+        COORDINATE (TYPE = TRANSPOSED_CARTESIAN),
+        SCALES (
+            metric_scale = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+            val_scale    = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0, MAX = 100)
+        ),
+        LAYERS (
+            range_max = RECT (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+                    Y = MaxRange (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (FILL = '#e0e0e0', OPACITY = 0.6)
+            ),
+            range_sat = RECT (
+                Z_INDEX = 2,
+                ENCODINGS (
+                    X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+                    Y = SatRange (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (FILL = '#bdbdbd', OPACITY = 0.8)
+            ),
+            range_bad = RECT (
+                Z_INDEX = 3,
+                ENCODINGS (
+                    X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+                    Y = BadRange (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (FILL = '#9e9e9e', OPACITY = 0.9)
+            ),
+            actual_bar = RECT (
+                Z_INDEX = 4,
+                ENCODINGS (
+                    X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+                    Y = Actual (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                CONDITIONS (
+                    COLOR WHEN Actual >= Target THEN '#2e7d32' ELSE '#c62828'
+                )
+            ),
+            target_rule = RULE (
+                Z_INDEX = 5,
+                ENCODINGS (
+                    X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+                    Y = Target (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (COLOR = '#000000', STROKE_WIDTH = 3)
+            )
+        )
+    )
+);
+
+-- ── Visual 3: Marginal Scatter & Quadrant Benchmarks ─────────────────────────
+CREATE VISUAL CustomerScatter AS CUSTOM (
+    TITLE = 'CAC vs LTV Quadrants with Marginal Benchmark Rules',
+    SOURCE = #customer_scatter,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            cac_scale = LINEAR (CHANNEL = X, INCLUDE_ZERO = ON, MIN = 0),
+            ltv_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0)
+        ),
+        LAYERS (
+            cac_threshold = RULE (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    X = CAC_Benchmark (TYPE = QUANTITATIVE, SCALE = cac_scale)
+                ),
+                STYLE (COLOR = '#e57373', STROKE_WIDTH = 2)
+            ),
+            ltv_threshold = RULE (
+                Z_INDEX = 2,
+                ENCODINGS (
+                    Y = LTV_Benchmark (TYPE = QUANTITATIVE, SCALE = ltv_scale)
+                ),
+                STYLE (COLOR = '#81c784', STROKE_WIDTH = 2)
+            ),
+            points = POINT (
+                Z_INDEX = 3,
+                ENCODINGS (
+                    X = CAC (TYPE = QUANTITATIVE, SCALE = cac_scale),
+                    Y = LTV (TYPE = QUANTITATIVE, SCALE = ltv_scale)
+                ),
+                CONDITIONS (
+                    COLOR WHEN IsRisk = 1 THEN '#d32f2f' ELSE '#1976d2'
+                )
+            )
+        )
+    )
+);
+
+-- ── Page Layout ──────────────────────────────────────────────────────────────
 CREATE PAGE CustomKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A .',
+    STRUCTURE = 'A B / C C',
     MAP (
-        'A' = PerformanceOverview
+        'A' = PerformanceOverview,
+        'B' = CustomerScatter,
+        'C' = BulletKpiCards
     )
 );
 

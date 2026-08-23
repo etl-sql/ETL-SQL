@@ -5,10 +5,12 @@ using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.ReportHosting;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Renderers;
 using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
+using ETL_SQL.Tests.Reporting;
 
 namespace ETL_SQL.Tests.Reporting.AdvancedAuthoring;
 
@@ -187,5 +189,23 @@ public sealed class AdvancedChartProductionTests
         Assert.Contains("#b91c1c", new SvgChartRenderer().Render(new VisualManifest { PlotPlan = plan }));
         Assert.Contains(plan.Fallback.Items, item => item.Detail?.Contains("conditional Color") == true);
         Assert.NotNull(PlotPlanTerminalRenderer.Render(plan));
+    }
+
+    [Fact]
+    public async Task KitchenSink39_RendersAllThreeCustomVisuals()
+    {
+        var scriptPath = @"C:\Users\chuck\scratch\ETL-SQL\samples\10_Kitchen_Sinks\39_CUSTOM_LAYERS.rptsql";
+        await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+        var manifest = await service.GetManifestAsync();
+        Assert.NotNull(manifest);
+        Assert.Equal(3, manifest.Visuals.Count);
+
+        var perf = manifest.Visuals.First(v => v.Name == "PerformanceOverview");
+        var bullet = manifest.Visuals.First(v => v.Name == "BulletKpiCards");
+        var scatter = manifest.Visuals.First(v => v.Name == "CustomerScatter");
+
+        Assert.NotNull(perf.NativeSvg);
+        Assert.NotNull(bullet.NativeSvg);
+        Assert.NotNull(scatter.NativeSvg);
     }
 }
