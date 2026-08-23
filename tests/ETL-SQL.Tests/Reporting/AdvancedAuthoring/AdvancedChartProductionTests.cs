@@ -208,4 +208,22 @@ public sealed class AdvancedChartProductionTests
         Assert.NotNull(bullet.NativeSvg);
         Assert.NotNull(scatter.NativeSvg);
     }
+
+    [Fact]
+    public async Task KitchenSink01_OverlayBar_RendersCompositeTerminalOutput()
+    {
+        var scriptPath = @"C:\Users\chuck\scratch\ETL-SQL\samples\10_Kitchen_Sinks\01_BAR.rptsql";
+        await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+        var manifest = await service.GetManifestAsync();
+        Assert.NotNull(manifest);
+        var overlayBar = manifest.Visuals.First(v => v.Name == "OverlayBar");
+        var plan = Assert.IsType<PlotPlan>(overlayBar.PlotPlan);
+        var renderable = PlotPlanTerminalRenderer.Render(plan, 80);
+        var text = ETL_SQL.Tests.Reporting.TerminalSemantics.TerminalSnapshotHarness.CaptureSnapshot(renderable, 80).NormalizedText;
+        Assert.Contains("Revenue", text);
+        Assert.Contains("Monthly Goal", text);
+        Assert.Contains("2-Month Moving Avg", text);
+        Assert.Contains("Jan", text);
+        Assert.Contains("Apr", text);
+    }
 }

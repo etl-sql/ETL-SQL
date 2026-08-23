@@ -63,9 +63,9 @@ internal static class PlotPlanTerminalRenderer
             {
                 var data = layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList();
                 var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey);
-                var label = layer.Mark == MarkKind.Rule
-                    ? layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value ?? layer.Id
-                    : series?.Label ?? layer.Id;
+                var label = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value
+                    ?? series?.Label
+                    ?? layer.Id;
                 var color = ResolveLayerColor(layer, plan);
                 return (Layer: layer, Data: data, Series: series, Label: label, Color: color);
             })
@@ -76,7 +76,11 @@ internal static class PlotPlanTerminalRenderer
         var continuousLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point).ToList();
         var ruleLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rule).ToList();
 
-        if (rectLayers.Count > 0)
+        if (rectLayers.Count > 0 && continuousLayers.Any(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area))
+        {
+            content.Add(RenderCompositeBarLine(plan, rectLayers, continuousLayers, ruleLayers, width));
+        }
+        else if (rectLayers.Count > 0)
         {
             foreach (var item in rectLayers)
                 content.Add(RenderRectangles(item.Data, item.Label, item.Color, width));
@@ -182,6 +186,102 @@ internal static class PlotPlanTerminalRenderer
             new Markup(string.Join("  ", headerParts) + headerSuffix),
             canvas.ToRenderable(),
             new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"));
+    }
+
+    private static IRenderable RenderCompositeBarLine(
+        PlotPlan plan,
+        IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data, ResolvedSeries? Series, string Label, string Color)> rectLayers,
+        IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data, ResolvedSeries? Series, string Label, string Color)> lineLayers,
+        IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data, ResolvedSeries? Series, string Label, string Color)> ruleLayers,
+        int width)
+    {
+        var primaryRect = rectLayers[0];
+        var categories = primaryRect.Data.Select(Label).ToList();
+        var allValues = rectLayers.SelectMany(l => l.Data.Select(Value))
+            .Concat(lineLayers.SelectMany(l => l.Data.Select(Value)))
+            .Concat(ruleLayers.SelectMany(r => r.Data.Select(Value)))
+            .Where(v => v.HasValue)
+            .Select(v => v!.Value)
+            .ToList();
+
+        if (allValues.Count == 0) return new Markup("[grey]all values are gaps[/]");
+        var min = Math.Min(0m, allValues.Min());
+        var max = allValues.Max();
+        if (min == max) max = min + 1m;
+
+        var cellW = Math.Clamp((width - 8) / 2, 16, 50);
+        var canvas = new BrailleCanvas(cellW, 8);
+        var headerParts = new List<string>();
+
+        var catCount = Math.Max(1, categories.Count);
+        var slotWidth = (decimal)canvas.DotWidth / catCount;
+        var barWidthDots = Math.Max(2, (int)(slotWidth * 0.55m));
+
+        foreach (var rect in rectLayers)
+        {
+            var ansi = SafeAnsiColor(rect.Color);
+            headerParts.Add($"[{ansi}]■[/] [bold]{Markup.Escape(rect.Label)}[/]");
+            var values = rect.Data.Select(Value).ToList();
+            for (var index = 0; index < rect.Data.Count; index++)
+            {
+                var val = values[index];
+                if (!val.HasValue || rect.Data[index].IsGap) continue;
+                var slotCenter = (index + 0.5m) * slotWidth;
+                var xStart = Math.Max(0, (int)(slotCenter - barWidthDots / 2m));
+                var xEnd = Math.Min(canvas.DotWidth - 1, xStart + barWidthDots - 1);
+                var baseY = canvas.DotHeight - 1 - (int)((0m - min) / (max - min) * (canvas.DotHeight - 1));
+                var topY = canvas.DotHeight - 1 - (int)((val.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                var y0 = Math.Min(baseY, topY);
+                var y1 = Math.Max(baseY, topY);
+                for (var x = xStart; x <= xEnd; x++)
+                {
+                    for (var y = y0; y <= y1; y++)
+                        canvas.Set(x, y, ansi);
+                }
+            }
+        }
+
+        foreach (var line in lineLayers)
+        {
+            var ansi = SafeAnsiColor(line.Color);
+            headerParts.Add($"[{ansi}]●[/] [bold]{Markup.Escape(line.Label)}[/]");
+            var values = line.Data.Select(Value).ToList();
+            (int X, int Y)? previous = null;
+            for (var index = 0; index < line.Data.Count; index++)
+            {
+                var val = values[index];
+                if (!val.HasValue || line.Data[index].IsGap) { previous = null; continue; }
+                var slotCenter = (index + 0.5m) * slotWidth;
+                var x = Math.Clamp((int)slotCenter, 0, canvas.DotWidth - 1);
+                var y = canvas.DotHeight - 1 - (int)((val.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                if (previous.HasValue) canvas.Line(previous.Value.X, previous.Value.Y, x, y, ansi);
+                else canvas.Set(x, y, ansi);
+                previous = (x, y);
+            }
+        }
+
+        foreach (var rule in ruleLayers)
+        {
+            var ansi = SafeAnsiColor(rule.Color);
+            headerParts.Add($"[{ansi}]──[/] [bold]{Markup.Escape(rule.Label)}[/]");
+            var val = rule.Data.Select(Value).FirstOrDefault(v => v.HasValue);
+            if (val.HasValue)
+            {
+                var y = canvas.DotHeight - 1 - (int)((val.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                if (y >= 0 && y < canvas.DotHeight)
+                {
+                    for (var x = 0; x < canvas.DotWidth; x += 2)
+                        canvas.Set(x, y, ansi);
+                }
+            }
+        }
+
+        var catAxis = string.Join("    ", categories.Select(c => Truncate(c, 8)));
+
+        return new Rows(
+            new Markup(string.Join("  ", headerParts)),
+            canvas.ToRenderable(),
+            new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]  [bold]{Markup.Escape(catAxis)}[/]"));
     }
 
     private static IRenderable RenderRectangles(IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
