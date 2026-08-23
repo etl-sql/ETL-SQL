@@ -309,6 +309,16 @@ internal static class PlotPlanTerminalRenderer
 
     private static IRenderable RenderRectangles(PlotPlan plan, IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
     {
+        var isHeatmap = data.Count > 0 &&
+            data.Select(d => DisplayChannel(d, FieldChannel.X)).Where(s => !string.IsNullOrEmpty(s)).Distinct().Count() > 1 &&
+            data.Select(d => DisplayChannel(d, FieldChannel.Y)).Where(s => !string.IsNullOrEmpty(s)).Distinct().Count() > 1 &&
+            data.All(d => !PlotPlanResolver.Number(Channel(d, FieldChannel.Y) ?? ChartValue.Null()).HasValue);
+
+        if (isHeatmap)
+        {
+            return RenderHeatmapMatrix(plan, data, series, width);
+        }
+
         var values = data.Select(Value).ToList();
         var maximum = values.Where(value => value.HasValue).Select(value => Math.Abs(value!.Value)).DefaultIfEmpty(1m).Max();
         if (maximum == 0m) maximum = 1m;
@@ -362,6 +372,65 @@ internal static class PlotPlanTerminalRenderer
         }).ToList();
         rows.Insert(0, new Markup($"[bold]{Markup.Escape(series)}[/] [grey](fractional bars)[/]"));
         return new Rows(rows);
+    }
+
+    private static IRenderable RenderHeatmapMatrix(PlotPlan plan, IReadOnlyList<ResolvedDatum> data, string series, int width)
+    {
+        var xCats = data.Select(d => DisplayChannel(d, FieldChannel.X) ?? "").Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
+        var yCats = data.Select(d => DisplayChannel(d, FieldChannel.Y) ?? "").Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
+
+        var numericValues = data.Select(d =>
+            PlotPlanResolver.Number(Channel(d, FieldChannel.Color) ?? Channel(d, FieldChannel.Text) ?? Channel(d, FieldChannel.Size) ?? ChartValue.Null()))
+            .Where(v => v.HasValue)
+            .Select(v => v!.Value)
+            .ToList();
+
+        var minVal = numericValues.Count > 0 ? numericValues.Min() : 0m;
+        var maxVal = numericValues.Count > 0 ? numericValues.Max() : 1m;
+        if (minVal == maxVal) maxVal = minVal + 1m;
+
+        var table = new Table().Border(TableBorder.Rounded).Title($"[bold]{Markup.Escape(series)}[/] [grey](2D Heatmap Grid)[/]");
+        table.AddColumn(new TableColumn("").LeftAligned());
+        foreach (var xCat in xCats)
+        {
+            table.AddColumn(new TableColumn($"[bold]{Markup.Escape(xCat)}[/]").Centered());
+        }
+
+        foreach (var yCat in yCats)
+        {
+            var cells = new List<IRenderable> { new Markup($"[bold]{Markup.Escape(yCat)}[/]") };
+            foreach (var xCat in xCats)
+            {
+                var datum = data.FirstOrDefault(d => DisplayChannel(d, FieldChannel.X) == xCat && DisplayChannel(d, FieldChannel.Y) == yCat);
+                if (datum == null || datum.IsGap)
+                {
+                    cells.Add(new Markup("[grey]--[/]"));
+                    continue;
+                }
+                var val = PlotPlanResolver.Number(Channel(datum, FieldChannel.Color) ?? Channel(datum, FieldChannel.Text) ?? Channel(datum, FieldChannel.Size) ?? ChartValue.Null()) ?? 0m;
+                var ratio = (double)Math.Clamp((val - minVal) / (maxVal - minVal), 0m, 1m);
+
+                int r = (int)(ratio * 220 + 35);
+                int g = (int)((1 - Math.Abs(ratio - 0.5) * 2) * 160 + 20);
+                int b = (int)((1 - ratio) * 220 + 35);
+                var hexColor = $"#{r:X2}{g:X2}{b:X2}";
+
+                var blockChar = ratio switch
+                {
+                    < 0.25 => "░░",
+                    < 0.50 => "▒▒",
+                    < 0.75 => "▓▓",
+                    _ => "██"
+                };
+
+                cells.Add(new Markup($"[{hexColor}]{blockChar}[/] {val.ToString("G", CultureInfo.InvariantCulture)}"));
+            }
+            table.AddRow(cells.ToArray());
+        }
+
+        return new Rows(
+            table,
+            new Markup($"[grey]Scale: {minVal.ToString(CultureInfo.InvariantCulture)} (░ low) … {maxVal.ToString(CultureInfo.InvariantCulture)} (█ high)[/]"));
     }
 
     private static IRenderable RenderLine(IReadOnlyList<ResolvedDatum> data, string series, string color, int width, bool area)

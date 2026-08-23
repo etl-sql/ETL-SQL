@@ -254,7 +254,7 @@ drop_statement = "DROP" local_drop_kind [ "IF" "EXISTS" ] identifier
                | "DROP" "SUBSCRIPTION" number
                | "DROP" "SAVED" "VIEW" string_literal "FOR" "REPORT" string_literal
                | "DROP" "SNAPSHOT" "FOR" "REPORT" string_literal ;
-local_drop_kind = "CONNECTION" | "PROCEDURE" | "FUNCTION" | "VIEW" | "VISUAL" | "PAGE" | "CONTAINER" | "STYLE" | "BUTTON" | "NAVIGATION" | "TEMPLATE" | "THEME" | "JOB" ;
+local_drop_kind = "CONNECTION" | "PROCEDURE" | "FUNCTION" | "VIEW" | "VISUAL" | "PAGE" | "CONTAINER" | "STYLE" | "BUTTON" | "NAVIGATION" | "TEMPLATE" | "THEME" | "JOB" | "BOOKMARK" ;
 create_directory_statement = "CREATE" "DIRECTORY" expression [ "WITH" "(" "OVERWRITE" "=" expression ")" ] [ "AT" identifier ] ;
 directory_operation_statement = ( "COPY" | "MOVE" | "RENAME" | "COMPRESS" | "DECOMPRESS" ) "DIRECTORY" expression [ "TO" expression ]
                                 [ directory_operation_options ] [ "AT" identifier ]
@@ -697,7 +697,7 @@ report_action = "SET_PARAMETER" "(" variable_name "," ( identifier | "VALUE" ) "
               | "REFRESH_VISUALS" "(" column_list ")"
               | identifier ;
 create_bookmark_statement = "CREATE" "BOOKMARK" identifier "AS" "(" { bookmark_clause [ "," ] } ")" ;
-bookmark_clause = "TITLE" [ "=" ] expression
+bookmark_clause = "TITLE" "=" expression
                 | "PAGE" [ "=" ] identifier
                 | "DEFAULT" [ "=" ] ( "ON" | "OFF" | "TRUE" | "FALSE" | identifier )
                 | "PARAMETERS" "(" [ bookmark_parameter { "," bookmark_parameter } ] ")"
