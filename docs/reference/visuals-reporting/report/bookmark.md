@@ -27,10 +27,13 @@ All clauses are optional. A bookmark with only `PAGE` acts as a named navigation
 | Clause | Description |
 |--------|-------------|
 | `TITLE` | Display label shown in the bookmark picker. |
-| `PARAMETERS` | Parameter assignments applied atomically when the bookmark is activated. |
+| `PARAMETERS` | Typed parameter assignments applied atomically when the bookmark is activated. Values keep their declared type — `@year = 2026` is a number, `@region = 'West'` a string, `NULL` is null; they are never flattened to quoted strings. |
 | `PAGE` | Target page to navigate to. |
-| `STATE` | UI state entries (VISIBLE, COLLAPSED) for named objects. |
-| `DEFAULT` | Marks this bookmark as the author default. Only one bookmark may be DEFAULT. |
+| `STATE` | UI state entries for named objects. Only `ObjectName.VISIBLE` and `ObjectName.COLLAPSED` are accepted, each set to `ON` or `OFF`. |
+| `DEFAULT` | Marks this bookmark as the author default (`ON` or `OFF`). At most one bookmark may be `DEFAULT = ON`. |
+
+Author bookmarks are shared and versioned with the report. They are distinct from a user's private
+**saved views**, which persist per-user in the Portal but use the same resolved-state envelope.
 
 ## APPLY_BOOKMARK Action
 

@@ -265,9 +265,26 @@ public record ApplyBookmarkAction : VisualAction
 
 // ── Bookmark ─────────────────────────────────────────────────────────────
 
-public record BookmarkParameterAssignment(string ParameterName, string Value) : AstNode;
+/// <summary>A single presentation-state property a bookmark may set. Constrained to the v1 contract.</summary>
+public enum BookmarkStateProperty
+{
+    Visible,
+    Collapsed
+}
 
-public record BookmarkStateEntry(string ObjectKey, string Value) : AstNode;
+/// <summary>
+/// A typed parameter assignment inside a bookmark's PARAMETERS clause. <see cref="Value"/> retains the
+/// parsed expression (typically a typed literal or a variable reference), so numbers, booleans, dates,
+/// and null are never flattened to quoted strings during formatting or serialization.
+/// </summary>
+public record BookmarkParameterAssignment(string ParameterName, Expression Value) : AstNode;
+
+/// <summary>A single STATE entry: <c>ObjectName.PROPERTY = ON|OFF</c>.</summary>
+public record BookmarkStateEntry(string ObjectName, BookmarkStateProperty Property, bool On) : AstNode
+{
+    /// <summary>The dotted key form (<c>ObjectName.VISIBLE</c>) for diagnostics and legacy comparisons.</summary>
+    public string ObjectKey => $"{ObjectName}.{Property.ToString().ToUpperInvariant()}";
+}
 
 /// <summary>CREATE BOOKMARK Name AS (TITLE = '...', PARAMETERS (...), PAGE = Page, STATE (...), DEFAULT = ON)</summary>
 public record CreateBookmarkStatement : Statement

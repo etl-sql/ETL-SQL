@@ -245,33 +245,56 @@ inventories and runtime assets are synchronized.
   selections are durable only when represented by declared parameters. Defer hover/tooltips,
   animation, scroll position, maximized visuals, table paging/search, arbitrary CSS mutations,
   matrix expansion, sort state, and drill paths until each has a stable cross-surface contract.
-- [x] Establish launch precedence: explicit URL bookmark, explicitly selected Portal saved view,
+- [ ] Establish launch precedence: explicit URL bookmark, explicitly selected Portal saved view,
   the user's default Portal saved view, the author default bookmark, then declared parameter and
   navigation defaults. A stale personal view must never prevent the base report from opening.
-- [x] Add parser, immutable AST, formatter, manifest, Analysis lint, LSP completion/hover/snippet,
+  *(Runtime precedence order + identifier-only `#bookmark=`/`#view=` replay + graceful fallback are
+  implemented in the browser runtime; the user-default/saved-view steps still need the Portal
+  saved-view GET-by-id and GET-default endpoints and end-to-end tests.)*
+- [ ] Add parser, immutable AST, formatter, manifest, Analysis lint, LSP completion/hover/snippet,
   rename, documentation, syntax-index, and Report Builder round-trip support. Author bookmark page,
   visual, container, and parameter references must be statically safe and rename-aware.
-- [x] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
+  *(Parser, immutable AST, typed formatter, manifest, Analysis lint, documentation, and syntax-index
+  DONE with tests. LSP completion/hover, bookmark-aware rename, and Report Builder create/edit/round-trip
+  remain — only the `$bookmark` snippet exists today.)*
+- [ ] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
   validate all references and typed values, stage parameter reconciliation and affected visuals,
   validate page/presentation state, publish one manifest, and roll back the entire application on
   failure. Do not apply parameters through sequential browser requests.
-- [x] Add Report Player and Portal bookmark pickers plus button/action invocation. The Portal picker
+  *(Client no longer applies partially: parameters are staged as one request and page/presentation
+  state is applied only on success. The server-side single-manifest atomic application operation with
+  rollback, integrated with `ReportInteractionRefresher`, is not yet built.)*
+- [ ] Add Report Player and Portal bookmark pickers plus button/action invocation. The Portal picker
   must distinguish author bookmarks from `My saved views`, and support save-as, update, make-default,
   delete, reset-to-report-default, and actual application of the user's default view.
-- [x] Converge Portal saved views on the same versioned resolved-state envelope while retaining
+  *(Author bookmark picker + button/`APPLY_BOOKMARK` invocation exist; "Save Default View" now sends
+  the full resolved-state envelope. The "My saved views" list/save-as/update/delete/reset UI remains.)*
+- [ ] Converge Portal saved views on the same versioned resolved-state envelope while retaining
   backward compatibility for existing `ParametersJson`/`FiltersJson`. Persist the report revision or
   script hash used to create the view and reconcile unknown/deleted state with warnings.
-- [x] Support author-bookmark replay in offline snapshots and identifier-only URL hashes. Never place
+  *(Shared `ResolvedReportState` envelope + `FromLegacy` reader + `StateJson`/`ScriptHash` columns exist;
+  the controller does not yet build/read the envelope or reconcile drift with warnings.)*
+- [ ] Support author-bookmark replay in offline snapshots and identifier-only URL hashes. Never place
   arbitrary parameter, filter, search, drill, or presentation values in browser history, referrers,
   logs, or generated share URLs. Re-check report and saved-view ownership when resolving Portal
   identifiers.
-- [x] Add parser/formatter/round-trip, duplicate/default, stale-reference, rename, type validation,
+  *(Identifier-only URL hashes DONE. Offline `.etlsnap` serialization/replay of bookmarks and Portal
+  ownership re-checks remain.)*
+- [ ] Add parser/formatter/round-trip, duplicate/default, stale-reference, rename, type validation,
   cascade reconciliation, atomic rollback, launch precedence, Portal ownership, report-revision
   drift, default-view restore, offline replay, accessibility, and URL-disclosure tests.
+  *(DONE: parser/formatter typed round-trip, duplicate/default rejection, stale-reference lint, type
+  validation, handler/manifest end-to-end, envelope + legacy compatibility, production-sample parse+execute.
+  Remaining: rename, cascade reconciliation, server-side atomic rollback, Portal ownership, revision
+  drift, default-view restore, offline replay, and accessibility tests.)*
 
 **Exit gate:** Bookmarks apply atomically and portably, object references are statically safe and
 rename-aware, Portal saved views use the shared state contract without becoming source-controlled
 bookmarks, user defaults restore correctly, and URLs reveal only the bookmark identifier.
+*(NOT yet met — see the unchecked items above. Foundation delivered: typed versioned envelope, strict
+parser/formatter/lint, DROP BOOKMARK, client atomic application, identifier-only URLs, corrected + runnable
+sample. Remaining: server-side atomic application, full Portal saved-view CRUD/ownership, LSP rename,
+Report Builder round-trip, offline replay, and accessibility.)*
 
 ### Phase 10 — Constrained HTML/SVG Presentation Templates
 

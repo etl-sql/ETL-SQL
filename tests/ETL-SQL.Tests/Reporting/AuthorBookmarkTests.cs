@@ -1,9 +1,15 @@
+using System.Linq;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting;
 
+/// <summary>
+/// Parser, formatter, and DROP coverage for author bookmarks. These exercise the real lexer/parser
+/// and the AstSerializer round-trip — not constructed AST nodes.
+/// </summary>
 public class AuthorBookmarkTests
 {
     private static Script Parse(string sql)
@@ -12,14 +18,20 @@ public class AuthorBookmarkTests
         return new Parser(tokens, sql).Parse();
     }
 
+    // Parse().Parse() collects syntax errors as diagnostics; ParseStatement() propagates them,
+    // which is what the rejection tests need to observe.
+    private static Statement ParseStatement(string sql)
+    {
+        var tokens = new Lexer(sql).Tokenize();
+        return new Parser(tokens, sql).ParseStatement();
+    }
+
     [Fact]
     public void ParsesMinimalBookmark()
     {
         var script = Parse("CREATE BOOKMARK Simple AS (TITLE = 'Simple view');");
-        var stmt = Assert.Single(script.Statements);
-        var bm = Assert.IsType<CreateBookmarkStatement>(stmt);
+        var bm = Assert.IsType<CreateBookmarkStatement>(Assert.Single(script.Statements));
         Assert.Equal("Simple", bm.Name);
-        Assert.NotNull(bm.Title);
         Assert.Contains("Simple view", bm.Title!.ToSql());
         Assert.False(bm.IsDefault);
         Assert.Empty(bm.Parameters);
@@ -28,167 +40,153 @@ public class AuthorBookmarkTests
     }
 
     [Fact]
-    public void ParsesFullBookmark()
+    public void RetainsTypedParameterLiterals()
+    {
+        var script = Parse("""
+            CREATE BOOKMARK B AS (
+                PARAMETERS (@region = 'West', @year = 2026, @flag = TRUE, @nothing = NULL)
+            );
+            """);
+        var bm = Assert.IsType<CreateBookmarkStatement>(Assert.Single(script.Statements));
+        Assert.Equal(4, bm.Parameters.Count);
+
+        var region = Assert.IsType<LiteralExpression>(bm.Parameters[0].Value);
+        Assert.Equal(TokenType.STRING_LITERAL, region.Type);
+        Assert.Equal("West", region.Value);
+
+        var year = Assert.IsType<LiteralExpression>(bm.Parameters[1].Value);
+        Assert.Equal(TokenType.NUMBER, year.Type);
+        Assert.Equal(2026m, year.Value);
+
+        var flag = Assert.IsType<LiteralExpression>(bm.Parameters[2].Value);
+        Assert.Equal(true, flag.Value);
+
+        var nothing = Assert.IsType<LiteralExpression>(bm.Parameters[3].Value);
+        Assert.Null(nothing.Value);
+    }
+
+    [Fact]
+    public void ParsesStructuredStateEntries()
     {
         var script = Parse("""
             CREATE BOOKMARK WestCoastDetail AS (
-                TITLE = 'West Coast Detail',
-                PARAMETERS (
-                    @region = 'West',
-                    @year = 2026
-                ),
                 PAGE = Detail,
-                STATE (
-                    FilterPanel.COLLAPSED = ON,
-                    DetailChart.VISIBLE = ON
-                ),
+                STATE (FilterPanel.COLLAPSED = ON, DetailChart.VISIBLE = OFF),
                 DEFAULT = ON
             );
             """);
-        var stmt = Assert.Single(script.Statements);
-        var bm = Assert.IsType<CreateBookmarkStatement>(stmt);
-        Assert.Equal("WestCoastDetail", bm.Name);
+        var bm = Assert.IsType<CreateBookmarkStatement>(Assert.Single(script.Statements));
         Assert.True(bm.IsDefault);
         Assert.Equal("Detail", bm.PageName);
-        Assert.Equal(2, bm.Parameters.Count);
-        Assert.Equal("@region", bm.Parameters[0].ParameterName);
-        Assert.Equal("West", bm.Parameters[0].Value);
-        Assert.Equal("@year", bm.Parameters[1].ParameterName);
-        Assert.Equal("2026", bm.Parameters[1].Value);
         Assert.Equal(2, bm.StateEntries.Count);
-        Assert.Equal("FilterPanel.COLLAPSED", bm.StateEntries[0].ObjectKey);
-        Assert.Equal("ON", bm.StateEntries[0].Value);
+        Assert.Equal("FilterPanel", bm.StateEntries[0].ObjectName);
+        Assert.Equal(BookmarkStateProperty.Collapsed, bm.StateEntries[0].Property);
+        Assert.True(bm.StateEntries[0].On);
+        Assert.Equal("DetailChart", bm.StateEntries[1].ObjectName);
+        Assert.Equal(BookmarkStateProperty.Visible, bm.StateEntries[1].Property);
+        Assert.False(bm.StateEntries[1].On);
     }
 
     [Fact]
-    public void ParsesApplyBookmarkAction()
+    public void FormatterDoesNotQuoteNumbersOrBooleans()
     {
         var script = Parse("""
-            CREATE BUTTON ApplyBtn AS (
-                TITLE = 'Apply West Coast',
-                ACTIONS (ON_CLICK = APPLY_BOOKMARK(WestCoastDetail))
-            );
-            """);
-        var stmt = Assert.Single(script.Statements);
-        var btn = Assert.IsType<CreateButtonStatement>(stmt);
-        var action = Assert.Single(btn.Actions);
-        var ab = Assert.IsType<ApplyBookmarkAction>(action);
-        Assert.Equal("WestCoastDetail", ab.BookmarkName);
-    }
-
-    [Fact]
-    public void FormatterRoundTripsBookmark()
-    {
-        var script = Parse("""
-            CREATE BOOKMARK Detail AS (
-                TITLE = 'Detail View',
-                PARAMETERS (@region = 'West'),
-                PAGE = DetailPage,
-                STATE (FilterPanel.COLLAPSED = ON),
+            CREATE BOOKMARK B AS (
+                PARAMETERS (@region = 'West', @year = 2026, @flag = TRUE),
+                STATE (Panel.COLLAPSED = ON),
                 DEFAULT = ON
             );
             """);
         var formatted = script.Statements[0].ToSql();
-        Assert.Contains("CREATE BOOKMARK Detail AS", formatted);
-        Assert.Contains("TITLE =", formatted);
-        Assert.Contains("PARAMETERS (@region = 'West')", formatted);
-        Assert.Contains("PAGE = DetailPage", formatted);
-        Assert.Contains("STATE (FilterPanel.COLLAPSED = ON)", formatted);
+        Assert.Contains("@region = 'West'", formatted);
+        Assert.Contains("@year = 2026", formatted);      // not '2026'
+        Assert.Contains("@flag = TRUE", formatted);       // not 'TRUE'
+        Assert.Contains("Panel.COLLAPSED = ON", formatted);
         Assert.Contains("DEFAULT = ON", formatted);
-
-        var reparsed = Parse(formatted);
-        var stmt = Assert.Single(reparsed.Statements);
-        var bm = Assert.IsType<CreateBookmarkStatement>(stmt);
-        Assert.Equal("Detail", bm.Name);
-        Assert.True(bm.IsDefault);
-        Assert.Equal("DetailPage", bm.PageName);
+        Assert.DoesNotContain("'2026'", formatted);
+        Assert.DoesNotContain("'TRUE'", formatted);
     }
 
     [Fact]
-    public void FormatterRoundTripsApplyBookmarkAction()
+    public void FormatterRoundTripsTypedBookmark()
     {
-        var script = Parse("""
-            CREATE BUTTON Btn AS (
-                ACTIONS (ON_CLICK = APPLY_BOOKMARK(MyBookmark))
-            );
-            """);
-        var formatted = script.Statements[0].ToSql();
-        Assert.Contains("APPLY_BOOKMARK(MyBookmark)", formatted);
-
-        var reparsed = Parse(formatted);
-        var btn = Assert.IsType<CreateButtonStatement>(reparsed.Statements[0]);
-        var action = Assert.Single(btn.Actions);
-        var ab = Assert.IsType<ApplyBookmarkAction>(action);
-        Assert.Equal("MyBookmark", ab.BookmarkName);
+        var original = """
+            CREATE BOOKMARK Detail AS (TITLE = 'Detail', PARAMETERS (@region = 'West', @year = 2026), PAGE = DetailPage, STATE (FilterPanel.COLLAPSED = ON), DEFAULT = ON);
+            """;
+        var formatted = Parse(original).Statements[0].ToSql();
+        var reparsed = Assert.IsType<CreateBookmarkStatement>(Parse(formatted).Statements[0]);
+        Assert.Equal("Detail", reparsed.Name);
+        Assert.True(reparsed.IsDefault);
+        Assert.Equal("DetailPage", reparsed.PageName);
+        var year = Assert.IsType<LiteralExpression>(reparsed.Parameters[1].Value);
+        Assert.Equal(TokenType.NUMBER, year.Type);
+        Assert.Equal(2026m, year.Value);
     }
 
     [Fact]
-    public void ParsesDuplicateBookmarkIdentifiers()
+    public void ParsesApplyBookmarkActionAndRoundTrips()
     {
-        var script = Parse("""
-            CREATE BOOKMARK A AS (TITLE = 'First');
-            CREATE BOOKMARK A AS (TITLE = 'Second');
-            """);
-        Assert.Equal(2, script.Statements.Count);
-        Assert.All(script.Statements, s => Assert.IsType<CreateBookmarkStatement>(s));
-        Assert.All(script.Statements.Cast<CreateBookmarkStatement>(), s => Assert.Equal("A", s.Name));
+        var script = Parse("CREATE BUTTON Btn AS (ACTIONS (ON_CLICK = APPLY_BOOKMARK(WestCoastDetail)));");
+        var btn = Assert.IsType<CreateButtonStatement>(Assert.Single(script.Statements));
+        var ab = Assert.IsType<ApplyBookmarkAction>(Assert.Single(btn.Actions));
+        Assert.Equal("WestCoastDetail", ab.BookmarkName);
+
+        var formatted = btn.ToSql();
+        Assert.Contains("APPLY_BOOKMARK(WestCoastDetail)", formatted);
+        var reparsed = Assert.IsType<CreateButtonStatement>(Parse(formatted).Statements[0]);
+        Assert.Equal("WestCoastDetail", Assert.IsType<ApplyBookmarkAction>(reparsed.Actions[0]).BookmarkName);
+    }
+
+    [Theory]
+    [InlineData("CREATE BOOKMARK B AS (STATE (Panel.MAXIMIZED = ON));")]      // invalid property
+    [InlineData("CREATE BOOKMARK B AS (STATE (Panel.COLLAPSED = YES));")]     // invalid value
+    [InlineData("CREATE BOOKMARK B AS (STATE (Panel = ON));")]                // missing property
+    [InlineData("CREATE BOOKMARK B AS (STATE (Panel.VISIBLE.EXTRA = ON));")]  // nested property
+    [InlineData("CREATE BOOKMARK B AS (DEFAULT = TRUE);")]                    // DEFAULT not ON/OFF
+    [InlineData("CREATE BOOKMARK B AS (PARAMETERS (@x = 1, @x = 2));")]       // duplicate parameter
+    public void RejectsMalformedBookmarkSyntax(string sql)
+    {
+        Assert.Throws<SyntaxException>(() => ParseStatement(sql));
     }
 
     [Fact]
-    public void ParsesMultipleDefaultBookmarks()
+    public void RejectsNonScalarParameterValue()
     {
-        var script = Parse("""
-            CREATE BOOKMARK A AS (TITLE = 'A', DEFAULT = ON);
-            CREATE BOOKMARK B AS (TITLE = 'B', DEFAULT = ON);
-            """);
-        Assert.Equal(2, script.Statements.Count);
-        Assert.All(script.Statements.Cast<CreateBookmarkStatement>(), s => Assert.True(s.IsDefault));
+        // A function call is not a typed scalar literal or variable reference.
+        Assert.Throws<SyntaxException>(() => ParseStatement("CREATE BOOKMARK B AS (PARAMETERS (@x = UPPER('a')));"));
     }
 
     [Fact]
-    public void ParsesBookmarkWithPageOnly()
+    public void AcceptsVariableReferenceParameterValue()
     {
-        var script = Parse("CREATE BOOKMARK Nav AS (PAGE = Overview);");
-        var stmt = Assert.Single(script.Statements);
-        var bm = Assert.IsType<CreateBookmarkStatement>(stmt);
-        Assert.Equal("Overview", bm.PageName);
-        Assert.Empty(bm.Parameters);
-        Assert.Empty(bm.StateEntries);
-        Assert.Null(bm.Title);
+        var script = Parse("CREATE BOOKMARK B AS (PARAMETERS (@target = @source));");
+        var bm = Assert.IsType<CreateBookmarkStatement>(script.Statements[0]);
+        Assert.IsType<VariableExpression>(bm.Parameters[0].Value);
     }
 
     [Fact]
-    public void ParsesBookmarkWithStateOnly()
+    public void ParsesDropBookmark()
     {
-        var script = Parse("""
-            CREATE BOOKMARK Collapsed AS (
-                STATE (
-                    Sidebar.COLLAPSED = ON,
-                    Chart1.VISIBLE = OFF
-                )
-            );
-            """);
-        var stmt = Assert.Single(script.Statements);
-        var bm = Assert.IsType<CreateBookmarkStatement>(stmt);
-        Assert.Equal(2, bm.StateEntries.Count);
-        Assert.Equal("Chart1.VISIBLE", bm.StateEntries[1].ObjectKey);
-        Assert.Equal("OFF", bm.StateEntries[1].Value);
+        var script = Parse("DROP BOOKMARK WestCoastDetail;");
+        var drop = Assert.IsType<DropReportObjectStatement>(Assert.Single(script.Statements));
+        Assert.Equal(ReportObjectType.Bookmark, drop.ObjectType);
+        Assert.Equal("WestCoastDetail", drop.Name);
+        Assert.False(drop.IfExists);
     }
 
     [Fact]
-    public void BookmarkManifestContainsNoRawParameterValues()
+    public void ParsesDropBookmarkIfExistsAndRoundTrips()
     {
-        var bookmark = new ETL_SQL.Reporting.BookmarkManifest
-        {
-            Name = "Test",
-            Parameters = new() { ["@secret"] = "sensitive_value" },
-            PageName = "Detail"
-        };
-        var json = System.Text.Json.JsonSerializer.Serialize(bookmark);
-        Assert.Contains("sensitive_value", json);
+        var script = Parse("DROP BOOKMARK IF EXISTS WestCoastDetail;");
+        var drop = Assert.IsType<DropReportObjectStatement>(Assert.Single(script.Statements));
+        Assert.True(drop.IfExists);
 
-        var urlHash = $"#bookmark={bookmark.Name}";
-        Assert.DoesNotContain("sensitive_value", urlHash);
-        Assert.Equal("#bookmark=Test", urlHash);
+        var formatted = drop.ToSql();
+        Assert.Contains("DROP BOOKMARK", formatted);
+        Assert.Contains("IF EXISTS", formatted);
+        Assert.Contains("WestCoastDetail", formatted);
+        var reparsed = Assert.IsType<DropReportObjectStatement>(Parse(formatted).Statements[0]);
+        Assert.Equal(ReportObjectType.Bookmark, reparsed.ObjectType);
+        Assert.True(reparsed.IfExists);
     }
 }

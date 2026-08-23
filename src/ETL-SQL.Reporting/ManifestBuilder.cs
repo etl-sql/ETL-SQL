@@ -190,26 +190,26 @@ namespace ETL_SQL.Reporting
                 foreach (var (_, bkStmt) in _ctx.ReportContext.BookmarkDefinitions)
                 {
                     var (bkTitle, _) = await _styleBuilder.ResolveMarkdownAsync(bkStmt.Title);
-                    var bkm = new BookmarkManifest
+                    var state = new ETL_SQL.Core.Reporting.ResolvedReportState
+                    {
+                        ActivePage = bkStmt.PageName
+                    };
+                    foreach (var p in bkStmt.Parameters)
+                        state.Parameters[p.ParameterName] = await ResolveBookmarkValueAsync(p.Value);
+                    foreach (var s in bkStmt.StateEntries)
+                    {
+                        if (s.Property == BookmarkStateProperty.Visible)
+                            state.Visible[s.ObjectName] = s.On;
+                        else
+                            state.Collapsed[s.ObjectName] = s.On;
+                    }
+                    manifest.Bookmarks.Add(new BookmarkManifest
                     {
                         Name = bkStmt.Name,
                         Title = bkTitle,
                         IsDefault = bkStmt.IsDefault,
-                        PageName = bkStmt.PageName,
-                    };
-                    if (bkStmt.Parameters.Count > 0)
-                    {
-                        bkm.Parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var p in bkStmt.Parameters)
-                            bkm.Parameters[p.ParameterName] = p.Value;
-                    }
-                    if (bkStmt.StateEntries.Count > 0)
-                    {
-                        bkm.State = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var s in bkStmt.StateEntries)
-                            bkm.State[s.ObjectKey] = s.Value;
-                    }
-                    manifest.Bookmarks.Add(bkm);
+                        State = state
+                    });
                 }
             }
 
@@ -560,6 +560,28 @@ namespace ETL_SQL.Reporting
         /// <summary>Builds a detached visual so an interaction transaction can commit it atomically.</summary>
         public Task<VisualManifest> BuildVisualSnapshotAsync(CreateVisualStatement statement) =>
             _visualBuilder.BuildAsync(statement.Name, statement);
+
+        /// <summary>
+        /// Resolves a bookmark parameter expression to a typed value, preserving its declared kind.
+        /// Literals resolve without evaluation; variable references and collapsed signed literals are
+        /// evaluated against the current context.
+        /// </summary>
+        private async Task<ETL_SQL.Core.Reporting.ReportStateValue> ResolveBookmarkValueAsync(ETL_SQL.Core.Expression expr)
+        {
+            if (expr is ETL_SQL.Core.LiteralExpression lit)
+                return ETL_SQL.Core.Reporting.ReportStateValue.FromLiteral(lit);
+            try
+            {
+                var value = await _ctx.EvaluateValue(expr, null!);
+                return ETL_SQL.Core.Reporting.ReportStateValue.FromObject(value);
+            }
+            catch
+            {
+                // A value that cannot be resolved at build time (e.g. an undeclared variable) is emitted
+                // as null; static validation reports the undeclared reference separately.
+                return ETL_SQL.Core.Reporting.ReportStateValue.Null;
+            }
+        }
 
         private VisualActionManifest TranslateAction(VisualAction action)
         {

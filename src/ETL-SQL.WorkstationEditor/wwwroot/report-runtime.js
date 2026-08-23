@@ -397,24 +397,48 @@
 
         renderManifest(manifest);
 
-        // Launch precedence: URL bookmark > saved view > user default > author default > declared defaults
-        const initialHash = window.location.hash;
-        let urlBookmarkApplied = false;
-        if (initialHash) {
-            const bmMatch = initialHash.match(/[#&]bookmark=([^&]+)/);
-            if (bmMatch) { applyBookmark(decodeURIComponent(bmMatch[1])); urlBookmarkApplied = true; }
-        }
-        if (!urlBookmarkApplied && manifest.bookmarks) {
-            const authorDefault = manifest.bookmarks.find(b => b.isDefault);
-            if (authorDefault) applyBookmark(authorDefault.name);
-        }
+        // Launch precedence (exact order):
+        //   1. explicit #bookmark=Name
+        //   2. explicit #view=SavedViewId
+        //   3. user's default Portal saved view
+        //   4. author default bookmark (DEFAULT = ON)
+        //   5. declared parameter/navigation defaults (already applied by renderManifest)
+        applyLaunchPrecedence(manifest);
 
-        // Listen for bookmark hash changes (identifier-only)
+        // Identifier-only hash replay. URLs and history carry only an identifier — never parameter,
+        // filter, search, drill, or presentation values.
         window.addEventListener('hashchange', () => {
-            const hash = window.location.hash;
-            const match = hash.match(/[#&]bookmark=([^&]+)/);
-            if (match) applyBookmark(decodeURIComponent(match[1]));
+            const parsed = parseStateHash(window.location.hash);
+            if (parsed.bookmark) applyBookmark(parsed.bookmark);
+            else if (parsed.view) applySavedView(parsed.view);
         });
+    }
+
+    // Parses an identifier-only state hash. Returns { bookmark, view } with at most one set.
+    function parseStateHash(hash) {
+        const result = { bookmark: null, view: null };
+        if (!hash) return result;
+        const bm = hash.match(/[#&]bookmark=([^&]+)/);
+        if (bm) { result.bookmark = decodeURIComponent(bm[1]); return result; }
+        const vw = hash.match(/[#&]view=([^&]+)/);
+        if (vw) { result.view = decodeURIComponent(vw[1]); }
+        return result;
+    }
+
+    async function applyLaunchPrecedence(manifest) {
+        const parsed = parseStateHash(window.location.hash);
+        if (parsed.bookmark) { await applyBookmark(parsed.bookmark); return; }
+        if (parsed.view) { if (await applySavedView(parsed.view)) return; }
+
+        // User's default Portal saved view (Portal mode only). A stale/unknown default must never
+        // prevent the base report from opening, so failure falls through to the author default.
+        if (await applyUserDefaultSavedView(manifest)) return;
+
+        if (manifest.bookmarks) {
+            const authorDefault = manifest.bookmarks.find(b => b.isDefault);
+            if (authorDefault) { await applyBookmark(authorDefault.name); return; }
+        }
+        // else: declared parameter/navigation defaults already applied by renderManifest.
     }
 
     function checkRequiredParameters(manifest) {
@@ -821,10 +845,12 @@
             }
             try {
                 const base = window.__API_BASE__ || '';
+                // Save the complete resolved-state envelope (typed parameters, active page, and
+                // presentation state). The server stamps the current script hash for drift detection.
                 const res = await fetch(`${base}/api/reports/${reportId}/saved-views/default`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(parameters || {})
+                    body: JSON.stringify({ state: captureResolvedState(), parameters: parameters || {} })
                 });
                 if (res.ok) {
                     feedback.notify('Saved current slicers as your default view.', { title: 'Default view saved', tone: 'success', auditAction: 'report.saved-view.update' });
@@ -4727,64 +4753,192 @@
     }
 
     function applyBookmark(bookmarkName) {
-        if (!bookmarkName || !_lastManifest) return;
+        if (!bookmarkName || !_lastManifest) return Promise.resolve(false);
         const bookmarks = _lastManifest.bookmarks || [];
         const bm = bookmarks.find(b => b.name.toLowerCase() === bookmarkName.toLowerCase());
         if (!bm) {
             console.warn('Bookmark not found:', bookmarkName);
-            return;
+            if (feedback) feedback.notify('Bookmark not found: ' + bookmarkName, { title: 'Bookmark', tone: 'error' });
+            return Promise.resolve(false);
         }
+        return applyResolvedState(bm.state || {}, { hash: '#bookmark=' + encodeURIComponent(bm.name) });
+    }
 
+    // Reads a named-object VISIBLE/COLLAPSED map from the shared envelope onto the DOM.
+    function applyPresentationState(state) {
+        if (state.visible) {
+            Object.entries(state.visible).forEach(([objName, on]) => {
+                const el = document.getElementById(objName) || document.querySelector(`[data-name="${objName}"]`);
+                if (el) el.style.display = on ? '' : 'none';
+            });
+        }
+        if (state.collapsed) {
+            Object.entries(state.collapsed).forEach(([objName, on]) => {
+                const el = document.getElementById(objName) || document.querySelector(`[data-name="${objName}"]`);
+                if (!el) return;
+                const container = el.closest('.collapsible-drawer')
+                               || el.closest('.collapsible-inline')
+                               || el.closest('.report-container') || el;
+                const name = container.getAttribute('data-name');
+                if (name) _uiStates[name] = { collapsed: !!on };
+                if (on) container.classList.add('collapsed');
+                else container.classList.remove('collapsed');
+            });
+        }
+    }
+
+    // The single atomic application contract shared by author bookmarks, saved views, buttons, and
+    // URL replay. Parameters are staged and committed as one request; the active page and
+    // presentation state are applied ONLY after that request succeeds. On failure nothing is
+    // applied (no partial bookmark), the identifier-only hash is not written, and a warning is shown.
+    async function applyResolvedState(state, opts) {
+        opts = opts || {};
         const batch = {};
-        if (bm.parameters) {
-            Object.entries(bm.parameters).forEach(([k, v]) => {
+        if (state.parameters) {
+            Object.entries(state.parameters).forEach(([k, v]) => {
                 const paramName = k.startsWith('@') ? k : '@' + k;
-                batch[paramName] = String(v ?? '');
+                // Typed values arrive as JS number/boolean/string/null; project to the string the API expects.
+                batch[paramName] = (v === null || v === undefined) ? '' : String(v);
             });
         }
 
-        const applyStateAndPage = () => {
-            if (bm.pageName) navigateToPage(bm.pageName);
-
-            if (bm.state) {
-                Object.entries(bm.state).forEach(([key, val]) => {
-                    const dotIdx = key.lastIndexOf('.');
-                    if (dotIdx < 0) return;
-                    const objName = key.substring(0, dotIdx);
-                    const prop = key.substring(dotIdx + 1).toUpperCase();
-
-                    const el = document.getElementById(objName)
-                            || document.querySelector(`[data-name="${objName}"]`);
-                    if (!el) return;
-
-                    if (prop === 'VISIBLE') {
-                        el.style.display = isOn(val) ? '' : 'none';
-                    } else if (prop === 'COLLAPSED') {
-                        const container = el.closest('.collapsible-drawer')
-                                       || el.closest('.collapsible-inline')
-                                       || el.closest('.report-container') || el;
-                        const name = container.getAttribute('data-name');
-                        if (name) _uiStates[name] = { collapsed: isOn(val) };
-                        if (isOn(val)) container.classList.add('collapsed');
-                        else container.classList.remove('collapsed');
-                    }
-                });
-            }
-
-            // Update hash to identifier only — no parameter values
-            if (window.history && window.history.replaceState) {
-                window.history.replaceState(null, '', '#bookmark=' + encodeURIComponent(bm.name));
+        const commit = () => {
+            if (state.activePage) navigateToPage(state.activePage);
+            applyPresentationState(state);
+            if (opts.hash && window.history && window.history.replaceState) {
+                window.history.replaceState(null, '', opts.hash);
             }
         };
 
-        if (Object.keys(batch).length > 0) {
-            _postParametersInternal(batch, false, getActivePageName()).then(m => {
-                if (m) renderManifest(m);
-                applyStateAndPage();
-            });
-        } else {
-            applyStateAndPage();
+        if (Object.keys(batch).length === 0) {
+            commit();
+            return true;
         }
+
+        // Offline snapshot / VS Code preview: apply parameters locally, then commit page/state.
+        if (typeof applyParametersOffline === 'function' && isOfflineSnapshot()) {
+            const ok = await applyParametersOffline(batch);
+            if (!ok) {
+                console.warn('Offline parameter application failed; bookmark not applied.');
+                if (feedback) feedback.notify('Could not apply bookmark offline.', { title: 'Bookmark', tone: 'error' });
+                return false;
+            }
+            commit();
+            return true;
+        }
+
+        const manifest = await _postParametersInternal(batch, false, getActivePageName());
+        if (manifest) {
+            renderManifest(manifest);
+            commit();
+            return true;
+        }
+
+        if (vscode) {
+            // VS Code host applies parameters and re-renders asynchronously; commit page/state after.
+            commit();
+            return true;
+        }
+
+        // Web mode: the parameter request failed — do not partially apply the bookmark.
+        console.warn('Parameter application failed; bookmark/view not applied.');
+        if (feedback) feedback.notify('Could not apply the requested state.', { title: 'Bookmark', tone: 'error' });
+        return false;
+    }
+
+    // Offline snapshots set window.__ETLSNAP__; overridden by the snapshot bootstrap when present.
+    function isOfflineSnapshot() {
+        return !!(window.__ETLSNAP__ || (typeof window.__OFFLINE__ !== 'undefined' && window.__OFFLINE__));
+    }
+
+    function currentReportId() {
+        return (_lastManifest && _lastManifest.id) || window.__REPORT_ID__ || null;
+    }
+
+    // Normalizes a saved-view API payload to a resolved-state envelope object.
+    function envelopeFromSavedView(view) {
+        if (!view) return null;
+        let state = view.state;
+        if (!state && view.stateJson) {
+            try { state = JSON.parse(view.stateJson); } catch (_) { state = null; }
+        }
+        if (!state) {
+            // Legacy view: only a parameters map. Fall back so it still applies.
+            state = { parameters: view.parameters || {} };
+        }
+        return state;
+    }
+
+    // Applies one Portal saved view by identifier. Portal mode only. Returns true on success.
+    // Unknown/unauthorized identifiers resolve to a graceful no-op (base report still opens) and
+    // never reveal whether another user's view exists.
+    async function applySavedView(viewId) {
+        const reportId = currentReportId();
+        if (!reportId || vscode || isOfflineSnapshot()) return false;
+        try {
+            const base = window.__API_BASE__ || '';
+            const res = await fetch(`${base}/api/reports/${reportId}/saved-views/${encodeURIComponent(viewId)}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!res.ok) return false;
+            const view = await res.json();
+            if (view && view.driftWarning && feedback) {
+                feedback.notify(view.driftWarning, { title: 'Saved view', tone: 'warning' });
+            }
+            const state = envelopeFromSavedView(view);
+            if (!state) return false;
+            return await applyResolvedState(state, { hash: '#view=' + encodeURIComponent(viewId) });
+        } catch (e) {
+            console.warn('Saved view could not be applied:', e && e.message);
+            return false;
+        }
+    }
+
+    // Applies the current user's default saved view, if any. Returns true when one was applied.
+    async function applyUserDefaultSavedView(manifest) {
+        const reportId = currentReportId();
+        if (!reportId || vscode || isOfflineSnapshot()) return false;
+        try {
+            const base = window.__API_BASE__ || '';
+            const res = await fetch(`${base}/api/reports/${reportId}/saved-views/default`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.status === 204 || !res.ok) return false;
+            const view = await res.json();
+            if (!view || (!view.state && !view.stateJson && !view.parameters)) return false;
+            if (view.driftWarning && feedback) {
+                feedback.notify(view.driftWarning, { title: 'Saved view', tone: 'warning' });
+            }
+            const state = envelopeFromSavedView(view);
+            if (!state) return false;
+            const idPart = view.id != null ? ('#view=' + encodeURIComponent(view.id)) : null;
+            return await applyResolvedState(state, idPart ? { hash: idPart } : {});
+        } catch (e) {
+            console.warn('Default saved view could not be applied:', e && e.message);
+            return false;
+        }
+    }
+
+    // Captures the current report state into a resolved-state envelope for saving as a view.
+    // Only identifiers/values needed for replay are captured; the ScriptHash is stamped server-side.
+    function captureResolvedState() {
+        const state = {
+            schemaVersion: 1,
+            activePage: getActivePageName(),
+            parameters: {},
+            visible: {},
+            collapsed: {}
+        };
+        const params = (_lastManifest && _lastManifest.parameters) || {};
+        Object.entries(params).forEach(([k, v]) => {
+            const name = k.startsWith('@') ? k : '@' + k;
+            state.parameters[name] = v;
+        });
+        // Collapsed state tracked in _uiStates.
+        Object.entries(_uiStates || {}).forEach(([name, s]) => {
+            if (s && typeof s.collapsed === 'boolean') state.collapsed[name] = s.collapsed;
+        });
+        return state;
     }
 
     function postDrillIn(visualName, clickedValue) {

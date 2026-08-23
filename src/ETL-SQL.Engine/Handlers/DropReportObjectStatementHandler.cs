@@ -50,6 +50,9 @@ public class DropReportObjectStatementHandler(ILogger logger) : IStatementHandle
             case ReportObjectType.Button:
                 removed = context.ReportContext.ButtonDefinitions.Remove(stmt.Name);
                 break;
+            case ReportObjectType.Bookmark:
+                removed = context.ReportContext.BookmarkDefinitions.Remove(stmt.Name);
+                break;
             case ReportObjectType.Template:
                 removed = context.ReportContext.TemplateDefinitions.Remove(stmt.Name);
                 if (removed)

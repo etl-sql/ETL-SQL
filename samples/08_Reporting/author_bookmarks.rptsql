@@ -44,7 +44,7 @@ CREATE VISUAL DetailTable AS TABLE (
                 AND year = @year)
 );
 
-CREATE CONTAINER FilterPanel AS (
+CREATE CONTAINER FilterPanel AS BOX (
     LAYOUT (
         STRUCTURE = 'A B',
         MAP ('A' = RegionFilter, 'B' = YearFilter)

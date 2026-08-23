@@ -783,6 +783,14 @@ public class DataParser : ParserComponent
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Navigation, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
+        else if (Match(TokenType.BOOKMARK))
+        {
+            if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            var name = ConsumeIdentifier("Expected bookmark name").Value;
+            RejectTrailingIfExists("BOOKMARK", name);
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new DropReportObjectStatement { ObjectType = ReportObjectType.Bookmark, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+        }
         else if (Match(TokenType.DATASET))
         {
             if (_parser.Current.Type == TokenType.STRING_LITERAL)

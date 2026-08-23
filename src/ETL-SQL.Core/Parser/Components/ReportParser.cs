@@ -1854,12 +1854,14 @@ public class ReportParser : ParserComponent
         bool isDefault = false;
         var parameters = new List<BookmarkParameterAssignment>();
         var stateEntries = new List<BookmarkStateEntry>();
+        var seenParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenState = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
             if (Match(TokenType.TITLE))
             {
-                Match(TokenType.EQUALS);
+                Consume(TokenType.EQUALS, "Expected '=' after TITLE");
                 title = ParseExpression();
             }
             else if (MatchIdentifier("PARAMETERS"))
@@ -1869,47 +1871,66 @@ public class ReportParser : ParserComponent
                 {
                     var paramName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
                     if (!paramName.StartsWith("@")) paramName = "@" + paramName;
+                    if (!seenParams.Add(paramName))
+                        throw new SyntaxException($"Bookmark parameter '{paramName}' is assigned more than once.", _parser.Previous.Line, _parser.Previous.Column);
                     Consume(TokenType.EQUALS, "Expected '=' after parameter name");
-                    var value = ConsumeValueExpr("Expected parameter value").Value;
+                    var value = ParseBookmarkParameterValue(paramName);
                     parameters.Add(new BookmarkParameterAssignment(paramName, value));
-                    Match(TokenType.COMMA);
+                    if (!Match(TokenType.COMMA)) break;
                 }
                 Consume(TokenType.RPAREN, "Expected ')' to close PARAMETERS");
             }
             else if (Match(TokenType.PAGE))
             {
-                Match(TokenType.EQUALS);
+                Consume(TokenType.EQUALS, "Expected '=' after PAGE");
                 pageName = ConsumeIdentifier("Expected page name").Value;
             }
             else if (Match(TokenType.DEFAULT))
             {
-                Match(TokenType.EQUALS);
+                Consume(TokenType.EQUALS, "Expected '=' after DEFAULT");
                 var defaultValue = Advance().Value;
-                isDefault = string.Equals(defaultValue, "ON", StringComparison.OrdinalIgnoreCase)
-                         || string.Equals(defaultValue, "TRUE", StringComparison.OrdinalIgnoreCase);
+                if (string.Equals(defaultValue, "ON", StringComparison.OrdinalIgnoreCase))
+                    isDefault = true;
+                else if (string.Equals(defaultValue, "OFF", StringComparison.OrdinalIgnoreCase))
+                    isDefault = false;
+                else
+                    throw new SyntaxException($"DEFAULT must be ON or OFF, got '{defaultValue}'.", _parser.Previous.Line, _parser.Previous.Column);
             }
             else if (MatchIdentifier("STATE"))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after STATE");
                 while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                 {
-                    var firstPart = ConsumeIdentifier("Expected object.property reference").Value;
-                    var objectKey = firstPart;
-                    while (Match(TokenType.DOT))
+                    var objectName = ConsumeIdentifier("Expected object name in STATE entry").Value;
+                    Consume(TokenType.DOT, $"Expected '.PROPERTY' after object name '{objectName}' in STATE. Only ObjectName.VISIBLE and ObjectName.COLLAPSED are allowed.");
+                    var propToken = ConsumeIdentifier("Expected VISIBLE or COLLAPSED after '.'");
+                    var property = propToken.Value.ToUpperInvariant() switch
                     {
-                        var nextPart = ConsumeIdentifier("Expected property name after '.'").Value;
-                        objectKey = objectKey + "." + nextPart;
-                    }
-                    Consume(TokenType.EQUALS, "Expected '=' after state key");
-                    var stateValue = Advance().Value;
-                    stateEntries.Add(new BookmarkStateEntry(objectKey, stateValue));
-                    Match(TokenType.COMMA);
+                        "VISIBLE" => BookmarkStateProperty.Visible,
+                        "COLLAPSED" => BookmarkStateProperty.Collapsed,
+                        _ => throw new SyntaxException($"Invalid STATE property '{propToken.Value}'. Only VISIBLE and COLLAPSED are allowed.", propToken.Line, propToken.Column)
+                    };
+                    if (Match(TokenType.DOT))
+                        throw new SyntaxException("STATE references may only be 'ObjectName.PROPERTY'; nested properties are not allowed.", _parser.Previous.Line, _parser.Previous.Column);
+                    Consume(TokenType.EQUALS, "Expected '=' after state property");
+                    var valueToken = Advance();
+                    var on = valueToken.Value.ToUpperInvariant() switch
+                    {
+                        "ON" => true,
+                        "OFF" => false,
+                        _ => throw new SyntaxException($"STATE value for '{objectName}.{property.ToString().ToUpperInvariant()}' must be ON or OFF, got '{valueToken.Value}'.", valueToken.Line, valueToken.Column)
+                    };
+                    var key = $"{objectName}.{property}";
+                    if (!seenState.Add(key))
+                        throw new SyntaxException($"STATE entry '{objectName}.{property.ToString().ToUpperInvariant()}' is set more than once.", propToken.Line, propToken.Column);
+                    stateEntries.Add(new BookmarkStateEntry(objectName, property, on));
+                    if (!Match(TokenType.COMMA)) break;
                 }
                 Consume(TokenType.RPAREN, "Expected ')' to close STATE");
             }
             else
             {
-                throw new SyntaxException($"Unexpected token '{_parser.Current.Value}' in CREATE BOOKMARK body", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException($"Unexpected token '{_parser.Current.Value}' in CREATE BOOKMARK body. Expected TITLE, PARAMETERS, PAGE, STATE, or DEFAULT.", _parser.Current.Line, _parser.Current.Column);
             }
             Match(TokenType.COMMA);
         }
@@ -1929,6 +1950,47 @@ public class ReportParser : ParserComponent
             Column = startToken.Column
         };
     }
+
+    /// <summary>
+    /// Parses one bookmark parameter value, constraining it to a typed scalar literal (number, string,
+    /// boolean, or NULL) or a declared variable reference. This keeps bookmark PARAMETERS a state
+    /// declaration rather than a hidden transformation engine, while retaining the value's type.
+    /// </summary>
+    private Expression ParseBookmarkParameterValue(string paramName)
+    {
+        var start = _parser.Current;
+        var expr = ParseExpression();
+        var normalized = NormalizeBookmarkValue(expr);
+        if (normalized is null)
+            throw new SyntaxException(
+                $"Bookmark parameter '{paramName}' must be a typed scalar literal (number, string, boolean, or NULL) or a declared variable reference.",
+                start.Line, start.Column);
+        return normalized;
+    }
+
+    private static Expression? NormalizeBookmarkValue(Expression expr) => expr switch
+    {
+        LiteralExpression => expr,
+        VariableExpression => expr,
+        // A negative number is parsed as (0 - <number literal>); collapse it to a signed literal.
+        BinaryExpression
+        {
+            Operator: TokenType.MINUS,
+            Left: LiteralExpression { Type: TokenType.NUMBER },
+            Right: LiteralExpression { Type: TokenType.NUMBER, Value: decimal d }
+        } b when IsZero(((LiteralExpression)b.Left).Value)
+            => new LiteralExpression(-d, TokenType.NUMBER) { Line = expr.Line, Column = expr.Column },
+        _ => null
+    };
+
+    private static bool IsZero(object? value) => value switch
+    {
+        decimal d => d == 0m,
+        int i => i == 0,
+        long l => l == 0,
+        double db => db == 0,
+        _ => false
+    };
 
     // ── ALTER (Report Objects) ────────────────────────────────────────────
 

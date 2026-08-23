@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
 
@@ -24,8 +25,6 @@ public sealed class BookmarkValidationRule : ILintRule
     {
         var results = new List<LintResult>();
         var bookmarks = script.Statements.OfType<CreateBookmarkStatement>().ToList();
-        if (bookmarks.Count == 0)
-            return Task.FromResult<IEnumerable<LintResult>>(results);
 
         var pageNames = new HashSet<string>(
             script.Statements.OfType<CreatePageStatement>().Select(p => p.Name),
@@ -36,10 +35,12 @@ public sealed class BookmarkValidationRule : ILintRule
             .Concat(script.Statements.OfType<CreateContainerStatement>().Select(c => c.Name)),
             StringComparer.OrdinalIgnoreCase);
 
-        var declaredParams = new HashSet<string>(
-            script.Statements.OfType<DeclareStatement>().Select(d =>
-                d.VariableName.StartsWith("@") ? d.VariableName : "@" + d.VariableName),
-            StringComparer.OrdinalIgnoreCase);
+        var declaredParamTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var d in script.Statements.OfType<DeclareStatement>())
+        {
+            var name = d.VariableName.StartsWith("@") ? d.VariableName : "@" + d.VariableName;
+            declaredParamTypes[name] = d.DataType;
+        }
 
         var bookmarkNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -63,13 +64,17 @@ public sealed class BookmarkValidationRule : ILintRule
             foreach (var param in bm.Parameters)
             {
                 var normalized = param.ParameterName.StartsWith("@") ? param.ParameterName : "@" + param.ParameterName;
-                if (!declaredParams.Contains(normalized))
+                if (!declaredParamTypes.TryGetValue(normalized, out var declaredType))
+                {
+                    results.Add(Error(bm, $"Bookmark '{bm.Name}' sets parameter '{param.ParameterName}' which is not declared in this script."));
+                }
+                else if (param.Value is LiteralExpression lit && !IsTypeCompatible(declaredType, lit))
                 {
                     results.Add(new LintResult
                     {
                         RuleName = Name,
                         Severity = LintSeverity.Warning,
-                        Message = $"Bookmark '{bm.Name}' sets parameter '{param.ParameterName}' which is not declared in this script.",
+                        Message = $"Bookmark '{bm.Name}' sets '{param.ParameterName}' to a {DescribeLiteral(lit)} value, which does not match its declared type '{declaredType}'.",
                         LineNumber = bm.Line,
                         ColumnNumber = bm.Column
                     });
@@ -120,6 +125,53 @@ public sealed class BookmarkValidationRule : ILintRule
             }
         }
     }
+
+    private static readonly HashSet<string> NumericTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "DECIMAL", "NUMERIC",
+        "FLOAT", "REAL", "DOUBLE", "MONEY", "NUMBER"
+    };
+
+    private static readonly HashSet<string> BooleanTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "BIT", "BOOL", "BOOLEAN"
+    };
+
+    /// <summary>
+    /// Checks a typed literal against a declared parameter type. NULL and variable references are always
+    /// compatible (a variable's value is not known statically). String-typed parameters accept any
+    /// literal because most declared inputs are strings that carry codes; numeric and boolean columns
+    /// are strict so an obvious mismatch is surfaced as a warning.
+    /// </summary>
+    private static bool IsTypeCompatible(string declaredType, LiteralExpression lit)
+    {
+        if (lit.Value == null) return true; // NULL is assignable to any type
+
+        // Strip any length/precision suffix, e.g. VARCHAR(50) -> VARCHAR.
+        var baseType = declaredType;
+        var paren = baseType.IndexOf('(');
+        if (paren >= 0) baseType = baseType[..paren];
+        baseType = baseType.Trim();
+
+        var isNumberLit = lit.Type == TokenType.NUMBER;
+        var isBoolLit = lit.Type is TokenType.TRUE or TokenType.FALSE or TokenType.ON or TokenType.OFF
+            || lit.Value is bool;
+        var isStringLit = lit.Type == TokenType.STRING_LITERAL || (!isNumberLit && !isBoolLit);
+
+        if (NumericTypes.Contains(baseType)) return isNumberLit;
+        if (BooleanTypes.Contains(baseType)) return isBoolLit;
+        // String/date/other declared types accept string (and, leniently, numeric) literals.
+        return isStringLit || isNumberLit;
+    }
+
+    private static string DescribeLiteral(LiteralExpression lit) => lit.Type switch
+    {
+        TokenType.NUMBER => "numeric",
+        TokenType.TRUE or TokenType.FALSE or TokenType.ON or TokenType.OFF => "boolean",
+        TokenType.STRING_LITERAL => "string",
+        TokenType.NULL => "null",
+        _ => lit.Value is bool ? "boolean" : "string"
+    };
 
     private LintResult Error(CreateBookmarkStatement bm, string message) => new()
     {

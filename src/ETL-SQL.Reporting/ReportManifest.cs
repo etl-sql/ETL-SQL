@@ -614,7 +614,11 @@ namespace ETL_SQL.Reporting
         public string? BookmarkName { get; set; }
     }
 
-    /// <summary>Serialized author bookmark from CREATE BOOKMARK.</summary>
+    /// <summary>
+    /// Serialized author bookmark from CREATE BOOKMARK. The resolved presentation state lives in the
+    /// shared <see cref="ETL_SQL.Core.Reporting.ResolvedReportState"/> envelope so author bookmarks and
+    /// Portal saved views apply through one contract.
+    /// </summary>
     public class BookmarkManifest
     {
         [JsonPropertyName("name")]
@@ -628,17 +632,9 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool IsDefault { get; set; }
 
-        [JsonPropertyName("pageName")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? PageName { get; set; }
-
-        [JsonPropertyName("parameters")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, string>? Parameters { get; set; }
-
+        /// <summary>The versioned, typed resolved-state envelope this bookmark applies.</summary>
         [JsonPropertyName("state")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, string>? State { get; set; }
+        public ETL_SQL.Core.Reporting.ResolvedReportState State { get; set; } = new();
     }
 
     /// <summary>A layout page with its slot→visual mapping.</summary>

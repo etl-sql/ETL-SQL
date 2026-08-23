@@ -720,6 +720,30 @@ Invoked as `etl-sql-report <command>`.
 
 ---
 
+## 10a. Author Bookmarks & Resolved Report State
+
+Author bookmarks (`CREATE BOOKMARK`) and Portal saved views share one versioned, serializable
+envelope, `ResolvedReportState` (in `ETL-SQL.Core/Reporting`). The envelope carries typed parameter
+values (`ReportStateValue` — a number stays a number, a boolean a boolean, null null; nothing is
+flattened to a quoted string), the active page, and named-object `VISIBLE`/`COLLAPSED` maps, plus a
+`schemaVersion` and, for saved views, the report script `ScriptHash` used to detect revision drift.
+
+- **Author bookmarks** are parsed into `CreateBookmarkStatement` (typed `BookmarkParameterAssignment`
+  expressions and strict `BookmarkStateEntry` records constrained to `VISIBLE`/`COLLAPSED` = `ON`/`OFF`),
+  registered by `CreateBookmarkStatementHandler` (which rejects duplicate identifiers and more than one
+  `DEFAULT = ON`), validated statically by `BookmarkValidationRule`, and emitted by `ManifestBuilder`
+  into `BookmarkManifest.State` (a `ResolvedReportState`). `DROP BOOKMARK` removes a registration.
+- **Portal saved views** persist the same envelope in `SavedReportView.StateJson` alongside `ScriptHash`,
+  retaining legacy `ParametersJson`/`FiltersJson` for backward compatibility
+  (`ResolvedReportState.FromLegacy`).
+- **Application** is atomic: parameters are staged and committed as one request before the active page
+  and presentation state are applied; a failed parameter request applies nothing (no partial bookmark).
+- **URL/launch precedence:** URLs carry only an identifier (`#bookmark=Name` or `#view=Id`) — never
+  parameter, filter, search, drill, or presentation values. Launch order is explicit URL bookmark →
+  explicit saved view → user default saved view → author default bookmark → declared defaults.
+
+See the [Author Bookmarks ADR](decisions/AuthorBookmarks.md) for the accepted contract.
+
 ## 11. Execution Phases Reference
 
 | Phase | What was built |

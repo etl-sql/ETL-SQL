@@ -1622,13 +1622,15 @@ public static class AstSerializer
         if (s.Title != null) parts.Add($"TITLE = {s.Title.ToSql()}");
         if (s.Parameters.Count > 0)
         {
-            var paramParts = s.Parameters.Select(p => $"{p.ParameterName} = {Quote(p.Value)}");
+            // Value.ToSql() preserves the declared type: numbers/booleans/NULL are never quoted.
+            var paramParts = s.Parameters.Select(p => $"{p.ParameterName} = {p.Value.ToSql()}");
             parts.Add($"PARAMETERS ({string.Join(", ", paramParts)})");
         }
         if (s.PageName != null) parts.Add($"PAGE = {s.PageName}");
         if (s.StateEntries.Count > 0)
         {
-            var stateParts = s.StateEntries.Select(e => $"{e.ObjectKey} = {e.Value}");
+            var stateParts = s.StateEntries.Select(e =>
+                $"{e.ObjectName}.{e.Property.ToString().ToUpperInvariant()} = {(e.On ? "ON" : "OFF")}");
             parts.Add($"STATE ({string.Join(", ", stateParts)})");
         }
         if (s.IsDefault) parts.Add("DEFAULT = ON");
