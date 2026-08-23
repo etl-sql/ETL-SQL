@@ -220,6 +220,17 @@ if (multiMode)
         return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName), noCache);
     });
 
+    app.MapPost("/reports/{name}/api/bookmark",
+        async (string name, HttpContext ctx, DashboardServiceFactory fac) =>
+    {
+        var svc = fac.GetService(name);
+        if (svc == null) return Results.NotFound();
+        var body = await JsonSerializer.DeserializeAsync<BookmarkApplyRequest>(ctx.Request.Body, webOptions);
+        if (body == null || string.IsNullOrWhiteSpace(body.BookmarkName))
+            return Results.BadRequest("bookmarkName is required");
+        return Results.Json(await svc.ApplyBookmarkAsync(body.BookmarkName), noCache);
+    });
+
     app.MapPost("/reports/{name}/api/run-script",
         async (string name, HttpContext ctx, DashboardServiceFactory fac) =>
     {
@@ -316,6 +327,14 @@ else
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
         return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName), noCache);
+    });
+
+    app.MapPost("/api/bookmark", async (HttpContext ctx, DashboardService svc) =>
+    {
+        var body = await JsonSerializer.DeserializeAsync<BookmarkApplyRequest>(ctx.Request.Body, webOptions);
+        if (body == null || string.IsNullOrWhiteSpace(body.BookmarkName))
+            return Results.BadRequest("bookmarkName is required");
+        return Results.Json(await svc.ApplyBookmarkAsync(body.BookmarkName), noCache);
     });
 
     app.MapPost("/api/drill", async (HttpContext ctx, DashboardService svc) =>
@@ -732,4 +751,9 @@ public class DrillRequest
 public class RefreshVisualsRequest
 {
     public List<string>? Visuals { get; set; }
+}
+
+public class BookmarkApplyRequest
+{
+    public string? BookmarkName { get; set; }
 }

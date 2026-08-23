@@ -220,6 +220,105 @@ namespace ETL_SQL.ReportHosting
         public async Task<ReportManifest> SetParameterAsync(string name, string value, bool isInteraction = false, string? pageName = null)
             => await SetParametersAsync(new[] { (name, value) }, isInteraction, pageName);
 
+        /// <summary>
+        /// Applies an author bookmark by name as one server-side transaction: resolve the envelope,
+        /// validate/reconcile every reference and typed value against the current manifest, stage the
+        /// parameter reconciliation and affected visual refreshes through the cascading-parameter engine,
+        /// then publish one manifest carrying the resolved <see cref="ReportManifest.AppliedState"/>. On any
+        /// failure nothing is applied (the live manifest is untouched) and the returned manifest reports
+        /// the error. The active page and presentation state are carried on the published manifest for the
+        /// client to apply as one deterministic swap — never as a second request.
+        /// </summary>
+        public Task<ReportManifest> ApplyBookmarkAsync(string bookmarkName)
+            => ApplyResolvedStateAsync(bookmarkName, null, null);
+
+        /// <summary>
+        /// Applies a resolved-state envelope (a Portal saved view) as one server-side transaction, with the
+        /// same atomic contract as <see cref="ApplyBookmarkAsync"/>. <paramref name="currentScriptHash"/>
+        /// enables report-revision drift warnings.
+        /// </summary>
+        public Task<ReportManifest> ApplySavedViewAsync(ETL_SQL.Core.Reporting.ResolvedReportState state, string? currentScriptHash = null)
+            => ApplyResolvedStateAsync(null, state, currentScriptHash);
+
+        private async Task<ReportManifest> ApplyResolvedStateAsync(
+            string? bookmarkName,
+            ETL_SQL.Core.Reporting.ResolvedReportState? providedState,
+            string? currentScriptHash)
+        {
+            if (_manifest == null || _evaluator == null)
+                await GetManifestAsync();
+            if (_manifest == null || _evaluator == null)
+                throw new InvalidOperationException("Report manifest is not available.");
+
+            await _lock.WaitAsync();
+            try
+            {
+                // Resolve the requested envelope.
+                ETL_SQL.Core.Reporting.ResolvedReportState? requested = providedState;
+                if (requested == null && bookmarkName != null)
+                {
+                    requested = BookmarkApplicationService.ResolveAuthorBookmark(_manifest, bookmarkName);
+                    if (requested == null)
+                    {
+                        var notFound = CloneManifest(_manifest);
+                        notFound.AppliedState = null;
+                        notFound.StateWarnings = new List<string> { $"Bookmark '{bookmarkName}' was not found." };
+                        notFound.Error = $"Bookmark '{bookmarkName}' was not found.";
+                        return notFound;
+                    }
+                }
+                requested ??= new ETL_SQL.Core.Reporting.ResolvedReportState();
+
+                // Validate/reconcile against the current manifest (unknown refs dropped with warnings).
+                var reconciliation = BookmarkApplicationService.Reconcile(_manifest, requested, currentScriptHash);
+                var resolved = reconciliation.State;
+
+                // Stage on a clone so a failure leaves the live manifest untouched (no partial apply).
+                var staged = CloneManifest(_manifest);
+                var updates = resolved.Parameters
+                    .Select(p => (p.Key, p.Value.ToCanonicalString()))
+                    .ToList();
+
+                try
+                {
+                    if (updates.Count > 0)
+                        await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, staged, updates, isInteraction: false);
+                }
+                catch (Exception ex)
+                {
+                    // The cascade refresh threw — roll back (variables restored by the refresher) and
+                    // apply nothing. Report the failure on an unpublished copy of the live manifest.
+                    _evaluator.Logger.Warning($"[Bookmark] Application failed and was rolled back: {ex.Message}");
+                    var failed = CloneManifest(_manifest);
+                    failed.AppliedState = null;
+                    failed.StateWarnings = new List<string> { "The bookmark could not be applied and no changes were made." };
+                    failed.Error = ex.Message;
+                    return failed;
+                }
+
+                // Success: attach the resolved presentation state and publish with one reference swap.
+                staged.AppliedState = resolved;
+                staged.StateWarnings = reconciliation.Warnings.Count > 0 ? reconciliation.Warnings : null;
+                staged.BuiltAt = DateTime.UtcNow;
+                staged.IsInteraction = false;
+                _manifest = staged;
+
+                // Mirror committed parameter values into the host's parameter cache and baseline.
+                foreach (var (name, _) in updates)
+                {
+                    var normalized = name.StartsWith('@') ? name : '@' + name;
+                    if (_manifest.Parameters.TryGetValue(normalized, out var committed))
+                    {
+                        _parameters[name.TrimStart('@')] = committed;
+                        _evaluator.ReportContext.BaselineParameters[normalized] = committed;
+                    }
+                }
+
+                return _manifest;
+            }
+            finally { _lock.Release(); }
+        }
+
         private static ReportManifest CloneManifest(ReportManifest manifest) =>
             JsonSerializer.Deserialize<ReportManifest>(JsonSerializer.Serialize(manifest))
             ?? throw new InvalidOperationException("Unable to stage the report manifest.");

@@ -151,6 +151,20 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("error")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Error { get; set; }
+
+        /// <summary>
+        /// The resolved presentation state (active page + VISIBLE/COLLAPSED) the client should apply
+        /// after a server-side atomic bookmark/saved-view application. Present only on the single
+        /// manifest published by that operation; the client applies it as one deterministic swap.
+        /// </summary>
+        [JsonPropertyName("appliedState")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ETL_SQL.Core.Reporting.ResolvedReportState? AppliedState { get; set; }
+
+        /// <summary>Warnings from reconciling a bookmark/saved-view envelope against the current report.</summary>
+        [JsonPropertyName("stateWarnings")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? StateWarnings { get; set; }
     }
 
     public record LogEntryManifest(

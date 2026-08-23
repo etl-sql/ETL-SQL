@@ -257,13 +257,17 @@ inventories and runtime assets are synchronized.
   *(Parser, immutable AST, typed formatter, manifest, Analysis lint, documentation, and syntax-index
   DONE with tests. LSP completion/hover, bookmark-aware rename, and Report Builder create/edit/round-trip
   remain — only the `$bookmark` snippet exists today.)*
-- [ ] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
+- [x] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
   validate all references and typed values, stage parameter reconciliation and affected visuals,
   validate page/presentation state, publish one manifest, and roll back the entire application on
   failure. Do not apply parameters through sequential browser requests.
-  *(Client no longer applies partially: parameters are staged as one request and page/presentation
-  state is applied only on success. The server-side single-manifest atomic application operation with
-  rollback, integrated with `ReportInteractionRefresher`, is not yet built.)*
+  *(DONE: `BookmarkApplicationService.Reconcile` resolves+validates+reconciles the envelope against the
+  manifest; `DashboardService.ApplyBookmarkAsync` stages on a manifest clone, runs
+  `ReportInteractionRefresher` through the cascade engine, publishes ONE manifest carrying `AppliedState`,
+  and rolls back the whole application on any failure. Exposed at `POST /api/bookmark` (ReportPlayer) and
+  `POST /api/reports/{id}/bookmark` (Portal, with permission checks); the client applies the single
+  published `appliedState` as one swap. Tested incl. cascade-invalid rollback. Portal saved-view
+  application still uses the client-side atomic path pending the saved-view endpoints.)*
 - [ ] Add Report Player and Portal bookmark pickers plus button/action invocation. The Portal picker
   must distinguish author bookmarks from `My saved views`, and support save-as, update, make-default,
   delete, reset-to-report-default, and actual application of the user's default view.
@@ -284,17 +288,20 @@ inventories and runtime assets are synchronized.
   cascade reconciliation, atomic rollback, launch precedence, Portal ownership, report-revision
   drift, default-view restore, offline replay, accessibility, and URL-disclosure tests.
   *(DONE: parser/formatter typed round-trip, duplicate/default rejection, stale-reference lint, type
-  validation, handler/manifest end-to-end, envelope + legacy compatibility, production-sample parse+execute.
-  Remaining: rename, cascade reconciliation, server-side atomic rollback, Portal ownership, revision
-  drift, default-view restore, offline replay, and accessibility tests.)*
+  validation, handler/manifest end-to-end, envelope + legacy compatibility, production-sample parse+execute,
+  reconcile validation (unknown page/param/object + coercion + drift), server-side atomic apply +
+  cascade-reconciliation rollback, and launch-precedence/URL-disclosure at the envelope level.
+  Remaining: bookmark-aware rename, Portal ownership, default-view restore, offline replay, and
+  accessibility tests.)*
 
 **Exit gate:** Bookmarks apply atomically and portably, object references are statically safe and
 rename-aware, Portal saved views use the shared state contract without becoming source-controlled
 bookmarks, user defaults restore correctly, and URLs reveal only the bookmark identifier.
-*(NOT yet met — see the unchecked items above. Foundation delivered: typed versioned envelope, strict
-parser/formatter/lint, DROP BOOKMARK, client atomic application, identifier-only URLs, corrected + runnable
-sample. Remaining: server-side atomic application, full Portal saved-view CRUD/ownership, LSP rename,
-Report Builder round-trip, offline replay, and accessibility.)*
+*(NOT yet met — see the unchecked items above. Delivered: typed versioned envelope, strict
+parser/formatter/lint, DROP BOOKMARK, server-side atomic application through the cascading engine with
+rollback (publishes one manifest), client single-swap application, identifier-only URLs, corrected +
+runnable sample. Remaining: full Portal saved-view CRUD/ownership, LSP rename, Report Builder round-trip,
+offline replay, and accessibility.)*
 
 ### Phase 10 — Constrained HTML/SVG Presentation Templates
 

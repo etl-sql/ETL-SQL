@@ -4752,16 +4752,65 @@
         }
     }
 
-    function applyBookmark(bookmarkName) {
-        if (!bookmarkName || !_lastManifest) return Promise.resolve(false);
+    async function applyBookmark(bookmarkName) {
+        if (!bookmarkName || !_lastManifest) return false;
         const bookmarks = _lastManifest.bookmarks || [];
         const bm = bookmarks.find(b => b.name.toLowerCase() === bookmarkName.toLowerCase());
         if (!bm) {
             console.warn('Bookmark not found:', bookmarkName);
             if (feedback) feedback.notify('Bookmark not found: ' + bookmarkName, { title: 'Bookmark', tone: 'error' });
-            return Promise.resolve(false);
+            return false;
         }
-        return applyResolvedState(bm.state || {}, { hash: '#bookmark=' + encodeURIComponent(bm.name) });
+
+        const hash = '#bookmark=' + encodeURIComponent(bm.name);
+
+        // Web mode: apply through the server-side atomic operation. The server resolves, validates,
+        // reconciles, refreshes affected visuals through the cascading-parameter engine, and publishes
+        // ONE manifest carrying the resolved `appliedState`. The client applies that state as one swap.
+        if (isWebMode && !vscode && !isOfflineSnapshot()) {
+            try {
+                const res = await fetch(apiBase + '/bookmark', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookmarkName: bm.name })
+                });
+                if (!res.ok) {
+                    if (feedback) feedback.notify('Could not apply bookmark.', { title: 'Bookmark', tone: 'error' });
+                    return false;
+                }
+                const manifest = await res.json();
+                if (manifest && manifest.error) {
+                    if (feedback) feedback.notify(manifest.error, { title: 'Bookmark not applied', tone: 'error' });
+                    return false;
+                }
+                renderManifest(manifest);
+                if (manifest && manifest.appliedState) commitResolvedState(manifest.appliedState, { hash });
+                else if (window.history && window.history.replaceState) window.history.replaceState(null, '', hash);
+                if (manifest && manifest.stateWarnings && feedback) {
+                    manifest.stateWarnings.forEach(w => feedback.notify(w, { title: 'Saved view', tone: 'warning' }));
+                }
+                return true;
+            } catch (e) {
+                console.warn('Bookmark application request failed:', e && e.message);
+                if (feedback) feedback.notify('Could not apply bookmark.', { title: 'Bookmark', tone: 'error' });
+                return false;
+            }
+        }
+
+        // VS Code preview / offline snapshot: apply the manifest-carried envelope through the shared
+        // client-side atomic contract (no server available).
+        return applyResolvedState(bm.state || {}, { hash });
+    }
+
+    // Applies the active page + presentation state from a resolved envelope and writes the
+    // identifier-only hash. Used after both the server-side and client-side application paths.
+    function commitResolvedState(state, opts) {
+        opts = opts || {};
+        if (state.activePage) navigateToPage(state.activePage);
+        applyPresentationState(state);
+        if (opts.hash && window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', opts.hash);
+        }
     }
 
     // Reads a named-object VISIBLE/COLLAPSED map from the shared envelope onto the DOM.
@@ -4802,13 +4851,7 @@
             });
         }
 
-        const commit = () => {
-            if (state.activePage) navigateToPage(state.activePage);
-            applyPresentationState(state);
-            if (opts.hash && window.history && window.history.replaceState) {
-                window.history.replaceState(null, '', opts.hash);
-            }
-        };
+        const commit = () => commitResolvedState(state, opts);
 
         if (Object.keys(batch).length === 0) {
             commit();

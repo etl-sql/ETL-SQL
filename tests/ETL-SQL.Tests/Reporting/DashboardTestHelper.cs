@@ -43,6 +43,8 @@ namespace ETL_SQL.Tests.Reporting
             typeof(CreateButtonStatementHandler),
             typeof(CreateStyleStatementHandler),
             typeof(CreateThemeStatementHandler),
+            typeof(CreateBookmarkStatementHandler),
+            typeof(DropReportObjectStatementHandler),
             typeof(SetReportMetadataStatementHandler),
             typeof(ExportReportStatementHandler)
         };

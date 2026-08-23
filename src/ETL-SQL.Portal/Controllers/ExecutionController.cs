@@ -452,6 +452,34 @@ public class ExecutionController(
         return Ok(manifest);
     }
 
+    // ── 2.3b  POST /api/reports/{id}/bookmark ────────────────────────────────
+
+    /// <summary>
+    /// Applies an author bookmark by name as one server-side atomic transaction (resolve, validate,
+    /// stage the cascading-parameter reconciliation, publish one manifest carrying the resolved state,
+    /// roll back on failure). The client applies the returned <c>appliedState</c> as one swap.
+    /// </summary>
+    [HttpPost("reports/{id:int}/bookmark")]
+    public async Task<IActionResult> ApplyBookmark(int id, [FromBody] BookmarkApplyRequest req)
+    {
+        if (req is null || string.IsNullOrWhiteSpace(req.BookmarkName))
+            return BadRequest(new { error = "bookmarkName is required" });
+
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (perm is null) return Forbid();
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var manifest = await svc.ApplyBookmarkAsync(req.BookmarkName);
+        await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
+        return Ok(manifest);
+    }
+
     // ── 2.4  POST /api/reports/{id}/drill ────────────────────────────────────
 
     [HttpPost("reports/{id:int}/drill")]

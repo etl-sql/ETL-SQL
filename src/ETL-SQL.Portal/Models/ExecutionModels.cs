@@ -30,3 +30,5 @@ public record BatchParameterRequest(List<ParameterUpdateRequest> Params, bool Is
 public record DrillRequest(string VisualName, string Direction, string? ClickedValue, int TargetDepth = 0);
 
 public record RefreshVisualsRequest(List<string> Visuals);
+
+public record BookmarkApplyRequest(string BookmarkName);
