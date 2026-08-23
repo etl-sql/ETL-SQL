@@ -361,6 +361,8 @@ public interface IReportContext
     IDictionary<string, CreateStyleStatement> StyleDefinitions { get; }
     /// <summary>Named button definitions registered by CREATE BUTTON.</summary>
     IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; }
+    /// <summary>Named bookmark definitions registered by CREATE BOOKMARK.</summary>
+    IDictionary<string, CreateBookmarkStatement> BookmarkDefinitions { get; }
     /// <summary>Named template definitions registered by CREATE TEMPLATE.</summary>
     IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; }
 

@@ -286,6 +286,7 @@ public static class AstSerializer
         CreateContainerStatement s => FormatCreateContainer(s),
         CreateNavigationStatement s => FormatCreateNavigation(s),
         CreateButtonStatement s => FormatCreateButton(s),
+        CreateBookmarkStatement s => FormatCreateBookmark(s),
         CreateStyleStatement s => FormatCreateStyle(s),
         CreateTagStatement s => FormatCreateTag(s),
         DeleteTagStatement s => FormatDeleteTag(s),
@@ -410,6 +411,7 @@ public static class AstSerializer
         NavigatePageAction n => $"NAVIGATE_PAGE({n.TargetPage})",
         RefreshVisualsAction n => $"REFRESH_VISUALS({string.Join(", ", n.Targets)})",
         SetUiStateAction n => $"SET_UI_STATE({FormatActionTargets(n.Targets)}, {n.Key}, {n.Value})",
+        ApplyBookmarkAction n => $"APPLY_BOOKMARK({n.BookmarkName})",
         VisualMapping m => FormatMapping(m),
 
         _ => node is Statement ? "UNKNOWN STATEMENT" : node.GetType().Name
@@ -1612,6 +1614,25 @@ public static class AstSerializer
             parts.Add("STYLE (" + FormatStringAssignments(s.Styles) + ")");
 
         return $"{CreationVerb(s.Mode)} BUTTON {s.Name} AS ({string.Join(", ", parts)});";
+    }
+
+    private static string FormatCreateBookmark(CreateBookmarkStatement s)
+    {
+        var parts = new List<string>();
+        if (s.Title != null) parts.Add($"TITLE = {s.Title.ToSql()}");
+        if (s.Parameters.Count > 0)
+        {
+            var paramParts = s.Parameters.Select(p => $"{p.ParameterName} = {Quote(p.Value)}");
+            parts.Add($"PARAMETERS ({string.Join(", ", paramParts)})");
+        }
+        if (s.PageName != null) parts.Add($"PAGE = {s.PageName}");
+        if (s.StateEntries.Count > 0)
+        {
+            var stateParts = s.StateEntries.Select(e => $"{e.ObjectKey} = {e.Value}");
+            parts.Add($"STATE ({string.Join(", ", stateParts)})");
+        }
+        if (s.IsDefault) parts.Add("DEFAULT = ON");
+        return $"CREATE BOOKMARK {s.Name} AS ({string.Join(", ", parts)});";
     }
 
     private static string FormatCreateStyle(CreateStyleStatement s)

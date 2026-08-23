@@ -219,6 +219,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; } = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; } = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; } = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
+    public IDictionary<string, CreateBookmarkStatement> BookmarkDefinitions { get; } = new Dictionary<string, CreateBookmarkStatement>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; } = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
 
     public IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; } = new Dictionary<string, CreateThemeStatement>(StringComparer.OrdinalIgnoreCase);

@@ -219,9 +219,9 @@ documentation, Gemini baselines, and production conformance tests use the same c
 
 ### Reporting & Interaction — Author Bookmarks
 
-**Status:** Accepted  
-**Horizon:** Later  
-**Authoritative design:** Not yet decided
+**Status:** In Progress  
+**Horizon:** Next  
+**Authoritative design:** [`docs/architecture/decisions/AuthorBookmarks.md`](docs/architecture/decisions/AuthorBookmarks.md)
 
 Authors need source-controlled report states that atomically apply parameters, active page, and
 supported presentation state. A bookmark is distinct from a user-created Portal saved view and from

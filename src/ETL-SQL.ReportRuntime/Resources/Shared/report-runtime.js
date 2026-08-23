@@ -391,6 +391,25 @@
         }
 
         renderManifest(manifest);
+
+        // Launch precedence: URL bookmark > saved view > user default > author default > declared defaults
+        const initialHash = window.location.hash;
+        let urlBookmarkApplied = false;
+        if (initialHash) {
+            const bmMatch = initialHash.match(/[#&]bookmark=([^&]+)/);
+            if (bmMatch) { applyBookmark(decodeURIComponent(bmMatch[1])); urlBookmarkApplied = true; }
+        }
+        if (!urlBookmarkApplied && manifest.bookmarks) {
+            const authorDefault = manifest.bookmarks.find(b => b.isDefault);
+            if (authorDefault) applyBookmark(authorDefault.name);
+        }
+
+        // Listen for bookmark hash changes (identifier-only)
+        window.addEventListener('hashchange', () => {
+            const hash = window.location.hash;
+            const match = hash.match(/[#&]bookmark=([^&]+)/);
+            if (match) applyBookmark(decodeURIComponent(match[1]));
+        });
     }
 
     function checkRequiredParameters(manifest) {
@@ -816,6 +835,80 @@
         // and surface a native alert. Keep the preview chrome to its own actions below.
         if (!vscode) {
             actions.appendChild(defaultViewBtn);
+        }
+
+        // Author bookmark picker
+        if (manifest.bookmarks && manifest.bookmarks.length > 0) {
+            const bmContainer = document.createElement('div');
+            bmContainer.className = 'bookmark-picker';
+            bmContainer.style.position = 'relative';
+            bmContainer.style.display = 'inline-block';
+
+            const bmBtn = document.createElement('button');
+            bmBtn.className = 'header-btn';
+            bmBtn.title = 'Author Bookmarks';
+            bmBtn.textContent = 'Bookmarks';
+            bmBtn.setAttribute('aria-haspopup', 'true');
+            bmBtn.setAttribute('aria-expanded', 'false');
+
+            const bmMenu = document.createElement('div');
+            bmMenu.className = 'bookmark-menu';
+            bmMenu.setAttribute('role', 'menu');
+            bmMenu.style.display = 'none';
+            bmMenu.style.position = 'absolute';
+            bmMenu.style.right = '0';
+            bmMenu.style.top = '100%';
+            bmMenu.style.zIndex = '1000';
+            bmMenu.style.background = 'var(--card-bg, #fff)';
+            bmMenu.style.border = '1px solid var(--border, #ddd)';
+            bmMenu.style.borderRadius = '6px';
+            bmMenu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+            bmMenu.style.minWidth = '180px';
+            bmMenu.style.padding = '4px 0';
+
+            manifest.bookmarks.forEach(bm => {
+                const item = document.createElement('button');
+                item.className = 'bookmark-menu-item';
+                item.setAttribute('role', 'menuitem');
+                item.style.display = 'block';
+                item.style.width = '100%';
+                item.style.textAlign = 'left';
+                item.style.padding = '8px 16px';
+                item.style.border = 'none';
+                item.style.background = 'none';
+                item.style.cursor = 'pointer';
+                item.style.fontSize = '0.875rem';
+                item.style.color = 'var(--text, #333)';
+                item.textContent = bm.title || bm.name;
+                if (bm.isDefault) {
+                    item.style.fontWeight = 'bold';
+                }
+                item.addEventListener('mouseenter', () => { item.style.background = 'var(--hover-bg, #f0f0f0)'; });
+                item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+                item.addEventListener('click', () => {
+                    bmMenu.style.display = 'none';
+                    bmBtn.setAttribute('aria-expanded', 'false');
+                    applyBookmark(bm.name);
+                });
+                bmMenu.appendChild(item);
+            });
+
+            bmBtn.addEventListener('click', () => {
+                const open = bmMenu.style.display !== 'none';
+                bmMenu.style.display = open ? 'none' : 'block';
+                bmBtn.setAttribute('aria-expanded', String(!open));
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!bmContainer.contains(e.target)) {
+                    bmMenu.style.display = 'none';
+                    bmBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            bmContainer.appendChild(bmBtn);
+            bmContainer.appendChild(bmMenu);
+            actions.appendChild(bmContainer);
         }
 
         if (vscode) {
@@ -4623,6 +4716,69 @@
                     else el.className = value;
                 }
             });
+        } else if (action.type === 'APPLY_BOOKMARK') {
+            applyBookmark(action.bookmarkName);
+        }
+    }
+
+    function applyBookmark(bookmarkName) {
+        if (!bookmarkName || !_lastManifest) return;
+        const bookmarks = _lastManifest.bookmarks || [];
+        const bm = bookmarks.find(b => b.name.toLowerCase() === bookmarkName.toLowerCase());
+        if (!bm) {
+            console.warn('Bookmark not found:', bookmarkName);
+            return;
+        }
+
+        const batch = {};
+        if (bm.parameters) {
+            Object.entries(bm.parameters).forEach(([k, v]) => {
+                const paramName = k.startsWith('@') ? k : '@' + k;
+                batch[paramName] = String(v ?? '');
+            });
+        }
+
+        const applyStateAndPage = () => {
+            if (bm.pageName) navigateToPage(bm.pageName);
+
+            if (bm.state) {
+                Object.entries(bm.state).forEach(([key, val]) => {
+                    const dotIdx = key.lastIndexOf('.');
+                    if (dotIdx < 0) return;
+                    const objName = key.substring(0, dotIdx);
+                    const prop = key.substring(dotIdx + 1).toUpperCase();
+
+                    const el = document.getElementById(objName)
+                            || document.querySelector(`[data-name="${objName}"]`);
+                    if (!el) return;
+
+                    if (prop === 'VISIBLE') {
+                        el.style.display = isOn(val) ? '' : 'none';
+                    } else if (prop === 'COLLAPSED') {
+                        const container = el.closest('.collapsible-drawer')
+                                       || el.closest('.collapsible-inline')
+                                       || el.closest('.report-container') || el;
+                        const name = container.getAttribute('data-name');
+                        if (name) _uiStates[name] = { collapsed: isOn(val) };
+                        if (isOn(val)) container.classList.add('collapsed');
+                        else container.classList.remove('collapsed');
+                    }
+                });
+            }
+
+            // Update hash to identifier only — no parameter values
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState(null, '', '#bookmark=' + encodeURIComponent(bm.name));
+            }
+        };
+
+        if (Object.keys(batch).length > 0) {
+            _postParametersInternal(batch, false, getActivePageName()).then(m => {
+                if (m) renderManifest(m);
+                applyStateAndPage();
+            });
+        } else {
+            applyStateAndPage();
         }
     }
 

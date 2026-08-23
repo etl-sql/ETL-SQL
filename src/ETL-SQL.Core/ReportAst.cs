@@ -45,7 +45,8 @@ public enum ReportObjectType
     Style,
     Button,
     Template,
-    Theme
+    Theme,
+    Bookmark
 }
 
 public enum OverlayType
@@ -253,6 +254,30 @@ public record SetUiStateAction : VisualAction
     public required List<string> Targets { get; init; }
     public required string Key { get; init; }
     public required string Value { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+public record ApplyBookmarkAction : VisualAction
+{
+    public required string BookmarkName { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+// ── Bookmark ─────────────────────────────────────────────────────────────
+
+public record BookmarkParameterAssignment(string ParameterName, string Value) : AstNode;
+
+public record BookmarkStateEntry(string ObjectKey, string Value) : AstNode;
+
+/// <summary>CREATE BOOKMARK Name AS (TITLE = '...', PARAMETERS (...), PAGE = Page, STATE (...), DEFAULT = ON)</summary>
+public record CreateBookmarkStatement : Statement
+{
+    public required string Name { get; init; }
+    public Expression? Title { get; init; }
+    public string? PageName { get; init; }
+    public bool IsDefault { get; init; }
+    public IReadOnlyList<BookmarkParameterAssignment> Parameters { get; init; } = [];
+    public IReadOnlyList<BookmarkStateEntry> StateEntries { get; init; } = [];
     public override string ToSql() => AstSerializer.Format(this);
 }
 

@@ -183,6 +183,36 @@ namespace ETL_SQL.Reporting
                 }
             }
 
+            // ── Bookmarks ────────────────────────────────────────────────────
+            if (_ctx.ReportContext.BookmarkDefinitions.Count > 0)
+            {
+                manifest.Bookmarks = new List<BookmarkManifest>();
+                foreach (var (_, bkStmt) in _ctx.ReportContext.BookmarkDefinitions)
+                {
+                    var (bkTitle, _) = await _styleBuilder.ResolveMarkdownAsync(bkStmt.Title);
+                    var bkm = new BookmarkManifest
+                    {
+                        Name = bkStmt.Name,
+                        Title = bkTitle,
+                        IsDefault = bkStmt.IsDefault,
+                        PageName = bkStmt.PageName,
+                    };
+                    if (bkStmt.Parameters.Count > 0)
+                    {
+                        bkm.Parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var p in bkStmt.Parameters)
+                            bkm.Parameters[p.ParameterName] = p.Value;
+                    }
+                    if (bkStmt.StateEntries.Count > 0)
+                    {
+                        bkm.State = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var s in bkStmt.StateEntries)
+                            bkm.State[s.ObjectKey] = s.Value;
+                    }
+                    manifest.Bookmarks.Add(bkm);
+                }
+            }
+
             // ── Datasets ─────────────────────────────────────────────────────
             foreach (var (tableName, dStmt) in _ctx.ReportContext.DatasetDefinitions)
             {
@@ -597,6 +627,7 @@ namespace ETL_SQL.Reporting
                     Key = su.Key,
                     Value = su.Value
                 },
+                ApplyBookmarkAction ab => new VisualActionManifest { Type = "APPLY_BOOKMARK", Trigger = action.Trigger, BookmarkName = ab.BookmarkName },
                 _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
             };
         }

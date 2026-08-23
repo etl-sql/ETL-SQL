@@ -1,0 +1,118 @@
+-- Author Bookmarks Sample
+-- Demonstrates: parameter/page bookmarks, author default, visibility/collapse state,
+-- APPLY_BOOKMARK button, and identifier-only deep links.
+
+SET REPORT TITLE = 'Sales Dashboard with Bookmarks';
+
+DECLARE @region VARCHAR INPUT = 'All';
+DECLARE @year   INT     INPUT = 2026;
+
+SELECT 'North' AS region, 2025 AS year, 120000 AS revenue INTO #sales
+UNION ALL SELECT 'North', 2026, 135000
+UNION ALL SELECT 'South', 2025, 95000
+UNION ALL SELECT 'South', 2026, 102000
+UNION ALL SELECT 'West', 2025, 88000
+UNION ALL SELECT 'West', 2026, 97000
+UNION ALL SELECT 'East', 2025, 110000
+UNION ALL SELECT 'East', 2026, 125000;
+
+-- ── Visuals ───────────────────────────────────────────────────────────────
+
+CREATE VISUAL RegionFilter AS SLICER (
+    SOURCE  = (SELECT DISTINCT region FROM #sales),
+    MAPPINGS (VALUE = region),
+    DEFAULT = 'All',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
+);
+
+CREATE VISUAL YearFilter AS SLICER (
+    SOURCE  = (SELECT DISTINCT year FROM #sales ORDER BY year),
+    MAPPINGS (VALUE = year),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@year, year))
+);
+
+CREATE VISUAL SalesChart AS BAR (
+    SOURCE = (SELECT region, revenue FROM #sales
+              WHERE (region = @region OR @region = 'All')
+                AND year = @year),
+    MAPPINGS (X = region, Y = revenue)
+);
+
+CREATE VISUAL DetailTable AS TABLE (
+    SOURCE = (SELECT * FROM #sales
+              WHERE (region = @region OR @region = 'All')
+                AND year = @year)
+);
+
+CREATE CONTAINER FilterPanel AS (
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP ('A' = RegionFilter, 'B' = YearFilter)
+    )
+);
+
+-- ── Author Bookmarks ──────────────────────────────────────────────────────
+
+CREATE BOOKMARK WestCoastDetail AS (
+    TITLE = 'West Coast Detail',
+    PARAMETERS (
+        @region = 'West',
+        @year = 2026
+    ),
+    PAGE = Detail,
+    STATE (
+        FilterPanel.COLLAPSED = ON,
+        DetailTable.VISIBLE = ON
+    )
+);
+
+CREATE BOOKMARK Overview AS (
+    TITLE = 'Overview (All Regions)',
+    PARAMETERS (
+        @region = 'All',
+        @year = 2026
+    ),
+    PAGE = Main,
+    DEFAULT = ON
+);
+
+CREATE BOOKMARK EastCoast AS (
+    TITLE = 'East Coast Focus',
+    PARAMETERS (
+        @region = 'East',
+        @year = 2026
+    ),
+    PAGE = Main
+);
+
+-- ── Buttons ───────────────────────────────────────────────────────────────
+
+CREATE BUTTON WestBtn AS (
+    TITLE = 'West Coast View',
+    ACTIONS (ON_CLICK = APPLY_BOOKMARK(WestCoastDetail))
+);
+
+CREATE BUTTON OverviewBtn AS (
+    TITLE = 'Back to Overview',
+    ACTIONS (ON_CLICK = APPLY_BOOKMARK(Overview))
+);
+
+-- ── Pages ─────────────────────────────────────────────────────────────────
+
+CREATE PAGE Main AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'F F / C C / B B',
+        MAP ('F' = FilterPanel, 'C' = SalesChart, 'B' = OverviewBtn)
+    )
+);
+
+CREATE PAGE Detail AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'F F / T T / B B',
+        MAP ('F' = FilterPanel, 'T' = DetailTable, 'B' = WestBtn)
+    )
+);
+
+-- Deep link: #bookmark=WestCoastDetail
+-- Deep link: #bookmark=Overview
+-- Deep link: #bookmark=EastCoast

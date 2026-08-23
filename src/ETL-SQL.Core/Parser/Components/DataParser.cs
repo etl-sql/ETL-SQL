@@ -346,6 +346,11 @@ public class DataParser : ParserComponent
             RejectUnsupportedCreateIfNotExists("BUTTON");
             return _parent.ReportParser.ParseCreateButton(startToken, mode);
         }
+        if (Match(TokenType.BOOKMARK))
+        {
+            RejectUnsupportedCreateIfNotExists("BOOKMARK");
+            return _parent.ReportParser.ParseCreateBookmark(startToken);
+        }
         if (Match(TokenType.TEMPLATE))
         {
             RejectUnsupportedCreateIfNotExists("TEMPLATE");

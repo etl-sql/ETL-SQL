@@ -109,13 +109,17 @@ public record CreateSavedReportViewRequest(
     string Name,
     Dictionary<string, string>? Parameters,
     Dictionary<string, string>? Filters,
+    string? StateJson = null,
+    string? ScriptHash = null,
     bool IsDefault = false);
 
 public record UpdateSavedReportViewRequest(
     string? Name,
     Dictionary<string, string>? Parameters,
     Dictionary<string, string>? Filters,
-    bool? IsDefault);
+    bool? IsDefault,
+    string? StateJson = null,
+    string? ScriptHash = null);
 
 public record SavedReportViewDto(
     int Id,
@@ -123,6 +127,8 @@ public record SavedReportViewDto(
     string Name,
     Dictionary<string, string>? Parameters,
     Dictionary<string, string>? Filters,
+    string? StateJson,
+    string? ScriptHash,
     bool IsDefault,
     DateTime CreatedAt,
     DateTime UpdatedAt);

@@ -980,6 +980,8 @@ Specific to `.rptsql` files and the reporting engine.
 | `PAGINATED` (Page Mode) | Print-ready multi-page report layout mode | [PAGE.md](reference/visuals-reporting/report/page.md) |
 | `ROW_DETAIL` | Expandable master/detail table rows | [VISUAL.md](reference/visuals-reporting/report/visual.md) |
 | `CASCADE` | Atomic dependent option sets for slicers and multiselects | [CASCADE.md](reference/visuals-reporting/report/cascade.md) |
+| `CREATE BOOKMARK` | Named parameter/page/state snapshot | [BOOKMARK.md](reference/visuals-reporting/report/bookmark.md) |
+| `APPLY_BOOKMARK` | Action to apply an author bookmark | [ACTIONS.md](reference/visuals-reporting/report/actions.md) |
 
 Lifecycle: every report object above supports `CREATE OR REPLACE <kind> <name>` and
 `DROP <kind> [IF EXISTS] <name>`. `ALTER <kind> <name> (...)` patches named clauses and is supported

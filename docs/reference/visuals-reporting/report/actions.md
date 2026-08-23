@@ -75,6 +75,13 @@ ON_CLICK = SET_UI_STATE('TargetVisual', 'CLASS', '+highlighted')
 Key: `VISIBLE`, `COLLAPSED`, `COLOR`, `BACKGROUND-COLOR`, `CLASS`.
 Value: `ON`/`OFF`, hex colors, or class names (prefix with `+` to add, `-` to remove).
 
+### APPLY_BOOKMARK
+Applies a named author bookmark — sets parameters, navigates to a page, and applies UI state atomically.
+```sql
+ON_CLICK = APPLY_BOOKMARK(WestCoastDetail)
+```
+The bookmark must be declared with `CREATE BOOKMARK` in the same script. The URL hash is updated to `#bookmark=Name` (identifier only — no parameter values are exposed).
+
 ## Examples
 
 **Table with Row Selection:**

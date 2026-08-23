@@ -405,6 +405,8 @@ public class SavedReportView
     public string Name { get; set; } = "";
     public string? ParametersJson { get; set; }
     public string? FiltersJson { get; set; }
+    public string? StateJson { get; set; }
+    public string? ScriptHash { get; set; }
     public bool IsDefault { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

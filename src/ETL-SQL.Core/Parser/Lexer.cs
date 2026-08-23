@@ -218,6 +218,8 @@ public class Lexer
         dict["APPLY_PARAMETERS"] = TokenType.APPLY_PARAMETERS;
         dict["NAVIGATE_PAGE"] = TokenType.NAVIGATE_PAGE;
         dict["REFRESH_VISUALS"] = TokenType.REFRESH_VISUALS;
+        dict["APPLY_BOOKMARK"] = TokenType.APPLY_BOOKMARK;
+        dict["BOOKMARK"] = TokenType.BOOKMARK;
 
         // ── Portal admin command keywords ──────────────────────
         dict["USER"] = TokenType.USER;

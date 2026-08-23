@@ -21,6 +21,7 @@ CREATE BUTTON <name> AS (
 - **`ON_CLICK = APPLY_PARAMETERS`**: Apply staged parameter changes.
 - **`ON_CLICK = NAVIGATE_PAGE(PageName)`**: Show another page in this report.
 - **`ON_CLICK = SET_UI_STATE(Target, Key, Value)`**: Show, hide, open, collapse, or style report objects.
+- **`ON_CLICK = APPLY_BOOKMARK(BookmarkName)`**: Apply a named author bookmark (parameters, page, UI state).
 
 ## Examples
 

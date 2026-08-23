@@ -1841,6 +1841,95 @@ public class ReportParser : ParserComponent
         };
     }
 
+    // ── CREATE BOOKMARK ───────────────────────────────────────────────────
+
+    public Statement ParseCreateBookmark(Token startToken)
+    {
+        var name = ConsumeIdentifier("Expected bookmark name after CREATE BOOKMARK").Value;
+        Consume(TokenType.AS, "Expected AS after bookmark name");
+        Consume(TokenType.LPAREN, "Expected '(' after AS");
+
+        Expression? title = null;
+        string? pageName = null;
+        bool isDefault = false;
+        var parameters = new List<BookmarkParameterAssignment>();
+        var stateEntries = new List<BookmarkStateEntry>();
+
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            if (Match(TokenType.TITLE))
+            {
+                Match(TokenType.EQUALS);
+                title = ParseExpression();
+            }
+            else if (MatchIdentifier("PARAMETERS"))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after PARAMETERS");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var paramName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
+                    if (!paramName.StartsWith("@")) paramName = "@" + paramName;
+                    Consume(TokenType.EQUALS, "Expected '=' after parameter name");
+                    var value = ConsumeValueExpr("Expected parameter value").Value;
+                    parameters.Add(new BookmarkParameterAssignment(paramName, value));
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close PARAMETERS");
+            }
+            else if (Match(TokenType.PAGE))
+            {
+                Match(TokenType.EQUALS);
+                pageName = ConsumeIdentifier("Expected page name").Value;
+            }
+            else if (Match(TokenType.DEFAULT))
+            {
+                Match(TokenType.EQUALS);
+                var defaultValue = Advance().Value;
+                isDefault = string.Equals(defaultValue, "ON", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(defaultValue, "TRUE", StringComparison.OrdinalIgnoreCase);
+            }
+            else if (MatchIdentifier("STATE"))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after STATE");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var firstPart = ConsumeIdentifier("Expected object.property reference").Value;
+                    var objectKey = firstPart;
+                    while (Match(TokenType.DOT))
+                    {
+                        var nextPart = ConsumeIdentifier("Expected property name after '.'").Value;
+                        objectKey = objectKey + "." + nextPart;
+                    }
+                    Consume(TokenType.EQUALS, "Expected '=' after state key");
+                    var stateValue = Advance().Value;
+                    stateEntries.Add(new BookmarkStateEntry(objectKey, stateValue));
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close STATE");
+            }
+            else
+            {
+                throw new SyntaxException($"Unexpected token '{_parser.Current.Value}' in CREATE BOOKMARK body", _parser.Current.Line, _parser.Current.Column);
+            }
+            Match(TokenType.COMMA);
+        }
+
+        Consume(TokenType.RPAREN, "Expected ')' to close CREATE BOOKMARK");
+        Match(TokenType.SEMICOLON);
+
+        return new CreateBookmarkStatement
+        {
+            Name = name,
+            Title = title,
+            PageName = pageName,
+            IsDefault = isDefault,
+            Parameters = parameters,
+            StateEntries = stateEntries,
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
+    }
+
     // ── ALTER (Report Objects) ────────────────────────────────────────────
 
     /// <summary>
@@ -2989,10 +3078,17 @@ public class ReportParser : ParserComponent
                 Value = val
             };
         }
+        else if (Match(TokenType.APPLY_BOOKMARK))
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after APPLY_BOOKMARK");
+            var bookmarkName = ConsumeIdentifier("Expected bookmark name").Value;
+            Consume(TokenType.RPAREN, "Expected ')' to close APPLY_BOOKMARK");
+            action = new ApplyBookmarkAction { Trigger = trigger, BookmarkName = bookmarkName };
+        }
         else
         {
             throw new SyntaxException(
-                $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, BACK, REFRESH_REPORT, REFRESH_VISUALS, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, NAVIGATE_PAGE, or SET_UI_STATE after {trigger} =",
+                $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, APPLY_BOOKMARK, BACK, REFRESH_REPORT, REFRESH_VISUALS, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, NAVIGATE_PAGE, or SET_UI_STATE after {trigger} =",
                 _parser.Current.Line, _parser.Current.Column);
         }
 

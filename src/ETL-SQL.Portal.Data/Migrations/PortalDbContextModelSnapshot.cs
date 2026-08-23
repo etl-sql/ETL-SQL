@@ -1646,6 +1646,12 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<int>("ReportId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ScriptHash")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StateJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 

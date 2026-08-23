@@ -110,6 +110,10 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ButtonManifest>? Buttons { get; set; }
 
+        [JsonPropertyName("bookmarks")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<BookmarkManifest>? Bookmarks { get; set; }
+
         /// <summary>Global parameter values (active session state).</summary>
         [JsonPropertyName("parameters")]
         public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -603,6 +607,38 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("value")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Value { get; set; }
+
+        // APPLY_BOOKMARK fields
+        [JsonPropertyName("bookmarkName")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? BookmarkName { get; set; }
+    }
+
+    /// <summary>Serialized author bookmark from CREATE BOOKMARK.</summary>
+    public class BookmarkManifest
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("title")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("isDefault")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsDefault { get; set; }
+
+        [JsonPropertyName("pageName")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? PageName { get; set; }
+
+        [JsonPropertyName("parameters")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Parameters { get; set; }
+
+        [JsonPropertyName("state")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? State { get; set; }
     }
 
     /// <summary>A layout page with its slot→visual mapping.</summary>

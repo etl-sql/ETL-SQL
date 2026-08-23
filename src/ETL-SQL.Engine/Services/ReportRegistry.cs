@@ -17,6 +17,7 @@ public class ReportRegistry : IReportContext
     public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; private set; }
     public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; private set; }
     public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; private set; }
+    public IDictionary<string, CreateBookmarkStatement> BookmarkDefinitions { get; private set; }
     public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; private set; }
 
     public IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; private set; }
@@ -46,6 +47,7 @@ public class ReportRegistry : IReportContext
         NavigationDefinitions = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
         StyleDefinitions = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
         ButtonDefinitions = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
+        BookmarkDefinitions = new Dictionary<string, CreateBookmarkStatement>(StringComparer.OrdinalIgnoreCase);
         TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
 
         ThemeDefinitions = new Dictionary<string, CreateThemeStatement>(StringComparer.OrdinalIgnoreCase);
@@ -64,6 +66,7 @@ public class ReportRegistry : IReportContext
             NavigationDefinitions = new Dictionary<string, CreateNavigationStatement>(NavigationDefinitions, StringComparer.OrdinalIgnoreCase),
             StyleDefinitions = new Dictionary<string, CreateStyleStatement>(StyleDefinitions, StringComparer.OrdinalIgnoreCase),
             ButtonDefinitions = new Dictionary<string, CreateButtonStatement>(ButtonDefinitions, StringComparer.OrdinalIgnoreCase),
+            BookmarkDefinitions = new Dictionary<string, CreateBookmarkStatement>(BookmarkDefinitions, StringComparer.OrdinalIgnoreCase),
             TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(TemplateDefinitions, StringComparer.OrdinalIgnoreCase),
 
             ThemeDefinitions = new Dictionary<string, CreateThemeStatement>(ThemeDefinitions, StringComparer.OrdinalIgnoreCase),
@@ -93,6 +96,7 @@ public class ReportRegistry : IReportContext
         NavigationDefinitions.Clear();
         StyleDefinitions.Clear();
         ButtonDefinitions.Clear();
+        BookmarkDefinitions.Clear();
         TemplateDefinitions.Clear();
 
         ThemeDefinitions.Clear();

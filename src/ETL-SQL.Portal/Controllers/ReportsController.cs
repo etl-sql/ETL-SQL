@@ -229,6 +229,8 @@ public class ReportsController : ControllerBase
             view.Name,
             DeserializeDictionary(view.ParametersJson),
             DeserializeDictionary(view.FiltersJson),
+            view.StateJson,
+            view.ScriptHash,
             view.IsDefault,
             view.CreatedAt,
             view.UpdatedAt);
@@ -1156,6 +1158,8 @@ public class ReportsController : ControllerBase
             Name = req.Name,
             ParametersJson = SerializeDictionary(req.Parameters),
             FiltersJson = SerializeDictionary(req.Filters),
+            StateJson = req.StateJson,
+            ScriptHash = req.ScriptHash,
             IsDefault = req.IsDefault
         };
         db.SavedReportViews.Add(view);
@@ -1177,6 +1181,8 @@ public class ReportsController : ControllerBase
         if (req.Name is not null) view.Name = req.Name;
         if (req.Parameters is not null) view.ParametersJson = SerializeDictionary(req.Parameters);
         if (req.Filters is not null) view.FiltersJson = SerializeDictionary(req.Filters);
+        if (req.StateJson is not null) view.StateJson = req.StateJson;
+        if (req.ScriptHash is not null) view.ScriptHash = req.ScriptHash;
         if (req.IsDefault.HasValue)
         {
             if (req.IsDefault.Value) await ClearDefaultSavedViewsAsync(id);
@@ -1993,7 +1999,15 @@ public class ReportsController : ControllerBase
             paramsDict = [];
         }
 
-        return Ok(new { id = defaultView.Id, name = defaultView.Name, isDefault = defaultView.IsDefault, parameters = paramsDict });
+        return Ok(new
+        {
+            id = defaultView.Id,
+            name = defaultView.Name,
+            isDefault = defaultView.IsDefault,
+            parameters = paramsDict,
+            stateJson = defaultView.StateJson,
+            scriptHash = defaultView.ScriptHash
+        });
     }
 
 }
