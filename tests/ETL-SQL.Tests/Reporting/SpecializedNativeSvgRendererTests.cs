@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using ETL_SQL.Reporting;
 using Xunit;
 
@@ -29,6 +30,24 @@ public sealed class SpecializedNativeSvgRendererTests
         yield return [Visual("NETWORK", ["From", "To", "Weight"], [["A", "B", "2"], ["B", "C", "3"]], ("from", "From"), ("to", "To"), ("value", "Weight")), "circle"];
         yield return [Visual("MAP", ["Longitude", "Latitude", "Value", "Label"], [["-93.2", "44.9", "10", "Minneapolis"]], ("lon", "Longitude"), ("lat", "Latitude"), ("value", "Value"), ("label", "Label"), ("MODE", "POINTS")), "Minneapolis"];
         yield return [Visual("MATRIX", ["Region", "Quarter", "Revenue"], [["North", "Q1", "10"], ["South", "Q2", "12"]]), "Revenue"];
+    }
+
+    [Fact]
+    public void Treemap_SquarifiesTilesAndAppliesCategoryPalette()
+    {
+        var visual = Visual("TREEMAP", ["Name", "Value"],
+            [["Electronics", "1500"], ["Furniture", "1200"], ["Clothing", "900"], ["Toys", "400"], ["Books", "300"], ["Garden", "600"]],
+            ("name", "Name"), ("value", "Value"));
+        visual.Options["COLOR:ELECTRONICS"] = "#123456";
+
+        var svg = new SvgChartRenderer().Render(visual)!;
+        var tiles = Regex.Matches(svg, "<rect class='treemap-tile'[^>]+>");
+
+        Assert.Equal(6, tiles.Count);
+        Assert.Contains("fill='#123456'", svg);
+        Assert.Contains(tiles.Cast<Match>(), match =>
+            Regex.Match(match.Value, " y='(?<value>[0-9.]+)'").Groups["value"].Value is { Length: > 0 } value &&
+            double.Parse(value, System.Globalization.CultureInfo.InvariantCulture) > 38d);
     }
 
     private static VisualManifest Visual(string type, string[] columns, string?[][] rows, params (string Key, string Value)[] options)

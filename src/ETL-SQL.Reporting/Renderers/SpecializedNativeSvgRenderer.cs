@@ -35,31 +35,97 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         var roots = nodes.Where(n => string.IsNullOrWhiteSpace(n.Parent) || nodes.All(p => !p.Id.Equals(n.Parent, StringComparison.OrdinalIgnoreCase))).ToList();
         if (roots.Count == 0) roots = nodes;
         var sb = Start(v);
-        SliceAndDice(sb, roots, nodes, 8, Top, Width - 16, Height - Top - 8, 0);
+        Squarify(sb, v, roots, nodes, 8, Top, Width - 16, Height - Top - 8, 0);
         return End(sb);
     }
 
-    private static void SliceAndDice(StringBuilder sb, IReadOnlyList<Node> siblings, IReadOnlyList<Node> all, double x, double y, double w, double h, int depth)
+    private static void Squarify(StringBuilder sb, VisualManifest visual, IReadOnlyList<Node> siblings,
+        IReadOnlyList<Node> all, double x, double y, double w, double h, int depth)
     {
         if (siblings.Count == 0 || w <= 1 || h <= 1) return;
-        var totals = siblings.Select(n => Math.Max(n.Value, DescendantValue(n, all))).ToArray();
-        var total = totals.Sum();
-        if (total <= 0) total = siblings.Count;
-        var cursor = depth % 2 == 0 ? x : y;
-        for (var i = 0; i < siblings.Count; i++)
+        var weighted = siblings
+            .Select(node => (Node: node, Weight: Math.Max(node.Value, DescendantValue(node, all))))
+            .OrderByDescending(item => item.Weight)
+            .ThenBy(item => item.Node.Row)
+            .ToList();
+        var total = weighted.Sum(item => item.Weight);
+        if (total <= 0d)
         {
-            var share = (totals[i] <= 0 ? 1 : totals[i]) / total;
-            var bounds = depth % 2 == 0
-                ? (X: cursor, Y: y, W: i == siblings.Count - 1 ? x + w - cursor : w * share, H: h)
-                : (X: x, Y: cursor, W: w, H: i == siblings.Count - 1 ? y + h - cursor : h * share);
-            var node = siblings[i];
-            sb.Append($"<g data-row-index='{node.Row}'><rect x='{F(bounds.X)}' y='{F(bounds.Y)}' width='{F(Math.Max(0, bounds.W))}' height='{F(Math.Max(0, bounds.H))}' fill='{Palette[(node.Row + depth) % Palette.Length]}' fill-opacity='{F(Math.Max(.45, .86 - depth * .1))}' stroke='white'/><title>{Xml(node.Id)}: {F(node.Value)}</title>");
-            if (bounds.W > 42 && bounds.H > 20) sb.Append($"<text x='{F(bounds.X + 5)}' y='{F(bounds.Y + 15)}' font-size='11' fill='white'>{Xml(Trim(node.Id, (int)(bounds.W / 7)))}</text>");
-            sb.Append("</g>");
-            var children = all.Where(n => n.Parent.Equals(node.Id, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (children.Count > 0) SliceAndDice(sb, children, all, bounds.X + 4, bounds.Y + 20, Math.Max(0, bounds.W - 8), Math.Max(0, bounds.H - 24), depth + 1);
-            cursor += depth % 2 == 0 ? bounds.W : bounds.H;
+            weighted = weighted.Select(item => (item.Node, Weight: 1d)).ToList();
+            total = weighted.Count;
         }
+        var remaining = weighted.Select(item => new TreemapItem(item.Node, item.Weight / total * w * h)).ToList();
+        var layouts = new List<TreemapLayout>();
+        var bounds = new TreemapBounds(x, y, w, h);
+        while (remaining.Count > 0)
+        {
+            var row = new List<TreemapItem> { remaining[0] };
+            remaining.RemoveAt(0);
+            while (remaining.Count > 0 && WorstAspect(row.Append(remaining[0]), Math.Min(bounds.Width, bounds.Height)) <=
+                WorstAspect(row, Math.Min(bounds.Width, bounds.Height)))
+            {
+                row.Add(remaining[0]);
+                remaining.RemoveAt(0);
+            }
+            bounds = LayoutTreemapRow(row, bounds, layouts);
+        }
+
+        foreach (var layout in layouts)
+        {
+            var node = layout.Item.Node;
+            var fallback = Palette[(node.Row + depth) % Palette.Length];
+            var color = SafeTreemapColor(GetColor(visual, node.Id), fallback);
+            sb.Append($"<g data-row-index='{node.Row}'><rect class='treemap-tile' x='{F(layout.Bounds.X)}' y='{F(layout.Bounds.Y)}' width='{F(Math.Max(0, layout.Bounds.Width))}' height='{F(Math.Max(0, layout.Bounds.Height))}' fill='{color}' fill-opacity='{F(Math.Max(.55, .9 - depth * .1))}' stroke='white' stroke-width='2'/><title>{Xml(node.Id)}: {F(node.Value)}</title>");
+            if (layout.Bounds.Width > 42 && layout.Bounds.Height > 20)
+                sb.Append($"<text x='{F(layout.Bounds.X + 6)}' y='{F(layout.Bounds.Y + 16)}' font-size='11' font-weight='{(depth == 0 ? "600" : "400")}' fill='white'>{Xml(Trim(node.Id, (int)(layout.Bounds.Width / 7)))}</text>");
+            sb.Append("</g>");
+            var children = all.Where(candidate => candidate.Parent.Equals(node.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (children.Count > 0)
+                Squarify(sb, visual, children, all, layout.Bounds.X + 4, layout.Bounds.Y + 21,
+                    Math.Max(0, layout.Bounds.Width - 8), Math.Max(0, layout.Bounds.Height - 25), depth + 1);
+        }
+    }
+
+    private static double WorstAspect(IEnumerable<TreemapItem> source, double shortSide)
+    {
+        var row = source.ToList();
+        if (row.Count == 0 || shortSide <= 0d) return double.PositiveInfinity;
+        var sum = row.Sum(item => item.Area);
+        var maximum = row.Max(item => item.Area);
+        var minimum = row.Min(item => item.Area);
+        if (sum <= 0d || minimum <= 0d) return double.PositiveInfinity;
+        var sideSquared = shortSide * shortSide;
+        return Math.Max(sideSquared * maximum / (sum * sum), sum * sum / (sideSquared * minimum));
+    }
+
+    private static TreemapBounds LayoutTreemapRow(IReadOnlyList<TreemapItem> row, TreemapBounds bounds,
+        ICollection<TreemapLayout> output)
+    {
+        var area = row.Sum(item => item.Area);
+        if (bounds.Width >= bounds.Height)
+        {
+            var columnWidth = bounds.Height <= 0d ? 0d : area / bounds.Height;
+            var cursor = bounds.Y;
+            for (var index = 0; index < row.Count; index++)
+            {
+                var height = columnWidth <= 0d ? 0d : row[index].Area / columnWidth;
+                if (index == row.Count - 1) height = bounds.Y + bounds.Height - cursor;
+                output.Add(new TreemapLayout(row[index], new TreemapBounds(bounds.X, cursor, columnWidth, height)));
+                cursor += height;
+            }
+            return new TreemapBounds(bounds.X + columnWidth, bounds.Y, Math.Max(0d, bounds.Width - columnWidth), bounds.Height);
+        }
+
+        var rowHeight = bounds.Width <= 0d ? 0d : area / bounds.Width;
+        var x = bounds.X;
+        for (var index = 0; index < row.Count; index++)
+        {
+            var width = rowHeight <= 0d ? 0d : row[index].Area / rowHeight;
+            if (index == row.Count - 1) width = bounds.X + bounds.Width - x;
+            output.Add(new TreemapLayout(row[index], new TreemapBounds(x, bounds.Y, width, rowHeight)));
+            x += width;
+        }
+        return new TreemapBounds(bounds.X, bounds.Y + rowHeight, bounds.Width, Math.Max(0d, bounds.Height - rowHeight));
     }
 
     private static double DescendantValue(Node node, IReadOnlyList<Node> all)
@@ -204,6 +270,12 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
     private static double ProjectX(double lon) => 10 + (lon + 180) / 360 * (Width - 20);
     private static double ProjectY(double lat) => Top + (90 - lat) / 180 * (Height - Top - 8);
     private static string Color(double t) { t = Math.Clamp(t, 0, 1); return $"#{(int)(224 - 216 * t):X2}{(int)(243 - 195 * t):X2}{(int)(248 - 141 * t):X2}"; }
+    private static string SafeTreemapColor(string? candidate, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(candidate)) return fallback;
+        var value = candidate.Trim();
+        return value.Length is 4 or 7 && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit) ? value : fallback;
+    }
     private static string? Property(JsonElement properties, string name) => properties.TryGetProperty(name, out var value) ? value.ToString() : null;
     private static string[] Path(Node node, IReadOnlyList<Node> nodes) { var output = new List<string> { node.Id }; var parent = node.Parent; var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { node.Id }; while (!string.IsNullOrWhiteSpace(parent) && seen.Add(parent)) { output.Insert(0, parent); parent = nodes.FirstOrDefault(n => n.Id.Equals(parent, StringComparison.OrdinalIgnoreCase))?.Parent ?? ""; } return output.ToArray(); }
     private static string Arc(double cx, double cy, double inner, double outer, double start, double end) { var large = end - start > Math.PI ? 1 : 0; var o1 = (X: cx + outer * Math.Cos(start), Y: cy + outer * Math.Sin(start)); var o2 = (X: cx + outer * Math.Cos(end), Y: cy + outer * Math.Sin(end)); if (inner <= .1) return $"M {F(cx)} {F(cy)} L {F(o1.X)} {F(o1.Y)} A {F(outer)} {F(outer)} 0 {large} 1 {F(o2.X)} {F(o2.Y)} Z"; var i2 = (X: cx + inner * Math.Cos(end), Y: cy + inner * Math.Sin(end)); var i1 = (X: cx + inner * Math.Cos(start), Y: cy + inner * Math.Sin(start)); return $"M {F(o1.X)} {F(o1.Y)} A {F(outer)} {F(outer)} 0 {large} 1 {F(o2.X)} {F(o2.Y)} L {F(i2.X)} {F(i2.Y)} A {F(inner)} {F(inner)} 0 {large} 0 {F(i1.X)} {F(i1.Y)} Z"; }
@@ -216,4 +288,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
     private static string Xml(string value) => System.Security.SecurityElement.Escape(value) ?? "";
     private static string Trim(string value, int max) => max > 1 && value.Length > max ? value[..(max - 1)] + "…" : value;
     private sealed record Node(string Id, string Parent, double Value, int Row);
+    private sealed record TreemapItem(Node Node, double Area);
+    private sealed record TreemapBounds(double X, double Y, double Width, double Height);
+    private sealed record TreemapLayout(TreemapItem Item, TreemapBounds Bounds);
 }

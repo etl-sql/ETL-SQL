@@ -197,6 +197,51 @@ public sealed class StandardCatalogCartesianMigrationTests
         Assert.Contains("data-overlay-type='Polynomial'", svg);
         Assert.Equal(2, CountOccurrences(svg, "class='plot-overlay-label-bg'"));
         Assert.Equal(2, CountOccurrences(svg, "class='plot-overlay-label'"));
+        Assert.Equal(2, CountOccurrences(svg, "class='plot-overlay-label-leader'"));
+        Assert.Equal(2, CountOccurrences(svg, "text-anchor='start'"));
+        XDocument.Parse(svg);
+    }
+
+    [Fact]
+    public void Scatter_RegressionUsesQuantitativeXAndPadsPointDomain()
+    {
+        var bindings = ImmutableArray.Create(
+            new FieldBinding(FieldChannel.X, "Score", DataSemanticKind.Quantitative, "x"),
+            new FieldBinding(FieldChannel.Y, "Rank", DataSemanticKind.Quantitative, "y"));
+        var layers = ImmutableArray.Create(
+            new MarkLayerSpec("primary", MarkKind.Point, 0, bindings, []),
+            new MarkLayerSpec("linear", MarkKind.Line, 100, [],
+                [new StyleToken("overlayType", "Linear"), new StyleToken("label", "Linear Fit")]),
+            new MarkLayerSpec("polynomial", MarkKind.Line, 101, [],
+                [new StyleToken("overlayType", "Polynomial"), new StyleToken("parameter", "2"), new StyleToken("label", "Polynomial Fit")]));
+        var spec = ChartSpec.Create("regression-scatter", "#stats", bindings, layers,
+            new CoordinateSpec(CoordinateKind.Cartesian),
+            [new ScaleSpec("x", FieldChannel.X, ScaleKind.Linear, false, []),
+                new ScaleSpec("y", FieldChannel.Y, ScaleKind.Linear, false, [])],
+            new FormattingSpec("en-US", "UTC", "", []), new NullHandlingSpec(NullValuePolicy.Skip, []),
+            new ThemeSpec("default", []), new AccessibilitySpec("Regression scatter", null, null, true));
+        var data = ChartDataSet.Create("#stats", 4,
+        [
+            new ChartColumn("Score", ChartValueKind.Decimal, DataSemanticKind.Quantitative,
+                [ChartValue.From(10m), ChartValue.From(12m), ChartValue.From(20m), ChartValue.From(30m)], []),
+            new ChartColumn("Rank", ChartValueKind.Decimal, DataSemanticKind.Quantitative,
+                [ChartValue.From(100m), ChartValue.From(144m), ChartValue.From(400m), ChartValue.From(900m)], [])
+        ]);
+
+        var plan = new PlotPlanResolver().Resolve(spec, data);
+        var polynomial = plan.Layers.Single(layer => layer.Id == "polynomial");
+        var svg = new SvgChartRenderer().Render(plan);
+
+        Assert.Equal(new decimal?[] { 10m, 12m, 20m, 30m }, polynomial.Data.Select(datum => Number(datum, FieldChannel.X)));
+        Assert.All(polynomial.Data.Select((datum, index) => (Actual: Number(datum, FieldChannel.Y), Expected: data.Columns[1].Values[index].Decimal)),
+            pair => Assert.InRange(Math.Abs(pair.Actual!.Value - pair.Expected!.Value), 0m, .001m));
+        Assert.Equal(9m, PlotPlanResolver.Number(plan.Scales.Single(scale => scale.Channel == FieldChannel.X).Domain[0]));
+        Assert.Equal(31m, PlotPlanResolver.Number(plan.Scales.Single(scale => scale.Channel == FieldChannel.X).Domain[^1]));
+        Assert.Equal(2, CountOccurrences(svg, "class='plot-overlay-label-leader'"));
+        Assert.Equal(4, CountOccurrences(svg, "class='plot-point'"));
+        Assert.Equal(4, CountOccurrences(svg, "<circle"));
+        Assert.True(svg.LastIndexOf("class='plot-point'", StringComparison.Ordinal) >
+            svg.LastIndexOf("class='plot-overlay'", StringComparison.Ordinal));
         XDocument.Parse(svg);
     }
 
@@ -260,6 +305,31 @@ public sealed class StandardCatalogCartesianMigrationTests
     }
 
     [Fact]
+    public async Task Gauge_StylesProduceDistinctNativeGeometry()
+    {
+        var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("gauge_native_plot_plan.rptsql");
+        var source = Assert.IsType<PlotPlan>(Assert.Single(manifest.Visuals).PlotPlan);
+        PlotPlan WithStyle(string style) => source with { Style = source.Style.Add(new StyleToken("GAUGE_STYLE", style)) };
+
+        var progress = new SvgChartRenderer().Render(source);
+        var semiCircle = new SvgChartRenderer().Render(WithStyle("SEMI_CIRCLE"));
+        var ring = new SvgChartRenderer().Render(WithStyle("RING"));
+        var bar = new SvgChartRenderer().Render(WithStyle("BAR"));
+
+        Assert.Contains("data-gauge-style='PROGRESS'", progress);
+        Assert.Contains("data-gauge-style='SEMI_CIRCLE'", semiCircle);
+        Assert.Contains("data-gauge-style='RING'", ring);
+        Assert.Contains("data-gauge-style='BAR'", bar);
+        Assert.Contains("stroke-dasharray=", ring);
+        Assert.Contains("<rect class='plot-gauge-value'", bar);
+        Assert.Equal(4, new[] { progress, semiCircle, ring, bar }.Distinct(StringComparer.Ordinal).Count());
+        XDocument.Parse(progress);
+        XDocument.Parse(semiCircle);
+        XDocument.Parse(ring);
+        XDocument.Parse(bar);
+    }
+
+    [Fact]
     public async Task BoxPlot_ComputesStatisticsOnceInPlotPlan()
     {
         var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("boxplot_native_plot_plan.rptsql");
@@ -292,6 +362,36 @@ public sealed class StandardCatalogCartesianMigrationTests
         Assert.Contains(">Direct</text>", svg);
         Assert.Contains("Search: 43%", svg);
         Assert.Contains("Direct: 27%", svg);
+        Assert.Equal(4, CountOccurrences(svg, "class='plot-arc-label'"));
+        Assert.Equal(4, CountOccurrences(svg, "class='plot-arc-label-leader'"));
+    }
+
+    [Fact]
+    public async Task Donut_RendersDynamicCenterValueAndRoseGeometry()
+    {
+        var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("pie_donut_proportions.rptsql");
+        var source = Assert.IsType<PlotPlan>(manifest.Visuals.Single(item => item.Name == "LeadSourceDonut").PlotPlan);
+        var plan = source with
+        {
+            Coordinate = source.Coordinate! with { InnerRadius = .55m },
+            Style = source.Style
+                .Add(new StyleToken("CENTER_VALUE", "{total} qualified"))
+                .Add(new StyleToken("CENTER_LABEL", "Total leads"))
+                .Add(new StyleToken("ROSE_MODE", "ON"))
+        };
+
+        var svg = new SvgChartRenderer().Render(plan);
+
+        Assert.Contains("class='plot-arc-center-value'", svg);
+        Assert.Contains(">10400 qualified</text>", svg);
+        Assert.Contains("class='plot-arc-center-label'", svg);
+        Assert.Contains(">Total leads</text>", svg);
+        var radii = Regex.Matches(svg, @" A (?<radius>[0-9.]+) \k<radius> 0")
+            .Select(match => match.Groups["radius"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        Assert.True(radii.Count > 2);
+        XDocument.Parse(svg);
     }
 
     [Fact]

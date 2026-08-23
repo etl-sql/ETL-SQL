@@ -199,14 +199,14 @@ public sealed class PlotPlanResolver
             if (scale.IncludeZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
             if (minimum == maximum) maximum = minimum + 1m;
             var needsMarkHeadroom = !spec.Theme.Tokens.Any(token => token.Name.Equals("MICRO_CHART", StringComparison.OrdinalIgnoreCase)) &&
-                scale.Channel is FieldChannel.Y or FieldChannel.Y2 && resolvedLayers.Any(layer =>
-                layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point &&
-                !layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)));
+                resolvedLayers.Any(layer => !layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)) &&
+                    (scale.Channel is FieldChannel.Y or FieldChannel.Y2 && layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point ||
+                     scale.Channel == FieldChannel.X && scale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic && layer.Mark == MarkKind.Point));
             if (needsMarkHeadroom)
             {
                 var padding = Math.Max(.01m, (maximum - minimum) * .05m);
                 if (scale.DomainMaximum is null) maximum += padding;
-                if (!scale.IncludeZero && scale.DomainMinimum is null) minimum -= padding;
+                if ((!scale.IncludeZero || scale.Channel == FieldChannel.X) && scale.DomainMinimum is null) minimum -= padding;
             }
             var ticks = scale.Kind == ScaleKind.Logarithmic
                 ? Enumerable.Range(0, 5).Select(index => (decimal)Math.Pow(10d,
@@ -543,46 +543,61 @@ public sealed class PlotPlanResolver
         var type = layer.Style.First(token => token.Name == "overlayType").Value;
         var parameterText = layer.Style.FirstOrDefault(token => token.Name == "parameter")?.Value;
         decimal.TryParse(parameterText, NumberStyles.Any, CultureInfo.InvariantCulture, out var parameter);
+        var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
         var yBinding = spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2);
         var yValues = columns[yBinding.Field].Values.Select(Number).Select(value => value ?? 0m).ToList();
+        var xColumn = xBinding is not null && columns.TryGetValue(xBinding.Field, out var resolvedXColumn) ? resolvedXColumn : null;
+        var regressionX = Enumerable.Range(0, yValues.Count)
+            .Select(index => xColumn is null ? index : Number(xColumn.Values[index]) ?? index)
+            .ToList();
         var resolvedValues = type switch
         {
-            "Goal" => Enumerable.Repeat(parameter, Math.Max(1, categories.Length)).Select(value => (decimal?)value).ToList(),
-            "Average" => Enumerable.Repeat(yValues.DefaultIfEmpty(0m).Average(), Math.Max(1, categories.Length)).Select(value => (decimal?)value).ToList(),
+            "Goal" => Enumerable.Repeat(parameter, Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
+            "Average" => Enumerable.Repeat(yValues.DefaultIfEmpty(0m).Average(), Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
             "MovingAvg" => MovingAverage(yValues, Math.Max(1, (int)(parameter == 0 ? 3 : parameter))),
-            "Linear" => PolynomialRegression(yValues, 1),
-            "Polynomial" => PolynomialRegression(yValues, Math.Max(1, (int)(parameter == 0 ? 2 : parameter))),
-            _ => Enumerable.Repeat((decimal?)null, Math.Max(1, categories.Length)).ToList()
+            "Linear" => PolynomialRegression(regressionX, yValues, 1),
+            "Polynomial" => PolynomialRegression(regressionX, yValues, Math.Max(1, (int)(parameter == 0 ? 2 : parameter))),
+            _ => Enumerable.Repeat((decimal?)null, Math.Max(1, yValues.Count)).ToList()
         };
-        var data = resolvedValues.Select((value, index) => new ResolvedDatum(index,
-            [
-                new ResolvedChannelValue(FieldChannel.X, ChartValue.From(categories.IsDefaultOrEmpty ? index.ToString(CultureInfo.InvariantCulture) : categories[index]), categories.IsDefaultOrEmpty ? null : categories[index]),
-                new ResolvedChannelValue(FieldChannel.Y, value.HasValue ? ChartValue.From(value.Value) : ChartValue.Null(), value?.ToString(CultureInfo.InvariantCulture))
-            ], !value.HasValue, null)).ToImmutableArray();
+        var data = resolvedValues.Select((value, index) =>
+        {
+            var xValue = xColumn is null ? ChartValue.From(index) : xColumn.Values[index];
+            var xDisplay = xColumn is null || xColumn.DisplayValues.IsDefaultOrEmpty
+                ? Display(xValue)
+                : xColumn.DisplayValues[index] ?? Display(xValue);
+            return new ResolvedDatum(index,
+                [
+                    new ResolvedChannelValue(FieldChannel.X, xValue, xDisplay),
+                    new ResolvedChannelValue(FieldChannel.Y, value.HasValue ? ChartValue.From(value.Value) : ChartValue.Null(), value?.ToString(CultureInfo.InvariantCulture))
+                ], !value.HasValue, null);
+        }).ToImmutableArray();
         return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, data) { Style = layer.Style };
     }
 
     private static List<decimal?> MovingAverage(IReadOnlyList<decimal> values, int window) =>
         values.Select((_, index) => index < window - 1 ? (decimal?)null : values.Skip(index - window + 1).Take(window).Average()).ToList();
 
-    private static List<decimal?> PolynomialRegression(IReadOnlyList<decimal> values, int requestedDegree)
+    private static List<decimal?> PolynomialRegression(
+        IReadOnlyList<decimal> xValues,
+        IReadOnlyList<decimal> yValues,
+        int requestedDegree)
     {
-        if (values.Count == 0) return [];
-        var degree = Math.Min(requestedDegree, values.Count - 1);
+        if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
+        var degree = Math.Min(requestedDegree, yValues.Count - 1);
         var size = degree + 1;
         var matrix = new decimal[size, size + 1];
         for (var row = 0; row < size; row++)
         {
             for (var column = 0; column < size; column++)
-                matrix[row, column] = Enumerable.Range(0, values.Count).Sum(index => Power(index, row + column));
-            matrix[row, size] = Enumerable.Range(0, values.Count).Sum(index => values[index] * Power(index, row));
+                matrix[row, column] = xValues.Sum(value => Power(value, row + column));
+            matrix[row, size] = Enumerable.Range(0, yValues.Count).Sum(index => yValues[index] * Power(xValues[index], row));
         }
 
         for (var pivot = 0; pivot < size; pivot++)
         {
             var best = Enumerable.Range(pivot, size - pivot)
                 .OrderByDescending(row => Math.Abs(matrix[row, pivot])).First();
-            if (matrix[best, pivot] == 0m) return Enumerable.Repeat((decimal?)null, values.Count).ToList();
+            if (matrix[best, pivot] == 0m) return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
             if (best != pivot)
                 for (var column = pivot; column <= size; column++)
                     (matrix[pivot, column], matrix[best, column]) = (matrix[best, column], matrix[pivot, column]);
@@ -597,12 +612,12 @@ public sealed class PlotPlanResolver
         }
 
         var coefficients = Enumerable.Range(0, size).Select(index => matrix[index, size]).ToArray();
-        return Enumerable.Range(0, values.Count)
-            .Select(index => (decimal?)coefficients.Select((coefficient, power) => coefficient * Power(index, power)).Sum())
+        return xValues
+            .Select(value => (decimal?)coefficients.Select((coefficient, power) => coefficient * Power(value, power)).Sum())
             .ToList();
     }
 
-    private static decimal Power(int value, int exponent)
+    private static decimal Power(decimal value, int exponent)
     {
         var result = 1m;
         for (var index = 0; index < exponent; index++) result *= value;

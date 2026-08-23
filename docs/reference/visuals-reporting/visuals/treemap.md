@@ -1,5 +1,6 @@
-Type: TREEMAP
-Displays hierarchical data as nested rectangles sized by value. Good for showing part-to-whole relationships across many categories simultaneously.
+# TREEMAP
+
+Displays flat or hierarchical data as squarified nested rectangles sized by value.
 
 Mappings:
 - **NAME** - category label for each tile
@@ -8,7 +9,7 @@ Mappings:
 - **COLOR** - optional; column used to colour tiles independently of size
 
 Options:
-- **COLORS** - colour range or discrete palette
+- **COLORS** - discrete category-to-color assignments such as `COLORS ('Hardware' = '#4e79a7')`
 - **SHOW_VALUES = ON|OFF** - show value inside tile (default ON)
 - **SHOW_PERCENT = ON|OFF** - show % of total inside tile (default OFF)
 

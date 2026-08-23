@@ -1,5 +1,6 @@
-Type: GAUGE, GAUGE_STYLE (arc | needle | bar)
-A single KPI shown as a gauge dial. It is ideal for showing progress toward a target or position within a range.
+# GAUGE
+
+A single KPI shown as a progress arc, semicircle, ring, needle dial, or horizontal bar.
 
 Mappings:
 - **VALUE** - the current metric value (required)
@@ -8,9 +9,11 @@ Mappings:
 - **GOAL** - target value; rendered as a marker on the dial
 
 Options:
-- **GAUGE_STYLE = 'arc'** - circular arc gauge (default)
-- **GAUGE_STYLE = 'needle'** - traditional dial with needle
-- **GAUGE_STYLE = 'bar'** - horizontal progress-bar style
+- **GAUGE_STYLE = 'PROGRESS'** - 270-degree progress arc (default; `ARC` is an alias)
+- **GAUGE_STYLE = 'SEMI_CIRCLE'** - Power BI-style half-circle progress gauge
+- **GAUGE_STYLE = 'RING'** - full circular progress ring
+- **GAUGE_STYLE = 'NEEDLE'** - semicircular dial with a needle
+- **GAUGE_STYLE = 'BAR'** - horizontal progress bar
 - **COLORS = ('range_start%:color', ...)** - colour bands as percent of range, e.g. ('0%:#e74c3c', '60%:#f39c12', '80%:#27ae60')
 - **TITLE = 'label'** - text label beneath the gauge
 
@@ -22,7 +25,7 @@ CREATE VISUAL SLAGauge AS GAUGE (
   SOURCE   = #kpi,
   MAPPINGS (VALUE = score, MIN = min_val, MAX = max_val, GOAL = target),
   OPTIONS  (
-    GAUGE_STYLE = 'arc',
+    GAUGE_STYLE = 'SEMI_CIRCLE',
     COLORS (
       low = '#e74c3c',
       medium = '#f39c12',

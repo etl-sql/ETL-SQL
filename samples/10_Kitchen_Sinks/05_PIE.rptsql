@@ -29,10 +29,10 @@ CREATE VISUAL PercentPie AS PIE (
     )
 );
 
--- 4. Styled Pie (Custom Colors & Legend)
+-- 4. Styled Rose Pie (Custom Colors, Geometry & Legend)
 CREATE VISUAL StyledPie AS PIE (
     SOURCE = #channels,
-    TITLE = 'Styled Pie Chart',
+    TITLE = 'Styled Rose Pie Chart',
     MAPPINGS (LABEL = Channel, VALUE = Users),
     OPTIONS (
         COLORS (
@@ -42,6 +42,7 @@ CREATE VISUAL StyledPie AS PIE (
             'Referral' = '#76b7b2',
             'Email' = '#59a14f'
         ),
+        ROSE_MODE = ON,
         LEGEND_POSITION = RIGHT
     )
 );

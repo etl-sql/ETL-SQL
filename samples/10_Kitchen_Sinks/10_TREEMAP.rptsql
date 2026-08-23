@@ -1,10 +1,10 @@
 -- Kitchen Sink: TREEMAP Visual
--- This script demonstrates the TREEMAP visual type.
+-- This script demonstrates the TREEMAP visual type for flat and multi-level hierarchical area layouts.
 
 SET REPORT TITLE = 'Kitchen Sink: TREEMAP Visual';
-SET REPORT DESCRIPTION = 'Demonstration of TREEMAP area chart capabilities.';
+SET REPORT DESCRIPTION = 'Demonstration of TREEMAP area charts with flat categories and nested parent-child hierarchies.';
 
--- 1. Mock Data Generation
+-- 1. Mock Data Generation (Flat Categories)
 SELECT 'Electronics' AS Cat, 1500 AS Val INTO #treedata
 UNION ALL SELECT 'Furniture', 1200
 UNION ALL SELECT 'Clothing', 900
@@ -12,32 +12,57 @@ UNION ALL SELECT 'Toys', 400
 UNION ALL SELECT 'Books', 300
 UNION ALL SELECT 'Garden', 600;
 
--- 2. Basic Treemap
+-- 2. Mock Data Generation (Nested Parent-Child Hierarchy)
+SELECT 'Electronics' AS Item, '' AS Parent, 3500 AS Revenue INTO #nested_tree
+UNION ALL SELECT 'Laptops', 'Electronics', 2000
+UNION ALL SELECT 'Phones', 'Electronics', 1500
+UNION ALL SELECT 'Furniture', '', 2500
+UNION ALL SELECT 'Desks', 'Furniture', 1400
+UNION ALL SELECT 'Chairs', 'Furniture', 1100
+UNION ALL SELECT 'Clothing', '', 1800
+UNION ALL SELECT 'Jackets', 'Clothing', 1000
+UNION ALL SELECT 'Shoes', 'Clothing', 800;
+
+-- 3. Basic Flat Treemap
 CREATE VISUAL BasicTreemap AS TREEMAP (
     SOURCE = #treedata,
     TITLE = 'Basic Treemap (Category Size by Value)',
     MAPPINGS (LABEL = Cat, VALUE = Val)
 );
 
--- 3. Treemap with Custom Colors
+-- 4. Nested Hierarchical Treemap (Slice-and-Dice Subdivisions)
+CREATE VISUAL HierarchicalTreemap AS TREEMAP (
+    SOURCE = #nested_tree,
+    TITLE = 'Hierarchical Treemap (Category › Sub-Category)',
+    MAPPINGS (
+        LABEL  = Item,
+        PARENT = Parent,
+        VALUE  = Revenue
+    )
+);
+
+-- 5. Treemap with Custom Colors
 CREATE VISUAL StyledTreemap AS TREEMAP (
     SOURCE = #treedata,
-    TITLE = 'Styled Treemap',
+    TITLE = 'Styled Treemap (Custom Palette)',
     MAPPINGS (LABEL = Cat, VALUE = Val),
     OPTIONS (
         COLORS (
             'Electronics' = '#4e79a7',
-            'Furniture' = '#f28e2b'
+            'Furniture'   = '#f28e2b',
+            'Clothing'    = '#e15759',
+            'Garden'      = '#59a14f'
         )
     )
 );
 
 -- Page Layout
 CREATE PAGE TreemapKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B',
+    STRUCTURE = 'A B / C .',
     MAP (
         'A' = BasicTreemap,
-        'B' = StyledTreemap
+        'B' = StyledTreemap,
+        'C' = HierarchicalTreemap
     )
 );
 
