@@ -14,8 +14,20 @@ using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models
 
 namespace ETL_SQL.LSP;
 
-/// <summary>Scoped rename for layer, scale, and field symbols inside one native CHART declaration.</summary>
-public sealed class AdvancedChartRenameProvider(DocumentStateStore store) : IRenameHandler, IPrepareRenameHandler
+/// <summary>
+/// Rename for report-authoring symbols:
+/// <list type="bullet">
+///   <item><description>layer, scale, and field symbols, scoped to the one native CHART declaration
+///     they belong to;</description></item>
+///   <item><description>author bookmark identifiers, across every site one can appear —
+///     <c>CREATE BOOKMARK</c>, <c>APPLY_BOOKMARK(...)</c>, and <c>DROP BOOKMARK</c> — so a bookmark
+///     cannot be renamed into a dangling in-canvas action.</description></item>
+/// </list>
+/// A bookmark's references to other objects (its PAGE, its STATE object names, its parameters) are
+/// held safe from the other direction: <c>BookmarkValidationRule</c> reports a stale reference as a
+/// diagnostic as soon as its target is renamed or dropped.
+/// </summary>
+public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHandler, IPrepareRenameHandler
 {
     public Task<WorkspaceEdit?> Handle(RenameParams request, CancellationToken cancellationToken)
     {
@@ -50,6 +62,9 @@ public sealed class AdvancedChartRenameProvider(DocumentStateStore store) : IRen
         symbol = default!;
         if (!store.TryGetState(uri, out state!)) return false;
         var cursor = Offset(state.Text, (int)position.Line, (int)position.Character);
+
+        if (TryResolveBookmark(state, cursor, out symbol)) return true;
+
         var visual = state.Script.Statements.OfType<CreateVisualStatement>()
             .FirstOrDefault(item => item.AdvancedChart is not null && cursor >= item.StartOffset && cursor <= item.EndOffset);
         if (visual?.AdvancedChart is not { } chart) return false;
@@ -84,6 +99,24 @@ public sealed class AdvancedChartRenameProvider(DocumentStateStore store) : IRen
         var fieldOffsets = IdentifierOffsets(chartText, chartStart, word.Value.Name);
         symbol = new RenameSymbol(word.Value.Name, word.Value.Start, fieldOffsets);
         return fieldOffsets.Contains(word.Value.Start);
+    }
+
+    /// <summary>
+    /// Resolves the cursor to a declared bookmark. The cursor must be sitting on one of the bookmark's
+    /// own identifier occurrences — landing on a same-named column or variable elsewhere in the script
+    /// falls through to the chart symbols instead of silently renaming the bookmark.
+    /// </summary>
+    private static bool TryResolveBookmark(DocumentState state, int cursor, out RenameSymbol symbol)
+    {
+        symbol = default!;
+        var word = WordAt(state.Text, cursor);
+        if (word is null) return false;
+        var bookmark = BookmarkSymbols.Find(state.Script, word.Value.Name);
+        if (bookmark is null) return false;
+        var offsets = BookmarkSymbols.ReferenceOffsets(state.Text, bookmark.Name);
+        if (!offsets.Contains(word.Value.Start)) return false;
+        symbol = new RenameSymbol(bookmark.Name, word.Value.Start, offsets);
+        return true;
     }
 
     private static List<int> Captures(string text, int baseOffset, string pattern, string group) =>

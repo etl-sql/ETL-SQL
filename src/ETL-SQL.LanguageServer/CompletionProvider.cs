@@ -81,6 +81,12 @@ namespace ETL_SQL.LSP
             var datasetItems = GetDatasetCompletions(scriptBefore, prefix, line, startCol, col);
             var snippetItems = GetSnippetCompletions(scriptBefore, prefix, line, startCol, col);
             var chartItems = GetAdvancedChartCompletions(scriptBefore, prefix, line, startCol, col);
+            var bookmarkItems = GetBookmarkCompletions(state.Script, scriptBefore, prefix, line, startCol, col);
+
+            // Where a bookmark identifier is the only thing that can legally appear, offering the
+            // generic word list alongside it would just be noise — the declared bookmarks are the
+            // complete set of valid answers.
+            if (bookmarkItems.Count > 0) return new CompletionList(bookmarkItems);
 
             var items = suggestions.Select(s =>
             {
@@ -105,6 +111,40 @@ namespace ETL_SQL.LSP
 
             return new CompletionList(snippetItems.Concat(chartItems).Concat(items).Concat(datasetItems)
                 .GroupBy(item => item.Label, StringComparer.OrdinalIgnoreCase).Select(group => group.First()).ToList());
+        }
+
+        /// <summary>
+        /// Offers the bookmarks declared in this script wherever a bookmark identifier is expected —
+        /// inside <c>APPLY_BOOKMARK(</c> and after <c>DROP BOOKMARK</c>. Author bookmarks are the only
+        /// valid values there, so completing them from the AST is what keeps an in-canvas action from
+        /// being typed against a bookmark that does not exist.
+        /// </summary>
+        private static List<CompletionItem> GetBookmarkCompletions(
+            ETL_SQL.Core.Script? script, string scriptBefore, string prefix, int line, int startCol, int col)
+        {
+            if (!BookmarkSymbols.ExpectsBookmarkName(scriptBefore)) return [];
+            return BookmarkSymbols.Declared(script)
+                .Where(bookmark => string.IsNullOrEmpty(prefix)
+                    || bookmark.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(bookmark => new CompletionItem
+                {
+                    Label = bookmark.Name,
+                    Kind = CompletionItemKind.Reference,
+                    Detail = bookmark.IsDefault ? "Author bookmark (report default)" : "Author bookmark",
+                    Documentation = new MarkupContent
+                    {
+                        Kind = MarkupKind.Markdown,
+                        Value = BookmarkSymbols.Describe(bookmark)
+                    },
+                    // Sorted ahead of everything else: in this position nothing else is valid.
+                    SortText = "0000_" + bookmark.Name,
+                    InsertText = bookmark.Name,
+                    TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit
+                    {
+                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
+                        NewText = bookmark.Name
+                    })
+                }).ToList();
         }
 
         private static List<CompletionItem> GetAdvancedChartCompletions(string scriptBefore, string prefix, int line, int startCol, int col)

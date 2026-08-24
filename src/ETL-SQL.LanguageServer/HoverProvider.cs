@@ -82,10 +82,18 @@ namespace ETL_SQL.LSP
             var hasDeclaration = word != null &&
                 _store.TryFindDeclaration(word, request.TextDocument.Uri, out declarationUri, out declaration);
 
-            if (entry == null && functionHelp == null && keywordHelp == null && datasetEntry == null && !hasDeclaration)
+            // Author bookmark hover: the identifier under the cursor names a bookmark declared in this
+            // script, so show what applying it will actually do — page, typed parameters, and state.
+            var bookmark = BookmarkSymbols.Find(state.Script, word);
+
+            if (entry == null && functionHelp == null && keywordHelp == null && datasetEntry == null
+                && !hasDeclaration && bookmark == null)
                 return Task.FromResult<Hover?>(null);
 
             var md = new List<string>();
+
+            if (bookmark != null)
+                md.Add(BookmarkSymbols.Describe(bookmark));
 
             if (entry != null)
             {

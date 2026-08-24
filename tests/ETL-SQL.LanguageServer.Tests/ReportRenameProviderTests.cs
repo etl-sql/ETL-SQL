@@ -10,7 +10,7 @@ using Xunit;
 
 namespace ETL_SQL.LanguageServer.Tests;
 
-public sealed class AdvancedChartRenameProviderTests
+public sealed class ReportRenameProviderTests
 {
     private const string ScriptText = """
         CREATE VISUAL Native AS CUSTOM (
@@ -62,13 +62,13 @@ public sealed class AdvancedChartRenameProviderTests
         Assert.Equal(3, edits.Count);
     }
 
-    private static (AdvancedChartRenameProvider Provider, DocumentUri Uri) Provider()
+    private static (ReportRenameProvider Provider, DocumentUri Uri) Provider()
     {
         var uri = DocumentUri.From("untitled:advanced-chart.rptsql");
         var parser = new Parser(new Lexer(ScriptText).Tokenize(), ScriptText);
         var store = new DocumentStateStore();
         store.SetState(uri, ScriptText, parser.Parse(), new ETL_SQL.Core.LineageTracker(ETL_SQL.Common.NullLogger.Instance));
-        return (new AdvancedChartRenameProvider(store), uri);
+        return (new ReportRenameProvider(store), uri);
     }
 
     private static Position PositionOf(string text, string value)
