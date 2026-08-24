@@ -1376,6 +1376,10 @@ public static class AstSerializer
         sb.AppendLine($"{CreationVerb(s.Mode)} VISUAL {s.Name} AS {s.VisualType.ToString().ToUpper()} (");
         if (s.Title != null) sb.AppendLine($"    TITLE = {s.Title.ToSql()},");
         if (s.Subtitle != null) sb.AppendLine($"    SUBTITLE = {s.Subtitle.ToSql()},");
+        // Detail surfaces are formatted here for the same reason pages, containers, and buttons
+        // format theirs: omitting the clause silently deletes the author's tooltip on the next
+        // format pass. Visuals were the one CREATE that dropped it.
+        if (s.Tooltip != null) sb.AppendLine($"    TOOLTIP {FormatTooltip(s.Tooltip)},");
         // TEXT visuals use CONTENT; controls use DEFAULT; both map to DefaultValue on the AST node
         if (s.DefaultValue != null && s.VisualType == VisualType.Text)
             sb.AppendLine($"    CONTENT = {s.DefaultValue.ToSql()},");

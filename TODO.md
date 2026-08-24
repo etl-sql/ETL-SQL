@@ -437,13 +437,32 @@ feature.
   before the field existed deserialized as an explicit transient tooltip and the `type` fallback
   never ran, silently downgrading older container popovers to text. It is now nullable, so absence
   stays distinguishable from an explicit choice.)*
-- [ ] Add parser/formatter, analysis/LSP, manifest/versioning, interaction-refresh, runtime DOM,
+- [x] Add parser/formatter, analysis/LSP, manifest/versioning, interaction-refresh, runtime DOM,
   keyboard, touch, accessibility, positioning, cycle, disclosure, budget, stale-request, export, and
   cross-host tests. Exercise the real kitchen-sink nested-chart fixture, not only string-presence
   assertions against `report-runtime.js`.
-- [ ] Measure open, refresh, reposition, and dismissal latency on the named kitchen-sink fixture at a
+  *(DONE. 36 browser tests (behaviour, geometry, performance) drive the canonical
+  `report-runtime.js` through `tools/ui-sandbox/detail-surface.html`, which reproduces the
+  kitchen-sink nested-chart workflow — `BarWithTooltip` opening `TooltipBox` containing
+  `MonthDetail` — with no Portal, database, or login. Alongside them: 9 parser/formatter round
+  trips, 32 resolver/static-safety, 18 static-fallback and manifest-versioning, 5 payload-budget,
+  and 3 rename tests. The round-trip requirement caught a real data-loss defect: `FormatCreateVisual`
+  never emitted `TOOLTIP` at all, so formatting a report silently deleted the author's tooltip —
+  pages, containers, and buttons formatted theirs, visuals were the one `CREATE` that dropped it.)*
+- [x] Measure open, refresh, reposition, and dismissal latency on the named kitchen-sink fixture at a
   documented data size. Record the baseline and regression tolerance rather than claiming an
   unmeasured sub-millisecond target.
+  *(DONE. Fixture: the kitchen-sink tooltip example — `#sales` at 8 rows x 4 columns, 4 trigger
+  marks, 2 detail rows per activation — which is the shape the sample actually ships, so a
+  regression is a regression in real authored reports. Measured on this machine, headless Chromium:
+  transient open **50.9 ms**, popover open through refresh completion **65.3 ms**, reposition after
+  scroll **26.8 ms**, dismissal and cleanup **3.5 ms**. Budgets are set well above those at 400 /
+  2500 / 300 / 300 ms and are deliberately coarse: they are tripwires for work that is O(marks) or
+  worse — a reflow storm, an unfenced refresh, a listener leak — not tuned targets, because a
+  headless CI agent is an order of magnitude noisier than a developer machine. No sub-millisecond
+  claim is encoded anywhere. Every run writes its measured values to test output, which is the
+  record to compare against when re-baselining, and a repeated open/dismiss loop asserts no surface
+  or live-region leak.)*
 - [ ] Update the focused help, Report-SQL guide, syntax index, snippets, LSP, and Report Builder to
   match only the accepted and tested forms. Modify shared browser assets only under
   `src/ETL-SQL.ReportRuntime/Resources/Shared/`, then synchronize and verify generated copies.
