@@ -316,6 +316,17 @@ namespace ETL_SQL.Reporting
                     break;
             }
 
+            // A page cannot be hovered, so a detail surface is described rather than
+            // expanded — and never in words that imply the interaction is available here.
+            var detail = DetailSurfaceProjection.Describe(v.Tooltip);
+            if (detail != null)
+            {
+                var detailPara = section.AddParagraph(detail);
+                detailPara.Format.SpaceBefore = Unit.FromPoint(4);
+                detailPara.Format.Font.Size = Unit.FromPoint(8);
+                detailPara.Format.Font.Italic = true;
+            }
+
             if (v.PrintLayout?.PageBreakAfter == true)
             {
                 var brPara = section.AddParagraph();

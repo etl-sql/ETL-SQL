@@ -14,7 +14,10 @@
 | [Groups and Folder Permissions](permissions.md) | Two facts worth knowing before you design a permission scheme: |
 | [Configuration Reference](portal-config-reference.md) | All settings live under the `"Portal"` key in `appsettings.json`. Every key can be overridden with an environment variable using the double-undersc... |
 | [Production Readiness Checklist](production-readiness.md) | Use this checklist before promoting the Portal to a production or customer-facing environment. Items marked **Required** will cause data loss, secu... |
-| [Publishing Reports](publishing.md) | Registering a `.rptsql` script as a named report in a folder, and the review and versioning controls around doing so. |
+| [Publishing Reports](publishing.md) | Hub for registering a `.rptsql` script as a named report in a folder, plus versioning and sharing controls. |
+| &nbsp;&nbsp;↳ [Report Publishing Workflows](report-publishing-workflows.md) | GUI and script-first publishing, metadata tags, script hash pinning, update/delete, and environment promotion. |
+| &nbsp;&nbsp;↳ [Report Versioning and Promotion](report-versioning-and-promotion.md) | Dataset at-rest key lifecycle, key rotation, in-place upgrades, rollback, and orphan reconciliation. |
+| &nbsp;&nbsp;↳ [Embed Tokens and Sharing](embed-tokens-and-sharing.md) | Share links, embed tokens, saved views, alerts, effective permissions, usage metrics, and catalog search. |
 | [Quick Start](quick-start.md) | The shortest path to a working Portal: the steps you cannot skip, in order. |
 | [Extended Admin Scripting](scripting.md) | The Portal connector supports script-first administration inside a remote block: |
 | [Security Model](security.md) | For non-interactive API and CLI identities, see Service Accounts. |

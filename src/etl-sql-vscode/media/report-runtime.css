@@ -203,6 +203,17 @@
       color: CanvasText;
     }
   }
+
+  @media print {
+    /* A detail surface is transient screen state anchored to the viewport. Printing with
+       one open would stamp a floating panel over the layout at whatever position it
+       happened to occupy, and would imply the reader can interact with it. Browser-printed
+       PDFs get the same semantic notice the static exporters emit instead. */
+    .report-chart-tooltip,
+    .report-detail-live { display: none !important; }
+
+    .native-chart-wrapper [data-row-index][tabindex] { outline: none !important; }
+  }
   .table-wrapper { overflow: auto; max-height: 500px; display: flex; flex-direction: column; }
   .table-wrapper > table { flex: 1; }
   table { border-collapse: collapse; width: 100%; }
