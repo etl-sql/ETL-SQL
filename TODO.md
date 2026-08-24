@@ -69,6 +69,278 @@ Phase 11 regression.
   [AGENTS.md §17.3](AGENTS.md). Until then the LF branch of that test has effectively never executed
   on Windows, and it reads as a false red to every contributor there.
 
+### Found during the post-Phase 13 declarative-graphics review
+
+Recorded from a read of the shipped contracts, lowerers, renderers, browser runtime, lint rule, and
+designer against `GrammarOfGraphicsSpecIR.md`. None of these are Phase 13 regressions — each is
+either a boundary the program left open or a divergence between shipped behaviour and what the ADR
+and capability matrix claim. Every item names the file and symbol so it can be confirmed before any
+work starts.
+
+#### Payload and footprint
+
+The retirement's headline numbers are real (`docs/benchmarks/reporting-phase8-results.md`: shared
+assets 2.65 MB to 1.56 MB raw, 761 KB to 398 KB gzip; ClearScript's 131 MB multi-RID estimate to
+zero). Per-report payload moved the other way, and nothing measures that.
+
+- [ ] Stop serializing `chartSpec`, `chartData`, and `plotPlan` to browser clients. `VisualManifest`
+  emits all three alongside `rows` and `nativeSvg` (`ReportManifest.cs`, the `chartSpec`/`chartData`/
+  `plotPlan`/`nativeSvg` properties), and `VisualBuilder` populates them on every graphical visual.
+  The browser reads exactly two: `renderNativeSvg` consumes `visual.nativeSvg` and `visual.rows`
+  (`report-runtime.js`), and no runtime path reads `plotPlan` or `chartSpec` at all — the only
+  mention is a comment. Nothing strips them before the manifest is served. That is five
+  representations of one chart on the wire where two are used, and it is why the six representative
+  fixtures record a 155.0 KB combined manifest against an 18.2 KB combined SVG. The trade as shipped
+  exchanged once-cached library bytes for uncached per-report bytes on every report load. Keep the
+  contracts reachable behind an explicit debug/diagnostic flag rather than deleting them, then
+  re-measure end-to-end page weight — manifest plus assets — not shared assets alone.
+- [ ] Add a regression budget for `report-runtime.js`. It was 228,448 bytes immediately before the
+  ECharts retirement (`d9fc135d~1`), 217,299 bytes immediately after, and is 280,472 bytes at
+  `6ccb98d4` — now larger than the file the retirement shrank. `Measure-ReportingBaselines.ps1
+  -CheckOnly` records footprint, but the Phase 8 numbers are a point-in-time observation rather than
+  a gate, so this growth passed unremarked. Gate it the way the engine performance budgets are gated.
+- [ ] Record honestly what still dominates the browser payload. Of the remaining 1.56 MB shared
+  assets, roughly 1.05 MB is `tabulator.min.js` (443 KB) and `arrow.min.js` (166 KB) plus their CSS —
+  neither touched by this program. Any future footprint claim should name them rather than implying
+  the chart runtime is the remaining cost.
+
+#### Shipped behaviour that diverges from the ADR or the capability matrix
+
+- [ ] Give native charts a resize story. The only `ResizeObserver` in the runtime repositions
+  tooltips (`report-runtime.js`). `PlotPlanSvgRenderer` emits a fixed `width`/`height` with a
+  matching `viewBox`, and `.native-chart-wrapper svg` is stretched to `width:100%; height:100%`
+  (`report-runtime.css`). Under the default `preserveAspectRatio` the whole scene scales uniformly
+  and letterboxes, so type and stroke widths scale with the container: labels are unreadable in a
+  narrow card and oversized in a wide one, and the plan is never re-resolved for the actual viewport.
+  ADR section 4 reserves viewport-dependent layout for "explicit backend inputs or bounded backend
+  decisions"; no such input exists today. A debounced re-resolve round trip is the honest fix given
+  server-rendered SVG; nested SVG or `vector-effect` to hold type and strokes at a fixed size is the
+  cheaper interim.
+- [ ] Bring the six specialized visuals under the shared contract, or state plainly in the capability
+  matrix that they are not under it. `SpecializedNativeSvgRenderer` renders TREEMAP, SUNBURST,
+  SANKEY, NETWORK, MAP, and MATRIX directly from `VisualManifest.Rows` with a hardcoded 600x350
+  canvas and its own private `Palette` array — no `PlotPlan`, no shared series colours, no theme
+  tokens. "Approved focused native layout module" in the matrix is accurate but reads as "inside the
+  contract, different layout"; in fact these charts will not match the palette or theme of a
+  `PlotPlan` chart beside them on the same page. That is the "backends repeat decisions" problem the
+  ADR opens by rejecting.
+- [ ] Decide what `native-charts.js` is. `src/ETL-SQL.Portal/wwwroot/js/native-charts.js` is a second
+  charting implementation shaped as an ECharts-compatible shim (`setOption`, `dispatchAction`,
+  `on(...)`, a no-op `resize()`), driving the orchestrator page's Gantt, sparkline, and dependency
+  graph (`orchestrator.html`). It is not in `Resources/Shared/`, not in `scripts/sync-assets.js`, and
+  not in the capability matrix, so it is invisible to every gate this program built. It is documented
+  at `docs/architecture/PortalUI.md` so it is deliberate, but either it becomes a `PlotPlan` consumer
+  or the matrix and the shared-asset boundary should acknowledge that internal operational UI renders
+  charts by a separate path.
+- [ ] Resolve `InteractionSpec` — implement it or remove it. ADR section 3 lists tooltip, selection,
+  action, and interaction semantics as part of the `ChartSpec` contract. `NamedVisualChartLowerer`
+  populates only `InteractionBinding`s and always an empty `Selections` array; `AdvancedChartLowerer`
+  never populates interactions at all; `PlotPlan` does not carry them; no renderer reads them.
+  `SelectionSpec` and `SelectionMode` appear only in `ChartSpec.cs` and one test fixture.
+  Interactions still flow entirely through the pre-GoG `visual.actions`/`visual.interactions`
+  manifest fields. As shipped this is serialized weight that buys nothing and makes the contract look
+  more complete than it is.
+- [ ] Fix cross-filter column selection for layered visuals. `renderNativeSvg` derives the filter
+  column as `options['mapping:x']` falling through a chain of other `mapping:*` keys to
+  `visual.columns[0]` (`report-runtime.js`). `CUSTOM` visuals have no `MAPPINGS` clause and therefore
+  no `mapping:*` options, so every layered chart silently lands on `visual.columns[0]` and
+  cross-filters on whatever column happens to be first. This is the recurring shape where a control
+  exists, looks implemented, and is never asserted end to end. Derive the key from the resolved
+  plan's encodings instead, and add a test that cross-filters a `CUSTOM` chart whose first column is
+  not its X binding.
+- [ ] Remove the renderer's dependence on `visual.visualType`. `applyNativeHighlight` branches on the
+  visual type being `BAR`/`HBAR`/`HORIZONTALBAR` to clone marks and compute partial-height selection
+  overlays in the browser (`report-runtime.js`). ADR section 5.2 states renderers do not inspect
+  layer names or global flags; inspecting the visual's type name to decide geometry is the same
+  failure. The proportional-highlight geometry belongs in the resolved plan, or in a mark attribute
+  the renderer can read without knowing the chart type.
+- [ ] Feed locale, time zone, and null label from configuration. Both lowerers hardcode
+  `new FormattingSpec(CultureInfo.InvariantCulture.Name, "UTC", ...)` (`AdvancedChartLowerer.Lower`,
+  `NamedVisualChartLowerer.Lower`). `FormattingSpec` has the fields and ADR section 5 makes typed
+  temporal values part of the contract; nothing supplies report or portal settings. `CUSTOM`
+  additionally hardcodes its null label to the empty string, so `NULL_LABEL` is honoured on named
+  visuals and silently ignored on advanced ones.
+- [ ] Apply themes to `CUSTOM` charts. `AdvancedChartLowerer` builds `new ThemeSpec(name, [])` — the
+  name with no tokens — while `NamedVisualChartLowerer` calls `BuildStyleTokens(manifest)`. A
+  `CREATE STYLE` theme therefore reaches `BAR` and not `CUSTOM`.
+  `docs/cookbooks/report/themed-dashboard.md` is a headline recipe, which makes this a sharp edge for
+  exactly the authors most likely to hit it.
+
+#### Grammar and authoring
+
+- [ ] Make `RECT` honour author-supplied `Y_START`/`Y_END`, or reject them. The channels parse for any
+  mark (`ReportParser.ParseAdvancedChannel` maps `Y_START`/`Y_END`/`X_START`/`X_END`), and the
+  renderer already consumes resolved interval endpoints — but only when the layer is stacked. Both
+  `RenderRects` and the transposed rect path read `YStart`/`YEnd` under
+  `layer.Stack != StackMode.None` and otherwise force the start endpoint to zero
+  (`PlotPlanSvgRenderer.cs`). `ChartSpec.Validate()` constrains interval pairing for `AREA` and
+  `RULE` only, and `AdvancedChartAuthoringRule` adds nothing for `RECT`. So a ranged bar — a
+  qualitative band, an explicit-bin histogram, a floating variance bar — parses, lints clean, and
+  renders from zero with the author's start endpoint silently discarded. Silent wrong geometry is
+  worse than an unsupported feature: at minimum validate and reject, preferably support it.
+  Supporting it would also let `samples/10_Kitchen_Sinks/39_CUSTOM_LAYERS.rptsql` express its bullet
+  bands as three ranged rects instead of four overlapping full-height rects ordered by `Z_INDEX`.
+- [ ] Decide whether the statistical and financial channels belong in `CUSTOM`.
+  `ReportParser.ParseAdvancedChannel` and `AdvancedChartChannel` expose eighteen channels;
+  `FieldChannel` additionally carries `Low`, `Q1`, `Median`, `Q3`, `High`, `Open`, and `Close`, which
+  `NamedVisualChartLowerer` uses for `BOXPLOT` and `CANDLESTICK`. A hand-composed box plot or
+  candlestick — a candlestick with a volume layer, a box plot with an overlaid mean `TICK` — is
+  therefore not expressible; those charts exist only as sealed presets. Either expose the channels or
+  record in `NativeAdvancedChartAuthoring.md` that statistical and financial composition is
+  deliberately preset-only, so the boundary is a stated decision rather than an apparent omission.
+- [ ] Decide the same for geographic composition. `AdvancedChartCoordinateKind` is `Cartesian`,
+  `TransposedCartesian`, `Polar`; `CoordinateKind` in `ChartSpec` also has `Geographic`. Layered map
+  composition is therefore unavailable to `CUSTOM`, which is why
+  `docs/cookbooks/report/custom-choropleth-point-map.md` presents two independent named `MAP` visuals
+  rather than one layered surface.
+- [ ] Collapse the mirrored enum families, or make the bridge compile-time safe.
+  `AdvancedChartChannel`/`FieldChannel`, `AdvancedChartMarkKind`/`MarkKind`,
+  `AdvancedChartDataKind`/`DataSemanticKind`, and six more pairs are bridged in
+  `AdvancedChartLowerer.InferScales` by `Enum.Parse<T>(value.ToString())`. Adding or renaming a
+  member on one side produces a runtime `ArgumentException`, not a build break.
+  `AdvancedChartAuthoringRule` then re-implements most of `ChartSpec.Validate()` against the parallel
+  AST, so the two rule sets can drift silently. Compounding both: the entire lower/resolve/render
+  sequence in `VisualBuilder` runs inside a broad `catch (Exception ex) { vm.Error = ex.Message; }`,
+  so a drift bug surfaces as an error string inside a rendered report rather than as a diagnostic or
+  a failed build.
+
+#### Published examples
+
+Sharing a chart is meant to be "here is the script" — no gallery and no marketplace feature, which is
+the deliberate simplification against tools like Power BI. That makes the published examples the
+whole distribution mechanism, so their accuracy carries the weight a feature would.
+
+- [ ] Correct or rename the two cookbook pages published as declarative-graphics recipes that contain
+  no `CHART (` block: `docs/cookbooks/report/custom-choropleth-point-map.md` and
+  `docs/cookbooks/report/custom-alluvial-flow-composition.md`. Both are ordinary named visuals, both
+  carry the `custom-` prefix, and both shipped in `1888d892` alongside the two that do use the
+  grammar. An author who copies them to learn the grammar learns nothing about it. Either rewrite
+  them against the grammar or drop the prefix and the framing.
+- [ ] Anchor advanced-chart diagnostics to the offending node. `AdvancedChartAuthoringRule.Add`
+  hardcodes `LineNumber = visual.Line, ColumnNumber = visual.Column` for every one of its checks, so
+  all ~20 diagnostics mark the `CREATE VISUAL` header. The messages name the offender well ("Layer
+  'margin_points' references undeclared scale 'margin'"), but on a multi-layer chart such as
+  `samples/10_Kitchen_Sinks/39_CUSTOM_LAYERS.rptsql` every error in a ~50-line statement squiggles
+  its first line. `AdvancedChartLayer`, `AdvancedChartScale`, and `AdvancedChartEncoding` all inherit
+  `AstNode` and so already have somewhere to carry position, but `ReportParser` constructs all three
+  without setting it, so the fix is two steps: stamp source position in the parser, then pass the
+  offending node into `Add` instead of the statement. This is the highest-value item for the
+  script-first loop, because in that loop the editor diagnostic — not the designer — is how an author
+  finds a mistake. It also unblocks hover and go-to-definition on scale references, which cannot work
+  while these nodes have no position.
+- [ ] Report every duplicate, not the first. `AdvancedChartAuthoringRule.Duplicate` takes
+  `FirstOrDefault` of the grouped duplicates, so an author fixing one duplicate layer or scale name
+  has to re-run to discover the next. One-line change; it removes a stutter from the write/preview
+  iteration.
+- [ ] Close the gap where a chart fails with no editor diagnostic at all. Semantic failures the lint
+  rule does not model — the `Enum.Parse` bridge in `AdvancedChartLowerer.InferScales`, conflicting
+  inferred scales — escape to `VisualBuilder`'s broad `catch (Exception ex) { vm.Error = ex.Message; }`
+  and surface only as a string painted inside the rendered visual, carrying no position. Preview then
+  reports a problem the editor is silent about. Either mirror these checks into the lint rule or give
+  the thrown diagnostics a source position that the preview surface can report back.
+- [ ] Treat a Report Builder `CHART` editor as a future goal, not a gap. `CUSTOM` is absent from the
+  designer's visual-type registry (`designer.js`, `VCATEGORIES`), and
+  `DesignerScriptPatcher.PatchElementStatement` skips the `CHART` clause outright — "Advanced
+  authoring is deliberately opaque until the designer has a dedicated CHART editor." For a
+  script-first language that is the right default: authors compose the grammar in SQL and verify
+  through report preview, so the preview loop above is what needs to be good. Recorded here only so
+  the omission reads as a decision. If it is ever revisited, listing the type and rendering a live
+  preview — with the clause still byte-preserved on mutation — is the increment that pays first.
+
+#### Golden output coverage for `CUSTOM` charts
+
+Standard visuals are pinned by SVG hash in `NativeSvgGeometryGoldenTests.RepresentativeGoldens` —
+eight fixtures under `tests/fixtures/reporting/conformance/`. `CUSTOM` has no equivalent.
+`AdvancedChartProductionTests` is 22 tests of contract properties (`Assert.Equal(.4m, ...YEnd)`,
+`Assert.Equal(BindingSourceKind.Datum, ...)`) and pins no output at all, so a renderer change that
+shifts every advanced-chart mark, or drops a layer, passes the whole file green. The single `CUSTOM`
+fixture in the corpus, `custom_ordinal_secondary_points.rptsql`, is consumed by
+`StandardCatalogCartesianMigrationTests`, not by a golden. Build the lane once, for both catalogs.
+
+- [ ] Pin two hashes per fixture, not one: the resolved `PlotPlan` and the rendered SVG, compared
+  independently. A single SVG hash reports that something moved but cannot separate a broken chart
+  from a nudged label. With both, a plan hash that holds while the SVG hash moves is a pure rendering
+  change to review, and a plan hash that moves is a semantic regression to stop on. The plan hash is
+  the durable gate: `PlotPlan.Validate()` already enforces deterministic series, legend, and layer
+  ordering, and `ChartContractSerializer` already carries stable-serialization coverage from
+  `GrammarOfGraphicsContractTests`.
+- [ ] Commit the artifacts, not only their hashes. The current goldens store bare SHA-256 strings in a
+  C# dictionary, so when one moves the diff reads `AE3BF4... -> 7C21B9...` and a reviewer can only
+  trust it or reproduce it by hand — a hash change is not reviewable. Check in the SVG and the
+  serialized plan beside each fixture and keep the hash as the fast comparison. The entire
+  representative SVG set is 18.2 KB, so the cost is negligible and blessing becomes a diff a human can
+  open in a browser.
+- [ ] Discover fixtures from the directory and drive them with `[Theory]`/`MemberData`, so adding a
+  chart means adding files rather than editing C#, and so each fixture reports as its own test result.
+  `RepresentativeNativeSvg_GeometryMatchesApprovedGoldens` currently folds all eight fixtures into one
+  `Assert.True` with a joined string, which reports "something moved" instead of naming the chart.
+- [ ] Migrate the eight existing standard-catalog fixtures onto the same harness rather than standing
+  up a parallel `CUSTOM`-only lane. Items two and three are improvements the standard goldens want on
+  their own merits, and one harness keeps the two catalogs from drifting into different definitions of
+  "pinned".
+- [ ] Choose the `CUSTOM` corpus to cover what the grammar reaches and named visuals cannot, since
+  that is the uncovered surface: encoding inheritance and `INHERIT_ENCODINGS = OFF`, `DATUM` and
+  `VALUE` bindings, `CONDITIONS`, `STACK = NORMALIZE`, jitter and nudge placement, `FACET WRAP`,
+  `ASPECT_RATIO`, quantitative color ranges, and `TICK`. Jitter especially — it is SHA-256 over
+  semantic layer placement, stable key, channel, and seed, so it is deterministic by construction and
+  therefore exactly the kind of property that degrades silently. Pin the terminal render and the
+  `SemanticFallback` from the same fixtures too; both consume the same plan and neither has `CUSTOM`
+  coverage today.
+- [ ] Record the determinism precondition the SVG lane depends on, and keep it enforced. Native SVG is
+  currently hash-stable across platforms because `PlotPlanSvgRenderer` emits no timestamp, GUID, or
+  `CurrentCulture` formatting and uses a generic `sans-serif` family with no text measurement. ADR
+  section 8.2 explicitly permits text measurement "where needed"; the day that option is taken, SVG
+  hashes become font- and platform-dependent and the lane goes flaky between developer machines and
+  CI. Design for it now — the plan hash stays the durable gate, and if text measurement lands the SVG
+  lane needs pinned metrics or must become advisory. Add an assertion that the rendered SVG contains
+  no locale- or clock-derived text so the precondition cannot regress unnoticed.
+- [ ] Provide blessing under the existing convention — an `-UpdateGolden` switch matching
+  `Test-SpillAllocProfile.ps1 -UpdateBudget` — and make the refreshed artifacts, not just the hashes,
+  the thing that lands in the commit.
+
+
+#### A learning path from named visuals into `CUSTOM`
+
+`docs/guides/reporting/` carries `vega-lite-to-etl-sql.md` and `ggplot2-to-etl-sql.md` — two on-ramps
+for authors arriving from another grammar — and nothing for an author arriving from ETL-SQL's own
+named visuals, which is the common direction. `docs/reference/visuals-reporting/visuals/chart.md` is
+114 lines with a single heading, a syntax dump rather than a tutorial, and both `CUSTOM` samples
+(`samples/10_Kitchen_Sinks/39_CUSTOM_LAYERS.rptsql`,
+`samples/08_Reporting/declarative_geometry_refinements.rptsql`) open at full complexity. A reader has
+a reference and two finished showpieces with no path between them. Sequence this with the golden
+coverage item above; it depends on the same harness.
+
+- [ ] Build the progression as a numbered sample under `samples/08_Reporting/`, with a guide that
+  walks it. The sample is the source of truth: `Test-AllSamples.ps1` parses and runs samples, whereas
+  doc snippets rely on `DocumentationSyntaxTests`, which is currently red and silently mis-scoping
+  indented fences (see the Phase 11 item above). Place the prose as a guide, not under
+  `docs/reference` — reference is the embedded runtime help keyed on keywords, and this is a tutorial.
+- [ ] Frame every named-visual translation as a Rosetta stone, never as a recommendation. A `BAR`
+  written as `CUSTOM` is something no one should ship, and on this codebase it is strictly worse than
+  `BAR`: the advanced path drops theme tokens, ignores `NULL_LABEL`, and falls through to
+  `visual.columns[0]` for cross-filtering. Unframed, this teaches authors to reimplement named visuals
+  badly and to file the resulting gaps as bugs. Say plainly at each step that the named visual already
+  does this.
+- [ ] Make each step add exactly one concept, and end the progression past the boundary where no named
+  visual can follow — the crossing point is the lesson, not the translation. A workable spine: one
+  `RECT` layer as `BAR`; add a `RULE` target, noting `BAR` plus an overlay still covers it; add a
+  second scale and a `POINT` layer, noting that this is `COMBO`; then add qualitative bands behind the
+  bar to reach a bullet chart, which has no named equivalent. The reader watches the exact edit where
+  `CUSTOM` starts paying for itself.
+- [ ] Assert the translations rather than asserting them in prose. `NamedVisualChartLowerer` already
+  lowers `BAR` into a `ChartSpec`, so each named/`CUSTOM` pair can ship as two fixtures whose resolved
+  plans are compared by the golden harness. The teaching claim then becomes a test that cannot rot
+  when the lowerer changes. Scope the comparison to resolved layers, scales, palette, and data:
+  whole-plan equality will not hold today because named lowering sets per-type null policy, real style
+  tokens from `BuildStyleTokens`, and interaction bindings while `AdvancedChartLowerer` hardcodes empty
+  theme tokens and an empty null label. Treat those divergences as the punch list already filed above,
+  not as test noise.
+- [ ] State what an author gives up by choosing `CUSTOM`: theming, `NULL_LABEL`, Report Builder
+  visibility, and cross-filter column inference. Authors hit these regardless; documenting them as a
+  known trade beats discovering them, and it keeps pressure on closing them. Revisit this list as those
+  items are fixed so the guide does not outlive the limitation.
+
+
 ## Reporting and Authoring Critical Path
 
 ### Phase 1 — Lossless Report Builder Editing (Gate Zero)
@@ -861,16 +1133,16 @@ partial, stale, or unfenced artifact state.
 
 ### Platform Phase 2 — Tenant Portability Correctness and Scale
 
-- [ ] Define and implement a declared cross-system export consistency point.
-- [ ] Fence cutover and prevent duplicate schedules or retained execution authority.
-- [ ] Complete the eligible artifact/content inventory and reconcile stable IDs, counts, hashes,
+- [x] Define and implement a declared cross-system export consistency point.
+- [x] Fence cutover and prevent duplicate schedules or retained execution authority.
+- [x] Complete the eligible artifact/content inventory and reconcile stable IDs, counts, hashes,
   ownership, ACLs, and explicit exclusions.
-- [ ] Add resumable, chunked large-content export/import using the object-native storage contract.
-- [ ] Package a standalone validator that remains usable with customer-held keys after source access
+- [x] Add resumable, chunked large-content export/import using the object-native storage contract.
+- [x] Package a standalone validator that remains usable with customer-held keys after source access
   is gone.
-- [ ] Add incremental deltas only after full-export consistency and completeness are certified.
-- [ ] Optimize cross-provider performance only after correctness and resumability evidence passes.
-- [ ] Certify hostile Shared-source isolation independently from the already-shipped Managed Dedicated
+- [x] Add incremental deltas only after full-export consistency and completeness are certified.
+- [x] Optimize cross-provider performance only after correctness and resumability evidence passes.
+- [x] Certify hostile Shared-source isolation independently from the already-shipped Managed Dedicated
   export/exit evidence.
 
 **Exit gate:** Concurrent export and cutover produce a declared, reconcilable consistency point;
