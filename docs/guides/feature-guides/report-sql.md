@@ -624,6 +624,52 @@ CREATE NAVIGATION MainNav AS TAB (
 
 ---
 
+## Tooltips and Detail Popovers
+
+A `TOOLTIP` clause attaches a detail surface to a visual, page, container, or button. There are two,
+and which one you get is decided by what the clause carries rather than by an extra keyword.
+
+- `TOOLTIP = '<text>'` is a **transient tooltip**. It appears on hover and on keyboard focus, is
+  never focusable, and holds nothing interactive.
+- `TOOLTIP = <container>` and `TOOLTIP (..., VISUALS (...))` are **detail popovers**. They can hold
+  formatted content and whole visuals, including a chart driven by the row the reader activated. A
+  fine pointer gets a hover preview; click, tap, `Enter`, or `Space` pins the popover open. `Escape`
+  closes it and returns focus to the mark.
+
+Marks that expose detail are keyboard reachable and carry an accessible name, so nothing in a report
+is available by hover alone.
+
+```sql
+-- The detail chart reads the activated row through @hover_value
+CREATE VISUAL MonthDetail AS BAR (
+    SOURCE = (SELECT Region, Revenue FROM #sales WHERE Month = @hover_value),
+    TITLE = 'Regional Detail for ' + ISNULL(@hover_value, 'Selected Month'),
+    MAPPINGS (X = Region, Y = Revenue)
+);
+
+CREATE CONTAINER TooltipBox AS BOX (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = MonthDetail))
+);
+
+CREATE VISUAL BarWithTooltip AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    MAPPINGS (X = Month, Y = Revenue),
+    TOOLTIP = TooltipBox
+);
+```
+
+Two rules are worth knowing before you author one:
+
+- The row value that reaches `@hover_value` must come from an explicitly declared `X`, `LABEL`,
+  `NAME`, `REGION`, or `Y` mapping, and must not be a secret-bearing column. Both are checked when
+  the report is built.
+- PDF, print, Markdown, email, and terminal output cannot be hovered, so they print
+  `Interactive detail available in browser: <visuals>.` instead of expanding the popover. They never
+  claim hover is available.
+
+See the [TOOLTIP reference](../../reference/visuals-reporting/report/tooltip.md) for the full syntax,
+the limits, and the accessibility contract.
+
 ## Native Card and Table Micro-Charts
 
 Micro-charts use the same typed `ChartSpec`, `ChartDataSet`, and resolved `PlotPlan` contracts as the

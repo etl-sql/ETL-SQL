@@ -346,6 +346,9 @@ public static class DetailSurfaceResolver
 
         if (mapping == null)
         {
+            // COMPAT_BREAK: 0.19 — the browser previously fell back to the first column when
+            // no row-context role was mapped. An implicit choice is not a decision about what
+            // is safe to disclose, so the fallback is removed.
             diagnostics.Add(new DetailSurfaceDiagnostic(
                 DetailSurfaceDiagnostics.MissingRowContext,
                 DetailSurfaceSeverity.Error,

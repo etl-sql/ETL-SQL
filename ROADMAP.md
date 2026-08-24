@@ -282,27 +282,31 @@ template examples.
 
 ### Reporting & Interaction — Visual Detail Popovers
 
-**Status:** Exploring  
-**Horizon:** Later  
-**Authoritative design:** Not yet decided
+**Status:** Shipped in v0.19.0
 
-Charts may expose rich formatted detail and small semantic micro-charts on click, focus, or hover
-without turning popovers into recursively embedded dashboards.
+A `TOOLTIP` clause attaches one of two detail surfaces. A transient tooltip carries text, is never
+focusable, and holds nothing interactive. A detail popover carries formatted content and whole
+visuals — including a chart driven by the row the reader activated — and is opened by hover preview,
+click, tap, or keyboard, then pinned until dismissed.
 
-**Why now:** Useful polish after core chart and parameter interactions are stable.
+**What shipped:** One shared browser controller across the supported chart adapters, with anchor-based
+flip/shift placement, `Escape`/outside-click/toggle dismissal with focus return, generation-fenced
+refreshes, and correct `role="tooltip"` versus labelled-dialog semantics. Static resolution of every
+tooltip target with `RPT2101`–`RPT2114` diagnostics covering missing references, cycles, nesting,
+depth, node, refresh-work, payload, and per-report budgets. A row-context contract that admits only
+an explicitly mapped, non-secret column into `@hover_value`. One semantic fallback wording shared by
+PDF, print, Markdown, email, terminal, plain text, and snapshots, which never implies hover is
+available.
 
-**Boundaries:** Start with visual targets, formatted text, and bounded micro-charts. Every hover
-interaction needs touch, keyboard, terminal, export, email, and assistive-technology behavior.
-Container targets and arbitrary nested visuals are excluded initially.
+**Boundaries held:** A detail surface cannot open another detail surface or recursively embed a
+dashboard, and every limit fails the build rather than rendering a partial surface.
 
-**Dependencies:** GoG tooltip semantics, native micro-charts, parameter-cycle detection, accessibility
-contracts, and payload budgets.
+**Evidence:** 36 browser tests (behaviour, geometry, performance) driving the canonical runtime,
+plus parser/formatter round trips, static-safety and budget boundaries at limit-1/limit/limit+1,
+manifest version compatibility, rename, and designer round trips. Measured on the kitchen-sink
+fixture: transient open 50.9 ms, refresh completion 65.3 ms, reposition 26.8 ms, dismissal 3.5 ms.
 
-**Delivery slices:** Formatted text; click/focus detail popovers; one bounded micro-chart; only then
-evaluate broader target types.
-
-**Acceptance evidence:** Keyboard/touch/accessibility tests, cycle and payload enforcement, viewport
-positioning fixtures, and measured performance on a defined report fixture.
+**Reference:** [`TOOLTIP`](docs/reference/visuals-reporting/report/tooltip.md).
 
 ---
 

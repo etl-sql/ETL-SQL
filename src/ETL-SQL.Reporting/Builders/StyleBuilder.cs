@@ -173,6 +173,9 @@ namespace ETL_SQL.Reporting.Builders
             var resolved = DetailSurfaceResolver.Resolve(
                 ownerObject, tooltip, visuals, containers, diagnostics, ownerVisual);
 
+            // COMPAT_BREAK: 0.19 — an unresolvable, cyclic, nested, or over-budget detail
+            // surface previously produced a manifest that every renderer ignored, so the
+            // report published and the tooltip simply never appeared. It now fails closed.
             var error = diagnostics.FirstOrDefault(d => d.Severity == DetailSurfaceSeverity.Error);
             if (error != null)
                 throw new ExecutionException($"[{error.Code}] {error.Message}");

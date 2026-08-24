@@ -1376,6 +1376,7 @@ public static class AstSerializer
         sb.AppendLine($"{CreationVerb(s.Mode)} VISUAL {s.Name} AS {s.VisualType.ToString().ToUpper()} (");
         if (s.Title != null) sb.AppendLine($"    TITLE = {s.Title.ToSql()},");
         if (s.Subtitle != null) sb.AppendLine($"    SUBTITLE = {s.Subtitle.ToSql()},");
+        // COMPAT_BREAK: 0.19 — formatted output for a visual with a TOOLTIP changes.
         // Detail surfaces are formatted here for the same reason pages, containers, and buttons
         // format theirs: omitting the clause silently deletes the author's tooltip on the next
         // format pass. Visuals were the one CREATE that dropped it.

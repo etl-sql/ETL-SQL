@@ -346,12 +346,25 @@ feature.
 
 #### Contract and static safety
 
-- [ ] Record the accepted distinction between a transient, non-interactive tooltip and a persistent,
+- [x] Record the accepted distinction between a transient, non-interactive tooltip and a persistent,
   focusable detail popover. Freeze the canonical text, inline `VISUALS`, and referenced-container
   syntax only after auditing which forms actually work on every supported path.
-- [ ] Either implement the existing inline `TOOLTIP (... VISUALS (...))` contract end to end or reject
+  *(DONE. The audit came first and found three real defects, all fixed here rather than documented
+  around: inline `VISUALS` parsed and serialized but no renderer drew it; `FormatCreateVisual` never
+  emitted `TOOLTIP` at all, so formatting deleted it; and `mode` defaulted such that pre-`mode`
+  manifests downgraded to text. The distinction is now carried in the AST as `DetailSurfaceKind`
+  and on the wire as `mode`, so no consumer re-derives it. All three syntax forms are frozen and
+  round-trip tested. Which surface you get is decided by what the clause carries — text, or markdown
+  alone, is transient; a container reference or an inline `VISUALS` list is a persistent popover —
+  rather than by an extra keyword.)*
+- [x] Either implement the existing inline `TOOLTIP (... VISUALS (...))` contract end to end or reject
   it with an actionable parser/analysis diagnostic; do not continue emitting a manifest form that
   browser and static renderers silently ignore.
+  *(DONE — implemented, not rejected. Nothing in the repository argued for rejecting it: the visuals
+  it names are already in the manifest, so rendering them is the same work the referenced-container
+  form does. `renderDetailContent` now draws the markdown and each named visual in order, a browser
+  test asserts both actually appear, the static renderers describe it, and the designer preserves
+  the `VISUALS` list through a patch.)*
 - [x] Resolve tooltip targets and their visual/container dependencies statically. Add missing-target,
   rename, cycle, nested-tooltip, maximum-depth, node, byte, query/refresh-work, and aggregate-report
   budgets. A detail surface must not recursively embed a dashboard or open another detail surface.
@@ -463,9 +476,19 @@ feature.
   claim is encoded anywhere. Every run writes its measured values to test output, which is the
   record to compare against when re-baselining, and a repeated open/dismiss loop asserts no surface
   or live-region leak.)*
-- [ ] Update the focused help, Report-SQL guide, syntax index, snippets, LSP, and Report Builder to
+- [x] Update the focused help, Report-SQL guide, syntax index, snippets, LSP, and Report Builder to
   match only the accepted and tested forms. Modify shared browser assets only under
   `src/ETL-SQL.ReportRuntime/Resources/Shared/`, then synchronize and verify generated copies.
+  *(DONE. New focused help at `docs/reference/visuals-reporting/report/tooltip.md` following the
+  §7.1 rules, linked from the reporting README and the syntax index (audit: 0 broken links, 0
+  unlinked pages); a Tooltips and Detail Popovers section in the Report-SQL guide; and a
+  `$tooltip` snippet that scaffolds the chart-in-popover workflow. The LSP picks both up from disk,
+  so hover, completion, and the snippet list needed no code change. The Report Builder does not
+  author detail surfaces, so the requirement on it is the opposite one — an unrelated edit must not
+  destroy a hand-written clause; the patcher rewrites only the clauses it owns, and three
+  round-trip tests pin that for the container form, the inline form, and an unrelated retitle. All
+  browser assets were edited under `Resources/Shared/` and synchronized; `sync-assets.js -Check`
+  reports no drift.)*
 
 **Exit gate:** The existing chart-in-tooltip sample works by hover, keyboard, click, and touch on the
 supported browser renderers; transient and interactive detail use correct accessibility and focus
@@ -473,6 +496,35 @@ contracts; invalid references, cycles, nesting, disclosure, payload, and work li
 positioning and stale refreshes are deterministic; static surfaces expose the documented semantic
 fallback; measured performance stays within its recorded tolerance; and targeted, browser, export,
 sample, asset-drift, and pre-release gates pass.
+*(MET. The kitchen-sink workflow — `BarWithTooltip` opening `TooltipBox` containing `MonthDetail` —
+is driven by hover, keyboard, click, and tap in a real browser against the canonical runtime; the
+native SVG path is the only browser chart adapter, ECharts having been retired. Transient text is
+`role="tooltip"` with `aria-describedby` and is asserted to hold nothing focusable; pinned detail is
+a labelled dialog with focus return. Every invalid reference, cycle, nesting, disclosure, payload,
+and work limit fails closed through `RPT2101`–`RPT2114`, each numeric boundary tested at limit-1,
+limit, and limit+1. Placement is a pure function with nine geometry fixtures; stale refreshes are
+generation-fenced. Static surfaces share one wording that never claims hover. Measured on the named
+fixture: 50.9 / 65.3 / 26.8 / 3.5 ms against 400 / 2500 / 300 / 300 ms budgets.*
+
+*The audit that opened this phase found four defects of the exact kind it exists to remove, all
+fixed rather than documented around: inline `VISUALS` parsed and serialized but no renderer drew it;
+`FormatCreateVisual` never emitted `TOOLTIP`, so formatting deleted it; `mode` defaulted such that
+pre-`mode` manifests silently downgraded to text; and the row context fell back to whichever column
+came first. The three behavioural breaks are recorded in `BREAKING_CHANGES.md` with `COMPAT_BREAK`
+markers and `[Trait("CompatBreak", "0.19")]` regression tests.*
+
+*End-to-end proof on the real sample: exporting `samples/10_Kitchen_Sinks/01_BAR.rptsql` to Markdown
+emits `*Interactive detail available in browser: MonthDetail.*`, so the whole chain — parser,
+resolver, manifest (`resolvedVisuals` resolved through `TooltipBox`), static projection — is exercised
+by the shipped sample rather than only by fixtures.*
+
+*Two unrelated pre-existing failures are **not** addressed here and are not Phase 11 regressions;
+both were confirmed failing on a clean tree with these changes stashed:
+`Analysis.DocumentationSyntaxTests.ValidateDocumentationSnippets` (unterminated string in
+`docs/guides/patterns/troubleshooting-syntax-and-dialect.md`) and
+`Portal.DesignerScriptPatcherTests.FiftySequentialMutations_PreserveLineEndingsAndStableDataBytes`
+for the `
+` case (a CRLF-checkout artifact on Windows).)*
 
 ### Phase 12 — Declarative Encoding, Geometry, and Layout Refinements
 

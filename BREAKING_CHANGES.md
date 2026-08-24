@@ -17,6 +17,27 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.19.0 — Semantic: Invalid detail surfaces (TOOLTIP) now fail the build
+- **What changed**: A `TOOLTIP` clause whose target could not be resolved — a missing container or visual, a container cycle, a nested detail surface, or a surface over its depth/visual/node/refresh/payload budget — previously still produced a manifest, which every renderer then ignored. The report published and the tooltip simply never appeared. Manifest building now rejects the report with an `RPT21xx` diagnostic instead.
+- **Who is affected**: Reports whose `TOOLTIP` clause already pointed at something that does not exist or cannot be rendered. Such a report was already not showing its tooltip; the change is that the failure is now reported instead of silent.
+- **Migration**: Correct or remove the named target. The diagnostic names the offending object and what to do about it.
+- **Diagnostic**: `RPT2101`–`RPT2110` (missing container, missing visual, cycle, nested surface, depth, visual count, node count, refresh-query count, payload bytes, per-report surface count).
+- **Earliest removal**: Immediate.
+
+### v0.19.0 — Semantic: Detail popovers require an explicit, non-secret row-context mapping
+- **What changed**: Opening a detail popover pushes one value from the activated row into `@hover_value`. The browser previously fell back to the first column when the visual declared none of the row-context mapping roles. That fallback is removed, and a secret-bearing column is now rejected outright.
+- **Who is affected**: Visuals with a container or inline-`VISUALS` `TOOLTIP` that declare none of `X`, `LABEL`, `NAME`, `REGION`, or `Y` in `MAPPINGS`, or that map a column whose name indicates a credential.
+- **Migration**: Add one of the row-context mapping roles naming the column that should reach `@hover_value`. If that column is secret-bearing, map a non-secret identifier or label instead; secret values must not reach refresh parameters, manifests, URLs, accessibility text, snapshots, or exports.
+- **Diagnostic**: `RPT2114` (no explicit row-context mapping), `RPT2111` (secret-bearing column).
+- **Earliest removal**: Immediate.
+
+### v0.19.0 — Semantic: The formatter no longer deletes a visual's TOOLTIP clause
+- **What changed**: `CREATE VISUAL` formatting omitted the `TOOLTIP` clause entirely, so formatting a report silently deleted the author's detail surface. Pages, containers, and buttons already formatted theirs. The clause is now emitted.
+- **Who is affected**: Anyone who formats a `.rptsql` file containing a visual with a `TOOLTIP` — through the LSP, the designer, or `AstSerializer` directly. Formatted output changes, and previously lost clauses are now preserved.
+- **Migration**: None. This restores authored content that was being discarded; re-add any `TOOLTIP` clause an earlier format pass removed.
+- **Diagnostic**: N/A — detectable only by comparing formatted output against the source.
+- **Earliest removal**: N/A.
+
 ### v0.17.0 — Connector: SFTP rejects unpinned host keys by default
 - **What changed**: The SFTP connector previously connected and logged a warning when `HOST_KEY_FINGERPRINT` was unset, trusting whatever host key the server presented. It now rejects the connection unless the new `ALLOW_UNPINNED_HOST_KEY` option is set to `TRUE`. A fingerprint that is set but does not match is still rejected, as before.
 - **Who is affected**: Scripts using the `SFTP` (or `SSH`) connector without `HOST_KEY_FINGERPRINT`.

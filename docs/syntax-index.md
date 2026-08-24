@@ -901,7 +901,7 @@ ETL-SQL statements rather than hidden inside the visual declaration.
 | `FORMATTING` | `FORMATTING ( expr THEN color, ... )` | Conditional formatting rules |
 | `OVERLAYS` | `OVERLAYS ( Type AS Style, ... )` | Trend lines, goals, and averages |
 | `SUMMARY` | `SUMMARY ( Agg(Col), ... )` | Table footer/total summaries |
-| `TOOLTIP` | `TOOLTIP = ... / ( ... )` | Custom hover information |
+| `TOOLTIP` | `TOOLTIP = ... / ( ... )` | [Transient tooltip or focusable detail popover](reference/visuals-reporting/report/tooltip.md) |
 | `MIN` / `MAX` | `MIN = n, MAX = n` | Range limits for controls |
 | `DECIMALS` | `DECIMALS = n` | Numeric precision |
 | `PLACEHOLDER` | `PLACEHOLDER = '...'` | Empty state text |
