@@ -9,7 +9,28 @@ namespace ETL_SQL.Reporting.Authoring;
 public sealed record DesignerAuthoringState(
     List<DesignerAuthoringPage> Pages,
     List<DesignerAuthoringDataset> Datasets,
-    DesignerAuthoringReportStyle? ReportStyle = null);
+    DesignerAuthoringReportStyle? ReportStyle = null,
+    List<DesignerAuthoringBookmark>? Bookmarks = null);
+
+/// <summary>
+/// One author bookmark as the designer edits it. Values are carried as the authored source text
+/// (<c>'West'</c>, <c>25</c>, <c>TRUE</c>) rather than as strings, so a number never round-trips into a
+/// quoted string — the same typed contract the parser and formatter hold.
+/// </summary>
+public sealed record DesignerAuthoringBookmark(
+    string Id,
+    string Name,
+    string? Title = null,
+    string? Page = null,
+    bool IsDefault = false,
+    List<DesignerAuthoringBookmarkParameter>? Parameters = null,
+    List<DesignerAuthoringBookmarkState>? State = null);
+
+/// <summary><c>@Name = &lt;value expression&gt;</c> inside a bookmark's PARAMETERS clause.</summary>
+public sealed record DesignerAuthoringBookmarkParameter(string Name, string Value);
+
+/// <summary><c>ObjectName.VISIBLE|COLLAPSED = ON|OFF</c> inside a bookmark's STATE clause.</summary>
+public sealed record DesignerAuthoringBookmarkState(string ObjectName, string Property, bool On);
 
 public sealed record DesignerAuthoringReportStyle(
     string? Theme = null,

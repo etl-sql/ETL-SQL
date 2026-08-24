@@ -56,6 +56,7 @@ public sealed class DesignerScriptPatcher
             .ToList();
         PatchElements(script, ast, visuals, lineEnding, replacements);
         PatchPages(script, ast, state.Pages ?? [], lineEnding, replacements);
+        PatchBookmarks(script, ast, state.Bookmarks, lineEnding, replacements);
 
         return ApplyReplacements(script, replacements);
     }
@@ -132,6 +133,56 @@ public sealed class DesignerScriptPatcher
             insertAt,
             insertAt,
             suffix + string.Join(lineEnding + lineEnding, additions) + lineEnding + lineEnding));
+    }
+
+    /// <summary>
+    /// Reconciles author bookmarks. A null <paramref name="bookmarks"/> means "this designer does not
+    /// edit bookmarks" and leaves every existing <c>CREATE BOOKMARK</c> untouched — an older client
+    /// that cannot represent them must never delete them by omission. An empty list is an explicit
+    /// "no bookmarks" and does remove them.
+    /// </summary>
+    private static void PatchBookmarks(
+        string script,
+        Script ast,
+        IReadOnlyList<DesignerAuthoringBookmark>? bookmarks,
+        string lineEnding,
+        List<SpanReplacement> replacements)
+    {
+        if (bookmarks is null) return;
+
+        var existing = ast.Statements.OfType<CreateBookmarkStatement>()
+            .GroupBy(statement => statement.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var desiredNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var additions = new List<string>();
+
+        foreach (var bookmark in bookmarks)
+        {
+            var desired = DesignerScriptGenerationService.GenerateBookmark(bookmark, lineEnding);
+            if (desired.Length == 0) continue;
+            var name = DesignerScriptGenerationService.SanitizeName(bookmark.Name, bookmark.Id);
+            desiredNames.Add(name);
+
+            if (existing.TryGetValue(name, out var statement))
+                AddStatementReplacementIfChanged(script, statement, desired, replacements);
+            else
+                additions.Add(desired);
+        }
+
+        foreach (var (name, statement) in existing)
+            if (!desiredNames.Contains(name))
+                replacements.Add(DeletionReplacement(script, statement));
+
+        if (additions.Count == 0) return;
+
+        // Bookmarks reference pages and named objects, so a new one is appended after everything
+        // already declared rather than spliced into the middle of the presentation block.
+        var insertAt = script.Length;
+        var prefix = script.EndsWith(lineEnding, StringComparison.Ordinal) ? lineEnding : lineEnding + lineEnding;
+        replacements.Add(new SpanReplacement(
+            insertAt,
+            insertAt,
+            prefix + string.Join(lineEnding + lineEnding, additions) + lineEnding));
     }
 
     private static void PatchElements(

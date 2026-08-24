@@ -3805,6 +3805,12 @@ export function createDesigner(container, opts = {}) {
             <div id="dsgn-ds-list"></div>
         </div>
         <div class="etlsql-dsgn-section">
+            <div class="etlsql-dsgn-section-hdr">
+                Bookmarks <button class="etlsql-dsgn-section-action" id="dsgn-add-bookmark" type="button">+ Add</button>
+            </div>
+            <div id="dsgn-bookmark-list"></div>
+        </div>
+        <div class="etlsql-dsgn-section">
             <div class="etlsql-dsgn-section-hdr">On This Page</div>
             <div id="dsgn-tree"></div>
         </div>
@@ -4564,6 +4570,7 @@ export function createDesigner(container, opts = {}) {
         renderCanvas();
         renderTree();
         renderDatasets();
+        renderBookmarks();
         renderProps();
         syncScriptFromGridDebounced();
     }
@@ -4717,6 +4724,106 @@ export function createDesigner(container, opts = {}) {
         state.datasets.push({ id: 'ds_' + uid(), name: name.trim(), query: 'SELECT 1 AS Placeholder' });
         renderDatasets();
         renderProps();
+    }
+
+    // ── Author bookmarks ─────────────────────────────────────────────────────
+    // Bookmarks are shared, source-controlled report state — the author's counterpart to a reader's
+    // private saved view. The designer edits them as a list; the server patches only the matching
+    // CREATE BOOKMARK statement, so everything else in the script stays where the author put it.
+
+    function bookmarkList() {
+        // Undefined means "never loaded"; the patcher reads that as "leave existing bookmarks alone".
+        // Only materialize the array once the author actually edits one.
+        return Array.isArray(state.bookmarks) ? state.bookmarks : [];
+    }
+
+    function renderBookmarks() {
+        const list = sidebar.querySelector('#dsgn-bookmark-list');
+        if (!list) return;
+        list.innerHTML = '';
+        const bookmarks = bookmarkList();
+        if (!bookmarks.length) {
+            list.innerHTML = '<div class="etlsql-dsgn-sidebar-empty"><strong>No bookmarks yet</strong>'
+                + '<span>Capture a page and its parameters as a named view readers can jump to.</span></div>';
+            return;
+        }
+        for (const bm of bookmarks) {
+            const row = document.createElement('div');
+            row.className = 'etlsql-dsgn-ds-block';
+            const label = bm.title || bm.name;
+            const page = bm.page ? ` → ${esc(bm.page)}` : '';
+            row.innerHTML = `
+                <div class="etlsql-dsgn-ds-item">
+                    <span title="${esc(bm.name)}">${bm.isDefault ? '★ ' : ''}${esc(label)}${page}</span>
+                    <span>
+                        <button data-bmedit="${esc(bm.id)}" type="button" title="Edit ${esc(bm.name)}"
+                                aria-label="Edit bookmark ${esc(bm.name)}">✎</button>
+                        <button data-bmdefault="${esc(bm.id)}" type="button"
+                                title="${bm.isDefault ? 'Clear report default' : 'Make report default'}"
+                                aria-label="${bm.isDefault ? 'Clear' : 'Set'} ${esc(bm.name)} as the report default">${bm.isDefault ? '★' : '☆'}</button>
+                        <button data-bmid="${esc(bm.id)}" type="button" title="Remove ${esc(bm.name)}"
+                                aria-label="Remove bookmark ${esc(bm.name)}">✕</button>
+                    </span>
+                </div>
+            `;
+            list.appendChild(row);
+        }
+    }
+
+    async function addBookmark() {
+        const name = await _feedback.prompt('Name the bookmark readers will see.', {
+            title: 'Add bookmark', label: 'Bookmark name', required: true,
+            pattern: /^[A-Za-z_][A-Za-z0-9_]*$/,
+            patternMessage: 'Start with a letter or underscore and use only letters, numbers, and underscores.',
+            confirmLabel: 'Add bookmark', auditAction: 'designer.bookmark.add'
+        });
+        if (!name?.trim()) return;
+        if (!Array.isArray(state.bookmarks)) state.bookmarks = [];
+        state.bookmarks.push({
+            id: 'bm_' + uid(),
+            name: name.trim(),
+            // Capture the page the author is on: a bookmark that lands nowhere is not useful, and the
+            // author can still clear it when editing.
+            page: state.pages[pageIdx]?.name || null,
+            isDefault: false,
+            parameters: [],
+            state: []
+        });
+        renderBookmarks();
+        syncScriptFromGridDebounced();
+    }
+
+    async function editBookmarkTitle(id) {
+        const bm = bookmarkList().find(b => b.id === id);
+        if (!bm) return;
+        const title = await _feedback.prompt('Shown in the reader’s bookmark menu.', {
+            title: `Edit ${bm.name}`, label: 'Display title', value: bm.title || '',
+            confirmLabel: 'Save', auditAction: 'designer.bookmark.update'
+        });
+        if (title === null) return;
+        bm.title = title.trim() || null;
+        renderBookmarks();
+        syncScriptFromGridDebounced();
+    }
+
+    function toggleBookmarkDefault(id) {
+        const bookmarks = bookmarkList();
+        const target = bookmarks.find(b => b.id === id);
+        if (!target) return;
+        const next = !target.isDefault;
+        // At most one author default: the parser rejects a second one, so the designer must not be
+        // able to author a script that will not parse.
+        for (const bm of bookmarks) bm.isDefault = false;
+        target.isDefault = next;
+        renderBookmarks();
+        syncScriptFromGridDebounced();
+    }
+
+    function removeBookmark(id) {
+        if (!Array.isArray(state.bookmarks)) return;
+        state.bookmarks = state.bookmarks.filter(b => b.id !== id);
+        renderBookmarks();
+        syncScriptFromGridDebounced();
     }
 
     let isSplitActive = false;
@@ -5606,6 +5713,21 @@ export function createDesigner(container, opts = {}) {
     sidebar.querySelector('#dsgn-ds-list').addEventListener('click', e => {
         const del = e.target.closest('[data-dsid]');
         if (del) { state.datasets = state.datasets.filter(d => d.id !== del.dataset.dsid); renderDatasets(); renderProps(); }
+    });
+
+    sidebar.querySelector('#dsgn-add-bookmark').addEventListener('click', () =>
+        addBookmark().catch(e => _feedback.notify(e.message, { title: 'Bookmark not added', tone: 'error' })));
+    sidebar.querySelector('#dsgn-bookmark-list').addEventListener('click', e => {
+        const edit = e.target.closest('[data-bmedit]');
+        if (edit) {
+            editBookmarkTitle(edit.dataset.bmedit)
+                .catch(err => _feedback.notify(err.message, { title: 'Bookmark not updated', tone: 'error' }));
+            return;
+        }
+        const makeDefault = e.target.closest('[data-bmdefault]');
+        if (makeDefault) { toggleBookmarkDefault(makeDefault.dataset.bmdefault); return; }
+        const del = e.target.closest('[data-bmid]');
+        if (del) removeBookmark(del.dataset.bmid);
     });
 
     saveModal.querySelector('#dsgn-modal-cancel').addEventListener('click', () => { saveModal.style.display = 'none'; });

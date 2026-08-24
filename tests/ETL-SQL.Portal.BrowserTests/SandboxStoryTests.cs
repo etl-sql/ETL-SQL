@@ -145,6 +145,51 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
             + string.Join("\n  ", failures));
     }
 
+    /// <summary>
+    /// The Report Builder's bookmark panel, driven in a real browser against the canonical
+    /// <c>designer.js</c>.
+    ///
+    /// <para>Bookmarks reached the builder as data before they reached it as a surface: the designer
+    /// state round-tripped them through parse/patch while offering no way to see or change one. The
+    /// property asserted here is that the panel lists what the script declares and that the
+    /// at-most-one-default rule the parser enforces is enforced in the editor too — authoring a second
+    /// default in the builder would produce a script that no longer parses.</para>
+    /// </summary>
+    [Fact]
+    public async Task DesignerBookmarkPanel_ListsDeclaredBookmarksAndKeepsOneDefault()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='designer']");
+        await page.WaitForSelectorAsync("#dsgn-bookmark-list", new PageWaitForSelectorOptions { Timeout = 30_000 });
+
+        var rows = page.Locator("#dsgn-bookmark-list .etlsql-dsgn-ds-block");
+        Assert.Equal(2, await rows.CountAsync());
+        Assert.Contains("West, Q4", await rows.Nth(0).InnerTextAsync());
+
+        // The report default is marked, and exactly one of them carries it.
+        Assert.Equal(1, await page.Locator("#dsgn-bookmark-list [data-bmdefault='bm_0']").CountAsync());
+        Assert.Equal("★", (await page.Locator("#dsgn-bookmark-list [data-bmdefault='bm_0']").InnerTextAsync()).Trim());
+        Assert.Equal("☆", (await page.Locator("#dsgn-bookmark-list [data-bmdefault='bm_1']").InnerTextAsync()).Trim());
+
+        // Promoting the second must demote the first rather than leaving two defaults behind.
+        await page.ClickAsync("#dsgn-bookmark-list [data-bmdefault='bm_1']");
+        await page.WaitForTimeoutAsync(150);
+        Assert.Equal("☆", (await page.Locator("#dsgn-bookmark-list [data-bmdefault='bm_0']").InnerTextAsync()).Trim());
+        Assert.Equal("★", (await page.Locator("#dsgn-bookmark-list [data-bmdefault='bm_1']").InnerTextAsync()).Trim());
+
+        // Deleting one leaves the other; the panel is the only place a bookmark can be removed
+        // without hand-editing the script.
+        await page.ClickAsync("#dsgn-bookmark-list [data-bmid='bm_0']");
+        await page.WaitForTimeoutAsync(150);
+        Assert.Equal(1, await rows.CountAsync());
+        Assert.DoesNotContain("West, Q4", await page.Locator("#dsgn-bookmark-list").InnerTextAsync());
+
+        Assert.Empty(session.PageErrors);
+    }
+
     // A narrow-viewport assertion was tried here and removed. The sandbox stage is
     // `overflow: auto`, so a component wider than it scrolls inside its own container -- which is
     // the correct pattern, not a defect, and the check flagged six components for doing the right

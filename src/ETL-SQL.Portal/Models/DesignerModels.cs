@@ -98,7 +98,24 @@ public record PatchDesignerResponse(string Script);
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,
     List<DesignerDatasetDto> Datasets,
-    DesignerReportStyleDto? ReportStyle = null);
+    DesignerReportStyleDto? ReportStyle = null,
+    // Null means "this client does not edit bookmarks", and existing CREATE BOOKMARK statements are
+    // left alone. An empty list is an explicit "no bookmarks" and removes them.
+    List<DesignerBookmarkDto>? Bookmarks = null);
+
+public record DesignerBookmarkDto(
+    string Id,
+    string Name,
+    string? Title = null,
+    string? Page = null,
+    bool IsDefault = false,
+    List<DesignerBookmarkParameterDto>? Parameters = null,
+    List<DesignerBookmarkStateDto>? State = null);
+
+/// <summary><c>Value</c> is the authored source text (<c>'West'</c>, <c>25</c>), never a coerced string.</summary>
+public record DesignerBookmarkParameterDto(string Name, string Value);
+
+public record DesignerBookmarkStateDto(string ObjectName, string Property, bool On);
 
 public record DesignerReportStyleDto(
     string? Theme = null,

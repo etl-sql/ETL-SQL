@@ -15,10 +15,26 @@ function sampleState() {
       ],
     }],
     datasets: [{ name: 'sales', query: 'SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales' }],
+    // Author bookmarks: shared, source-controlled report state. Values are the authored source text
+    // (quoted for strings, bare for numbers) so the round-trip cannot retype them.
+    bookmarks: [
+      {
+        id: 'bm_0', name: 'WestQ4', title: 'West, Q4', page: 'Overview', isDefault: true,
+        parameters: [{ name: '@Region', value: "'West'" }, { name: '@Limit', value: '25' }],
+        state: [{ objectName: 'detail', property: 'COLLAPSED', on: true }],
+      },
+      {
+        id: 'bm_1', name: 'EastQ4', title: 'East, Q4', page: 'Overview', isDefault: false,
+        parameters: [{ name: '@Region', value: "'East'" }],
+        state: [],
+      },
+    ],
   };
 }
 
 function blankState() {
+  // No `bookmarks` key at all: the patcher reads that as "this client does not edit bookmarks"
+  // and leaves any already in the script alone, which is the state a fresh canvas starts in.
   return { pages: [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }], datasets: [] };
 }
 

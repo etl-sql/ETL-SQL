@@ -61,6 +61,60 @@ public sealed class DesignerScriptGenerationService
             AppendLine(sb, string.Empty, nl);
         }
 
+        // Bookmarks come last: they reference pages and named objects, so emitting them after the
+        // declarations keeps a generated scaffold readable top to bottom.
+        foreach (var bookmark in state.Bookmarks ?? [])
+        {
+            var text = GenerateBookmark(bookmark, nl);
+            if (text.Length == 0) continue;
+            AppendLine(sb, text, nl);
+            AppendLine(sb, string.Empty, nl);
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Emits one <c>CREATE BOOKMARK</c>. Parameter values are written through verbatim, because the
+    /// designer carries them as authored source text — quoting a number here is exactly the bug the
+    /// typed bookmark AST exists to prevent.
+    /// </summary>
+    internal static string GenerateBookmark(DesignerAuthoringBookmark bookmark, string nl)
+    {
+        var clauses = new List<string>();
+        if (!string.IsNullOrWhiteSpace(bookmark.Title))
+            clauses.Add($"    TITLE = '{EscapeStr(bookmark.Title!)}'");
+
+        var parameters = (bookmark.Parameters ?? []).Where(p => !string.IsNullOrWhiteSpace(p.Name)).ToList();
+        if (parameters.Count > 0)
+        {
+            var assignments = parameters.Select(p =>
+                $"        {(p.Name.StartsWith('@') ? p.Name : "@" + p.Name)} = {p.Value?.Trim()}");
+            clauses.Add($"    PARAMETERS ({nl}{string.Join("," + nl, assignments)}{nl}    )");
+        }
+
+        if (!string.IsNullOrWhiteSpace(bookmark.Page))
+            clauses.Add($"    PAGE = {SanitizeName(bookmark.Page!)}");
+
+        var stateEntries = (bookmark.State ?? []).Where(s => !string.IsNullOrWhiteSpace(s.ObjectName)).ToList();
+        if (stateEntries.Count > 0)
+        {
+            var entries = stateEntries.Select(s =>
+                $"        {SanitizeName(s.ObjectName)}.{(s.Property ?? "VISIBLE").ToUpperInvariant()} = {(s.On ? "ON" : "OFF")}");
+            clauses.Add($"    STATE ({nl}{string.Join("," + nl, entries)}{nl}    )");
+        }
+
+        if (bookmark.IsDefault)
+            clauses.Add("    DEFAULT = ON");
+
+        // A bookmark that sets nothing is not a bookmark; emitting an empty body would only produce
+        // a script that no longer parses.
+        if (clauses.Count == 0) return string.Empty;
+
+        var sb = new StringBuilder();
+        AppendLine(sb, $"CREATE BOOKMARK {SanitizeName(bookmark.Name, bookmark.Id)} AS (", nl);
+        AppendLine(sb, string.Join("," + nl, clauses), nl);
+        sb.Append(");");
         return sb.ToString();
     }
 

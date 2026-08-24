@@ -218,8 +218,32 @@ public sealed class DesignerAnalysisService
             pages.Add(new DesignerPageDto("p1", "Page 1", "Dashboard", synth));
         }
 
-        return new DesignerStateDto(pages, datasets);
+        return new DesignerStateDto(pages, datasets, null, BookmarksToDto(ast));
     }
+
+    /// <summary>
+    /// Surfaces the script's author bookmarks so the builder can list and edit them. Parameter values
+    /// keep their authored source form (<c>'West'</c>, <c>25</c>, <c>TRUE</c>) rather than being
+    /// stringified, so editing an unrelated bookmark cannot quietly retype another one's values.
+    /// </summary>
+    private static List<DesignerBookmarkDto> BookmarksToDto(Script ast) =>
+        ast.Statements.OfType<CreateBookmarkStatement>()
+            .Select((bookmark, index) => new DesignerBookmarkDto(
+                $"bm_{index}",
+                bookmark.Name,
+                bookmark.Title is LiteralExpression literal
+                    ? literal.Value?.ToString()
+                    : bookmark.Title?.ToSql().Trim('\''),
+                bookmark.PageName,
+                bookmark.IsDefault,
+                bookmark.Parameters
+                    .Select(p => new DesignerBookmarkParameterDto(p.ParameterName, p.Value.ToSql()))
+                    .ToList(),
+                bookmark.StateEntries
+                    .Select(s => new DesignerBookmarkStateDto(
+                        s.ObjectName, s.Property.ToString().ToUpperInvariant(), s.On))
+                    .ToList()))
+            .ToList();
 
     private static DesignerVisualDto VisualToDto(
         CreateVisualStatement v, int idx, int col, int row, int colSpan, int rowSpan)
