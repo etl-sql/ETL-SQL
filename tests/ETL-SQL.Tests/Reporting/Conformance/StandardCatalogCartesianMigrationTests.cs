@@ -64,7 +64,7 @@ public sealed class StandardCatalogCartesianMigrationTests
     {
         var bindings = ImmutableArray.Create(
             new FieldBinding(FieldChannel.X, "Month", DataSemanticKind.Nominal, "x"),
-            new FieldBinding(FieldChannel.Y, "Revenue", DataSemanticKind.Quantitative, "y"),
+            new FieldBinding(FieldChannel.Y, "Revenue", DataSemanticKind.Quantitative, "y") { Stack = StackMode.Zero },
             new FieldBinding(FieldChannel.Color, "Region", DataSemanticKind.Nominal, "color"));
         var spec = ChartSpec.Create("stacked-hbar", "#multi", bindings,
             [new MarkLayerSpec("bars", MarkKind.Rect, 0, bindings, [])],
@@ -73,7 +73,7 @@ public sealed class StandardCatalogCartesianMigrationTests
                 new ScaleSpec("y", FieldChannel.Y, ScaleKind.Linear, true, []),
                 new ScaleSpec("color", FieldChannel.Color, ScaleKind.Ordinal, false, [])],
             new FormattingSpec("en-US", "UTC", "", []), new NullHandlingSpec(NullValuePolicy.Gap, []),
-            new ThemeSpec("default", [new StyleToken("STACKED", "ON")]),
+            new ThemeSpec("default", []),
             new AccessibilitySpec("Stacked horizontal revenue", null, null, true));
         var data = ChartDataSet.Create("#multi", 4,
         [
@@ -132,7 +132,7 @@ public sealed class StandardCatalogCartesianMigrationTests
     {
         var bindings = ImmutableArray.Create(
             new FieldBinding(FieldChannel.X, "Month", DataSemanticKind.Nominal, "x"),
-            new FieldBinding(FieldChannel.Y, "Revenue", DataSemanticKind.Quantitative, "y"),
+            new FieldBinding(FieldChannel.Y, "Revenue", DataSemanticKind.Quantitative, "y") { Stack = StackMode.Zero },
             new FieldBinding(FieldChannel.Color, "Region", DataSemanticKind.Nominal, "color"));
         var spec = ChartSpec.Create("stacked-line", "#multi", bindings,
             [new MarkLayerSpec("primary", MarkKind.Line, 0, bindings, [])],
@@ -141,7 +141,7 @@ public sealed class StandardCatalogCartesianMigrationTests
                 new ScaleSpec("y", FieldChannel.Y, ScaleKind.Linear, true, []),
                 new ScaleSpec("color", FieldChannel.Color, ScaleKind.Ordinal, false, [])],
             new FormattingSpec("en-US", "UTC", "", []), new NullHandlingSpec(NullValuePolicy.Gap, []),
-            new ThemeSpec("default", [new StyleToken("STACKED", "ON")]),
+            new ThemeSpec("default", []),
             new AccessibilitySpec("Stacked line", null, null, true));
         var data = ChartDataSet.Create("#multi", 4,
         [

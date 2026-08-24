@@ -18,6 +18,16 @@ public sealed record PlotBounds(decimal X, decimal Y, decimal Width, decimal Hei
 
 public sealed record PlotTick(ChartValue Value, string Label);
 
+public sealed record ResolvedColorRange(
+    ColorRangeKind Kind,
+    string Low,
+    string High,
+    string? Mid,
+    decimal? Midpoint,
+    string NullColor,
+    ImmutableArray<PlotTick> Ticks,
+    string AccessibleDescription);
+
 public sealed record ResolvedScale(
     string Id,
     FieldChannel Channel,
@@ -25,7 +35,11 @@ public sealed record ResolvedScale(
     ImmutableArray<ChartValue> Domain,
     ImmutableArray<string> Categories,
     ImmutableArray<PlotTick> Ticks,
-    bool IncludesZero);
+    bool IncludesZero)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResolvedColorRange? ColorRange { get; init; }
+}
 
 public sealed record ResolvedSeries(string Key, string Label, int Order, string Color);
 
@@ -44,6 +58,10 @@ public sealed record ResolvedDatum(
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<ResolvedEncodingValue> Encodings { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public decimal DisplayOffsetX { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public decimal DisplayOffsetY { get; init; }
 }
 
 public sealed record ResolvedMarkLayer(
@@ -55,6 +73,12 @@ public sealed record ResolvedMarkLayer(
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<StyleToken> Style { get; init; }
+    public StackMode Stack { get; init; }
+    public decimal BandSize { get; init; } = .75m;
+    public decimal TickThickness { get; init; } = .15m;
+    public TickOrientation TickOrientation { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PositionAdjustmentSpec? Position { get; init; }
 }
 
 public sealed record ResolvedNullPolicy(
@@ -69,7 +93,11 @@ public sealed record ResolvedFacetPanel(
     string? ColumnLabel,
     PlotBounds Bounds,
     ImmutableArray<int> RowIndices,
-    ImmutableArray<ResolvedScale> Scales);
+    ImmutableArray<ResolvedScale> Scales)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PlotBounds? CartesianViewport { get; init; }
+}
 
 public sealed record SemanticFallbackItem(string Label, string Value, int Order)
 {
@@ -116,6 +144,9 @@ public sealed record PlotPlan(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<ResolvedFacetPanel> Facets { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PlotBounds? CartesianViewport { get; init; }
+
     public static PlotPlan Create(
         string specId,
         PlotBounds bounds,
@@ -132,7 +163,7 @@ public sealed record PlotPlan(
         ImmutableArray<StyleToken> style = default,
         ImmutableArray<ResolvedFacetPanel> facets = default) => new(
             ChartContractVersions.PlotPlanSchema,
-            ChartContractVersions.Current,
+            ChartContractVersions.PlotPlanCurrent,
             specId,
             title,
             bounds,
@@ -152,7 +183,7 @@ public sealed record PlotPlan(
 
     public void Validate()
     {
-        ChartContractValidation.RequireVersion(Schema, Version, ChartContractVersions.PlotPlanSchema, nameof(PlotPlan));
+        ChartContractValidation.RequireVersion(Schema, Version, ChartContractVersions.PlotPlanSchema, ChartContractVersions.PlotPlanCurrent, nameof(PlotPlan));
         ChartContractValidation.RequireName(SpecId, nameof(SpecId));
         if (Bounds.Width <= 0 || Bounds.Height <= 0)
             throw new InvalidDataException("Plot bounds must have positive width and height.");

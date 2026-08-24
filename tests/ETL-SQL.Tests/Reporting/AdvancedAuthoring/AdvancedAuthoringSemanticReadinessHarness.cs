@@ -39,13 +39,13 @@ public static class AdvancedAuthoringSemanticReadinessHarness
         return new List<SemanticCapabilityItem>
         {
             new(
-                Concept: "Ordered Multi-Layer Marks (RECT, LINE, POINT, RULE, AREA, ARC)",
+                Concept: "Ordered Multi-Layer Marks (RECT, LINE, POINT, RULE, AREA, ARC, TICK)",
                 Category: "Layer Composition",
                 IsSupportedInContracts: true,
                 IsSupportedInRenderers: true,
-                IsExposedInReportSql: false,
-                StatusSummary: "Supported in ChartSpec & PlotPlan contracts; limited to named COMBO and OVERLAYS in Report-SQL syntax",
-                TechnicalGapDetail: "Report-SQL parser cannot currently declare arbitrary multi-layer specs (e.g. LAYER RECT + LAYER LINE + LAYER POINT in a single visual body)"
+                IsExposedInReportSql: true,
+                StatusSummary: "Supported by CUSTOM CHART layers, versioned ChartSpec/PlotPlan contracts, and all semantic fallback surfaces",
+                TechnicalGapDetail: "Layer data-source overrides remain deliberately separate; all layers in one chart use the root staged source"
             ),
             new(
                 Concept: "Dual-Axis Bindings (Primary Y vs Secondary Y2)",
@@ -60,19 +60,19 @@ public static class AdvancedAuthoringSemanticReadinessHarness
                 Concept: "Scale Resolution Policies (Shared vs Independent)",
                 Category: "Faceting & Resolution",
                 IsSupportedInContracts: true,
-                IsSupportedInRenderers: false,
-                IsExposedInReportSql: false,
-                StatusSummary: "Declared in ScaleResolutionSpec (Shared vs Independent); multi-facet splitting is not yet implemented in PlotPlanResolver",
-                TechnicalGapDetail: "PlotPlanResolver currently resolves single-panel bounds and does not split datasets into sub-panel coordinate spaces"
+                IsSupportedInRenderers: true,
+                IsExposedInReportSql: true,
+                StatusSummary: "Shared and independent X/Y/color scales resolve per facet in PlotPlanResolver",
+                TechnicalGapDetail: "Independent offset-scale policy is not separately exposed; offset slots remain stable across panels"
             ),
             new(
                 Concept: "1D and 2D Facet Grid Specifications",
                 Category: "Faceting & Resolution",
                 IsSupportedInContracts: true,
-                IsSupportedInRenderers: false,
-                IsExposedInReportSql: false,
-                StatusSummary: "FacetSpec model exists in contracts; multi-panel layout resolution pending Phase 7",
-                TechnicalGapDetail: "Requires facet-aware canvas grid partitioning in SVG and ECharts lowerers"
+                IsSupportedInRenderers: true,
+                IsExposedInReportSql: true,
+                StatusSummary: "ROW/COLUMN grids and one-dimensional WRAP resolve deterministic bounded panels",
+                TechnicalGapDetail: "Wrap is intentionally mutually exclusive with ROW/COLUMN grids"
             ),
             new(
                 Concept: "Coordinate Systems (Cartesian, Transposed, Polar)",
@@ -93,22 +93,22 @@ public static class AdvancedAuthoringSemanticReadinessHarness
                 TechnicalGapDetail: "MarkLayerSpec does not contain an optional DataReference override property"
             ),
             new(
-                Concept: "In-Line Binding Expressions & Transforms",
+                Concept: "Typed Field, Datum, and Visual-Value Binding Sources",
                 Category: "Data Transformation",
-                IsSupportedInContracts: false,
-                IsSupportedInRenderers: false,
-                IsExposedInReportSql: false,
-                StatusSummary: "Absent in contracts; transformations must be pre-staged via SQL queries into #temp tables",
-                TechnicalGapDetail: "FieldBinding only accepts simple column identifier strings, not scalar expression ASTs"
+                IsSupportedInContracts: true,
+                IsSupportedInRenderers: true,
+                IsExposedInReportSql: true,
+                StatusSummary: "Bare fields, scaled DATUM constants/parameters, and unscaled VALUE constants are supported",
+                TechnicalGapDetail: "Arbitrary expressions and transformations remain intentionally rejected and must be staged in SQL"
             ),
             new(
                 Concept: "Conditional Visual Mark Encodings",
                 Category: "Encodings & Styles",
-                IsSupportedInContracts: false,
-                IsSupportedInRenderers: false,
-                IsExposedInReportSql: false,
-                StatusSummary: "Absent in contracts; mark styles are static StyleToken lists per layer",
-                TechnicalGapDetail: "No contract model for condition-driven style rules (e.g. IF value < 0 THEN color='#EF4444')"
+                IsSupportedInContracts: true,
+                IsSupportedInRenderers: true,
+                IsExposedInReportSql: true,
+                StatusSummary: "Typed conditional color, opacity, size, shape, and text encodings resolve once into PlotPlan",
+                TechnicalGapDetail: "Connected LINE/AREA marks reject row-level conditions to avoid ambiguous segment semantics"
             ),
             new(
                 Concept: "Accessible Semantic Fallbacks & Plain-Text Summaries",

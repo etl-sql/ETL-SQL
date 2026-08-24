@@ -110,14 +110,14 @@ public sealed record ChartDataSet(
 {
     public static ChartDataSet Create(string name, int rowCount, ImmutableArray<ChartColumn> columns) => new(
         ChartContractVersions.ChartDataSchema,
-        ChartContractVersions.Current,
+        ChartContractVersions.ChartDataCurrent,
         name,
         rowCount,
         columns);
 
     public void Validate()
     {
-        ChartContractValidation.RequireVersion(Schema, Version, ChartContractVersions.ChartDataSchema, nameof(ChartDataSet));
+        ChartContractValidation.RequireVersion(Schema, Version, ChartContractVersions.ChartDataSchema, ChartContractVersions.ChartDataCurrent, nameof(ChartDataSet));
         ChartContractValidation.RequireName(Name, nameof(Name));
         if (RowCount < 0) throw new InvalidDataException("Chart data row count cannot be negative.");
         ChartContractValidation.RequireUnique(Columns.Select(column => column.Name), "column name");

@@ -501,12 +501,12 @@ public class LineageAnalyzer
 
             if (visual.AdvancedChart is { } chart)
             {
+                foreach (var encoding in chart.Encodings)
+                    RecordChartBinding(encoding, "CHART");
                 foreach (var layer in chart.Layers)
                 {
                     foreach (var encoding in layer.Encodings)
-                        Tracker.Record(target, sources, "CREATE VISUAL CHART",
-                            targetColumn: $"{layer.Name}.{encoding.Channel.ToString().ToUpperInvariant()}",
-                            sourceColumns: new[] { encoding.Field }, line: encoding.Line, column: encoding.Column);
+                        RecordChartBinding(encoding, layer.Name);
                     foreach (var condition in layer.Conditions)
                         Tracker.Record(target, sources, "CREATE VISUAL CHART CONDITION",
                             targetColumn: $"{layer.Name}.{condition.Channel.ToString().ToUpperInvariant()}",
@@ -518,6 +518,26 @@ public class LineageAnalyzer
                 if (chart.Facet?.ColumnField is { } columnField)
                     Tracker.Record(target, sources, "CREATE VISUAL CHART FACET", targetColumn: "FACET.COLUMN",
                         sourceColumns: new[] { columnField }, line: chart.Facet.Line, column: chart.Facet.Column);
+                if (chart.Facet?.WrapField is { } wrapField)
+                    Tracker.Record(target, sources, "CREATE VISUAL CHART FACET", targetColumn: "FACET.WRAP",
+                        sourceColumns: new[] { wrapField }, line: chart.Facet.Line, column: chart.Facet.Column);
+
+                void RecordChartBinding(AdvancedChartEncoding encoding, string scope)
+                {
+                    var targetColumn = $"{scope}.{encoding.Channel.ToString().ToUpperInvariant()}";
+                    if (encoding.Source.Kind == AdvancedChartBindingSourceKind.Field)
+                    {
+                        Tracker.Record(target, sources, "CREATE VISUAL CHART", targetColumn,
+                            sourceColumns: new[] { encoding.Source.Field! }, line: encoding.Line, column: encoding.Column);
+                        return;
+                    }
+                    if (encoding.Source.Constant is VariableExpression parameter)
+                        Tracker.Record(target, sources, "CREATE VISUAL CHART PARAMETER", targetColumn,
+                            metadata: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["parameter-dependency"] = parameter.Name
+                            }, line: encoding.Line, column: encoding.Column);
+                }
             }
         }
     }

@@ -87,14 +87,16 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
         if (layer is not null)
         {
             var offsets = Captures(chartText, chartStart,
-                $@"(?ix)(?:^|[,\(])\s*(?<name>{Regex.Escape(layer.Name)})\b(?=\s*=\s*(?:RECT|LINE|AREA|POINT|RULE|ARC|TEXT)\b)", "name");
+                $@"(?ix)(?:^|[,\(])\s*(?<name>{Regex.Escape(layer.Name)})\b(?=\s*=\s*(?:RECT|LINE|AREA|POINT|RULE|ARC|TEXT|TICK)\b)", "name");
             symbol = new RenameSymbol(layer.Name, word.Value.Start, offsets);
             return offsets.Contains(word.Value.Start);
         }
 
-        var fields = chart.Layers.SelectMany(item => item.Encodings.Select(encoding => encoding.Field))
+        var fields = chart.Encodings.Concat(chart.Layers.SelectMany(item => item.Encodings))
+            .Where(encoding => encoding.Source.Kind == AdvancedChartBindingSourceKind.Field)
+            .Select(encoding => encoding.Source.Field!)
             .Concat(chart.Layers.SelectMany(item => item.Conditions.SelectMany(condition => condition.Predicate.GetSourceColumns())))
-            .Concat(new[] { chart.Facet?.RowField, chart.Facet?.ColumnField }.Where(item => item is not null).Cast<string>())
+            .Concat(new[] { chart.Facet?.RowField, chart.Facet?.ColumnField, chart.Facet?.WrapField }.Where(item => item is not null).Cast<string>())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (!fields.Contains(word.Value.Name)) return false;
         var fieldOffsets = IdentifierOffsets(chartText, chartStart, word.Value.Name);

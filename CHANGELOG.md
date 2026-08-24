@@ -12,7 +12,21 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Added
+
+- Completed the native Grammar-of-Graphics authoring surface with typed field/`DATUM`/`VALUE`
+  bindings, inherited encodings, explicit stack/offset/interval placement, deterministic jitter and
+  nudge, continuous color ranges, wrapped facets, fixed Cartesian aspect, and category-local `TICK`
+  marks across parser, formatter, lint, LSP, lineage, Report Builder, serialization, native SVG,
+  terminal, accessibility, and export paths.
+- Added a parser-tested production composite report, Vega-Lite and ggplot2 conversion guidance, a
+  declarative-geometry cookbook entry, and a reproducible Phase 13 closure evidence index.
+
+### Changed
+
+- Reconciled the reporting capability matrix with the source-backed renderer contract. Every
+  graphical catalog visual now uses the shared native `PlotPlan` path or an approved focused native
+  SVG module; no graphical visual requires ECharts, ClearScript, or another external chart runtime.
 
 ## [0.18.0] — 2026-08-20
 

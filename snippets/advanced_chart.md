@@ -1,25 +1,28 @@
 ---
 trigger: $advanced_chart
 label: CREATE VISUAL … AS CUSTOM CHART
-description: Native layered chart with explicit scales, encodings, conditions, and optional facets
+description: Native layered chart with inherited encodings, inferred scales, constants, placement, and facets
 ---
 CREATE VISUAL «VisualName» AS CUSTOM (
   SOURCE = «#prepared»,
   CHART (
-    COORDINATE (TYPE = CARTESIAN),
-    SCALES (
-      x_scale = BAND (CHANNEL = X, ORDER = SOURCE),
-      y_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+    COORDINATE (TYPE = CARTESIAN, ASPECT_RATIO = «1»),
+    ENCODINGS (
+      X = «category» (TYPE = NOMINAL),
+      Y = «value» (TYPE = QUANTITATIVE, AXIS = PRIMARY)
     ),
     LAYERS (
       primary = RECT (
         Z_INDEX = 0,
-        ENCODINGS (
-          X = «category» (TYPE = NOMINAL, SCALE = x_scale),
-          Y = «value» (TYPE = QUANTITATIVE, SCALE = y_scale, AXIS = PRIMARY)
-        ),
+        ENCODINGS (COLOR = VALUE('#2563eb') (TYPE = NOMINAL)),
         CONDITIONS (COLOR WHEN «value» < 0 THEN '#b91c1c' ELSE '#2563eb')
+      ),
+      target = TICK (
+        BAND_SIZE = 0.9,
+        THICKNESS = 0.2,
+        ENCODINGS (Y = DATUM(«target») (TYPE = QUANTITATIVE))
       )
-    )
+    ),
+    FACET (WRAP = «region», COLUMNS = «3»)
   )
 );

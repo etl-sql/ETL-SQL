@@ -21,7 +21,7 @@ Output files produced:
 |------|-------------|
 | `<script>.report.md` | GitHub Flavored Markdown document. Default when `--format md`. |
 | `<script>.report.json` | Raw manifest JSON. Default when `--format json`. |
-| `<script>.report.pdf` | Static PDF export via PDFsharp/MigraDoc. Charts render from ECharts/SVG, tables are capped for readability. Default when `--format pdf`. |
+| `<script>.report.pdf` | Static PDF export via PDFsharp/MigraDoc. Charts render from native SVG/`PlotPlan`; tables are capped for readability. Default when `--format pdf`. |
 | `<script>.etlsnap` | Encrypted snapshot package (ZIP structure containing layout JSON and Arrow IPC tables). Always written alongside the report. |
 
 Flags:
@@ -138,8 +138,9 @@ visuals keep their current data.
 live rebuild without restarting the server.
 
 **Dashboard rendering** — the VS Code WebviewPanel loads the bundled React app (`ui/dist/index.html`,
-manifest injected as `window.__INITIAL_STATE__.messages`); the web ReportPlayer uses a single vanilla-JS
-file (`wwwroot/report-runtime.js`). Both render charts with [Apache ECharts v5](https://echarts.apache.org/).
+manifest injected as `window.__INITIAL_STATE__.messages`); the web ReportPlayer uses the canonical
+shared browser runtime. Both import native SVG and bind row-indexed marks to actions, cross-filtering,
+drill context, and tooltips from the serialized renderer-neutral plan.
 
 ## VS Code preview
 

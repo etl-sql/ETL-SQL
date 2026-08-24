@@ -274,7 +274,7 @@ public sealed class DesignerScriptPatcher
         {
             // Advanced authoring is deliberately opaque until the designer has a dedicated CHART
             // editor. Unrelated edits must preserve all nested trivia byte-for-byte.
-            if (clause == "CHART" && FindClause(original, clause) is not null && FindClause(desired, clause) is not null)
+            if (clause == "CHART" && FindClause(original, clause) is not null)
                 continue;
             if (clause == "MAPPINGS" && ContainsNativeMicroChartSyntax(original) && !ContainsEquivalentNativeMicroChartSyntax(original, desired))
                 continue;

@@ -6,8 +6,9 @@
 Report-SQL extends ETL-SQL with dedicated statement types for building interactive dashboards: `SET REPORT TITLE`, `CREATE DATASET`, `CREATE VISUAL`, `CREATE PAGE`, `CREATE CONTAINER`, `CREATE NAVIGATION`, `CREATE BUTTON`, and `CREATE STYLE` — plus a CLI build tool and live browser hosts for serving reports.
 
 For composite authoring, `CREATE VISUAL ... AS CUSTOM` accepts a native [`CHART`](../../reference/visuals-reporting/visuals/chart.md)
-declaration with ordered mark layers, named scales, Cartesian/transposed/polar coordinates,
-presentation-only conditions, dual axes, and one- or two-dimensional facets. It is renderer-neutral:
+declaration with inherited encodings, ordered mark layers, deterministic inferred/declared scales,
+stack/offset/interval placement, fixed Cartesian aspect, continuous color ramps, `TICK` targets,
+presentation-only conditions, dual axes, and grid or wrapped facets. It is renderer-neutral:
 embedded Vega-Lite and hidden visual transforms are intentionally unsupported, so aggregation,
 filtering, lookup, calculation, windowing, and statistical preparation remain reviewable ETL-SQL.
 

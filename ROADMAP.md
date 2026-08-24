@@ -91,8 +91,8 @@ out-of-scope bytes unchanged and that invalid intermediate edits do not reset th
 
 ### Reporting & Presentation — Native Grammar-of-Graphics Spine
 
-**Status:** Incremental
-**Horizon:** Foundation
+**Status:** Shipped
+**Horizon:** Delivered
 **Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
 
 ETL-SQL needs its own typed, versioned visual contract so report meaning is not defined by an ECharts
@@ -100,31 +100,32 @@ option object. Named `.rptsql` visual types remain the easy path and lower into 
 a deterministic `PlotPlan` resolves domains, ordering, ticks, palettes, null handling, and legends
 once for every renderer.
 
-**Why now:** This is the common spine for safer advanced authoring, native static export,
-micro-charts, terminal reporting, renderer independence, and eventual ECharts retirement.
+**Outcome:** This is the common spine for advanced authoring, native static export,
+micro-charts, terminal reporting, renderer independence, and the completed ECharts/ClearScript retirement.
 
 **Boundaries:** Data transformation remains visible in ETL-SQL and `#temp` tables. ETL-SQL learns
 from Vega-Lite but does not embed Vega-Lite JSON or accept a second runtime reporting language.
-ECharts is a temporary compiler target, not stored semantic state.
+No vendor chart schema or external chart runtime is stored or used by the reporting path.
 
 **Dependencies:** Lossless Report Builder editing and a dependency-light Core contract; renderer and
 pixel-emission dependencies remain in the reporting layer.
 
-**Delivery slices:** The representative named visuals and native `CUSTOM` authoring grammar are
-delivered across typed columnar data, `PlotPlan`, transient ECharts output, native SVG, and terminal
-output. Remaining slices broaden catalog conversion, evaluate specialized layouts, and retire ECharts
-only after the capability matrix proves no certified path still requires it.
+**Delivered:** Every graphical catalog visual lowers through typed `ChartSpec`/`PlotPlan` semantics or
+an approved focused native layout module. Native `CUSTOM` authoring covers layers, scales,
+Cartesian/transposed/polar coordinates, conditions, inheritance, datum/value bindings, explicit
+stack/offset/interval placement, deterministic jitter/nudge, continuous color ranges, wrapped facets,
+fixed aspect, and `TICK`. Browser and static output use native SVG; terminal and accessible fallbacks
+consume the same resolved contract. The capability matrix proves that no graphical visual requires an
+external chart runtime.
 
 **Acceptance evidence:** Cross-backend golden and semantic conformance tests, a capability matrix,
 typed-value and null tests, and measured bundle, cold-start, export-time, and output-size baselines.
 
-**Current delivery:** `BAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, and `COMBO`, including `RULE`
-annotations, lower through typed `ChartSpec`/`ChartDataSet` contracts into one deterministic
-`PlotPlan`. Native `CUSTOM`/`CHART` syntax adds ordered layers, named scales, Cartesian/transposed/polar
-coordinates, dual axes, conditional encodings, facets, and shared/independent scale policies while
-keeping transformations visible in ETL-SQL. Browser ECharts options are compiled transiently from
-the plan; native SVG, terminal, and static PDF consume the same semantics without server-side V8.
-Remaining catalog types stay explicitly classified in the capability matrix for later slices.
+**Closure evidence:** [`reporting-phase13-closure.md`](docs/benchmarks/reporting-phase13-closure.md)
+indexes version compatibility, cross-backend conformance, visual goldens, accessibility, bundle,
+cold-start, memory, export-time, output-size, parser/sample, and capability/source parity gates. The
+production composite sample and Vega-Lite/ggplot2 conversion guides keep transformations visible in
+source-controlled SQL.
 
 ### Reporting & Presentation — Native Card and Table Micro-Charts
 

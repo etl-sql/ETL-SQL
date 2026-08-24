@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using ETL_SQL.Reporting.Semantics;
 
 namespace ETL_SQL.Reporting.Semantics.Runtime;
@@ -23,16 +26,17 @@ public sealed class PlotPlanResolver
         var series = seriesKeys.Select((key, index) => new ResolvedSeries(key, key, index, ResolveColor(spec, key, index))).ToImmutableArray();
         var palette = series.Select(item => new PaletteAssignment(item.Key, item.Color)).ToImmutableArray();
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
-        var layers = ResolveLayers(spec, data, columns, categories, series).ToImmutableArray();
+        var layers = ResolveStacking(ResolveLayers(spec, data, columns, categories, series).ToImmutableArray());
         var scales = ResolveScales(spec, columns, categories, layers).ToImmutableArray();
         var plotBounds = bounds ?? new PlotBounds(0, 0, 600, 350);
         var facets = ResolveFacets(spec, columns, scales, plotBounds);
+        layers = ResolveDisplayOffsets(spec, data, columns, layers, scales, facets, plotBounds);
         var sourceLayers = layers.Where(layer => layer.Style.IsDefault || !layer.Style.Any(token => token.Name == "overlayType"));
         var gapRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => datum.IsGap).Select(datum => datum.RowIndex).Distinct().Order().ToImmutableArray();
         var usedRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap).Select(datum => datum.RowIndex).ToHashSet();
         var skippedRows = Enumerable.Range(0, data.RowCount).Where(index => !usedRows.Contains(index) && !gapRows.Contains(index)).ToImmutableArray();
         var fallback = BuildFallback(spec, layers, categories);
-        var summary = BuildSummary(spec, data, series, layers, facets, gapRows, skippedRows);
+        var summary = BuildSummary(spec, data, series, layers, scales, facets, gapRows, skippedRows);
 
         var plan = PlotPlan.Create(
             spec.Id,
@@ -48,7 +52,10 @@ public sealed class PlotPlanResolver
             spec.Title,
             spec.Coordinate,
             spec.Theme.Tokens,
-            facets);
+            facets) with
+        {
+            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, plotBounds)
+        };
         plan.Validate();
         return plan;
     }
@@ -58,13 +65,13 @@ public sealed class PlotPlanResolver
         IReadOnlyDictionary<string, ChartColumn> columns)
     {
         var binding = spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.X or FieldChannel.Theta);
-        if (binding is null || !columns.TryGetValue(binding.Field, out var column)) return [];
+        if (binding?.Field is not { } categoryField || !columns.TryGetValue(categoryField, out var column)) return [];
         var categories = column.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToList();
         var axisSort = spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals("AXIS_SORT", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant();
         if (axisSort is "VALUE" or "VALUE_DESC")
         {
             var measureBinding = spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Radius);
-            if (measureBinding is not null && columns.TryGetValue(measureBinding.Field, out var measure))
+            if (measureBinding?.Field is { } measureField && columns.TryGetValue(measureField, out var measure))
             {
                 var sums = categories.ToDictionary(category => category, _ => 0m, StringComparer.Ordinal);
                 for (var index = 0; index < column.Values.Length; index++)
@@ -95,7 +102,7 @@ public sealed class PlotPlanResolver
     {
         if (spec.Coordinate.Kind == CoordinateKind.Polar && spec.Bindings.Any(binding => binding.Channel == FieldChannel.Theta)) return categories;
         var color = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
-        if (color is not null && columns.TryGetValue(color.Field, out var colorColumn))
+        if (color?.SemanticKind is not DataSemanticKind.Quantitative && color?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
             return colorColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToImmutableArray();
 
         var namedLayers = spec.Layers.Where(layer => layer.Mark is not MarkKind.Rule &&
@@ -114,10 +121,11 @@ public sealed class PlotPlanResolver
         foreach (var scale in spec.Scales)
         {
             var bindings = spec.Bindings.Concat(spec.Layers.SelectMany(layer => layer.Bindings))
-                .Where(binding => binding.ScaleId == scale.Id && columns.ContainsKey(binding.Field)).ToList();
+                .Where(binding => binding.ScaleId == scale.Id &&
+                    (binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field))).ToList();
             if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal)
             {
-                var inferred = bindings.SelectMany(binding => columns[binding.Field].Values)
+                var inferred = bindings.SelectMany(binding => BindingValues(binding, columns))
                     .Select(ValueKey).Where(value => value is not null).Cast<string>()
                     .Distinct(StringComparer.Ordinal).ToImmutableArray();
                 var values = !scale.CategoryOrder.IsDefaultOrEmpty
@@ -131,7 +139,7 @@ public sealed class PlotPlanResolver
                 continue;
             }
 
-            var raw = bindings.SelectMany(binding => columns[binding.Field].Values).Where(value => value.Kind != ChartValueKind.Null).ToList();
+            var raw = bindings.SelectMany(binding => BindingValues(binding, columns)).Where(value => value.Kind != ChartValueKind.Null).ToList();
             var layout = spec.Layers.Select(layer => layer.Style.FirstOrDefault(token => token.Name.Equals("layout", StringComparison.OrdinalIgnoreCase))?.Value)
                 .FirstOrDefault(value => value is not null);
             if (scale.Channel == FieldChannel.Y && layout is "boxplot" or "waterfall")
@@ -143,11 +151,19 @@ public sealed class PlotPlanResolver
                     .Where(channel => channels.Contains(channel.Channel) && channel.Value.Kind != ChartValueKind.Null)
                     .Select(channel => channel.Value).ToList();
             }
+            if (scale.Channel is FieldChannel.Y or FieldChannel.Y2 && resolvedLayers.Any(layer => layer.Stack != StackMode.None))
+            {
+                raw = resolvedLayers.Where(layer => layer.Stack != StackMode.None).SelectMany(layer => layer.Data)
+                    .SelectMany(datum => datum.Channels)
+                    .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd && channel.Value.Kind != ChartValueKind.Null)
+                    .Select(channel => channel.Value).ToList();
+            }
             if (scale.Kind == ScaleKind.Time)
             {
                 var temporalValues = bindings.SelectMany(binding =>
                 {
-                    var column = columns[binding.Field];
+                    if (binding.Field is null || !columns.TryGetValue(binding.Field, out var column))
+                        return BindingValues(binding, columns).Select(value => new { Value = value, Display = Display(value) });
                     return column.Values.Select((value, index) => new
                     {
                         Value = value,
@@ -167,22 +183,6 @@ public sealed class PlotPlanResolver
             }
 
             var numbers = raw.Select(Number).Where(number => number.HasValue).Select(number => number!.Value).ToList();
-            if (scale.Channel == FieldChannel.Y && IsEnabled(spec.Theme.Tokens, "STACKED"))
-            {
-                var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
-                var yBinding = bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y);
-                if (xBinding is not null && yBinding is not null && columns.TryGetValue(xBinding.Field, out var xColumn))
-                {
-                    numbers = Enumerable.Range(0, xColumn.Values.Length)
-                        .GroupBy(index => ValueKey(xColumn.Values[index]) ?? string.Empty, StringComparer.Ordinal)
-                        .SelectMany(group =>
-                        {
-                            var values = group.Select(index => Number(columns[yBinding.Field].Values[index]) ?? 0m);
-                            return new[] { values.Where(value => value < 0m).Sum(), values.Where(value => value > 0m).Sum() };
-                        })
-                        .ToList();
-                }
-            }
             if (scale.Channel is FieldChannel.Y or FieldChannel.Y2)
             {
                 numbers.AddRange(resolvedLayers
@@ -212,10 +212,25 @@ public sealed class PlotPlanResolver
                 ? Enumerable.Range(0, 5).Select(index => (decimal)Math.Pow(10d,
                     Math.Log10((double)minimum) + (Math.Log10((double)maximum) - Math.Log10((double)minimum)) * index / 4d)).ToList()
                 : Enumerable.Range(0, 5).Select(index => minimum + ((maximum - minimum) * index / 4m)).ToList();
-            yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
+            var resolved = new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                 [ChartValue.From(minimum), ChartValue.From(maximum)], [],
                 ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray(),
                 scale.IncludeZero);
+            if (scale.ColorRange is { } colorRange)
+            {
+                if (colorRange.Midpoint is { } midpoint && (midpoint < minimum || midpoint > maximum))
+                    throw new InvalidOperationException($"Diverging midpoint {midpoint} for scale '{scale.Id}' must fall inside resolved domain [{minimum}, {maximum}].");
+                var description = colorRange.Kind == ColorRangeKind.Diverging
+                    ? $"Color ranges from {minimum:0.##} ({colorRange.Low}) through {colorRange.Midpoint:0.##} ({colorRange.Mid}) to {maximum:0.##} ({colorRange.High})."
+                    : $"Color ranges from {minimum:0.##} ({colorRange.Low}) to {maximum:0.##} ({colorRange.High}).";
+                resolved = resolved with
+                {
+                    ColorRange = new ResolvedColorRange(colorRange.Kind, colorRange.Low, colorRange.High,
+                        colorRange.Mid, colorRange.Midpoint, colorRange.NullColor,
+                        resolved.Ticks, description)
+                };
+            }
+            yield return resolved;
         }
     }
 
@@ -226,7 +241,7 @@ public sealed class PlotPlanResolver
         ImmutableArray<string> categories,
         ImmutableArray<ResolvedSeries> series)
     {
-        foreach (var layer in spec.Layers.OrderBy(item => item.ZIndex).ThenBy(item => item.Id, StringComparer.Ordinal))
+        foreach (var layer in spec.Layers.OrderBy(item => item.ZIndex))
         {
             var overlayType = layer.Style.FirstOrDefault(token => token.Name == "overlayType")?.Value;
             if (overlayType is not null)
@@ -255,7 +270,7 @@ public sealed class PlotPlanResolver
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
                 ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;
-            if (colorBinding is not null && columns.TryGetValue(colorBinding.Field, out var colorColumn))
+            if (colorBinding?.SemanticKind is not DataSemanticKind.Quantitative && colorBinding?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
             {
                 foreach (var resolvedSeries in series)
                 {
@@ -263,7 +278,7 @@ public sealed class PlotPlanResolver
                         rowIndex => ValueKey(colorColumn.Values[rowIndex]) == resolvedSeries.Key);
                     yield return new ResolvedMarkLayer($"{layer.Id}-{resolvedSeries.Order:D2}", layer.Mark, layer.ZIndex + resolvedSeries.Order,
                         resolvedSeries.Key, dataPoints)
-                    { Style = layer.Style };
+                    { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
                 }
             }
             else
@@ -271,10 +286,71 @@ public sealed class PlotPlanResolver
                 var seriesKey = explicitSeries ?? series.FirstOrDefault()?.Key;
                 yield return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, seriesKey,
                     ResolveLayerData(layer, spec, data, columns, categories, _ => true))
-                { Style = layer.Style };
+                { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
             }
         }
     }
+
+    private static StackMode LayerStack(MarkLayerSpec layer, ChartSpec spec)
+    {
+        var declared = layer.Bindings.Select(binding => binding.Stack).FirstOrDefault(stack => stack != StackMode.None);
+        return declared;
+    }
+
+    private static ImmutableArray<ResolvedMarkLayer> ResolveStacking(ImmutableArray<ResolvedMarkLayer> layers)
+    {
+        if (layers.All(layer => layer.Stack == StackMode.None)) return layers;
+        var totals = layers.Where(layer => layer.Stack == StackMode.Normalize)
+            .SelectMany(layer => layer.Data.Select(datum => (Layer: layer, Datum: datum)))
+            .Select(item => (Key: StackKey(item.Datum), Value: StackValue(item.Datum)))
+            .Where(item => item.Value.HasValue)
+            .GroupBy(item => (item.Key, Sign: Math.Sign(item.Value!.Value)))
+            .ToDictionary(group => group.Key, group => group.Sum(item => Math.Abs(item.Value!.Value)));
+        var positive = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        var negative = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        return layers.Select(layer =>
+        {
+            if (layer.Stack == StackMode.None) return layer;
+            var data = layer.Data.Select(datum =>
+            {
+                var raw = StackValue(datum);
+                if (!raw.HasValue || datum.IsGap) return datum;
+                var key = StackKey(datum);
+                var baselines = raw.Value < 0m ? negative : positive;
+                var start = baselines.GetValueOrDefault(key);
+                var amount = raw.Value;
+                if (layer.Stack == StackMode.Normalize)
+                {
+                    var total = totals.GetValueOrDefault((key, Math.Sign(raw.Value)));
+                    amount = total == 0m ? 0m : raw.Value / total;
+                }
+                var end = start + amount;
+                baselines[key] = end;
+                var channel = datum.Channels.Any(value => value.Channel == FieldChannel.Y2) ? FieldChannel.Y2 : FieldChannel.Y;
+                var startChannel = channel == FieldChannel.Y2 ? FieldChannel.YStart : FieldChannel.YStart;
+                var endChannel = channel == FieldChannel.Y2 ? FieldChannel.YEnd : FieldChannel.YEnd;
+                return datum with
+                {
+                    Channels = datum.Channels
+                        .Where(value => value.Channel != startChannel && value.Channel != endChannel).ToImmutableArray()
+                        .Add(new ResolvedChannelValue(startChannel, ChartValue.From(start), start.ToString(CultureInfo.InvariantCulture)))
+                        .Add(new ResolvedChannelValue(endChannel, ChartValue.From(end), end.ToString(CultureInfo.InvariantCulture)))
+                };
+            }).ToImmutableArray();
+            return layer with { Data = data };
+        }).ToImmutableArray();
+    }
+
+    private static decimal? StackValue(ResolvedDatum datum) =>
+        Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? Channel(datum, FieldChannel.Radius) ?? ChartValue.Null());
+
+    private static string StackKey(ResolvedDatum datum) => string.Join("\u001f", new[]
+    {
+        ValueKey(Channel(datum, FieldChannel.X) ?? Channel(datum, FieldChannel.Theta) ?? ChartValue.From(datum.RowIndex.ToString(CultureInfo.InvariantCulture))),
+        ValueKey(Channel(datum, FieldChannel.Row) ?? ChartValue.From("")),
+        ValueKey(Channel(datum, FieldChannel.Column) ?? ChartValue.From("")),
+        ValueKey(Channel(datum, FieldChannel.Wrap) ?? ChartValue.From(""))
+    });
 
     private static ResolvedMarkLayer ResolveBoxPlot(
         MarkLayerSpec layer,
@@ -291,12 +367,12 @@ public sealed class PlotPlanResolver
         {
             var resolved = ResolveLayerData(layer, spec, chartData, columns, categories, _ => true);
             return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, resolved)
-            { Style = layer.Style };
+            { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
         }
         var xBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.X);
         var yBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.Y);
-        var xColumn = columns[xBinding.Field];
-        var yColumn = columns[yBinding.Field];
+        var xColumn = columns[xBinding.Field!];
+        var yColumn = columns[yBinding.Field!];
         var resolvedData = categories.Select((category, categoryIndex) =>
         {
             var rowIndices = Enumerable.Range(0, xColumn.Values.Length)
@@ -318,7 +394,8 @@ public sealed class PlotPlanResolver
                 new ResolvedChannelValue(FieldChannel.High, ChartValue.From(high), high.ToString(CultureInfo.InvariantCulture))
             ], values.Length == 0, $"{category}: {low}, {q1}, {median}, {q3}, {high}");
         }).ToImmutableArray();
-        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, resolvedData) { Style = layer.Style };
+        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, resolvedData)
+        { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
     }
 
     private static decimal Percentile(decimal[] sorted, decimal fraction)
@@ -351,7 +428,8 @@ public sealed class PlotPlanResolver
                     .Add(new ResolvedChannelValue(FieldChannel.YEnd, ChartValue.From(end), end.ToString(CultureInfo.InvariantCulture)))
             };
         }).ToImmutableArray();
-        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, output) { Style = layer.Style };
+        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, output)
+        { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
     }
 
     private static IEnumerable<ResolvedMarkLayer> ResolveRadar(
@@ -361,24 +439,24 @@ public sealed class PlotPlanResolver
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<ResolvedSeries> series)
     {
-        var seriesBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.Color);
-        var metrics = spec.Bindings.Where(binding => binding.Channel == FieldChannel.Detail).ToList();
+        var seriesBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.Color && binding.Field is not null);
+        var metrics = spec.Bindings.Where(binding => binding.Channel == FieldChannel.Detail && binding.Field is not null).ToList();
         for (var rowIndex = 0; rowIndex < data.RowCount; rowIndex++)
         {
-            var key = ValueKey(columns[seriesBinding.Field].Values[rowIndex]) ?? $"Series {rowIndex + 1}";
+            var key = ValueKey(columns[seriesBinding.Field!].Values[rowIndex]) ?? $"Series {rowIndex + 1}";
             var points = metrics.Select(binding =>
             {
-                var column = columns[binding.Field];
+                var column = columns[binding.Field!];
                 var value = column.Values[rowIndex];
                 return new ResolvedDatum(rowIndex,
                 [
-                    new ResolvedChannelValue(FieldChannel.Theta, ChartValue.From(binding.Field), binding.Field),
+                    new ResolvedChannelValue(FieldChannel.Theta, ChartValue.From(binding.Field!), binding.Field),
                     new ResolvedChannelValue(FieldChannel.Radius, value,
                         column.DisplayValues.IsDefaultOrEmpty ? Display(value) : column.DisplayValues[rowIndex])
                 ], value.Kind == ChartValueKind.Null, $"{binding.Field}: {Display(value)}");
             }).ToImmutableArray();
             yield return new ResolvedMarkLayer($"{layer.Id}-{rowIndex:D2}", layer.Mark, layer.ZIndex + rowIndex, key, points)
-            { Style = layer.Style };
+            { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
         }
     }
 
@@ -391,28 +469,28 @@ public sealed class PlotPlanResolver
         Func<int, bool> include)
     {
         var layerBindings = layer.Bindings.IsDefaultOrEmpty ? spec.Bindings : layer.Bindings
-            .AddRange(spec.Bindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column &&
-                !layer.Bindings.Any(existing => existing.Channel == binding.Channel && existing.Field.Equals(binding.Field, StringComparison.OrdinalIgnoreCase))));
+            .AddRange(spec.Bindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap &&
+                !layer.Bindings.Any(existing => existing.Channel == binding.Channel)));
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
         var preserveRows = layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
             && token.Value.Equals("true", StringComparison.OrdinalIgnoreCase));
         if (!preserveRows && categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
-            columns.TryGetValue(categoryBinding.Field, out var categoryColumn) && !categories.IsDefaultOrEmpty)
+            categoryBinding.Field is { } categoryField && columns.TryGetValue(categoryField, out var categoryColumn) && !categories.IsDefaultOrEmpty)
         {
-            var facetBindings = layerBindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column)
-                .Where(binding => columns.ContainsKey(binding.Field)).ToList();
+            var facetBindings = layerBindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)
+                .Where(binding => binding.Field is not null && columns.ContainsKey(binding.Field)).ToList();
             if (facetBindings.Count > 0)
             {
                 var facetKeys = Enumerable.Range(0, data.RowCount).Where(include)
-                    .Select(index => string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field].Values[index]) ?? string.Empty)))
+                    .Select(index => string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field!].Values[index]) ?? string.Empty)))
                     .Distinct(StringComparer.Ordinal).ToList();
                 foreach (var facetKey in facetKeys)
                     foreach (var category in categories)
                     {
                         var rowIndex = Enumerable.Range(0, data.RowCount).FirstOrDefault(index => include(index)
                             && ValueKey(categoryColumn.Values[index]) == category
-                            && string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field].Values[index]) ?? string.Empty)) == facetKey, -1);
+                            && string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field!].Values[index]) ?? string.Empty)) == facetKey, -1);
                         if (rowIndex >= 0) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions));
                     }
                 return rows.ToImmutableArray();
@@ -440,14 +518,17 @@ public sealed class PlotPlanResolver
         NullHandlingSpec nulls,
         ImmutableArray<EncodingConditionSpec> conditions)
     {
-        var channels = bindings.Where(binding => columns.ContainsKey(binding.Field)).Select(binding =>
+        var channels = bindings.Where(binding => binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field)).Select(binding =>
         {
-            var column = columns[binding.Field];
+            if (binding.SourceKind != BindingSourceKind.Field)
+                return new ResolvedChannelValue(binding.Channel, binding.Constant!, Display(binding.Constant!));
+            var column = columns[binding.Field!];
             return new ResolvedChannelValue(binding.Channel, column.Values[rowIndex],
                 column.DisplayValues.IsDefaultOrEmpty ? null : column.DisplayValues[rowIndex]);
         }).ToImmutableArray();
         var requiredNull = channels.Any(channel =>
             (channel.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or
+                FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.YStart or FieldChannel.YEnd or
                 FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close)
             && channel.Value.Kind == ChartValueKind.Null);
         return new ResolvedDatum(rowIndex, channels, requiredNull && nulls.Default == NullValuePolicy.Gap,
@@ -545,8 +626,8 @@ public sealed class PlotPlanResolver
         decimal.TryParse(parameterText, NumberStyles.Any, CultureInfo.InvariantCulture, out var parameter);
         var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
         var yBinding = spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2);
-        var yValues = columns[yBinding.Field].Values.Select(Number).Select(value => value ?? 0m).ToList();
-        var xColumn = xBinding is not null && columns.TryGetValue(xBinding.Field, out var resolvedXColumn) ? resolvedXColumn : null;
+        var yValues = columns[yBinding.Field!].Values.Select(Number).Select(value => value ?? 0m).ToList();
+        var xColumn = xBinding?.Field is { } xField && columns.TryGetValue(xField, out var resolvedXColumn) ? resolvedXColumn : null;
         var regressionX = Enumerable.Range(0, yValues.Count)
             .Select(index => xColumn is null ? index : Number(xColumn.Values[index]) ?? index)
             .ToList();
@@ -571,7 +652,8 @@ public sealed class PlotPlanResolver
                     new ResolvedChannelValue(FieldChannel.Y, value.HasValue ? ChartValue.From(value.Value) : ChartValue.Null(), value?.ToString(CultureInfo.InvariantCulture))
                 ], !value.HasValue, null);
         }).ToImmutableArray();
-        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, data) { Style = layer.Style };
+        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, data)
+        { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
     }
 
     private static List<decimal?> MovingAverage(IReadOnlyList<decimal> values, int window) =>
@@ -670,10 +752,15 @@ public sealed class PlotPlanResolver
         PlotBounds bounds)
     {
         if (spec.Facet is null) return [];
+        if (spec.Facet.WrapField is not null)
+            return ResolveWrappedFacets(spec, columns, globalScales, bounds);
         var rowValues = FacetValues(spec.Facet.RowField, columns);
         var columnValues = FacetValues(spec.Facet.ColumnField, columns);
         if (rowValues.Count == 0) rowValues.Add(null);
         if (columnValues.Count == 0) columnValues.Add(null);
+        ValidateFacetBudget(rowValues.Count * columnValues.Count,
+            columns.Values.FirstOrDefault()?.Values.Length ?? 0, bounds, columnValues.Count, rowValues.Count,
+            rowValues.Concat(columnValues).Where(value => value is not null).Select(value => value!.Length).DefaultIfEmpty(0).Max());
         var panels = new List<ResolvedFacetPanel>();
         var panelWidth = bounds.Width / columnValues.Count;
         var panelHeight = bounds.Height / rowValues.Count;
@@ -688,12 +775,109 @@ public sealed class PlotPlanResolver
                     .ToImmutableArray();
                 if (indices.IsDefaultOrEmpty) continue;
                 var scales = globalScales.Select(scale => Independent(scale, spec.Facet.Resolution, spec, columns, indices)).ToImmutableArray();
+                var panelBounds = new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight);
                 panels.Add(new ResolvedFacetPanel(
                     $"facet-{rowIndex:D2}-{columnIndex:D2}", rowLabel, columnLabel,
-                    new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight),
-                    indices, scales));
+                    panelBounds, indices, scales)
+                {
+                    CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, panelBounds)
+                });
             }
         return panels.ToImmutableArray();
+    }
+
+    private static ImmutableArray<ResolvedFacetPanel> ResolveWrappedFacets(
+        ChartSpec spec,
+        IReadOnlyDictionary<string, ChartColumn> columns,
+        ImmutableArray<ResolvedScale> globalScales,
+        PlotBounds bounds)
+    {
+        var facet = spec.Facet!;
+        var values = FacetValues(facet.WrapField, columns);
+        if (values.Count == 0) return [];
+        var columnCount = Math.Min(facet.Columns ?? 3, values.Count);
+        var rowCount = (values.Count + columnCount - 1) / columnCount;
+        var sourceRowCount = columns.Values.FirstOrDefault()?.Values.Length ?? 0;
+        ValidateFacetBudget(values.Count, sourceRowCount, bounds, columnCount, rowCount,
+            values.Where(value => value is not null).Select(value => value!.Length).DefaultIfEmpty(0).Max());
+
+        var panelWidth = bounds.Width / columnCount;
+        var panelHeight = bounds.Height / rowCount;
+        var panels = new List<ResolvedFacetPanel>(values.Count);
+        for (var index = 0; index < values.Count; index++)
+        {
+            var rowIndex = index / columnCount;
+            var columnIndex = index % columnCount;
+            var label = values[index];
+            var indices = Enumerable.Range(0, sourceRowCount)
+                .Where(row => MatchesFacet(facet.WrapField, label, columns, row))
+                .ToImmutableArray();
+            var scales = globalScales.Select(scale => Independent(scale, facet.Resolution, spec, columns, indices)).ToImmutableArray();
+            var panelBounds = new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight);
+            panels.Add(new ResolvedFacetPanel(
+                $"facet-wrap-{index:D3}", null, label,
+                panelBounds, indices, scales)
+            {
+                CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, panelBounds)
+            });
+        }
+        return panels.ToImmutableArray();
+    }
+
+    private static void ValidateFacetBudget(int panelCount, int sourceRowCount, PlotBounds bounds, int columns, int rows, int longestLabel)
+    {
+        const int maxPanels = 100;
+        const long maxRenderWork = 1_000_000;
+        const decimal minimumPanelWidth = 120m;
+        const decimal minimumPanelHeight = 110m;
+        if (panelCount > maxPanels)
+            throw new InvalidDataException($"Facet cardinality {panelCount} exceeds the {maxPanels}-panel limit; filter or group the facet field.");
+        if ((long)panelCount * sourceRowCount > maxRenderWork)
+            throw new InvalidDataException($"Facet render work ({panelCount} panels × {sourceRowCount} rows) exceeds the {maxRenderWork:N0}-cell limit; filter or aggregate the source.");
+        if (bounds.Width / columns < minimumPanelWidth || bounds.Height / rows < minimumPanelHeight)
+            throw new InvalidDataException($"Facet layout would create panels smaller than {minimumPanelWidth}×{minimumPanelHeight}; reduce COLUMNS/cardinality or enlarge the visual.");
+        if (longestLabel * 6m + 16m > bounds.Width / columns)
+            throw new InvalidDataException($"Facet label length ({longestLabel} characters) exceeds the available strip width; reduce COLUMNS, shorten labels in SQL, or enlarge the visual.");
+    }
+
+    private static PlotBounds? ResolveCartesianViewport(
+        CoordinateSpec coordinate, ImmutableArray<ResolvedScale> scales, PlotBounds bounds)
+    {
+        if (coordinate.AspectRatio is not { } aspectRatio) return null;
+        var xScale = scales.First(scale => scale.Channel == FieldChannel.X);
+        var yScale = scales.First(scale => scale.Channel == FieldChannel.Y);
+        var xSpan = ScaleSpan(xScale);
+        var ySpan = ScaleSpan(yScale);
+        if (xSpan <= 0m || ySpan <= 0m)
+            throw new InvalidDataException("ASPECT_RATIO requires non-degenerate X and Y domains.");
+
+        const decimal horizontalChrome = 80m;
+        const decimal verticalChrome = 100m;
+        var availableWidth = bounds.Width - horizontalChrome;
+        var availableHeight = bounds.Height - verticalChrome;
+        if (availableWidth <= 0m || availableHeight <= 0m)
+            throw new InvalidDataException("ASPECT_RATIO requires a visual large enough for axes and plot content.");
+        var desiredPlotRatio = aspectRatio * ySpan / xSpan;
+        var plotWidth = availableWidth;
+        var plotHeight = plotWidth * desiredPlotRatio;
+        if (plotHeight > availableHeight)
+        {
+            plotHeight = availableHeight;
+            plotWidth = plotHeight / desiredPlotRatio;
+        }
+        var frameWidth = plotWidth + horizontalChrome;
+        var frameHeight = plotHeight + verticalChrome;
+        return new PlotBounds(bounds.X + (bounds.Width - frameWidth) / 2m,
+            bounds.Y + (bounds.Height - frameHeight) / 2m, frameWidth, frameHeight);
+    }
+
+    private static decimal ScaleSpan(ResolvedScale scale)
+    {
+        var minimum = scale.Domain.Length == 0 ? 0m : Number(scale.Domain[0]) ?? 0m;
+        var maximum = scale.Domain.Length < 2 ? minimum + 1m : Number(scale.Domain[^1]) ?? minimum + 1m;
+        if (scale.Kind != ScaleKind.Logarithmic) return Math.Abs(maximum - minimum);
+        if (minimum <= 0m || maximum <= 0m) return 0m;
+        return Math.Abs((decimal)(Math.Log10((double)maximum) - Math.Log10((double)minimum)));
     }
 
     private static List<string?> FacetValues(string? field, IReadOnlyDictionary<string, ChartColumn> columns) =>
@@ -720,10 +904,11 @@ public sealed class PlotPlanResolver
         };
         if (mode == ScaleResolutionMode.Shared) return scale;
         var bindings = spec.Bindings.Concat(spec.Layers.SelectMany(layer => layer.Bindings))
-            .Where(binding => binding.ScaleId == scale.Id && columns.ContainsKey(binding.Field)).ToList();
+            .Where(binding => binding.ScaleId == scale.Id &&
+                (binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field))).ToList();
         if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal)
         {
-            var categories = bindings.SelectMany(binding => rows.Select(index => ValueKey(columns[binding.Field].Values[index])))
+            var categories = bindings.SelectMany(binding => rows.Select(index => ValueKey(BindingValue(binding, columns, index))))
                 .Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToImmutableArray();
             return scale with
             {
@@ -734,7 +919,7 @@ public sealed class PlotPlanResolver
         }
         if (scale.Kind == ScaleKind.Time)
         {
-            var temporal = bindings.SelectMany(binding => rows.Select(index => columns[binding.Field].Values[index]))
+            var temporal = bindings.SelectMany(binding => rows.Select(index => BindingValue(binding, columns, index)))
                 .Where(value => value.Kind != ChartValueKind.Null)
                 .GroupBy(ValueKey, StringComparer.Ordinal).Select(group => group.First())
                 .OrderBy(ValueKey, StringComparer.Ordinal).ToImmutableArray();
@@ -745,7 +930,7 @@ public sealed class PlotPlanResolver
                 Ticks = temporal.Select(value => new PlotTick(value, Display(value))).ToImmutableArray()
             };
         }
-        var values = bindings.SelectMany(binding => rows.Select(index => Number(columns[binding.Field].Values[index])))
+        var values = bindings.SelectMany(binding => rows.Select(index => Number(BindingValue(binding, columns, index))))
             .Where(value => value.HasValue).Select(value => value!.Value).ToList();
         if (values.Count == 0) return scale;
         var minimum = values.Min();
@@ -758,22 +943,164 @@ public sealed class PlotPlanResolver
             ? Enumerable.Range(0, 5).Select(index => (decimal)Math.Pow(10d,
                 Math.Log10((double)minimum) + (Math.Log10((double)maximum) - Math.Log10((double)minimum)) * index / 4d))
             : Enumerable.Range(0, 5).Select(index => minimum + (maximum - minimum) * index / 4m)).ToImmutableArray();
+        var colorRange = scale.ColorRange;
+        if (colorRange is not null)
+        {
+            if (colorRange.Midpoint is { } midpoint && (midpoint < minimum || midpoint > maximum))
+                throw new InvalidOperationException($"Diverging midpoint {midpoint} for independent scale '{scale.Id}' must fall inside panel domain [{minimum}, {maximum}].");
+            colorRange = colorRange with
+            {
+                Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray(),
+                AccessibleDescription = colorRange.Kind == ColorRangeKind.Diverging
+                    ? $"Color ranges from {minimum:0.##} ({colorRange.Low}) through {colorRange.Midpoint:0.##} ({colorRange.Mid}) to {maximum:0.##} ({colorRange.High})."
+                    : $"Color ranges from {minimum:0.##} ({colorRange.Low}) to {maximum:0.##} ({colorRange.High})."
+            };
+        }
         return scale with
         {
             Domain = [ChartValue.From(minimum), ChartValue.From(maximum)],
-            Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray()
+            Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray(),
+            ColorRange = colorRange
         };
     }
 
+    private static ImmutableArray<ResolvedMarkLayer> ResolveDisplayOffsets(
+        ChartSpec spec,
+        ChartDataSet data,
+        IReadOnlyDictionary<string, ChartColumn> columns,
+        ImmutableArray<ResolvedMarkLayer> layers,
+        ImmutableArray<ResolvedScale> scales,
+        ImmutableArray<ResolvedFacetPanel> facets,
+        PlotBounds bounds)
+    {
+        var panelByRow = facets.SelectMany(panel => panel.RowIndices.Select(row => (row, panel)))
+            .ToDictionary(item => item.row, item => item.panel);
+
+        foreach (var layer in layers.Where(layer => layer.Position?.Kind == PositionAdjustmentKind.Jitter))
+        {
+            var keyField = layer.Position!.StableKeyField!;
+            if (!columns.TryGetValue(keyField, out var keyColumn))
+                throw new InvalidOperationException($"Layer '{layer.Id}' JITTER key field '{keyField}' does not exist.");
+            var keys = keyColumn.Values.Select(ValueKey).ToArray();
+            if (keys.Any(key => key is null))
+                throw new InvalidOperationException($"Layer '{layer.Id}' JITTER key field '{keyField}' contains nulls.");
+            var duplicate = keys.GroupBy(key => key!, StringComparer.Ordinal).FirstOrDefault(group => group.Count() > 1);
+            if (duplicate is not null)
+                throw new InvalidOperationException($"Layer '{layer.Id}' JITTER key field '{keyField}' contains duplicate value '{duplicate.Key}'.");
+        }
+
+        return layers.Select(layer => layer with
+        {
+            Data = layer.Data.Select(datum =>
+            {
+                var panel = panelByRow.GetValueOrDefault(datum.RowIndex);
+                var datumScales = panel?.Scales ?? scales;
+                var datumBounds = panel?.CartesianViewport ?? panel?.Bounds ?? bounds;
+                var xScale = datumScales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
+                var yScale = datumScales.FirstOrDefault(scale => scale.Channel is FieldChannel.Y or FieldChannel.Y2);
+                var xBand = datumBounds.Width / Math.Max(1, xScale?.Categories.Length ?? 1);
+                var yBand = datumBounds.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
+                var offsetX = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
+                var offsetY = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand);
+                if (layer.Position is { } position)
+                {
+                    if (position.Kind == PositionAdjustmentKind.Jitter)
+                    {
+                        var key = ValueKey(columns[position.StableKeyField!].Values[datum.RowIndex])!;
+                        var identity = LayerPlacementIdentity(layer);
+                        offsetX += SignedHash(spec.Id, identity, key, "x", position.Seed) * position.X *
+                            (xScale?.Kind is ScaleKind.Band or ScaleKind.Point ? xBand : datumBounds.Width);
+                        offsetY += SignedHash(spec.Id, identity, key, "y", position.Seed) * position.Y *
+                            (yScale?.Kind is ScaleKind.Band or ScaleKind.Point ? yBand : datumBounds.Height);
+                    }
+                    else if (position.Kind == PositionAdjustmentKind.Nudge)
+                    {
+                        var nudge = ResolveNudge(position, datum, xScale, yScale, datumBounds, xBand, yBand, layer.Id);
+                        offsetX += nudge.X;
+                        offsetY += nudge.Y;
+                    }
+                }
+                return datum with { DisplayOffsetX = offsetX, DisplayOffsetY = offsetY };
+            }).ToImmutableArray()
+        }).ToImmutableArray();
+    }
+
+    private static decimal ResolveOffsetChannel(ResolvedDatum datum, FieldChannel channel,
+        ImmutableArray<ResolvedScale> scales, decimal band)
+    {
+        var value = Channel(datum, channel);
+        if (value is null || value.Kind == ChartValueKind.Null) return 0m;
+        var categories = scales.FirstOrDefault(scale => scale.Channel == channel)?.Categories ?? [];
+        var index = categories.IndexOf(Display(value));
+        return index < 0 || categories.Length < 2 ? 0m :
+            (((index + .5m) / categories.Length) - .5m) * band;
+    }
+
+    private static (decimal X, decimal Y) ResolveNudge(PositionAdjustmentSpec position, ResolvedDatum datum,
+        ResolvedScale? xScale, ResolvedScale? yScale, PlotBounds bounds, decimal xBand, decimal yBand, string layerId)
+    {
+        if (position.Unit == PositionAdjustmentUnit.Em) return (position.X * 12m, -position.Y * 12m);
+        if (position.Unit == PositionAdjustmentUnit.Band) return (position.X * xBand, -position.Y * yBand);
+        if (xScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic) ||
+            yScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
+            throw new InvalidOperationException($"Layer '{layerId}' data-domain NUDGE requires two continuous numeric scales.");
+        var x = Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
+        var y = Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
+        if (!x.HasValue || !y.HasValue)
+            throw new InvalidOperationException($"Layer '{layerId}' data-domain NUDGE requires numeric X and Y datum values.");
+        return (DataNudge(x.Value, position.X, xScale, bounds.Width, layerId, "X"),
+            -DataNudge(y.Value, position.Y, yScale, bounds.Height, layerId, "Y"));
+    }
+
+    private static decimal DataNudge(decimal value, decimal amount, ResolvedScale scale, decimal length,
+        string layerId, string channel)
+    {
+        var minimum = scale.Domain.Length == 0 ? 0m : Number(scale.Domain[0]) ?? 0m;
+        var maximum = scale.Domain.Length < 2 ? minimum : Number(scale.Domain[^1]) ?? minimum;
+        if (maximum <= minimum)
+            throw new InvalidOperationException($"Layer '{layerId}' data-domain NUDGE requires a non-zero {channel} domain.");
+        if (scale.Kind == ScaleKind.Logarithmic && (value <= 0m || value + amount <= 0m))
+            throw new InvalidOperationException($"Layer '{layerId}' data-domain NUDGE moves {channel} outside the positive logarithmic domain.");
+        decimal Position(decimal candidate) => scale.Kind == ScaleKind.Logarithmic
+            ? (decimal)((Math.Log10((double)candidate) - Math.Log10((double)minimum)) /
+                        (Math.Log10((double)maximum) - Math.Log10((double)minimum)))
+            : (candidate - minimum) / (maximum - minimum);
+        return (Position(value + amount) - Position(value)) * length;
+    }
+
+    private static string LayerPlacementIdentity(ResolvedMarkLayer layer) =>
+        $"{layer.Mark}|{layer.ZIndex}|{string.Join(',', layer.Data.FirstOrDefault()?.Channels.Select(channel => channel.Channel) ?? [])}";
+
+    private static decimal SignedHash(string chart, string layer, string key, string channel, int seed)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{chart}\u001f{layer}\u001f{key}\u001f{channel}\u001f{seed}"));
+        ulong value = 0;
+        for (var index = 0; index < sizeof(ulong); index++) value = (value << 8) | bytes[index];
+        return (decimal)value / ulong.MaxValue * 2m - 1m;
+    }
+
     private static string BuildSummary(ChartSpec spec, ChartDataSet data, ImmutableArray<ResolvedSeries> series,
-        ImmutableArray<ResolvedMarkLayer> layers, ImmutableArray<ResolvedFacetPanel> facets,
-        ImmutableArray<int> gaps, ImmutableArray<int> skipped) =>
+        ImmutableArray<ResolvedMarkLayer> layers, ImmutableArray<ResolvedScale> scales,
+        ImmutableArray<ResolvedFacetPanel> facets, ImmutableArray<int> gaps, ImmutableArray<int> skipped) =>
         $"{spec.Title ?? spec.Id}: {data.RowCount} rows, {layers.Length} ordered layers, {series.Length} series, " +
-        $"{(facets.IsDefaultOrEmpty ? 1 : facets.Length)} facet panels, {gaps.Length} gaps, {skipped.Length} skipped rows.";
+        $"{(facets.IsDefaultOrEmpty ? 1 : facets.Length)} facet panels, {gaps.Length} gaps, {skipped.Length} skipped rows." +
+        (scales.FirstOrDefault(scale => scale.ColorRange is not null)?.ColorRange is { } range ? " " + range.AccessibleDescription : string.Empty);
 
     private static string ResolveColor(ChartSpec spec, string key, int index) =>
         spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals($"COLOR:{key}", StringComparison.OrdinalIgnoreCase))?.Value
         ?? PaletteColors[index % PaletteColors.Length];
+
+    private static IEnumerable<ChartValue> BindingValues(FieldBinding binding, IReadOnlyDictionary<string, ChartColumn> columns)
+    {
+        if (binding.SourceKind != BindingSourceKind.Field)
+            return binding.Constant is null ? [] : [binding.Constant];
+        return binding.Field is not null && columns.TryGetValue(binding.Field, out var column) ? column.Values : [];
+    }
+
+    private static ChartValue BindingValue(FieldBinding binding, IReadOnlyDictionary<string, ChartColumn> columns, int rowIndex) =>
+        binding.SourceKind == BindingSourceKind.Field && binding.Field is not null && columns.TryGetValue(binding.Field, out var column)
+            ? column.Values[rowIndex]
+            : binding.Constant ?? ChartValue.Null();
 
     private static bool IsEnabled(ImmutableArray<StyleToken> tokens, string name)
     {

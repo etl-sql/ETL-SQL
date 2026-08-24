@@ -15,7 +15,7 @@ accept renderer option objects, or introduce a second transformation language.
 The authoring path is:
 
 ```text
-CUSTOM visual AST -> ChartSpec -> PlotPlan -> ECharts compiler / native SVG / terminal fallback
+CUSTOM visual AST -> ChartSpec -> PlotPlan -> native SVG / terminal and semantic fallback
 ```
 
 Named visual types remain the preferred concise syntax. `CUSTOM` is for compositions that cannot be
@@ -206,9 +206,9 @@ resolution, styles, and conditions. Reporting lowers those records directly into
 - Conditions become typed `EncodingConditionSpec` values and resolve into per-datum portable
   presentation values before any renderer runs.
 
-`ChartSpec` and `PlotPlan` advance together when these additive contracts are serialized. ECharts
-options remain transient output and never appear in the AST, `ChartSpec`, saved designer state, or
-neutral manifest as authoritative meaning.
+`ChartSpec` and `PlotPlan` advance together when these additive contracts are serialized. Native SVG
+remains derived output and never appears in the AST, `ChartSpec`, saved designer state, or neutral
+manifest as authoritative meaning.
 
 ## 5. Validation and diagnostics
 
@@ -288,7 +288,7 @@ Every grammar form requires:
 - column-lineage assertions for encodings, facets, and condition predicates;
 - deterministic `ChartSpec` and `PlotPlan` serialization;
 - equivalent semantic ordering, domains, layers, facet panels, conditions, and fallbacks across the
-  ECharts compiler, native SVG, terminal, and accessibility/plain-text surfaces;
+  browser/native SVG, terminal, and accessibility/plain-text surfaces;
 - documentation and snippets containing parser-tested minimal examples.
 
 ## References

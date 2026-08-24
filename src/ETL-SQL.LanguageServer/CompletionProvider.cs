@@ -155,10 +155,14 @@ namespace ETL_SQL.LSP
             if (scope.Count(character => character == '(') <= scope.Count(character => character == ')')) return [];
             string[] keywords =
             [
-                "COORDINATE", "SCALES", "LAYERS", "ENCODINGS", "STYLE", "CONDITIONS", "FACET", "RESOLVE",
-                "CARTESIAN", "TRANSPOSED_CARTESIAN", "POLAR", "RECT", "LINE", "AREA", "POINT", "RULE", "ARC", "TEXT",
+                "COORDINATE", "SCALES", "LAYERS", "ENCODINGS", "INHERIT_ENCODINGS", "DATUM", "VALUE", "STYLE", "CONDITIONS", "FACET", "RESOLVE",
+                "CARTESIAN", "TRANSPOSED_CARTESIAN", "POLAR", "RECT", "LINE", "AREA", "POINT", "RULE", "ARC", "TEXT", "TICK",
                 "LINEAR", "LOGARITHMIC", "TIME", "BAND", "POINT", "ORDINAL", "IDENTITY",
-                "QUANTITATIVE", "TEMPORAL", "NOMINAL", "ORDINAL", "PRIMARY", "SECONDARY", "SHARED", "INDEPENDENT"
+                "QUANTITATIVE", "TEMPORAL", "NOMINAL", "ORDINAL", "PRIMARY", "SECONDARY", "SHARED", "INDEPENDENT",
+                "X_START", "X_END", "X_OFFSET", "Y_START", "Y_END", "Y_OFFSET", "STACK", "ZERO", "NORMALIZE",
+                "BAND_SIZE", "POSITION", "JITTER", "NUDGE", "KEY", "SEED", "DATA", "EM", "WRAP", "COLUMNS",
+                "ASPECT_RATIO", "RANGE", "GRADIENT", "DIVERGING", "LOW", "MID", "HIGH", "MIDPOINT", "NULL_COLOR",
+                "THICKNESS", "ORIENTATION", "AUTO", "HORIZONTAL", "VERTICAL"
             ];
             return keywords.Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(keyword => string.IsNullOrEmpty(prefix) || keyword.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))

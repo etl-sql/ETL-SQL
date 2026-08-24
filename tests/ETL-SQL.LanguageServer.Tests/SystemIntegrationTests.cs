@@ -493,6 +493,10 @@ SET @normal = 'still-visible';
             Assert.Contains(result, item => item.Label == "SCALES");
             Assert.Contains(result, item => item.Label == "FACET");
             Assert.Contains(result, item => item.Label == "INDEPENDENT");
+            Assert.Contains(result, item => item.Label == "TICK");
+            Assert.Contains(result, item => item.Label == "JITTER");
+            Assert.Contains(result, item => item.Label == "DIVERGING");
+            Assert.Contains(result, item => item.Label == "ASPECT_RATIO");
         }
 
         private class MockConfiguration : Microsoft.Extensions.Configuration.IConfiguration

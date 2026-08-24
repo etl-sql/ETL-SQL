@@ -1429,14 +1429,19 @@ public static class AstSerializer
         var sections = new List<string>
         {
             "COORDINATE ( " + string.Join(", ", CoordinateParts(chart.Coordinate)) + " )",
-            "SCALES (\n" + string.Join(",\n", chart.Scales.Select(scale => Indent(FormatAdvancedScale(scale), 4))) + "\n)",
             "LAYERS (\n" + string.Join(",\n", chart.Layers.Select(layer => Indent(FormatAdvancedLayer(layer), 4))) + "\n)"
         };
+        if (!chart.Scales.IsDefaultOrEmpty)
+            sections.Insert(1, "SCALES (\n" + string.Join(",\n", chart.Scales.Select(scale => Indent(FormatAdvancedScale(scale), 4))) + "\n)");
+        if (!chart.Encodings.IsDefaultOrEmpty)
+            sections.Insert(chart.Scales.IsDefaultOrEmpty ? 1 : 2, "ENCODINGS (\n" + string.Join(",\n", chart.Encodings.Select(encoding => Indent(FormatAdvancedEncoding(encoding), 4))) + "\n)");
         if (chart.Facet != null)
         {
             var facets = new List<string>();
             if (chart.Facet.RowField != null) facets.Add($"ROW = {chart.Facet.RowField}");
             if (chart.Facet.ColumnField != null) facets.Add($"COLUMN = {chart.Facet.ColumnField}");
+            if (chart.Facet.WrapField != null) facets.Add($"WRAP = {chart.Facet.WrapField}");
+            if (chart.Facet.Columns.HasValue) facets.Add($"COLUMNS = {chart.Facet.Columns.Value}");
             sections.Add("FACET ( " + string.Join(", ", facets) + " )");
         }
         sections.Add($"RESOLVE ( X = {Upper(chart.Resolution.X)}, Y = {Upper(chart.Resolution.Y)}, COLOR = {Upper(chart.Resolution.Color)} )");
@@ -1449,6 +1454,7 @@ public static class AstSerializer
         if (coordinate.StartAngle.HasValue) yield return $"START_ANGLE = {Number(coordinate.StartAngle.Value)}";
         if (coordinate.EndAngle.HasValue) yield return $"END_ANGLE = {Number(coordinate.EndAngle.Value)}";
         if (coordinate.InnerRadius.HasValue) yield return $"INNER_RADIUS = {Number(coordinate.InnerRadius.Value)}";
+        if (coordinate.AspectRatio.HasValue) yield return $"ASPECT_RATIO = {Number(coordinate.AspectRatio.Value)}";
     }
 
     private static string FormatAdvancedScale(AdvancedChartScale scale)
@@ -1463,12 +1469,27 @@ public static class AstSerializer
         options.Add(scale.ExplicitOrder.IsDefaultOrEmpty
             ? $"ORDER = {Upper(scale.Order)}"
             : "ORDER = (" + string.Join(", ", scale.ExplicitOrder.Select(Format)) + ")");
+        if (scale.ColorRange is { } range)
+        {
+            var rangeOptions = new List<string> { $"LOW = {range.Low.ToSql()}" };
+            if (range.Mid is not null) rangeOptions.Add($"MID = {range.Mid.ToSql()}");
+            rangeOptions.Add($"HIGH = {range.High.ToSql()}");
+            if (range.Midpoint is not null) rangeOptions.Add($"MIDPOINT = {range.Midpoint.ToSql()}");
+            if (range.NullColor is not null) rangeOptions.Add($"NULL_COLOR = {range.NullColor.ToSql()}");
+            options.Add($"RANGE = {Upper(range.Kind)}( {string.Join(", ", rangeOptions)} )");
+        }
         return $"{scale.Name} = {Upper(scale.Kind)} ( {string.Join(", ", options)} )";
     }
 
     private static string FormatAdvancedLayer(AdvancedChartLayer layer)
     {
         var sections = new List<string> { $"Z_INDEX = {layer.ZIndex}" };
+        if (!layer.InheritEncodings) sections.Add("INHERIT_ENCODINGS = OFF");
+        if (layer.BandSize != .75m) sections.Add($"BAND_SIZE = {Number(layer.BandSize)}");
+        if (layer.Mark == AdvancedChartMarkKind.Tick && layer.TickThickness != .15m) sections.Add($"THICKNESS = {Number(layer.TickThickness)}");
+        if (layer.Mark == AdvancedChartMarkKind.Tick && layer.TickOrientation != AdvancedChartTickOrientation.Auto)
+            sections.Add($"ORIENTATION = {Upper(layer.TickOrientation)}");
+        if (layer.Position.Kind != AdvancedChartPositionKind.Identity) sections.Add(FormatAdvancedPosition(layer.Position));
         sections.Add("ENCODINGS (\n" + string.Join(",\n",
             layer.Encodings.Select(encoding => Indent(FormatAdvancedEncoding(encoding), 4))) + "\n)");
         if (!layer.Styles.IsDefaultOrEmpty)
@@ -1481,6 +1502,19 @@ public static class AstSerializer
             string.Join(",\n", sections.Select(section => Indent(section, 4))) + "\n)";
     }
 
+    private static string FormatAdvancedPosition(AdvancedChartPosition position)
+    {
+        if (position.Kind == AdvancedChartPositionKind.Identity) return "POSITION = IDENTITY";
+        var options = new List<string> { $"X = {Number(position.X)}", $"Y = {Number(position.Y)}" };
+        if (position.Kind == AdvancedChartPositionKind.Jitter)
+        {
+            options.Add($"KEY = {position.KeyField}");
+            if (position.Seed != 0) options.Add($"SEED = {position.Seed}");
+        }
+        else options.Add($"UNIT = {Upper(position.Unit)}");
+        return $"POSITION = {Upper(position.Kind)}( {string.Join(", ", options)} )";
+    }
+
     private static string FormatAdvancedEncoding(AdvancedChartEncoding encoding)
     {
         var options = new List<string> { $"TYPE = {Upper(encoding.DataKind)}" };
@@ -1488,7 +1522,15 @@ public static class AstSerializer
         if (encoding.Axis != AdvancedChartAxisRole.None) options.Add($"AXIS = {Upper(encoding.Axis)}");
         if (encoding.Sort != AdvancedChartSortDirection.Source) options.Add($"SORT = {Upper(encoding.Sort)}");
         if (encoding.Format != null) options.Add($"FORMAT = {Quote(encoding.Format)}");
-        return $"{Upper(encoding.Channel)} = {encoding.Field} ( {string.Join(", ", options)} )";
+        if (encoding.Stack != AdvancedChartStackMode.None) options.Add($"STACK = {Upper(encoding.Stack)}");
+        var source = encoding.Source.Kind switch
+        {
+            AdvancedChartBindingSourceKind.Field => encoding.Source.Field!,
+            AdvancedChartBindingSourceKind.Datum => $"DATUM({encoding.Source.Constant!.ToSql()})",
+            AdvancedChartBindingSourceKind.Value => $"VALUE({encoding.Source.Constant!.ToSql()})",
+            _ => throw new InvalidOperationException("Unsupported advanced chart binding source.")
+        };
+        return $"{Upper(encoding.Channel)} = {source} ( {string.Join(", ", options)} )";
     }
 
     private static string Upper<T>(T value) where T : struct, Enum => value switch

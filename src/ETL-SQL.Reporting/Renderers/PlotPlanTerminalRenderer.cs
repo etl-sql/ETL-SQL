@@ -48,6 +48,14 @@ internal static class PlotPlanTerminalRenderer
         if (plan.Legend.Length > 1)
             content.Add(new Markup(string.Join("  ", plan.Legend.Select(entry =>
                 $"[#{entry.Color.TrimStart('#')}]{PointGlyphs[entry.Order % PointGlyphs.Length]}[/] {Markup.Escape(entry.Label)} [grey]({Markup.Escape(entry.Color)})[/]"))));
+        var continuousColor = plan.Scales.FirstOrDefault(scale => scale.ColorRange is not null)?.ColorRange;
+        if (continuousColor is not null)
+        {
+            var bins = continuousColor.Mid is null
+                ? $"[{continuousColor.Low}]■[/] low  →  [{continuousColor.High}]■[/] high"
+                : $"[{continuousColor.Low}]■[/] low  →  [{continuousColor.Mid}]■[/] midpoint  →  [{continuousColor.High}]■[/] high";
+            content.Add(new Rows(new Markup(bins), new Markup($"[grey]{Markup.Escape(continuousColor.AccessibleDescription)}[/]")));
+        }
         return new Panel(new Rows(content))
         {
             Header = new PanelHeader(Markup.Escape(plan.Title ?? plan.SpecId)),
@@ -75,7 +83,7 @@ internal static class PlotPlanTerminalRenderer
 
         var rectLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rect).ToList();
         var continuousLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point).ToList();
-        var ruleLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rule).ToList();
+        var ruleLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Rule or MarkKind.Tick).ToList();
 
         if (rectLayers.Count > 0 && continuousLayers.Any(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area))
         {
@@ -105,7 +113,7 @@ internal static class PlotPlanTerminalRenderer
                     MarkKind.Rect => RenderRectangles(plan, item.Data, item.Label, item.Color, width),
                     MarkKind.Line or MarkKind.Area => RenderLine(item.Data, item.Label, item.Color, width, item.Layer.Mark == MarkKind.Area),
                     MarkKind.Point => RenderPoints(item.Data, item.Label, item.Color, item.Series?.Order ?? 0),
-                    MarkKind.Rule => RenderRule(item.Data, item.Label, item.Color),
+                    MarkKind.Rule or MarkKind.Tick => RenderRule(item.Data, item.Label, item.Color),
                     _ => RenderFallback(plan.Fallback)
                 });
             }
@@ -579,11 +587,18 @@ internal static class PlotPlanTerminalRenderer
 
     private static List<(string Label, HashSet<int> Rows)> ResolveFacets(PlotPlan plan)
     {
+        if (!plan.Facets.IsDefaultOrEmpty)
+            return plan.Facets.Select(panel =>
+            {
+                var label = panel.RowLabel is null ? panel.ColumnLabel ?? "All data" :
+                    panel.ColumnLabel is null ? panel.RowLabel : $"{panel.RowLabel} / {panel.ColumnLabel}";
+                return (label, panel.RowIndices.ToHashSet());
+            }).ToList();
         var source = plan.Layers.FirstOrDefault(layer => layer.Mark is not MarkKind.Rule)?.Data ?? [];
         var groups = source.GroupBy(datum =>
         {
             var row = Channel(datum, FieldChannel.Row);
-            var column = Channel(datum, FieldChannel.Column);
+            var column = Channel(datum, FieldChannel.Column) ?? Channel(datum, FieldChannel.Wrap);
             return row is null && column is null ? "All data" : $"{(row is null ? "" : PlotPlanResolver.Display(row))}{(row is not null && column is not null ? " / " : "")}{(column is null ? "" : PlotPlanResolver.Display(column))}";
         }, StringComparer.Ordinal).Select(group => (group.Key, group.Select(datum => datum.RowIndex).ToHashSet())).ToList();
         return groups.Count == 0 ? [("All data", plan.Layers.SelectMany(layer => layer.Data).Select(datum => datum.RowIndex).ToHashSet())] : groups;

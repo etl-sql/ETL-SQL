@@ -22,7 +22,7 @@ public sealed class ReportRenameProviderTests
               ENCODINGS (Y = Revenue (TYPE = QUANTITATIVE, SCALE = revenue_scale)),
               CONDITIONS (COLOR WHEN Revenue < 0 THEN '#b91c1c')
             )),
-            FACET (ROW = Revenue)
+            FACET (WRAP = Revenue, COLUMNS = 3)
           )
         );
         """;
@@ -46,7 +46,7 @@ public sealed class ReportRenameProviderTests
     }
 
     [Fact]
-    public async Task RenameField_UpdatesEncodingConditionAndFacetButNotStringLiteral()
+    public async Task RenameField_UpdatesEncodingConditionAndWrappedFacetButNotStringLiteral()
     {
         var (provider, uri) = Provider();
         var cursor = PositionOf(ScriptText, "Revenue (TYPE");

@@ -1,0 +1,198 @@
+-- Declarative geometry refinements: every calculation remains visible in SQL.
+SET REPORT TITLE = 'Declarative Geometry Refinements';
+SET REPORT DESCRIPTION = 'Portable stacks, intervals, position adjustments, wrapped facets, fixed aspect, color ramps, TICK targets, interactions, and semantic fallbacks.';
+
+DECLARE @Target DECIMAL = 5;
+
+SELECT 'A' AS Category, 20 AS Actual, 30 AS Forecast, 'Actual' AS Series INTO #bars
+UNION ALL SELECT 'B', 10, 30, 'Forecast'
+UNION ALL SELECT 'C', 35, 15, 'Actual';
+
+SELECT 'Q1' AS Period, 10 AS Lower, 20 AS Upper, 15 AS Center INTO #forecast
+UNION ALL SELECT 'Q2', 12, 25, 19
+UNION ALL SELECT 'Q3', 14, 27, 22;
+
+SELECT 'n-1' AS StableId, 1 AS Score, 4 AS Rank, 'North' AS Region INTO #observations
+UNION ALL SELECT 's-1', 2, 3, 'South'
+UNION ALL SELECT 'e-1', 3, 2, 'East'
+UNION ALL SELECT 'w-1', 4, 1, 'West';
+
+SELECT 'North' AS Region, 0 AS Expected, 0 AS Observed, -10 AS Variance INTO #parity
+UNION ALL SELECT 'South', 2, 3, -2
+UNION ALL SELECT 'East', 5, 5, 0
+UNION ALL SELECT 'West', 8, 7, 4
+UNION ALL SELECT 'Central', 10, 10, 10;
+
+SELECT 'A' AS Category, 'East' AS Series, 18 AS Amount INTO #grouped
+UNION ALL SELECT 'A', 'West', 25
+UNION ALL SELECT 'B', 'East', 31
+UNION ALL SELECT 'B', 'West', 22;
+
+SELECT 'Latency' AS Metric, 100 AS RangeMax, 63 AS Actual, 75 AS Target INTO #bullet
+UNION ALL SELECT 'Throughput', 100, 82, 80;
+
+SELECT 'A' AS Category, 12 AS Low, 21 AS High, 17 AS Estimate INTO #errors
+UNION ALL SELECT 'B', 18, 34, 26
+UNION ALL SELECT 'C', 9, 24, 19;
+
+CREATE VISUAL NormalizedBars AS CUSTOM (
+  TITLE = 'Normalized actual and forecast by category',
+  SOURCE = #bars,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    ENCODINGS (X = Category (TYPE = NOMINAL)),
+    LAYERS (
+      actual = RECT (BAND_SIZE = 1, ENCODINGS (Y = Actual (TYPE = QUANTITATIVE, STACK = NORMALIZE))),
+      forecast = RECT (BAND_SIZE = 0.55, ENCODINGS (Y = Forecast (TYPE = QUANTITATIVE, STACK = NORMALIZE)))
+    )
+  ),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
+);
+
+CREATE VISUAL ForecastRibbon AS CUSTOM (
+  TITLE = 'Forecast range, center, and target',
+  SOURCE = #forecast,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (period_band = BAND (CHANNEL = X)),
+    ENCODINGS (X = Period (TYPE = ORDINAL, SCALE = period_band)),
+    LAYERS (
+      bounds = AREA (ENCODINGS (
+        Y_START = Lower (TYPE = QUANTITATIVE),
+        Y_END = Upper (TYPE = QUANTITATIVE),
+        TOOLTIP = Period (TYPE = ORDINAL)
+      )),
+      center = LINE (ENCODINGS (Y = Center (TYPE = QUANTITATIVE))),
+      target = TICK (BAND_SIZE = 0.9, THICKNESS = 0.2,
+        ENCODINGS (Y = DATUM(@Target) (TYPE = QUANTITATIVE), TOOLTIP = VALUE('Target') (TYPE = NOMINAL)))
+    )
+  )
+);
+
+CREATE VISUAL DeterministicStrip AS CUSTOM (
+  TITLE = 'Deterministically jittered observations',
+  SOURCE = #observations,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (
+      points = POINT (
+        POSITION = JITTER(X = 0.08, Y = 0.04, KEY = StableId, SEED = 42),
+        ENCODINGS (X = Score (TYPE = QUANTITATIVE), Y = Rank (TYPE = QUANTITATIVE),
+          X_OFFSET = Region (TYPE = NOMINAL), DETAIL = StableId (TYPE = NOMINAL),
+          TOOLTIP = StableId (TYPE = NOMINAL))
+      ),
+      labels = TEXT (
+        POSITION = NUDGE(X = 0.4, Y = 0.6, UNIT = EM),
+        ENCODINGS (X = Score (TYPE = QUANTITATIVE), Y = Rank (TYPE = QUANTITATIVE), TEXT = StableId (TYPE = NOMINAL))
+      )
+    )
+  ),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
+);
+
+CREATE VISUAL RegionalParity AS CUSTOM (
+  TITLE = 'Regional expected versus observed parity',
+  SOURCE = #parity,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN, ASPECT_RATIO = 1),
+    SCALES (
+      variance = LINEAR (CHANNEL = COLOR,
+        RANGE = DIVERGING(LOW = '#2166ac', MID = '#f7f7f7', HIGH = '#b2182b', MIDPOINT = 0))
+    ),
+    ENCODINGS (X = Expected (TYPE = QUANTITATIVE), Y = Observed (TYPE = QUANTITATIVE)),
+    LAYERS (
+      observations = POINT (ENCODINGS (COLOR = Variance (TYPE = QUANTITATIVE, SCALE = variance))),
+      parity = RULE (ENCODINGS (
+        X_START = DATUM(0) (TYPE = QUANTITATIVE), X_END = DATUM(10) (TYPE = QUANTITATIVE),
+        Y_START = DATUM(0) (TYPE = QUANTITATIVE), Y_END = DATUM(10) (TYPE = QUANTITATIVE)
+      )),
+      vertical_threshold = RULE (ENCODINGS (
+        X = DATUM(5) (TYPE = QUANTITATIVE),
+        Y_START = DATUM(0) (TYPE = QUANTITATIVE), Y_END = DATUM(10) (TYPE = QUANTITATIVE)
+      )),
+      parameter_threshold = RULE (ENCODINGS (
+        Y = DATUM(@Target) (TYPE = QUANTITATIVE),
+        X_START = DATUM(0) (TYPE = QUANTITATIVE), X_END = DATUM(10) (TYPE = QUANTITATIVE)
+      ))
+    ),
+    FACET (WRAP = Region, COLUMNS = 3)
+  )
+);
+
+CREATE VISUAL GroupedBars AS CUSTOM (
+  TITLE = 'Grouped amount by category and series',
+  SOURCE = #grouped,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (grouped_marks = RECT (BAND_SIZE = 0.9, ENCODINGS (
+      X = Category (TYPE = NOMINAL),
+      Y = Amount (TYPE = QUANTITATIVE, STACK = NONE),
+      X_OFFSET = Series (TYPE = NOMINAL),
+      COLOR = Series (TYPE = NOMINAL)
+    )))
+  ),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
+);
+
+CREATE VISUAL BulletBands AS CUSTOM (
+  TITLE = 'Actual performance against target',
+  SOURCE = #bullet,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    ENCODINGS (X = Metric (TYPE = NOMINAL)),
+    LAYERS (
+      qualitative_band = RECT (BAND_SIZE = 1, ENCODINGS (
+        Y = RangeMax (TYPE = QUANTITATIVE), COLOR = VALUE('#d1d5db') (TYPE = NOMINAL)
+      )),
+      actual_measure = RECT (BAND_SIZE = 0.45, Z_INDEX = 1, ENCODINGS (
+        Y = Actual (TYPE = QUANTITATIVE), COLOR = VALUE('#2563eb') (TYPE = NOMINAL)
+      )),
+      target_tick = TICK (BAND_SIZE = 0.85, THICKNESS = 0.22, Z_INDEX = 2,
+        ENCODINGS (Y = Target (TYPE = QUANTITATIVE), TOOLTIP = VALUE('Target') (TYPE = NOMINAL)))
+    )
+  )
+);
+
+CREATE VISUAL ErrorRanges AS CUSTOM (
+  TITLE = 'Estimate with prepared low and high range',
+  SOURCE = #errors,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (category_band = BAND (CHANNEL = X)),
+    ENCODINGS (X = Category (TYPE = NOMINAL, SCALE = category_band)),
+    LAYERS (
+      extent = RULE (ENCODINGS (
+        Y_START = Low (TYPE = QUANTITATIVE), Y_END = High (TYPE = QUANTITATIVE)
+      )),
+      estimate = TICK (BAND_SIZE = 0.65, ORIENTATION = HORIZONTAL,
+        ENCODINGS (Y = Estimate (TYPE = QUANTITATIVE)))
+    )
+  )
+);
+
+CREATE VISUAL SequentialBarcode AS CUSTOM (
+  TITLE = 'Estimate encoded with a continuous color range',
+  SOURCE = #errors,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      magnitude = LINEAR (CHANNEL = COLOR,
+        RANGE = GRADIENT(LOW = '#eff6ff', HIGH = '#1d4ed8'))
+    ),
+    ENCODINGS (X = Category (TYPE = NOMINAL)),
+    LAYERS (barcode = TICK (BAND_SIZE = 0.22, THICKNESS = 0.12, ORIENTATION = VERTICAL, ENCODINGS (
+      Y = Estimate (TYPE = QUANTITATIVE),
+      COLOR = Estimate (TYPE = QUANTITATIVE, SCALE = magnitude)
+    )))
+  )
+);
+
+CREATE PAGE GeometryRefinements AS DASHBOARD (
+  STRUCTURE = 'A B / C D',
+  MAP ('A' = NormalizedBars, 'B' = ForecastRibbon, 'C' = DeterministicStrip, 'D' = RegionalParity)
+);
+
+CREATE PAGE PlacementAndRanges AS DASHBOARD (
+  STRUCTURE = 'A B / C D',
+  MAP ('A' = GroupedBars, 'B' = BulletBands, 'C' = ErrorRanges, 'D' = SequentialBarcode)
+);

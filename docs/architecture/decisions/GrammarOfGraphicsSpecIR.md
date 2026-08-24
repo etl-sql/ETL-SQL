@@ -18,7 +18,7 @@ ordering, scales, colors, nulls, and fallbacks.
 That coupling limits ETL-SQL's product goals:
 
 - Script-first, reviewable, lineage-aware report definitions.
-- Renderer independence and eventual ECharts retirement.
+- Renderer independence and the completed ECharts retirement.
 - Consistent semantics across browser, terminal, PDF, email, and future presentation surfaces.
 - Native static output without requiring server-side V8.
 - Composite charts without adding a bespoke visual keyword for every combination.
@@ -119,6 +119,79 @@ to browsers, easy to inspect, and requires no chart-data decoding library. Arrow
 for dense `TABLE` and `MATRIX` data. The crossover between representations is selected from measured
 payload, parse, memory, and interaction behavior; this ADR does not establish a permanent row-count
 threshold.
+
+### 5.1 Binding-source contract
+
+An encoding has exactly one immutable, serialized source kind:
+
+- **Field** reads a named source column and is written with the existing bare-column form. This is
+  the canonical field syntax; ordinary reports do not require a `FIELD(...)` wrapper.
+- **Datum** is written as `DATUM(scalar)` and supplies a typed value in the data domain. It may use a
+  compatible scale, axis, format, and semantic type exactly as a field datum does.
+- **Value** is written as `VALUE(scalar)` and supplies a typed value in the visual range. It bypasses
+  scales and axes, and is rejected on positional channels.
+
+The scalar is either a literal or a declared, non-secret variable. Column references, aggregates,
+function calls, and arbitrary expressions are rejected so encoding cannot become a hidden
+transformation language. A lowered parameter binding retains its parameter dependency and typed
+resolved value; secret-bearing parameters fail before serialization. Field sources create column
+lineage, literal sources create none, and parameter sources create parameter-dependency metadata.
+No constant is represented as a synthetic source column.
+
+Top-level `CHART ENCODINGS` are inherited by layers at compile time. A local channel replaces the
+same global channel atomically, including its scale, axis, sort, format, and source. Other global
+channels remain. `INHERIT_ENCODINGS = OFF` isolates a layer. Both scopes reject duplicate channels,
+and mark/scale validation runs on the resulting effective set. `ChartSpec` always serializes the
+complete effective bindings, so renderers never implement inheritance.
+
+### 5.2 Resolved geometry and layout refinements
+
+Placement dimensions remain orthogonal and serialized. `Z_INDEX` determines paint order, `STACK`
+determines accumulation, nominal/ordinal offset channels determine dodge slots, and `BAND_SIZE`
+determines relative mark thickness. Positive and negative stacks use separate baselines; normalized
+stacks retain raw values while emitting resolved endpoints. Standard visual lowering writes these
+semantics explicitly. Renderers do not inspect layer names or global `STACKED` flags.
+The delivered stack geometry covers quantitative Y/Y2 in Cartesian and transposed Cartesian
+coordinates; polar/radial stacking fails validation until a renderer-neutral radial endpoint
+contract exists.
+
+`Y_START`/`Y_END` and `X_START`/`X_END` are the general interval channels. AREA requires paired Y
+endpoints for a floating ribbon; RULE consumes paired endpoints for a ranged segment. All interval
+statistics are prepared in SQL. `TICK` is a separate category-local target/observation mark with a
+relative band length and bounded em-relative thickness. It accepts nominal/ordinal X plus
+quantitative Y; `AUTO` resolves to a horizontal category-local segment, while explicit horizontal
+or vertical orientation remains portable. TICK never inherits RULE's plot-spanning meaning.
+
+Layer position adjustments are typed. Jitter hashes the chart's semantic layer placement, stable
+key, channel, and explicit seed with SHA-256, then resolves band-relative display offsets. It rejects
+null or duplicate keys. Nudge declares `DATA`, `BAND`, or `EM` units. Both resolve after scales,
+stacks, and offset slots and before rendering; raw values, domains, lineage, actions, tooltips,
+fallbacks, and exports remain unchanged. Layer display names are deliberately excluded from jitter
+identity so rename cannot move marks.
+
+Scale inference is a lowering decision, never a renderer guess. Quantitative positions/sizes use
+linear scales, temporal positions use time, categorical RECT/TICK positions use band, categorical
+POINT/LINE positions use point, and categorical color/shape uses ordinal. Stable inferred IDs encode
+coordinate, primary/secondary axis, and channel. Unsupported or conflicting combinations require an
+explicit scale.
+
+Quantitative color uses a linear/log data transform plus a typed sequential or diverging output
+range. Portable colors are `#RRGGBB`; interpolation is deterministic sRGB with half-away-from-zero
+component rounding, ratios clamp to the domain, nulls use the declared null color, and diverging
+midpoints must resolve inside the domain. The plan carries colorbar ticks and an accessible range
+description; terminal output uses ordered labeled bins.
+
+One-dimensional `FACET WRAP` is mutually exclusive with the row/column grid. It retains first-seen
+category order and resolves row-major panels with an incomplete final row aligned to the start.
+Resolution rejects more than 100 panels, more than 1,000,000 panel-row work cells, columns outside
+1–12, and panels below 120×110 logical units before allocating panel contracts. Graphical, terminal,
+PDF/email, and accessibility consumers receive the same ordered panels.
+
+Cartesian `ASPECT_RATIO` is the physical Y-unit/X-unit ratio after continuous primary domains are
+resolved. The resolver subtracts fixed axis/title chrome, fits the maximal rectangle, centers it,
+and serializes the viewport; renderers preserve domains and deliberate padding. Polar, transposed,
+discrete, secondary-only, degenerate-domain, and undersized forms fail closed until they have a
+portable meaning. Facets resolve the same rule independently inside each panel.
 
 ## 6. Authoring and Transformation Boundary
 
@@ -271,8 +344,8 @@ text, trivia, and line endings.
 
 ### Slice 1 — Representative End-to-End Contract
 
-Prove a versioned `ChartSpec`, typed columnar data, deterministic `PlotPlan`, named visual lowering,
-transient ECharts compilation, native SVG, and terminal output with a deliberately varied set:
+This slice originally proved a versioned `ChartSpec`, typed columnar data, deterministic `PlotPlan`,
+named visual lowering, native SVG, and terminal output with a deliberately varied set:
 
 - `BAR` for band and linear scales.
 - `LINE` for temporal or ordinal values, gaps, and multiple series.
@@ -294,11 +367,11 @@ Specify and parser-test the ETL-SQL-native advanced grammar for layering, scales
 conditions, and facets. Update LSP, formatter, documentation, samples, and Report Builder mutation
 support together. This slice does not add embedded Vega-Lite.
 
-### Slice 4 — Catalog Expansion and ECharts Retirement
+### Slice 4 — Catalog Expansion and ECharts Retirement (Complete)
 
-Migrate remaining standard visuals in independently testable groups. Evaluate specialized layout
-modules for complex charts, classify Gantt from evidence, and remove ECharts/ClearScript only after
-the capability matrix, exports, interactions, and regression fixtures no longer require them.
+The remaining standard visuals migrated in independently testable groups. Focused native layout
+modules cover the complex charts, Gantt was classified from evidence, and ECharts/ClearScript were
+removed after capability, export, interaction, and regression gates passed.
 
 ### Slice 5 — Advanced Samples and Conversion Guidance
 
@@ -317,11 +390,16 @@ The architecture is complete only when evidence covers:
 - Browser, terminal, PDF, email, accessibility, and plain-text fallback fixtures.
 - Report Builder and LSP round-trip preservation for every added grammar form.
 - Measured bundle size, cold start, export time, output size, and memory on declared workloads.
-- A maintained capability matrix classifying native, semantic-fallback, and temporary ECharts paths.
+- A maintained capability matrix classifying native, semantic-fallback, and unsupported paths.
 - Third-party license and inventory compliance for any specialized modules.
 
-ECharts retirement is an outcome of passing this evidence, not a date or size promise embedded in the
-architecture.
+ECharts retirement followed from passing this evidence; it was not a date or size promise embedded in
+the architecture.
+
+Phase 12 resolver, allocation, serialized-plan, and native-SVG measurements are recorded in
+[Reporting Phase 12 Refinement Measurements](../../benchmarks/reporting-phase12-refinements.md).
+The complete requirement-to-test and measurement index is recorded in
+[Reporting Phase 13 Closure Evidence](../../benchmarks/reporting-phase13-closure.md).
 
 ## 14. Consequences
 
@@ -333,7 +411,7 @@ architecture.
 - Native SVG, terminal reporting, micro-charts, and accessibility summaries become coherent consumers
   of one plan.
 - Existing named visuals stay simple while advanced composition can grow in native syntax.
-- ECharts can be retired incrementally with measurable capability gates.
+- External chart runtimes can be kept retired with measurable capability gates.
 
 ### Costs and risks
 

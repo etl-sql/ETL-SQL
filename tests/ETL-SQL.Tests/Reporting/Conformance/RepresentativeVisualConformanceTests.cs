@@ -82,6 +82,8 @@ public class RepresentativeVisualConformanceTests
         Assert.Equal("#3B82F6", visual.Options["color:Mid-Market"]);
 
         var plan = Assert.IsType<PlotPlan>(visual.PlotPlan);
+        Assert.All(plan.Layers.Where(layer => layer.Mark == MarkKind.Rect), layer => Assert.Equal(StackMode.Zero, layer.Stack));
+        Assert.DoesNotContain(plan.Style, token => token.Name.Equals("STACKED", StringComparison.OrdinalIgnoreCase));
         var y = plan.Scales.Single(scale => scale.Channel == FieldChannel.Y);
         Assert.Equal(170000m, PlotPlanResolver.Number(y.Domain[^1]));
         var svg = new SvgChartRenderer().Render(plan);

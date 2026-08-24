@@ -184,5 +184,38 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.Contains("SPARKLINE(jan, feb, mar) LINE AS 'Trend'", response.script);
             Assert.Contains("attainment PROGRESS_BAR (MIN = 0, MAX = 1, COLOR = '#16A34A')", response.script);
         }
+
+        [Fact]
+        public async Task Generate_SurgicalEdit_PreservesAdvancedChartRefinementGrammar()
+        {
+            const string script = """
+                CREATE VISUAL Native AS CUSTOM (
+                  TITLE = 'Before', SOURCE = #prepared,
+                  CHART (
+                    COORDINATE (TYPE = CARTESIAN, ASPECT_RATIO = 1),
+                    SCALES (color = LINEAR (CHANNEL = COLOR, RANGE = GRADIENT(LOW = '#2166ac', HIGH = '#b2182b'))),
+                    ENCODINGS (X = category (TYPE = NOMINAL)),
+                    LAYERS (target = TICK (BAND_SIZE = 0.9, THICKNESS = 0.2,
+                      ENCODINGS (Y = DATUM(5) (TYPE = QUANTITATIVE)))),
+                    FACET (WRAP = region, COLUMNS = 3)
+                  )
+                );
+                CREATE PAGE [Overview] AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = Native));
+                """;
+            const string state = """
+                {"pages":[{"id":"p","name":"Overview","mode":"Dashboard","visuals":[
+                  {"id":"n","name":"Native","type":"CUSTOM","gridCol":1,"gridRow":1,"gridColSpan":12,"gridRowSpan":6,"title":"After","dataset":"prepared","mappings":{},"options":{}}
+                ]}],"datasets":[]}
+                """;
+
+            var response = await new DesignerLspHandler(NullLogger<DesignerLspHandler>.Instance).Handle(
+                new DesignerGenerateParams { designStateJson = state, script = script }, CancellationToken.None);
+
+            Assert.Contains("TITLE = 'After'", response.script);
+            Assert.Contains("ASPECT_RATIO = 1", response.script);
+            Assert.Contains("RANGE = GRADIENT", response.script);
+            Assert.Contains("target = TICK", response.script);
+            Assert.Contains("FACET (WRAP = region, COLUMNS = 3)", response.script);
+        }
     }
 }

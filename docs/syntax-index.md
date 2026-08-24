@@ -883,7 +883,9 @@ CREATE VISUAL name AS <Type> ( ... )
 ```
 
 Native advanced charts use `CREATE VISUAL name AS CUSTOM (..., CHART (...))` with explicit
-renderer-neutral layers, scales, coordinates, conditional presentation, and row/column facets. See
+renderer-neutral layers, inferred or declared scales, field/`DATUM`/`VALUE` bindings, stacking,
+offsets, interval geometry, deterministic position adjustments, continuous color ranges, `TICK`
+targets, fixed Cartesian aspect, and grid/wrap facets. See
 [CHART](reference/visuals-reporting/visuals/chart.md). Data transformations remain in preceding
 ETL-SQL statements rather than hidden inside the visual declaration.
 | Section | Option | Description |
@@ -1038,7 +1040,7 @@ see the [Lifecycle Capability Matrix](reference/statements/lifecycle-matrix.md).
 - [ReportManifest JSON Schema](reference/visuals-reporting/report-manifest.md) — The compiled `ReportManifest` is the structure returned by the snapshot and by the Repo...
 - [Report Runtime Contract](reference/visuals-reporting/report-runtime-contract.md) — The report canvas is shared infrastructure. ReportPlayer, Portal, and the VS Code previ...
 - [Report-SQL](reference/visuals-reporting/report/index.md) — Report-SQL extends ETL-SQL with components for building interactive dashboards: dataset...
-- [CREATE THEME](reference/visuals-reporting/report/theme.md) — Defines a custom ECharts color theme that can be applied to any visual or page with `ST...
+- [CREATE THEME](reference/visuals-reporting/report/theme.md) — Defines a renderer-neutral color theme applied to visuals or pages with `STYLE (THEME = name)`.
 - [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.16.0**
 - [Large Data Certification](reference/performance/large-data-certification.md) — This document describes which large-data scenarios are certified, at which scale tiers,...
 

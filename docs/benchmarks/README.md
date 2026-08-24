@@ -17,6 +17,8 @@ This directory contains execution baseline reports and test result datasets for 
 | [Reporting Phase 7 Semantic Readiness](reporting-phase7-semantic-readiness.md) | PlotPlan semantic lowering and rendering readiness baselines. |
 | [Reporting Phase 8 Baselines](reporting-phase8-baselines.md) | End-to-end dashboard compilation and snapshot delivery performance metrics. |
 | [Reporting Phase 8 Results](reporting-phase8-results.md) | Release validation test execution logs and throughput statistics. |
+| [Reporting Phase 12 Refinements](reporting-phase12-refinements.md) | Resolver, allocation, serialized-plan, native-SVG size, and rendering budgets for the shipped declarative geometry refinements. |
+| [Reporting Phase 13 Closure](reporting-phase13-closure.md) | Requirement-to-evidence index for versioning, cross-backend conformance, accessibility, capability parity, and reproducible performance measurements. |
 
 ---
 

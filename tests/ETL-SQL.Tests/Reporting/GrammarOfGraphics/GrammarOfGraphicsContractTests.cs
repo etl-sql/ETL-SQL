@@ -14,7 +14,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.ChartSpec();
         var json = ChartContractSerializer.Serialize(value);
 
-        Assert.Equal("9f59d59e9642fd299607c8f32cf18ba9d68e9c71b6a43c8d56667f7aa9738efc", Fingerprint(json));
+        Assert.Equal("fb16b8da0dddd55dc577afdbf9a64391ff4c55a7fb5a3234b85119024c4794d7", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializeChartSpec(json)));
     }
 
@@ -40,7 +40,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.PlotPlan();
         var json = ChartContractSerializer.Serialize(value);
 
-        Assert.Equal("71c2f75282e17975a7a16bbb74c022a1c4aeb6cc9599b9912ecfb10a3d5e6f76", Fingerprint(json));
+        Assert.Equal("767de214aa732fa6030c97256860efc7e50bc0349350532f9988db39b535e5cc", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializePlotPlan(json)));
         Assert.Equal(["North", "South"], value.Series.Select(series => series.Key));
         Assert.Equal(["revenue-bars", "target-rule"], value.Layers.Select(layer => layer.Id));
@@ -54,7 +54,46 @@ public sealed class GrammarOfGraphicsContractTests
         Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializeChartSpec(
             json.Replace(ChartContractVersions.ChartSpecSchema, "https://example.invalid/chart-spec", StringComparison.Ordinal)));
         Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializeChartSpec(
-            json.Replace("\"version\": 1", "\"version\": 2", StringComparison.Ordinal)));
+            json.Replace("\"version\": 2", "\"version\": 3", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Deserialization_MigratesVersionOneChartAndPlotContracts()
+    {
+        var chartJson = ChartContractSerializer.Serialize(GrammarOfGraphicsContractFixtures.ChartSpec())
+            .Replace(ChartContractVersions.ChartSpecSchema, ChartContractVersions.LegacyChartSpecSchema, StringComparison.Ordinal)
+            .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
+        var plotJson = ChartContractSerializer.Serialize(GrammarOfGraphicsContractFixtures.PlotPlan())
+            .Replace(ChartContractVersions.PlotPlanSchema, ChartContractVersions.LegacyPlotPlanSchema, StringComparison.Ordinal)
+            .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
+
+        Assert.Equal(ChartContractVersions.ChartSpecCurrent, ChartContractSerializer.DeserializeChartSpec(chartJson).Version);
+        Assert.Equal(ChartContractVersions.PlotPlanCurrent, ChartContractSerializer.DeserializePlotPlan(plotJson).Version);
+    }
+
+    [Fact]
+    public void VersionOneGlobalStack_IsExplicitlyMigratedOrRejectedAtTheResolvedBoundary()
+    {
+        var chart = GrammarOfGraphicsContractFixtures.ChartSpec() with
+        {
+            Theme = new ThemeSpec("legacy", [new StyleToken("STACKED", "ON")])
+        };
+        var chartJson = ChartContractSerializer.Serialize(chart)
+            .Replace(ChartContractVersions.ChartSpecSchema, ChartContractVersions.LegacyChartSpecSchema, StringComparison.Ordinal)
+            .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
+        var migrated = ChartContractSerializer.DeserializeChartSpec(chartJson);
+        Assert.DoesNotContain(migrated.Theme.Tokens, token => token.Name == "STACKED");
+        Assert.Contains(migrated.Layers.SelectMany(layer => layer.Bindings), binding =>
+            binding.Channel is FieldChannel.Y or FieldChannel.Y2 && binding.Stack == StackMode.Zero);
+
+        var plot = GrammarOfGraphicsContractFixtures.PlotPlan() with
+        {
+            Style = [new StyleToken("STACKED", "ON")]
+        };
+        var plotJson = ChartContractSerializer.Serialize(plot)
+            .Replace(ChartContractVersions.PlotPlanSchema, ChartContractVersions.LegacyPlotPlanSchema, StringComparison.Ordinal)
+            .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
+        Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializePlotPlan(plotJson));
     }
 
     [Fact]

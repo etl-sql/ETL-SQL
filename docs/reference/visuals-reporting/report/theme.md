@@ -1,6 +1,6 @@
 # CREATE THEME
 
-Defines a custom ECharts color theme that can be applied to any visual or page with `STYLE (THEME = themeName)`. Themes are saved as JSON files to `{TemplatePath}/Themes/` and embedded in the report manifest so the web player can register them at render time.
+Defines a renderer-neutral color theme that can be applied to any visual or page with `STYLE (THEME = themeName)`. Themes are saved as JSON files to `{TemplatePath}/Themes/` and embedded in the report manifest so every supported report surface can resolve the same tokens.
 
 ```sql
 CREATE THEME corporate AS (
@@ -12,7 +12,7 @@ CREATE THEME corporate AS (
 );
 ```
 
-Apply the theme just like any built-in ECharts theme:
+Apply the theme just like any built-in theme:
 
 ```sql
 CREATE VISUAL RevenueChart AS BAR (
@@ -24,15 +24,15 @@ CREATE VISUAL RevenueChart AS BAR (
 
 ### Supported theme properties
 
-| Property | Maps to ECharts | Description |
-|---|---|---|
-| `BACKGROUND` | `backgroundColor` | Chart background fill |
-| `TEXT_COLOR` | `textStyle.color`, title, legend, axis label colors | Default text color everywhere |
-| `ACCENT_COLOR` | `color[0]` | First (primary) series color |
-| `COLORS` | `color` array | Comma-separated hex list for all series |
-| `AXIS_COLOR` | Axis line, tick, and label colors | If omitted, inherits `TEXT_COLOR` |
-| `GRID_COLOR` | `splitLine.lineStyle.color` | Axis grid line color |
-| Any other key | Passed through as-is to root | Use for ECharts-specific overrides |
+| Property | Description |
+|---|---|
+| `BACKGROUND` | Chart and card background fill. |
+| `TEXT_COLOR` | Default title, legend, axis-label, and narrative text color. |
+| `ACCENT_COLOR` | First or primary series color when `COLORS` is omitted. |
+| `COLORS` | Comma-separated palette used for ordered series. |
+| `AXIS_COLOR` | Axis line, tick, and label color; inherits `TEXT_COLOR` when omitted. |
+| `GRID_COLOR` | Axis grid-line color. |
+| Any other key | Retained as a lower-case extension token for report surfaces that explicitly support it. |
 
 ### DROP THEME
 

@@ -31,6 +31,13 @@ public sealed class NamedVisualChartLowerer
 
         var bindings = BuildBindings(statement, manifest).ToImmutableArray();
         var layers = BuildLayers(statement, bindings).ToImmutableArray();
+        if (IsOn(manifest.Options.GetValueOrDefault("STACKED")) || IsOn(manifest.Styles?.GetValueOrDefault("STACKED")))
+            layers = layers.Select(layer => layer with
+            {
+                Bindings = layer.Bindings.Select(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2
+                    ? binding with { Stack = StackMode.Zero }
+                    : binding).ToImmutableArray()
+            }).ToImmutableArray();
         var scales = BuildScales(statement, bindings, manifest).ToImmutableArray();
         var title = manifest.Options.GetValueOrDefault("title") ?? manifest.Name;
 
@@ -122,7 +129,7 @@ public sealed class NamedVisualChartLowerer
                 var series = statement.TypedSeries[index];
                 var secondary = !series.SeriesType.Equals(firstType, StringComparison.OrdinalIgnoreCase);
                 var channel = secondary ? FieldChannel.Y2 : FieldChannel.Y;
-                var y = bindings.First(binding => binding.Field.Equals(series.Column, StringComparison.OrdinalIgnoreCase));
+                var y = bindings.First(binding => binding.Field!.Equals(series.Column, StringComparison.OrdinalIgnoreCase));
                 yield return new MarkLayerSpec(
                     $"series-{index:D2}-{Sanitize(series.Column)}",
                     series.SeriesType.Equals("bar", StringComparison.OrdinalIgnoreCase) ? MarkKind.Rect : MarkKind.Line,
@@ -195,7 +202,7 @@ public sealed class NamedVisualChartLowerer
     {
         if (statement.VisualType == VisualType.Radar)
         {
-            var dimensions = bindings.Where(binding => binding.Channel == FieldChannel.Detail).Select(binding => binding.Field).ToImmutableArray();
+            var dimensions = bindings.Where(binding => binding.Channel == FieldChannel.Detail).Select(binding => binding.Field!).ToImmutableArray();
             var values = manifest.Rows.SelectMany(row => manifest.Columns.Skip(1).Select((_, index) => index + 1 < row.Count ? row[index + 1] : null))
                 .Select(value => decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var number) ? (decimal?)number : null)
                 .Where(value => value.HasValue).Select(value => value!.Value).ToList();
@@ -262,15 +269,20 @@ public sealed class NamedVisualChartLowerer
 
     private static ImmutableArray<StyleToken> BuildStyleTokens(VisualManifest manifest) =>
         (manifest.Styles ?? new Dictionary<string, string>())
+            .Where(pair => !pair.Key.Equals("STACKED", StringComparison.OrdinalIgnoreCase))
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .Select(pair => new StyleToken(pair.Key, pair.Value))
             .Concat(manifest.Options
+                .Where(pair => !pair.Key.Equals("STACKED", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(pair => new StyleToken(pair.Key, pair.Value)))
             .GroupBy(token => token.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.Last())
             .OrderBy(token => token.Name, StringComparer.OrdinalIgnoreCase)
             .ToImmutableArray();
+
+    private static bool IsOn(string? value) => value is not null &&
+        (value.Equals("ON", StringComparison.OrdinalIgnoreCase) || value.Equals("TRUE", StringComparison.OrdinalIgnoreCase));
 
     private static FieldChannel? MapChannel(VisualType type, string role) => role.ToUpperInvariant() switch
     {

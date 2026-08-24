@@ -8,6 +8,7 @@
 | [Choropleth Maps with Point Overlays](custom-choropleth-point-map.md) | **Pattern**: Dual-layer geographic visualization combining regional density shading with facility/site geo-coordinate point overlays. |
 | [Combo Chart: Revenue + Volume](combo-chart.md) | **Pattern**: Revenue bars and unit-volume line on the same axes — the classic dual-metric chart for spotting when revenue and volume diverge. |
 | [Cross-Page Filtering with Navigation](cross-page-filtering-with-navigation.md) | **Pattern**: A slicer on Page 1 sets a parameter that Page 2 also reads. Navigation tabs let users switch pages while the filter persists. |
+| [Declarative Geometry Refinements](declarative-geometry-refinements.md) | **Pattern**: Production native `CUSTOM` composites with visible SQL transforms, inherited bindings, intervals, placement, color scales, wrapped facets, interaction, and portable fallbacks. |
 | [Custom Bullet & Target Cards](custom-bullet-target-performance.md) | **Pattern**: Stephen Few style bullet & target performance cards built from Grammar of Graphics `RECT` bands, actual metric bars, and `RULE` target marks. |
 | [Executive KPI Dashboard](executive-kpi-dashboard.md) | **Pattern**: KPI cards, regional bar chart, slicer-filtered detail table. The go-to starting point for any executive summary report. |
 | [Flow and Hierarchy Analysis](flow-and-hierarchy-analysis.md) | **Pattern**: Use newer relationship-oriented visuals together: a `SANKEY` chart for weighted flow, a `SUNBURST` chart for hierarchical contributions. |
