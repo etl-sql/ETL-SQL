@@ -1872,9 +1872,11 @@
         };
     }
 
-    // Exposed for deterministic geometry fixtures. Reading it does not open a surface.
+    // Exposed for deterministic geometry fixtures and for driving the refresh/unmount
+    // teardown from a test. Reading it does not open a surface.
     window.__ETLSQL_DETAIL__ = Object.freeze({
         computeDetailPlacement: computeDetailPlacement,
+        destroyIn: function (scope) { destroyDetailSurfaces(scope || document); },
         preferredSide: DETAIL_PREFERRED_SIDE,
         viewportMargin: DETAIL_VIEWPORT_MARGIN,
         anchorGap: DETAIL_ANCHOR_GAP

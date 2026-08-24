@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Detail surfaces — UI sandbox</title>
+<!--
+  Detail-surface harness.
+
+  Loads the CANONICAL report runtime (not a host copy) against a hand-built manifest, so
+  tooltip and popover behaviour can be driven without a Portal, a database, a login, or a
+  report execution. The SVG marks are hand-written with data-row-index so the geometry is
+  fixed and assertions about placement, focus order, and pinning stay deterministic.
+
+  Query parameters:
+    ?surface=popover   referenced-container popover (default)
+    ?surface=tooltip   transient text tooltip
+    ?surface=inline    inline markdown + VISUALS popover
+    ?rtl=1             render right-to-left
+
+  Serve the repo root (tools/ui-sandbox/serve.ps1) and open /tools/ui-sandbox/detail-surface.html.
+-->
+<link rel="stylesheet" href="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.css">
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; }
+  #root { padding: 24px; }
+  /* A tall spacer lets tests scroll the anchor near a viewport edge to force a flip. */
+  #spacer { height: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="spacer"></div>
+<script>
+(function () {
+    const params = new URLSearchParams(window.location.search);
+    const surface = params.get('surface') || 'popover';
+    if (params.get('rtl') === '1') {
+        document.documentElement.setAttribute('dir', 'rtl');
+        document.body.style.direction = 'rtl';
+    }
+    if (params.get('spacer')) {
+        document.getElementById('spacer').style.height = params.get('spacer') + 'px';
+    }
+
+    // Three marks, evenly spaced, each carrying its row index. Deliberately plain shapes:
+    // the controller only looks for [data-row-index].
+    const nativeSvg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="180" viewBox="0 0 360 180">' +
+        '<rect data-row-index="0" x="20"  y="60"  width="80" height="100" fill="#2563eb"></rect>' +
+        '<rect data-row-index="1" x="140" y="30"  width="80" height="130" fill="#2563eb"></rect>' +
+        '<rect data-row-index="2" x="260" y="90"  width="80" height="70"  fill="#2563eb"></rect>' +
+        '</svg>';
+
+    const tooltips = {
+        tooltip: { type: 'text', mode: 'tooltip', text: 'Revenue for the month' },
+        popover: { type: 'container', mode: 'popover', containerRef: 'TooltipBox', resolvedVisuals: ['MonthDetail'] },
+        inline: { type: 'inline', mode: 'popover', markdown: 'Regional breakdown', visuals: ['MonthDetail'], resolvedVisuals: ['MonthDetail'] }
+    };
+
+    window.__MANIFEST__ = {
+        title: 'Detail surface harness',
+        parameters: {},
+        pages: [{ name: 'Main', structure: 'A', mode: 'DASHBOARD', slotMap: { A: 'BarWithTooltip' } }],
+        containers: [{
+            name: 'TooltipBox',
+            containerType: 'BOX',
+            structure: 'A',
+            slotMap: { A: 'MonthDetail' }
+        }],
+        visuals: [
+            {
+                name: 'BarWithTooltip',
+                visualType: 'BAR',
+                title: 'Revenue by month',
+                columns: ['Month', 'Revenue'],
+                rows: [['January', '320'], ['February', '290'], ['March', '410']],
+                options: { 'mapping:x': 'Month', 'mapping:y': 'Revenue' },
+                nativeSvg: nativeSvg,
+                tooltip: tooltips[surface] || tooltips.popover
+            },
+            {
+                name: 'MonthDetail',
+                visualType: 'TABLE',
+                title: 'Regional detail',
+                columns: ['Region', 'Revenue'],
+                rows: [['North', '120'], ['South', '200']]
+            }
+        ]
+    };
+})();
+</script>
+<script src="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js"></script>
+</body>
+</html>

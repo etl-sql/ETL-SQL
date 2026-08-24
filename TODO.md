@@ -379,17 +379,43 @@ feature.
 
 #### Browser interaction and accessibility
 
-- [ ] Use one shared detail-surface implementation across supported native and browser chart adapters.
+- [x] Use one shared detail-surface implementation across supported native and browser chart adapters.
   Preserve hover for fine pointers; add keyboard focus and click/tap activation, with a pinned
   popover when content is interactive or cannot safely disappear on pointer leave.
-- [ ] Implement deterministic dismissal and focus behavior: `Escape`, outside click, trigger
+  *(DONE. `attachDetailSurface` replaces `installNativeTooltip`; adapters call it and keep no private
+  tooltip state. Audit result worth recording: the native SVG path is the **only** browser chart
+  adapter — ECharts was retired, and the `renderChart` fallback at the bottom of the visual dispatch
+  is a call to a function that no longer exists. Fine pointers get a hover preview, coarse pointers
+  get no preview and open pinned on first tap, and keyboard focus plus Enter/Space pins. Persistent
+  detail is always pinned, so it never disappears on pointer leave.)*
+- [x] Implement deterministic dismissal and focus behavior: `Escape`, outside click, trigger
   reactivation, focus return, stale-refresh cancellation, and removal when the source visual is
   refreshed or unmounted. Do not create keyboard traps or hover-only content.
-- [ ] Use the correct accessibility model: `role="tooltip"` plus `aria-describedby` for transient
+  *(DONE. One surface exists at a time; opening another closes the previous. Escape restores focus to
+  the trigger, outside click and re-activation close, and generation fencing means a response for a
+  superseded row — or one that lands after dismissal — never replaces current detail. The surface is
+  appended to `document.body`, so `destroyDetailSurfaces` runs before the report root is cleared;
+  without it a re-render orphaned an open popover anchored to marks that no longer existed. Marks are
+  focusable and named, so no detail is hover-only.)*
+- [x] Use the correct accessibility model: `role="tooltip"` plus `aria-describedby` for transient
   text, and an appropriately labelled focusable popover/dialog pattern for interactive detail.
   Announce loading, error, and refreshed states without repeatedly flooding live regions.
-- [ ] Replace cursor clamping with a tested anchor-based flip/shift placement contract covering all
+  *(DONE. Transient text is `role="tooltip"`, referenced by the trigger's `aria-describedby`, and
+  stays `pointer-events: none` so it can never acquire focusable descendants — asserted by counting
+  focusable nodes inside it. Pinned detail is a labelled `role="dialog"` and drops
+  `aria-describedby`, so a whole dialog is not announced inline as the trigger's description. One
+  shared polite `role="status"` region serves the whole report and drops repeated identical
+  messages, so a hover sweep cannot flood it.)*
+- [x] Replace cursor clamping with a tested anchor-based flip/shift placement contract covering all
   viewport edges, scrolling, zoom, narrow screens, right-to-left layout, and resized content.
+  *(DONE. `computeDetailPlacement` is a pure function of anchor rect, surface size, and viewport,
+  with a documented preferred side (`top`) and deterministic flip order. The old cursor-follow
+  clamping could not be asserted on at all, because the result depended on where the mouse happened
+  to be; placement is now a table of numbers. Nine geometry fixtures cover preferred side, vertical
+  flip, fallback to a horizontal side, both horizontal edges, oversized content, a narrow viewport,
+  RTL leading-edge alignment, and purity. Live repositioning on scroll, viewport resize, and content
+  resize — via `ResizeObserver` — is asserted by checking the gap to the mark is preserved on
+  whichever side was chosen and the surface stays inside the viewport.)*
 
 #### Portable behavior and evidence
 
