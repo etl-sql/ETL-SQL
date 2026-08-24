@@ -310,18 +310,20 @@ named visuals, which is the common direction. `docs/reference/visuals-reporting/
 a reference and two finished showpieces with no path between them. Sequence this with the golden
 coverage item above; it depends on the same harness.
 
-- [ ] Build the progression as a numbered sample under `samples/08_Reporting/`, with a guide that
+- [x] Build the progression as a numbered sample under `samples/08_Reporting/`, with a guide that
   walks it. The sample is the source of truth: `Test-AllSamples.ps1` parses and runs samples, whereas
   doc snippets rely on `DocumentationSyntaxTests`, which is currently red and silently mis-scoping
   indented fences (see the Phase 11 item above). Place the prose as a guide, not under
   `docs/reference` — reference is the embedded runtime help keyed on keywords, and this is a tutorial.
-- [ ] Frame every named-visual translation as a Rosetta stone, never as a recommendation. A `BAR`
+  Sample: `samples/08_Reporting/custom_chart_learning_path.rptsql`.
+  Guide: `docs/guides/reporting/custom-chart-learning-path.md`.
+- [x] Frame every named-visual translation as a Rosetta stone, never as a recommendation. A `BAR`
   written as `CUSTOM` is something no one should ship, and on this codebase it is strictly worse than
   `BAR`: the advanced path drops theme tokens, ignores `NULL_LABEL`, and falls through to
   `visual.columns[0]` for cross-filtering. Unframed, this teaches authors to reimplement named visuals
   badly and to file the resulting gaps as bugs. Say plainly at each step that the named visual already
   does this.
-- [ ] Make each step add exactly one concept, and end the progression past the boundary where no named
+- [x] Make each step add exactly one concept, and end the progression past the boundary where no named
   visual can follow — the crossing point is the lesson, not the translation. A workable spine: one
   `RECT` layer as `BAR`; add a `RULE` target, noting `BAR` plus an overlay still covers it; add a
   second scale and a `POINT` layer, noting that this is `COMBO`; then add qualitative bands behind the
@@ -335,10 +337,11 @@ coverage item above; it depends on the same harness.
   tokens from `BuildStyleTokens`, and interaction bindings while `AdvancedChartLowerer` hardcodes empty
   theme tokens and an empty null label. Treat those divergences as the punch list already filed above,
   not as test noise.
-- [ ] State what an author gives up by choosing `CUSTOM`: theming, `NULL_LABEL`, Report Builder
+- [x] State what an author gives up by choosing `CUSTOM`: theming, `NULL_LABEL`, Report Builder
   visibility, and cross-filter column inference. Authors hit these regardless; documenting them as a
   known trade beats discovering them, and it keeps pressure on closing them. Revisit this list as those
-  items are fixed so the guide does not outlive the limitation.
+  items are fixed so the guide does not outlive the limitation. Documented in the guide's opening
+  callout and restated at Step 1.
 
 
 ## Reporting and Authoring Critical Path

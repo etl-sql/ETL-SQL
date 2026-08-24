@@ -18,6 +18,7 @@ Report-SQL extends ETL-SQL with dedicated declarative statements for creating in
 | [Micro-Charts & KPI Cards](micro-charts-and-kpis.md) | Embedded table sparklines, progress bars, and KPI cards. |
 | [Custom Theming & Branding](custom-theming-and-branding.md) | Global shell branding, CSS overrides, and custom action buttons. |
 | [Report Badges & Trust](report-badges-and-trust.md) | Ownership, stewardship, certification tier, and freshness indicators. |
+| [From Named Visuals to Custom Charts](custom-chart-learning-path.md) | Progressive tutorial: rebuild BAR as CUSTOM, add layers and scales one concept at a time, end at a bullet chart no named visual can express. |
 | [Vega-Lite to ETL-SQL](vega-lite-to-etl-sql.md) | Convert field/datum/value encodings, geometry, scales, and transforms into native script-first charts. |
 | [ggplot2 to ETL-SQL](ggplot2-to-etl-sql.md) | Map aesthetics, layers, positions, facets, intervals, fixed aspect, and visible SQL statistics. |
 

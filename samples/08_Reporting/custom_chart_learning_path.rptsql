@@ -1,0 +1,238 @@
+-- Custom Chart Learning Path
+-- A progressive tutorial that rebuilds familiar named visuals as CUSTOM, adding
+-- one concept per step until the chart crosses into territory no named visual covers.
+--
+-- Step 1: A bar chart (RECT layer = BAR)
+-- Step 2: Add a target line (RULE layer)
+-- Step 3: Add a second axis with margin dots (dual scale + POINT layer = COMBO)
+-- Step 4: Add qualitative bands behind the bar to build a bullet chart (no named equivalent)
+
+SET REPORT TITLE = 'Custom Chart Learning Path';
+SET REPORT DESCRIPTION = 'Four progressive steps from named BAR to a bullet chart that only CUSTOM can express.';
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- Shared mock data — every step reads from the same table
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+SELECT 'Jan' AS Month, 82000  AS Revenue, 0.28 AS MarginPct, 90000  AS Target INTO #sales
+UNION ALL SELECT 'Feb', 95000,  0.32, 90000
+UNION ALL SELECT 'Mar', 78000,  0.21, 90000
+UNION ALL SELECT 'Apr', 110000, 0.35, 90000
+UNION ALL SELECT 'May', 103000, 0.30, 90000
+UNION ALL SELECT 'Jun', 125000, 0.38, 90000;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- STEP 1 — A bar chart, the CUSTOM way
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- This is the CUSTOM equivalent of:
+--   CREATE VISUAL Step1_Named AS BAR (
+--       SOURCE = #sales, MAPPINGS (X = Month, Y = Revenue),
+--       OPTIONS (AXIS_SORT = SOURCE));
+-- The named BAR is better here — it inherits themes, NULL_LABEL, and cross-filter
+-- inference. This translation exists only to teach the skeleton.
+
+CREATE VISUAL Step1_CustomBar AS CUSTOM (
+    SOURCE = #sales,
+    TITLE = 'Step 1: Revenue by Month (one RECT layer)',
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            months  = BAND (CHANNEL = X, ORDER = SOURCE),
+            dollars = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+        ),
+        LAYERS (
+            bars = RECT (
+                ENCODINGS (
+                    X = Month (TYPE = ORDINAL, SCALE = months),
+                    Y = Revenue (TYPE = QUANTITATIVE, SCALE = dollars)
+                )
+            )
+        )
+    )
+);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- STEP 2 — Add a target reference line
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- New concept: a second layer (RULE) sharing the same scales, painted in front
+-- via Z_INDEX. A named BAR with a RULE overlay still covers this in practice,
+-- so this is still Rosetta stone territory.
+
+CREATE VISUAL Step2_BarWithTarget AS CUSTOM (
+    SOURCE = #sales,
+    TITLE = 'Step 2: Revenue bars + $90K target line (RECT + RULE)',
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            months  = BAND (CHANNEL = X, ORDER = SOURCE),
+            dollars = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+        ),
+        LAYERS (
+            bars = RECT (
+                Z_INDEX = 0,
+                ENCODINGS (
+                    X = Month (TYPE = ORDINAL, SCALE = months),
+                    Y = Revenue (TYPE = QUANTITATIVE, SCALE = dollars)
+                )
+            ),
+            target_line = RULE (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    Y = Target (TYPE = QUANTITATIVE, SCALE = dollars)
+                ),
+                STYLE (COLOR = '#c62828', STROKE_WIDTH = 2, STROKE_DASH = '6,4')
+            )
+        )
+    )
+);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- STEP 3 — Dual-axis combo: bars + margin dots
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- New concepts: a second scale on Y2, a POINT layer on a secondary axis, and
+-- CONDITIONS for data-driven color. The named COMBO visual already handles this
+-- shape. We keep both named equivalents visible so the reader sees what each
+-- concept maps to.
+
+CREATE VISUAL Step3_DualAxis AS CUSTOM (
+    SOURCE = #sales,
+    TITLE = 'Step 3: Revenue bars + margin dots on a secondary axis (COMBO equivalent)',
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            months  = BAND (CHANNEL = X, ORDER = SOURCE),
+            dollars = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON),
+            pct     = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = OFF)
+        ),
+        LAYERS (
+            bars = RECT (
+                Z_INDEX = 0,
+                ENCODINGS (
+                    X = Month (TYPE = ORDINAL, SCALE = months),
+                    Y = Revenue (TYPE = QUANTITATIVE, SCALE = dollars, AXIS = PRIMARY)
+                )
+            ),
+            margin_dots = POINT (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    X = Month (TYPE = ORDINAL, SCALE = months),
+                    Y2 = MarginPct (TYPE = QUANTITATIVE, SCALE = pct, AXIS = SECONDARY)
+                ),
+                CONDITIONS (
+                    COLOR WHEN MarginPct < 0.25 THEN '#c62828' ELSE '#2e7d32'
+                )
+            )
+        )
+    )
+);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- STEP 4 — Bullet chart: qualitative bands + actual bar + target tick
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- This is where CUSTOM starts paying for itself. No named visual can express
+-- layered qualitative bands behind a metric bar with a target marker on top.
+-- New concepts: TRANSPOSED_CARTESIAN, multiple RECT layers at different Z levels,
+-- and a TICK mark for the target.
+
+SELECT 'Revenue'  AS KPI, 92 AS Actual, 85 AS Target, 50 AS Poor, 75 AS Fair, 100 AS MaxRange INTO #bullet
+UNION ALL SELECT 'Margin',    78, 80, 40, 65, 100
+UNION ALL SELECT 'New Logos', 95, 82, 50, 75, 100
+UNION ALL SELECT 'NPS',       68, 75, 45, 70, 100;
+
+CREATE VISUAL Step4_BulletChart AS CUSTOM (
+    SOURCE = #bullet,
+    TITLE = 'Step 4: Bullet performance chart (no named equivalent)',
+    CHART (
+        COORDINATE (TYPE = TRANSPOSED_CARTESIAN),
+        SCALES (
+            kpi_scale = BAND (CHANNEL = X, ORDER = SOURCE),
+            val_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0, MAX = 100)
+        ),
+        LAYERS (
+            band_max = RECT (
+                Z_INDEX = 0,
+                ENCODINGS (
+                    X = KPI (TYPE = NOMINAL, SCALE = kpi_scale),
+                    Y = MaxRange (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (FILL = '#e0e0e0', OPACITY = 0.5)
+            ),
+            band_fair = RECT (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    X = KPI (TYPE = NOMINAL, SCALE = kpi_scale),
+                    Y = Fair (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (FILL = '#bdbdbd', OPACITY = 0.7)
+            ),
+            band_poor = RECT (
+                Z_INDEX = 2,
+                ENCODINGS (
+                    X = KPI (TYPE = NOMINAL, SCALE = kpi_scale),
+                    Y = Poor (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (FILL = '#9e9e9e', OPACITY = 0.85)
+            ),
+            actual = RECT (
+                Z_INDEX = 3,
+                BAND_SIZE = 0.35,
+                ENCODINGS (
+                    X = KPI (TYPE = NOMINAL, SCALE = kpi_scale),
+                    Y = Actual (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                CONDITIONS (
+                    COLOR WHEN Actual >= Target THEN '#2e7d32' ELSE '#c62828'
+                )
+            ),
+            target_mark = TICK (
+                Z_INDEX = 4,
+                BAND_SIZE = 0.7,
+                THICKNESS = 0.25,
+                ENCODINGS (
+                    X = KPI (TYPE = NOMINAL, SCALE = kpi_scale),
+                    Y = Target (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (COLOR = '#000000')
+            )
+        )
+    )
+);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- Page Layout — one page per step so the progression is visible
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE PAGE Step1Page AS DASHBOARD (
+    TITLE = 'Step 1: One RECT Layer',
+    STRUCTURE = 'A',
+    MAP ('A' = Step1_CustomBar)
+);
+
+CREATE PAGE Step2Page AS DASHBOARD (
+    TITLE = 'Step 2: Add a RULE Target',
+    STRUCTURE = 'A',
+    MAP ('A' = Step2_BarWithTarget)
+);
+
+CREATE PAGE Step3Page AS DASHBOARD (
+    TITLE = 'Step 3: Dual-Axis Combo',
+    STRUCTURE = 'A',
+    MAP ('A' = Step3_DualAxis)
+);
+
+CREATE PAGE Step4Page AS DASHBOARD (
+    TITLE = 'Step 4: Bullet Chart',
+    STRUCTURE = 'A',
+    MAP ('A' = Step4_BulletChart)
+);
+
+CREATE NAVIGATION LearningPath AS TAB (
+    DEFAULT = Step1Page,
+    PAGES (Step1Page, Step2Page, Step3Page, Step4Page)
+);
