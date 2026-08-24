@@ -389,12 +389,6 @@
             return;
         }
 
-        // Phase 4: Intercept execution if required parameters are missing
-        if (!checkRequiredParameters(manifest)) {
-            publishExportState('blocked', { reason: 'required-parameters' });
-            return; // Modal is showing, wait for user input
-        }
-
         renderManifest(manifest);
 
         // Launch precedence (exact order):
@@ -403,7 +397,15 @@
         //   3. user's default Portal saved view
         //   4. author default bookmark (DEFAULT = ON)
         //   5. declared parameter/navigation defaults (already applied by renderManifest)
-        applyLaunchPrecedence(manifest);
+        await applyLaunchPrecedence(manifest);
+
+        // A launch bookmark/view may be the source of a REQUIRED parameter. Validate only after
+        // launch precedence has had the opportunity to apply it atomically.
+        const launchedManifest = _lastManifest || manifest;
+        if (!checkRequiredParameters(launchedManifest)) {
+            publishExportState('blocked', { reason: 'required-parameters' });
+            return;
+        }
 
         // Identifier-only hash replay. URLs and history carry only an identifier — never parameter,
         // filter, search, drill, or presentation values.
@@ -419,26 +421,32 @@
         const result = { bookmark: null, view: null };
         if (!hash) return result;
         const bm = hash.match(/[#&]bookmark=([^&]+)/);
-        if (bm) { result.bookmark = decodeURIComponent(bm[1]); return result; }
+        if (bm) {
+            try { result.bookmark = decodeURIComponent(bm[1]); } catch (_) { /* malformed hash: ignore */ }
+            return result;
+        }
         const vw = hash.match(/[#&]view=([^&]+)/);
-        if (vw) { result.view = decodeURIComponent(vw[1]); }
+        if (vw) {
+            try { result.view = decodeURIComponent(vw[1]); } catch (_) { /* malformed hash: ignore */ }
+        }
         return result;
     }
 
     async function applyLaunchPrecedence(manifest) {
         const parsed = parseStateHash(window.location.hash);
-        if (parsed.bookmark) { await applyBookmark(parsed.bookmark); return; }
-        if (parsed.view) { if (await applySavedView(parsed.view)) return; }
+        if (parsed.bookmark) { if (await applyBookmark(parsed.bookmark)) return true; }
+        if (parsed.view) { if (await applySavedView(parsed.view)) return true; }
 
         // User's default Portal saved view (Portal mode only). A stale/unknown default must never
         // prevent the base report from opening, so failure falls through to the author default.
-        if (await applyUserDefaultSavedView(manifest)) return;
+        if (await applyUserDefaultSavedView(manifest)) return true;
 
         if (manifest.bookmarks) {
             const authorDefault = manifest.bookmarks.find(b => b.isDefault);
-            if (authorDefault) { await applyBookmark(authorDefault.name); return; }
+            if (authorDefault && await applyBookmark(authorDefault.name)) return true;
         }
         // else: declared parameter/navigation defaults already applied by renderManifest.
+        return false;
     }
 
     function checkRequiredParameters(manifest) {
@@ -4607,12 +4615,14 @@
                 if (key === 'VISIBLE') {
                     const isVisible = isOn(value);
                     el.style.display = isVisible ? '' : 'none';
+                    const name = el.getAttribute('data-name') || el.id;
+                    if (name) _uiStates[name] = Object.assign({}, _uiStates[name], { visible: isVisible });
                 } else if (key === 'COLLAPSED') {
                     const isCollapsed = isOn(value);
                     const container = el.closest('.collapsible-drawer') || el.closest('.collapsible-inline') || el.closest('.report-container') || el;
 
                     const name = container.getAttribute('data-name');
-                    if (name) _uiStates[name] = { collapsed: isCollapsed };
+                    if (name) _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: isCollapsed });
 
                     if (isCollapsed) container.classList.add('collapsed');
                     else container.classList.remove('collapsed');
@@ -4721,7 +4731,10 @@
         if (state.visible) {
             Object.entries(state.visible).forEach(([objName, on]) => {
                 const el = document.getElementById(objName) || document.querySelector(`[data-name="${objName}"]`);
-                if (el) el.style.display = on ? '' : 'none';
+                if (el) {
+                    el.style.display = on ? '' : 'none';
+                    _uiStates[objName] = Object.assign({}, _uiStates[objName], { visible: !!on });
+                }
             });
         }
         if (state.collapsed) {
@@ -4732,7 +4745,7 @@
                                || el.closest('.collapsible-inline')
                                || el.closest('.report-container') || el;
                 const name = container.getAttribute('data-name');
-                if (name) _uiStates[name] = { collapsed: !!on };
+                if (name) _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: !!on });
                 if (on) container.classList.add('collapsed');
                 else container.classList.remove('collapsed');
             });
@@ -4849,20 +4862,6 @@
         return /^\/api\/reports\/\d+$/.test(base) ? base + '/saved-views' : null;
     }
 
-    // Normalizes a saved-view API payload to a resolved-state envelope object.
-    function envelopeFromSavedView(view) {
-        if (!view) return null;
-        let state = view.state;
-        if (!state && view.stateJson) {
-            try { state = JSON.parse(view.stateJson); } catch (_) { state = null; }
-        }
-        if (!state) {
-            // Legacy view: only a parameters map. Fall back so it still applies.
-            state = { parameters: view.parameters || {} };
-        }
-        return state;
-    }
-
     // Applies one Portal saved view by identifier. Portal mode only. Returns true on success.
     // Unknown/unauthorized identifiers resolve to a graceful no-op (base report still opens) and
     // never reveal whether another user's view exists.
@@ -4870,17 +4869,23 @@
         const base = savedViewsBase();
         if (!base) return false;
         try {
-            const res = await fetch(`${base}/${encodeURIComponent(viewId)}`, {
+            const res = await fetch(`${base}/${encodeURIComponent(viewId)}/apply`, {
+                method: 'POST',
                 headers: { 'Accept': 'application/json' }
             });
             if (!res.ok) return false;
-            const view = await res.json();
-            if (view && view.driftWarning && feedback) {
-                feedback.notify(view.driftWarning, { title: 'Saved view', tone: 'warning' });
+            const manifest = await res.json();
+            if (!manifest || manifest.error) {
+                if (manifest && manifest.error && feedback)
+                    feedback.notify(manifest.error, { title: 'Saved view not applied', tone: 'error' });
+                return false;
             }
-            const state = envelopeFromSavedView(view);
-            if (!state) return false;
-            return await applyResolvedState(state, { hash: '#view=' + encodeURIComponent(viewId) });
+            renderManifest(manifest);
+            if (manifest.appliedState)
+                commitResolvedState(manifest.appliedState, { hash: '#view=' + encodeURIComponent(viewId) });
+            if (manifest.stateWarnings && feedback)
+                manifest.stateWarnings.forEach(w => feedback.notify(w, { title: 'Saved view', tone: 'warning' }));
+            return true;
         } catch (e) {
             console.warn('Saved view could not be applied:', e && e.message);
             return false;
@@ -4897,14 +4902,8 @@
             });
             if (res.status === 204 || !res.ok) return false;
             const view = await res.json();
-            if (!view || (!view.state && !view.stateJson && !view.parameters)) return false;
-            if (view.driftWarning && feedback) {
-                feedback.notify(view.driftWarning, { title: 'Saved view', tone: 'warning' });
-            }
-            const state = envelopeFromSavedView(view);
-            if (!state) return false;
-            const idPart = view.id != null ? ('#view=' + encodeURIComponent(view.id)) : null;
-            return await applyResolvedState(state, idPart ? { hash: idPart } : {});
+            if (!view || view.id == null) return false;
+            return await applySavedView(view.id);
         } catch (e) {
             console.warn('Default saved view could not be applied:', e && e.message);
             return false;
@@ -4922,12 +4921,22 @@
             collapsed: {}
         };
         const params = (_lastManifest && _lastManifest.parameters) || {};
+        const metadata = (_lastManifest && _lastManifest.parameterMetadata) || {};
         Object.entries(params).forEach(([k, v]) => {
             const name = k.startsWith('@') ? k : '@' + k;
-            state.parameters[name] = v;
+            const metaKey = Object.keys(metadata).find(m => m.toLowerCase() === name.toLowerCase());
+            const type = metaKey && metadata[metaKey] ? String(metadata[metaKey].type || '').toUpperCase() : '';
+            if (/^(BIT|BOOL|BOOLEAN)$/.test(type) && /^(TRUE|FALSE)$/i.test(String(v)))
+                state.parameters[name] = String(v).toUpperCase() === 'TRUE';
+            else if (/^(INT|INTEGER|BIGINT|SMALLINT|TINYINT|DECIMAL|NUMERIC|FLOAT|REAL|DOUBLE|MONEY|NUMBER)(\s*\(|$)/.test(type)
+                && v !== '' && Number.isFinite(Number(v)))
+                state.parameters[name] = Number(v);
+            else
+                state.parameters[name] = v == null ? null : String(v);
         });
-        // Collapsed state tracked in _uiStates.
+        // Presentation state is tracked as actions/bookmarks are applied.
         Object.entries(_uiStates || {}).forEach(([name, s]) => {
+            if (s && typeof s.visible === 'boolean') state.visible[name] = s.visible;
             if (s && typeof s.collapsed === 'boolean') state.collapsed[name] = s.collapsed;
         });
         return state;
@@ -5592,6 +5601,6 @@
     // Test escape hatch: exposes pure functions for automated testing.
     // Harmless in production (just sets a window property that nothing reads).
     if (typeof window !== 'undefined') {
-        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, isOfflineSnapshot };
+        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot };
     }
 })();

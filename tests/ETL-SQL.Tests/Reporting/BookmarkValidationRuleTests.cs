@@ -79,11 +79,27 @@ public class BookmarkValidationRuleTests
     }
 
     [Fact]
-    public async Task ParameterTypeMismatch_IsWarning()
+    public async Task ParameterTypeMismatch_IsError()
     {
-        // @year is INT; assigning a string literal is a type mismatch warning.
+        // Authored state is source-controlled and must be wholly valid; it cannot partially apply.
         var results = await Lint(ValidPreamble + "CREATE BOOKMARK B AS (PARAMETERS (@year = 'twenty'));");
-        Assert.Contains(results, r => r.Severity == LintSeverity.Warning && r.Message.Contains("declared type 'INT'"));
+        Assert.Contains(results, r => r.Severity == LintSeverity.Error && r.Message.Contains("declared type 'INT'"));
+    }
+
+    [Fact]
+    public async Task RequiredParameterCannotBeBookmarkedAsNull()
+    {
+        var results = await Lint(ValidPreamble
+            + "DECLARE @required STRING INPUT REQUIRED = ''; CREATE BOOKMARK B AS (PARAMETERS (@required = NULL));");
+        Assert.Contains(results, r => r.Severity == LintSeverity.Error && r.Message.Contains("REQUIRED"));
+    }
+
+    [Fact]
+    public async Task InvalidTemporalLiteralIsError()
+    {
+        var results = await Lint(ValidPreamble
+            + "DECLARE @asOf DATE INPUT = '2026-01-01'; CREATE BOOKMARK B AS (PARAMETERS (@asOf = 'not-a-date')); ");
+        Assert.Contains(results, r => r.Severity == LintSeverity.Error && r.Message.Contains("declared type 'DATE'"));
     }
 
     [Fact]

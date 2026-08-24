@@ -14,9 +14,8 @@ namespace ETL_SQL.LSP;
 ///
 /// A bookmark identifier appears in exactly three places — <c>CREATE BOOKMARK Name</c>,
 /// <c>APPLY_BOOKMARK(Name)</c>, and <c>DROP BOOKMARK Name</c> — which is what makes a complete rename
-/// possible from the text alone. The references a bookmark makes to *other* objects (its PAGE, its
-/// STATE object names, its parameters) are kept safe by <c>BookmarkValidationRule</c>, which reports a
-/// stale reference as a diagnostic the moment the target is renamed or deleted.
+/// possible from the text alone. References a bookmark makes to pages, named objects, and parameters
+/// are handled by <c>ReportRenameProvider</c> as references of those target symbols.
 /// </summary>
 public static class BookmarkSymbols
 {

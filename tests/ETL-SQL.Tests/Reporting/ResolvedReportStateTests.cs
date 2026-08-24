@@ -85,6 +85,16 @@ public class ResolvedReportStateTests
         Assert.NotNull(ResolvedReportState.FromJson(""));
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("{\"schemaVersion\":99}")]
+    [InlineData("{\"schemaVersion\":1,\"parameters\":{\"@x\":{\"bad\":true}}}")]
+    public void Envelope_TryFromJson_RejectsInvalidClientState(string json)
+    {
+        Assert.False(ResolvedReportState.TryFromJson(json, out _, out var error));
+        Assert.False(string.IsNullOrWhiteSpace(error));
+    }
+
     [Fact]
     public void Envelope_FromLegacy_ReadsParametersAndFiltersJson()
     {

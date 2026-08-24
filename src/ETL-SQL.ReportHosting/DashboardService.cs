@@ -271,6 +271,16 @@ namespace ETL_SQL.ReportHosting
 
                 // Validate/reconcile against the current manifest (unknown refs dropped with warnings).
                 var reconciliation = BookmarkApplicationService.Reconcile(_manifest, requested, currentScriptHash);
+                // Author bookmarks are source-controlled declarations and must be wholly valid. Saved
+                // views are reader-owned persisted state and deliberately tolerate revision drift.
+                if (providedState == null && reconciliation.HasWarnings)
+                {
+                    var invalid = CloneManifest(_manifest);
+                    invalid.AppliedState = null;
+                    invalid.StateWarnings = reconciliation.Warnings;
+                    invalid.Error = $"Bookmark '{bookmarkName}' is invalid and was not applied.";
+                    return invalid;
+                }
                 var resolved = reconciliation.State;
 
                 // Stage on a clone so a failure leaves the live manifest untouched (no partial apply).

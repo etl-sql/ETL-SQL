@@ -226,6 +226,60 @@ public sealed class SavedReportViewStateTests
         Assert.Empty((await list.Content.ReadFromJsonAsync<JsonArray>(Json))!);
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("{\"schemaVersion\":42}")]
+    [InlineData("{\"schemaVersion\":1,\"parameters\":{\"@Region\":{\"nested\":true}}}")]
+    public async Task StructurallyInvalidStateIsRejectedRatherThanNormalized(string stateJson)
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var token = await AdminTokenAsync(client);
+        var reportId = await CreateReportAsync(factory, client, token, "invalid-shape");
+
+        var response = await Send(client, HttpMethod.Post, token, $"/api/reports/{reportId}/saved-views",
+            new { name = "Broken", stateJson });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ClientCannotSpoofTheSavedViewRevision()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var token = await AdminTokenAsync(client);
+        var reportId = await CreateReportAsync(factory, client, token, "server-hash");
+
+        var created = await Send(client, HttpMethod.Post, token, $"/api/reports/{reportId}/saved-views", new
+        {
+            name = "Stamped",
+            scriptHash = "attacker-controlled",
+            stateJson = """{"schemaVersion":1,"scriptHash":"also-attacker-controlled"}"""
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var body = (await created.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+        Assert.NotEqual("attacker-controlled", body["scriptHash"]!.GetValue<string>());
+        Assert.Equal(body["scriptHash"]!.GetValue<string>(), body["state"]!["scriptHash"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task SavedViewHasAServerSideAtomicApplyEndpoint()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var token = await AdminTokenAsync(client);
+        var reportId = await CreateReportAsync(factory, client, token, "apply");
+        var created = await Send(client, HttpMethod.Post, token, $"/api/reports/{reportId}/saved-views",
+            new { name = "Apply me", stateJson = """{"schemaVersion":1}""" });
+        var viewId = (await created.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+
+        var applied = await Send(client, HttpMethod.Post, token,
+            $"/api/reports/{reportId}/saved-views/{viewId}/apply", new { });
+        Assert.Equal(HttpStatusCode.OK, applied.StatusCode);
+        var manifest = (await applied.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+        Assert.NotNull(manifest["appliedState"]);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static async Task<int> CreateReportAsync(

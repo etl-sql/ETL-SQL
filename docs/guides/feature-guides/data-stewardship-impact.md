@@ -1,5 +1,8 @@
 # Data Stewardship and Impact Analysis
 
+> [!TIP]
+> This topic has moved to the **[Data Quality & Governance](../data-quality/data-stewardship-and-impact.md)** guide suite. The focused guide there contains additional examples and remediation patterns.
+
 This guide is for administrators, data stewards, report publishers, and CI/CD owners who need to use ETL-SQL lineage metadata before publishing dashboards, changing scripts, or making schema-impacting changes.
 
 > **Applies to:** every deployment profile. Lineage is persisted by whatever runs the script, including the CLI on a workstation — a Portal is not required to use this guide.

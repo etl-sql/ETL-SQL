@@ -289,21 +289,15 @@ public class ReportsController : ControllerBase
         string? requestedStateJson,
         Dictionary<string, string>? parameters,
         Dictionary<string, string>? filters,
+        string? scriptHash,
         out string? stateJson)
     {
         stateJson = null;
         if (!string.IsNullOrWhiteSpace(requestedStateJson))
         {
-            try
-            {
-                using var _ = JsonDocument.Parse(requestedStateJson);
-            }
-            catch (JsonException)
-            {
+            if (!ResolvedReportState.TryFromJson(requestedStateJson, out var envelope, out _))
                 return false;
-            }
-            var envelope = ResolvedReportState.FromJson(requestedStateJson);
-            envelope.SchemaVersion = ResolvedReportState.CurrentSchemaVersion;
+            envelope.ScriptHash = scriptHash;
             stateJson = envelope.ToJson();
             return true;
         }
@@ -311,9 +305,9 @@ public class ReportsController : ControllerBase
         if ((parameters is null || parameters.Count == 0) && (filters is null || filters.Count == 0))
             return true;
 
-        stateJson = ResolvedReportState
-            .FromLegacy(SerializeDictionary(parameters), SerializeDictionary(filters))
-            .ToJson();
+        var legacy = ResolvedReportState
+            .FromLegacy(SerializeDictionary(parameters), SerializeDictionary(filters), scriptHash);
+        stateJson = legacy.ToJson();
         return true;
     }
 
@@ -1250,7 +1244,7 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { error = "Saved view name is required." });
-        if (!TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, out var stateJson))
+        if (!TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, report.PublishedScriptHash, out var stateJson))
             return BadRequest(new { error = "State is not valid JSON." });
         if (req.IsDefault) await ClearDefaultSavedViewsAsync(id);
 
@@ -1263,7 +1257,7 @@ public class ReportsController : ControllerBase
             FiltersJson = SerializeDictionary(req.Filters),
             StateJson = stateJson,
             // Stamp the revision the view was captured against so later drift is detectable.
-            ScriptHash = req.ScriptHash ?? report.PublishedScriptHash,
+            ScriptHash = report.PublishedScriptHash,
             IsDefault = req.IsDefault
         };
         db.SavedReportViews.Add(view);
@@ -1285,7 +1279,7 @@ public class ReportsController : ControllerBase
 
         var stateChanged = req.StateJson is not null || req.Parameters is not null || req.Filters is not null;
         string? stateJson = view.StateJson;
-        if (stateChanged && !TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, out stateJson))
+        if (stateChanged && !TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, report.PublishedScriptHash, out stateJson))
             return BadRequest(new { error = "State is not valid JSON." });
 
         if (req.Name is not null) view.Name = req.Name;
@@ -1295,11 +1289,7 @@ public class ReportsController : ControllerBase
         {
             view.StateJson = stateJson;
             // Re-capturing state re-stamps the revision, so an updated view is no longer flagged as drifted.
-            view.ScriptHash = req.ScriptHash ?? report.PublishedScriptHash;
-        }
-        else if (req.ScriptHash is not null)
-        {
-            view.ScriptHash = req.ScriptHash;
+            view.ScriptHash = report.PublishedScriptHash;
         }
         if (req.IsDefault.HasValue)
         {
@@ -2056,6 +2046,8 @@ public class ReportsController : ControllerBase
 
         var parameters = body?.Parameters;
         var envelope = body?.State ?? ResolvedReportState.FromLegacy(SerializeDictionary(parameters), null);
+        if (envelope.SchemaVersion != ResolvedReportState.CurrentSchemaVersion)
+            return BadRequest(new { error = $"Unsupported report-state schema version '{envelope.SchemaVersion}'." });
         envelope.SchemaVersion = ResolvedReportState.CurrentSchemaVersion;
         // The server, not the client, stamps the revision the view was captured against.
         envelope.ScriptHash = report.PublishedScriptHash;

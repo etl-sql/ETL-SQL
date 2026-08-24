@@ -249,18 +249,20 @@ inventories and runtime assets are synchronized.
   the user's default Portal saved view, the author default bookmark, then declared parameter and
   navigation defaults. A stale personal view must never prevent the base report from opening.
   *(DONE. The runtime resolves precedence in order with graceful fallback at every step. The two
-  endpoints it already called now exist: `GET /api/reports/{id}/saved-views/{viewId}` and
+  lookup endpoints now exist: `GET /api/reports/{id}/saved-views/{viewId}` and
   `.../saved-views/default`, the latter answering **204** rather than 404 when the reader has no
-  personal default. The runtime also addressed both off a rebuilt path rather than the Portal host
-  base, so every saved-view request 404'd silently; it now addresses off `__API_BASE__`.)*
+  personal default. Actual application uses `POST .../saved-views/{viewId}/apply`, which performs
+  reconciliation and refresh as one server transaction. The runtime addresses all three from
+  `__API_BASE__`.)*
 - [x] Add parser, immutable AST, formatter, manifest, Analysis lint, LSP completion/hover/snippet,
   rename, documentation, syntax-index, and Report Builder round-trip support. Author bookmark page,
   visual, container, and parameter references must be statically safe and rename-aware.
   *(DONE. LSP: `BookmarkSymbols` backs completion where only a bookmark identifier is valid
   (`APPLY_BOOKMARK(`, `DROP BOOKMARK`), hover documentation, and rename across the declaration plus
   every `APPLY_BOOKMARK`/`DROP BOOKMARK` site — `AdvancedChartRenameProvider` is now
-  `ReportRenameProvider`. A bookmark's references to other objects are held safe from the other
-  direction by `BookmarkValidationRule`, which errors the moment a target is renamed or dropped.
+  `ReportRenameProvider`. Page, visual/container, and parameter targets inside bookmark definitions
+  participate in the target symbol's rename, while `BookmarkValidationRule` rejects stale or
+  type-incompatible authored references.
   Report Builder: `DesignerStateDto.Bookmarks` carries them through parse → edit → patch with values
   as authored source text, plus a sidebar panel to add/edit/make-default/remove.)*
 - [x] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
@@ -291,7 +293,8 @@ inventories and runtime assets are synchronized.
   *(DONE. Create/update build a canonical envelope, upgrading a legacy parameter/filter map on write
   and reading one as an envelope on read, so pre-envelope rows converge without a data migration; the
   legacy columns stay populated for older clients. Malformed state is rejected rather than stored. The
-  server — not the client — stamps `ScriptHash` from the report's `PublishedScriptHash`, and a later
+  server — not the client — stamps both the envelope and row `ScriptHash` from the report's
+  `PublishedScriptHash`, and a later
   republish surfaces as a `driftWarning` on read. Drift never blocks: unknown references are dropped
   during reconciliation and the reader still gets the view. Re-capturing re-stamps the revision.)*
 - [x] Support author-bookmark replay in offline snapshots and identifier-only URL hashes. Never place
@@ -310,10 +313,12 @@ inventories and runtime assets are synchronized.
 - [x] Add parser/formatter/round-trip, duplicate/default, stale-reference, rename, type validation,
   cascade reconciliation, atomic rollback, launch precedence, Portal ownership, report-revision
   drift, default-view restore, offline replay, accessibility, and URL-disclosure tests.
-  *(DONE. Added to the earlier suite: 7 Portal endpoint tests (envelope round-trip, legacy
+  *(DONE. Added Portal endpoint tests for envelope round-trip, legacy
   compatibility, drift warning + re-stamp, cross-user identifier opacity, 204/round-trip default,
-  single-default invariant, malformed rejection); 17 LSP tests for completion context, hover, and
-  rename — applying the edits back to the source and asserting the resulting text, not edit counts;
+  single-default invariant, malformed/invalid-schema rejection, revision spoof prevention, and
+  atomic saved-view application; LSP tests cover completion context, hover, bookmark rename, and
+  target-reference rename — applying the edits back to the source and asserting the resulting text,
+  not edit counts;
   8 Report Builder round-trip tests (parse fidelity, byte-for-byte no-op patch, scoped edit, add,
   remove, null-preserves-existing, fresh generate re-parses); 11 runtime tests covering the saved-view
   URL base per host, the menu's accessibility contract, identifier-only hashes, and offline replay

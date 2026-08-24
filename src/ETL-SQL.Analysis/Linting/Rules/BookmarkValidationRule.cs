@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -35,11 +36,11 @@ public sealed class BookmarkValidationRule : ILintRule
             .Concat(script.Statements.OfType<CreateContainerStatement>().Select(c => c.Name)),
             StringComparer.OrdinalIgnoreCase);
 
-        var declaredParamTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var declaredParamTypes = new Dictionary<string, (string Type, bool IsRequired)>(StringComparer.OrdinalIgnoreCase);
         foreach (var d in script.Statements.OfType<DeclareStatement>())
         {
             var name = d.VariableName.StartsWith("@") ? d.VariableName : "@" + d.VariableName;
-            declaredParamTypes[name] = d.DataType;
+            declaredParamTypes[name] = (d.DataType, d.IsRequired);
         }
 
         var bookmarkNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -64,17 +65,18 @@ public sealed class BookmarkValidationRule : ILintRule
             foreach (var param in bm.Parameters)
             {
                 var normalized = param.ParameterName.StartsWith("@") ? param.ParameterName : "@" + param.ParameterName;
-                if (!declaredParamTypes.TryGetValue(normalized, out var declaredType))
+                if (!declaredParamTypes.TryGetValue(normalized, out var declaration))
                 {
                     results.Add(Error(bm, $"Bookmark '{bm.Name}' sets parameter '{param.ParameterName}' which is not declared in this script."));
                 }
-                else if (param.Value is LiteralExpression lit && !IsTypeCompatible(declaredType, lit))
+                else if (param.Value is LiteralExpression lit
+                    && (declaration.IsRequired && lit.Value is null || !IsTypeCompatible(declaration.Type, lit)))
                 {
                     results.Add(new LintResult
                     {
                         RuleName = Name,
-                        Severity = LintSeverity.Warning,
-                        Message = $"Bookmark '{bm.Name}' sets '{param.ParameterName}' to a {DescribeLiteral(lit)} value, which does not match its declared type '{declaredType}'.",
+                        Severity = LintSeverity.Error,
+                        Message = $"Bookmark '{bm.Name}' sets '{param.ParameterName}' to a {DescribeLiteral(lit)} value, which does not match its declared type '{declaration.Type}'{(declaration.IsRequired && lit.Value is null ? " (REQUIRED)" : string.Empty)}.",
                         LineNumber = bm.Line,
                         ColumnNumber = bm.Column
                     });
@@ -137,6 +139,11 @@ public sealed class BookmarkValidationRule : ILintRule
         "BIT", "BOOL", "BOOLEAN"
     };
 
+    private static readonly HashSet<string> TemporalTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DATE", "DATETIME", "DATETIME2", "SMALLDATETIME", "DATETIMEOFFSET", "TIMESTAMP", "TIME"
+    };
+
     /// <summary>
     /// Checks a typed literal against a declared parameter type. NULL and variable references are always
     /// compatible (a variable's value is not known statically). String-typed parameters accept any
@@ -160,7 +167,16 @@ public sealed class BookmarkValidationRule : ILintRule
 
         if (NumericTypes.Contains(baseType)) return isNumberLit;
         if (BooleanTypes.Contains(baseType)) return isBoolLit;
-        // String/date/other declared types accept string (and, leniently, numeric) literals.
+        if (TemporalTypes.Contains(baseType))
+        {
+            if (!isStringLit) return false;
+            var raw = Convert.ToString(lit.Value, CultureInfo.InvariantCulture);
+            return baseType.Equals("TIME", StringComparison.OrdinalIgnoreCase)
+                ? TimeSpan.TryParse(raw, CultureInfo.InvariantCulture, out _)
+                : DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal, out _);
+        }
+        // String/provider-specific declared types accept string (and, leniently, numeric) literals.
         return isStringLit || isNumberLit;
     }
 

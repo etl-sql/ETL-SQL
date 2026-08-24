@@ -26,6 +26,11 @@ namespace ETL_SQL.Reporting
             "BIT", "BOOL", "BOOLEAN"
         };
 
+        private static readonly HashSet<string> TemporalTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "DATE", "DATETIME", "DATETIME2", "SMALLDATETIME", "DATETIMEOFFSET", "TIMESTAMP", "TIME"
+        };
+
         /// <summary>Looks up an author bookmark's state by name (case-insensitive). Null if not found.</summary>
         public static ResolvedReportState? ResolveAuthorBookmark(ReportManifest manifest, string bookmarkName)
         {
@@ -89,6 +94,11 @@ namespace ETL_SQL.Reporting
                 }
                 if (manifest.ParameterMetadata.TryGetValue(name, out var meta))
                 {
+                    if (meta.IsRequired && value.Kind == ReportStateValueKind.Null)
+                    {
+                        result.Warnings.Add($"Required parameter '{name}' cannot be NULL; it was skipped.");
+                        continue;
+                    }
                     if (!TryCoerce(meta.Type, value, out var coerced))
                     {
                         result.Warnings.Add($"Value for '{name}' does not match its declared type '{meta.Type}'; it was skipped.");
@@ -154,7 +164,16 @@ namespace ETL_SQL.Reporting
                 return false;
             }
 
-            // String / date / other declared types accept any scalar (numbers project to their canonical text).
+            if (TemporalTypes.Contains(baseType))
+            {
+                if (value.Kind != ReportStateValueKind.String) return false;
+                if (baseType.Equals("TIME", StringComparison.OrdinalIgnoreCase))
+                    return TimeSpan.TryParse(value.StringValue, CultureInfo.InvariantCulture, out _);
+                return DateTimeOffset.TryParse(value.StringValue, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal, out _);
+            }
+
+            // String and provider-specific scalar types accept a canonical scalar projection.
             return true;
         }
     }

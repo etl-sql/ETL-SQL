@@ -62,6 +62,53 @@ public sealed class ResolvedReportState
     public string ToJson() => JsonSerializer.Serialize(this, SerializerOptions);
 
     /// <summary>
+    /// Strictly validates a client-supplied envelope. Persisted legacy data is still read through
+    /// <see cref="FromJson"/>, but new writes must be an object using the current schema and scalar
+    /// parameter values so corrupt or forward-incompatible state is never stored silently.
+    /// </summary>
+    public static bool TryFromJson(string? json, out ResolvedReportState state, out string? error)
+    {
+        state = new ResolvedReportState();
+        error = null;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            error = "State is required.";
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                error = "State must be a JSON object.";
+                return false;
+            }
+
+            var parsed = JsonSerializer.Deserialize<ResolvedReportState>(json, SerializerOptions);
+            if (parsed is null)
+            {
+                error = "State could not be read.";
+                return false;
+            }
+            if (parsed.SchemaVersion != CurrentSchemaVersion)
+            {
+                error = $"Unsupported report-state schema version '{parsed.SchemaVersion}'.";
+                return false;
+            }
+
+            Normalize(parsed);
+            state = parsed;
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Parses an envelope from JSON. Unknown/older schema versions are read best-effort. Returns an
     /// empty envelope for null/blank input rather than throwing, so a malformed persisted view can
     /// never prevent a report from opening.
@@ -73,19 +120,23 @@ public sealed class ResolvedReportState
         {
             var state = JsonSerializer.Deserialize<ResolvedReportState>(json, SerializerOptions);
             if (state == null) return new ResolvedReportState();
-            state.Parameters ??= new(StringComparer.OrdinalIgnoreCase);
-            state.Visible ??= new(StringComparer.OrdinalIgnoreCase);
-            state.Collapsed ??= new(StringComparer.OrdinalIgnoreCase);
-            // Re-key with a case-insensitive comparer regardless of how it deserialized.
-            state.Parameters = new(state.Parameters, StringComparer.OrdinalIgnoreCase);
-            state.Visible = new(state.Visible, StringComparer.OrdinalIgnoreCase);
-            state.Collapsed = new(state.Collapsed, StringComparer.OrdinalIgnoreCase);
+            Normalize(state);
             return state;
         }
         catch (JsonException)
         {
             return new ResolvedReportState();
         }
+    }
+
+    private static void Normalize(ResolvedReportState state)
+    {
+        state.Parameters ??= new(StringComparer.OrdinalIgnoreCase);
+        state.Visible ??= new(StringComparer.OrdinalIgnoreCase);
+        state.Collapsed ??= new(StringComparer.OrdinalIgnoreCase);
+        state.Parameters = new(state.Parameters, StringComparer.OrdinalIgnoreCase);
+        state.Visible = new(state.Visible, StringComparer.OrdinalIgnoreCase);
+        state.Collapsed = new(state.Collapsed, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

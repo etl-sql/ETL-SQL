@@ -480,6 +480,40 @@ public class ExecutionController(
         return Ok(manifest);
     }
 
+    // ── 2.3c  POST /api/reports/{id}/saved-views/{viewId}/apply ─────────────
+
+    /// <summary>
+    /// Applies the caller's private saved view through the same server-side atomic operation as an
+    /// author bookmark. Ownership is part of the lookup, so another user's identifier remains
+    /// indistinguishable from a missing one.
+    /// </summary>
+    [HttpPost("reports/{id:int}/saved-views/{viewId:int}/apply")]
+    public async Task<IActionResult> ApplySavedView(int id, int viewId)
+    {
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (perm is null) return Forbid();
+
+        var view = await CatalogScope.SavedReportViews.AsNoTracking()
+            .FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
+        if (view is null) return NotFound();
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        var state = string.IsNullOrWhiteSpace(view.StateJson)
+            ? ETL_SQL.Core.Reporting.ResolvedReportState.FromLegacy(view.ParametersJson, view.FiltersJson, view.ScriptHash)
+            : ETL_SQL.Core.Reporting.ResolvedReportState.FromJson(view.StateJson);
+        state.ScriptHash = view.ScriptHash;
+
+        var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var manifest = await svc.ApplySavedViewAsync(state, report.PublishedScriptHash);
+        await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
+        return Ok(manifest);
+    }
+
     // ── 2.4  POST /api/reports/{id}/drill ────────────────────────────────────
 
     [HttpPost("reports/{id:int}/drill")]

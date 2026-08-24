@@ -20,6 +20,7 @@ public class BookmarkApplicationServiceTests
         m.Containers = new() { new ContainerManifest { Name = "Panel" } };
         m.ParameterMetadata["@year"] = new ParameterMetadataManifest { Name = "@year", Type = "INT" };
         m.ParameterMetadata["@region"] = new ParameterMetadataManifest { Name = "@region", Type = "VARCHAR" };
+        m.ParameterMetadata["@asOf"] = new ParameterMetadataManifest { Name = "@asOf", Type = "DATE" };
         m.Parameters["@year"] = "2026";
         m.Parameters["@region"] = "All";
         return m;
@@ -92,6 +93,29 @@ public class BookmarkApplicationServiceTests
         var r = BookmarkApplicationService.Reconcile(m, req);
         Assert.False(r.State.Parameters.ContainsKey("@year"));
         Assert.Contains(r.Warnings, w => w.Contains("@year"));
+    }
+
+    [Fact]
+    public void Reconcile_InvalidTemporalValueIsDroppedWithWarning()
+    {
+        var m = ManifestWith();
+        var req = new ResolvedReportState();
+        req.Parameters["@asOf"] = ReportStateValue.FromString("not-a-date");
+        var r = BookmarkApplicationService.Reconcile(m, req);
+        Assert.False(r.State.Parameters.ContainsKey("@asOf"));
+        Assert.Contains(r.Warnings, w => w.Contains("@asOf"));
+    }
+
+    [Fact]
+    public void Reconcile_RequiredParameterRejectsNull()
+    {
+        var m = ManifestWith();
+        m.ParameterMetadata["@region"].IsRequired = true;
+        var req = new ResolvedReportState();
+        req.Parameters["@region"] = ReportStateValue.Null;
+        var r = BookmarkApplicationService.Reconcile(m, req);
+        Assert.False(r.State.Parameters.ContainsKey("@region"));
+        Assert.Contains(r.Warnings, w => w.Contains("Required parameter"));
     }
 
     [Fact]

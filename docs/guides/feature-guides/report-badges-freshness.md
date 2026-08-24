@@ -1,5 +1,8 @@
 # Report Ownership & Data Freshness Badges
 
+> [!TIP]
+> This topic has moved to the **[Reporting Guides](../reporting/report-badges-and-trust.md)** suite. The focused guide there covers badge configuration, freshness thresholds, and trust indicators in full.
+
 Published reports display standardized metadata badges in the report runtime header and Portal catalog cards. Badges provide immediate visual trust indicators regarding report ownership, data governance, certification level, and data freshness.
 
 > **Applies to:** every deployment profile. Badges render in the report runtime, so they appear in the Report Player on a workstation as well as on Portal catalog cards.

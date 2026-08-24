@@ -170,9 +170,7 @@ public sealed class ReportStateValueJsonConverter : JsonConverter<ReportStateVal
             case JsonTokenType.String:
                 return ReportStateValue.FromString(reader.GetString() ?? string.Empty);
             default:
-                // Objects/arrays are not valid scalar state values; skip and coerce to null defensively.
-                reader.Skip();
-                return ReportStateValue.Null;
+                throw new JsonException("Report-state parameter values must be JSON scalars.");
         }
     }
 

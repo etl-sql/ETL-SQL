@@ -20,3 +20,12 @@
 | [Themed Dashboard with CREATE STYLE](themed-dashboard.md) | **Pattern**: Define a shared visual identity once with `CREATE STYLE`, then apply it across all visuals, pages, and containers. |
 | [Financial Waterfall, Funnel & Gauge](waterfall-funnel-gauge.md) | **Pattern**: Three financial visuals on one page — a cash-flow waterfall, a sales conversion funnel, and a KPI gauge showing actuals vs target. |
 | [Year-over-Year Comparison](year-over-year-comparison.md) | **Pattern**: Stack current year and prior year on the same chart. A donut shows the full-year share breakdown by product alongside. |
+
+---
+
+## Related Guides
+
+- [Report-SQL & Dashboards](../../guides/reporting/README.md) — dashboard authoring, parameters, cascading slicers, RLS, theming, and report badges
+- [Portal User Guides](../../guides/tooling/portal/README.md) — browsing reports, exporting, subscriptions, sharing, and saved views
+- [Data Quality & Governance](../../guides/data-quality/README.md) — embedding quality gates and impact analysis into your reporting pipeline
+

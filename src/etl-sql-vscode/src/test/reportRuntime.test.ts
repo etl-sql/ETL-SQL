@@ -337,6 +337,71 @@ describe('parseStateHash()', () => {
         expect(parse('')).toEqual({ bookmark: null, view: null });
         // An explicit bookmark outranks a view in the same hash.
         expect(parse('#bookmark=Overview&view=42').view).toBeNull();
+        expect(parse('#bookmark=%E0%A4%A')).toEqual({ bookmark: null, view: null });
+    });
+});
+
+describe('Portal saved-view application', () => {
+    it('uses the server-side atomic apply endpoint', async () => {
+        const calls: Array<{ url: string; method?: string }> = [];
+        const win = makeDOM(w => {
+            w.__IS_WEB__ = true;
+            w.__API_BASE__ = '/api/reports/7';
+            w.__MANIFEST__ = { ...EMPTY_MANIFEST, parameters: {} };
+            w.fetch = (url: string, init: any = {}) => {
+                calls.push({ url, method: init.method });
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        ...EMPTY_MANIFEST,
+                        parameters: { '@Limit': '25' },
+                        appliedState: { parameters: { '@Limit': 25 }, visible: {}, collapsed: {} },
+                    }),
+                });
+            };
+        });
+        win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(await win.__reportRuntime__.applySavedView(12)).toBe(true);
+        expect(calls.some(c => c.url === '/api/reports/7/saved-views/12/apply' && c.method === 'POST')).toBe(true);
+        expect(win.location.hash).toBe('#view=12');
+    });
+
+    it('lets the launch default satisfy a required parameter before prompting', async () => {
+        const win = makeDOM(w => {
+            w.__IS_WEB__ = true;
+            w.__API_BASE__ = '/api/reports/7';
+            w.__MANIFEST__ = {
+                ...EMPTY_MANIFEST,
+                parameters: { '@Region': '' },
+                parameterMetadata: { '@Region': { name: '@Region', type: 'VARCHAR', isRequired: true } },
+                bookmarks: [{ name: 'DefaultRegion', isDefault: true, state: { parameters: { '@Region': 'West' } } }],
+            };
+            w.fetch = (url: string, init: any = {}) => {
+                if (url === '/api/reports/7/saved-views/default')
+                    return Promise.resolve({ ok: true, status: 204, json: () => Promise.resolve(null) });
+                if (url === '/api/reports/7/bookmark' && init.method === 'POST')
+                    return Promise.resolve({
+                        ok: true,
+                        status: 200,
+                        json: () => Promise.resolve({
+                            ...EMPTY_MANIFEST,
+                            parameters: { '@Region': 'West' },
+                            parameterMetadata: { '@Region': { name: '@Region', type: 'VARCHAR', isRequired: true } },
+                            bookmarks: w.__MANIFEST__.bookmarks,
+                            appliedState: { parameters: { '@Region': 'West' }, visible: {}, collapsed: {} },
+                        }),
+                    });
+                return Promise.reject(new Error('unexpected request: ' + url));
+            };
+        });
+
+        win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 10));
+        expect(win.__CURRENT_MANIFEST__.parameters['@Region']).toBe('West');
+        expect(win.document.querySelector('.required-params-modal')).toBeNull();
     });
 });
 
@@ -358,6 +423,10 @@ describe('offline snapshot bookmark replay', () => {
                 buttons: [],
                 navigations: [],
                 parameters: { '@Region': 'North' },
+                parameterMetadata: {
+                    '@Region': { name: '@Region', type: 'VARCHAR' },
+                    '@Limit': { name: '@Limit', type: 'INT' },
+                },
                 bookmarks: [
                     {
                         name: 'WestQ4',
@@ -366,7 +435,7 @@ describe('offline snapshot bookmark replay', () => {
                             activePage: 'Detail',
                             parameters: { '@Region': 'West', '@Limit': 25 },
                             collapsed: {},
-                            visible: {},
+                            visible: { FilterPanel: false },
                         },
                     },
                 ],
@@ -403,6 +472,21 @@ describe('offline snapshot bookmark replay', () => {
         expect(await win.__reportRuntime__.applyBookmark('DoesNotExist')).toBe(false);
         expect(win.__CURRENT_MANIFEST__.parameters['@Region']).toBe('North');
         expect(win.location.hash).toBe('');
+    });
+
+    it('captures typed parameter and visibility state in the shared envelope', async () => {
+        const win = offlineWindow();
+        win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const panel = win.document.createElement('div');
+        panel.setAttribute('data-name', 'FilterPanel');
+        win.document.body.appendChild(panel);
+
+        await win.__reportRuntime__.applyBookmark('WestQ4');
+        const state = win.__reportRuntime__.captureResolvedState();
+        expect(state.parameters['@Region']).toBe('West');
+        expect(state.parameters['@Limit']).toBe(25);
+        expect(state.visible.FilterPanel).toBe(false);
     });
 
     it('offers author bookmarks in the picker but no saved-view actions offline', async () => {

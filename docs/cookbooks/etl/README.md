@@ -33,3 +33,12 @@
 | [Specification-Driven Vendor Feed Build](spec-driven-vendor-feed.md) | Use this pattern when a vendor gives you a PDF, Excel workbook, or data dictionary and you want a strong ETL-SQL starting point without hand-transc... |
 | [The Staged Ingestion (Classical ETL)](staged-ingestion.md) | This pattern extracts data from a remote source, stages it in the Engine workspace for validation, and performs an atomic `MERGE` into the producti... |
 | [Time Series Gap Filling (FILL_DATES)](time-series-gap-filling.md) | When building reporting dashboards (e.g. daily sales charts), missing dates in the raw transaction log will cause dates to be skipped on the chart ... |
+
+---
+
+## Related Guides
+
+- [ETL Pipelines & Orchestration](../../guides/pipelines/README.md) — staged vs. streaming ingestion, parallel execution, DAGs, error handling, and resilience patterns
+- [Data Quality & Governance](../../guides/data-quality/README.md) — column rules, quarantine remediation, cross-table assertions, and CI/CD quality gates
+- [Operations & Tuning](../../guides/operations/README.md) — script logging, performance tuning, and one-person quality loops
+

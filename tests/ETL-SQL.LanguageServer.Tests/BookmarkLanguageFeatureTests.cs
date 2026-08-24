@@ -19,6 +19,11 @@ namespace ETL_SQL.LanguageServer.Tests;
 public sealed class BookmarkLanguageFeatureTests
 {
     private const string ScriptText = """
+        DECLARE @Region VARCHAR INPUT = 'All';
+        DECLARE @Limit INT INPUT = 10;
+        CREATE VISUAL FilterPanel AS TEXT (VALUE = 'Filters');
+        CREATE PAGE Summary AS DASHBOARD (LAYOUT (STRUCTURE = 'A', MAP ('A' = FilterPanel)));
+
         CREATE BOOKMARK WestQ4 AS (
             TITLE = 'West, Q4',
             PARAMETERS (
@@ -113,7 +118,7 @@ public sealed class BookmarkLanguageFeatureTests
     }
 
     [Fact]
-    public async Task AnIdentifierThatIsNotABookmarkIsNotRenamedAsOne()
+    public async Task RenamingAPageRewritesTheBookmarkPageReference()
     {
         var (provider, uri) = RenameProvider();
 
@@ -124,8 +129,43 @@ public sealed class BookmarkLanguageFeatureTests
             NewName = "Overview"
         }, CancellationToken.None);
 
-        // PAGE = Summary names a page, not a bookmark; the bookmark rename must not claim it.
-        Assert.Null(result);
+        var edits = Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]).ToList();
+        Assert.Equal(2, edits.Count);
+        var rewritten = Apply(ScriptText, edits);
+        Assert.Contains("CREATE PAGE Overview", rewritten);
+        Assert.Contains("PAGE = Overview", rewritten);
+    }
+
+    [Fact]
+    public async Task RenamingANamedObjectRewritesBookmarkStateReference()
+    {
+        var (provider, uri) = RenameProvider();
+        var result = await provider.Handle(new RenameParams
+        {
+            TextDocument = new TextDocumentIdentifier(uri),
+            Position = PositionOf(ScriptText, "FilterPanel.VISIBLE"),
+            NewName = "Filters"
+        }, CancellationToken.None);
+
+        var rewritten = Apply(ScriptText, Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]));
+        Assert.Contains("CREATE VISUAL Filters", rewritten);
+        Assert.Contains("Filters.VISIBLE", rewritten);
+    }
+
+    [Fact]
+    public async Task RenamingAParameterRewritesBookmarkAssignments()
+    {
+        var (provider, uri) = RenameProvider();
+        var result = await provider.Handle(new RenameParams
+        {
+            TextDocument = new TextDocumentIdentifier(uri),
+            Position = PositionOf(ScriptText, "@Region VARCHAR"),
+            NewName = "Area"
+        }, CancellationToken.None);
+
+        var rewritten = Apply(ScriptText, Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]));
+        Assert.DoesNotContain("@Region", rewritten);
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(rewritten, "@Area").Count);
     }
 
     // ── Completion context ───────────────────────────────────────────────────

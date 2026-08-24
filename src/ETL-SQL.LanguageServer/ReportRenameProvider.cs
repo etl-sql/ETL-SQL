@@ -23,9 +23,9 @@ namespace ETL_SQL.LSP;
 ///     <c>CREATE BOOKMARK</c>, <c>APPLY_BOOKMARK(...)</c>, and <c>DROP BOOKMARK</c> — so a bookmark
 ///     cannot be renamed into a dangling in-canvas action.</description></item>
 /// </list>
-/// A bookmark's references to other objects (its PAGE, its STATE object names, its parameters) are
-/// held safe from the other direction: <c>BookmarkValidationRule</c> reports a stale reference as a
-/// diagnostic as soon as its target is renamed or dropped.
+/// Bookmark target references participate in their target's rename as well: PAGE references follow
+/// page declarations, STATE references follow visual/container declarations, and parameter keys
+/// follow their sigiled variable throughout the report.
 /// </summary>
 public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHandler, IPrepareRenameHandler
 {
@@ -64,6 +64,7 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
         var cursor = Offset(state.Text, (int)position.Line, (int)position.Character);
 
         if (TryResolveBookmark(state, cursor, out symbol)) return true;
+        if (TryResolveBookmarkTarget(state, cursor, out symbol)) return true;
 
         var visual = state.Script.Statements.OfType<CreateVisualStatement>()
             .FirstOrDefault(item => item.AdvancedChart is not null && cursor >= item.StartOffset && cursor <= item.EndOffset);
@@ -119,6 +120,57 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
         return true;
     }
 
+    private static bool TryResolveBookmarkTarget(DocumentState state, int cursor, out RenameSymbol symbol)
+    {
+        symbol = default!;
+        var word = WordAt(state.Text, cursor);
+        if (word is null) return false;
+        var escaped = Regex.Escape(word.Value.Name);
+
+        if (state.Script.Statements.OfType<CreatePageStatement>()
+            .Any(p => p.Name.Equals(word.Value.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            var offsets = Captures(state.Text, 0,
+                $@"(?ix)(?:\bCREATE\s+PAGE\s+|\bPAGE\s*=\s*|\bNAVIGATE_PAGE\s*\(\s*)(?<name>{escaped})\b", "name");
+            if (offsets.Contains(word.Value.Start))
+            {
+                symbol = new RenameSymbol(word.Value.Name, word.Value.Start, offsets);
+                return true;
+            }
+        }
+
+        var isObject = state.Script.Statements.OfType<CreateVisualStatement>()
+                .Any(v => v.Name.Equals(word.Value.Name, StringComparison.OrdinalIgnoreCase))
+            || state.Script.Statements.OfType<CreateContainerStatement>()
+                .Any(c => c.Name.Equals(word.Value.Name, StringComparison.OrdinalIgnoreCase));
+        if (isObject)
+        {
+            var offsets = Captures(state.Text, 0,
+                $@"(?ix)(?:\bCREATE\s+(?:VISUAL|CONTAINER)\s+(?<name>{escaped})\b|(?:^|[,\(])\s*(?<name>{escaped})\b(?=\s*\.\s*(?:VISIBLE|COLLAPSED)\b))", "name");
+            if (offsets.Contains(word.Value.Start))
+            {
+                symbol = new RenameSymbol(word.Value.Name, word.Value.Start, offsets);
+                return true;
+            }
+        }
+
+        var isParameter = state.Script.Statements.OfType<DeclareStatement>()
+            .Any(d => d.VariableName.TrimStart('@').Equals(word.Value.Name, StringComparison.OrdinalIgnoreCase));
+        if (isParameter)
+        {
+            var offsets = IdentifierOffsets(state.Text, 0, word.Value.Name)
+                .Where(offset => offset > 0 && state.Text[offset - 1] == '@')
+                .ToList();
+            if (offsets.Contains(word.Value.Start))
+            {
+                symbol = new RenameSymbol(word.Value.Name, word.Value.Start, offsets);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static List<int> Captures(string text, int baseOffset, string pattern, string group) =>
         Regex.Matches(text, pattern, RegexOptions.Multiline | RegexOptions.CultureInvariant)
             .Select(match => baseOffset + match.Groups[group].Index).Distinct().Order().ToList();
@@ -148,6 +200,7 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
     {
         if (text.Length == 0) return null;
         offset = Math.Clamp(offset, 0, text.Length - 1);
+        if (text[offset] == '@' && offset + 1 < text.Length) offset++;
         if (!(char.IsLetterOrDigit(text[offset]) || text[offset] == '_') && offset > 0) offset--;
         var start = offset;
         while (start > 0 && (char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_')) start--;

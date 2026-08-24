@@ -241,6 +241,11 @@ Use this map to find the right document for any task.
 | Pipeline mental model for new users | **[Getting Started](docs/guides/onboarding/getting-started.md)** |
 | Sample script inventory (290+ files in `/samples/`) | **[Sample Guide](docs/guides/patterns/sample-guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/feature-guides/report-sql.md)** |
+| Dashboard authoring, parameters, slicers, RLS, themes | **[Reporting Guides](docs/guides/reporting/README.md)** |
+| Data quality rules, quarantine, assertions, impact | **[Data Quality Guides](docs/guides/data-quality/README.md)** |
+| Pipelines, orchestration, parallel execution, DAGs | **[Pipeline Guides](docs/guides/pipelines/README.md)** |
+| Contributor testing, test lanes, SLT corpus | **[Testing Guides](docs/guides/testing/README.md)** |
+| Portal end-user tasks (browse, export, share, views) | **[Portal User Guides](docs/guides/tooling/portal/README.md)** |
 | Visual Report Builder (WYSIWYG 12-col grid, ergonomics, drag-and-drop) | **[Visual Report Builder Guide](docs/guides/tooling/report-builder.md)** |
 | Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](./docs/architecture/standards/Script_Composition_Standards.md)** |
 | Production install, HA, Governance Core, OIDC | **[Administration](docs/administration/platform/README.md)** |
