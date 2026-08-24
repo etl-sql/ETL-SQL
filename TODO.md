@@ -33,6 +33,42 @@ GoG contract changes.
 - [x] Give the `gw-enrollModal` overlay in `gateways-admin.js` a semantic, accessible dialog role and
   name so `PortalDialogAccessibilityTests` passes.
 
+### Found during Phase 11, out of its scope
+
+These were surfaced by the Phase 11 detail-surface audit and its verification runs, but none of them
+belong to the tooltip contract, so they were recorded rather than fixed in that change. The last two
+were each confirmed still failing on a clean tree with the Phase 11 work stashed, so neither is a
+Phase 11 regression.
+
+- [ ] Remove or replace the dead `renderChart` fallback in
+  `src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js`. The visual dispatch ends with
+  `visual.nativeSvg ? renderNativeSvg(...) : renderChart(...)`, but `renderChart` is not defined
+  anywhere in the runtime — the name appears exactly once, at that call site — because it was left
+  behind when ECharts was retired. It is hard to reach today (the server populates `nativeSvg` for
+  every type that falls through to `default`, and the runtime returns early on `visual.error`), but a
+  manifest that arrives without a payload — an older snapshot, a lightweight/externalized manifest, a
+  future visual type — hits a `ReferenceError` that aborts the whole page render instead of degrading.
+  Either delete the branch and render an explicit "missing chart payload" message, or restore a real
+  fallback. Add a test that renders a chart-type visual whose `nativeSvg` is absent.
+- [ ] Fix `Analysis.DocumentationSyntaxTests.ValidateDocumentationSnippets`, currently red. The
+  extractor matches a fenced `sql` block with a regex that requires the **closing** fence to start at
+  column zero, so it does not match an indented one.
+  `docs/guides/patterns/troubleshooting-syntax-and-dialect.md` indents four `sql` fences by two
+  spaces inside list items, so each of those blocks runs past its own end and swallows the following
+  prose; the apostrophe in "ETL-SQL's" then reads as an unterminated string literal, which is the
+  reported failure. Six files repo-wide contain indented `sql` fences, so the gate is also silently
+  mis-scoping or skipping blocks it is supposed to be validating. Prefer teaching the extractor to
+  honour an indented fence — that widens real coverage — over unindenting the four fences, and assert
+  the checked-snippet count rises so the fix is proven to add validation rather than remove a failure.
+- [ ] Fix `Portal.DesignerScriptPatcherTests.FiftySequentialMutations_PreserveLineEndingsAndStableDataBytes`
+  for the LF case, currently red on any Windows checkout.
+  `ReportDesignerRoundTripFixtures.WithLineEnding` replaces LF with the requested line ending, but the
+  fixture is a C# raw string literal, so on a checkout with `core.autocrlf=true` the source already
+  holds CRLF. Replacing LF with LF leaves every CR in place, and the assertion that the result
+  contains no CR fails. Normalize CRLF to LF before substituting, per
+  [AGENTS.md §17.3](AGENTS.md). Until then the LF branch of that test has effectively never executed
+  on Windows, and it reads as a false red to every contributor there.
+
 ## Reporting and Authoring Critical Path
 
 ### Phase 1 — Lossless Report Builder Editing (Gate Zero)
