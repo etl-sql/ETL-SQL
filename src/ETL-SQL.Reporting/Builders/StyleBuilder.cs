@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Reporting;
 
 namespace ETL_SQL.Reporting.Builders
 {
@@ -72,16 +75,96 @@ namespace ETL_SQL.Reporting.Builders
                 ? ctx.VarContext.GetVariable(value)?.ToString() ?? value
                 : value;
 
+        /// <summary>
+        /// Projects a <see cref="TooltipDefinition"/> onto the wire. The detail-surface
+        /// contract is resolved statically here so every consumer receives the same
+        /// <c>mode</c> and the same resolved visual list rather than re-deriving them.
+        /// </summary>
+        /// <exception cref="ExecutionException">
+        /// Thrown when the surface violates the detail-surface contract. Detail surfaces fail
+        /// closed: a report with an unresolvable, cyclic, nested, or over-budget tooltip is
+        /// rejected rather than published with a surface that silently does nothing.
+        /// </exception>
         public async Task<TooltipManifest?> BuildTooltipManifestAsync(TooltipDefinition? tooltip)
+            => await BuildTooltipManifestAsync(tooltip, ownerObject: null);
+
+        /// <inheritdoc cref="BuildTooltipManifestAsync(TooltipDefinition?)"/>
+        public async Task<TooltipManifest?> BuildTooltipManifestAsync(
+            TooltipDefinition? tooltip,
+            string? ownerObject)
         {
             if (tooltip == null) return null;
+
+            var resolved = ResolveDetailSurface(tooltip, ownerObject ?? "<visual>");
+
             if (tooltip.ContainerRef != null)
-                return new TooltipManifest { Type = "container", ContainerRef = tooltip.ContainerRef };
-            if (tooltip.InlineVisuals != null)
-                return new TooltipManifest { Type = "inline", Markdown = tooltip.InlineMarkdown, Visuals = tooltip.InlineVisuals };
+            {
+                return new TooltipManifest
+                {
+                    Type = "container",
+                    Mode = TooltipManifest.PopoverMode,
+                    ContainerRef = tooltip.ContainerRef,
+                    ResolvedVisuals = resolved.Visuals.ToList()
+                };
+            }
+
+            if (tooltip.IsInline)
+            {
+                return new TooltipManifest
+                {
+                    Type = "inline",
+                    Mode = tooltip.Kind == DetailSurfaceKind.Persistent
+                        ? TooltipManifest.PopoverMode
+                        : TooltipManifest.TooltipMode,
+                    Markdown = tooltip.InlineMarkdown,
+                    Visuals = tooltip.InlineVisuals,
+                    ResolvedVisuals = resolved.Visuals.ToList()
+                };
+            }
 
             var (text, isMd) = await ResolveMarkdownAsync(tooltip.PlainText);
-            return new TooltipManifest { Type = "text", Text = text, IsMarkdown = isMd };
+
+            // An expression-valued tooltip is only measurable once evaluated; apply the same
+            // limit the resolver applies to literals so the boundary cannot be bypassed.
+            if (text is { Length: > DetailSurfaceLimits.MaxTransientTextLength })
+            {
+                throw new ExecutionException(
+                    $"[{DetailSurfaceDiagnostics.TransientTextTooLong}] The transient tooltip on " +
+                    $"'{ownerObject ?? "<visual>"}' evaluated to {text.Length} characters, exceeding " +
+                    $"the limit of {DetailSurfaceLimits.MaxTransientTextLength}. Shorten the text, or " +
+                    "use a referenced container to present long-form detail as a focusable popover.");
+            }
+
+            return new TooltipManifest
+            {
+                Type = "text",
+                Mode = TooltipManifest.TooltipMode,
+                Text = text,
+                IsMarkdown = isMd
+            };
+        }
+
+        /// <summary>
+        /// Runs the static detail-surface contract over the report's declared objects and
+        /// converts any error diagnostic into a fail-closed <see cref="ExecutionException"/>.
+        /// </summary>
+        private ResolvedDetailSurface ResolveDetailSurface(TooltipDefinition tooltip, string ownerObject)
+        {
+            var diagnostics = new List<DetailSurfaceDiagnostic>();
+            var resolved = DetailSurfaceResolver.Resolve(
+                ownerObject,
+                tooltip,
+                new Dictionary<string, CreateVisualStatement>(
+                    ctx.ReportContext.VisualDefinitions, StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, CreateContainerStatement>(
+                    ctx.ReportContext.ContainerDefinitions, StringComparer.OrdinalIgnoreCase),
+                diagnostics);
+
+            var error = diagnostics.FirstOrDefault(d => d.Severity == DetailSurfaceSeverity.Error);
+            if (error != null)
+                throw new ExecutionException($"[{error.Code}] {error.Message}");
+
+            return resolved;
         }
 
         public async Task<(string? Value, bool IsMarkdown)> ResolveMarkdownAsync(Expression? input, bool parserFlag = false)

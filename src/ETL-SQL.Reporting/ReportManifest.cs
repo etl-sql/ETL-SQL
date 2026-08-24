@@ -907,10 +907,46 @@ namespace ETL_SQL.Reporting
     /// Serializable form of a TooltipDefinition.
     /// type = "text" | "container" | "inline"
     /// </summary>
+    /// <remarks>
+    /// <see cref="Mode"/> is the field consumers switch on. It carries the accepted
+    /// detail-surface contract across the wire so the browser runtime, the static
+    /// renderers, and the screen-reader projection all pick the same behaviour without
+    /// re-deriving it from <see cref="Type"/>:
+    /// <list type="bullet">
+    ///   <item><description><c>tooltip</c> — transient, non-interactive text. Rendered as
+    ///   <c>role="tooltip"</c> with <c>aria-describedby</c>; never focusable.</description></item>
+    ///   <item><description><c>popover</c> — persistent, focusable detail carrying formatted
+    ///   content or visuals. Rendered as a labelled dialog; pinned on activation.</description></item>
+    /// </list>
+    /// Older manifests predate <see cref="Mode"/>; consumers must fall back to deriving it
+    /// from <see cref="Type"/> so previously published reports keep working.
+    /// </remarks>
     public class TooltipManifest
     {
+        /// <summary>Transient text tooltip mode value for <see cref="Mode"/>.</summary>
+        public const string TooltipMode = "tooltip";
+
+        /// <summary>Persistent focusable detail popover mode value for <see cref="Mode"/>.</summary>
+        public const string PopoverMode = "popover";
+
         [JsonPropertyName("type")]
         public string Type { get; set; } = "text";
+
+        /// <summary>
+        /// The detail surface this tooltip projects to: <c>tooltip</c> or <c>popover</c>.
+        /// See the remarks on <see cref="TooltipManifest"/>.
+        /// </summary>
+        [JsonPropertyName("mode")]
+        public string Mode { get; set; } = TooltipMode;
+
+        /// <summary>
+        /// Visual names this surface renders, resolved statically through any referenced
+        /// container graph. Lets static renderers and the screen-reader projection describe
+        /// the detail without expanding it.
+        /// </summary>
+        [JsonPropertyName("resolvedVisuals")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? ResolvedVisuals { get; set; }
 
         [JsonPropertyName("text")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

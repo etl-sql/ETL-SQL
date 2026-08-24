@@ -138,43 +138,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             try
             {
-                if (visual.PlotPlan is not null)
-                    return PlotPlanTerminalRenderer.Render(visual.PlotPlan);
-
-                return visual.VisualType.ToUpperInvariant() switch
-                {
-                    "HBAR" or "HORIZONTALBAR" => RenderBarChart(visual),
-                    "BAR" => RenderVerticalBarChart(visual),
-                    "PIE" or "DONUT" => RenderBreakdownChart(visual),
-                    "CARD" => RenderCard(visual),
-                    "TABLE" => RenderTable(visual),
-                    "TEXT" => RenderText(visual),
-                    "GAUGE" => RenderGauge(visual),
-                    "BOXPLOT" => RenderBoxPlot(visual),
-                    "WATERFALL" => RenderWaterfall(visual),
-                    "LINE" => RenderLineChart(visual),
-                    "SCATTER" => RenderScatterPlot(visual),
-                    "HEATMAP" => RenderHeatMap(visual),
-                    "SLICER" or "DATEPICKER" or "RELDATEPICKER" or "REDATEPICKER" or "SLIDER" or "MULTISELECT" or "SEARCH" => RenderSlicer(visual, manifest),
-                    "BUBBLE" => RenderBubbleChart(visual),
-                    "FUNNEL" => RenderFunnelChart(visual),
-                    "GANTT" => RenderGanttChart(visual),
-                    "CANDLESTICK" => RenderCandlestickChart(visual),
-                    "TRELLIS" => RenderTrellisChart(visual, manifest),
-                    "MATRIX" => RenderMatrixChart(visual),
-                    "CHECKBOX" => RenderCheckbox(visual, manifest),
-                    "TEXTBOX" => RenderTextbox(visual, manifest),
-                    "NUMBERBOX" => RenderNumberbox(visual, manifest),
-                    "MAP" => RenderSemanticFallback(visual),
-                    "IMAGE" => RenderImagePlaceholder(visual),
-                    "COMBO" => RenderComboPlaceholder(visual),
-                    "TREEMAP" => RenderSemanticFallback(visual),
-                    "RADAR" => RenderRadarPlaceholder(visual),
-                    "SANKEY" => RenderSemanticFallback(visual),
-                    "SUNBURST" => RenderSemanticFallback(visual),
-                    "NETWORK" => RenderSemanticFallback(visual),
-                    _ => RenderPlaceholder(visual)
-                };
+                return WithDetailNotice(visual, RenderVisualBody(visual, manifest));
             }
             catch (Exception ex)
             {
@@ -182,6 +146,59 @@ namespace ETL_SQL.Reporting.Renderers
                     .Header(Markup.Escape(visual.Name))
                     .Border(BoxBorder.Rounded);
             }
+        }
+
+        /// <summary>
+        /// Appends the detail-surface summary beneath a visual. A terminal cannot hover, so
+        /// the notice describes the detail rather than implying the interaction exists.
+        /// </summary>
+        private static IRenderable WithDetailNotice(VisualManifest visual, IRenderable body)
+        {
+            var detail = DetailSurfaceProjection.Describe(visual.Tooltip);
+            return detail == null
+                ? body
+                : new Rows(body, new Markup($"[italic grey]{Markup.Escape(detail)}[/]"));
+        }
+
+        private static IRenderable RenderVisualBody(VisualManifest visual, ReportManifest? manifest)
+        {
+            if (visual.PlotPlan is not null)
+                return PlotPlanTerminalRenderer.Render(visual.PlotPlan);
+
+            return visual.VisualType.ToUpperInvariant() switch
+            {
+                "HBAR" or "HORIZONTALBAR" => RenderBarChart(visual),
+                "BAR" => RenderVerticalBarChart(visual),
+                "PIE" or "DONUT" => RenderBreakdownChart(visual),
+                "CARD" => RenderCard(visual),
+                "TABLE" => RenderTable(visual),
+                "TEXT" => RenderText(visual),
+                "GAUGE" => RenderGauge(visual),
+                "BOXPLOT" => RenderBoxPlot(visual),
+                "WATERFALL" => RenderWaterfall(visual),
+                "LINE" => RenderLineChart(visual),
+                "SCATTER" => RenderScatterPlot(visual),
+                "HEATMAP" => RenderHeatMap(visual),
+                "SLICER" or "DATEPICKER" or "RELDATEPICKER" or "REDATEPICKER" or "SLIDER" or "MULTISELECT" or "SEARCH" => RenderSlicer(visual, manifest),
+                "BUBBLE" => RenderBubbleChart(visual),
+                "FUNNEL" => RenderFunnelChart(visual),
+                "GANTT" => RenderGanttChart(visual),
+                "CANDLESTICK" => RenderCandlestickChart(visual),
+                "TRELLIS" => RenderTrellisChart(visual, manifest),
+                "MATRIX" => RenderMatrixChart(visual),
+                "CHECKBOX" => RenderCheckbox(visual, manifest),
+                "TEXTBOX" => RenderTextbox(visual, manifest),
+                "NUMBERBOX" => RenderNumberbox(visual, manifest),
+                "MAP" => RenderSemanticFallback(visual),
+                "IMAGE" => RenderImagePlaceholder(visual),
+                "COMBO" => RenderComboPlaceholder(visual),
+                "TREEMAP" => RenderSemanticFallback(visual),
+                "RADAR" => RenderRadarPlaceholder(visual),
+                "SANKEY" => RenderSemanticFallback(visual),
+                "SUNBURST" => RenderSemanticFallback(visual),
+                "NETWORK" => RenderSemanticFallback(visual),
+                _ => RenderPlaceholder(visual)
+            };
         }
 
         private static IRenderable RenderSemanticFallback(VisualManifest visual)

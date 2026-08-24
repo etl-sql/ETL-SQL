@@ -44,7 +44,7 @@ namespace ETL_SQL.Reporting.Builders
                 TitleIsMarkdown = titleMd,
                 Subtitle = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
-                Tooltip = await styleBuilder.BuildTooltipManifestAsync(pStmt.Tooltip),
+                Tooltip = await styleBuilder.BuildTooltipManifestAsync(pStmt.Tooltip, pStmt.Name),
                 PrintLayout = pStmt.PrintLayout == null ? null : new PageLayoutDefinitionManifest
                 {
                     PageSize = pStmt.PrintLayout.PageSize,

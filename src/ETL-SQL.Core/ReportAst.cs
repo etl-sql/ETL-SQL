@@ -13,6 +13,30 @@ namespace ETL_SQL.Core;
 // ── Tooltip ───────────────────────────────────────────────────────────────
 
 /// <summary>
+/// Classifies a <see cref="TooltipDefinition"/> as one of the two accepted detail surfaces.
+/// </summary>
+/// <remarks>
+/// The distinction drives the accessibility model, dismissal rules, and static-safety budgets:
+/// <list type="bullet">
+///   <item><description><see cref="Transient"/> — a plain text tooltip. Non-interactive, never
+///   contains focusable descendants, projected as <c>role="tooltip"</c> plus
+///   <c>aria-describedby</c>, and dismissed on pointer leave or blur.</description></item>
+///   <item><description><see cref="Persistent"/> — a detail popover carrying formatted content
+///   or visuals. Focusable, projected as a labelled dialog, pinned on click or keyboard
+///   activation, and dismissed only by Escape, outside click, trigger toggle, or
+///   unmount.</description></item>
+/// </list>
+/// </remarks>
+public enum DetailSurfaceKind
+{
+    /// <summary>Transient, non-interactive text tooltip.</summary>
+    Transient,
+
+    /// <summary>Persistent, focusable detail popover containing formatted content or visuals.</summary>
+    Persistent
+}
+
+/// <summary>
 /// A tooltip that can be plain text, a reference to an existing named container,
 /// or an inline anonymous container (optional markdown + visual list).
 /// </summary>
@@ -22,6 +46,24 @@ public record TooltipDefinition
     public string? ContainerRef { get; init; }
     public string? InlineMarkdown { get; init; }
     public List<string>? InlineVisuals { get; init; }
+
+    /// <summary>
+    /// The detail surface this definition projects to. Text tooltips are transient; inline and
+    /// referenced-container forms are persistent detail popovers because they carry formatted
+    /// content or visuals that must survive pointer leave.
+    /// </summary>
+    public DetailSurfaceKind Kind =>
+        ContainerRef != null || InlineVisuals is { Count: > 0 }
+            ? DetailSurfaceKind.Persistent
+            : DetailSurfaceKind.Transient;
+
+    /// <summary>
+    /// True when this came from the inline <c>TOOLTIP (...)</c> block form. Distinct from
+    /// <see cref="Kind"/>: an inline block carrying only markdown still projects to a
+    /// transient tooltip, but it must be validated as an inline surface so an empty block
+    /// is rejected rather than silently treated as a text tooltip with no text.
+    /// </summary>
+    public bool IsInline => ContainerRef == null && (InlineVisuals != null || InlineMarkdown != null);
 
     public static TooltipDefinition Text(Expression text) =>
         new() { PlainText = text };

@@ -118,7 +118,7 @@ namespace ETL_SQL.Reporting
                         TitleIsMarkdown = titleMd,
                         Subtitle = subtitle,
                         SubtitleIsMarkdown = subtitleMd,
-                        Tooltip = await _styleBuilder.BuildTooltipManifestAsync(cStmt.Tooltip),
+                        Tooltip = await _styleBuilder.BuildTooltipManifestAsync(cStmt.Tooltip, cStmt.Name),
                         IsCollapsible = cStmt.IsCollapsible,
                         Icon = cStmt.Icon,
                         IsPinnable = cStmt.IsPinnable,
@@ -165,7 +165,7 @@ namespace ETL_SQL.Reporting
                         Name = name,
                         ButtonType = bStmt.ButtonType,
                         Title = bTitle,
-                        Tooltip = await _styleBuilder.BuildTooltipManifestAsync(bStmt.Tooltip),
+                        Tooltip = await _styleBuilder.BuildTooltipManifestAsync(bStmt.Tooltip, bStmt.Name),
                         Styles = resolvedStyles.Count > 0 ? resolvedStyles : new Dictionary<string, string>()
                     };
 

@@ -72,7 +72,7 @@ namespace ETL_SQL.Reporting.Builders
                 TitleIsMarkdown = titleMd,
                 SubtitleIsMarkdown = subtitleMd,
                 IsMarkdown = vStmt.VisualType == VisualType.Text || vStmt.VisualType == VisualType.Textbox,
-                Tooltip = await styleBuilder.BuildTooltipManifestAsync(vStmt.Tooltip),
+                Tooltip = await styleBuilder.BuildTooltipManifestAsync(vStmt.Tooltip, vStmt.Name),
                 PrintLayout = vStmt.PrintLayout == null ? null : new PrintLayoutOverrideManifest
                 {
                     PageBreakBefore = vStmt.PrintLayout.PageBreakBefore,

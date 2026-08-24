@@ -146,6 +146,15 @@ namespace ETL_SQL.Reporting
             }
             sb.AppendLine();
 
+            // Detail surfaces cannot be hovered in Markdown or email, so describe them
+            // instead of pretending the interaction exists.
+            var detail = DetailSurfaceProjection.Describe(v.Tooltip);
+            if (detail != null)
+            {
+                sb.AppendLine($"*{EscapeCell(detail)}*");
+                sb.AppendLine();
+            }
+
             switch (v.VisualType.ToUpperInvariant())
             {
                 case "TABLE":
