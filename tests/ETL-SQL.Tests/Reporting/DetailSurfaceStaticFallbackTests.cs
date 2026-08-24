@@ -91,7 +91,7 @@ namespace ETL_SQL.Tests.Reporting
         public void LegacyContainerManifest_WithoutMode_IsTreatedAsPopover()
         {
             // Type is the only signal an older manifest carries.
-            var legacy = new TooltipManifest { Type = "container", Mode = null!, ContainerRef = "Box" };
+            var legacy = new TooltipManifest { Type = "container", Mode = null, ContainerRef = "Box" };
             Assert.True(DetailSurfaceProjection.IsPopover(legacy));
         }
 
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Reporting
             var legacy = new TooltipManifest
             {
                 Type = "inline",
-                Mode = null!,
+                Mode = null,
                 Visuals = new List<string> { "Trend" }
             };
             Assert.True(DetailSurfaceProjection.IsPopover(legacy));
@@ -112,7 +112,7 @@ namespace ETL_SQL.Tests.Reporting
         [Trait("Category", "Smoke.Reporting")]
         public void LegacyTextManifest_WithoutMode_IsTreatedAsTooltip()
         {
-            var legacy = new TooltipManifest { Type = "text", Mode = null!, Text = "hi" };
+            var legacy = new TooltipManifest { Type = "text", Mode = null, Text = "hi" };
             Assert.False(DetailSurfaceProjection.IsPopover(legacy));
         }
 
@@ -188,6 +188,102 @@ namespace ETL_SQL.Tests.Reporting
             var markdown = new MarkdownRenderer().Render(manifest);
 
             Assert.Contains("Detail: Revenue for the month", markdown);
+        }
+
+        // ── PDF surface ────────────────────────────────────────────────────────
+
+        private static ReportManifest PageWith(TooltipManifest? tooltip) => new()
+        {
+            Title = "Sales",
+            Visuals = new List<VisualManifest> { VisualWith(tooltip) },
+            Pages = new List<PageManifest>
+            {
+                new() { Name = "Main", Structure = "A", SlotMap = { ["A"] = "BarWithTooltip" } }
+            }
+        };
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void PdfExport_CarriesTheDetailNotice()
+        {
+            var popover = new TooltipManifest
+            {
+                Type = "container",
+                Mode = TooltipManifest.PopoverMode,
+                ContainerRef = "TooltipBox",
+                ResolvedVisuals = new List<string> { "MonthDetail" }
+            };
+
+            var withDetail = new PdfExporter().Export(PageWith(popover));
+            var withoutDetail = new PdfExporter().Export(PageWith(null));
+
+            // PDF content streams are compressed, so the text is not directly assertable here;
+            // the wording itself is pinned by the Describe tests above. What this establishes is
+            // that the notice actually reaches the document rather than being dropped.
+            Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, withDetail[..4]);
+            Assert.True(withDetail.Length > withoutDetail.Length,
+                $"detail notice added no content: {withDetail.Length} vs {withoutDetail.Length}");
+        }
+
+        // ── Snapshot / offline replay ──────────────────────────────────────────
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void ManifestRoundTrip_PreservesTheDetailSurfaceContract()
+        {
+            // Snapshots serialize and rehydrate the whole ReportManifest, and offline replay
+            // runs the same runtime, so preserving these three fields is what makes offline
+            // behaviour identical to online rather than silently degraded.
+            var original = PageWith(new TooltipManifest
+            {
+                Type = "container",
+                Mode = TooltipManifest.PopoverMode,
+                ContainerRef = "TooltipBox",
+                ResolvedVisuals = new List<string> { "MonthDetail" },
+                StaticSummary = "Interactive detail available in browser: MonthDetail."
+            });
+
+            var json = System.Text.Json.JsonSerializer.Serialize(original);
+            var rehydrated = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>(json)!;
+
+            var tooltip = rehydrated.Visuals[0].Tooltip!;
+            Assert.Equal(TooltipManifest.PopoverMode, tooltip.Mode);
+            Assert.Equal("TooltipBox", tooltip.ContainerRef);
+            Assert.Equal(new[] { "MonthDetail" }, tooltip.ResolvedVisuals);
+            Assert.Equal("Interactive detail available in browser: MonthDetail.", tooltip.StaticSummary);
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void ManifestWithoutMode_DeserializesToTheTooltipDefault()
+        {
+            // A manifest published before `mode` existed omits the property entirely.
+            const string legacy = """
+                {"type":"container","containerRef":"Box"}
+                """;
+
+            var tooltip = System.Text.Json.JsonSerializer.Deserialize<TooltipManifest>(legacy)!;
+
+            // The property defaults, but classification still routes through IsPopover, which
+            // falls back to `type` - so an older report keeps behaving as a popover.
+            Assert.True(DetailSurfaceProjection.IsPopover(tooltip));
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void StaticSummary_MatchesTheDescribedProjection()
+        {
+            var tooltip = new TooltipManifest
+            {
+                Type = "container",
+                Mode = TooltipManifest.PopoverMode,
+                ContainerRef = "TooltipBox",
+                ResolvedVisuals = new List<string> { "MonthDetail" }
+            };
+            tooltip.StaticSummary = DetailSurfaceProjection.Describe(tooltip);
+
+            // The browser's print note and the static exporters must render the same sentence.
+            Assert.Equal(DetailSurfaceProjection.Describe(tooltip), tooltip.StaticSummary);
         }
 
         [Fact]

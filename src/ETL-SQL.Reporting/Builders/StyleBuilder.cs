@@ -99,18 +99,18 @@ namespace ETL_SQL.Reporting.Builders
 
             if (tooltip.ContainerRef != null)
             {
-                return new TooltipManifest
+                return WithStaticSummary(new TooltipManifest
                 {
                     Type = "container",
                     Mode = TooltipManifest.PopoverMode,
                     ContainerRef = tooltip.ContainerRef,
                     ResolvedVisuals = resolved.Visuals.ToList()
-                };
+                });
             }
 
             if (tooltip.IsInline)
             {
-                return new TooltipManifest
+                return WithStaticSummary(new TooltipManifest
                 {
                     Type = "inline",
                     Mode = tooltip.Kind == DetailSurfaceKind.Persistent
@@ -119,7 +119,7 @@ namespace ETL_SQL.Reporting.Builders
                     Markdown = tooltip.InlineMarkdown,
                     Visuals = tooltip.InlineVisuals,
                     ResolvedVisuals = resolved.Visuals.ToList()
-                };
+                });
             }
 
             var (text, isMd) = await ResolveMarkdownAsync(tooltip.PlainText);
@@ -135,13 +135,23 @@ namespace ETL_SQL.Reporting.Builders
                     "use a referenced container to present long-form detail as a focusable popover.");
             }
 
-            return new TooltipManifest
+            return WithStaticSummary(new TooltipManifest
             {
                 Type = "text",
                 Mode = TooltipManifest.TooltipMode,
                 Text = text,
                 IsMarkdown = isMd
-            };
+            });
+        }
+
+        /// <summary>
+        /// Stamps the non-hoverable fallback onto the manifest so the browser's print output
+        /// and the static exporters share one wording instead of each composing their own.
+        /// </summary>
+        private static TooltipManifest WithStaticSummary(TooltipManifest manifest)
+        {
+            manifest.StaticSummary = DetailSurfaceProjection.Describe(manifest);
+            return manifest;
         }
 
         /// <summary>

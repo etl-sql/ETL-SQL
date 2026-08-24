@@ -1959,6 +1959,26 @@
     }, true);
 
     /**
+     * Adds the non-hoverable fallback note for a visual's detail surface.
+     *
+     * The note is hidden on screen — the live surface is what a browser reader uses — but is
+     * present in the accessibility tree and revealed when printing, so a browser-printed PDF
+     * carries the same semantic summary the static exporters emit. The wording comes from the
+     * manifest (`staticSummary`), computed once server-side, so the two cannot drift.
+     *
+     * @param {HTMLElement} container the visual's card
+     * @param {object} visual the visual manifest entry
+     */
+    function appendDetailStaticNote(container, visual) {
+        const summary = visual.tooltip && visual.tooltip.staticSummary;
+        if (!summary) return;
+        const note = document.createElement('p');
+        note.className = 'report-detail-static-note';
+        note.textContent = summary;
+        container.appendChild(note);
+    }
+
+    /**
      * Destroys every detail surface attached beneath `scope`. The surface element is
      * appended to document.body, so clearing the report root would otherwise orphan an
      * open popover; this must run before any bulk re-render or unmount.
@@ -2320,6 +2340,7 @@
         // tears it down, so a surface can never outlive the marks it is anchored to.
         const detailSurface = attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn);
         wrapper._detailSurface = detailSurface;
+        appendDetailStaticNote(container, visual);
 
         wrapper.addEventListener('pointerover', event => {
             const mark = event.target.closest('[data-row-index]');

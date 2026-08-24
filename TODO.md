@@ -419,9 +419,24 @@ feature.
 
 #### Portable behavior and evidence
 
-- [ ] Define deterministic PDF, print, Markdown/email, terminal, plain-text, screen-reader, and
+- [x] Define deterministic PDF, print, Markdown/email, terminal, plain-text, screen-reader, and
   offline-snapshot behavior. Static surfaces may use a concise semantic summary instead of expanded
   interactive content, but must never silently imply that hover is available.
+  *(DONE. `DetailSurfaceProjection` owns one wording for every non-hoverable surface: transient text
+  is reproduced verbatim (it carries no interaction), and a popover becomes
+  "Interactive detail available in browser: &lt;visuals&gt;." — asserted never to contain "hover",
+  "mouse over", or "point at". The sentence is computed once at manifest build and stored as
+  `staticSummary`, so the browser's print output and the static exporters cannot drift into two
+  wordings of the same fallback. Markdown/email and terminal render it inline; PDF adds it beneath
+  the visual; print CSS hides the live surface — printing with one open would stamp a floating panel
+  over the layout — and reveals the note instead; the note stays in the accessibility tree on screen
+  for the screen-reader projection. Offline snapshots serialize and rehydrate the whole manifest and
+  replay through the same runtime, so `mode`, `resolvedVisuals`, and `staticSummary` travel with them
+  and offline behaviour is identical rather than degraded. A round-trip test caught a real
+  compatibility defect while writing this: `mode` defaulted to `tooltip`, so a manifest published
+  before the field existed deserialized as an explicit transient tooltip and the `type` fallback
+  never ran, silently downgrading older container popovers to text. It is now nullable, so absence
+  stays distinguishable from an explicit choice.)*
 - [ ] Add parser/formatter, analysis/LSP, manifest/versioning, interaction-refresh, runtime DOM,
   keyboard, touch, accessibility, positioning, cycle, disclosure, budget, stale-request, export, and
   cross-host tests. Exercise the real kitchen-sink nested-chart fixture, not only string-presence

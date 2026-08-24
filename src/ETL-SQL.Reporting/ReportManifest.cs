@@ -936,8 +936,16 @@ namespace ETL_SQL.Reporting
         /// The detail surface this tooltip projects to: <c>tooltip</c> or <c>popover</c>.
         /// See the remarks on <see cref="TooltipManifest"/>.
         /// </summary>
+        /// <remarks>
+        /// Deliberately nullable with no default. Defaulting it to <see cref="TooltipMode"/>
+        /// would make a manifest published before this field existed deserialize as an
+        /// explicit transient tooltip, so the <see cref="Type"/> fallback would never run and
+        /// an older container popover would be silently downgraded to text. Absence has to
+        /// stay distinguishable from an explicit choice.
+        /// </remarks>
         [JsonPropertyName("mode")]
-        public string Mode { get; set; } = TooltipMode;
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Mode { get; set; }
 
         /// <summary>
         /// Visual names this surface renders, resolved statically through any referenced
@@ -947,6 +955,16 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("resolvedVisuals")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<string>? ResolvedVisuals { get; set; }
+
+        /// <summary>
+        /// The one-line description a surface that cannot be hovered shows instead of the
+        /// detail itself. Computed once by <see cref="DetailSurfaceProjection.Describe"/> so
+        /// the browser's print output and the static exporters cannot drift into two
+        /// different wordings of the same fallback.
+        /// </summary>
+        [JsonPropertyName("staticSummary")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? StaticSummary { get; set; }
 
         [JsonPropertyName("text")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
