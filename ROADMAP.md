@@ -219,8 +219,8 @@ documentation, Gemini baselines, and production conformance tests use the same c
 
 ### Reporting & Interaction — Author Bookmarks
 
-**Status:** In Progress  
-**Horizon:** Next  
+**Status:** Complete  
+**Horizon:** Delivered  
 **Authoritative design:** [`docs/architecture/decisions/AuthorBookmarks.md`](docs/architecture/decisions/AuthorBookmarks.md)
 
 Authors need source-controlled report states that atomically apply parameters, active page, and
@@ -240,6 +240,16 @@ invocation; offline serialization and identifier-only deep links.
 
 **Acceptance evidence:** Atomic-application tests, stale-reference diagnostics, rename tests,
 offline replay, and disclosure tests for generated URLs.
+
+**Delivered:** One versioned `ResolvedReportState` envelope shared by author bookmarks and Portal
+saved views; server-side atomic application through the cascading-parameter engine that publishes one
+manifest and rolls back entirely on failure; strict parser/formatter/lint plus `DROP BOOKMARK`;
+LSP completion, hover, and rename across every bookmark reference; Report Builder parse/edit/patch
+round-trip with a bookmarks panel; a Portal Views menu covering author bookmarks and per-user saved
+views with the full WAI-ARIA menu-button keyboard model; per-user ownership re-checks, revision-drift
+warnings, and identifier-only URLs. One boundary is deliberate and recorded in `TODO.md`: offline
+bookmark replay is implemented and tested against the runtime's `__ETLSNAP__` contract, but no
+self-contained offline HTML snapshot *host* exists yet — that is a separate feature.
 
 ### Reporting & Presentation — Constrained HTML/SVG Templates
 

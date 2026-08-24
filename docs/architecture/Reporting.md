@@ -742,6 +742,42 @@ flattened to a quoted string), the active page, and named-object `VISIBLE`/`COLL
   parameter, filter, search, drill, or presentation values. Launch order is explicit URL bookmark →
   explicit saved view → user default saved view → author default bookmark → declared defaults.
 
+### Saved-view API and ownership
+
+The browser runtime resolves saved views off the Portal host base (`__API_BASE__` is
+`/api/reports/{id}` in the Portal and `/reports/{name}/api` in the ReportPlayer, which has no
+saved-view API at all), so the feature is available only where it exists:
+
+| Route | Purpose |
+| :--- | :--- |
+| `GET /api/reports/{id}/saved-views` | The caller's own views for a report |
+| `GET /api/reports/{id}/saved-views/{viewId}` | Resolves one view for `#view=` replay |
+| `GET /api/reports/{id}/saved-views/default` | The caller's default, or **204** when they have none |
+| `POST /api/reports/{id}/saved-views` | Save-as, carrying `stateJson` |
+| `POST /api/reports/{id}/saved-views/default` | Upserts the caller's single default from the envelope |
+| `PUT` / `DELETE .../saved-views/{viewId}` | Update (including make-default) and delete |
+
+Ownership is re-checked on every resolution rather than trusted from the URL: a view belonging to
+another user answers exactly as a deleted one does, so an identifier cannot be used to probe for
+someone else's views. Having no default is **204**, not an error — a reader without a personal
+default must still get the base report.
+
+The server, not the client, stamps `ScriptHash` from the report's `PublishedScriptHash` when a view is
+captured. A later republish is surfaced as a `driftWarning` on read; drift never blocks application,
+because unknown references are dropped during reconciliation and the reader still gets the view.
+
+### Editing surfaces
+
+- **LSP:** completion offers the declared bookmarks where only one is valid (`APPLY_BOOKMARK(`,
+  `DROP BOOKMARK`); hover explains what applying one does; `ReportRenameProvider` renames a bookmark
+  across its declaration, `APPLY_BOOKMARK`, and `DROP BOOKMARK` sites. A bookmark's references to other
+  objects are held safe from the other direction by `BookmarkValidationRule`.
+- **Report Builder:** `DesignerStateDto.Bookmarks` carries bookmarks through parse → edit → patch, with
+  parameter values as authored source text. A **null** list means "this client does not edit bookmarks"
+  and preserves what the script holds; an **empty** list is an explicit "none" and removes them.
+- **Offline:** in an offline snapshot (`window.__ETLSNAP__`) a bookmark applies from the manifest's
+  precomputed envelope with no server. Frozen rows cannot change, and the reader is told so.
+
 See the [Author Bookmarks ADR](decisions/AuthorBookmarks.md) for the accepted contract.
 
 ## 11. Execution Phases Reference

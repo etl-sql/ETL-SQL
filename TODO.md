@@ -245,18 +245,24 @@ inventories and runtime assets are synchronized.
   selections are durable only when represented by declared parameters. Defer hover/tooltips,
   animation, scroll position, maximized visuals, table paging/search, arbitrary CSS mutations,
   matrix expansion, sort state, and drill paths until each has a stable cross-surface contract.
-- [ ] Establish launch precedence: explicit URL bookmark, explicitly selected Portal saved view,
+- [x] Establish launch precedence: explicit URL bookmark, explicitly selected Portal saved view,
   the user's default Portal saved view, the author default bookmark, then declared parameter and
   navigation defaults. A stale personal view must never prevent the base report from opening.
-  *(Runtime precedence order + identifier-only `#bookmark=`/`#view=` replay + graceful fallback are
-  implemented in the browser runtime; the user-default/saved-view steps still need the Portal
-  saved-view GET-by-id and GET-default endpoints and end-to-end tests.)*
-- [ ] Add parser, immutable AST, formatter, manifest, Analysis lint, LSP completion/hover/snippet,
+  *(DONE. The runtime resolves precedence in order with graceful fallback at every step. The two
+  endpoints it already called now exist: `GET /api/reports/{id}/saved-views/{viewId}` and
+  `.../saved-views/default`, the latter answering **204** rather than 404 when the reader has no
+  personal default. The runtime also addressed both off a rebuilt path rather than the Portal host
+  base, so every saved-view request 404'd silently; it now addresses off `__API_BASE__`.)*
+- [x] Add parser, immutable AST, formatter, manifest, Analysis lint, LSP completion/hover/snippet,
   rename, documentation, syntax-index, and Report Builder round-trip support. Author bookmark page,
   visual, container, and parameter references must be statically safe and rename-aware.
-  *(Parser, immutable AST, typed formatter, manifest, Analysis lint, documentation, and syntax-index
-  DONE with tests. LSP completion/hover, bookmark-aware rename, and Report Builder create/edit/round-trip
-  remain — only the `$bookmark` snippet exists today.)*
+  *(DONE. LSP: `BookmarkSymbols` backs completion where only a bookmark identifier is valid
+  (`APPLY_BOOKMARK(`, `DROP BOOKMARK`), hover documentation, and rename across the declaration plus
+  every `APPLY_BOOKMARK`/`DROP BOOKMARK` site — `AdvancedChartRenameProvider` is now
+  `ReportRenameProvider`. A bookmark's references to other objects are held safe from the other
+  direction by `BookmarkValidationRule`, which errors the moment a target is renamed or dropped.
+  Report Builder: `DesignerStateDto.Bookmarks` carries them through parse → edit → patch with values
+  as authored source text, plus a sidebar panel to add/edit/make-default/remove.)*
 - [x] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
   validate all references and typed values, stage parameter reconciliation and affected visuals,
   validate page/presentation state, publish one manifest, and roll back the entire application on
@@ -266,42 +272,64 @@ inventories and runtime assets are synchronized.
   `ReportInteractionRefresher` through the cascade engine, publishes ONE manifest carrying `AppliedState`,
   and rolls back the whole application on any failure. Exposed at `POST /api/bookmark` (ReportPlayer) and
   `POST /api/reports/{id}/bookmark` (Portal, with permission checks); the client applies the single
-  published `appliedState` as one swap. Tested incl. cascade-invalid rollback. Portal saved-view
-  application still uses the client-side atomic path pending the saved-view endpoints.)*
-- [ ] Add Report Player and Portal bookmark pickers plus button/action invocation. The Portal picker
+  published `appliedState` as one swap. Tested incl. cascade-invalid rollback.)*
+- [x] Add Report Player and Portal bookmark pickers plus button/action invocation. The Portal picker
   must distinguish author bookmarks from `My saved views`, and support save-as, update, make-default,
   delete, reset-to-report-default, and actual application of the user's default view.
-  *(Author bookmark picker + button/`APPLY_BOOKMARK` invocation exist; "Save Default View" now sends
-  the full resolved-state envelope. The "My saved views" list/save-as/update/delete/reset UI remains.)*
-- [ ] Converge Portal saved views on the same versioned resolved-state envelope while retaining
+  *(DONE. One accessible "Views" menu replaces the bookmark-only picker: author bookmarks and
+  My saved views as separately labelled groups, with save-as, update, make-default, delete,
+  save-as-default, and reset-to-report-default. Full WAI-ARIA menu-button keyboard model
+  (arrows/Home/End/Escape/Tab, roving tabindex, focus restore); the name and delete prompts reuse the
+  shared accessible dialogs. The saved-view half is absent where the API does not exist — the
+  ReportPlayer, VS Code preview, and offline snapshots — rather than rendered as dead controls.
+  `POST .../saved-views/default` also bound its body to `Dictionary<string,string>` while the client
+  posted `{ state, parameters }`, so "Save Default View" could not have worked; it now takes the
+  envelope.)*
+- [x] Converge Portal saved views on the same versioned resolved-state envelope while retaining
   backward compatibility for existing `ParametersJson`/`FiltersJson`. Persist the report revision or
   script hash used to create the view and reconcile unknown/deleted state with warnings.
-  *(Shared `ResolvedReportState` envelope + `FromLegacy` reader + `StateJson`/`ScriptHash` columns exist;
-  the controller does not yet build/read the envelope or reconcile drift with warnings.)*
-- [ ] Support author-bookmark replay in offline snapshots and identifier-only URL hashes. Never place
+  *(DONE. Create/update build a canonical envelope, upgrading a legacy parameter/filter map on write
+  and reading one as an envelope on read, so pre-envelope rows converge without a data migration; the
+  legacy columns stay populated for older clients. Malformed state is rejected rather than stored. The
+  server — not the client — stamps `ScriptHash` from the report's `PublishedScriptHash`, and a later
+  republish surfaces as a `driftWarning` on read. Drift never blocks: unknown references are dropped
+  during reconciliation and the reader still gets the view. Re-capturing re-stamps the revision.)*
+- [x] Support author-bookmark replay in offline snapshots and identifier-only URL hashes. Never place
   arbitrary parameter, filter, search, drill, or presentation values in browser history, referrers,
   logs, or generated share URLs. Re-check report and saved-view ownership when resolving Portal
   identifiers.
-  *(Identifier-only URL hashes DONE. Offline `.etlsnap` serialization/replay of bookmarks and Portal
-  ownership re-checks remain.)*
-- [ ] Add parser/formatter/round-trip, duplicate/default, stale-reference, rename, type validation,
+  *(DONE. Ownership is re-checked on every saved-view resolution rather than trusted from the URL: a
+  view belonging to another user answers exactly as a deleted one does, so an identifier cannot probe
+  for someone else's views. `applyParametersOffline` was a dead hook — guarded on a function that was
+  never defined, so an offline bookmark fell through to a network call that cannot succeed; it now
+  applies from the manifest's precomputed envelope with no server, and says that the snapshot's
+  figures cannot change. `history.replaceState` failing on an opaque origin no longer aborts the
+  application. **Scope note:** no product surface sets `__ETLSNAP__` today — a self-contained offline
+  HTML snapshot host is its own feature (`EXPORT REPORT` does PDF/CSV/MARKDOWN only). This makes the
+  runtime side of that contract work and tested for when one ships.)*
+- [x] Add parser/formatter/round-trip, duplicate/default, stale-reference, rename, type validation,
   cascade reconciliation, atomic rollback, launch precedence, Portal ownership, report-revision
   drift, default-view restore, offline replay, accessibility, and URL-disclosure tests.
-  *(DONE: parser/formatter typed round-trip, duplicate/default rejection, stale-reference lint, type
-  validation, handler/manifest end-to-end, envelope + legacy compatibility, production-sample parse+execute,
-  reconcile validation (unknown page/param/object + coercion + drift), server-side atomic apply +
-  cascade-reconciliation rollback, and launch-precedence/URL-disclosure at the envelope level.
-  Remaining: bookmark-aware rename, Portal ownership, default-view restore, offline replay, and
-  accessibility tests.)*
+  *(DONE. Added to the earlier suite: 7 Portal endpoint tests (envelope round-trip, legacy
+  compatibility, drift warning + re-stamp, cross-user identifier opacity, 204/round-trip default,
+  single-default invariant, malformed rejection); 17 LSP tests for completion context, hover, and
+  rename — applying the edits back to the source and asserting the resulting text, not edit counts;
+  8 Report Builder round-trip tests (parse fidelity, byte-for-byte no-op patch, scoped edit, add,
+  remove, null-preserves-existing, fresh generate re-parses); 11 runtime tests covering the saved-view
+  URL base per host, the menu's accessibility contract, identifier-only hashes, and offline replay
+  with any network call treated as a failure; and a Playwright test driving the builder's bookmark
+  panel in a real browser against the canonical `designer.js`.)*
 
 **Exit gate:** Bookmarks apply atomically and portably, object references are statically safe and
 rename-aware, Portal saved views use the shared state contract without becoming source-controlled
 bookmarks, user defaults restore correctly, and URLs reveal only the bookmark identifier.
-*(NOT yet met — see the unchecked items above. Delivered: typed versioned envelope, strict
-parser/formatter/lint, DROP BOOKMARK, server-side atomic application through the cascading engine with
-rollback (publishes one manifest), client single-swap application, identifier-only URLs, corrected +
-runnable sample. Remaining: full Portal saved-view CRUD/ownership, LSP rename, Report Builder round-trip,
-offline replay, and accessibility.)*
+*(MET. Application is atomic on the server through the cascading engine with rollback, publishing one
+manifest; the client applies it as one swap and replays offline from the manifest. Bookmark
+identifiers are rename-aware across every site, and a bookmark's references to other objects are
+statically checked. Portal saved views persist the same versioned envelope, stay private per user,
+carry the revision they were captured against, and warn on drift without blocking. URLs and history
+carry only an identifier. The one deliberate boundary is recorded above: the offline snapshot *host*
+does not exist yet, so offline replay is implemented and tested at the runtime contract.)*
 
 ### Phase 10 — Constrained HTML/SVG Presentation Templates
 

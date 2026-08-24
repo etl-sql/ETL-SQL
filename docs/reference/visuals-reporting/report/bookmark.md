@@ -68,6 +68,36 @@ Use identifier-only URL hashes — no parameter values are exposed:
 DROP BOOKMARK IF EXISTS WestCoastDetail;
 ```
 
+## Authoring aids
+
+The editor knows about bookmarks:
+
+- Typing inside `APPLY_BOOKMARK(` or after `DROP BOOKMARK` completes the bookmarks this script
+  declares — nothing else is valid in those positions.
+- Hovering a bookmark identifier shows its page, typed parameter values, and state entries.
+- Renaming a bookmark (F2) rewrites its declaration and every `APPLY_BOOKMARK` and `DROP BOOKMARK`
+  reference, so a rename cannot leave a button pointing at a bookmark that no longer exists.
+- A bookmark that refers to a page, container, visual, or parameter that has since been renamed or
+  removed is reported as a diagnostic rather than failing at run time.
+
+The Report Builder lists bookmarks in its sidebar, where you can add one, edit its title, mark it the
+report default, or remove it. Editing a bookmark rewrites only that statement — the rest of the script
+is left exactly as written.
+
+## Readers' saved views
+
+A bookmark you write is shared with everyone who opens the report and is versioned with the script. A
+reader can also save their **own** view from the Views menu — their current filters and page under a
+name only they see. Saved views use the same state contract, so both appear in the same menu, listed
+separately, and both apply the same way.
+
+Saved views are private: another person's view can never be opened from its link. If the report is
+republished after a view was saved, the reader is warned that parts of it may no longer apply — the
+view still opens, with the parts that no longer exist dropped.
+
+Offline snapshots replay bookmarks too. The saved figures cannot change without a server, so applying a
+bookmark there restores the page, layout state, and filter selections, and says so.
+
 ## Examples
 
 ```sql
