@@ -544,17 +544,33 @@ rollback/restore result, and isolation-negative results.
 - **Promise zero-loss migration** — rejected because some state is intentionally nonportable for
   security and correctness.
 
-## 20. Open Implementation Decisions
+## 20. Phase 2 Implementation Decisions
 
-- Canonical manifest/component schemas and MIME/content type registrations
+- The additive `etl-sql.tenant-bundle/v2` manifest carries the declared consistency point, complete
+  inventory, chunk indexes, and delta-base digest; the validator retains a v1 reader.
 - ~~Signature algorithms, trust chain, recipient encryption formats, key rotation, and published-key
   distribution~~ — decided, see §13.1 and
   [Tenant Portability Signing Keys](../administration/platform/tenant-portability-signing-keys.md).
-- Exact stable-ID preservation and collision UX per resource class
-- Initial evidence/content classes and first large-content storage provider
-- Consistency-point mechanism across Portal database, Orchestrator state, and artifact storage
-- Incremental delta granularity and retention
-- Standalone validator packaging and supported platforms
+- Stable IDs are the inventory and component join key. Every included item binds its plaintext hash,
+  length, owner, and ACL definitions; every other disposition carries a reason and remediation.
+- Large content uses 8 MiB default chunks committed through `ObjectNativeArtifactStorage`. Operation,
+  tenant, stable ID, offset, plaintext hash, stored hash, and whole-content hash make retry and
+  reassembly independently verifiable.
+- A consistency point double-reads Portal/Orchestrator revisions around the immutable artifact commit
+  set, retrying on movement. Final migration first obtains a durable mutation/scheduler fence epoch.
+- Shared Orchestrator cutover ownership is a tenant-scoped, versioned compare-and-swap record in
+  `TenantPortabilityCutovers`. Fencing transactionally disables and remembers source jobs in
+  `TenantPortabilityFencedJobs`; lease admission checks the fence, and target authority cannot be
+  claimed until existing source leases drain. These authority records are retained source evidence,
+  never portable target authority.
+- Orchestrator jobs, schedules, notifications, links, selected history/quality/lineage, ownership,
+  and object ACL grants are individually identified and hashed in inventory. ACLs carry source
+  intent only and are rebound from source object IDs after target objects are created disabled.
+- Each incremental/final delta names the immediately preceding consistency digest. Mixed-tenant,
+  reordered, replayed, or post-final sequences are invalid.
+- `ETL-SQL.TenantValidator` publishes as a self-contained single-file executable for `win-x64`,
+  `linux-x64`, and `osx-arm64`; it verifies signatures, stored hashes, and—with the customer-held
+  recipient private key—decrypted plaintext hashes without network or source access.
 - Initial supported self-hosted Enterprise reference topology and compatibility window
 - Maximum bundle/chunk limits and default retention for completed/incomplete operations
 

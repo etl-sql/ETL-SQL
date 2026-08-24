@@ -42,6 +42,19 @@ public static class TenantBundleCrypto
         return output.ToArray();
     }
 
+    public static async Task DecryptAsync(
+        Stream ciphertext, Stream plaintext, string privateKeyFile, string? passphrase,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(ciphertext);
+        ArgumentNullException.ThrowIfNull(plaintext);
+        RequireFile(privateKeyFile, "private key");
+        var keys = new EncryptionKeys(new FileInfo(privateKeyFile), passphrase ?? string.Empty);
+        using var pgp = new PGP(keys);
+        await pgp.DecryptAsync(ciphertext, plaintext).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+    }
+
     public static async Task SignDetachedAsync(
         string manifestPath, string signaturePath, string signingPrivateKeyFile,
         string? passphrase, CancellationToken ct = default)

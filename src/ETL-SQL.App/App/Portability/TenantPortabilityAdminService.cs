@@ -211,7 +211,8 @@ internal static class TenantPortabilityAdminService
                 NullIfWhiteSpace(ctx.TenantRecipientKey),
                 await ResolveOptionalPassphraseAsync("ETLSQL_TENANT_RECIPIENT_PASSPHRASE", ct).ConfigureAwait(false),
                 collision,
-                ctx.TenantDryRun),
+                ctx.TenantDryRun,
+                ctx.TenantBaseConsistencyPoint),
             portal, orchestrator, ct).ConfigureAwait(false);
 
         foreach (var entry in result.Plan)

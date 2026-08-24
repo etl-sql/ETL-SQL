@@ -172,7 +172,8 @@ public sealed class TenantExitJourneyTests : IDisposable
         Directory.Move(bundle, archived);
 
         var validation = await TenantBundleValidator.ValidateAsync(archived,
-            new TenantBundleValidator.Options(operatorPub, RequireSignature: true));
+            new TenantBundleValidator.Options(operatorPub, RequireSignature: true,
+                RecipientPrivateKeyFile: tenantPriv));
         Assert.True(validation.IsValid, string.Join("; ", validation.Findings.Select(f => f.Message)));
 
         var script = await File.ReadAllBytesAsync(

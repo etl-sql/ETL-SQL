@@ -222,4 +222,36 @@ public sealed class TenantBundleImporterTests : IDisposable
         // Decrypted to exactly what was exported, verified against the manifest's plaintext hash.
         Assert.Equal("CREATE FOLDER 'Sales';", portal.AppliedScript);
     }
+
+    [Fact]
+    public async Task DeltaWithWrongTargetBaseFailsBeforePlanningOrMutation()
+    {
+        var payload = new TenantBundlePayload("catalog:portal-configuration", "catalog",
+            "application/x-etlsql", "catalog/portal-configuration.etlsql", "CREATE FOLDER 'Sales';");
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload.Content))
+            .ToLowerInvariant();
+        var point = TenantExportConsistencyCoordinator.Declare("tenant-acme",
+            [new("portal", "revision-2")], [], 0, false, DateTimeOffset.UtcNow);
+        var request = Request() with
+        {
+            ExportMode = TenantBundleExportMode.IncrementalDelta,
+            ConsistencyPoint = point.Digest,
+            Payloads = [payload],
+            DeclaredConsistencyPoint = point,
+            Inventory = [new("catalog:portal-configuration", "catalog",
+                TenantInventoryDisposition.Included, payload.Content.Length, hash, "user:owner", [],
+                null, null, "tenant-acme")],
+            BaseConsistencyPointDigest = "certified-base"
+        };
+        await TenantBundleWriter.WriteAsync(_root, request);
+        var portal = new FakePortal();
+
+        var result = await TenantBundleImporter.ImportAsync(_root,
+            Options() with { ExpectedBaseConsistencyPointDigest = "different-base" }, portal);
+
+        Assert.False(result.Applied);
+        Assert.False(portal.Applied);
+        Assert.Empty(result.Plan);
+        Assert.Contains("out-of-order", result.RefusalReason!, StringComparison.Ordinal);
+    }
 }

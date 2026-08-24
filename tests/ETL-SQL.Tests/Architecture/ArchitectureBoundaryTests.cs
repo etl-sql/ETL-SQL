@@ -61,6 +61,7 @@ public sealed class ArchitectureBoundaryTests
         ["App"] = 6,
         ["TUI"] = 6,
         ["ReportBuilder.CLI"] = 7,
+        ["TenantValidator"] = 7,
     };
 
     // Upward project references that exist today. Each is an open layering-debt item in TODO.md.

@@ -41,7 +41,15 @@ public static class TenantBundleValidator
     /// untrusted source must set this: a stripped signature is indistinguishable from an unsigned
     /// export unless the caller states that it expected one.
     /// </param>
-    public sealed record Options(string? OperatorPublicKeyFile = null, bool RequireSignature = false);
+    public sealed record Options(
+        string? OperatorPublicKeyFile = null,
+        bool RequireSignature = false,
+        string? RecipientPrivateKeyFile = null,
+        string? RecipientPassphrase = null,
+        long MaxManifestBytes = 16 * 1024 * 1024,
+        int MaxComponents = 100_000,
+        long MaxPayloadBytes = 64L * 1024 * 1024 * 1024,
+        long MaxComponentBytes = 1024L * 1024 * 1024);
 
     public static Task<TenantBundleValidationResult> ValidateAsync(
         string bundleRoot, CancellationToken ct = default) =>
@@ -62,6 +70,14 @@ public static class TenantBundleValidator
                 "bundle.manifest.missing", "Error", TenantBundle.ManifestFileName,
                 $"No {TenantBundle.ManifestFileName} at the bundle root. Without it nothing in the " +
                 "directory can be attributed to a tenant, a source version, or a consistency point.")]);
+        }
+
+        var manifestLength = new FileInfo(manifestPath).Length;
+        if (manifestLength > options.MaxManifestBytes)
+        {
+            return new TenantBundleValidationResult(null, [new TenantBundleFinding(
+                "bundle.manifest.oversized", "Error", TenantBundle.ManifestFileName,
+                $"The manifest is {manifestLength} bytes; the configured limit is {options.MaxManifestBytes}.")]);
         }
 
         // §13 requires signature verification to precede any trust in payload metadata, so this runs
@@ -127,21 +143,89 @@ public static class TenantBundleValidator
             return new TenantBundleValidationResult(null, findings);
         }
 
-        if (!string.Equals(manifest.SchemaVersion, TenantBundle.SchemaVersion, StringComparison.Ordinal))
+        if (!string.Equals(manifest.SchemaVersion, TenantBundle.SchemaVersion, StringComparison.Ordinal)
+            && !string.Equals(manifest.SchemaVersion, TenantBundle.Phase2SchemaVersion, StringComparison.Ordinal))
         {
             findings.Add(new TenantBundleFinding(
                 "bundle.schema.unsupported", "Error", manifest.SchemaVersion ?? "(none)",
-                $"Bundle schema '{manifest.SchemaVersion}' is not '{TenantBundle.SchemaVersion}'. " +
+                $"Bundle schema '{manifest.SchemaVersion}' is not a supported v1/v2 tenant bundle. " +
                 "Refusing to interpret an unknown schema as if it were this one."));
             return new TenantBundleValidationResult(manifest, findings);
         }
 
-        if (manifest.ExportMode != TenantBundleExportMode.ConfigurationAndArtifacts)
+
+        if (manifest.Components.Count > options.MaxComponents
+            || manifest.Components.Any(c => c.ByteLength < 0 || c.ByteLength > options.MaxComponentBytes)
+            || manifest.Components.Sum(c => c.ByteLength) > options.MaxPayloadBytes)
+        {
+            findings.Add(new TenantBundleFinding(
+                "bundle.limits.exceeded", "Error", TenantBundle.ManifestFileName,
+                "The declared component count or payload bytes exceed the configured validation limits."));
+            return new TenantBundleValidationResult(manifest, findings);
+        }
+
+        foreach (var duplicate in manifest.Components.GroupBy(c => c.LogicalId, StringComparer.Ordinal)
+                     .Where(g => g.Count() > 1))
+            findings.Add(new TenantBundleFinding("bundle.logical-id.duplicate", "Error", duplicate.Key,
+                $"Logical id '{duplicate.Key}' appears {duplicate.Count()} times."));
+        foreach (var duplicate in manifest.Components.GroupBy(c => c.Path, StringComparer.Ordinal)
+                     .Where(g => g.Count() > 1))
+            findings.Add(new TenantBundleFinding("bundle.path.duplicate", "Error", duplicate.Key,
+                $"Payload path '{duplicate.Key}' is claimed by {duplicate.Count()} components."));
+
+        if (manifest.ExportMode != TenantBundleExportMode.ConfigurationAndArtifacts
+            && !string.Equals(manifest.SchemaVersion, TenantBundle.Phase2SchemaVersion, StringComparison.Ordinal))
         {
             findings.Add(new TenantBundleFinding(
                 "bundle.mode.unsupported", "Error", manifest.ExportMode.ToString(),
                 $"Export mode '{manifest.ExportMode}' is declared but not implemented in this " +
                 "release. The bundle may be incomplete relative to what its mode promises."));
+        }
+
+        if (string.Equals(manifest.SchemaVersion, TenantBundle.Phase2SchemaVersion, StringComparison.Ordinal))
+        {
+            if (manifest.DeclaredConsistencyPoint is null
+                || !TenantExportConsistencyCoordinator.Verify(manifest.DeclaredConsistencyPoint)
+                || !string.Equals(manifest.DeclaredConsistencyPoint.TenantId,
+                    manifest.TenantExportIdentity, StringComparison.Ordinal)
+                || !string.Equals(manifest.ConsistencyPoint,
+                    manifest.DeclaredConsistencyPoint.Digest, StringComparison.OrdinalIgnoreCase))
+                findings.Add(new TenantBundleFinding("bundle.consistency.invalid", "Error",
+                    "declaredConsistencyPoint", "The cross-system consistency point is absent, altered, or tenant-mismatched."));
+            var inventory = TenantPortabilityInventory.Reconcile(manifest.TenantExportIdentity, manifest.Inventory ?? []);
+            foreach (var error in inventory.Errors)
+                findings.Add(new TenantBundleFinding("bundle.inventory.invalid", "Error", "inventory", error));
+            var inventoryById = (manifest.Inventory ?? []).GroupBy(x => x.StableId, StringComparer.Ordinal)
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+            var chunkedById = (manifest.ChunkedContent ?? []).GroupBy(x => x.StableId, StringComparer.Ordinal)
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+            foreach (var component in manifest.Components)
+            {
+                if (!inventoryById.TryGetValue(component.LogicalId, out var item)
+                    || item.Disposition != TenantInventoryDisposition.Included
+                    || item.ByteLength != (component.PlaintextSha256 is null ? component.ByteLength : item.ByteLength)
+                    || !string.Equals(item.Sha256, component.PlaintextSha256 ?? component.Sha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    findings.Add(new TenantBundleFinding("bundle.inventory.component-mismatch", "Error",
+                        component.LogicalId, "The component is absent from inventory or its disposition/hash is different."));
+            }
+            foreach (var item in inventoryById.Values.Where(x => x.Disposition == TenantInventoryDisposition.Included))
+                if (!manifest.Components.Any(x => x.LogicalId == item.StableId)
+                    && (!chunkedById.TryGetValue(item.StableId, out var content)
+                        || content.TotalLength != item.ByteLength
+                        || !string.Equals(content.ContentSha256, item.Sha256, StringComparison.OrdinalIgnoreCase))
+                    && (item.ContainerLogicalId is null
+                        || !manifest.Components.Any(x => x.LogicalId == item.ContainerLogicalId)))
+                    findings.Add(new TenantBundleFinding("bundle.inventory.content-missing", "Error", item.StableId,
+                        "An included inventory row has no matching component or chunk index."));
+            if (manifest.ExportMode == TenantBundleExportMode.FinalCutoverDelta
+                && manifest.DeclaredConsistencyPoint?.MutationsFenced != true)
+                findings.Add(new TenantBundleFinding("bundle.cutover.unfenced", "Error", "exportMode",
+                    "A final cutover delta does not carry a durable mutation/scheduler fence."));
+            if (manifest.ExportMode is TenantBundleExportMode.IncrementalDelta or TenantBundleExportMode.FinalCutoverDelta
+                && string.IsNullOrWhiteSpace(manifest.BaseConsistencyPointDigest))
+                findings.Add(new TenantBundleFinding("bundle.delta.base-missing", "Error", "baseConsistencyPointDigest",
+                    "An incremental delta does not identify the certified base export."));
         }
 
         if (string.Equals(manifest.SourceProfile, TenantBundle.EncryptionRequiredSourceProfile,
@@ -184,22 +268,49 @@ public static class TenantBundleValidator
                 continue;
             }
 
-            var content = await File.ReadAllBytesAsync(resolved, ct).ConfigureAwait(false);
-            if (content.LongLength != component.ByteLength)
+            var actualLength = new FileInfo(resolved).Length;
+            if (actualLength != component.ByteLength)
             {
                 findings.Add(new TenantBundleFinding(
                     "bundle.payload.length", "Error", component.LogicalId,
-                    $"'{component.Path}' is {content.LongLength} bytes; the manifest declares " +
+                    $"'{component.Path}' is {actualLength} bytes; the manifest declares " +
                     $"{component.ByteLength}."));
             }
 
-            var actual = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+            await using var content = new FileStream(resolved, FileMode.Open, FileAccess.Read,
+                FileShare.Read, 1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var actual = Convert.ToHexString(await SHA256.HashDataAsync(content, ct).ConfigureAwait(false))
+                .ToLowerInvariant();
             if (!string.Equals(actual, component.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 findings.Add(new TenantBundleFinding(
                     "bundle.payload.hash", "Error", component.LogicalId,
                     $"'{component.Path}' hashes to {actual}; the manifest declares {component.Sha256}. " +
                     "The payload was altered after export."));
+            }
+
+
+            if (manifest.Encryption?.Encrypted == true
+                && !string.IsNullOrWhiteSpace(options.RecipientPrivateKeyFile)
+                && component.PlaintextSha256 is { } expectedPlaintext)
+            {
+                try
+                {
+                    await using var encrypted = new FileStream(resolved, FileMode.Open, FileAccess.Read,
+                        FileShare.Read, 1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                    await using var plaintext = new HashingSinkStream();
+                    await TenantBundleCrypto.DecryptAsync(encrypted, plaintext,
+                        options.RecipientPrivateKeyFile!, options.RecipientPassphrase, ct).ConfigureAwait(false);
+                    var plaintextHash = plaintext.GetHash();
+                    if (!string.Equals(plaintextHash, expectedPlaintext, StringComparison.OrdinalIgnoreCase))
+                        findings.Add(new TenantBundleFinding("bundle.payload.plaintext-hash", "Error",
+                            component.LogicalId, "The decrypted payload does not match its export-time plaintext hash."));
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    findings.Add(new TenantBundleFinding("bundle.payload.decrypt", "Error",
+                        component.LogicalId, $"The customer-held recipient key could not authenticate this payload: {ex.Message}"));
+                }
             }
         }
 
@@ -226,5 +337,26 @@ public static class TenantBundleValidator
         }
 
         return new TenantBundleValidationResult(manifest, findings);
+    }
+
+    private sealed class HashingSinkStream : Stream
+    {
+        private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        public string GetHash() => Convert.ToHexString(_hash.GetHashAndReset()).ToLowerInvariant();
+        public override void Write(byte[] buffer, int offset, int count) => _hash.AppendData(buffer, offset, count);
+        public override void Write(ReadOnlySpan<byte> buffer) => _hash.AppendData(buffer);
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default)
+        { ct.ThrowIfCancellationRequested(); _hash.AppendData(buffer.Span); return ValueTask.CompletedTask; }
+        protected override void Dispose(bool disposing) { if (disposing) _hash.Dispose(); base.Dispose(disposing); }
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken ct) => Task.CompletedTask;
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
     }
 }

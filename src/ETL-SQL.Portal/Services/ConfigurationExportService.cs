@@ -19,9 +19,18 @@ public sealed class ConfigurationExportService(
     DatasetTenantScope datasetScope,
     PortalTenantCatalogScope? catalogScope = null)
 {
-    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports;
-    private IQueryable<Subscription> Subscriptions => catalogScope?.Subscriptions ?? db.Subscriptions;
-    private IQueryable<ReportAlert> ReportAlerts => catalogScope?.ReportAlerts ?? db.ReportAlerts;
+    private string TenantId => datasetScope.TenantId;
+    private IQueryable<Group> Groups => db.Groups.Where(value => value.TenantId == TenantId);
+    private IQueryable<PortalUser> Users => db.Users.Where(value => value.TenantId == TenantId);
+    private IQueryable<UserGroup> UserGroups => db.UserGroups.Where(value => value.TenantId == TenantId);
+    private IQueryable<Folder> Folders => catalogScope?.Folders ?? db.Folders.Where(value => value.TenantId == TenantId);
+    private IQueryable<FolderAcl> FolderAcls => catalogScope?.FolderAcls ?? db.FolderAcls.Where(value =>
+        Folders.Any(folder => folder.Id == value.FolderId));
+    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports.Where(value => value.TenantId == TenantId);
+    private IQueryable<Subscription> Subscriptions => catalogScope?.Subscriptions ?? db.Subscriptions.Where(value =>
+        Reports.Any(report => report.Id == value.ReportId));
+    private IQueryable<ReportAlert> ReportAlerts => catalogScope?.ReportAlerts ?? db.ReportAlerts.Where(value =>
+        Reports.Any(report => report.Id == value.ReportId));
 
     public sealed record ExportResult(string Script, IReadOnlyList<string> RequiredSecrets,
         IReadOnlyList<string> Skipped, IReadOnlyList<string> Emitted,
@@ -56,7 +65,7 @@ public sealed class ConfigurationExportService(
         // ── Groups ────────────────────────────────────────────────────────────
         var groupCount = 0;
         AppendSection(body, "Groups");
-        await foreach (var g in db.Groups.AsNoTracking()
+        await foreach (var g in Groups.AsNoTracking()
             .OrderBy(g => g.Name)
             .Select(g => new { g.Name, g.Description, g.Provider, g.AdGroup })
             .AsAsyncEnumerable()
@@ -76,13 +85,14 @@ public sealed class ConfigurationExportService(
         // ── Users ─────────────────────────────────────────────────────────────
         var roleByUser = (await (
             from ur in db.UserRoles
+            join u in Users on ur.UserId equals u.Id
             join r in db.Roles on ur.RoleId equals r.Id
             select new { ur.UserId, r.Name }).ToListAsync(ct))
             .GroupBy(role => role.UserId)
             .ToDictionary(group => group.Key, group => group.First().Name);
         var userCount = 0;
         AppendSection(body, "Users (passwords are never exported — supply each ${...} secret at import)");
-        await foreach (var u in db.Users.AsNoTracking()
+        await foreach (var u in Users.AsNoTracking()
             .OrderBy(u => u.UserName)
             .Select(u => new
             {
@@ -120,9 +130,9 @@ public sealed class ConfigurationExportService(
         // ── Group memberships ────────────────────────────────────────────────
         var membershipCount = 0;
         var memberships = (
-            from ug in db.UserGroups.AsNoTracking()
-            join u in db.Users on ug.UserId equals u.Id
-            join g in db.Groups on ug.GroupId equals g.Id
+            from ug in UserGroups.AsNoTracking()
+            join u in Users on ug.UserId equals u.Id
+            join g in Groups on ug.GroupId equals g.Id
             orderby g.Name, u.UserName
             select new { Username = u.UserName!, Group = g.Name }).AsAsyncEnumerable();
         AppendSection(body, "Group memberships");
@@ -137,8 +147,8 @@ public sealed class ConfigurationExportService(
         var folderCount = 0;
         AppendSection(body, "Folders");
         await foreach (var folder in (
-            from f in db.Folders.AsNoTracking()
-            join u in db.Users.AsNoTracking() on f.OwnerId equals u.Id
+            from f in Folders.AsNoTracking()
+            join u in Users.AsNoTracking() on f.OwnerId equals u.Id
             orderby f.Path
             select new { f.Path, Owner = u.UserName })
             .AsAsyncEnumerable()
@@ -152,9 +162,9 @@ public sealed class ConfigurationExportService(
         // ── Folder ACLs ───────────────────────────────────────────────────────
         var folderAclCount = 0;
         var folderAcls = (
-            from a in db.FolderAcls.AsNoTracking()
-            join f in db.Folders on a.FolderId equals f.Id
-            join g in db.Groups on a.GroupId equals g.Id
+            from a in FolderAcls.AsNoTracking()
+            join f in Folders on a.FolderId equals f.Id
+            join g in Groups on a.GroupId equals g.Id
             orderby f.Path, g.Name
             select new { f.Path, Group = g.Name, a.Permission }).AsAsyncEnumerable();
         AppendSection(body, "Folder permissions");
@@ -172,7 +182,7 @@ public sealed class ConfigurationExportService(
         // on write.
         var connectionCount = 0;
         AppendSection(body, "Connections (credentials are SECRET: references, never values)");
-        await foreach (var c in db.PortalSharedConnections.AsNoTracking()
+        await foreach (var c in db.PortalSharedConnections.Where(value => value.TenantId == TenantId).AsNoTracking()
             .OrderBy(c => c.Alias)
             .Select(c => new { c.Alias, c.ConnectorType, c.OptionsJson })
             .AsAsyncEnumerable()
@@ -194,7 +204,7 @@ public sealed class ConfigurationExportService(
         var reportCount = 0;
         var reports = (
             from r in Reports.AsNoTracking()
-            join u in db.Users.AsNoTracking() on r.CreatedBy equals u.Id
+            join u in Users.AsNoTracking() on r.CreatedBy equals u.Id
             where !r.IsDeleted
             orderby r.Folder!.Path, r.Name
             select new
@@ -228,7 +238,7 @@ public sealed class ConfigurationExportService(
             .ToListAsync(ct);
         var datasetAclsByDataset = (await (
             from acl in db.DatasetAcls.AsNoTracking()
-            join g in db.Groups.Where(candidate => candidate.TenantId == datasetScope.TenantId)
+            join g in Groups
                 on acl.GroupId equals g.Id
             where tenantDatasetIds.Contains(acl.DatasetId)
             orderby g.Name
@@ -376,7 +386,8 @@ public sealed class ConfigurationExportService(
 
         // ── Scheduled refresh job links ───────────────────────────────────────
         AppendSection(body, "Scheduled report refresh job links");
-        var reportJobLinks = await db.ReportJobLinks
+        var reportJobLinks = await db.ReportJobLinks.Where(value =>
+                Reports.Any(report => report.Id == value.ReportId))
             .AsNoTracking()
             .Include(j => j.Report)
                 .ThenInclude(r => r.Folder)
@@ -394,6 +405,8 @@ public sealed class ConfigurationExportService(
         emitted.Add($"{reportJobLinks.Count} refresh job link(s)");
 
         skipped.Add("portal settings (JWT/dataset keys, Orchestrator API key/URL, branding): provisioned via configuration files, not script — see the administrators guide");
+        foreach (var runtimeOnly in RuntimeOnly)
+            skipped.Add($"excluded runtime/content state: {runtimeOnly}");
 
         return new ExportResult(
             ComposeScript(body, secrets, emitted, skipped, manifest), secrets, skipped, emitted, manifest);

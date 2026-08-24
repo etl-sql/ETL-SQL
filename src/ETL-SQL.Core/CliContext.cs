@@ -211,6 +211,7 @@ public class CliContext
     public string? TenantSigningKey { get; set; }
     public string? TenantCollisionPolicy { get; set; }
     public bool TenantDryRun { get; set; }
+    public string? TenantBaseConsistencyPoint { get; set; }
     public string? SaasTenantId { get; set; }
     public string? SaasSourceProfile { get; set; }
     public string? SaasPortalBootstrap { get; set; }

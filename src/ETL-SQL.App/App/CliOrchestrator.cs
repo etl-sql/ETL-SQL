@@ -599,6 +599,10 @@ namespace ETL_SQL.App
         {
             Description = "Compute and print the import plan without changing the target."
         };
+        private static readonly Option<string?> TenantBaseConsistencyPointOption = new("--base-consistency-point")
+        {
+            Description = "Target's currently certified consistency digest, required when applying a delta."
+        };
 
         private static readonly Option<string?> SaasTenantOption = new("--tenant", Array.Empty<string>())
         {
@@ -1245,6 +1249,7 @@ namespace ETL_SQL.App
                 TenantRecipientKeyOption,
                 TenantCollisionOption,
                 TenantDryRunOption,
+                TenantBaseConsistencyPointOption,
             };
             tenantImportCommand.SetAction(context => Dispatch(context, "admin-tenant-import", handler));
             tenantCommand.Add(tenantImportCommand);
@@ -2006,6 +2011,7 @@ namespace ETL_SQL.App
                 cliContext.TenantSigningKey = TryGetString(res, TenantSigningKeyOption);
                 cliContext.TenantCollisionPolicy = TryGetString(res, TenantCollisionOption);
                 cliContext.TenantDryRun = TryGetBool(res, TenantDryRunOption);
+                cliContext.TenantBaseConsistencyPoint = TryGetString(res, TenantBaseConsistencyPointOption);
             }
 
             if (commandName == "run")

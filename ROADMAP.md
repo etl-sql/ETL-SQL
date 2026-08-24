@@ -335,32 +335,6 @@ conformance; integration with large-content portability and Shared-source isolat
 **Acceptance evidence:** Provider contract certification covers concurrent writers, stale fences,
 partial writes, lost responses, retries, storage outages, reconciliation, and garbage collection.
 
-### SaaS Multi-Tenancy — Tenant Portability Expansion
-
-**Status:** Incremental  
-**Horizon:** Launch Gate — Shared SaaS  
-**Authoritative design:** [`docs/architecture/TenantPortability.md`](docs/architecture/TenantPortability.md)
-
-The minimum signed portability bundle and Managed Dedicated SaaS-to-self-hosted Enterprise exit have
-shipped. The next increment makes exports trustworthy under concurrent activity and practical for
-large content and Shared SaaS without weakening explicit exclusions and rebinding.
-
-**Why now:** A complete, consistent export is a prerequisite for a credible Shared SaaS exit promise.
-
-**Boundaries:** Continue the unified bundle; do not introduce an opaque database backup or competing
-package format. Correctness precedes incremental-export optimization.
-
-**Dependencies:** Cross-system consistency and cutover fencing, complete content inventory,
-object-native large-content storage, and hostile Shared-source isolation evidence.
-
-**Delivery slices:** Declared consistency point; cutover fencing and duplicate-schedule prevention;
-inventory reconciliation; resumable chunked content; standalone validator; incremental deltas;
-cross-provider scale optimization.
-
-**Acceptance evidence:** Concurrent export/cutover journeys reconcile stable IDs, hashes, ownership,
-ACLs, and exclusions; hostile packages fail before activation; interrupted large exports resume; and
-customer-held validation remains possible after source loss.
-
 ### Identity — Workload Identity and M2M Hardening
 
 **Status:** Incremental  

@@ -32,6 +32,7 @@
     <Project Path="src/ETL-SQL.Reporting.Contracts/ETL-SQL.Reporting.Contracts.csproj" />
     <Project Path="src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj" />
     <Project Path="src/ETL-SQL.TUI/ETL-SQL.TUI.csproj" />
+    <Project Path="src/ETL-SQL.TenantValidator/ETL-SQL.TenantValidator.csproj" />
     <Project Path="src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj" />
   </Folder>
   <Folder Name="/tests/">

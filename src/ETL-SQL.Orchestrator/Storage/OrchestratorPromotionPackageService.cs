@@ -26,7 +26,8 @@ public static partial class OrchestratorPromotionPackageService
         IReadOnlyList<JobHistoryEntry> QualityHistory,
         IReadOnlyList<QualityFailureRecord> QualityFailures,
         IReadOnlyList<LineageHistoryEntry> LineageAndTags,
-        IReadOnlyList<string> RequiredSecretReferences);
+        IReadOnlyList<string> RequiredSecretReferences,
+        IReadOnlyList<OrchestratorObjectGrant>? ObjectGrants = null);
 
     public sealed record ImportResult(int Jobs, int Schedules, int Notifications, int JobSchedules,
         int JobNotifications, int QualityRuns, int QualityFailures, int LineageEntries);
@@ -135,8 +136,10 @@ public static partial class OrchestratorPromotionPackageService
         var requiredSecrets = inspectable.SelectMany(value => SecretReferenceRegex().Matches(value).Select(match => match.Groups[1].Value))
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
 
+        var grants = await ExportObjectGrantsAsync(history, jobs, schedules, notifications, ct);
+
         return new(SchemaVersion, DateTimeOffset.UtcNow, jobs, schedules, notifications,
-            jobSchedules, jobNotifications, runs, failures, lineageRows, requiredSecrets);
+            jobSchedules, jobNotifications, runs, failures, lineageRows, requiredSecrets, grants);
     }
 
     public static async Task<Package> ExportAsync(
@@ -168,8 +171,10 @@ public static partial class OrchestratorPromotionPackageService
         var requiredSecrets = inspectable.SelectMany(value => SecretReferenceRegex().Matches(value).Select(match => match.Groups[1].Value))
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
 
+        var grants = await ExportObjectGrantsAsync(history, jobs, schedules, notifications, ct);
+
         return new(SchemaVersion, DateTimeOffset.UtcNow, jobs, schedules, notifications,
-            jobSchedules, jobNotifications, runs, failures, lineageRows, requiredSecrets);
+            jobSchedules, jobNotifications, runs, failures, lineageRows, requiredSecrets, grants);
     }
 
     public static async Task<ImportResult> ImportAsync(
@@ -256,6 +261,19 @@ public static partial class OrchestratorPromotionPackageService
             await catalog.AddJobNotificationAsync(targetJob.Id, targetNotification.Id, link.Trigger);
         }
 
+        if ((package.ObjectGrants?.Count ?? 0) > 0)
+        {
+            if (history is not IOrchestratorAuthorizationStore authorization)
+                throw new InvalidOperationException("The target store cannot import Orchestrator ACL definitions.");
+
+            foreach (var grant in package.ObjectGrants!)
+            {
+                var targetId = await ResolveImportedObjectIdAsync(package, grant, history, catalog, ct);
+                if (targetId is null) continue;
+                await authorization.SaveObjectGrantAsync(grant with { ObjectId = targetId, Version = 1 }, ct);
+            }
+        }
+
         var runIds = new Dictionary<long, long>();
         foreach (var run in package.QualityHistory)
             runIds[run.Id] = await history.ImportJobHistoryAsync(run);
@@ -317,6 +335,14 @@ public static partial class OrchestratorPromotionPackageService
         AddDuplicateFindings(package.Jobs.Select(j => j.Name), "job", findings);
         AddDuplicateFindings(package.Schedules.Select(s => s.Name), "schedule", findings);
         AddDuplicateFindings(package.Notifications.Select(n => n.Name), "notification", findings);
+
+        foreach (var grant in package.ObjectGrants ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(grant.PrincipalId) || string.IsNullOrWhiteSpace(grant.GrantedBy))
+                findings.Add(new("OP006", "Error", $"acl:{grant.ObjectId}", "An ACL has no principal or granting authority."));
+            if (!PackageContainsObject(package, grant.ObjectKind, grant.ObjectId))
+                findings.Add(new("OP006", "Error", $"acl:{grant.ObjectId}", "An ACL refers to an object outside this package."));
+        }
 
         foreach (var schedule in package.Schedules)
         {
@@ -419,6 +445,68 @@ public static partial class OrchestratorPromotionPackageService
     {
         foreach (var duplicate in names.GroupBy(name => name, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1))
             findings.Add(new("OP002", "Error", $"{kind}:{duplicate.Key}", "The package contains a duplicate logical identity."));
+    }
+
+    private static async Task<IReadOnlyList<OrchestratorObjectGrant>> ExportObjectGrantsAsync(
+        IJobHistoryStore history,
+        IReadOnlyList<JobDefinition> jobs,
+        IReadOnlyList<ScheduleDefinition> schedules,
+        IReadOnlyList<NotificationDefinition> notifications,
+        CancellationToken ct)
+    {
+        if (history is not IOrchestratorAuthorizationStore authorization) return [];
+        var objectIds = jobs.Where(x => x.Id.IsAssigned).Select(x => x.Id.Value)
+            .Concat(schedules.Where(x => x.Id.IsAssigned).Select(x => x.Id.Value))
+            .Concat(notifications.Where(x => x.Id.IsAssigned).Select(x => x.Id.Value))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(x => x, StringComparer.Ordinal);
+        var grants = new List<OrchestratorObjectGrant>();
+        foreach (var objectId in objectIds)
+        {
+            ct.ThrowIfCancellationRequested();
+            grants.AddRange(await authorization.GetObjectGrantsAsync(objectId, ct));
+        }
+        return grants.OrderBy(x => x.ObjectId, StringComparer.Ordinal)
+            .ThenBy(x => x.PrincipalKind).ThenBy(x => x.PrincipalId, StringComparer.Ordinal).ToArray();
+    }
+
+    private static bool PackageContainsObject(Package package, OrchestratorObjectKind kind, string objectId) =>
+        kind switch
+        {
+            OrchestratorObjectKind.Job => package.Jobs.Any(x => x.Id.Value == objectId),
+            OrchestratorObjectKind.Schedule => package.Schedules.Any(x => x.Id.Value == objectId),
+            OrchestratorObjectKind.Notification => package.Notifications.Any(x => x.Id.Value == objectId),
+            _ => false
+        };
+
+    private static async Task<string?> ResolveImportedObjectIdAsync(
+        Package package,
+        OrchestratorObjectGrant grant,
+        IJobHistoryStore history,
+        IJobCatalogStore catalog,
+        CancellationToken ct)
+    {
+        switch (grant.ObjectKind)
+        {
+            case OrchestratorObjectKind.Job:
+                {
+                    var source = package.Jobs.SingleOrDefault(x => x.Id.Value == grant.ObjectId);
+                    return source is null ? null : (await history.GetJobAsync(source.TenantId, source.Name))?.Id.Value;
+                }
+            case OrchestratorObjectKind.Schedule:
+                {
+                    var source = package.Schedules.SingleOrDefault(x => x.Id.Value == grant.ObjectId);
+                    return source is null ? null : (await catalog.GetScheduleAsync(source.TenantId, source.Name))?.Id.Value;
+                }
+            case OrchestratorObjectKind.Notification:
+                {
+                    var source = package.Notifications.SingleOrDefault(x => x.Id.Value == grant.ObjectId);
+                    return source is null ? null : (await catalog.GetNotificationAsync(source.TenantId, source.Name))?.Id.Value;
+                }
+            default:
+                ct.ThrowIfCancellationRequested();
+                return null;
+        }
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };

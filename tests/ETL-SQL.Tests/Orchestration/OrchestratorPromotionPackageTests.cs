@@ -32,6 +32,10 @@ public sealed class OrchestratorPromotionPackageTests : IDisposable
             Options: "{\"classification\":\"confidential\"}", CreatedBy: "owner@example.test"));
         await source.AddJobScheduleAsync("customer-load", "nightly", new DateTime(2026, 8, 3, 2, 0, 0, DateTimeKind.Utc));
         await source.AddJobNotificationAsync("customer-load", "quality-alert", NotificationTrigger.Failure);
+        var sourceJob = (await source.GetJobAsync((string?)null, "customer-load"))!;
+        await source.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+            sourceJob.Id.Value, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.Group,
+            "data-engineers", OrchestratorObjectPermission.Execute, "owner@example.test"));
 
         var started = new DateTime(2026, 8, 1, 2, 0, 0, DateTimeKind.Utc);
         var sourceRun = await source.ImportJobHistoryAsync(new JobHistoryEntry(
@@ -59,6 +63,7 @@ public sealed class OrchestratorPromotionPackageTests : IDisposable
         Assert.Contains("smtp.password", package.RequiredSecretReferences);
         Assert.DoesNotContain("resolved-secret-value", text);
         Assert.Contains("confidential", text);
+        Assert.Single(package.ObjectGrants!);
 
         json.Position = 0;
         var roundTripped = await OrchestratorPromotionPackageService.ReadAsync(json);
@@ -72,6 +77,9 @@ public sealed class OrchestratorPromotionPackageTests : IDisposable
         Assert.Equal("owner@example.test", importedJob.CreatedBy);
         Assert.Null(importedJob.LastRun);
         Assert.False(importedJob.IsEnabled);
+        var importedGrant = Assert.Single(await target.GetObjectGrantsAsync(importedJob.Id.Value));
+        Assert.Equal("data-engineers", importedGrant.PrincipalId);
+        Assert.Equal(OrchestratorObjectPermission.Execute, importedGrant.Permission);
         Assert.Single(await target.GetSchedulesAsync());
         var importedNotification = Assert.Single(await target.GetNotificationsAsync());
         Assert.Equal("SHARED:production-mail", importedNotification.ConnectionName);

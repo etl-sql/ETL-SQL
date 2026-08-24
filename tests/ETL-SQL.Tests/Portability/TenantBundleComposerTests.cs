@@ -1,7 +1,9 @@
 using System.Text.Json;
 using ETL_SQL.App.Portability;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Portability;
 using ETL_SQL.Core.Security;
+using ETL_SQL.Orchestrator.Storage;
 
 namespace ETL_SQL.Tests.Portability;
 
@@ -164,6 +166,31 @@ public sealed class TenantBundleComposerTests : IDisposable
             () => TenantBundleComposer.ComposeAsync(new FakePortal(Plan(), "x"), request));
 
         Assert.Contains("does_not_exist.etlsql", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReconciledInventoryNamesContainedOrchestratorResourcesWithOwnershipAndAcls()
+    {
+        var jobId = JobId.New();
+        var job = new JobDefinition("load", "SELECT 1;", 1, "HOUR", null, null, null,
+            CreatedBy: "user:owner", TenantId: "tenant-acme", Id: jobId);
+        var grant = new OrchestratorObjectGrant(jobId.Value, OrchestratorObjectKind.Job,
+            OrchestratorPrincipalKind.Group, "operators", OrchestratorObjectPermission.Execute,
+            "user:owner");
+        var package = new OrchestratorPromotionPackageService.Package(
+            OrchestratorPromotionPackageService.SchemaVersion, DateTimeOffset.UtcNow,
+            [job], [], [], [], [], [], [], [], [], [grant]);
+
+        var manifest = await TenantBundleComposer.ComposeAsync(
+            new FakePortal(Plan(), "CREATE FOLDER 'Sales';"),
+            Request(Path.Combine(_root, "inventory-bundle")) with { OrchestratorPackage = package });
+
+        var inventoryJob = Assert.Single(manifest.Inventory!,
+            x => x.StableId == $"orchestrator:job:{jobId.Value}");
+        Assert.Equal("user:owner", inventoryJob.Owner);
+        Assert.Contains("Group:operators:Execute", inventoryJob.AclEntries);
+        Assert.Equal("catalog:orchestrator-promotion", inventoryJob.ContainerLogicalId);
+        Assert.True(TenantPortabilityInventory.Reconcile("tenant-acme", manifest.Inventory!).IsComplete);
     }
 
     [Fact]

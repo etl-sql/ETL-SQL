@@ -51,7 +51,8 @@ public sealed record TenantImportOptions(
     string? RecipientPrivateKeyFile = null,
     string? RecipientPassphrase = null,
     TenantImportCollisionPolicy CollisionPolicy = TenantImportCollisionPolicy.Fail,
-    bool DryRun = false);
+    bool DryRun = false,
+    string? ExpectedBaseConsistencyPointDigest = null);
 
 public sealed record TenantImportResult(
     TenantPortabilityExitCode ExitCode,
@@ -97,6 +98,15 @@ public static class TenantBundleImporter
         }
 
         var manifest = preflight.Manifest!;
+        if (manifest.ExportMode is TenantBundleExportMode.IncrementalDelta or TenantBundleExportMode.FinalCutoverDelta
+            && !string.Equals(manifest.BaseConsistencyPointDigest,
+                options.ExpectedBaseConsistencyPointDigest, StringComparison.OrdinalIgnoreCase))
+        {
+            return new TenantImportResult(TenantPortabilityExitCode.BundleInvalid, Applied: false, [],
+                preflight.Findings, 0,
+                "The delta does not continue from the target's certified consistency point. " +
+                "Refusing an out-of-order, replayed, or mixed-source delta before mutation.");
+        }
         var script = Encoding.UTF8.GetString(await ReadComponentAsync(
             bundleRoot, manifest, "catalog:portal-configuration", options, ct).ConfigureAwait(false));
 

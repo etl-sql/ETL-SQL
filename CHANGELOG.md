@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Completed tenant-portability correctness and scale: v2 bundles now bind a cross-system consistency
+  point, reconciled stable-ID/hash/owner/ACL/exclusion inventory, certified delta sequencing, and
+  resumable content-addressed chunks over the object-native storage contract.
+- Added durable tenant cutover authority and scheduler fencing, Shared-source hostile isolation
+  certification, and offline self-contained tenant-bundle validators for Windows, Linux, and macOS
+  that can verify customer-encrypted content after source access is gone.
 - Completed the native Grammar-of-Graphics authoring surface with typed field/`DATUM`/`VALUE`
   bindings, inherited encodings, explicit stack/offset/interval placement, deterministic jitter and
   nudge, continuous color ranges, wrapped facets, fixed Cartesian aspect, and category-local `TICK`

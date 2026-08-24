@@ -12,6 +12,7 @@ etl-sql admin tenant import [options]
 
 | Option | Description |
 | :--- | :--- |
+| `--base-consistency-point` | Target's currently certified consistency digest, required when applying a delta. |
 | `--binding` | Target binding as SOURCE=TARGET (repeatable); preflight also accepts a supplied logical id. |
 | `--bundle` | Path to the tenant portability bundle directory. |
 | `--collision` | Import collision policy: fail (default) or proceed. |

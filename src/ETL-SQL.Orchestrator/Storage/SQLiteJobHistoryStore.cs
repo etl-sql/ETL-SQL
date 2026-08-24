@@ -23,7 +23,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public partial class RelationalJobHistoryStore : IJobHistoryStore, ITenantJobEvidenceStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, ITenantLineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore
+    public partial class RelationalJobHistoryStore : IJobHistoryStore, ITenantJobEvidenceStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, ITenantLineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore, ETL_SQL.Core.Portability.ITenantCutoverStateStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -292,6 +292,23 @@ namespace ETL_SQL.Orchestrator.Storage
                     TenantId TEXT NOT NULL,
                     JobName TEXT COLLATE NOCASE NOT NULL,
                     PRIMARY KEY (OperationId, JobName)
+                );
+                CREATE TABLE IF NOT EXISTS TenantPortabilityCutovers (
+                    TenantId TEXT PRIMARY KEY,
+                    OperationId TEXT NOT NULL,
+                    Authority TEXT NOT NULL,
+                    FenceEpoch INTEGER NOT NULL,
+                    SourceSchedulesEnabled INTEGER NOT NULL,
+                    TargetSchedulesEnabled INTEGER NOT NULL,
+                    SourceActiveExecutions INTEGER NOT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    Version INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE TABLE IF NOT EXISTS TenantPortabilityFencedJobs (
+                    TenantId TEXT NOT NULL,
+                    OperationId TEXT NOT NULL,
+                    JobName TEXT COLLATE NOCASE NOT NULL,
+                    PRIMARY KEY (TenantId, OperationId, JobName)
                 );";
 
                     // Bundle identity is (TenantId, BundleName, Version). Without the tenant, one
@@ -886,7 +903,12 @@ namespace ETL_SQL.Orchestrator.Storage
                   AND NOT EXISTS (
                       SELECT 1 FROM SharedTenantControlPlanes lifecycle
                        WHERE lifecycle.TenantId = Jobs.TenantId
-                         AND lifecycle.State <> 'Active');";
+                         AND lifecycle.State <> 'Active')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM TenantPortabilityCutovers portability
+                       WHERE portability.TenantId = Jobs.TenantId
+                         AND (portability.Authority <> 'Source'
+                              OR portability.SourceSchedulesEnabled = 0));";
             claim.AddParam("@owner", owner);
             claim.AddParam("@expires", now.Add(duration).ToString("O"));
             claim.AddParam("@id", jobId);

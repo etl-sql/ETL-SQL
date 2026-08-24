@@ -41,7 +41,11 @@ public sealed record TenantBundleRequest(
     IReadOnlyList<TenantBundleExclusion> Exclusions,
     string? RecipientPublicKeyFile = null,
     string? SigningPrivateKeyFile = null,
-    string? SigningPassphrase = null);
+    string? SigningPassphrase = null,
+    TenantExportConsistencyPoint? DeclaredConsistencyPoint = null,
+    IReadOnlyList<TenantInventoryItem>? Inventory = null,
+    IReadOnlyList<TenantChunkedContent>? ChunkedContent = null,
+    string? BaseConsistencyPointDigest = null);
 
 /// <summary>
 /// Writes the unified bundle described in <c>docs/architecture/TenantPortability.md</c> §5.
@@ -70,14 +74,29 @@ public static class TenantBundleWriter
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleRoot);
         ArgumentNullException.ThrowIfNull(request);
 
-        if (request.ExportMode != TenantBundleExportMode.ConfigurationAndArtifacts)
+        if (request.ExportMode != TenantBundleExportMode.ConfigurationAndArtifacts
+            && request.DeclaredConsistencyPoint is null)
         {
             throw new ArgumentException(
-                $"Export mode '{request.ExportMode}' is not implemented. Only " +
-                $"'{nameof(TenantBundleExportMode.ConfigurationAndArtifacts)}' ships today; see " +
-                "TenantPortability.md §5.3. Refusing rather than writing a bundle whose mode " +
-                "overstates what it contains.",
+                $"Export mode '{request.ExportMode}' is not implemented without a declared Phase 2 " +
+                "consistency point. Refusing to write a bundle whose mode overstates what it contains.",
                 nameof(request));
+        }
+
+        if (request.DeclaredConsistencyPoint is { } point)
+        {
+            if (!string.Equals(point.TenantId, request.TenantExportIdentity, StringComparison.Ordinal)
+                || !TenantExportConsistencyCoordinator.Verify(point))
+                throw new ArgumentException("The declared consistency point is invalid or belongs to another tenant.", nameof(request));
+            if (request.ExportMode == TenantBundleExportMode.FinalCutoverDelta && !point.MutationsFenced)
+                throw new ArgumentException("A final cutover delta requires a fenced consistency point.", nameof(request));
+            if (request.ExportMode is TenantBundleExportMode.IncrementalDelta or TenantBundleExportMode.FinalCutoverDelta
+                && string.IsNullOrWhiteSpace(request.BaseConsistencyPointDigest))
+                throw new ArgumentException("A delta must name its base consistency-point digest.", nameof(request));
+            var reconciliation = TenantPortabilityInventory.Reconcile(request.TenantExportIdentity,
+                request.Inventory ?? []);
+            if (!reconciliation.IsComplete)
+                throw new ArgumentException("The Phase 2 inventory is incomplete: " + string.Join("; ", reconciliation.Errors), nameof(request));
         }
 
         var duplicate = request.Payloads
@@ -137,15 +156,18 @@ public static class TenantBundleWriter
                 encrypting ? plaintextHash : null));
         }
 
+        if (request.DeclaredConsistencyPoint is not null)
+            ValidatePhase2Inventory(request, components);
+
         var manifest = new TenantBundleManifest(
-            TenantBundle.SchemaVersion,
+            request.DeclaredConsistencyPoint is null ? TenantBundle.SchemaVersion : TenantBundle.Phase2SchemaVersion,
             request.BundleId,
             request.CreatedUtc,
             request.SourceProductVersion,
             request.SourceProfile,
             request.TenantExportIdentity,
             request.ExportMode,
-            request.ConsistencyPoint,
+            request.DeclaredConsistencyPoint?.Digest ?? request.ConsistencyPoint,
             [.. components.OrderBy(c => c.LogicalId, StringComparer.Ordinal)],
             [.. request.RequiredBindings.OrderBy(b => b.LogicalId, StringComparer.Ordinal)],
             [.. request.Exclusions.OrderBy(e => e.LogicalId, StringComparer.Ordinal)],
@@ -158,7 +180,11 @@ public static class TenantBundleWriter
                 encrypting ? TenantBundleCrypto.Fingerprint(request.RecipientPublicKeyFile!) : null),
             string.IsNullOrWhiteSpace(request.SigningPrivateKeyFile)
                 ? null
-                : TenantBundle.SignatureFileName);
+                : TenantBundle.SignatureFileName,
+            request.DeclaredConsistencyPoint,
+            request.Inventory is null ? null : [.. request.Inventory.OrderBy(x => x.StableId, StringComparer.Ordinal)],
+            request.ChunkedContent is null ? null : [.. request.ChunkedContent.OrderBy(x => x.StableId, StringComparer.Ordinal)],
+            request.BaseConsistencyPointDigest);
 
         var manifestPath = Path.Combine(root, TenantBundle.ManifestFileName);
         await File.WriteAllTextAsync(
@@ -214,7 +240,11 @@ public static class TenantBundleWriter
             manifest.RequiredBindings,
             manifest.Exclusions,
             manifest.Counts,
-            Encrypted = manifest.Encryption?.Encrypted ?? false
+            Encrypted = manifest.Encryption?.Encrypted ?? false,
+            manifest.DeclaredConsistencyPoint,
+            manifest.Inventory,
+            manifest.ChunkedContent,
+            manifest.BaseConsistencyPointDigest
         };
 
         return Convert.ToHexString(
@@ -228,6 +258,37 @@ public static class TenantBundleWriter
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
 
     internal static string NormalizePath(string relativePath) => relativePath.Replace('\\', '/');
+
+    private static void ValidatePhase2Inventory(
+        TenantBundleRequest request, IReadOnlyList<TenantBundleComponent> components)
+    {
+        var inventory = (request.Inventory ?? []).ToDictionary(x => x.StableId, StringComparer.Ordinal);
+        var chunked = (request.ChunkedContent ?? []).ToDictionary(x => x.StableId, StringComparer.Ordinal);
+        foreach (var component in components)
+        {
+            if (!inventory.TryGetValue(component.LogicalId, out var item)
+                || item.Disposition != TenantInventoryDisposition.Included)
+                throw new ArgumentException($"Component '{component.LogicalId}' has no included inventory row.", nameof(request));
+            var contentHash = component.PlaintextSha256 ?? component.Sha256;
+            if (item.ByteLength != request.Payloads.Single(x => x.LogicalId == component.LogicalId).Content.LongLength
+                || !string.Equals(item.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"Component '{component.LogicalId}' does not match its inventory length/hash.", nameof(request));
+        }
+        foreach (var item in inventory.Values.Where(x => x.Disposition == TenantInventoryDisposition.Included))
+        {
+            var represented = components.Any(x => x.LogicalId == item.StableId)
+                || chunked.TryGetValue(item.StableId, out var content)
+                   && content.TotalLength == item.ByteLength
+                   && string.Equals(content.ContentSha256, item.Sha256, StringComparison.OrdinalIgnoreCase)
+                || item.ContainerLogicalId is not null
+                   && components.Any(x => x.LogicalId == item.ContainerLogicalId);
+            if (!represented)
+                throw new ArgumentException($"Included inventory item '{item.StableId}' has no payload or chunk index.", nameof(request));
+        }
+        foreach (var item in inventory.Values.Where(x => x.Disposition != TenantInventoryDisposition.Included))
+            if (!request.Exclusions.Any(x => x.LogicalId == item.StableId))
+                throw new ArgumentException($"Inventory exclusion '{item.StableId}' is absent from manifest exclusions.", nameof(request));
+    }
 
     /// <summary>
     /// Resolves a payload path inside the bundle root, refusing absolute paths and traversal. A

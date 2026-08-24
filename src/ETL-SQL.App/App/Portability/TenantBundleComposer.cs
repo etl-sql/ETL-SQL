@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ETL_SQL.Core.Portability;
@@ -174,6 +175,38 @@ public static class TenantBundleComposer
                 []));
         }
 
+        // Close the concurrent-configuration window around every payload read. The acknowledged
+        // download proves the first boundary; this second observation proves the Portal did not move
+        // while Orchestrator/catalog/artifact bytes were being captured.
+        var closingPlan = await portal.GetPlanAsync(ct).ConfigureAwait(false);
+        if (!string.Equals(plan.PlanHash, closingPlan.PlanHash, StringComparison.Ordinal)
+            || !string.Equals(plan.TenantExportIdentity, closingPlan.TenantExportIdentity, StringComparison.Ordinal))
+            throw new TenantBundleCompositionException(
+                "The Portal configuration or tenant identity changed while payloads were being read. " +
+                "No manifest was published; retry from a fresh consistency point.");
+
+        var revisions = new List<TenantExportRevision> { new("portal", plan.PlanHash) };
+        if (request.OrchestratorPackage is not null)
+        {
+            var orchestratorPayload = payloads.Single(x => x.LogicalId == "catalog:orchestrator-promotion");
+            revisions.Add(new("orchestrator", Sha256(orchestratorPayload.Content)));
+        }
+        var commitIds = payloads.Where(x => x.ResourceClass == "artifact")
+            .Select(x => $"{x.LogicalId}:{Sha256(x.Content)}").ToArray();
+        var consistency = TenantExportConsistencyCoordinator.Declare(tenantExportIdentity, revisions,
+            commitIds, fenceEpoch: 0, mutationsFenced: false, request.CreatedUtc);
+        var inventory = payloads.Select(payload => new TenantInventoryItem(
+                payload.LogicalId, payload.ResourceClass, TenantInventoryDisposition.Included,
+                payload.Content.LongLength, Sha256(payload.Content), $"tenant:{tenantExportIdentity}:administrator",
+                ["tenant-administrators:owner"], null, null, tenantExportIdentity))
+            .Concat(exclusions.Select(exclusion => new TenantInventoryItem(
+                exclusion.LogicalId, exclusion.ResourceClass, TenantInventoryDisposition.Excluded,
+                0, null, null, [], exclusion.Reason, exclusion.Remediation, tenantExportIdentity)))
+            .Concat(request.OrchestratorPackage is null
+                ? []
+                : BuildOrchestratorInventory(request.OrchestratorPackage, tenantExportIdentity))
+            .ToArray();
+
         return await TenantBundleWriter.WriteAsync(request.BundleRoot, new TenantBundleRequest(
             request.BundleId,
             request.CreatedUtc,
@@ -187,6 +220,65 @@ public static class TenantBundleComposer
             exclusions,
             request.RecipientPublicKeyFile,
             request.SigningPrivateKeyFile,
-            request.SigningPassphrase), ct).ConfigureAwait(false);
+            request.SigningPassphrase,
+            consistency,
+            inventory), ct).ConfigureAwait(false);
+    }
+
+    private static string Sha256(byte[] content) =>
+        Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+
+    private static IReadOnlyList<TenantInventoryItem> BuildOrchestratorInventory(
+        OrchestratorPromotionPackageService.Package package, string tenantId)
+    {
+        const string container = "catalog:orchestrator-promotion";
+        var rows = new List<TenantInventoryItem>();
+        var grants = package.ObjectGrants ?? [];
+
+        void Add<T>(string id, string kind, T value, string? owner, IEnumerable<string>? acl = null,
+            string? sourceTenant = null)
+        {
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(value, Json);
+            rows.Add(new TenantInventoryItem(id, kind, TenantInventoryDisposition.Included,
+                bytes.LongLength, Sha256(bytes),
+                string.IsNullOrWhiteSpace(owner) ? "unowned:administrator-adoption-required" : owner,
+                [.. (acl ?? []).OrderBy(x => x, StringComparer.Ordinal)], null, null,
+                sourceTenant ?? tenantId, container));
+        }
+
+        string[] ObjectAcl(string id) => grants.Where(x => x.ObjectId == id)
+            .Select(x => $"{x.PrincipalKind}:{x.PrincipalId}:{x.Permission}")
+            .OrderBy(x => x, StringComparer.Ordinal).ToArray();
+
+        foreach (var job in package.Jobs)
+            Add($"orchestrator:job:{job.Id.Value}", "orchestrator-job", job, job.CreatedBy,
+                ObjectAcl(job.Id.Value), job.TenantId);
+        foreach (var schedule in package.Schedules)
+            Add($"orchestrator:schedule:{schedule.Id.Value}", "orchestrator-schedule", schedule,
+                schedule.CreatedBy, ObjectAcl(schedule.Id.Value), schedule.TenantId);
+        foreach (var notification in package.Notifications)
+            Add($"orchestrator:notification:{notification.Id.Value}", "orchestrator-notification",
+                notification, notification.CreatedBy, ObjectAcl(notification.Id.Value), notification.TenantId);
+        foreach (var link in package.JobSchedules)
+            Add($"orchestrator:job-schedule:{link.JobId.Value}:{link.ScheduleId.Value}",
+                "orchestrator-job-schedule", link, "tenant-administrator");
+        foreach (var link in package.JobNotifications)
+            Add($"orchestrator:job-notification:{link.JobId.Value}:{link.NotificationId.Value}:{link.Trigger}",
+                "orchestrator-job-notification", link, "tenant-administrator");
+        foreach (var run in package.QualityHistory)
+            Add($"orchestrator:job-history:{run.Id}", "orchestrator-job-history", run,
+                package.Jobs.FirstOrDefault(x => x.Id == run.JobId)?.CreatedBy, sourceTenant: run.TenantId);
+        foreach (var failure in package.QualityFailures)
+            Add($"orchestrator:quality-failure:{failure.SourceRunId}:{failure.ColumnName}:{failure.Rule}:{failure.Action}",
+                "orchestrator-quality-failure", failure, failure.Owner);
+        foreach (var lineage in package.LineageAndTags)
+            Add($"orchestrator:lineage:{lineage.Id}", "orchestrator-lineage", lineage,
+                "tenant-administrator", sourceTenant: lineage.TenantId);
+        foreach (var grant in grants)
+            Add($"orchestrator:acl:{grant.ObjectId}:{grant.PrincipalKind}:{grant.PrincipalId}",
+                "orchestrator-acl", grant, grant.GrantedBy,
+                [$"{grant.PrincipalKind}:{grant.PrincipalId}:{grant.Permission}"]);
+
+        return rows;
     }
 }

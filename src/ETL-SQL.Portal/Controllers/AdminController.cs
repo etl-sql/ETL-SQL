@@ -1877,8 +1877,8 @@ public class AdminController(
         var export = await exporter.GenerateAsync(orchestratorAlias, HttpContext.RequestAborted);
         return Ok(new
         {
-            tenantExportIdentity = config.TenantId,
-            planHash = ComputeExportPlanHash(export, config.TenantId),
+            tenantExportIdentity = TenantId,
+            planHash = ComputeExportPlanHash(export, TenantId),
             emitted = export.Emitted,
             requiredSecrets = export.RequiredSecrets,
             skipped = export.Skipped,
@@ -1902,7 +1902,7 @@ public class AdminController(
         [FromQuery] string? acknowledgedPlan = null)
     {
         var export = await exporter.GenerateAsync(orchestratorAlias, HttpContext.RequestAborted);
-        var planHash = ComputeExportPlanHash(export, config.TenantId);
+        var planHash = ComputeExportPlanHash(export, TenantId);
 
         if (!string.IsNullOrWhiteSpace(acknowledgedPlan)
             && !string.Equals(acknowledgedPlan, planHash, StringComparison.OrdinalIgnoreCase))

@@ -14,6 +14,7 @@ namespace ETL_SQL.Core.Portability;
 public static class TenantBundle
 {
     public const string SchemaVersion = "etl-sql.tenant-bundle/v1";
+    public const string Phase2SchemaVersion = "etl-sql.tenant-bundle/v2";
 
     /// <summary>The canonical manifest file name at the bundle root.</summary>
     public const string ManifestFileName = "manifest.json";
@@ -123,4 +124,8 @@ public sealed record TenantBundleManifest(
     IReadOnlyList<TenantBundleExclusion> Exclusions,
     TenantBundleCounts Counts,
     TenantBundleEncryption? Encryption = null,
-    string? SignatureFile = null);
+    string? SignatureFile = null,
+    TenantExportConsistencyPoint? DeclaredConsistencyPoint = null,
+    IReadOnlyList<TenantInventoryItem>? Inventory = null,
+    IReadOnlyList<TenantChunkedContent>? ChunkedContent = null,
+    string? BaseConsistencyPointDigest = null);

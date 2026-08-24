@@ -3,6 +3,7 @@ using System.Text;
 using Azure.Storage.Blobs;
 using ETL_SQL.Connectors.ObjectStorage;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Portability;
 using ETL_SQL.Core.Storage;
 using Xunit;
 
@@ -75,6 +76,26 @@ internal static class ObjectStoreProviderContract
         Assert.True((await native.ReconcileAsync(TimeSpan.Zero, DateTimeOffset.UtcNow.AddMinutes(1))).DeletedStagingObjects > 0);
     }
 
+    public static async Task ResumablePortabilityChunks(IObjectStore store)
+    {
+        var authority = new Epochs();
+        var native = new ObjectNativeArtifactStorage(store, authority, authority, $"chunks-{Guid.NewGuid():N}");
+        var payload = new byte[10 * 1024 * 1024 + 19];
+        new Random(73).NextBytes(payload);
+        var operation = $"export-{Guid.NewGuid():N}";
+        TenantChunkedContent index;
+        await using (var input = new MemoryStream(payload, writable: false))
+            index = await TenantChunkTransfer.ExportAsync(native, "tenant-contract", operation,
+                "dataset:large", input, 1, 1024 * 1024);
+        await using (var retry = new MemoryStream(payload, writable: false))
+            await TenantChunkTransfer.ExportAsync(native, "tenant-contract", operation,
+                "dataset:large", retry, 1, 1024 * 1024);
+        await using var output = new MemoryStream();
+        await TenantChunkTransfer.ImportAsync(native, index, output);
+        Assert.Equal(payload, output.ToArray());
+        Assert.Equal(11, index.Chunks.Count);
+    }
+
     private static MemoryStream Bytes(string value) => new(Encoding.UTF8.GetBytes(value));
     private sealed class Epochs : IWriteEpochStore, IClusterLockStore
     {
@@ -139,6 +160,7 @@ public sealed class S3ObjectStoreProviderContractTests(S3Fixture fixture)
     [Fact] public Task ConditionalWritesAndOpaqueVersions() => ObjectStoreProviderContract.ConditionalWritesAndOpaqueVersions(Create());
     [Fact] public Task ObjectNativePublication() => ObjectStoreProviderContract.ObjectNativePublication(Create());
     [Fact] public Task HostileFailureMatrix() => ObjectStoreProviderContract.HostileFailureMatrix(Create());
+    [Fact] public Task ResumablePortabilityChunks() => ObjectStoreProviderContract.ResumablePortabilityChunks(Create());
 }
 
 [Collection("AZURE_BLOB collection")]
@@ -161,4 +183,7 @@ public sealed class AzureBlobObjectStoreProviderContractTests(AzureBlobFixture f
     [Fact]
     public async Task HostileFailureMatrix() =>
         await ObjectStoreProviderContract.HostileFailureMatrix(await CreateAsync());
+    [Fact]
+    public async Task ResumablePortabilityChunks() =>
+        await ObjectStoreProviderContract.ResumablePortabilityChunks(await CreateAsync());
 }
