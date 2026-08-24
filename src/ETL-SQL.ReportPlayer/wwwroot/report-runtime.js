@@ -4706,7 +4706,13 @@
         if (state.activePage) navigateToPage(state.activePage);
         applyPresentationState(state);
         if (opts.hash && window.history && window.history.replaceState) {
-            window.history.replaceState(null, '', opts.hash);
+            // A snapshot opened from disk has an opaque origin, where replaceState throws. The hash is
+            // a convenience for sharing a link; failing to write it must not abort the application.
+            try {
+                window.history.replaceState(null, '', opts.hash);
+            } catch (e) {
+                console.debug('State hash not written:', e && e.message);
+            }
         }
     }
 
@@ -4789,6 +4795,43 @@
     // Offline snapshots set window.__ETLSNAP__; overridden by the snapshot bootstrap when present.
     function isOfflineSnapshot() {
         return !!(window.__ETLSNAP__ || (typeof window.__OFFLINE__ !== 'undefined' && window.__OFFLINE__));
+    }
+
+    /**
+     * Applies a bookmark's parameter values inside an offline snapshot.
+     *
+     * A snapshot has no server to re-query, and its rows are frozen at capture time, so the figures
+     * cannot move. What can and must replay is everything the author bookmarked that is not data: the
+     * parameter values themselves (so the slicers show the state the bookmark describes), the active
+     * page, and the VISIBLE/COLLAPSED presentation state — all of which the manifest already carries,
+     * because ManifestBuilder resolves each bookmark's typed envelope at build time.
+     *
+     * The reader is told once, and only once per application, that the figures belong to the snapshot;
+     * silently showing bookmarked slicer positions over unchanged numbers would be the more misleading
+     * outcome.
+     *
+     * Returns true when the state was applied, so the caller can commit the page/presentation half.
+     */
+    async function applyParametersOffline(batch) {
+        if (!_lastManifest) return false;
+        const entries = Object.entries(batch || {});
+        if (entries.length === 0) return true;
+
+        _lastManifest.parameters = _lastManifest.parameters || {};
+        for (const [name, value] of entries) {
+            _lastManifest.parameters[name] = value;
+            parameters[name] = value;
+        }
+
+        // Re-render from the snapshot in memory so the controls reflect the bookmarked values.
+        renderManifest(_lastManifest);
+
+        if (feedback) {
+            feedback.notify(
+                'Applied the bookmark’s filters. Figures come from the saved snapshot and do not change offline.',
+                { title: 'Offline snapshot', tone: 'info' });
+        }
+        return true;
     }
 
     function currentReportId() {
@@ -5549,6 +5592,6 @@
     // Test escape hatch: exposes pure functions for automated testing.
     // Harmless in production (just sets a window property that nothing reads).
     if (typeof window !== 'undefined') {
-        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash };
+        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, isOfflineSnapshot };
     }
 })();

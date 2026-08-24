@@ -65,6 +65,11 @@ function makeDOM(extraSetup?: (win: any) => void): any {
     // Prevent fetch from being called (not available in jsdom by default).
     win.fetch = () => Promise.reject(new Error('fetch not available in tests'));
 
+    // jsdom has no `CSS` global, so CSS.escape — which the runtime uses to build attribute
+    // selectors — throws a ReferenceError that real browsers never see. Shim it so tests exercise
+    // the same code path the browser does rather than an accidental error branch.
+    if (!win.CSS) { win.CSS = { escape: (value: string) => String(value).replace(/["\\]/g, (m: string) => '\\' + m) }; }
+
     if (extraSetup) { extraSetup(win); }
 
     // Execute the script; __reportRuntime__ is attached to win.
@@ -332,5 +337,90 @@ describe('parseStateHash()', () => {
         expect(parse('')).toEqual({ bookmark: null, view: null });
         // An explicit bookmark outranks a view in the same hash.
         expect(parse('#bookmark=Overview&view=42').view).toBeNull();
+    });
+});
+
+// ── Offline snapshot bookmark replay ──────────────────────────────────────────
+
+describe('offline snapshot bookmark replay', () => {
+    function offlineWindow() {
+        return makeDOM(w => {
+            w.__IS_WEB__ = true;
+            // The offline contract: a snapshot bootstrap sets __ETLSNAP__ and pre-embeds the manifest.
+            w.__ETLSNAP__ = { capturedAt: '2026-08-23T00:00:00Z' };
+            w.__MANIFEST__ = {
+                title: 'Snapshot Report',
+                visuals: [],
+                pages: [
+                    { name: 'Summary', visuals: [] },
+                    { name: 'Detail', visuals: [] },
+                ],
+                buttons: [],
+                navigations: [],
+                parameters: { '@Region': 'North' },
+                bookmarks: [
+                    {
+                        name: 'WestQ4',
+                        title: 'West, Q4',
+                        state: {
+                            activePage: 'Detail',
+                            parameters: { '@Region': 'West', '@Limit': 25 },
+                            collapsed: {},
+                            visible: {},
+                        },
+                    },
+                ],
+            };
+            // Any network call at all is a failure: a snapshot on disk has no server.
+            w.fetch = () => Promise.reject(new Error('offline snapshot must not call the network'));
+        });
+    }
+
+    it('applies a bookmark from the manifest without touching the network', async () => {
+        const win = offlineWindow();
+        win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(win.__reportRuntime__.isOfflineSnapshot()).toBe(true);
+
+        const applied = await win.__reportRuntime__.applyBookmark('WestQ4');
+        expect(applied).toBe(true);
+
+        // The bookmarked parameter values replay onto the snapshot in memory, so the slicers show the
+        // state the author captured even though the frozen rows cannot change.
+        expect(win.__CURRENT_MANIFEST__.parameters['@Region']).toBe('West');
+        expect(win.__CURRENT_MANIFEST__.parameters['@Limit']).toBe('25');
+
+        // Identifier only — never the values — in the URL.
+        expect(win.location.hash).toBe('#bookmark=WestQ4');
+    });
+
+    it('reports an unknown bookmark rather than half-applying it', async () => {
+        const win = offlineWindow();
+        win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(await win.__reportRuntime__.applyBookmark('DoesNotExist')).toBe(false);
+        expect(win.__CURRENT_MANIFEST__.parameters['@Region']).toBe('North');
+        expect(win.location.hash).toBe('');
+    });
+
+    it('offers author bookmarks in the picker but no saved-view actions offline', async () => {
+        const win = offlineWindow();
+        const picker = win.__reportRuntime__.buildViewsPicker({
+            visuals: [], pages: [], buttons: [], navigations: [],
+            bookmarks: [{ name: 'WestQ4', title: 'West, Q4' }],
+        });
+        expect(picker).not.toBeNull();
+
+        picker.querySelector('button').click();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const labels = Array.from(picker.querySelectorAll('[role="group"]'))
+            .map((g: any) => g.getAttribute('aria-label'));
+        expect(labels).toContain('Report bookmarks');
+        // Saved views are a Portal feature; offering save-as in a file on disk would be a dead control.
+        expect(labels).not.toContain('My saved views');
+        expect(labels).not.toContain('Saved view actions');
     });
 });
