@@ -336,39 +336,65 @@ carry the revision they were captured against, and warn on drift without blockin
 carry only an identifier. The one deliberate boundary is recorded above: the offline snapshot *host*
 does not exist yet, so offline replay is implemented and tested at the runtime contract.)*
 
-### Phase 10 — Constrained HTML/SVG Presentation Templates
+### Phase 11 — Rich Tooltip/Popover Hardening and Cross-Surface Parity
 
-- [ ] Revise `MicroChartsAndHtmlEmbedding.md` to separate native micro-charts from arbitrary template
-  rendering and record the accepted Zero-Trust boundary.
-- [ ] Threat-model HTML, CSS, SVG, URLs, actions, data binding, template expansion, and export/fallback
-  behavior before accepting syntax.
-- [ ] Implement parsed element/attribute/property/URL allowlists, scoped selectors, and node, depth,
-  byte, work, and recursion budgets; script stripping alone is not sufficient.
-- [ ] Deliver static single-row presentation components before bounded repeaters.
-- [ ] Add scoped styling and carefully allowlisted actions only after the static component boundary
-  passes adversarial tests.
-- [ ] Prohibit recursive visual/template expansion; consider non-recursive composition helpers only
-  after deterministic budgets and fallbacks exist.
-- [ ] Add accessibility rules and deterministic browser, export, email, terminal, and plain-text
-  behavior.
+The basic feature already exists: report syntax and manifests support text, inline, and container
+tooltips, and the native SVG browser path can refresh `@hover_value` and render a referenced
+container containing another chart. `samples/10_Kitchen_Sinks/01_BAR.rptsql` is the compatibility
+fixture. This phase completes and hardens that contract; it does not introduce tooltips as a new
+feature.
 
-**Exit gate:** Adversarial sanitizer, CSS isolation, URL, resource-exhaustion, recursion, action,
-accessibility, and cross-surface tests pass with fail-closed behavior.
+#### Contract and static safety
 
-### Phase 11 — Visual Detail Popovers
+- [ ] Record the accepted distinction between a transient, non-interactive tooltip and a persistent,
+  focusable detail popover. Freeze the canonical text, inline `VISUALS`, and referenced-container
+  syntax only after auditing which forms actually work on every supported path.
+- [ ] Either implement the existing inline `TOOLTIP (... VISUALS (...))` contract end to end or reject
+  it with an actionable parser/analysis diagnostic; do not continue emitting a manifest form that
+  browser and static renderers silently ignore.
+- [ ] Resolve tooltip targets and their visual/container dependencies statically. Add missing-target,
+  rename, cycle, nested-tooltip, maximum-depth, node, byte, query/refresh-work, and aggregate-report
+  budgets. A detail surface must not recursively embed a dashboard or open another detail surface.
+- [ ] Define the row-context contract explicitly. Only allow declared, non-secret mapping values to
+  flow into the detail refresh; never expose secret values through parameters, manifests, logs,
+  accessibility text, URLs, snapshots, or exports.
 
-- [ ] Accept a design for formatted detail and bounded semantic micro-charts with click, focus, hover,
-  touch, keyboard, terminal, export, email, and assistive-technology behavior.
-- [ ] Deliver formatted text detail first, then click/focus popovers, then one bounded micro-chart.
-- [ ] Add viewport flip/shift positioning with deterministic fixtures.
-- [ ] Enforce dependency-cycle, nesting, data-disclosure, node, byte, and render-work budgets.
-- [ ] Start with visual targets; keep arbitrary container targets and recursively embedded dashboards
-  out of the initial implementation.
-- [ ] Measure interaction latency on a named report fixture instead of encoding an unverified
-  sub-millisecond claim.
+#### Browser interaction and accessibility
 
-**Exit gate:** Keyboard, touch, accessibility, cycle, payload, positioning, disclosure, and measured
-performance tests pass for the deliberately constrained feature set.
+- [ ] Use one shared detail-surface implementation across supported native and browser chart adapters.
+  Preserve hover for fine pointers; add keyboard focus and click/tap activation, with a pinned
+  popover when content is interactive or cannot safely disappear on pointer leave.
+- [ ] Implement deterministic dismissal and focus behavior: `Escape`, outside click, trigger
+  reactivation, focus return, stale-refresh cancellation, and removal when the source visual is
+  refreshed or unmounted. Do not create keyboard traps or hover-only content.
+- [ ] Use the correct accessibility model: `role="tooltip"` plus `aria-describedby` for transient
+  text, and an appropriately labelled focusable popover/dialog pattern for interactive detail.
+  Announce loading, error, and refreshed states without repeatedly flooding live regions.
+- [ ] Replace cursor clamping with a tested anchor-based flip/shift placement contract covering all
+  viewport edges, scrolling, zoom, narrow screens, right-to-left layout, and resized content.
+
+#### Portable behavior and evidence
+
+- [ ] Define deterministic PDF, print, Markdown/email, terminal, plain-text, screen-reader, and
+  offline-snapshot behavior. Static surfaces may use a concise semantic summary instead of expanded
+  interactive content, but must never silently imply that hover is available.
+- [ ] Add parser/formatter, analysis/LSP, manifest/versioning, interaction-refresh, runtime DOM,
+  keyboard, touch, accessibility, positioning, cycle, disclosure, budget, stale-request, export, and
+  cross-host tests. Exercise the real kitchen-sink nested-chart fixture, not only string-presence
+  assertions against `report-runtime.js`.
+- [ ] Measure open, refresh, reposition, and dismissal latency on the named kitchen-sink fixture at a
+  documented data size. Record the baseline and regression tolerance rather than claiming an
+  unmeasured sub-millisecond target.
+- [ ] Update the focused help, Report-SQL guide, syntax index, snippets, LSP, and Report Builder to
+  match only the accepted and tested forms. Modify shared browser assets only under
+  `src/ETL-SQL.ReportRuntime/Resources/Shared/`, then synchronize and verify generated copies.
+
+**Exit gate:** The existing chart-in-tooltip sample works by hover, keyboard, click, and touch on the
+supported browser renderers; transient and interactive detail use correct accessibility and focus
+contracts; invalid references, cycles, nesting, disclosure, payload, and work limits fail closed;
+positioning and stale refreshes are deterministic; static surfaces expose the documented semantic
+fallback; measured performance stays within its recorded tolerance; and targeted, browser, export,
+sample, asset-drift, and pre-release gates pass.
 
 ### Phase 12 — Declarative Encoding, Geometry, and Layout Refinements
 

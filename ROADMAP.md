@@ -251,31 +251,34 @@ warnings, and identifier-only URLs. One boundary is deliberate and recorded in `
 bookmark replay is implemented and tested against the runtime's `__ETLSNAP__` contract, but no
 self-contained offline HTML snapshot *host* exists yet — that is a separate feature.
 
-### Reporting & Presentation — Constrained HTML/SVG Templates
+### Reporting & Presentation — Constrained Data-Bound Presentation Components
 
-**Status:** Exploring  
-**Horizon:** Later  
-**Authoritative design:** [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md), to be revised before implementation
+**Status:** On hold — problem discovery required
 
-Authors may eventually need bespoke KPI cards, badges, narrative panels, repeaters, and status
-components beyond the native analytical grammar.
+**Horizon:** Unscheduled
 
-**Why now:** This is useful after native GoG and micro-charts cover analytical graphics; it is not a
-foundation for chart authoring.
+**Authoritative design:** None accepted. `MicroChartsAndHtmlEmbedding.md` contains an earlier template
+proposal alongside the delivered native micro-chart design and must not be treated as an
+implementation contract for this item.
 
-**Boundaries:** GoG remains the custom analytical-graphics escape hatch. Templates require parsed
-HTML/CSS/SVG, scoped selectors, element/attribute/property/URL allowlists, node/depth/byte/recursion
-budgets, accessibility rules, and deterministic non-browser fallbacks. Script stripping alone is not
-a sufficient security boundary.
+Native KPI-card sparklines, table-cell micro-charts, built-in report visuals, containers, and the
+`CUSTOM` Grammar-of-Graphics path already cover the known charting requirements. It is not yet clear
+that authors need a separate data-bound component/template language.
 
-**Dependencies:** A dedicated Zero-Trust threat model, native micro-charts, sanitizer policy, and
-portable fallback contract.
+**Problem to validate:** Determine whether real reporting workflows require compound operational
+tiles, narrative metric panels, status components, or row repeaters that cannot be expressed cleanly
+with the existing `CARD`, `TABLE`, `TEXT`, `IMAGE`, page/container, and `CUSTOM` visual capabilities.
+Research should start with concrete authoring examples and identify why extending a native visual or
+container would not solve each case.
 
-**Delivery slices:** Static single-row components; bounded repeaters; scoped styling; carefully
-allowlisted actions; only then consider composition helpers that cannot recurse.
+**Not the purpose:** This is not required to embed charts in KPI cards, and it is not an arbitrary
+HTML, SVG, JavaScript, Canvas, D3, or alternate custom-chart surface.
 
-**Acceptance evidence:** Adversarial sanitizer tests, resource-budget tests, CSS-boundary tests,
-accessibility checks, and deterministic browser/export/email/terminal behavior.
+**Resume gate:** Resume design only when documented user scenarios demonstrate a recurring product
+gap, the smallest native alternative has been evaluated, and the value justifies the substantial
+Zero-Trust, accessibility, export, email, terminal, and cross-host compatibility surface. If resumed,
+begin with a dedicated threat model and proposed ADR; do not infer accepted syntax from the earlier
+template examples.
 
 ### Reporting & Interaction — Visual Detail Popovers
 
