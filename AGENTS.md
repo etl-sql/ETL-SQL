@@ -1,6 +1,27 @@
 # ETL-SQL: AI Agent Instruction Manual
 
-Welcome, Agent. You are assisting in the development and operation of **ETL-SQL**, a unique hybrid engine that executes SQL-like syntax against diverse data sources (SQL, NoSQL, FlatFiles) with an emphasis on portability and "Zero-Trust" security.
+Welcome, Agent. You are assisting in the development and operation of **ETL-SQL**, a hybrid engine that executes SQL-like syntax against diverse data sources (SQL, NoSQL, FlatFiles) with an emphasis on portability and "Zero-Trust" security.
+
+**This file is the single standard for every agent working in this repo** — Claude, Codex, and Gemini all follow it. Harness-specific notes live in the sibling file for that tool (e.g. `CLAUDE.md`) and must never restate or contradict anything here.
+
+| Section | Use it for |
+| :--- | :--- |
+| [1](#1-the-mental-model--read-this-first)–[5](#5-scripting-patterns--how-to-think-about-a-request) | Writing `.etlsql` / `.rptsql` scripts |
+| [6](#6-documentation-library-map)–[7](#7-documentation-stewardship-rules) | Finding and writing documentation |
+| [8](#8-engine-coding-principles-when-modifying-c-source)–[10](#10-engine-architecture-patterns) | Modifying C# source |
+| [11](#11-third-party-dependency-policy)–[19](#19-cross-platform-line-endings--pre-push-validation) | Dependencies, assets, releases, and gates |
+
+## 0. Writing Style
+
+Applies to chat responses, commit messages, docs, and code comments.
+
+- Casual, direct, peer-to-peer tone. Short sentences.
+- Focus on utility. Do not over-explain basics or state the obvious.
+- No final summary or concluding paragraph unless asked for one.
+- No corporate buzzwords: "leverage", "seamless", "robust", "delve", "testament", "beacon", "foster".
+- No structural clichés: "harnessing the power of", "in today's digital landscape", "at the intersection of".
+- Avoid the "X rather than Y" closing sentence structure.
+- User-facing docs refer to **release versions**, never internal phase or slice names (those belong in `TODO.md`, `ROADMAP.md`, and design docs).
 
 ---
 
@@ -80,7 +101,7 @@ Key syntax facts:
 
 ### 2.1 Report-SQL (`.rptsql`) Key Facts
 
-`.rptsql` files are standard ETL-SQL scripts with additional statement types. Use `Report_SQL_Guide.md` as the full reference. Critical patterns to get right:
+`.rptsql` files are standard ETL-SQL scripts with additional statement types. Use the [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) as the full reference. Critical patterns to get right:
 
 - **File structure**: normal ETL-SQL data prep statements first, then `CREATE VISUAL`, `CREATE PAGE`, `CREATE DATASET`, `CREATE CONTAINER`, `CREATE NAVIGATION` at the end
 - **Report metadata**: `SET REPORT TITLE = '...'` and `SET REPORT DESCRIPTION = '...'` (optional, appear before visuals)
@@ -107,7 +128,7 @@ Key syntax facts:
 
 ---
 
-## 2.2 Enterprise Operations Key Facts
+### 2.2 Enterprise Operations Key Facts
 
 The platform now includes shipped enterprise operations features. When generating scripts, editing server code, or writing docs, do not assume ETL-SQL is single-node or SQLite-only.
 
@@ -260,12 +281,20 @@ Use this map to find the right document for any task.
 ### Contributing Engine Code
 | Need | Document |
 | :--- | :--- |
-| How connectors work internally | **[Architecture/Connectors.md](./Docs/Architecture/Connectors.md)** |
-| Engine internals (parser, evaluator, AST) | **[Architecture/Engine.md](./Docs/Architecture/Engine.md)** |
-| Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](./Docs/Architecture/Presentation.md)** |
-| Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](./Docs/Architecture/Orchestrator.md)** |
-| Portal auth, HA topology, API, health checks | **[Architecture/Portal.md](./Docs/Architecture/Portal.md)** |
-| Grammar State Engine model, autocomplete, and doc-testing | **[Architecture/GrammarStateEngine.md](./Docs/Architecture/GrammarStateEngine.md)** |
+| How connectors work internally | **[Architecture/Connectors.md](docs/architecture/Connectors.md)** |
+| Engine internals (parser, evaluator, AST, pushdown) | **[Architecture/Engine.md](docs/architecture/Engine.md)** |
+| Parser/Lexer internals, adding a new statement type | **[Architecture/ParserLexer.md](docs/architecture/ParserLexer.md)** |
+| Variable scoping, procedures, `RUN SCRIPT`, output parameters | **[Architecture/VariableScoping.md](docs/architecture/VariableScoping.md)** |
+| Expression evaluation, type system, NULL propagation | **[Architecture/ExpressionEvaluation.md](docs/architecture/ExpressionEvaluation.md)** |
+| Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](docs/architecture/Presentation.md)** |
+| TUI editor internals (buffer, highlighting, autocomplete) | **[Architecture/TuiEditor.md](docs/architecture/TuiEditor.md)** |
+| Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](docs/architecture/Orchestrator.md)** |
+| Portal auth, data model, HA topology, API, health checks | **[Architecture/Portal.md](docs/architecture/Portal.md)** |
+| Portal UI — DAG visualization, designer, lite editor, execution model | **[Architecture/PortalUI.md](docs/architecture/PortalUI.md)** |
+| Report-SQL runtime and semantic contracts | **[Architecture/Reporting.md](docs/architecture/Reporting.md)**, **[ReportingSemanticContracts.md](docs/architecture/ReportingSemanticContracts.md)** |
+| LSP server (completions, diagnostics, hover, schema autocomplete) | **[Architecture/LanguageServer.md](docs/architecture/LanguageServer.md)** |
+| VS Code extension (commands, REPL, results panel, report preview) | **[Architecture/VSCodeExtension.md](docs/architecture/VSCodeExtension.md)** |
+| Grammar State Engine model, autocomplete, and doc-testing | **[Architecture/GrammarStateEngine.md](docs/architecture/GrammarStateEngine.md)** |
 | C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](./docs/architecture/standards/Engine_Coding_Standards.md)** |
 | Rules for writing a new connector | **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** |
 | Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](./docs/architecture/standards/Language_Syntax_Standards.md)** |
@@ -276,6 +305,7 @@ Use this map to find the right document for any task.
 | Rules for touching the presentation layer | **[Standards/Presentation_Standards.md](./docs/architecture/standards/Presentation_Standards.md)** |
 | Rules for writing help docs & snippets | **[Standards/Help_and_Snippet_Standards.md](./docs/architecture/standards/Help_and_Snippet_Standards.md)** |
 | Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](./docs/architecture/roadmaps/Engine_Upgrade_Strategy.md)** |
+| Cutting a release (checklist, version bump, validation gate, tag/publish) | **[release-checklist.md](./docs/releases/release-checklist.md)** |
 
 ---
 
@@ -323,7 +353,10 @@ These rules apply when you are editing the ETL-SQL engine source code — **not*
 - **Logging**: `Logger.Instance` is **obsolete**. Always use the `ILogger` provided via dependency injection or pulled from `IExecutionContext`. Do not use `Console.WriteLine`.
 - **AST Nodes**: Prefer `record` types for all AST node classes to enforce immutability. Do not use mutable `class` declarations for nodes.
 - **Async**: All I/O calls must use the `Async` overloads with a `CancellationToken`. No `.Result`, `.Wait()`, or `GetAwaiter().GetResult()` in connector or handler code.
-- **Exceptions**: Connector-level provider exceptions (`SqlException`, `NpgsqlException`, etc.) must be caught and re-thrown as `ExecutionException` with a sanitized message. Never let raw provider exceptions escape the connector boundary.
+- **Exceptions**: Connector-level provider exceptions (`SqlException`, `NpgsqlException`, etc.) must be caught and re-thrown as `ExecutionException` with a sanitized message. Never let raw provider exceptions escape the connector boundary. Reserve exceptions for exceptional conditions — do not use them for ordinary control flow. The codebase has no `Result<T>`/`ErrorOr` library and adding one falls under [§11](#11-third-party-dependency-policy).
+- **C# style**: File-scoped namespaces and primary constructors. SOLID and DRY. Constructor injection only — no service-locator lookups. 4-space indent, EditorConfig-governed; `dotnet format` runs from the pre-commit hook.
+- **Web surfaces**: Prefer Minimal API `Map*` methods over controllers for new endpoints.
+- **Tests**: xUnit with FluentAssertions. `INT`/`TINYINT`/`BIGINT` all store as `decimal` at runtime — assert with an `m` suffix or `Convert.ToDecimal`, never `int`/`long`/`byte` literals.
 
 ### 8.1 Connector-Specific Rules
 
@@ -345,11 +378,131 @@ CREATE CONNECTION sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_w
 CREATE CONNECTION sales AS MSSQL WITH(SERVER='sql01', DATABASE='SalesDB');
 ```
 
-For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](./Docs/Architecture/Connectors.md)**.
+For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](docs/architecture/Connectors.md)**.
 
 ---
 
-## 9. Third-Party Dependency Policy
+## 9. Build, Test & Run
+
+Solution file: `ETL-SQL.slnx`. Composition root: `DependencyInjectionSetup.BuildServiceProvider()` in `src/ETL-SQL.App/App/DependencyInjectionSetup.cs` — the only one, including for tests. Configuration lives in `src/appsettings.json` (engine tuning, security boundaries, connector defaults, logging).
+
+```bash
+# Build
+dotnet build ETL-SQL.slnx
+
+# Default lane — excludes Docker integration, long-running perf, the SLT corpus,
+# the randomized fuzzer (non-deterministic, own lane), and the Playwright browser lane
+dotnet test ETL-SQL.slnx --filter "Category!=Integration&Category!=Performance&Category!=SLT&Category!=Fuzz&Category!=Browser"
+
+# Single class / single method
+dotnet test ETL-SQL.slnx --filter "FullyQualifiedName=ETL_SQL.Tests.AliasTests"
+dotnet test ETL-SQL.slnx --filter "FullyQualifiedName=ETL_SQL.Tests.AliasTests.TestFileAlias"
+
+# Coverage (requires the dotnet-reportgenerator local tool)
+dotnet test ETL-SQL.slnx --collect:"XPlat Code Coverage" --results-directory ./coverage
+dotnet reportgenerator -reports:"./coverage/**/coverage.cobertura.xml" -targetdir:"./coverage/report" -reporttypes:"Html;TextSummary"
+```
+
+Never run the solution-wide suite while iterating — scope to one test project plus a filter.
+
+**Opt-in lanes** (excluded from the default run):
+
+| Lane | Command | Why it is separate |
+| :--- | :--- | :--- |
+| Portal | `--filter "Category=Portal"` | `WebApplicationFactory`, no Docker — also included in the default run |
+| Browser | `pwsh -File scripts/test-lane.ps1 -Lane browser` | Real Chromium against a Kestrel-hosted Portal; downloads ~113 MB on first run. Set `ETLSQL_PLAYWRIGHT_SKIP_INSTALL=1` when cached |
+| Integration | `--filter "Category=Integration"` | Needs Docker |
+| Performance | `--filter "Category=Performance"` | Crash risk — `TestLargeDatasetMemory` uses 1M rows |
+| SLT corpus | `--filter "Category=SLT"` | OOM risk on large files; run manually to pinpoint failures |
+| Fuzz | `--filter "Category=Fuzz"` | Grammar-driven generation + NoREC oracle. Deterministic: `ETLSQL_FUZZ_SEED` reproduces a failure, `ETLSQL_FUZZ_ITERATIONS` scales it (default 500) |
+
+**Sandbox lifecycle evidence** — build the worker image first; the lanes skip with a precise diagnostic when the image or runtime is missing, and never silently downgrade.
+
+```bash
+pwsh -File scripts/Test-SandboxWorkerImage.ps1 -Tag etlsql-sandbox-worker-test:local
+
+# Standard tier (ordinary runc) — NOT a hostile-tenant boundary result
+dotnet test ETL-SQL.slnx --filter "FullyQualifiedName~DockerStandardSandboxLifecycleTests"
+
+# Hardened tier (gVisor/Kata, digest-pinned image) — the citable Hardened evidence.
+# Linux host only; prepare once, then export the pinned image reference:
+#   sudo bash scripts/enable-hardened-sandbox-lane.sh
+#   export ETLSQL_SANDBOX_WORKER_DIGEST_IMAGE=$(cat /tmp/etlsql-pinned-worker-image)
+dotnet test ETL-SQL.slnx --filter "FullyQualifiedName~DockerHardenedSandboxLifecycleTests"
+```
+
+**CI gate:** 70% minimum line coverage (`scripts/Test-CoverageGate.ps1`). Tests run single-threaded — each test project's `xunit.runner.json` sets `parallelizeAssembly` and `parallelizeTestCollections` to `false`.
+
+### Running the application
+
+```bash
+dotnet run --project src/ETL-SQL.App -- run MyScript.etlsql        # headless
+dotnet run --project src/ETL-SQL.App -- ui edit MyScript.etlsql    # TUI editor
+```
+
+### Environment assumptions
+
+C# 13 / .NET 10, ASP.NET Core (Minimal APIs preferred for new services), EF Core over SQLite and PostgreSQL. Development is on Windows 11 with PowerShell 7+; give local commands in `dotnet` CLI + PowerShell form with backslash paths. Production runs cross-platform, so nothing in the engine may assume Windows. Tests use xUnit + FluentAssertions. Secrets go in user-secrets or `.env` — never hardcoded.
+
+---
+
+## 10. Engine Architecture Patterns
+
+### Dependency tiers
+
+Strictly layered — a project may reference only its own tier or lower. This is **enforced**, not aspirational: `ArchitectureBoundaryTests` asserts the live `src/*.csproj` reference graph against the table below. Existing upward edges are pinned in allow-lists tied to open `TODO.md` items; the lists may only shrink, and a new upward edge fails CI immediately. Update that test in the same change if you move a project between tiers.
+
+| Tier | Project(s) | Role |
+| :--- | :--- | :--- |
+| 0 | `Core` | Parser, AST, interfaces (`IExecutionContext`, etc.), shared language contracts |
+| 1 | `Analysis`, `Engine`, `Reporting.Contracts` | Lint/explain/diagnostics; evaluator, statement handlers, expression evaluator, external engines |
+| 2 | `Reporting`, `ReportBuilder`, `ReportRuntime`, `Portal.Data`, `Connectors.Common` | Report-SQL compilation, report authoring model, browser runtime assets, portal catalog schema. Engine must not consume these |
+| 3 | `Connectors` (+ `.Cloud`, `.Databases`, `.Files`, `.Messaging`, `.Remote`), `Infrastructure.Docker`, `.Logging`, `.Sqlite`, `Orchestrator`, `ReportHosting`, `Portal.Migrations.Postgres`, `Gateway` | Provider I/O, container/logging/local-state infrastructure, job scheduler, execution history, leases/fencing, reusable report session hosting, outbound egress |
+| 4 | `LanguageServer`, `Orchestrator.Service`, `ReportPlayer`, `WorkstationEditor` | LSP; Windows Service / systemd daemon wrapping the Orchestrator; standalone report host |
+| 5 | `Portal` | Dashboard HTTP server, catalog and admin API |
+| 6 | `App`, `TUI` | CLI entry point (System.CommandLine), Spectre.Console terminal IDE |
+| 7 | `ReportBuilder.CLI`, `TenantValidator` | Top-level tools |
+
+Each per-domain connector group references only `Core` and `Connectors.Common` — never `Engine`.
+
+### Parser → AST → Evaluator
+
+1. `Lexer` tokenizes the script into `TokenType` tokens.
+2. `StatementParser` (recursive descent, split across partial classes by domain) converts tokens to an AST.
+3. `Evaluator.Evaluate(Script)` walks the AST, dispatching each `Statement` to a registered `IStatementHandler` via a `Dictionary<Type, IStatementHandler>`.
+
+AST nodes are `record` types inheriting from `AstNode` (which tracks source location). `Script` contains `List<Statement>`.
+
+### Adding a statement
+
+Every handler implements `IStatementHandler` and declares `Type SupportedStatementType`; handlers are registered via DI and auto-discovered into the dispatch table. A new statement needs all five:
+
+1. A `record` AST node in `ETL-SQL.Core/Ast.cs`
+2. A `TokenType.cs` entry (if a new keyword is involved)
+3. A parser case in the matching `StatementParser.*.cs` partial
+4. An `IStatementHandler` implementation in `ETL-SQL.Engine/Handlers/`
+5. DI registration in `src/ETL-SQL.App/App/DependencyInjectionSetup.cs`
+
+Naming rules for the record and handler are in [§17](#17-syntax-consistency-rules).
+
+### Evaluator as execution context
+
+`Evaluator` implements ~8 context interfaces at once (`IExecutionContext`, `IVariableContext`, `IQueryContext`, `ILineageContext`, `ISqlCompilerContext`, `ITransactionContext`, `IDockerContext`, `ILoggingContext`). Handlers receive `IExecutionContext` and downcast only to the interface they actually need.
+
+### External engines (disk-spilling)
+
+Four engines take over when row counts exceed the thresholds in `appsettings.json → Engine` (default 100k rows per operation, tunable):
+
+- `ExternalAggregateEngine` — GROUP BY with disk spill
+- `ExternalJoinEngine` — hash-based JOIN with disk spill
+- `ExternalWindowEngine` — PARTITION BY streaming
+- `ExternalSortEngine` — chunked sort
+
+Spill behavior affects determinism — see [§18](#18-triage--defect-principles--a-wrong-answer-outranks-a-crash) before changing it.
+
+---
+
+## 11. Third-Party Dependency Policy
 
 Use only free and open-source software for new third-party libraries, tools, and bundled assets unless the user explicitly approves an exception.
 
@@ -359,7 +512,7 @@ Use only free and open-source software for new third-party libraries, tools, and
 - Preserve license and copyright banners in bundled JavaScript, CSS, fonts, images, and generated browser assets.
 - Existing non-FOSS or commercially conditioned dependencies are grandfathered only until replaced; do not expand their use without explicit approval.
 
-### 9.1 Before Adding Any NuGet Package
+### 11.1 Before Adding Any NuGet Package
 
 1. **Search first**: Check `Directory.Packages.props` — if a package already handles the need, use it. Do not add a second library for the same domain.
 2. **Try BCL/framework first**: If `System.*` or `Microsoft.*` provides the capability, use it. External packages are for capabilities the framework doesn't cover.
@@ -387,7 +540,7 @@ Use only free and open-source software for new third-party libraries, tools, and
 
 ---
 
-## 10. Shared Report Runtime Assets
+## 12. Shared Report Runtime Assets
 
 The report browser runtime has exactly one source of truth:
 
@@ -416,7 +569,7 @@ Before changing a browser-side report/portal component, prototype and visually v
 
 ---
 
-## 11. Source Boundary Rules for Agents
+## 13. Source Boundary Rules for Agents
 
 Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](./docs/architecture/roadmaps/Source_Boundary_Migration_Plan.md)**.
 
@@ -429,7 +582,7 @@ Before moving source files, projects, report runtime assets, or host-owned behav
 
 ---
 
-## 12. Developer Workflows & Utility Scripts
+## 14. Developer Workflows & Utility Scripts
 
 To assist in local development, compiling, and executing test suites, the repository includes several core scripts under the `scripts/` folder. Both PowerShell (`.ps1` for Windows) and Bash (`.sh` for Linux/macOS) scripts are provided.
 
@@ -442,7 +595,7 @@ For full usage and script details, refer to **[scripts/README.md](./scripts/READ
 - **Smoke Tests:** Runs targeted categories of fast smoke tests (Core, Security, Reporting, Portal).
   - Windows: `.\scripts\test-smoke.ps1 -Lane all`
   - Linux/macOS: `./scripts/test-smoke.sh --lane all`
-- **General Test Lanes:** Gateway script to run specific test suites (fast, engine, portal, integration, perf, full, benchmarks, slt).
+- **General Test Lanes:** Gateway script to run a specific suite — `smoke`, `fast`, `engine`, `portal`, `portal-hosted`, `browser`, `integration`, `perf`, `release`, `full`, `benchmarks`, `slt`, `spill`, `ebnf`, `fuzz-smoke`, `fuzz`.
   - Windows: `.\scripts\test-lane.ps1 -Lane fast`
   - Linux/macOS: `./scripts/test-lane.sh --lane fast`
 - **SQLite Logic Tests (SLT) Corpus:** Runs the SLT verification engine against corpus files, writing output to teed timestamped logs in `slt_results/`.
@@ -452,7 +605,7 @@ For full usage and script details, refer to **[scripts/README.md](./scripts/READ
 
 ---
 
-## 13. Common Mistakes to Avoid
+## 15. Common Mistakes to Avoid
 
 | Mistake | Correct pattern |
 | :--- | :--- |
@@ -470,7 +623,7 @@ For full usage and script details, refer to **[scripts/README.md](./scripts/READ
 
 ---
 
-## 14. Breaking Change Protocol
+## 16. Breaking Change Protocol
 
 A **breaking change** is any modification that could produce different results for identical script input. This includes:
 - **Syntax changes** — keyword renamed, clause made required, operator removed
@@ -494,7 +647,7 @@ For **parser syntax removals**: keep the old form parsing (with a lint warning e
 
 **Do not add behavioral shims** ("run v1 semantics on a v3 engine"). Shims accumulate indefinitely and make the engine unmaintainable. The migration linter is the compatibility layer — build it when a major version ships with breaking changes, not before.
 
-### 14.1 Release, Versioning, and Branching Rules
+### 16.1 Versioning Rules
 
 ETL-SQL strictly follows [Semantic Versioning 2.0.0](https://semver.org/). Agents must respect the following rules:
 
@@ -503,14 +656,29 @@ ETL-SQL strictly follows [Semantic Versioning 2.0.0](https://semver.org/). Agent
   - **Minor versions (`1.x.0`):** New features, connector additions, or enhancements. Must be strictly backwards-compatible; no breaking changes are permitted.
   - **Patch versions (`1.x.y`):** Backward-compatible bug fixes and security hotfixes only.
   - **Major versions (`x.0.0`):** Reserved for breaking changes, syntax removals, and paradigm shifts.
-- **Branch Management for Stable Releases:**
-  - Active development for minor/major versions occurs on the `main` branch.
-  - Upon tagging a stable release (e.g., `v1.0.0`), create a release branch named `release/v1.0` (or `release/v1.x`).
-  - Critical bug fixes and security hotfixes targeting that release must be applied (or cherry-picked) to its corresponding `release/v1.x` branch and released as patch version updates (e.g., `v1.0.1`). These fixes must also be integrated back into the `main` branch.
+
+### 16.2 Branching Model
+
+- **No direct commits to `main` or `dev`.**
+- Active development happens on the **release branch for the version in flight** (e.g. `release/v0.19.0`). Branch features and fixes off that branch, not off `dev` or `main`, and open pull requests back into it.
+- After a stable release is tagged, critical bug fixes and security hotfixes are applied (or cherry-picked) to that version's `release/vX.Y.Z` branch, shipped as a patch, and merged forward.
+- Batch work into a single push. Every push to `main` or a `release/**` branch runs the full ~40-minute CI; back-to-back pushes queue the runners. Cancel superseded runs when the queue backs up.
+- Enable the repo's hooks once per clone so staged C# is formatted and formatting drift never breaks the CI gate: `git config core.hooksPath scripts`. Same command on every platform — no symlink or elevation needed. The hook refuses a partially staged C# file that also has unstaged edits, so unrelated local work is never swept into a commit.
+
+### 16.3 Release Flow
+
+Full procedure: **[release-checklist.md](./docs/releases/release-checklist.md)**. The mechanical sequence:
+
+1. `scripts/Set-Version.ps1 -Version x.y.z` plus a hand-authored `CHANGELOG.md` entry.
+2. `scripts/Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration` — the authoritative gate. Writes `release-validation/latest/state.json`; `-Explain` previews the plan, `-Resume` continues after fixing a failed phase.
+3. `scripts/Master-Release.ps1 -Version x.y.z` — builds the VS Code UI, runs cross-platform packaging via `scripts/publish-release.ps1` (emits `release/`, `sha256sums.txt`, a CycloneDX `sbom.json`, and SLSA provenance), and builds the Windows MSI.
+4. Tag and publish **manually**: push the branch, then `git tag vx.y.z && git push origin vx.y.z`. The tag push triggers `.github/workflows/release.yml`.
+
+`.github/workflows/ci.yml` runs on pushes and PRs to `main` and `release/**` but does **not** cover the Docker integration or SLT lanes — a green CI is not a substitute for `Test-PreRelease`. Confirm CI is green before tagging: a few failures only reproduce there.
 
 ---
 
-## 15. Syntax Consistency Rules
+## 17. Syntax Consistency Rules
 
 These rules apply when **adding new language syntax** (keywords, statements, or connection options) to the engine.
 
@@ -538,7 +706,7 @@ All ETL-SQL keywords must be **UPPERCASE, underscore-separated**: `ENGINE_COMPAT
 
 ---
 
-## 16. Triage & Defect Principles — A Wrong Answer Outranks a Crash
+## 18. Triage & Defect Principles — A Wrong Answer Outranks a Crash
 
 All agents, contributors, and maintainers must strictly adhere to this core engineering rule:
 
@@ -550,7 +718,7 @@ All agents, contributors, and maintainers must strictly adhere to this core engi
 
 ---
 
-## 17. Cross-Platform Line Endings & Pre-Push Validation
+## 19. Cross-Platform Line Endings & Pre-Push Validation
 
 To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions runs:
 

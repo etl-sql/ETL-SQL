@@ -8,7 +8,7 @@ using Xunit;
 namespace ETL_SQL.Tests.Architecture;
 
 /// <summary>
-/// Enforces the documented tier layering (CLAUDE.md / AGENTS.md §8): a project may only reference
+/// Enforces the documented tier layering (AGENTS.md §10): a project may only reference
 /// projects in the same or a lower tier, and specific layers may not take dependencies on packages
 /// that belong to higher layers (presentation, heavy infrastructure). The rules are asserted against
 /// the actual <c>src/*.csproj</c> reference graph.
@@ -24,7 +24,7 @@ public sealed class ArchitectureBoundaryTests
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
-    // Per-project tier. Lower may not reference higher. Assigned per project (not per CLAUDE.md group)
+    // Per-project tier. Lower may not reference higher. Assigned per project (not per AGENTS.md tier group)
     // so intended edges are legal: the report *libraries* (Reporting/ReportBuilder/ReportRuntime) sit
     // just above Engine — Engine must not consume them — while the shells and hosts on top may.
     private static readonly IReadOnlyDictionary<string, int> Tier = new Dictionary<string, int>

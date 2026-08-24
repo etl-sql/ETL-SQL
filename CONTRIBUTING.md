@@ -46,31 +46,36 @@ swept into the commit.
 ### Running the Test Suite
 
 ```bash
-# All tests (unit + integration — Docker required for Testcontainers tests)
-dotnet test
+# The default lane — what CI runs. Excludes Docker integration, long-running perf,
+# the SLT corpus, the randomized fuzzer, and the Playwright browser lane.
+dotnet test ETL-SQL.slnx --filter "Category!=Integration&Category!=Performance&Category!=SLT&Category!=Fuzz&Category!=Browser"
 
-# Unit tests only (no Docker and no browser download required)
-dotnet test --filter "Category!=Integration&Category!=Browser"
-
-# A single test project
+# A single test project — do this while iterating, not the solution-wide suite
 dotnet test tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
 
-# With coverage (requires coverlet)
-dotnet test --collect:"XPlat Code Coverage"
+# With coverage (requires the dotnet-reportgenerator local tool)
+dotnet test ETL-SQL.slnx --collect:"XPlat Code Coverage" --results-directory ./coverage
 ```
+
+The opt-in lanes (Docker integration, performance, SLT, fuzz, browser) and the `scripts/test-lane.ps1`
+gateway are documented in [AGENTS.md §9](AGENTS.md#9-build-test--run). Run
+`.\scripts\Test-PrePush.ps1` before pushing — it checks formatting, asset sync, syntax-index sync, link
+coverage, and fast contract tests in about 30 seconds.
 
 ### Running the Application
 
 ```bash
-# Interactive console IDE
-dotnet run --project src/ETL-SQL.App -- --ui edit samples/sample.etlsql
+# Interactive terminal IDE
+dotnet run --project src/ETL-SQL.App -- ui edit samples/sample.etlsql
 
 # Headless script execution
-dotnet run --project src/ETL-SQL.App -- --run samples/sample.etlsql
+dotnet run --project src/ETL-SQL.App -- run samples/sample.etlsql
 
 # Interactive REPL (no file)
 dotnet run --project src/ETL-SQL.App
 ```
+
+`run` and `ui` are verbs, not flags. `dotnet run --project src/ETL-SQL.App -- --help` lists the rest.
 
 ### Recommended VS Code Extensions
 
@@ -84,49 +89,72 @@ dotnet run --project src/ETL-SQL.App
 ```
 ETL-SQL/
 ├── src/
-│   ├── ETL-SQL.Core/          # Parser, AST, interfaces, linting, crypto, security
+│   ├── ETL-SQL.Core/          # Parser, AST, interfaces, shared language contracts
+│   ├── ETL-SQL.Analysis/      # Lint, explain, diagnostics, grammar state engine
 │   ├── ETL-SQL.Engine/        # Evaluator, statement handlers, query pipeline
-│   ├── ETL-SQL.Connectors/    # All IConnector / IDataSource implementations
+│   ├── ETL-SQL.Connectors*/   # IConnector / IDataSource implementations, split per domain
+│   ├── ETL-SQL.Infrastructure.*/  # Docker, logging, and local SQLite state
 │   ├── ETL-SQL.Orchestrator/  # ExecutionSession, SchedulerService, job history
 │   ├── ETL-SQL.Orchestrator.Service/  # Windows Service / systemd host
-│   ├── ETL-SQL.App/           # Primary CLI + TUI entry point
-│   ├── ETL-SQL.ReportBuilder/ # Report-SQL compiler, DashboardService
-│   ├── ETL-SQL.ReportBuilder.CLI/
-│   ├── ETL-SQL.ReportPlayer/  # ASP.NET report server
+│   ├── ETL-SQL.Gateway/       # Outbound egress gateway
+│   ├── ETL-SQL.LanguageServer/ # LSP implementation
+│   ├── ETL-SQL.App/           # Primary CLI entry point
+│   ├── ETL-SQL.TUI/           # Terminal IDE
+│   ├── ETL-SQL.Reporting*/    # Report-SQL compilation and semantic contracts
+│   ├── ETL-SQL.ReportBuilder*/ # Report authoring model and its CLI
+│   ├── ETL-SQL.ReportRuntime/ # Canonical browser runtime assets (see AGENTS.md §12)
+│   ├── ETL-SQL.ReportHosting/ # Reusable report session hosting
+│   ├── ETL-SQL.ReportPlayer/  # Standalone ASP.NET report server
+│   ├── ETL-SQL.Portal*/       # Dashboard server, catalog/admin API, EF migrations
 │   └── etl-sql-vscode/        # VS Code language extension (TypeScript/Node)
-├── tests/
-│   └── ETL-SQL.Tests/         # xUnit test suite (unit + integration)
+├── tests/                     # xUnit suites, SLT corpus, fixtures, benchmarks
 ├── samples/                   # Sample .etlsql scripts (see docs/guides/patterns/sample-guide.md)
-├── Docs/                      # Full documentation library
-├── AGENTS.md                  # AI assistant instruction manual
+├── docs/                      # Full documentation library
+├── scripts/                   # Build, test-lane, and release automation
+├── tools/ui-sandbox/          # No-build harness for browser-side UI work
+├── AGENTS.md                  # The agent standard — read before contributing
 ├── CHANGELOG.md               # Version history
 ├── CONTRIBUTING.md            # This file
 └── SECURITY.md                # Security policy
 ```
 
-See [Docs/Architecture/Engine.md](Docs/Architecture/Engine.md) for the full project dependency graph and what each project owns.
+Projects are strictly tiered and the layering is enforced by `ArchitectureBoundaryTests` against the
+live `csproj` reference graph. See [AGENTS.md §10](AGENTS.md#10-engine-architecture-patterns) for the
+tier table, and [docs/architecture/Engine.md](docs/architecture/Engine.md) for what each project owns.
 
 ---
 
 ## 3. Branching Model
 
+Canonical rules live in [AGENTS.md §16.2](AGENTS.md#162-branching-model). The short version:
+
 | Branch | Purpose |
 | :--- | :--- |
-| `main` | Stable, releasable at any time. No direct commits. |
-| `dev` | Active development. PRs merge here first. |
-| `release/v<version>` | Version-specific staging (e.g., `release/v0.15.0`). Stage features/fixes before merging to `main`. |
-| `feature/<name>` | New features — branch from active `release/v<version>` (or `dev`). |
-| `fix/<name>` | Bug fixes — branch from active `release/v<version>` (or `main` for hotfixes). |
-| `docs/<name>` | Documentation-only changes — branch from active `release/v<version>` or `dev`. |
+| `main` | Stable and releasable at any time. No direct commits. |
+| `release/v<version>` | The version in flight (e.g. `release/v0.19.0`). Active development happens here; merges to `main` at release time. |
+| `feature/<name>` | New features — branch from the active `release/v<version>`. |
+| `fix/<name>` | Bug fixes — branch from the active `release/v<version>` (or from `main` for a hotfix on a shipped release). |
+| `docs/<name>` | Documentation-only changes — branch from the active `release/v<version>`. |
 
 ```bash
-# Start a new feature targeting a version release (e.g., v0.15.0)
-git checkout release/v0.15.0
+# Start a new feature targeting the version in flight
+git checkout release/v0.19.0
 git pull
 git checkout -b feature/my-feature
 
-# When ready, open a PR targeting release/v0.15.0
+# When ready, open a PR targeting release/v0.19.0
 ```
+
+**Why `main` is protected.** Release tags are cut from `main`, and pushing a `vx.y.z` tag triggers
+`release.yml`, which builds and publishes every platform artifact. `main` is therefore the branch
+releases are published *from*, not just the newest stable code. It carries GitHub branch protection
+requiring pull-request review, signed commits, and seven status checks — including Enterprise
+Certification (Windows and Linux), the MSI in-place upgrade lane, and CodeQL. Several of those only
+fail in CI and do not reproduce locally, so the PR gate is what keeps a red commit off `main` rather
+than merely telling you about it afterwards.
+
+Batch your work into one push. Every push to `main` or `release/**` runs the full ~40-minute CI, so
+back-to-back pushes queue the runners; cancel superseded runs when the queue backs up.
 
 ---
 
@@ -135,8 +163,8 @@ git checkout -b feature/my-feature
 ### Engine Code
 
 Before touching the engine, read:
-- **[Docs/Architecture/Engine.md](Docs/Architecture/Engine.md)** — dispatch loop, `#temp` scoping, pushdown logic
-- **[Docs/Architecture/Connectors.md](Docs/Architecture/Connectors.md)** — connector interface contract and lifecycle
+- **[docs/architecture/Engine.md](docs/architecture/Engine.md)** — dispatch loop, `#temp` scoping, pushdown logic
+- **[docs/architecture/Connectors.md](docs/architecture/Connectors.md)** — connector interface contract and lifecycle
 - **[AGENTS.md](AGENTS.md)** §8 — Engine Coding Principles (async, ILogger, record types)
 
 **Key rules enforced by CI:**
@@ -222,13 +250,13 @@ When your change affects user-facing behavior, update the relevant docs:
 
 | What changed | Update |
 | :--- | :--- |
-| New syntax / keyword | [docs/guides/onboarding/getting-started.md](docs/guides/onboarding/getting-started.md) |
-| New built-in function | [docs/guides/onboarding/getting-started.md](docs/guides/onboarding/getting-started.md) — signature, return type, and copy-pasteable example required |
-| New connector or new `WITH()` option | [docs/administration/platform/README.md](docs/administration/platform/README.md) |
-| New file/email/Docker operation | [docs/administration/platform/README.md](docs/administration/platform/README.md) |
-| New connector implementation | [Docs/Architecture/Connectors.md](Docs/Architecture/Connectors.md) |
+| New syntax / keyword | [docs/reference/statements/](docs/reference/statements/README.md) plus [docs/syntax-index.md](docs/syntax-index.md) |
+| New built-in function | [docs/reference/functions/](docs/reference/functions/README.md) — signature, return type, and copy-pasteable example required |
+| New connector or connector option | [docs/reference/connectors/](docs/reference/connectors/README.md) — include both authentication patterns |
+| New file/email/Docker operation | [docs/reference/file-operations/](docs/reference/file-operations/README.md) |
+| New connector implementation | [docs/architecture/Connectors.md](docs/architecture/Connectors.md) |
 | Security behavior change | [SECURITY.md](SECURITY.md) |
-| Breaking syntax change | [docs/guides/onboarding/migration-guide.md](docs/guides/onboarding/migration-guide.md) |
+| Breaking syntax change | [BREAKING_CHANGES.md](BREAKING_CHANGES.md) and [docs/guides/onboarding/migration-guide.md](docs/guides/onboarding/migration-guide.md) |
 | User-facing code, docs, samples, scripts, or workflow changes | Add a `changelog.d/<feature>.md` fragment; the pre-release gate compiles it into [CHANGELOG.md](CHANGELOG.md) |
 | New release | [CHANGELOG.md](CHANGELOG.md) — use Keep a Changelog format |
 
@@ -289,9 +317,9 @@ Before opening a PR, verify:
 For contributions that introduce or modify language syntax, keywords, or functions:
 
 - [ ] **Parser & Runtime**: Update the execution parser, immutable AST records, and runtime handlers or evaluators together; cover both accepted syntax and rejected or unsupported forms.
-- [ ] **EBNF Reference**: Update the canonical `grammar.ebnf` specification so it describes exactly what the execution parser accepts.
+- [ ] **EBNF Reference**: Update the canonical [`docs/grammar.ebnf`](docs/grammar.ebnf) specification so it describes exactly what the execution parser accepts.
 - [ ] **Documentation, Help & Snippets**: Update the syntax index and relevant guides, `docs/reference/` help pages, and `snippets/` templates, including a minimal working example for every new syntax form.
-- [ ] **Lint & Autocomplete**: Register the new tokens or state transitions in `DefaultGrammar.cs` and update diagnostics so editor guidance agrees with the execution parser.
+- [ ] **Lint & Autocomplete**: Register the new tokens or state transitions in `src/ETL-SQL.Analysis/Linting/Grammar/DefaultGrammar.cs` and update diagnostics so editor guidance agrees with the execution parser.
 - [ ] **Connector Pushdown**: Add connector/dialect translation mappings where pushdown is supported and explicit unsupported-feature behavior where it is not.
 - [ ] **Compatibility**: Check keyword, function-signature, and operator-precedence compatibility across supported dialects and document any intentional breaking change through the breaking-change process.
 - [ ] **Regression Tests**: Add focused parser/runtime tests plus representative SqlLogicTests under `tests/slt_data/` for successful execution, boundary behavior, and rejection paths.

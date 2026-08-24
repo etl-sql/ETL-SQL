@@ -81,7 +81,7 @@ internal static class ReportDesignerRoundTripFixtures
     /// The sources are C# raw string literals, so on a checkout with <c>core.autocrlf=true</c> they
     /// already hold CRLF. Substituting LF for LF would leave every CR in place and the LF case would
     /// assert against a CRLF script — a false red on every Windows checkout. Normalizing to LF first
-    /// makes the requested ending the only one present, per AGENTS.md §17.3.
+    /// makes the requested ending the only one present, per AGENTS.md §19.
     /// </remarks>
     internal static string WithLineEnding(string script, string lineEnding) =>
         script.Replace("\r\n", "\n", StringComparison.Ordinal)

@@ -1,6 +1,6 @@
 # Breaking Changes
 
-This file is the canonical record of every behavioral change that could cause an existing script to produce different results or fail to execute. Maintained by the protocol in [AGENTS.md §14](AGENTS.md).
+This file is the canonical record of every behavioral change that could cause an existing script to produce different results or fail to execute. Maintained by the protocol in [AGENTS.md §16](AGENTS.md#16-breaking-change-protocol).
 
 ## Format
 
