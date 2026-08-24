@@ -50,6 +50,7 @@ projects. License values are taken from local package metadata when available.
 | :--- | :--- | :--- |
 | Apache.Arrow | Apache-2.0 or package license file | Columnar data support. |
 | Apache.Avro | Apache-2.0 or package license file | Avro connector support. |
+| AWSSDK.S3 | Apache-2.0 | Amazon S3 connector and object-native artifact storage support. |
 | Azure.Storage.Blobs | MIT | Azure Blob Storage connector support. |
 | Cronos | MIT | Cron expression parsing for scheduling/orchestration. |
 | Docker.DotNet | MIT or package license file | Docker integration. |

@@ -16,8 +16,19 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | `Portal:Database:ConnectionString` | string | `""` | Connection details when `Postgres` provider is specified. |
 | `Portal:DatabasePath` | string | `./portal.db` | Local SQLite database path. Used when provider is `Sqlite`. |
 | `Portal:TenantId` | string | unset | Server-owned tenant identity for a host-fixed Managed Dedicated Portal. Required for SaaS portability export identity. |
-| `Portal:Storage:Provider` | string | `Local` | Shared file system provider: `Local` or `Smb` (UNC path for HA). |
+| `Portal:Storage:Provider` | string | `Local` | Artifact provider: `Local`, `Smb`/`Unc`, `S3`, or `AzureBlob`. Object providers require Portal PostgreSQL and a pre-created bucket/container. |
 | `Portal:Storage:KeyRingPath` | string | `null` | Folder storing Data Protection decryption keys. Must be shared across all nodes in HA deployments. |
+| `Portal:Storage:ObjectPrefix` | string | `null` | Optional object-key prefix shared by all Portal nodes. |
+| `Portal:Storage:Bucket` | string | `null` | S3 bucket name. |
+| `Portal:Storage:Region` | string | `us-east-1` | S3 region when `ServiceUrl` is unset. |
+| `Portal:Storage:ServiceUrl` | string | `null` | Optional S3-compatible endpoint. |
+| `Portal:Storage:ForcePathStyle` | boolean | `false` | Use path-style S3 addressing, commonly required by compatible endpoints. |
+| `Portal:Storage:AccessKey` | string | `null` | Optional S3 access key; omit with `SecretKey` to use the AWS credential chain. Supply through protected configuration. |
+| `Portal:Storage:SecretKey` | string | `null` | Optional S3 secret key paired with `AccessKey`. Supply through protected configuration. |
+| `Portal:Storage:AzureConnectionString` | string | `null` | Azure Blob connection string. Supply through protected configuration. |
+| `Portal:Storage:Container` | string | `null` | Azure Blob container name. |
+| `Portal:Storage:StagingRetentionHours` | integer | `24` | Minimum age before non-authoritative staging residue is garbage-collected. Values below 1 are clamped to 1. |
+| `Portal:Storage:ReconciliationIntervalMinutes` | integer | `60` | Interval for content/hash reconciliation and staging collection. Values below 1 are clamped to 1. |
 | `Portal:ScriptRootPath` | string | `./Reports` | Folder containing reports and dashboard scripts (`.rptsql`). |
 | `Portal:SnapshotDirectory` | string | `./Snapshots` | Directory where PDF/CSV dashboard exports are saved. |
 | `Portal:MapRootPath` | string | `./data/maps` | Base folder path storing GeoJSON map files. |

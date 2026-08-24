@@ -283,8 +283,12 @@ For a load-balanced Portal fleet:
 
 - Set `Portal:Database:Provider = Postgres` and the same `Portal:Database:ConnectionString` on every
   Portal node.
-- Set `Portal:Storage:Provider = Smb` or `Unc`, and point `ScriptRootPath`, `SnapshotDirectory`,
-  `DatasetRootPath`, `MapRootPath`, and `Storage.KeyRingPath` at shared UNC paths.
+- Choose shared artifact storage:
+  - For `Portal:Storage:Provider = Smb` or `Unc`, point `ScriptRootPath`, `SnapshotDirectory`,
+    `DatasetRootPath`, `MapRootPath`, and `Storage.KeyRingPath` at shared UNC paths.
+  - For `S3` or `AzureBlob`, configure the pre-created bucket/container and optional prefix. Scripts,
+    snapshots, datasets, and maps use object-native conditional commits; keep `Storage.KeyRingPath`
+    on a shared filesystem because ASP.NET Data Protection requires it.
 - Keep `Portal:Jwt:Secret`, `Portal:Dataset:AtRestKey`, and `Portal:Orchestrator:ApiKey` identical
   across Portal nodes.
 - Configure the load balancer for sticky sessions using `LoadBalancer.SessionAffinityCookieName`

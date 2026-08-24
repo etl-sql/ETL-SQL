@@ -610,6 +610,14 @@ artifact roots to be genuinely shared rather than merely identical: the fencing 
 through the database, and two nodes writing to separate directories are not contending for the same
 epoch at all.
 
+Object stores use a separate capability rather than pretending to satisfy filesystem rename
+semantics. `IObjectStore` exposes opaque versions and conditional object operations;
+`ObjectNativeArtifactStorage` publishes a logical artifact through a unique staging object, an
+immutable SHA-256 object, a database fence claim, and an authoritative conditional commit record.
+Readers follow only the commit record. Copy/delete is never treated as atomic rename. S3 and Azure
+Blob implement the same provider contract and hostile suite. The full protocol and failure model are
+in [Object-Native Artifact Storage Contract](decisions/ObjectNativeArtifactStorage.md).
+
 ---
 
 ## Observability Conventions

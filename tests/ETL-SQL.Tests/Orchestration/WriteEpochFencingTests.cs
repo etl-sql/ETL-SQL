@@ -126,6 +126,24 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task ObjectNativeStorage_UsesDatabaseLockAndMonotonicEpochForSharedMutations()
+        {
+            await _store.InitializeAsync();
+            var objects = new InMemoryObjectStore();
+            var nodeA = new ObjectNativeArtifactStorage(objects, _store, _store);
+            var nodeB = new ObjectNativeArtifactStorage(objects, _store, _store);
+            var adapterA = new ObjectNativeArtifactStorageAdapter(nodeA);
+            var adapterB = new ObjectNativeArtifactStorageAdapter(nodeB);
+
+            await Task.WhenAll(
+                adapterA.WriteAllTextAsync(ArtifactArea.Snapshots, "object.etlsnap", "A"),
+                adapterB.WriteAllTextAsync(ArtifactArea.Snapshots, "object.etlsnap", "B"));
+
+            Assert.Contains(await adapterA.ReadAllTextAsync(ArtifactArea.Snapshots, "object.etlsnap"), new[] { "A", "B" });
+            Assert.Equal(2, await _store.GetWriteEpochAsync("object-artifact", "Snapshots/object.etlsnap"));
+        }
+
+        [Fact]
         public async Task ExplicitStaleToken_CannotDeleteNewerArtifact()
         {
             await _store.InitializeAsync();

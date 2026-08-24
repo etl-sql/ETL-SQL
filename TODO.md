@@ -844,17 +844,17 @@ storage and authority foundations.
 
 ### Platform Phase 1 — Object-Native Artifact Storage Contract
 
-- [ ] Write the provider-neutral object-storage ADR and failure model on top of the existing artifact
+- [x] Write the provider-neutral object-storage ADR and failure model on top of the existing artifact
   storage abstraction.
-- [ ] Define immutable/content-addressed objects, staging keys, conditional writes using ETags or
+- [x] Define immutable/content-addressed objects, staging keys, conditional writes using ETags or
   version IDs, authoritative commit records, database-backed fencing, reconciliation, and abandoned
   staging garbage collection.
-- [ ] Explicitly reject POSIX-style atomic-rename emulation through unreliable copy/delete sequences.
-- [ ] Implement one object-store provider and certify concurrency, stale fences, partial writes, lost
+- [x] Explicitly reject POSIX-style atomic-rename emulation through unreliable copy/delete sequences.
+- [x] Implement one object-store provider and certify concurrency, stale fences, partial writes, lost
   responses, retries, outages, reconciliation, and garbage collection.
-- [ ] Add a second provider only after the first contract suite is provider-neutral; complete all
+- [x] Add a second provider only after the first contract suite is provider-neutral; complete all
   dependency license and inventory work for provider SDKs.
-- [ ] Integrate object storage with shared artifact consumers and large-content portability fixtures.
+- [x] Integrate object storage with shared artifact consumers and large-content portability fixtures.
 
 **Exit gate:** Two providers pass the same hostile contract suite and shared mutation cannot publish
 partial, stale, or unfenced artifact state.

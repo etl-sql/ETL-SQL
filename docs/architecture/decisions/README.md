@@ -22,6 +22,7 @@
 | [HA Topology and Failure Certification](HA_Topology_Failure_Certification.md) | This guide defines the supported Portal and Orchestrator deployment topologies, the readiness |
 | [Host Utilization Time Series & Capacity Reporting — Implementation Plan](HostUtilizationAndCapacityPlanning.md) | - **`NodeCapacityMonitor.Capture()`** (`ETL-SQL.Orchestrator/Scheduling/NodeCapacityMonitor.cs`) |
 | [Native Advanced Chart Authoring](NativeAdvancedChartAuthoring.md) | **Status:** Accepted and implemented for Phase 7 renderer-neutral layers, scales, conditions, coordinates, and facets. |
+| [Object-Native Artifact Storage Contract](ObjectNativeArtifactStorage.md) | **Status:** Accepted and implemented for Platform Phase 1; defines conditional commits, fencing, reconciliation, and S3/Azure provider certification. |
 | [Performance Regression Quality (v0.15.0 Phase 3) — Design](PerformanceRegressionQuality.md) | **Status:** Implemented for v0.15.0 Phase 3. |
 | [Design Strategy: First-Class Web Script Editing in the Portal](PortalEditorStrategy.md) | As ETL-SQL scales into enterprise farms (multiple orchestrators/portals) and SaaS/multi-tenant |
 | [Row-Level Security via Injected Identity — Reference Specification](RowLevelSecurity.md) | Let report authors write row-filtering predicates keyed on **who is running the report** and **what |

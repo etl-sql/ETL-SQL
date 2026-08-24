@@ -171,10 +171,17 @@ if (portalConfig.KeyManagement.Enabled)
 
 // Ensure required directories exist
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!);
-Directory.CreateDirectory(Path.GetFullPath(portalConfig.ScriptRootPath));
-Directory.CreateDirectory(Path.GetFullPath(portalConfig.SnapshotDirectory));
-Directory.CreateDirectory(Path.GetFullPath(portalConfig.MapRootPath));
-Directory.CreateDirectory(Path.GetFullPath(portalConfig.DatasetRootPath));
+var startupStorageProvider = portalConfig.Storage.Provider?.Trim() ?? "Local";
+var startupUsesObjectStorage = startupStorageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase)
+    || startupStorageProvider.Equals("AzureBlob", StringComparison.OrdinalIgnoreCase)
+    || startupStorageProvider.Equals("Azure_Blob", StringComparison.OrdinalIgnoreCase);
+if (!startupUsesObjectStorage)
+{
+    Directory.CreateDirectory(Path.GetFullPath(portalConfig.ScriptRootPath));
+    Directory.CreateDirectory(Path.GetFullPath(portalConfig.SnapshotDirectory));
+    Directory.CreateDirectory(Path.GetFullPath(portalConfig.MapRootPath));
+    Directory.CreateDirectory(Path.GetFullPath(portalConfig.DatasetRootPath));
+}
 
 // Effective key-ring directory (Data Protection key ring + the Keys artifact area). Configurable so a
 // multi-node HA deployment can point every node at the SAME shared location; defaults to the node-local
@@ -183,9 +190,33 @@ var keyRingPath = string.IsNullOrWhiteSpace(portalConfig.Storage.KeyRingPath)
     ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!, ".portal-keys")
     : Path.GetFullPath(portalConfig.Storage.KeyRingPath);
 
-// ── Artifact storage (provider configurable: Local default, SMB/UNC for HA) ──────
-// Maps each artifact area to its configured root; the Keys area is the Data Protection key ring
-// directory beside the portal database. Writes pass through FencedArtifactStorage (P1.8) and then the
+if (startupUsesObjectStorage)
+{
+    builder.Services.AddSingleton<ETL_SQL.Core.Storage.IObjectStore>(sp =>
+    {
+        var cfg = sp.GetRequiredService<PortalConfig>();
+        var provider = cfg.Storage.Provider.Trim();
+        return provider.Equals("S3", StringComparison.OrdinalIgnoreCase)
+            ? ETL_SQL.Connectors.ObjectStorage.ObjectStoreProviderFactory.CreateS3(
+                cfg.Storage.Bucket ?? string.Empty, cfg.Storage.Region, cfg.Storage.ServiceUrl,
+                cfg.Storage.ForcePathStyle, cfg.Storage.AccessKey, cfg.Storage.SecretKey, cfg.Storage.ObjectPrefix)
+            : ETL_SQL.Connectors.ObjectStorage.ObjectStoreProviderFactory.CreateAzureBlob(
+                cfg.Storage.AzureConnectionString ?? string.Empty,
+                cfg.Storage.Container ?? string.Empty,
+                cfg.Storage.ObjectPrefix);
+    });
+    builder.Services.AddSingleton<ETL_SQL.Core.Storage.ObjectNativeArtifactStorage>(sp =>
+        new ETL_SQL.Core.Storage.ObjectNativeArtifactStorage(
+            sp.GetRequiredService<ETL_SQL.Core.Storage.IObjectStore>(),
+            sp.GetRequiredService<ETL_SQL.Core.Data.IWriteEpochStore>(),
+            sp.GetRequiredService<ETL_SQL.Core.Data.IClusterLockStore>()));
+    builder.Services.AddHostedService<ETL_SQL.Portal.Services.ObjectArtifactMaintenanceService>();
+}
+
+// ── Artifact storage (Local/SMB filesystems or S3/Azure object commits) ───────────
+// Filesystem providers map each area to its configured root. Object providers route non-key areas
+// through immutable content + authoritative conditional commits; Keys remains the Data Protection
+// filesystem directory. Writes are database-fenced, and the
 // outer GuardedArtifactStorage enforces SecurityService path-traversal / executable /
 // script-immutability guardrails before any epoch is stamped (P1.6).
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalArtifactStorageBackend>(sp =>
@@ -196,20 +227,40 @@ builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalArtifactStorageBacke
     var keysRoot = string.IsNullOrWhiteSpace(cfg.Storage.KeyRingPath)
         ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(cfg.DatabasePath))!, ".portal-keys")
         : Path.GetFullPath(cfg.Storage.KeyRingPath);
-    ETL_SQL.Core.Storage.IArtifactStorage inner = ETL_SQL.Core.Storage.ArtifactStorageFactory.Create(
-        cfg.Storage.Provider,
-        new Dictionary<ETL_SQL.Core.Storage.ArtifactArea, string>
-        {
-            [ETL_SQL.Core.Storage.ArtifactArea.Scripts] = cfg.ScriptRootPath,
-            [ETL_SQL.Core.Storage.ArtifactArea.Snapshots] = cfg.SnapshotDirectory,
-            [ETL_SQL.Core.Storage.ArtifactArea.Maps] = cfg.MapRootPath,
-            [ETL_SQL.Core.Storage.ArtifactArea.Datasets] = cfg.DatasetRootPath,
-            [ETL_SQL.Core.Storage.ArtifactArea.Keys] = keysRoot,
-        });
     var epochs = sp.GetRequiredService<ETL_SQL.Core.Data.IWriteEpochStore>();
     var locks = sp.GetRequiredService<ETL_SQL.Core.Data.IClusterLockStore>();
-    var fenced = new ETL_SQL.Core.Storage.FencedArtifactStorage(
-        inner, epochs, locks);
+    var roots = new Dictionary<ETL_SQL.Core.Storage.ArtifactArea, string>
+    {
+        [ETL_SQL.Core.Storage.ArtifactArea.Scripts] = cfg.ScriptRootPath,
+        [ETL_SQL.Core.Storage.ArtifactArea.Snapshots] = cfg.SnapshotDirectory,
+        [ETL_SQL.Core.Storage.ArtifactArea.Maps] = cfg.MapRootPath,
+        [ETL_SQL.Core.Storage.ArtifactArea.Datasets] = cfg.DatasetRootPath,
+        [ETL_SQL.Core.Storage.ArtifactArea.Keys] = keysRoot,
+    };
+    ETL_SQL.Core.Storage.IArtifactStorage fenced;
+    var provider = cfg.Storage.Provider?.Trim() ?? "Local";
+    if (provider.Equals("S3", StringComparison.OrdinalIgnoreCase)
+        || provider.Equals("AzureBlob", StringComparison.OrdinalIgnoreCase)
+        || provider.Equals("Azure_Blob", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!cfg.Database.Provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Object artifact storage requires Portal:Database:Provider=Postgres so fencing and mutation locks are shared.");
+        var objectArtifacts = sp.GetRequiredService<ETL_SQL.Core.Storage.ObjectNativeArtifactStorage>();
+        var objectAdapter = new ETL_SQL.Core.Storage.ObjectNativeArtifactStorageAdapter(objectArtifacts);
+        var localKeys = new ETL_SQL.Core.Storage.FencedArtifactStorage(
+            ETL_SQL.Core.Storage.ArtifactStorageFactory.Create("local", roots), epochs, locks, "artifact-keys");
+        fenced = new ETL_SQL.Core.Storage.AreaRoutingArtifactStorage(objectAdapter,
+            new Dictionary<ETL_SQL.Core.Storage.ArtifactArea, ETL_SQL.Core.Storage.IArtifactStorage>
+            {
+                [ETL_SQL.Core.Storage.ArtifactArea.Keys] = localKeys
+            });
+    }
+    else
+    {
+        var inner = ETL_SQL.Core.Storage.ArtifactStorageFactory.Create(provider, roots);
+        fenced = new ETL_SQL.Core.Storage.FencedArtifactStorage(inner, epochs, locks);
+    }
     var security = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
     return new ETL_SQL.Portal.Services.PortalArtifactStorageBackend(
         new ETL_SQL.Core.Storage.GuardedArtifactStorage(fenced, security));

@@ -25,13 +25,21 @@ The Portal constrains filesystem access to configured roots. Set these to servic
 | `Portal:SnapshotDirectory` | Report snapshot output | `./Snapshots` |
 | `Portal:DatasetRootPath` | Dataset files managed by the portal | `./data/datasets` |
 | `Portal:MapRootPath` | Map assets used by reports | `./data/maps` |
-| `Portal:Storage:Provider` | Artifact provider: `Local` or `Smb`/`Unc` | `Local` |
+| `Portal:Storage:Provider` | Artifact provider: `Local`, `Smb`/`Unc`, `S3`, or `AzureBlob` | `Local` |
 | `Portal:Storage:KeyRingPath` | ASP.NET Data Protection key ring and Keys artifact root | `.portal-keys` beside the portal DB |
 | `Portal:Topology:ExpectedMode` | Readiness policy mode: `Auto`, `Standalone`, `Departmental`, or `HighAvailability` | `Auto` |
 | `Portal:Topology:MinLivePortalNodes` | Minimum live Portal heartbeats required by `/healthz` in HA mode | `1` |
 | `Portal:Topology:MinLiveOrchestratorNodes` | Minimum live Orchestrator heartbeats required by `/healthz` in HA mode | `0` |
 | `Portal:Topology:RequirePostgresForHa` | In HA mode, withhold readiness unless Portal and Orchestrator state are PostgreSQL | `true` |
 | `Portal:Topology:RequireSharedKeyRingForHa` | In HA mode, withhold readiness unless `Portal:Storage:KeyRingPath` is set | `true` |
+
+For `S3` and `AzureBlob`, configure the bucket/container fields documented in
+[Portal configuration](config/portal-configuration.md). The bucket/container must already exist, and
+`Portal:Database:Provider` must be `Postgres`: the object commit protocol uses the shared database
+for its per-artifact mutation lock and monotonic fence. Scripts, snapshots, datasets, and maps use
+object-native immutable content plus conditional commit records. `Keys` remains at the shared
+filesystem `KeyRingPath` because ASP.NET Data Protection requires a filesystem key ring. Never treat
+object copy/delete as atomic rename; consumers that require rename are rejected by the provider.
 | `Orchestrator:DatabasePath` | Orchestrator SQLite database | `%LocalAppData%/ETL-SQL/etlsql.db` |
 | `Orchestrator:Database:Provider` | Orchestrator state provider: `Sqlite` or `Postgres` | `Sqlite` |
 | `Orchestrator:Database:ConnectionString` | Orchestrator PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |

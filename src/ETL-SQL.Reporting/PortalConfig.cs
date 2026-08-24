@@ -393,9 +393,9 @@ public class PortalTopologyConfig
 public class PortalStorageConfig
 {
     /// <summary>
-    /// Artifact-storage provider for scripts/snapshots/datasets/maps/keys: "Local" (default) or "Smb"
-    /// (shared UNC share for multi-node Practical High Availability deployments). When "Smb", the area
-    /// root paths (<see cref="PortalConfig.ScriptRootPath"/> etc.) must be UNC paths.
+    /// Artifact-storage provider: Local, Smb, S3, or AzureBlob. Object providers hold scripts,
+    /// snapshots, datasets, and maps; Keys remains on KeyRingPath because ASP.NET Data Protection
+    /// requires a filesystem key ring.
     /// </summary>
     public string Provider { get; set; } = "Local";
 
@@ -407,6 +407,19 @@ public class PortalStorageConfig
     /// cannot be read by another.
     /// </summary>
     public string? KeyRingPath { get; set; }
+
+    /// <summary>Optional provider prefix beneath the bucket/container.</summary>
+    public string? ObjectPrefix { get; set; }
+    public string? Bucket { get; set; }
+    public string? Region { get; set; }
+    public string? ServiceUrl { get; set; }
+    public bool ForcePathStyle { get; set; }
+    public string? AccessKey { get; set; }
+    public string? SecretKey { get; set; }
+    public string? AzureConnectionString { get; set; }
+    public string? Container { get; set; }
+    public int StagingRetentionHours { get; set; } = 24;
+    public int ReconciliationIntervalMinutes { get; set; } = 60;
 }
 
 public class PortalDatabaseConfig
