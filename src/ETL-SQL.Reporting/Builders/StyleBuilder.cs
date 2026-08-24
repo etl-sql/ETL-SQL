@@ -151,14 +151,17 @@ namespace ETL_SQL.Reporting.Builders
         private ResolvedDetailSurface ResolveDetailSurface(TooltipDefinition tooltip, string ownerObject)
         {
             var diagnostics = new List<DetailSurfaceDiagnostic>();
+            var visuals = new Dictionary<string, CreateVisualStatement>(
+                ctx.ReportContext.VisualDefinitions, StringComparer.OrdinalIgnoreCase);
+            var containers = new Dictionary<string, CreateContainerStatement>(
+                ctx.ReportContext.ContainerDefinitions, StringComparer.OrdinalIgnoreCase);
+
+            // Supplying the owning visual enables the row-context contract; containers and
+            // buttons resolve without it because they have no row to disclose.
+            visuals.TryGetValue(ownerObject, out var ownerVisual);
+
             var resolved = DetailSurfaceResolver.Resolve(
-                ownerObject,
-                tooltip,
-                new Dictionary<string, CreateVisualStatement>(
-                    ctx.ReportContext.VisualDefinitions, StringComparer.OrdinalIgnoreCase),
-                new Dictionary<string, CreateContainerStatement>(
-                    ctx.ReportContext.ContainerDefinitions, StringComparer.OrdinalIgnoreCase),
-                diagnostics);
+                ownerObject, tooltip, visuals, containers, diagnostics, ownerVisual);
 
             var error = diagnostics.FirstOrDefault(d => d.Severity == DetailSurfaceSeverity.Error);
             if (error != null)

@@ -95,6 +95,53 @@ public static class DetailSurfaceDiagnostics
     public const string SecretDisclosure = "RPT2111";
     public const string TransientTextTooLong = "RPT2112";
     public const string EmptyInlineSurface = "RPT2113";
+    public const string MissingRowContext = "RPT2114";
+}
+
+/// <summary>
+/// The row-context contract for detail surfaces.
+/// </summary>
+/// <remarks>
+/// Opening a persistent detail surface pushes one value from the activated row into
+/// <c>@hover_value</c>, which the surface's visuals may read in their SOURCE. That value
+/// crosses a trust boundary — it reaches refresh parameters, the manifest, logs,
+/// accessibility text, DOM attributes, and any export or snapshot — so it is deliberately
+/// narrow:
+/// <list type="number">
+///   <item><description>It must come from an <b>explicitly declared mapping</b> on the
+///   owning visual. There is no positional fallback to "the first column": an implicit
+///   choice is not an author's decision about what is safe to disclose.</description></item>
+///   <item><description>The mapped column must not be <b>secret-bearing</b>. Columns whose
+///   names indicate credentials are rejected by
+///   <see cref="Common.SecretRedactor.IsSensitiveKey"/>, the same predicate the engine uses
+///   at every other redaction boundary.</description></item>
+/// </list>
+/// Both rules fail closed, and the diagnostics name only the column, never a value.
+/// </remarks>
+public static class DetailSurfaceRowContext
+{
+    /// <summary>
+    /// Mapping roles that can supply the row context, in the order the browser runtime
+    /// resolves them. Kept in step with the adapter's mapping lookup.
+    /// </summary>
+    public static readonly string[] ContextRoles = ["X", "LABEL", "NAME", "REGION", "Y"];
+
+    /// <summary>
+    /// Returns the mapping that supplies the row context for <paramref name="visual"/>,
+    /// or <c>null</c> when the visual declares none of <see cref="ContextRoles"/>.
+    /// </summary>
+    public static VisualMapping? Resolve(CreateVisualStatement visual)
+    {
+        ArgumentNullException.ThrowIfNull(visual);
+
+        foreach (var role in ContextRoles)
+        {
+            var mapping = visual.Mappings.FirstOrDefault(m =>
+                string.Equals(m.Role, role, StringComparison.OrdinalIgnoreCase));
+            if (mapping != null) return mapping;
+        }
+        return null;
+    }
 }
 
 /// <summary>
@@ -154,10 +201,10 @@ public static class DetailSurfaceResolver
         var diagnostics = new List<DetailSurfaceDiagnostic>();
 
         foreach (var (name, visual) in Ordered(visuals))
-            AddSurface(name, visual.Tooltip, visuals, containers, surfaces, diagnostics);
+            AddSurface(name, visual.Tooltip, visuals, containers, surfaces, diagnostics, visual);
 
         foreach (var (name, container) in Ordered(containers))
-            AddSurface(name, container.Tooltip, visuals, containers, surfaces, diagnostics);
+            AddSurface(name, container.Tooltip, visuals, containers, surfaces, diagnostics, null);
 
         if (surfaces.Count > DetailSurfaceLimits.MaxSurfacesPerReport)
         {
@@ -184,6 +231,21 @@ public static class DetailSurfaceResolver
         IReadOnlyDictionary<string, CreateVisualStatement> visuals,
         IReadOnlyDictionary<string, CreateContainerStatement> containers,
         ICollection<DetailSurfaceDiagnostic> diagnostics)
+        => Resolve(ownerObject, tooltip, visuals, containers, diagnostics, ownerVisual: null);
+
+    /// <inheritdoc cref="Resolve(string, TooltipDefinition, IReadOnlyDictionary{string, CreateVisualStatement}, IReadOnlyDictionary{string, CreateContainerStatement}, ICollection{DetailSurfaceDiagnostic})"/>
+    /// <param name="ownerVisual">
+    /// The visual that declared the clause, when the owner is a visual. Supplying it enables
+    /// the row-context contract; without it that check is skipped, because containers and
+    /// buttons have no row to disclose.
+    /// </param>
+    public static ResolvedDetailSurface Resolve(
+        string ownerObject,
+        TooltipDefinition tooltip,
+        IReadOnlyDictionary<string, CreateVisualStatement> visuals,
+        IReadOnlyDictionary<string, CreateContainerStatement> containers,
+        ICollection<DetailSurfaceDiagnostic> diagnostics,
+        CreateVisualStatement? ownerVisual)
     {
         ArgumentNullException.ThrowIfNull(tooltip);
         ArgumentNullException.ThrowIfNull(visuals);
@@ -227,6 +289,19 @@ public static class DetailSurfaceResolver
             ValidateTransientText(ownerObject, tooltip, diagnostics);
         }
 
+        // The row context only exists for a persistent surface: a transient tooltip shows
+        // static text and never pushes a row value across the refresh boundary.
+        if (tooltip.Kind == DetailSurfaceKind.Persistent && ownerVisual != null)
+            ValidateRowContext(ownerObject, ownerVisual, diagnostics);
+
+        // Nothing the surface renders may map a secret-bearing column either: the popover
+        // body is as much a disclosure surface as the refresh parameter.
+        foreach (var visualName in resolvedVisuals)
+        {
+            if (visuals.TryGetValue(visualName, out var detailVisual))
+                ValidateNoSecretMappings(ownerObject, visualName, detailVisual, diagnostics);
+        }
+
         EnforceBudgets(ownerObject, resolvedContainers, resolvedVisuals, visuals, diagnostics,
             out int refreshQueries);
 
@@ -250,10 +325,75 @@ public static class DetailSurfaceResolver
         IReadOnlyDictionary<string, CreateVisualStatement> visuals,
         IReadOnlyDictionary<string, CreateContainerStatement> containers,
         List<ResolvedDetailSurface> surfaces,
-        List<DetailSurfaceDiagnostic> diagnostics)
+        List<DetailSurfaceDiagnostic> diagnostics,
+        CreateVisualStatement? ownerVisual)
     {
         if (tooltip == null) return;
-        surfaces.Add(Resolve(ownerObject, tooltip, visuals, containers, diagnostics));
+        surfaces.Add(Resolve(ownerObject, tooltip, visuals, containers, diagnostics, ownerVisual));
+    }
+
+    /// <summary>
+    /// Enforces the row-context contract for a persistent surface: the value pushed into
+    /// <c>@hover_value</c> must come from an explicitly declared mapping and must not be
+    /// secret-bearing. See <see cref="DetailSurfaceRowContext"/>.
+    /// </summary>
+    private static void ValidateRowContext(
+        string ownerObject,
+        CreateVisualStatement ownerVisual,
+        ICollection<DetailSurfaceDiagnostic> diagnostics)
+    {
+        var mapping = DetailSurfaceRowContext.Resolve(ownerVisual);
+
+        if (mapping == null)
+        {
+            diagnostics.Add(new DetailSurfaceDiagnostic(
+                DetailSurfaceDiagnostics.MissingRowContext,
+                DetailSurfaceSeverity.Error,
+                ownerObject,
+                $"'{ownerObject}' opens a detail surface but declares no mapping that can supply " +
+                $"the row context. Add one of {string.Join(", ", DetailSurfaceRowContext.ContextRoles)} " +
+                "to MAPPINGS so the value flowing into @hover_value is an explicit choice rather " +
+                "than whichever column happens to come first."));
+            return;
+        }
+
+        if (Common.SecretRedactor.IsSensitiveKey(mapping.Column))
+        {
+            // Names the column, never a value: this diagnostic reaches logs and editors.
+            diagnostics.Add(new DetailSurfaceDiagnostic(
+                DetailSurfaceDiagnostics.SecretDisclosure,
+                DetailSurfaceSeverity.Error,
+                ownerObject,
+                $"'{ownerObject}' would push the secret-bearing column '{mapping.Column}' into " +
+                "@hover_value, exposing it through refresh parameters, the manifest, URLs, " +
+                "accessibility text, snapshots, and exports. Map a non-secret column such as an " +
+                "identifier or label for the '" + mapping.Role + "' role."));
+        }
+    }
+
+    /// <summary>
+    /// Rejects secret-bearing columns rendered inside a detail surface. The popover body
+    /// discloses just as much as the refresh parameter does.
+    /// </summary>
+    private static void ValidateNoSecretMappings(
+        string ownerObject,
+        string visualName,
+        CreateVisualStatement visual,
+        ICollection<DetailSurfaceDiagnostic> diagnostics)
+    {
+        foreach (var mapping in visual.Mappings)
+        {
+            if (!Common.SecretRedactor.IsSensitiveKey(mapping.Column)) continue;
+
+            diagnostics.Add(new DetailSurfaceDiagnostic(
+                DetailSurfaceDiagnostics.SecretDisclosure,
+                DetailSurfaceSeverity.Error,
+                ownerObject,
+                $"Visual '{visualName}', rendered inside the detail surface for '{ownerObject}', " +
+                $"maps the secret-bearing column '{mapping.Column}'. Remove it from the detail " +
+                "surface; secret values must not reach a rendered popover, its accessibility " +
+                "text, or any export of it."));
+        }
     }
 
     private static void ValidateTransientText(

@@ -290,6 +290,11 @@ namespace ETL_SQL.Reporting
 
             manifest.ExecutionTree = _ctx.Telemetry.ExecutionTree.ToSnapshot();
 
+            // Payload size is the one detail-surface budget that cannot be checked while
+            // resolving the AST: it depends on the rows the surface's visuals actually
+            // returned, which only exist now.
+            DetailSurfacePayloadGuard.Enforce(manifest);
+
             return manifest;
         }
 

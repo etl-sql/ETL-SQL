@@ -17,13 +17,19 @@ namespace ETL_SQL.Tests.Reporting
         private static LiteralExpression Lit(string value) =>
             new(value, ETL_SQL.Core.Parser.TokenType.STRING_LITERAL);
 
-        private static CreateVisualStatement Visual(string name, TooltipDefinition? tooltip = null) =>
+        private static CreateVisualStatement Visual(
+            string name,
+            TooltipDefinition? tooltip = null,
+            params (string Role, string Column)[] mappings) =>
             new()
             {
                 Name = name,
                 VisualType = VisualType.Bar,
                 Source = new VisualSourceExpression { TempTableName = "#detail" },
-                Tooltip = tooltip
+                Tooltip = tooltip,
+                Mappings = mappings.Length == 0
+                    ? new List<VisualMapping> { new() { Role = "X", Column = "Month" } }
+                    : mappings.Select(m => new VisualMapping { Role = m.Role, Column = m.Column }).ToList()
             };
 
         private static CreateContainerStatement Container(
@@ -360,6 +366,115 @@ namespace ETL_SQL.Tests.Reporting
             {
                 AssertNoErrors(diagnostics);
             }
+        }
+
+        // ── Row-context contract (secret disclosure) ───────────────────────────
+
+        /// <summary>Resolves a surface owned by a visual, enabling the row-context rules.</summary>
+        private static List<DetailSurfaceDiagnostic> ResolveOwned(
+            CreateVisualStatement owner,
+            Dictionary<string, CreateVisualStatement> visuals,
+            Dictionary<string, CreateContainerStatement> containers,
+            out ResolvedDetailSurface surface)
+        {
+            var diagnostics = new List<DetailSurfaceDiagnostic>();
+            surface = DetailSurfaceResolver.Resolve(
+                owner.Name, owner.Tooltip!, visuals, containers, diagnostics, owner);
+            return diagnostics;
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void RowContext_SecretBearingMappedColumn_IsRejected()
+        {
+            var owner = Visual("Bar", TooltipDefinition.Container("Box"), ("X", "ApiKey"));
+            var diagnostics = ResolveOwned(
+                owner,
+                Map(("Bar", owner), ("Detail", Visual("Detail"))),
+                Map(("Box", Container("Box", new[] { "Detail" }))),
+                out var surface);
+
+            AssertCode(diagnostics, DetailSurfaceDiagnostics.SecretDisclosure);
+            Assert.False(surface.IsValid);
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void RowContext_SecretDiagnostic_NamesTheColumnButNeverAValue()
+        {
+            var owner = Visual("Bar", TooltipDefinition.Container("Box"), ("X", "CustomerPassword"));
+            var diagnostics = ResolveOwned(
+                owner,
+                Map(("Bar", owner), ("Detail", Visual("Detail"))),
+                Map(("Box", Container("Box", new[] { "Detail" }))),
+                out _);
+
+            var secret = diagnostics.Single(d => d.Code == DetailSurfaceDiagnostics.SecretDisclosure);
+            Assert.Contains("CustomerPassword", secret.Message);
+            // The contract is fail-closed *without* echoing anything resembling a value.
+            Assert.DoesNotContain("SECRET:", secret.Message, System.StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("ENC:", secret.Message, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void RowContext_SecretColumnRenderedInsideTheSurface_IsRejected()
+        {
+            // Disclosure through the popover body, not the refresh parameter.
+            var owner = Visual("Bar", TooltipDefinition.Container("Box"), ("X", "Month"));
+            var diagnostics = ResolveOwned(
+                owner,
+                Map(("Bar", owner), ("Detail", Visual("Detail", null, ("Y", "ClientSecret")))),
+                Map(("Box", Container("Box", new[] { "Detail" }))),
+                out var surface);
+
+            AssertCode(diagnostics, DetailSurfaceDiagnostics.SecretDisclosure);
+            Assert.False(surface.IsValid);
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void RowContext_MissingExplicitMapping_IsRejected()
+        {
+            // No X/LABEL/NAME/REGION/Y mapping: there is no explicit author choice about
+            // which value crosses into @hover_value, and positional fallback is not allowed.
+            var owner = Visual("Bar", TooltipDefinition.Container("Box"), ("SIZE", "Weight"));
+            var diagnostics = ResolveOwned(
+                owner,
+                Map(("Bar", owner), ("Detail", Visual("Detail"))),
+                Map(("Box", Container("Box", new[] { "Detail" }))),
+                out var surface);
+
+            AssertCode(diagnostics, DetailSurfaceDiagnostics.MissingRowContext);
+            Assert.False(surface.IsValid);
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void RowContext_TransientTooltip_NeedsNoRowContext()
+        {
+            // A text tooltip pushes nothing across the refresh boundary.
+            var owner = Visual("Bar", TooltipDefinition.Text(Lit("static")), ("SIZE", "Weight"));
+            var diagnostics = ResolveOwned(owner, Map(("Bar", owner)), Map<CreateContainerStatement>(),
+                out var surface);
+
+            AssertNoErrors(diagnostics);
+            Assert.True(surface.IsValid);
+        }
+
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void RowContext_NonSecretMappedColumn_IsAccepted()
+        {
+            var owner = Visual("Bar", TooltipDefinition.Container("Box"), ("X", "Month"));
+            var diagnostics = ResolveOwned(
+                owner,
+                Map(("Bar", owner), ("Detail", Visual("Detail"))),
+                Map(("Box", Container("Box", new[] { "Detail" }))),
+                out var surface);
+
+            AssertNoErrors(diagnostics);
+            Assert.True(surface.IsValid);
         }
 
         // ── The real kitchen-sink shape ────────────────────────────────────────

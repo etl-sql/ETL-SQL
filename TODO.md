@@ -352,12 +352,30 @@ feature.
 - [ ] Either implement the existing inline `TOOLTIP (... VISUALS (...))` contract end to end or reject
   it with an actionable parser/analysis diagnostic; do not continue emitting a manifest form that
   browser and static renderers silently ignore.
-- [ ] Resolve tooltip targets and their visual/container dependencies statically. Add missing-target,
+- [x] Resolve tooltip targets and their visual/container dependencies statically. Add missing-target,
   rename, cycle, nested-tooltip, maximum-depth, node, byte, query/refresh-work, and aggregate-report
   budgets. A detail surface must not recursively embed a dashboard or open another detail surface.
-- [ ] Define the row-context contract explicitly. Only allow declared, non-secret mapping values to
+  *(DONE. `DetailSurfaceResolver` walks the referenced container graph over the report's declared
+  objects and centralizes every budget in `DetailSurfaceLimits`, reported through stable `RPT21xx`
+  codes: missing container/visual (`RPT2101`/`RPT2102`), direct and indirect cycles (`RPT2103`),
+  nested detail surfaces on either a container or a rendered visual (`RPT2104`), and the depth,
+  visual, node, refresh-query, and per-report surface budgets (`RPT2105`–`RPT2108`, `RPT2110`).
+  Payload size is the one budget that cannot be checked against the AST — what a popover costs is
+  the rows its visuals actually returned — so `DetailSurfacePayloadGuard` enforces `RPT2109` once
+  the manifest is complete. All of it fails closed at manifest build rather than emitting a surface
+  no renderer honours. Rename now follows the same dependencies: `ReportRenameProvider` updates
+  `TOOLTIP = <container>`, container slot targets, and inline `VISUALS (...)` entries, so renaming
+  an object can no longer leave a popover silently resolving to nothing.)*
+- [x] Define the row-context contract explicitly. Only allow declared, non-secret mapping values to
   flow into the detail refresh; never expose secret values through parameters, manifests, logs,
   accessibility text, URLs, snapshots, or exports.
+  *(DONE. `DetailSurfaceRowContext` fixes the contract: the value pushed into `@hover_value` must
+  come from an explicitly declared `X`/`LABEL`/`NAME`/`REGION`/`Y` mapping — positional fallback to
+  "the first column" is rejected as `RPT2114` because an implicit choice is not an author's decision
+  about what is safe to disclose — and that column must pass `SecretRedactor.IsSensitiveKey`, the
+  same predicate every other redaction boundary uses. Columns mapped by visuals rendered *inside*
+  the surface are checked too, since the popover body discloses as much as the refresh parameter.
+  Both rules fail closed as `RPT2111`/`RPT2114` and name only the column, never a value.)*
 
 #### Browser interaction and accessibility
 

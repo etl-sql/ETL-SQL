@@ -147,6 +147,16 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
         {
             var offsets = Captures(state.Text, 0,
                 $@"(?ix)(?:\bCREATE\s+(?:VISUAL|CONTAINER)\s+(?<name>{escaped})\b|(?:^|[,\(])\s*(?<name>{escaped})\b(?=\s*\.\s*(?:VISIBLE|COLLAPSED)\b))", "name");
+
+            // Detail-surface dependencies are references too. Without these, renaming a
+            // container silently orphans `TOOLTIP = <container>`, and renaming a visual
+            // orphans the container slot or inline VISUALS list that renders it.
+            offsets = offsets
+                .Concat(Captures(state.Text, 0, $@"(?ix)\bTOOLTIP\s*=\s*(?<name>{escaped})\b", "name"))
+                .Concat(Captures(state.Text, 0, $@"(?ix)'[^']*'\s*=\s*(?<name>{escaped})\b", "name"))
+                .Concat(TooltipVisualListOffsets(state.Text, word.Value.Name))
+                .Distinct().Order().ToList();
+
             if (offsets.Contains(word.Value.Start))
             {
                 symbol = new RenameSymbol(word.Value.Name, word.Value.Start, offsets);
@@ -169,6 +179,25 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Offsets of <paramref name="name"/> inside every inline <c>TOOLTIP (... VISUALS (...))</c>
+    /// list. The names are a comma-separated identifier list rather than a single capture, so
+    /// each block is located first and then scanned.
+    /// </summary>
+    private static List<int> TooltipVisualListOffsets(string text, string name)
+    {
+        var result = new List<int>();
+        foreach (Match block in Regex.Matches(
+            text,
+            @"(?ix)\bVISUALS\s*\((?<list>[^)]*)\)",
+            RegexOptions.Multiline | RegexOptions.CultureInvariant))
+        {
+            var list = block.Groups["list"];
+            result.AddRange(IdentifierOffsets(list.Value, list.Index, name));
+        }
+        return result;
     }
 
     private static List<int> Captures(string text, int baseOffset, string pattern, string group) =>
