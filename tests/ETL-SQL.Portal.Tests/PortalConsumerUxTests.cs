@@ -337,10 +337,11 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
         var userCtrl = CreateReportsController(db, userId: 1, isAdmin: true);
         var paramsDict = new Dictionary<string, string> { ["@region"] = "Midwest", ["@year"] = "2026" };
 
-        var saveRes = await userCtrl.SaveDefaultView(report.Id, paramsDict);
+        var saveRes = await userCtrl.SaveDefaultView(report.Id, new SaveDefaultReportViewRequest(Parameters: paramsDict));
         Assert.IsType<OkObjectResult>(saveRes);
 
-        var secondSaveRes = await userCtrl.SaveDefaultView(report.Id, new Dictionary<string, string> { ["@region"] = "West" });
+        var secondSaveRes = await userCtrl.SaveDefaultView(report.Id,
+            new SaveDefaultReportViewRequest(Parameters: new Dictionary<string, string> { ["@region"] = "West" }));
         Assert.IsType<OkObjectResult>(secondSaveRes);
 
         var getRes = await userCtrl.GetDefaultView(report.Id);

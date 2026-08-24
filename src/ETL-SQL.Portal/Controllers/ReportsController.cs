@@ -5,6 +5,7 @@ using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Reporting;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Filters;
 using ETL_SQL.Portal.Models;
@@ -222,8 +223,10 @@ public class ReportsController : ControllerBase
             token.RevokedAt);
     }
 
-    private static SavedReportViewDto ToSavedViewDto(SavedReportView view) =>
-        new(
+    private static SavedReportViewDto ToSavedViewDto(SavedReportView view, Report? report = null)
+    {
+        var state = BuildSavedViewEnvelope(view);
+        return new SavedReportViewDto(
             view.Id,
             view.ReportId,
             view.Name,
@@ -233,7 +236,86 @@ public class ReportsController : ControllerBase
             view.ScriptHash,
             view.IsDefault,
             view.CreatedAt,
-            view.UpdatedAt);
+            view.UpdatedAt,
+            state,
+            report is null ? null : SavedViewDriftWarning(view, report));
+    }
+
+    /// <summary>
+    /// Reads a saved view as the shared resolved-state envelope. Views written before the envelope
+    /// existed carry only <c>ParametersJson</c>/<c>FiltersJson</c>, so they are converted on read and
+    /// converge on the same typed shape without a data migration.
+    /// </summary>
+    private static ResolvedReportState BuildSavedViewEnvelope(SavedReportView view)
+    {
+        if (!string.IsNullOrWhiteSpace(view.StateJson))
+        {
+            var parsed = ResolvedReportState.FromJson(view.StateJson);
+            parsed.ScriptHash ??= view.ScriptHash;
+            return parsed;
+        }
+        return ResolvedReportState.FromLegacy(view.ParametersJson, view.FiltersJson, view.ScriptHash);
+    }
+
+    /// <summary>Normalizes a script hash for comparison; Portal stores them as <c>sha256:hex</c>.</summary>
+    private static string? NormalizeScriptHash(string? hash)
+    {
+        if (string.IsNullOrWhiteSpace(hash)) return null;
+        var trimmed = hash.Trim();
+        var colon = trimmed.IndexOf(':');
+        if (colon >= 0) trimmed = trimmed[(colon + 1)..];
+        return trimmed.ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Returns a human-readable warning when the report script has been republished since the view was
+    /// captured. Drift never blocks application — unknown references are dropped when the state is
+    /// reconciled against the manifest — but the viewer is told the view may be incomplete.
+    /// </summary>
+    private static string? SavedViewDriftWarning(SavedReportView view, Report report)
+    {
+        var saved = NormalizeScriptHash(view.ScriptHash);
+        var current = NormalizeScriptHash(report.PublishedScriptHash);
+        if (saved is null || current is null || saved == current) return null;
+        return $"The report has changed since '{view.Name}' was saved. Parts of the saved view may no longer apply.";
+    }
+
+    /// <summary>
+    /// Produces the canonical <c>StateJson</c> to persist. An explicit envelope from the client wins;
+    /// otherwise a legacy parameter/filter map is upgraded so every stored view carries an envelope.
+    /// Returns false when the supplied envelope is not valid JSON.
+    /// </summary>
+    private static bool TryBuildStateJson(
+        string? requestedStateJson,
+        Dictionary<string, string>? parameters,
+        Dictionary<string, string>? filters,
+        out string? stateJson)
+    {
+        stateJson = null;
+        if (!string.IsNullOrWhiteSpace(requestedStateJson))
+        {
+            try
+            {
+                using var _ = JsonDocument.Parse(requestedStateJson);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+            var envelope = ResolvedReportState.FromJson(requestedStateJson);
+            envelope.SchemaVersion = ResolvedReportState.CurrentSchemaVersion;
+            stateJson = envelope.ToJson();
+            return true;
+        }
+
+        if ((parameters is null || parameters.Count == 0) && (filters is null || filters.Count == 0))
+            return true;
+
+        stateJson = ResolvedReportState
+            .FromLegacy(SerializeDictionary(parameters), SerializeDictionary(filters))
+            .ToJson();
+        return true;
+    }
 
     private static ReportAlertDto ToAlertDto(ReportAlert alert) =>
         new(
@@ -1138,7 +1220,26 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
         var views = await catalogScope.SavedReportViews.Where(v => v.ReportId == id && v.UserId == CurrentUserId).OrderBy(v => v.Name).ToListAsync();
-        return Ok(views.Select(ToSavedViewDto));
+        return Ok(views.Select(v => ToSavedViewDto(v, report)));
+    }
+
+    /// <summary>
+    /// Resolves one saved view by identifier for launch-precedence replay (<c>#view=</c>). Ownership is
+    /// re-checked here rather than trusted from the URL: another user's view is indistinguishable from a
+    /// deleted one, so the identifier never discloses that it exists.
+    /// </summary>
+    [HttpGet("reports/{id:int}/saved-views/{viewId:int}")]
+    public async Task<IActionResult> GetSavedView(int id, int viewId)
+    {
+        var report = await catalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (perm is null) return Forbid();
+
+        var view = await catalogScope.SavedReportViews
+            .FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
+        if (view is null) return NotFound();
+        return Ok(ToSavedViewDto(view, report));
     }
 
     [HttpPost("reports/{id:int}/saved-views")]
@@ -1149,6 +1250,8 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { error = "Saved view name is required." });
+        if (!TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, out var stateJson))
+            return BadRequest(new { error = "State is not valid JSON." });
         if (req.IsDefault) await ClearDefaultSavedViewsAsync(id);
 
         var view = new SavedReportView
@@ -1158,14 +1261,15 @@ public class ReportsController : ControllerBase
             Name = req.Name,
             ParametersJson = SerializeDictionary(req.Parameters),
             FiltersJson = SerializeDictionary(req.Filters),
-            StateJson = req.StateJson,
-            ScriptHash = req.ScriptHash,
+            StateJson = stateJson,
+            // Stamp the revision the view was captured against so later drift is detectable.
+            ScriptHash = req.ScriptHash ?? report.PublishedScriptHash,
             IsDefault = req.IsDefault
         };
         db.SavedReportViews.Add(view);
         audit.Stage(CurrentUserId, "CREATE_SAVED_REPORT_VIEW", "Report", id.ToString(), req.Name);
         await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetSavedViews), new { id }, ToSavedViewDto(view));
+        return CreatedAtAction(nameof(GetSavedViews), new { id }, ToSavedViewDto(view, report));
     }
 
     [HttpPut("reports/{id:int}/saved-views/{viewId:int}")]
@@ -1178,11 +1282,25 @@ public class ReportsController : ControllerBase
 
         var view = await catalogScope.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
         if (view is null) return NotFound();
+
+        var stateChanged = req.StateJson is not null || req.Parameters is not null || req.Filters is not null;
+        string? stateJson = view.StateJson;
+        if (stateChanged && !TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, out stateJson))
+            return BadRequest(new { error = "State is not valid JSON." });
+
         if (req.Name is not null) view.Name = req.Name;
         if (req.Parameters is not null) view.ParametersJson = SerializeDictionary(req.Parameters);
         if (req.Filters is not null) view.FiltersJson = SerializeDictionary(req.Filters);
-        if (req.StateJson is not null) view.StateJson = req.StateJson;
-        if (req.ScriptHash is not null) view.ScriptHash = req.ScriptHash;
+        if (stateChanged)
+        {
+            view.StateJson = stateJson;
+            // Re-capturing state re-stamps the revision, so an updated view is no longer flagged as drifted.
+            view.ScriptHash = req.ScriptHash ?? report.PublishedScriptHash;
+        }
+        else if (req.ScriptHash is not null)
+        {
+            view.ScriptHash = req.ScriptHash;
+        }
         if (req.IsDefault.HasValue)
         {
             if (req.IsDefault.Value) await ClearDefaultSavedViewsAsync(id);
@@ -1191,7 +1309,7 @@ public class ReportsController : ControllerBase
         view.UpdatedAt = DateTime.UtcNow;
         audit.Stage(CurrentUserId, "UPDATE_SAVED_REPORT_VIEW", "Report", id.ToString(), view.Name);
         await db.SaveChangesAsync();
-        return Ok(ToSavedViewDto(view));
+        return Ok(ToSavedViewDto(view, report));
     }
 
     [HttpDelete("reports/{id:int}/saved-views/{viewId:int}")]
@@ -1920,8 +2038,12 @@ public class ReportsController : ControllerBase
         return Ok(new { message = "Access request denied.", requestId = request.Id, status = request.Status });
     }
 
+    /// <summary>
+    /// Saves (or replaces) the current user's default view for a report. The body carries the shared
+    /// resolved-state envelope; the legacy parameter map is still accepted so older clients keep working.
+    /// </summary>
     [HttpPost("reports/{id:int}/saved-views/default")]
-    public async Task<IActionResult> SaveDefaultView(int id, [FromBody] Dictionary<string, string>? parameters)
+    public async Task<IActionResult> SaveDefaultView(int id, [FromBody] SaveDefaultReportViewRequest? body)
     {
         var report = await catalogScope.Reports
             .Include(r => r.Folder)
@@ -1932,7 +2054,14 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.HasValue) return Forbid();
 
-        var paramsJson = System.Text.Json.JsonSerializer.Serialize(parameters ?? []);
+        var parameters = body?.Parameters;
+        var envelope = body?.State ?? ResolvedReportState.FromLegacy(SerializeDictionary(parameters), null);
+        envelope.SchemaVersion = ResolvedReportState.CurrentSchemaVersion;
+        // The server, not the client, stamps the revision the view was captured against.
+        envelope.ScriptHash = report.PublishedScriptHash;
+
+        var paramsJson = System.Text.Json.JsonSerializer.Serialize(
+            parameters ?? envelope.ToParameterStrings());
         const string defaultName = "My Default View";
         var savedViews = await catalogScope.SavedReportViews
             .Where(v => v.ReportId == id && v.UserId == CurrentUserId
@@ -1962,6 +2091,8 @@ public class ReportsController : ControllerBase
 
         defaultView.Name = defaultName;
         defaultView.ParametersJson = paramsJson;
+        defaultView.StateJson = envelope.ToJson();
+        defaultView.ScriptHash = report.PublishedScriptHash;
         defaultView.IsDefault = true;
         defaultView.UpdatedAt = DateTime.UtcNow;
 
@@ -1971,6 +2102,11 @@ public class ReportsController : ControllerBase
         return Ok(new { message = "Default view saved successfully.", viewId = defaultView.Id, isDefault = true });
     }
 
+    /// <summary>
+    /// Returns the current user's default saved view for this report as the shared resolved-state
+    /// envelope, or 204 when they have none — having no personal default is not an error, and the
+    /// report must still open on its declared/author defaults.
+    /// </summary>
     [HttpGet("reports/{id:int}/saved-views/default")]
     public async Task<IActionResult> GetDefaultView(int id)
     {
@@ -1987,27 +2123,9 @@ public class ReportsController : ControllerBase
             .AsNoTracking()
             .FirstOrDefaultAsync(v => v.ReportId == id && v.UserId == CurrentUserId && v.IsDefault);
 
-        if (defaultView is null) return NotFound();
+        if (defaultView is null) return NoContent();
 
-        Dictionary<string, string> paramsDict;
-        try
-        {
-            paramsDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(defaultView.ParametersJson ?? "{}") ?? [];
-        }
-        catch
-        {
-            paramsDict = [];
-        }
-
-        return Ok(new
-        {
-            id = defaultView.Id,
-            name = defaultView.Name,
-            isDefault = defaultView.IsDefault,
-            parameters = paramsDict,
-            stateJson = defaultView.StateJson,
-            scriptHash = defaultView.ScriptHash
-        });
+        return Ok(ToSavedViewDto(defaultView, report));
     }
 
 }

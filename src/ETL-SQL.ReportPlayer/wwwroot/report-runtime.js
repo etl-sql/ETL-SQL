@@ -833,114 +833,11 @@
             actions.appendChild(refreshBtn);
         }
 
-        const defaultViewBtn = document.createElement('button');
-        defaultViewBtn.className = 'header-btn';
-        defaultViewBtn.title = 'Save Current Slicers as My Default View';
-        defaultViewBtn.textContent = '📌 Save Default View';
-        defaultViewBtn.addEventListener('click', async () => {
-            const reportId = manifest.id || window.__REPORT_ID__;
-            if (!reportId) {
-                feedback.notify('Report ID not found.', { title: 'Default view not saved', tone: 'error' });
-                return;
-            }
-            try {
-                const base = window.__API_BASE__ || '';
-                // Save the complete resolved-state envelope (typed parameters, active page, and
-                // presentation state). The server stamps the current script hash for drift detection.
-                const res = await fetch(`${base}/api/reports/${reportId}/saved-views/default`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ state: captureResolvedState(), parameters: parameters || {} })
-                });
-                if (res.ok) {
-                    feedback.notify('Saved current slicers as your default view.', { title: 'Default view saved', tone: 'success', auditAction: 'report.saved-view.update' });
-                } else {
-                    feedback.notify('Failed to save default view.', { title: 'Default view not saved', tone: 'error' });
-                }
-            } catch (e) {
-                feedback.notify('Error saving default view: ' + e.message, { title: 'Default view not saved', tone: 'error' });
-            }
-        });
-        // Saving a default view needs the Portal's per-user saved-views API, which the VS Code
-        // preview has no session for — the click would POST to a relative URL that does not exist
-        // and surface a native alert. Keep the preview chrome to its own actions below.
-        if (!vscode) {
-            actions.appendChild(defaultViewBtn);
-        }
-
-        // Author bookmark picker
-        if (manifest.bookmarks && manifest.bookmarks.length > 0) {
-            const bmContainer = document.createElement('div');
-            bmContainer.className = 'bookmark-picker';
-            bmContainer.style.position = 'relative';
-            bmContainer.style.display = 'inline-block';
-
-            const bmBtn = document.createElement('button');
-            bmBtn.className = 'header-btn';
-            bmBtn.title = 'Author Bookmarks';
-            bmBtn.textContent = 'Bookmarks';
-            bmBtn.setAttribute('aria-haspopup', 'true');
-            bmBtn.setAttribute('aria-expanded', 'false');
-
-            const bmMenu = document.createElement('div');
-            bmMenu.className = 'bookmark-menu';
-            bmMenu.setAttribute('role', 'menu');
-            bmMenu.style.display = 'none';
-            bmMenu.style.position = 'absolute';
-            bmMenu.style.right = '0';
-            bmMenu.style.top = '100%';
-            bmMenu.style.zIndex = '1000';
-            bmMenu.style.background = 'var(--card-bg, #fff)';
-            bmMenu.style.border = '1px solid var(--border, #ddd)';
-            bmMenu.style.borderRadius = '6px';
-            bmMenu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-            bmMenu.style.minWidth = '180px';
-            bmMenu.style.padding = '4px 0';
-
-            manifest.bookmarks.forEach(bm => {
-                const item = document.createElement('button');
-                item.className = 'bookmark-menu-item';
-                item.setAttribute('role', 'menuitem');
-                item.style.display = 'block';
-                item.style.width = '100%';
-                item.style.textAlign = 'left';
-                item.style.padding = '8px 16px';
-                item.style.border = 'none';
-                item.style.background = 'none';
-                item.style.cursor = 'pointer';
-                item.style.fontSize = '0.875rem';
-                item.style.color = 'var(--text, #333)';
-                item.textContent = bm.title || bm.name;
-                if (bm.isDefault) {
-                    item.style.fontWeight = 'bold';
-                }
-                item.addEventListener('mouseenter', () => { item.style.background = 'var(--hover-bg, #f0f0f0)'; });
-                item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
-                item.addEventListener('click', () => {
-                    bmMenu.style.display = 'none';
-                    bmBtn.setAttribute('aria-expanded', 'false');
-                    applyBookmark(bm.name);
-                });
-                bmMenu.appendChild(item);
-            });
-
-            bmBtn.addEventListener('click', () => {
-                const open = bmMenu.style.display !== 'none';
-                bmMenu.style.display = open ? 'none' : 'block';
-                bmBtn.setAttribute('aria-expanded', String(!open));
-            });
-
-            document.addEventListener('click', (e) => {
-                if (!bmContainer.contains(e.target)) {
-                    bmMenu.style.display = 'none';
-                    bmBtn.setAttribute('aria-expanded', 'false');
-                }
-            });
-
-            bmContainer.appendChild(bmBtn);
-            bmContainer.appendChild(bmMenu);
-            actions.appendChild(bmContainer);
-        }
+        // Views picker: author bookmarks (shared, source-controlled) plus the caller's private
+        // "My saved views" when the Portal saved-view API is reachable. Both live in one menu so a
+        // reader picks a view without having to know which of the two kinds it is.
+        const viewsPicker = buildViewsPicker(manifest);
+        if (viewsPicker) actions.appendChild(viewsPicker);
 
         if (vscode) {
             const openBtn = document.createElement('button');
@@ -4898,6 +4795,17 @@
         return (_lastManifest && _lastManifest.id) || window.__REPORT_ID__ || null;
     }
 
+    // Saved views are a Portal-only, per-user feature. The Portal hosts the runtime with
+    // __API_BASE__ = '/api/reports/{id}'; the ReportPlayer uses '/reports/{name}/api' and has no
+    // saved-view API at all. Addressing off the host base (rather than rebuilding '/api/reports/{id}'
+    // by hand) is what keeps the URL correct in both hosts. Returns null wherever saved views do not
+    // exist — VS Code preview, the Player, and offline snapshots.
+    function savedViewsBase() {
+        if (vscode || isOfflineSnapshot()) return null;
+        const base = (window.__API_BASE__ || '').replace(/\/$/, '');
+        return /^\/api\/reports\/\d+$/.test(base) ? base + '/saved-views' : null;
+    }
+
     // Normalizes a saved-view API payload to a resolved-state envelope object.
     function envelopeFromSavedView(view) {
         if (!view) return null;
@@ -4916,11 +4824,10 @@
     // Unknown/unauthorized identifiers resolve to a graceful no-op (base report still opens) and
     // never reveal whether another user's view exists.
     async function applySavedView(viewId) {
-        const reportId = currentReportId();
-        if (!reportId || vscode || isOfflineSnapshot()) return false;
+        const base = savedViewsBase();
+        if (!base) return false;
         try {
-            const base = window.__API_BASE__ || '';
-            const res = await fetch(`${base}/api/reports/${reportId}/saved-views/${encodeURIComponent(viewId)}`, {
+            const res = await fetch(`${base}/${encodeURIComponent(viewId)}`, {
                 headers: { 'Accept': 'application/json' }
             });
             if (!res.ok) return false;
@@ -4939,11 +4846,10 @@
 
     // Applies the current user's default saved view, if any. Returns true when one was applied.
     async function applyUserDefaultSavedView(manifest) {
-        const reportId = currentReportId();
-        if (!reportId || vscode || isOfflineSnapshot()) return false;
+        const base = savedViewsBase();
+        if (!base) return false;
         try {
-            const base = window.__API_BASE__ || '';
-            const res = await fetch(`${base}/api/reports/${reportId}/saved-views/default`, {
+            const res = await fetch(`${base}/default`, {
                 headers: { 'Accept': 'application/json' }
             });
             if (res.status === 204 || !res.ok) return false;
@@ -4982,6 +4888,377 @@
             if (s && typeof s.collapsed === 'boolean') state.collapsed[name] = s.collapsed;
         });
         return state;
+    }
+
+    // ── Portal saved views: per-user CRUD over the shared resolved-state envelope ───────────────
+    // Every write sends the envelope; the server stamps the script hash it was captured against so a
+    // later republish of the report surfaces as a drift warning instead of a silently partial view.
+
+    async function savedViewsRequest(path, init) {
+        const base = savedViewsBase();
+        if (!base) return null;
+        try {
+            const res = await fetch(base + (path || ''), init);
+            if (!res.ok) return null;
+            if (res.status === 204) return true;
+            return await res.json();
+        } catch (e) {
+            console.warn('Saved-view request failed:', e && e.message);
+            return null;
+        }
+    }
+
+    function listSavedViews() {
+        return savedViewsRequest('', { headers: { 'Accept': 'application/json' } })
+            .then(r => Array.isArray(r) ? r : []);
+    }
+
+    function saveCurrentAsView(name, isDefault) {
+        return savedViewsRequest('', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name,
+                stateJson: JSON.stringify(captureResolvedState()),
+                isDefault: !!isDefault
+            })
+        });
+    }
+
+    // Upserts the caller's single default view. Distinct from save-as: the server replaces whatever
+    // default already exists rather than accumulating duplicates named "My Default View".
+    function saveDefaultView() {
+        return savedViewsRequest('/default', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ state: captureResolvedState() })
+        });
+    }
+
+    function updateSavedView(viewId, patch) {
+        return savedViewsRequest('/' + encodeURIComponent(viewId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch)
+        });
+    }
+
+    async function deleteSavedView(viewId) {
+        const base = savedViewsBase();
+        if (!base) return false;
+        try {
+            const res = await fetch(base + '/' + encodeURIComponent(viewId), { method: 'DELETE' });
+            return res.ok;
+        } catch (e) {
+            console.warn('Saved-view delete failed:', e && e.message);
+            return false;
+        }
+    }
+
+    // Drops the caller's personal default (so the report stops opening on it) and returns the canvas
+    // to what the author declared: the DEFAULT = ON bookmark when one exists, otherwise a clean reload.
+    async function resetToReportDefault(views) {
+        const personalDefault = (views || []).find(v => v.isDefault);
+        if (personalDefault) await updateSavedView(personalDefault.id, { isDefault: false });
+        const authorDefault = ((_lastManifest && _lastManifest.bookmarks) || []).find(b => b.isDefault);
+        if (authorDefault) {
+            await applyBookmark(authorDefault.name);
+        } else if (!vscode) {
+            window.location.hash = '';
+            window.location.reload();
+        }
+        return true;
+    }
+
+    // ── Views menu ──────────────────────────────────────────────────────────────────────────────
+
+    function styleMenuItem(el) {
+        el.type = 'button';
+        el.setAttribute('role', 'menuitem');
+        el.tabIndex = -1;
+        el.style.border = 'none';
+        el.style.background = 'none';
+        el.style.cursor = 'pointer';
+        el.style.fontSize = '0.875rem';
+        el.style.color = 'var(--text, #333)';
+        el.addEventListener('mouseenter', () => { el.style.background = 'var(--hover-bg, #f0f0f0)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = 'none'; });
+        el.addEventListener('focus', () => { el.style.background = 'var(--hover-bg, #f0f0f0)'; });
+        el.addEventListener('blur', () => { el.style.background = 'none'; });
+        return el;
+    }
+
+    function menuHeading(text) {
+        const h = document.createElement('div');
+        // Presentational: the accessible name of the group comes from the group's aria-label, so the
+        // heading text must not be announced a second time as a menu item.
+        h.setAttribute('role', 'presentation');
+        h.textContent = text;
+        h.style.padding = '6px 16px 2px';
+        h.style.fontSize = '0.7rem';
+        h.style.textTransform = 'uppercase';
+        h.style.letterSpacing = '0.04em';
+        h.style.opacity = '0.65';
+        return h;
+    }
+
+    /**
+     * Builds the header "Views" menu. Returns null when there is nothing to show — no author
+     * bookmarks and no Portal saved-view API (VS Code preview, ReportPlayer, offline snapshot).
+     *
+     * Keyboard model (WAI-ARIA menu button): Enter/Space/ArrowDown open and focus the first item,
+     * ArrowUp opens on the last, Arrow keys roam, Home/End jump, Escape closes and restores focus to
+     * the button, and Tab closes without swallowing the tab stop.
+     */
+    function buildViewsPicker(manifest) {
+        const bookmarks = (manifest && manifest.bookmarks) || [];
+        const supportsSavedViews = !!savedViewsBase();
+        if (bookmarks.length === 0 && !supportsSavedViews) return null;
+
+        const container = document.createElement('div');
+        container.className = 'bookmark-picker';
+        container.style.position = 'relative';
+        container.style.display = 'inline-block';
+
+        const menuId = 'etlsql-views-menu';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'header-btn';
+        btn.id = menuId + '-button';
+        btn.title = supportsSavedViews ? 'Bookmarks and saved views' : 'Author bookmarks';
+        btn.textContent = 'Views';
+        btn.setAttribute('aria-haspopup', 'menu');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-controls', menuId);
+
+        const menu = document.createElement('div');
+        menu.id = menuId;
+        menu.className = 'bookmark-menu';
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-labelledby', btn.id);
+        menu.hidden = true;
+        menu.style.display = 'none';
+        menu.style.position = 'absolute';
+        menu.style.right = '0';
+        menu.style.top = '100%';
+        menu.style.zIndex = '1000';
+        menu.style.background = 'var(--card-bg, #fff)';
+        menu.style.border = '1px solid var(--border, #ddd)';
+        menu.style.borderRadius = '6px';
+        menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        menu.style.minWidth = '260px';
+        menu.style.padding = '4px 0';
+
+        const items = () => Array.from(menu.querySelectorAll('[role="menuitem"]:not([disabled])'));
+
+        function close(restoreFocus) {
+            menu.hidden = true;
+            menu.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+            if (restoreFocus) btn.focus();
+        }
+
+        async function open(focusLast) {
+            await renderMenu();
+            menu.hidden = false;
+            menu.style.display = 'block';
+            btn.setAttribute('aria-expanded', 'true');
+            const all = items();
+            if (all.length) all[focusLast ? all.length - 1 : 0].focus();
+        }
+
+        function isOpen() { return !menu.hidden; }
+
+        // ── Menu content ────────────────────────────────────────────────────────────────────────
+        let savedViews = [];
+
+        function addBookmarkSection() {
+            if (bookmarks.length === 0) return;
+            const group = document.createElement('div');
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-label', 'Report bookmarks');
+            group.appendChild(menuHeading('Report bookmarks'));
+            bookmarks.forEach(bm => {
+                const item = styleMenuItem(document.createElement('button'));
+                item.className = 'bookmark-menu-item';
+                item.style.display = 'block';
+                item.style.width = '100%';
+                item.style.textAlign = 'left';
+                item.style.padding = '8px 16px';
+                item.textContent = bm.title || bm.name;
+                if (bm.isDefault) {
+                    item.style.fontWeight = 'bold';
+                    item.setAttribute('aria-label', (bm.title || bm.name) + ' (report default)');
+                }
+                item.addEventListener('click', () => { close(true); applyBookmark(bm.name); });
+                group.appendChild(item);
+            });
+            menu.appendChild(group);
+        }
+
+        function savedViewRow(view) {
+            const row = document.createElement('div');
+            row.setAttribute('role', 'group');
+            row.setAttribute('aria-label', view.name);
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.gap = '2px';
+            row.style.padding = '0 8px 0 0';
+
+            const apply = styleMenuItem(document.createElement('button'));
+            apply.className = 'saved-view-menu-item';
+            apply.style.flex = '1';
+            apply.style.textAlign = 'left';
+            apply.style.padding = '8px 8px 8px 16px';
+            apply.textContent = view.isDefault ? '★ ' + view.name : view.name;
+            apply.setAttribute('aria-label', view.isDefault ? view.name + ' (your default)' : view.name);
+            if (view.driftWarning) apply.title = view.driftWarning;
+            apply.addEventListener('click', () => { close(true); applySavedView(view.id); });
+            row.appendChild(apply);
+
+            const iconBtn = (glyph, label, handler) => {
+                const b = styleMenuItem(document.createElement('button'));
+                b.textContent = glyph;
+                b.setAttribute('aria-label', label);
+                b.title = label;
+                b.style.padding = '6px 6px';
+                b.addEventListener('click', handler);
+                return b;
+            };
+
+            row.appendChild(iconBtn('⟳', 'Update ' + view.name + ' to the current state', async () => {
+                const ok = await updateSavedView(view.id, { stateJson: JSON.stringify(captureResolvedState()) });
+                feedback.notify(ok ? `Updated '${view.name}'.` : `Could not update '${view.name}'.`,
+                    { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+                if (ok) await renderMenu();
+            }));
+
+            if (!view.isDefault) {
+                row.appendChild(iconBtn('☆', 'Make ' + view.name + ' my default view', async () => {
+                    const ok = await updateSavedView(view.id, { isDefault: true });
+                    feedback.notify(ok ? `'${view.name}' is now your default view.` : 'Could not set the default view.',
+                        { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+                    if (ok) await renderMenu();
+                }));
+            }
+
+            row.appendChild(iconBtn('✕', 'Delete ' + view.name, async () => {
+                close(true);
+                const confirmed = await feedback.confirm(`Delete the saved view '${view.name}'?`, {
+                    title: 'Delete saved view', confirmLabel: 'Delete', danger: true
+                });
+                if (!confirmed) return;
+                const ok = await deleteSavedView(view.id);
+                feedback.notify(ok ? `Deleted '${view.name}'.` : `Could not delete '${view.name}'.`,
+                    { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.delete' });
+                if (ok) await open(false);
+            }));
+
+            return row;
+        }
+
+        function addSavedViewSection() {
+            if (!supportsSavedViews) return;
+            const group = document.createElement('div');
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-label', 'My saved views');
+            group.appendChild(menuHeading('My saved views'));
+            if (savedViews.length === 0) {
+                const empty = document.createElement('div');
+                empty.setAttribute('role', 'presentation');
+                empty.textContent = 'No saved views yet.';
+                empty.style.padding = '6px 16px';
+                empty.style.fontSize = '0.8rem';
+                empty.style.opacity = '0.7';
+                group.appendChild(empty);
+            } else {
+                savedViews.forEach(v => group.appendChild(savedViewRow(v)));
+            }
+            menu.appendChild(group);
+        }
+
+        function addActionsSection() {
+            if (!supportsSavedViews) return;
+            const group = document.createElement('div');
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-label', 'Saved view actions');
+            group.style.borderTop = '1px solid var(--border, #ddd)';
+            group.style.marginTop = '4px';
+            group.style.paddingTop = '4px';
+
+            const action = (label, handler) => {
+                const b = styleMenuItem(document.createElement('button'));
+                b.style.display = 'block';
+                b.style.width = '100%';
+                b.style.textAlign = 'left';
+                b.style.padding = '8px 16px';
+                b.textContent = label;
+                b.addEventListener('click', handler);
+                group.appendChild(b);
+            };
+
+            action('Save current view as…', async () => {
+                close(true);
+                const name = await feedback.prompt('Name this view so you can return to it later.', {
+                    title: 'Save current view', label: 'View name', confirmLabel: 'Save',
+                    required: true, requiredMessage: 'Enter a name for the view.'
+                });
+                if (!name) return;
+                const created = await saveCurrentAsView(name, false);
+                feedback.notify(created ? `Saved '${name}'.` : `Could not save '${name}'.`,
+                    { title: 'Saved views', tone: created ? 'success' : 'error', auditAction: 'report.saved-view.create' });
+            });
+
+            action('Save as my default view', async () => {
+                close(true);
+                const saved = await saveDefaultView();
+                feedback.notify(saved ? 'Saved as your default view.' : 'Could not save your default view.',
+                    { title: 'Saved views', tone: saved ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+            });
+
+            action('Reset to report default', async () => {
+                close(true);
+                await resetToReportDefault(savedViews);
+            });
+
+            menu.appendChild(group);
+        }
+
+        async function renderMenu() {
+            if (supportsSavedViews) savedViews = await listSavedViews();
+            menu.textContent = '';
+            addBookmarkSection();
+            addSavedViewSection();
+            addActionsSection();
+        }
+
+        btn.addEventListener('click', () => { if (isOpen()) close(false); else open(false); });
+        btn.addEventListener('keydown', e => {
+            if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(false); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); open(true); }
+        });
+
+        menu.addEventListener('keydown', e => {
+            const all = items();
+            const index = all.indexOf(document.activeElement);
+            if (e.key === 'Escape') { e.preventDefault(); close(true); }
+            else if (e.key === 'Tab') { close(false); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); all[(index + 1) % all.length]?.focus(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); all[(index - 1 + all.length) % all.length]?.focus(); }
+            else if (e.key === 'Home') { e.preventDefault(); all[0]?.focus(); }
+            else if (e.key === 'End') { e.preventDefault(); all[all.length - 1]?.focus(); }
+        });
+
+        // The header is rebuilt on every manifest render, so this listener must go inert once its
+        // picker has been detached rather than accumulating one live handler per render.
+        document.addEventListener('click', e => {
+            if (!container.isConnected) return;
+            if (isOpen() && !container.contains(e.target)) close(false);
+        });
+
+        container.appendChild(btn);
+        container.appendChild(menu);
+        return container;
     }
 
     function postDrillIn(visualName, clickedValue) {
@@ -5272,6 +5549,6 @@
     // Test escape hatch: exposes pure functions for automated testing.
     // Harmless in production (just sets a window property that nothing reads).
     if (typeof window !== 'undefined') {
-        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, abbreviateNumber };
+        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash };
     }
 })();

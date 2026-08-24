@@ -121,6 +121,14 @@ public record UpdateSavedReportViewRequest(
     string? StateJson = null,
     string? ScriptHash = null);
 
+/// <summary>
+/// Body for saving the caller's default view. <c>State</c> is the shared resolved-state envelope;
+/// <c>Parameters</c> is the legacy flat map, still accepted so pre-envelope clients keep working.
+/// </summary>
+public record SaveDefaultReportViewRequest(
+    ETL_SQL.Core.Reporting.ResolvedReportState? State = null,
+    Dictionary<string, string>? Parameters = null);
+
 public record SavedReportViewDto(
     int Id,
     int ReportId,
@@ -131,7 +139,9 @@ public record SavedReportViewDto(
     string? ScriptHash,
     bool IsDefault,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    ETL_SQL.Core.Reporting.ResolvedReportState? State = null,
+    string? DriftWarning = null);
 
 public record CreateReportAlertRequest(
     string Name,

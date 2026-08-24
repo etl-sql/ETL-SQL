@@ -204,3 +204,133 @@ describe("renderNativeSvg()", () => {
         expect(container.querySelector("[data-row-index=\"0\"]")).not.toBeNull();
     });
 });
+
+// ── Views picker (author bookmarks + Portal saved views) ──────────────────────
+
+describe('savedViewsBase()', () => {
+    it('addresses saved views off the Portal host base rather than rebuilding the path', () => {
+        // The Portal hosts the runtime with __API_BASE__ = '/api/reports/{id}'. Concatenating
+        // '/api/reports/{id}' onto that base again produced a URL that 404s silently.
+        const win = makeDOM(w => { w.__IS_WEB__ = true; w.__API_BASE__ = '/api/reports/42'; });
+        expect(win.__reportRuntime__.savedViewsBase()).toBe('/api/reports/42/saved-views');
+    });
+
+    it('is unavailable in the ReportPlayer, which has no per-user saved-view API', () => {
+        const win = makeDOM(w => { w.__IS_WEB__ = true; w.__API_BASE__ = '/reports/Summary/api'; });
+        expect(win.__reportRuntime__.savedViewsBase()).toBeNull();
+    });
+
+    it('is unavailable in the VS Code preview and in offline snapshots', () => {
+        const vscodeWin = makeDOM(w => {
+            w.acquireVsCodeApi = () => ({ postMessage: () => {} });
+            w.__API_BASE__ = '/api/reports/42';
+        });
+        expect(vscodeWin.__reportRuntime__.savedViewsBase()).toBeNull();
+
+        const offlineWin = makeDOM(w => { w.__API_BASE__ = '/api/reports/42'; w.__ETLSNAP__ = {}; });
+        expect(offlineWin.__reportRuntime__.savedViewsBase()).toBeNull();
+    });
+});
+
+describe('buildViewsPicker()', () => {
+    it('returns nothing when there are no bookmarks and no saved-view API', () => {
+        const win = makeDOM();
+        expect(win.__reportRuntime__.buildViewsPicker({ ...EMPTY_MANIFEST, bookmarks: [] })).toBeNull();
+    });
+
+    it('exposes an accessible menu button wired to its menu', () => {
+        const win = makeDOM();
+        const picker = win.__reportRuntime__.buildViewsPicker({
+            ...EMPTY_MANIFEST,
+            bookmarks: [{ name: 'Overview', isDefault: true }, { name: 'Detail' }],
+        });
+        const button = picker.querySelector('button');
+        const menu = picker.querySelector('[role="menu"]');
+
+        expect(button.getAttribute('aria-haspopup')).toBe('menu');
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+        expect(button.getAttribute('aria-controls')).toBe(menu.id);
+        expect(menu.getAttribute('aria-labelledby')).toBe(button.id);
+        expect(menu.hidden).toBe(true);
+    });
+
+    it('opens on click, focuses the first item, and closes on Escape restoring focus', async () => {
+        const win = makeDOM();
+        const picker = win.__reportRuntime__.buildViewsPicker({
+            ...EMPTY_MANIFEST,
+            bookmarks: [{ name: 'Overview' }, { name: 'Detail' }],
+        });
+        win.document.body.appendChild(picker);
+        const button = picker.querySelector('button');
+        const menu = picker.querySelector('[role="menu"]');
+
+        button.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(menu.hidden).toBe(false);
+        expect(button.getAttribute('aria-expanded')).toBe('true');
+        const items = Array.from(menu.querySelectorAll('[role="menuitem"]')) as any[];
+        expect(items.map(i => i.textContent)).toEqual(['Overview', 'Detail']);
+        expect(win.document.activeElement).toBe(items[0]);
+
+        // Arrow keys roam the menu; every item is removed from the tab order while closed.
+        expect(items.every(i => i.tabIndex === -1)).toBe(true);
+        menu.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+        expect(win.document.activeElement).toBe(items[1]);
+
+        menu.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect(menu.hidden).toBe(true);
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+        expect(win.document.activeElement).toBe(button);
+    });
+
+    it('separates author bookmarks from the reader\'s own saved views', async () => {
+        const win = makeDOM(w => {
+            w.__IS_WEB__ = true;
+            w.__API_BASE__ = '/api/reports/7';
+            w.fetch = (url: string) => Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve(
+                    url === '/api/reports/7/saved-views'
+                        ? [{ id: 3, name: 'My West', isDefault: true }]
+                        : {}),
+            });
+        });
+        const picker = win.__reportRuntime__.buildViewsPicker({
+            ...EMPTY_MANIFEST,
+            bookmarks: [{ name: 'Overview' }],
+        });
+        win.document.body.appendChild(picker);
+        picker.querySelector('button').click();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const groups = Array.from(picker.querySelectorAll('[role="group"]')) as any[];
+        const labels = groups.map(g => g.getAttribute('aria-label'));
+        expect(labels).toContain('Report bookmarks');
+        expect(labels).toContain('My saved views');
+        expect(labels).toContain('Saved view actions');
+
+        // The personal default is announced as such rather than relying on the ★ glyph alone.
+        const mine = groups.find(g => g.getAttribute('aria-label') === 'My West');
+        expect(mine.querySelector('[role="menuitem"]').getAttribute('aria-label')).toBe('My West (your default)');
+
+        const actions = groups.find(g => g.getAttribute('aria-label') === 'Saved view actions');
+        expect(Array.from(actions.querySelectorAll('[role="menuitem"]')).map((b: any) => b.textContent))
+            .toEqual(['Save current view as…', 'Save as my default view', 'Reset to report default']);
+    });
+});
+
+// ── Identifier-only URL state ─────────────────────────────────────────────────
+
+describe('parseStateHash()', () => {
+    it('reads identifiers only and never carries values', () => {
+        const win = makeDOM();
+        const parse = win.__reportRuntime__.parseStateHash;
+        expect(parse('#bookmark=Overview')).toEqual({ bookmark: 'Overview', view: null });
+        expect(parse('#view=42')).toEqual({ bookmark: null, view: '42' });
+        expect(parse('')).toEqual({ bookmark: null, view: null });
+        // An explicit bookmark outranks a view in the same hash.
+        expect(parse('#bookmark=Overview&view=42').view).toBeNull();
+    });
+});
