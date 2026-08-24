@@ -96,6 +96,27 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("td[role=\"img\"] svg", css);
         }
 
+        /// <summary>
+        /// The chart dispatch must not call a function the runtime does not define. The
+        /// behavioural proof that the degraded state actually renders lives in the browser lane
+        /// (<c>DetailSurfaceBehaviourTests</c>); this keeps the dead call from coming back in a
+        /// lane that runs everywhere.
+        /// </summary>
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void SharedRuntime_HasNoUndefinedChartFallback()
+        {
+            var root = FindRepoRoot();
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));
+            var css = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.css"));
+
+            Assert.DoesNotContain("renderChart(", js);
+            Assert.Contains("function renderMissingChartPayload", js);
+            Assert.Contains(": renderMissingChartPayload(card, visual); break;", js);
+            Assert.Contains("el.setAttribute('role', 'status')", js);
+            Assert.Contains(".missing-chart-payload", css);
+        }
+
         private static string FindRepoRoot([CallerFilePath] string sourceFilePath = "")
         {
             foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory(), Path.GetDirectoryName(sourceFilePath) ?? "" })

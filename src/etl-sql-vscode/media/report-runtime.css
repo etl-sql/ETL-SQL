@@ -304,6 +304,7 @@
   footer { margin-top: 32px; color: #888; font-size: 0.8em; }
   .text-visual { line-height: 1.6; }
   .no-data { color: #999; font-style: italic; }
+  .missing-chart-payload { display: block; padding: 12px 0; }
   .error   { color: #c00; }
   .error-card { border: 1px solid #f5c6cb; border-radius: 4px; padding: 6px 10px; background: #fff5f5; }
   .error-card summary { cursor: pointer; color: #c00; font-weight: 600; }

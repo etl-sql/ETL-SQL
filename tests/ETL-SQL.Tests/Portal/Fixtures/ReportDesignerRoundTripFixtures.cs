@@ -74,6 +74,17 @@ internal static class ReportDesignerRoundTripFixtures
                 })])],
         []);
 
+    /// <summary>
+    /// Rewrites <paramref name="script"/> so every line break is <paramref name="lineEnding"/>.
+    /// </summary>
+    /// <remarks>
+    /// The sources are C# raw string literals, so on a checkout with <c>core.autocrlf=true</c> they
+    /// already hold CRLF. Substituting LF for LF would leave every CR in place and the LF case would
+    /// assert against a CRLF script — a false red on every Windows checkout. Normalizing to LF first
+    /// makes the requested ending the only one present, per AGENTS.md §17.3.
+    /// </remarks>
     internal static string WithLineEnding(string script, string lineEnding) =>
-        script.Replace("\n", lineEnding, StringComparison.Ordinal);
+        script.Replace("\r\n", "\n", StringComparison.Ordinal)
+              .Replace("\r", "\n", StringComparison.Ordinal)
+              .Replace("\n", lineEnding, StringComparison.Ordinal);
 }

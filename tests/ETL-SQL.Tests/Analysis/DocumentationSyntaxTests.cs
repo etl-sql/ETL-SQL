@@ -53,16 +53,13 @@ namespace ETL_SQL.Tests.Analysis
             int checkedSnippets = 0;
             int skippedSnippets = 0;
 
-            var sqlBlockRegex = new Regex(@"```sql\r?\n(.*?)\r?\n```", RegexOptions.Singleline);
-
             foreach (var file in mdFiles)
             {
                 var content = File.ReadAllText(file);
-                var matches = sqlBlockRegex.Matches(content);
 
-                foreach (Match match in matches)
+                foreach (var block in ExtractSqlBlocks(content))
                 {
-                    var sqlBlock = match.Groups[1].Value.Trim();
+                    var sqlBlock = block.Trim();
 
                     List<Token> allTokens;
                     try
@@ -136,9 +133,134 @@ namespace ETL_SQL.Tests.Analysis
                 }
             }
 
-            // Verify we actually checked some snippets
-            Assert.True(checkedSnippets >= 100,
+            // The floor is a coverage ratchet, not a smoke check. The previous column-zero
+            // extractor reached 3457 validated statements; honouring indented fences took it to
+            // 3495. Anything that drops back below this line has removed validation, which is
+            // exactly the failure mode a "make the gate green" change produces.
+            Assert.True(checkedSnippets >= 3490,
                 $"Expected broad documentation grammar coverage, but checked only {checkedSnippets} snippets ({skippedSnippets} skipped).");
+        }
+
+        /// <summary>
+        /// An indented fence must end at its own closing fence, not run on to the next
+        /// unindented one. This is asserted directly because the symptom in the aggregate gate
+        /// was a tokenizer error in unrelated prose, which reads as a documentation defect.
+        /// </summary>
+        [Fact]
+        public void ExtractSqlBlocks_BoundsAnIndentedFenceAtItsOwnClosingFence()
+        {
+            const string markdown = """
+                * Route failures:
+
+                  ```sql
+                  SELECT 1
+                  INTO #x;
+                  ```
+
+                Prose mentioning ETL-SQL's apostrophe.
+
+                ```sql
+                SELECT 2;
+                ```
+                """;
+
+            var blocks = DocumentationSyntaxTests.ExtractSqlBlocks(markdown);
+
+            Assert.Equal(2, blocks.Count);
+            // Dedented to column zero, and stopping before the prose that follows it.
+            Assert.Equal("SELECT 1\nINTO #x;", blocks[0]);
+            Assert.Equal("SELECT 2;", blocks[1]);
+            Assert.DoesNotContain("apostrophe", blocks[0]);
+            Assert.DoesNotContain("```", blocks[0]);
+        }
+
+        /// <summary>
+        /// The four indented fences in the troubleshooting guide were the reported failure. They
+        /// must now be extracted as four separate blocks that carry no prose.
+        /// </summary>
+        [Fact]
+        public void ExtractSqlBlocks_ValidatesTheIndentedFencesInTheTroubleshootingGuide()
+        {
+            var path = Path.Combine(FindRepoRoot(), "docs", "guides", "patterns", "troubleshooting-syntax-and-dialect.md");
+            var content = File.ReadAllText(path);
+
+            var indentedFences = content
+                .Replace("\r\n", "\n")
+                .Split('\n')
+                .Count(l => l.StartsWith(" ", StringComparison.Ordinal) && l.TrimStart().StartsWith("```sql", StringComparison.Ordinal));
+            Assert.Equal(4, indentedFences);
+
+            var blocks = ExtractSqlBlocks(content);
+            Assert.All(blocks, b => Assert.DoesNotContain("```", b));
+            Assert.All(blocks, b => Assert.DoesNotContain("ETL-SQL's", b));
+        }
+
+        // A fenced block opens with an optional indent, three or more backticks, and the bare
+        // `sql` info string. CommonMark lets a fence sit inside a list item, in which case both
+        // fences and the body carry the list's content indentation.
+        private static readonly Regex OpenFenceRegex =
+            new(@"^(?<indent>[ \t]*)(?<fence>`{3,})sql[ \t]*$", RegexOptions.Compiled);
+
+        // The closing fence is at least as long as the opening one and carries no info string.
+        private static readonly Regex CloseFenceRegex =
+            new(@"^(?<indent>[ \t]*)(?<fence>`{3,})[ \t]*$", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Returns the body of every fenced <c>sql</c> block in a markdown document.
+        /// </summary>
+        /// <remarks>
+        /// This is line-oriented rather than a single multi-line regex on purpose. The previous
+        /// regex required the closing fence to start at column zero, so an indented block — the
+        /// normal shape inside a list item — never found its own end: it ran on to the next
+        /// unindented fence and swallowed the intervening prose, which then failed to tokenize.
+        /// Honouring the indent both fixes that and brings the indented blocks, which were
+        /// silently mis-scoped, into real validation. The opening fence's indentation is stripped
+        /// from each body line, as CommonMark specifies.
+        /// </remarks>
+        internal static List<string> ExtractSqlBlocks(string content)
+        {
+            var blocks = new List<string>();
+            var lines = content.Replace("\r\n", "\n").Split('\n');
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var open = OpenFenceRegex.Match(lines[i]);
+                if (!open.Success) continue;
+
+                var indent = open.Groups["indent"].Value.Length;
+                var fenceLength = open.Groups["fence"].Value.Length;
+
+                var body = new List<string>();
+                int j = i + 1;
+                for (; j < lines.Length; j++)
+                {
+                    var close = CloseFenceRegex.Match(lines[j]);
+                    if (close.Success &&
+                        close.Groups["fence"].Value.Length >= fenceLength &&
+                        close.Groups["indent"].Value.Length <= indent + 3)
+                    {
+                        break;
+                    }
+
+                    body.Add(StripIndent(lines[j], indent));
+                }
+
+                blocks.Add(string.Join("\n", body));
+                i = j; // Resume after the closing fence (or at end of file if it is missing).
+            }
+
+            return blocks;
+        }
+
+        /// <summary>Removes up to <paramref name="width"/> leading spaces or tabs.</summary>
+        private static string StripIndent(string line, int width)
+        {
+            int removed = 0;
+            while (removed < width && removed < line.Length && (line[removed] == ' ' || line[removed] == '\t'))
+            {
+                removed++;
+            }
+            return line.Substring(removed);
         }
 
         private static readonly HashSet<string> StartKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -220,6 +342,14 @@ namespace ETL_SQL.Tests.Analysis
             {
                 return true;
             }
+            // `FOR REPORT ...` and `SEND TO ...` are clauses of CREATE SUBSCRIPTION, not
+            // statements of their own — an unterminated CREATE keeps owning them.
+            if (statementStart.Equals("CREATE", StringComparison.OrdinalIgnoreCase) &&
+                (nextKeyword.Equals("SEND", StringComparison.OrdinalIgnoreCase) ||
+                 nextKeyword.Equals("FOR", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
             if (statementStart.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) &&
                 nextKeyword.Equals("TRANSACTION", StringComparison.OrdinalIgnoreCase))
             {
@@ -252,12 +382,20 @@ namespace ETL_SQL.Tests.Analysis
             var current = new List<Token>();
             int parenthesisDepth = 0;
 
-            foreach (var token in tokens)
+            var real = tokens.Where(t => t.Type != TokenType.EOF).ToList();
+
+            for (int i = 0; i < real.Count; i++)
             {
-                if (token.Type == TokenType.EOF)
-                {
-                    continue;
-                }
+                var token = real[i];
+                var next = i + 1 < real.Count ? real[i + 1] : null;
+
+                // A checkpoint label (`Cleanup:` on its own line) is neither a statement nor a
+                // continuation of the one above it. Treat it as its own fragment so the block
+                // below it is validated on its own merits.
+                bool opensLabel = token.Type == TokenType.IDENTIFIER
+                    && next is not null
+                    && next.Type == TokenType.COLON
+                    && next.Line == token.Line;
 
                 if (token.Type == TokenType.LPAREN)
                 {
@@ -273,9 +411,10 @@ namespace ETL_SQL.Tests.Analysis
                     var lastToken = current.Last();
                     var firstToken = current.FirstOrDefault(t => t.Type != TokenType.EOF);
                     if (token.Line > lastToken.Line &&
-                        StartKeywords.Contains(token.Value) &&
-                        !IsContinuationToken(lastToken) &&
-                        (firstToken == null || !ShouldPreventSplit(firstToken.Value, token.Value)))
+                        (opensLabel ||
+                         (StartKeywords.Contains(token.Value) &&
+                          !IsContinuationToken(lastToken) &&
+                          (firstToken == null || !ShouldPreventSplit(firstToken.Value, token.Value)))))
                     {
                         results.Add(current);
                         current = new List<Token>();
@@ -283,6 +422,15 @@ namespace ETL_SQL.Tests.Analysis
                 }
 
                 current.Add(token);
+
+                // Close the label fragment immediately after its colon.
+                if (token.Type == TokenType.COLON && current.Count == 2 &&
+                    current[0].Type == TokenType.IDENTIFIER && current[0].Line == token.Line)
+                {
+                    results.Add(current);
+                    current = new List<Token>();
+                    continue;
+                }
 
                 if (token.Type == TokenType.SEMICOLON)
                 {

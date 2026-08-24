@@ -1639,7 +1639,7 @@
             case 'MATRIX':      renderMatrix(card, visual);                       break;
             default:            visual.nativeSvg
                                     ? renderNativeSvg(card, visual, manifest, effectiveTheme)
-                                    : renderChart(card, visual, manifest, effectiveTheme); break;
+                                    : renderMissingChartPayload(card, visual); break;
         }
 
         // DRILL_IN breadcrumb: shown when visual has an active drill state
@@ -2311,6 +2311,20 @@
                 wrapper.removeEventListener('focusout', onFocusOut);
             }
         };
+    }
+
+    // Chart-type visuals are rendered server-side into `nativeSvg`. A manifest that reaches
+    // the browser without one — an older snapshot, a lightweight/externalized manifest, an
+    // unrecognized visual type — has no payload the runtime can draw. Degrade to an explicit,
+    // announced state for that one card instead of aborting the whole page render.
+    function renderMissingChartPayload(container, visual) {
+        const type = (visual.visualType || 'chart').toUpperCase();
+        const name = visual.title || visual.name || 'this visual';
+        const el = noDataEl('Chart payload missing for ' + name + ' (' + type + '). Re-run the report to regenerate it.');
+        el.classList.add('missing-chart-payload');
+        el.setAttribute('role', 'status');
+        container.appendChild(el);
+        return el;
     }
 
     function renderNativeSvg(container, visual, manifest, pageTheme) {

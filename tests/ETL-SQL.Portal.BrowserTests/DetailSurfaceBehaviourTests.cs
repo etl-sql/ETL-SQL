@@ -484,4 +484,32 @@ public sealed class DetailSurfaceBehaviourTests(DetailSurfaceHarnessFixture fixt
         Assert.Equal(0, await page.Locator(Surface).CountAsync());
     }
 
+    // ── Missing chart payload ──────────────────────────────────────────────
+
+    /// <summary>
+    /// A chart-type visual whose <c>nativeSvg</c> never arrived must degrade to an explicit,
+    /// announced state in its own card. The dispatch used to call an undefined
+    /// <c>renderChart</c>, so this case threw a <c>ReferenceError</c> and aborted the whole
+    /// page render — every other visual on the page disappeared with it.
+    /// </summary>
+    [Fact]
+    public async Task AChartVisualWithoutANativeSvgPayload_DegradesInPlace()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html?payload=missing");
+
+        var missing = page.Locator(".missing-chart-payload");
+        await missing.WaitForAsync(new LocatorWaitForOptions { Timeout = 30_000 });
+
+        // Explicit, not blank: the message names the visual and its type, and is announced.
+        var text = await missing.InnerTextAsync();
+        Assert.Contains("Revenue by month", text);
+        Assert.Contains("BAR", text);
+        Assert.Equal("status", await missing.GetAttributeAsync("role"));
+
+        // The rest of the page still rendered, and nothing threw.
+        Assert.Equal(1, await page.Locator(".visual-card .table-wrapper").CountAsync());
+        Assert.Empty(session.PageErrors);
+    }
 }

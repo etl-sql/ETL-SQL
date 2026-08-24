@@ -15,6 +15,9 @@
     ?surface=popover   referenced-container popover (default)
     ?surface=tooltip   transient text tooltip
     ?surface=inline    inline markdown + VISUALS popover
+    ?payload=missing   chart-type visual delivered without a nativeSvg payload, alongside a
+                       second visual, so the degraded state and the rest of the page render
+                       can both be observed
     ?rtl=1             render right-to-left
 
   Serve the repo root (tools/ui-sandbox/serve.ps1) and open /tools/ui-sandbox/detail-surface.html.
@@ -57,10 +60,16 @@
         inline: { type: 'inline', mode: 'popover', markdown: 'Regional breakdown', visuals: ['MonthDetail'], resolvedVisuals: ['MonthDetail'] }
     };
 
+    // A manifest that reaches the browser without a server-rendered chart payload: an older
+    // snapshot, a lightweight manifest, or a visual type the server did not render.
+    const missingPayload = params.get('payload') === 'missing';
+
     window.__MANIFEST__ = {
         title: 'Detail surface harness',
         parameters: {},
-        pages: [{ name: 'Main', structure: 'A', mode: 'DASHBOARD', slotMap: { A: 'BarWithTooltip' } }],
+        pages: [missingPayload
+            ? { name: 'Main', structure: 'A B', mode: 'DASHBOARD', slotMap: { A: 'BarWithTooltip', B: 'MonthDetail' } }
+            : { name: 'Main', structure: 'A', mode: 'DASHBOARD', slotMap: { A: 'BarWithTooltip' } }],
         containers: [{
             name: 'TooltipBox',
             containerType: 'BOX',
@@ -75,7 +84,7 @@
                 columns: ['Month', 'Revenue'],
                 rows: [['January', '320'], ['February', '290'], ['March', '410']],
                 options: { 'mapping:x': 'Month', 'mapping:y': 'Revenue' },
-                nativeSvg: nativeSvg,
+                nativeSvg: missingPayload ? undefined : nativeSvg,
                 tooltip: tooltips[surface] || tooltips.popover
             },
             {

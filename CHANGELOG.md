@@ -28,6 +28,21 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added a parser-tested production composite report, Vega-Lite and ggplot2 conversion guidance, a
   declarative-geometry cookbook entry, and a reproducible Phase 13 closure evidence index.
 
+### Fixed
+
+- A chart-type visual delivered without a server-rendered SVG payload no longer aborts the whole
+  report page. The browser runtime called an undefined `renderChart`, so an older snapshot, a
+  lightweight manifest, or an unrendered visual type raised a `ReferenceError` that took every other
+  visual on the page with it. That card now degrades to an explicit, screen-reader-announced
+  "chart payload missing" state, covered by a browser-lane render test.
+- Documentation grammar validation now honours CommonMark-indented ` ```sql ` fences. The extractor
+  required the closing fence at column zero, so an indented block ran past its own end and swallowed
+  the prose after it — reported as a syntax error in that prose. Validated statements rose from 3457
+  to 3495, and the gate now ratchets on that count.
+- `ReportDesignerRoundTripFixtures.WithLineEnding` normalizes to LF before applying the requested
+  ending, so the LF case of the designer round-trip tests actually runs on a `core.autocrlf=true`
+  checkout instead of reporting a false red.
+
 ### Changed
 
 - Reconciled the reporting capability matrix with the source-backed renderer contract. Every
