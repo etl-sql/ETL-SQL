@@ -61,6 +61,11 @@ EXECUTE orch BEGIN
 END;
 ```
 
+## Troubleshooting
+
+- **401 Unauthorized**: Confirm `API_KEY` matches the Orchestrator service configuration.
+- **409 Conflict**: Legacy mode refuses per-object ACL mutations.
+
 ## References
 
 - [Service Connectors](README.md)

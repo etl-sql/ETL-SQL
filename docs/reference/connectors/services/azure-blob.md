@@ -20,6 +20,12 @@ Aliases: `BLOB`
 > Provide a full connection string in the traditional syntax, or use property-based structured syntax
 > with `ACCOUNT_NAME` and `ACCOUNT_KEY` / `SAS_TOKEN`.
 
+## Authentication
+
+Azure Blob Storage supports two authentication patterns:
+- **Account Key**: Supply `ACCOUNT_NAME` and `ACCOUNT_KEY`.
+- **SAS Token**: Supply `ACCOUNT_NAME` and `SAS_TOKEN`.
+
 ## Examples
 
 ```sql
@@ -29,6 +35,11 @@ CREATE CONNECTION cloud AS AZURE_BLOB('DefaultEndpointsProtocol=https;AccountNam
 -- Structured with account credentials
 CREATE CONNECTION cloud_struct AS AZURE_BLOB(ACCOUNT_NAME='myaccount', ACCOUNT_KEY='ENC:U2FsdGVk...', CONTAINER='raw-data');
 ```
+
+## Troubleshooting
+
+- **Authentication Failed**: Verify storage account name and valid, unexpired SAS token.
+- **Container Not Found**: Ensure target container exists before transfer.
 
 ## References
 

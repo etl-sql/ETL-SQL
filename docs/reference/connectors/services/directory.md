@@ -22,6 +22,10 @@ Querying a `DIRECTORY` connection via `SELECT` returns:
 - `IsReadOnly` (BIT) — `TRUE` if the file is read-only.
 - `CreationTime` (DATETIME) — time the file was created.
 
+## Authentication
+
+Directory connector uses host process file system permissions.
+
 ## Examples
 
 ```sql
@@ -30,6 +34,11 @@ CREATE CONNECTION data_dir AS DIRECTORY('C:\Data\Incoming', CREATE=ON);
 -- List all files in the directory as a result set
 SELECT FileName, Size, LastModified FROM data_dir;
 ```
+
+## Troubleshooting
+
+- **Access Denied**: Ensure process identity has read/write permissions on the target directory.
+- **Path Resolution**: Relative paths resolve against script root via `context.ResolvePath()`.
 
 ## References
 

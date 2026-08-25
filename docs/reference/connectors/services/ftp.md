@@ -18,6 +18,12 @@ Aliases: `FTP_CONN`
 | `USER` | Login username | No |
 | `PASSWORD` | Login password | No |
 
+## Authentication
+
+FTP connector supports:
+- **Standard Credentials**: Set `USER` and `PASSWORD`.
+- **Anonymous**: Set `USER='anonymous'` and email address as password.
+
 ## Examples
 
 ```sql
@@ -27,6 +33,11 @@ CREATE CONNECTION ftp_src AS FTP(HOST='ftp.example.com', USER='ftpuser', PASSWOR
 -- Traditional
 CREATE CONNECTION ftp_legacy AS FTP('ftp.example.com', USER='ftpuser', PASSWORD='ftppass');
 ```
+
+## Troubleshooting
+
+- **Passive Mode**: Set `USE_PASSIVE=TRUE` for connections behind NAT/firewalls.
+- **SSL / FTPS**: Use SFTP connector instead for SSH-backed file transfer.
 
 ## References
 

@@ -98,6 +98,10 @@ CREATE CONNECTION src AS FLATFILE(PATH='C:\Data\mixed.csv', NULL_AS=['EMPTY','NU
 > list is emitted. In `NULL_AS=['EMPTY','NULL']` the engine writes a blank field for every null.
 > Choose the first element to be the sentinel you want to produce on output.
 
+## Authentication
+
+Flat file operations use local file system permissions or storage connector credentials.
+
 ## Examples
 
 ```sql
@@ -171,6 +175,11 @@ is handled.
 > [!NOTE]
 > `INT` without a precision parameter has no inherent length and raises a "Width not defined" error.
 > Use `INT(N)`, `CHAR(N)`, `VARCHAR(N)`, or `/* @width: N */` for every column in a `FORMAT=FIXED` layout.
+
+## Troubleshooting
+
+- **Delimiter Escaping**: Set `DELIMITER` (e.g. `,`, `\t`, `|`) and `QUOTE_CHAR`.
+- **Encoding Mismatch**: Set `ENCODING` (e.g. `UTF-8`, `ASCII`, `Windows-1252`).
 
 ## References
 

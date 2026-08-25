@@ -18,6 +18,10 @@ Document extraction with JSONPath addressing for nested data. When querying a `J
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 | `TRANSACTIONAL` | `ON`/`OFF` — stage the complete output beside the target and publish with one replacement rename (default: `OFF`) | No |
 
+## Authentication
+
+JSON file operations use local file system permissions or storage connector credentials.
+
 ## Examples
 
 ```sql
@@ -27,6 +31,11 @@ CREATE CONNECTION json_src AS JSON('C:\Data\orders.json', ROOT_PATH='$.data.orde
 -- Compressed JSON
 CREATE CONNECTION json_gz AS JSON(PATH='C:\Data\events.json.gz', COMPRESS=ON);
 ```
+
+## Troubleshooting
+
+- **Parse Error**: Ensure file is valid JSON (array of objects) or NDJSON (one JSON object per line).
+- **Nested Schema**: Use `UNNEST` or JSON functions to flatten nested arrays.
 
 ## References
 

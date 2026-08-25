@@ -16,6 +16,12 @@ Aliases: `EMAIL`
 
 The host is supplied as the traditional connection-string argument (e.g. `SMTP('smtp.example.com', …)`).
 
+## Authentication
+
+SMTP email connector supports:
+- **Authenticated SMTP**: Supply `USER` and `PASSWORD`.
+- **Anonymous Relay**: Omit credentials for trusted internal relays.
+
 ## Examples
 
 ```sql
@@ -30,6 +36,11 @@ SEND EMAIL
     BODY 'All records processed.'
     AT mailer;
 ```
+
+## Troubleshooting
+
+- **Authentication Failed**: For Office 365 / Gmail, use App Passwords or OAuth2 relay.
+- **TLS Handshake Error**: Set `USE_SSL=TRUE` or port 587 for STARTTLS.
 
 ## References
 

@@ -25,6 +25,12 @@ password, and private-key JWT (recommended for production).
 > key to Snowflake (`ALTER USER … SET RSA_PUBLIC_KEY = '…'`), and store the private key path in
 > `PRIVATE_KEY_FILE`.
 
+## Authentication
+
+Snowflake supports two primary authentication modes:
+- **Username / Password**: Supply `USER` and `PASSWORD`.
+- **Key-Pair Authentication**: Supply `PRIVATE_KEY_FILE` (and optional `PRIVATE_KEY_PASSPHRASE`) for automated non-interactive pipelines.
+
 ## Examples
 
 ```sql
@@ -65,6 +71,12 @@ SELECT * INTO #top_accounts FROM sf.ORDERS WHERE status = 'CLOSED';
 | `APPROX_COUNT_DISTINCT` / `APPROX_PERCENTILE` | Approximate aggregates |
 
 The keywords `TOP` and `NOLOCK` are excluded (T-SQL only). Use `LIMIT` for row capping.
+
+## Troubleshooting
+
+- **JWT Token Expired / Invalid Key**: Verify private key format (PKCS#8 PEM) and matching public key registered on Snowflake user.
+- **Role / Warehouse Not Found**: Confirm `ROLE` and `WAREHOUSE` exist and user has usage permissions.
+- **Case Sensitivity**: Object identifiers in Snowflake default to uppercase unless quoted.
 
 ## References
 

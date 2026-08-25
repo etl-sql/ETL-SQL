@@ -25,6 +25,12 @@ Aliases: `SP`
 > - When using `AUTH_MODE = 'ENTRA_ID'`, the options `TENANT_ID`, `CLIENT_ID`, and `CLIENT_SECRET` are
 >   mutually required.
 
+## Authentication
+
+SharePoint / Microsoft Graph supports:
+- **Azure AD App Registration**: Supply `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID`.
+- **Certificate**: Supply `CERT_FILE` for automated client-credentials authentication.
+
 ## Examples
 
 ```sql
@@ -45,6 +51,11 @@ CREATE CONNECTION sp_onprem AS SHAREPOINT('https://sharepoint.local/sites/HR',
 -- Integrated authentication
 CREATE CONNECTION sp_integrated AS SHAREPOINT('https://tenant.sharepoint.com/sites/IT', AUTH_MODE = 'INTEGRATED');
 ```
+
+## Troubleshooting
+
+- **AADSTS7000215 (Invalid Client Secret)**: Refresh expired secret in Azure Portal.
+- **Site Not Found**: Verify site relative URL and document library path.
 
 ## References
 

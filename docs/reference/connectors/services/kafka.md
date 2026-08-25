@@ -18,6 +18,12 @@ messages from a topic as a table; `INSERT` publishes messages to a topic.
 | `SASL_USERNAME` | Username for SASL authentication | No |
 | `SASL_PASSWORD` | Password for SASL authentication (supports `ENC:`) | No |
 
+## Authentication
+
+Kafka connector supports:
+- **SASL/PLAIN or SASL/SCRAM**: Set `SASL_MECHANISM`, `USERNAME`, and `PASSWORD`.
+- **SSL / TLS**: Supply client certificates via `SSL_KEY_FILE` and `SSL_CERT_FILE`.
+
 ## Examples
 
 ```sql
@@ -44,6 +50,11 @@ SELECT Key, Value, Partition, Offset, Timestamp FROM kfk_auth;
 -- Publish a message to a topic
 INSERT INTO kfk_simple (Key, Value) VALUES ('msg-100', '{"event": "UserSignup", "userId": 42}');
 ```
+
+## Troubleshooting
+
+- **Broker Unreachable**: Verify bootstrap server host/port.
+- **Topic Authorization Failed**: Confirm SASL user has read/write ACLs on the topic.
 
 ## References
 

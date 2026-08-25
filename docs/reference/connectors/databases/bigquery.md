@@ -19,6 +19,12 @@ identity) when no credential file is provided.
 | `CREDENTIAL_FILE` | Path to service account JSON key file. Omit to use ADC (Cloud Run, GKE workload identity, `gcloud auth application-default login`). | No |
 | `LOCATION` | BigQuery job location: `US`, `EU`, `us-central1`, etc. Defaults to `US`. | No |
 
+## Authentication
+
+BigQuery supports two primary authentication methods:
+- **Service Account Key**: Pass the local JSON key file path using `KEY_FILE`.
+- **Application Default Credentials (ADC)**: When running on GCP (GCE, Cloud Run, GKE) or after running `gcloud auth application-default login`, omit `KEY_FILE` to use implicit ambient credentials.
+
 ## Examples
 
 ```sql
@@ -63,6 +69,12 @@ and `CURRENT_DATETIME()` respectively.
 
 **Write behavior:** `COPY INTO` uses BigQuery streaming inserts (low latency, no staging).
 `COPY INTO … APPEND=FALSE` truncates via `TRUNCATE TABLE` before inserting.
+
+## Troubleshooting
+
+- **Dataset Not Found**: Verify `PROJECT_ID` and `DATASET` match your GCP console exactly.
+- **Permission Denied**: Ensure the service account has at least `BigQuery Data Viewer` and `BigQuery Job User` IAM roles.
+- **Quota Exceeded**: Query exceeded project byte budget or rate limits. Stage filtered results into a `#temp` table before wide joins.
 
 ## References
 

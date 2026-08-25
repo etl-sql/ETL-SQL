@@ -15,12 +15,21 @@ schema file.
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 
+## Authentication
+
+Avro file operations use file system permissions or storage connector credentials (S3, Azure Blob, SFTP).
+
 ## Examples
 
 ```sql
 -- Read Avro with an external schema definition
 CREATE CONNECTION avro_src AS AVRO('C:\Data\events.avro', SCHEMA_FILE='C:\Schemas\events.avsc');
 ```
+
+## Troubleshooting
+
+- **Schema Evolution Failure**: Verify writer schema is compatible with reader schema.
+- **Corrupt File**: Ensure file was not truncated during transfer.
 
 ## References
 

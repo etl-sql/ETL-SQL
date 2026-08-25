@@ -31,6 +31,10 @@ unaccepted drift, `IGNORE_EXTRA_COLUMNS=ON` accepts surplus columns, `NULL_MISSI
 absent template columns with `NULL`, and `MAP_BY_HEADER_NAME=ON` aligns by unique source header names.
 Use `EXPECT SCHEMA` after staging if the accepted temp-table shape is part of the pipeline contract.
 
+## Authentication
+
+Excel file operations use local file system permissions or storage connector credentials. For password-protected workbooks, supply `PASSWORD`.
+
 ## Examples
 
 ```sql
@@ -40,6 +44,11 @@ CREATE CONNECTION xl_src AS EXCEL('C:\Reports\Q4.xlsx', SHEET='Summary', HEADER=
 -- Write an encrypted workbook
 CREATE CONNECTION xl_out AS EXCEL(PATH='C:\Secure\payroll.xlsx', ENCRYPT=ON, PASSWORD='safe_pass');
 ```
+
+## Troubleshooting
+
+- **Sheet Not Found**: Verify `SHEET_NAME` or 1-based `SHEET_INDEX`.
+- **Header Row Detection**: Set `HAS_HEADER=TRUE` and optional `START_ROW` to skip metadata headers.
 
 ## References
 

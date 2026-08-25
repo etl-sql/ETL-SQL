@@ -62,6 +62,12 @@ Graph entities are mapped to virtual tables:
   transaction instead of their own per-operation transaction.
 - In `SET WHAT_IF ON`, raw mutating Cypher in `EXECUTE` is skipped.
 
+## Authentication
+
+Neo4j supports basic authentication:
+- **Basic Auth**: Supply `USER` (default `neo4j`) and `PASSWORD` options.
+- **Encryption**: Set `ENCRYPTION=TRUE` for Neo4j AuraDB or secure Bolt listeners.
+
 ## Examples
 
 ```sql
@@ -84,6 +90,12 @@ BEGIN
     RETURN p.name AS source_name, fof.name AS fof_name
 END;
 ```
+
+## Troubleshooting
+
+- **Invalid Credentials**: Verify password against Neo4j Browser or Aura console.
+- **Bolt Protocol Error**: Ensure connecting to bolt/neo4j URI protocol (e.g. `bolt://host:7687`).
+- **Cypher Pushdown**: Write native Cypher within `EXECUTE neo_conn BEGIN ... END`.
 
 ## References
 

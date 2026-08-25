@@ -21,6 +21,12 @@ a native ETL-SQL connector.
 > For DSN-less connections you must provide `DRIVER` and at least one identifying property (`SERVER`
 > or `DATABASE`).
 
+## Authentication
+
+ODBC authentication depends on the underlying driver and DSN:
+- **DSN Connection**: References a system or user DSN with configured credentials or prompt.
+- **Driver-Native Pass-Through**: Supply connection string keywords including `UID`, `PWD`, or `Trusted_Connection`.
+
 ## Examples
 
 ```sql
@@ -86,6 +92,12 @@ CREATE CONNECTION dremio AS ODBC(DRIVER='{Dremio ODBC Driver 64-bit}',
 > All ODBC data-warehouse connections benefit from `TIMEOUT_SECONDS = 1800` (30 minutes) since
 > analytical queries routinely take minutes. Without it, the default 30-second command timeout causes
 > premature cancellations on large scans.
+
+## Troubleshooting
+
+- **Driver Not Found**: Ensure 64-bit ODBC driver matching the ETL-SQL runtime architecture is installed.
+- **Architecture Mismatch**: 32-bit drivers cannot be loaded by a 64-bit .NET runtime.
+- **Timeout**: Set `TIMEOUT_SECONDS` in connection options to override driver default.
 
 ## References
 

@@ -26,6 +26,12 @@ Aliases: `MARIADB`
 | `CONNECTION_LIFETIME` | Maximum age in seconds for a pooled connection | No |
 | `TABLE` | Default table context | No |
 
+## Authentication
+
+MySQL supports standard user authentication and SSL:
+- **Standard Authentication**: Set `USER` and `PASSWORD` options.
+- **SSL / TLS**: Set `SSL_MODE` (`REQUIRED`, `VERIFY_CA`, `VERIFY_IDENTITY`) and optional `SSL_CA` path.
+
 ## Examples
 
 ```sql
@@ -52,6 +58,12 @@ server.
 
 The keywords `TOP`, `ROWNUM`, and `PERCENT` are excluded. The T-SQL 2-argument `ISNULL` function is
 excluded (use MySQL's `IFNULL` or `COALESCE`).
+
+## Troubleshooting
+
+- **Access Denied**: Confirm user grants include remote host wildcard or explicit IP permissions (`'user'@'%' or 'user'@'host'`).
+- **Packet Too Large**: For large batch inserts, increase `max_allowed_packet` on the MySQL server.
+- **Unknown Database**: Verify `DATABASE` exists and user has `SELECT`/`INSERT` privileges.
 
 ## References
 

@@ -53,6 +53,13 @@ Aliases: `REST`, `HTTP`
 | `BODY_TEMPLATE` | Dynamic body template containing `${column_name}` placeholders | No |
 | `ERROR_BODY_MAX_CHARS` | Maximum character length of response body saved in errors (default: `4096`) | No |
 
+## Authentication
+
+HTTP API connector supports multiple authentication patterns:
+- **Bearer Token**: Pass `AUTH_HEADER = 'Bearer <token>'` or `BEARER_TOKEN = 'SECRET:...'`.
+- **API Key**: Supply key in custom header via `HEADERS` or query parameter.
+- **Basic Auth**: Supply `USER` and `PASSWORD`.
+
 ## Examples
 
 ```sql
@@ -92,6 +99,12 @@ INSERT INTO bulk_api (location, totalBeds) SELECT loc_name, total FROM #bed_data
 >   write requests (`POST`/`PUT`/`PATCH`) for all surviving rows.
 > - To delete resources via the API, configure a connection with `METHOD='DELETE'` (e.g. with dynamic
 >   template params) and execute it directly or via a query block.
+
+## Troubleshooting
+
+- **HTTP 401 Unauthorized**: Verify token expiration and secret reference.
+- **HTTP 429 Too Many Requests**: Implement retry delay or throttle batch requests.
+- **Invalid JSON Response**: Check endpoint URL and accept headers.
 
 ## References
 

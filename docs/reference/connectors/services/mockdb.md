@@ -4,14 +4,14 @@ Built-in, zero-configuration in-memory database for script development and testi
 server, no configuration required. Accepts all DDL and DML operations but discards its data when the
 session ends.
 
+## Syntax
+
 ```sql
 CREATE CONNECTION <name> AS MOCKDB();
 ```
 
 ## Pre-populated tables
 
-| Table | Columns |
-| :--- | :--- |
 | `Users` | `UserID`, `UserName`, `Email`, `ExternalID`, `RegistrationDate`, `PreciseTime`, `LastLoginOffset` |
 | `Products` | `ProductID`, `ProductName`, `Category`, `Cost`, `Price`, `StockLevel`, `Discontinued`, `WeightGrams`, `SkidGuid` |
 | `Orders` / `Sales` | `SaleID`, `OrderDate`, `CustomerID`, `ProductID`, `Quantity`, `UnitPrice`, `Total`, `Region`, `ShipTimeOffset`, `ProcessDuration` |
@@ -50,7 +50,17 @@ END
 > [!WARNING]
 > `MOCKDB` is strictly for development and testing. Do not use it in production scripts.
 
+## Troubleshooting
+
+- **Table Not Found**: Seed mock tables with `SEED TABLE` or inline dataset declarations.
+- **Scope**: MockDB data exists only within the execution context of the test session.
+
 ## References
 
 - [Service Connectors](README.md)
 - [Connectors](../README.md)
+
+
+## Authentication
+
+MockDB is an in-memory test database connector. It requires no authentication credentials.

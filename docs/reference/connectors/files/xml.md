@@ -18,6 +18,10 @@ Document extraction with XPath addressing for nested elements. When querying an 
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 | `TRANSACTIONAL` | `ON`/`OFF` — stage the complete output beside the target and publish with one replacement rename (default: `OFF`) | No |
 
+## Authentication
+
+XML file operations use local file system permissions or storage connector credentials.
+
 ## Examples
 
 ```sql
@@ -27,6 +31,11 @@ CREATE CONNECTION xml_src AS XML('C:\Data\catalog.xml', ROOT_PATH='/Catalog/Prod
 -- Encrypted XML archive
 CREATE CONNECTION xml_vault AS XML(PATH='C:\Vault\archive.xml', ENCRYPT=ON, PASSWORD='vault_pass');
 ```
+
+## Troubleshooting
+
+- **XPath / Root Element**: Configure `ROW_TAG` to designate repeating record elements.
+- **Malformed XML**: Verify entity encoding and XML closing tags.
 
 ## References
 

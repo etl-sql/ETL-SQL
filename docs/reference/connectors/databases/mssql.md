@@ -30,6 +30,12 @@ Aliases: `SQL`, `SQLSERVER`
 > Do not set `USER`/`PASSWORD` when using `TRUSTED_CONNECTION=TRUE`. They are mutually exclusive
 > authentication methods.
 
+## Authentication
+
+SQL Server supports two mutually exclusive authentication methods:
+- **SQL Authentication**: Set `USER` and `PASSWORD`.
+- **Integrated Security (Windows Authentication)**: Set `TRUSTED_CONNECTION=TRUE` and omit `USER`/`PASSWORD`.
+
 ## Examples
 
 ```sql
@@ -50,6 +56,12 @@ BEGIN TRANSACTION;
   INSERT INTO m_sales.dbo.Staging SELECT * FROM #processed;
 COMMIT;
 ```
+
+## Troubleshooting
+
+- **Login Failed for User**: Verify credentials, database existence, and whether SQL Server is configured for mixed-mode authentication.
+- **SSL / Certificate Error**: For self-signed certificates in non-production, set `TRUST_SERVER_CERTIFICATE=TRUE`.
+- **Connection Timeout**: Verify SQL Server is listening on TCP/IP and SQL Browser is active for named instances.
 
 ## References
 

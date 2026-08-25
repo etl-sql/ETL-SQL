@@ -1,4 +1,4 @@
-﻿# TRANSACTIONAL FILE WRITES
+# TRANSACTIONAL FILE WRITES
 
 `TRANSACTIONAL=ON` prevents consumers from observing a partial local file and preserves the prior
 target when serialization, encryption, compression, cancellation, or publication fails.
@@ -42,8 +42,18 @@ INSERT INTO safe_csv.FILE
 SELECT * FROM #validated_rows;
 ```
 
+## Troubleshooting
+
+- **Staging Directory Permission**: Ensure directory permits write and rename operations.
+- **Lock Contention**: Clean up orphaned staging files if processes terminate abnormally.
+
 ## References
 
 - [File Connectors](README.md)
 - [SFTP](../services/sftp.md)
 - [Connector Standards](../../../architecture/standards/connectors-standards.md)
+
+
+## Authentication
+
+Transactional write operations use local or remote file system permissions.

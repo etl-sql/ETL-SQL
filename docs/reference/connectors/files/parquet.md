@@ -16,6 +16,10 @@ Hive, and data-lake systems — it compresses well and supports efficient column
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 | `TRANSACTIONAL` | `ON`/`OFF` — stage the complete output beside the target and publish with one replacement rename (default: `OFF`) | No |
 
+## Authentication
+
+Parquet file operations use local file system permissions or storage connector credentials.
+
 ## Examples
 
 ```sql
@@ -25,6 +29,11 @@ CREATE CONNECTION pq_out AS PARQUET(PATH='C:\Data\output.parquet');
 -- Maximum compression for archival
 CREATE CONNECTION pq_archive AS PARQUET('C:\Archive\data.parquet', COMPRESSION=ZSTD);
 ```
+
+## Troubleshooting
+
+- **Type Mismatch**: Ensure column data types match Parquet schema types.
+- **Compression Unsupported**: Supported codecs include SNAPPY, GZIP, ZSTD, and UNCOMPRESSED.
 
 ## References
 

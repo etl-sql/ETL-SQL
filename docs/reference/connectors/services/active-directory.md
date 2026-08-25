@@ -26,6 +26,12 @@ Aliases: `AD`, `LDAP`
 > `AUTH_MODE = 'SIMPLE'` transmits credentials in plaintext unless `USE_SSL=TRUE` (LDAPS) is active. Use
 > `USE_SSL=TRUE` with simple binding.
 
+## Authentication
+
+Active Directory supports two authentication patterns:
+- **Simple Bind**: Supply `SERVICE_USER` (distinguished name or UPN) and `SERVICE_PASSWORD`.
+- **Integrated Windows Auth / Kerberos**: Omit credentials on domain-joined Windows hosts.
+
 ## Examples
 
 ```sql
@@ -43,6 +49,12 @@ SELECT sAMAccountName, displayName, mail, memberOf
 FROM ad_corp
 WHERE sAMAccountName = 'jdoe';
 ```
+
+## Troubleshooting
+
+- **LDAP Server Unavailable**: Verify hostname, port (389 for LDAP, 636 for LDAPS), and SSL settings.
+- **Invalid Credentials (LDAP 49)**: Check UPN format and password expiration.
+- **Size Limit Exceeded**: Use paged queries for directories exceeding 1,000 objects.
 
 ## References
 

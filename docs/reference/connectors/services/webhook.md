@@ -42,6 +42,12 @@ Rows without a `Text` column fall back to `col: value` pairs joined with `;`.
 - **Egress policy is enforced on every request** — including every redirect hop — and the connector never uses an ambient system proxy. DNS-resolved addresses are re-validated at connect time.
 - **Only 307/308 redirects are followed** (they preserve the POST body). A 301/302/303 fails the statement instead of silently converting the delivery to a body-less GET — update the connection `URL` to the endpoint's new address.
 
+## Authentication
+
+Webhook connector supports:
+- **Secret URL**: Supply webhook endpoint containing pre-authenticated token.
+- **Bearer Token / Header**: Pass `BEARER_TOKEN` or custom HMAC signature secret.
+
 ## Examples
 
 ```sql

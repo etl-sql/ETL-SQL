@@ -20,6 +20,12 @@ Aliases: `MONGO`
 | `PASSWORD` | Password for authentication (supports `ENC:`) | No |
 | `TIMEOUT_SECONDS` | Connection timeout limit in seconds (default: `30`) | No |
 
+## Authentication
+
+MongoDB supports standard connection string authentication and credential options:
+- **Username / Password**: Supply credentials in the connection string (`mongodb://user:pass@host:port/db`) or via `USER` and `PASSWORD` options.
+- **SCRAM-SHA-256 / SCRAM-SHA-1**: Default authentication mechanism supported across standalone and replica-set clusters.
+
 ## Examples
 
 ```sql
@@ -43,6 +49,12 @@ SELECT name, price, category FROM mongo_uri;
 -- Insert a new document
 INSERT INTO mongo_uri (name, price, category) VALUES ('Wireless Mouse', 29.99, 'Electronics');
 ```
+
+## Troubleshooting
+
+- **Authentication Failed**: Verify database name matches the auth database (often `admin`).
+- **Connection Timeout**: Ensure MongoDB port (default 27017) is accessible and cluster IP allowlist includes the ETL-SQL host.
+- **BSON Type Conversion**: Complex nested documents are converted to JSON strings or flattened automatically.
 
 ## References
 

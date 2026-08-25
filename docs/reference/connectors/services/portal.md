@@ -64,8 +64,20 @@ EXECUTE orch BEGIN
 END;
 ```
 
+## Troubleshooting
+
+- **Token Expired**: Re-issue JWT with refreshed credentials.
+- **Forbidden (403)**: Ensure user or token role permits portal management actions.
+
 ## References
 
 - [Service Connectors](README.md)
 - [Connectors](../README.md)
 - [Orchestrator](orchestrator.md)
+
+
+## Authentication
+
+Portal connector supports:
+- **JWT Bearer Token**: Pass admin or service JWT via `AUTH_TOKEN`.
+- **Service Account**: Authenticate with service principal credentials.

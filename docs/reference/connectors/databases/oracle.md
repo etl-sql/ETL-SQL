@@ -23,6 +23,12 @@ pre-configured **TNS** alias. Supports full SQL pushdown, transactions, and conn
 > `TNS_NAME` and `SERVICE_NAME` are **mutually exclusive**. Using both in the same connection raises a
 > parse error.
 
+## Authentication
+
+Oracle supports standard user credentials and wallet-based authentication:
+- **Standard Credentials**: Set `USER` and `PASSWORD` with `HOST`, `PORT`, and `SERVICE_NAME` (or `SID`).
+- **Oracle Wallet**: Use `WALLET_LOCATION` with SSL/TCPS for Oracle Autonomous Cloud Database (ADW/ATP).
+
 ## Examples
 
 ```sql
@@ -32,6 +38,12 @@ CREATE CONNECTION o_dev AS ORACLE(HOST='oradb.local', PORT=1521, SERVICE_NAME='O
 -- TNS Name pattern (traditional)
 CREATE CONNECTION o_prod AS ORACLE('Data Source=MyTNS;User Id=app_user;Password=pwd;');
 ```
+
+## Troubleshooting
+
+- **ORA-12154 (TNS could not resolve service name)**: Verify `SERVICE_NAME` or EZConnect string.
+- **ORA-01017 (invalid username/password)**: Confirm case-sensitivity of credentials.
+- **Character Encoding**: Ensure UTF-8 or national charset compatibility on NVARCHAR columns.
 
 ## References
 

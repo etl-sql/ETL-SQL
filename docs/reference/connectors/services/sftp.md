@@ -48,6 +48,12 @@ Aliases: `SSH`
 > either the pin (preferred) or the opt-out. A pin that is set but does not match is still always
 > rejected — the opt-out does not weaken that.
 
+## Authentication
+
+SFTP supports two mutually exclusive authentication methods:
+- **Password**: Supply `USER` and `PASSWORD`.
+- **Key-Pair (Recommended)**: Supply `USER`, `KEYFILE`, and optional `PASSPHRASE`.
+
 ## Examples
 
 ```sql
@@ -74,6 +80,11 @@ CREATE CONNECTION legacy_box AS SFTP(
   ALLOW_UNPINNED_HOST_KEY = 'TRUE'
 );
 ```
+
+## Troubleshooting
+
+- **Host Key Verification Failed**: Set `HOST_KEY_FINGERPRINT` to the pinned SHA256 key fingerprint.
+- **Mutual Exclusion Error**: Do not provide both `PASSWORD` and `KEYFILE`.
 
 ## References
 

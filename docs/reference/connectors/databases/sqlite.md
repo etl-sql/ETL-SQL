@@ -18,6 +18,12 @@ Aliases: `SQLITE3`
 > volume encryption. `PASSWORD` is intentionally unsupported because the shipped native SQLite library
 > is not SQLCipher.
 
+## Authentication
+
+SQLite is an embedded, file-based database:
+- **File System Permissions**: Access is governed by local file system permissions of the executing process.
+- **Read-Only Mode**: Set `READ_ONLY=TRUE` to prevent any disk modifications.
+
 ## Examples
 
 ```sql
@@ -30,6 +36,12 @@ CREATE CONNECTION local_db AS SQLITE(DATABASE='C:\Data\local.db', TIMEOUT_SECOND
 -- Traditional connection string form
 CREATE CONNECTION legacy_db AS SQLITE('Data Source=C:\Data\legacy.db;Mode=ReadOnly;');
 ```
+
+## Troubleshooting
+
+- **Database Locked (SQLITE_BUSY)**: Multiple processes writing concurrently. Set `BUSY_TIMEOUT_MS` to wait on locks.
+- **File Not Found**: Verify path with `IExecutionContext.ResolvePath()`. Relative paths resolve against script root.
+- **Permissions Error**: Ensure write access to directory for WAL journal files.
 
 ## References
 
