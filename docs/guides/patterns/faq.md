@@ -2,26 +2,24 @@
 
 [« Back to Patterns & Troubleshooting](README.md)
 
-Quick answers to frequently asked questions, organized by category with links to focused troubleshooting guides.
-
----
+Quick navigation to frequently asked questions and troubleshooting guides across the documentation.
 
 > **Applies to:** every deployment profile (Solo, Team, Enterprise, SaaS).
 
 ## 1. General & Architecture
 
-#### What is ETL-SQL?
-ETL-SQL is a script-first orchestration and reporting engine. It enables you to extract, transform, validate, and publish data across heterogeneous systems (SQL databases, flat files, cloud storage, REST APIs) using plain-text `.etlsql` and `.rptsql` files. See [Thinking in Pipelines](../onboarding/getting-started.md).
+- **What is ETL-SQL?** — See [The Mental Model & Pipeline Thinking](../onboarding/getting-started.md).
+- **How do I check the engine version?** — See [`eng.version`](../../reference/eng/version.md) and [System Variables](../../reference/eng/variables.md).
+- **Can a script query multiple databases?** — See [Cross-Platform Reconciliation](../../cookbooks/etl/cross-platform-reconciliation.md).
 
-#### How do I check the engine version?
-Use the `@@VERSION` system variable or query `eng.version`:
-```sql
-PRINT @@VERSION;
-```
+## 2. Security & File Operations
 
----
+- **Why are file paths required to be absolute?** — See [Zero-Trust Security Boundaries](../../architecture/standards/connectors-standards.md).
+- **How do I send an email from a script?** — See [`SEND EMAIL`](../../reference/file-operations/send-email.md).
+- **How do I test destructive queries safely before running?** — See [`SET WHAT_IF ON`](../../reference/statements/session-control/config.md).
+- **How do I encrypt sensitive files or secrets?** — See [`ENCRYPT FILE`](../../reference/file-operations/encrypt-file.md) and [Secrets Management](../../administration/platform/secrets.md).
 
-## 2. Troubleshooting Guides
+## 3. Troubleshooting Guides
 
 For detailed problem diagnosis, step-by-step remedies, and code snippets, see our focused troubleshooting pages:
 
@@ -32,35 +30,7 @@ For detailed problem diagnosis, step-by-step remedies, and code snippets, see ou
 | **Reporting & Dashboards** | [Troubleshooting: Report-SQL](troubleshooting-reporting.md) | `RELDATE` casting errors, Tier 2 traps, cascading slicer updates, action bindings. |
 | **Performance & Ingestion** | [Troubleshooting: Performance](troubleshooting-performance.md) | Cross-source join pre-filtering, `BULK INSERT` batching, `#temp` table indexes. |
 
----
-
-## 3. Top Quick Answers
-
-#### How do I send an email from a script?
-Use the canonical `SEND EMAIL` statement:
-```sql
-SEND EMAIL 
-    TO      'team@company.com'
-    FROM    'etl@company.com'
-    SUBJECT 'Pipeline Completed'
-    BODY    'The daily pipeline ran successfully.'
-    AT      smtp_conn;
-```
-
-#### Why are file paths required to be absolute?
-The Zero-Trust security sandbox requires absolute paths (e.g. `C:\Data\input.csv` or `/data/input.csv`) to prevent path traversal attacks.
-
-#### How do I safely test destructive queries before executing?
-Wrap the queries in a dry-run block using `SET WHAT_IF ON`:
-```sql
-SET WHAT_IF ON;
-DELETE FROM prod_db.dbo.Logs WHERE LogDate < '2025-01-01';
-SET WHAT_IF OFF;
-```
-
----
-
-## Related Topics
+## Related References
 
 - [5-Minute Quickstart](../onboarding/QUICKSTART.md)
 - [ETL Recipes Cookbook](../../cookbooks/etl/README.md)
