@@ -8,7 +8,7 @@ Welcome, Agent. You are assisting in the development and operation of **ETL-SQL*
 | :--- | :--- |
 | [1](#1-the-mental-model--read-this-first)–[5](#5-scripting-patterns--how-to-think-about-a-request) | Writing `.etlsql` / `.rptsql` scripts |
 | [6](#6-documentation-library-map)–[7](#7-documentation-stewardship-rules) | Finding and writing documentation |
-| [8](#8-engine-coding-principles-when-modifying-c-source)–[10](#10-engine-architecture-patterns) | Modifying C# source |
+| [8](#8-code-principles-by-surface)–[10](#10-engine-architecture-patterns) | Modifying C#, HTML, JavaScript, TypeScript, and VS Code source |
 | [11](#11-third-party-dependency-policy)–[19](#19-cross-platform-line-endings--pre-push-validation) | Dependencies, assets, releases, and gates |
 
 ## 0. Writing Style
@@ -86,7 +86,7 @@ Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
 - **Temp tables**: `#TableName` — prefix with `#` for in-memory engine-side tables
 - **Encrypted strings**: `'ENC:base64...'` — set session password first with `USE PASSWORD = '...'`
-- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `SNOWFLAKE`, `BIGQUERY`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `WEBHOOK`/`SLACK`/`TEAMS`, `DIRECTORY`, `PORTAL`, `ORCHESTRATOR`, `MYSQL`, `SQLITE`, `MONGODB`, `KAFKA`, `NEO4J`, `S3`, `SHAREPOINT`, `ACTIVE_DIRECTORY` (and `MOCKDB` for test/mock workloads)
+- **Connectors**: Use the [Data Connectors reference](docs/reference/connectors/README.md) for the current supported tokens and options; do not copy connector inventories into other docs.
 - **Suspension**: `WAITFOR DELAY 'hh:mm:ss'` — fixed pause; `WAITFOR TIME 'hh:mm:ss'` — pause until clock time
 - **Data quality**: `@expect`/`@fail` tags on SELECT columns enforce value rules; a trailing `ON FAILURE` clause routes them. `ASSERT JOB` asserts on the run's own metrics. See [Data Quality Rules](docs/reference/statements/dml/data-quality-rules.md) and [ASSERT JOB](docs/reference/statements/session-control/assert-job.md)
 
@@ -105,7 +105,7 @@ Key syntax facts:
 
 - **File structure**: normal ETL-SQL data prep statements first, then `CREATE VISUAL`, `CREATE PAGE`, `CREATE DATASET`, `CREATE CONTAINER`, `CREATE NAVIGATION` at the end
 - **Report metadata**: `SET REPORT TITLE = '...'` and `SET REPORT DESCRIPTION = '...'` (optional, appear before visuals)
-- **Visual types**: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `FUNNEL`, `GAUGE`, `WATERFALL`, `BUBBLE`, `RADAR`, `CANDLESTICK`, `MAP`, `SANKEY`, `SUNBURST`, `NETWORK`, `TRELLIS`, `MATRIX`, `GANTT`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `TEXTBOX`, `NUMBERBOX`, `CHECKBOX`
+- **Visual types**: Use the [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) for the current visual inventory and mappings.
 - **Interactive bindings** — If a control has a `SOURCE` (like `SLICER`), bind the parameter to the mapped column name. If it lacks a `SOURCE` (like `DATEPICKER` or `SLIDER`), you **must** bind it to the literal keyword `value`:
   ```sql
   -- Slicer (has SOURCE)
@@ -124,7 +124,7 @@ Key syntax facts:
 - **Filter types** (`DATEPICKER`, `SLIDER`, `SEARCH`) do not require a `SOURCE` clause
 - **MULTISELECT** requires a `SOURCE` clause for its option list
 - **STYLE** cascades: page-level `STYLE (THEME = dark)` applies to all charts; visual-level `STYLE` overrides it
-- **Portal administration is script-first** inside `EXECUTE portal BEGIN...END`: use commands such as `PUBLISH REPORT`, `CREATE SUBSCRIPTION`, `REFRESH REPORT`, `FAVORITE REPORT`, `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW CATALOG SEARCH`, `SHOW EFFECTIVE PERMISSIONS`, `SHOW PORTAL USAGE METRICS`, `VALIDATE REPORT SCRIPT`, `CREATE SHARE LINK`, `CREATE EMBED TOKEN`, `CREATE SAVED VIEW`, and `CREATE ALERT`.
+- **Portal administration is script-first** inside `EXECUTE portal BEGIN...END`; use the [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) for the current command inventory.
 
 ---
 
@@ -206,17 +206,34 @@ Use the **staged ingestion pattern** (never write directly from source to target
 CREATE CONNECTION src AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
 CREATE CONNECTION dest AS MSSQL(SERVER='...', DATABASE='...', TRUSTED_CONNECTION=TRUE);
 
+DECLARE @Cutoff DATETIME = DATEADD(DAY, -1, GETDATE());
+
 BEGIN TRY
-    -- 1. Extract into engine memory
+    -- 1. Extract only source columns. The engine binds @Cutoff for the remote query.
+    SELECT id, name, email
+    INTO #extracted
+    FROM src.customers
+    WHERE updated_at > @Cutoff;
+
+    -- 2. Transform in engine context.
     SELECT id, UPPER(name) AS name, email, GETDATE() AS loaded_at
     INTO #staging
-    FROM src.customers
-    WHERE updated_at > DATEADD(DAY, -1, GETDATE());
+    FROM #extracted;
 
-    -- 2. Validate / clean
+    -- 3. Validate / clean
     UPDATE #staging SET email = NULL WHERE email NOT LIKE '%@%';
 
-    -- 3. Load
+    -- 4. Preview the destructive load.
+    SET WHAT_IF ON;
+    MERGE INTO dest.dbo.Customers AS T
+    USING #staging AS S ON T.id = S.id
+    WHEN MATCHED AND S.name <> T.name THEN
+        UPDATE SET T.name = S.name, T.loaded_at = S.loaded_at
+    WHEN NOT MATCHED THEN
+        INSERT (id, name, email, loaded_at) VALUES (S.id, S.name, S.email, S.loaded_at);
+    SET WHAT_IF OFF;
+
+    -- 5. Run for real only after validating the WHAT_IF output.
     MERGE INTO dest.dbo.Customers AS T
     USING #staging AS S ON T.id = S.id
     WHEN MATCHED AND S.name <> T.name THEN
@@ -260,7 +277,7 @@ Use this map to find the right document for any task.
 | Relative date parameters (`@TODAY`, offsets, report filters) | **[Relative Date Parameters](docs/reference/functions/datetime/reldate.md)** |
 | Complete production recipes | **[Cookbook](docs/cookbooks/etl/README.md)** |
 | Pipeline mental model for new users | **[Getting Started](docs/guides/onboarding/getting-started.md)** |
-| Sample script inventory (290+ files in `/samples/`) | **[Sample Guide](docs/guides/patterns/sample-guide.md)** |
+| Sample script inventory in `/samples/` | **[Sample Guide](docs/guides/patterns/sample-guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/feature-guides/report-sql.md)** |
 | Dashboard authoring, parameters, slicers, RLS, themes | **[Reporting Guides](docs/guides/reporting/README.md)** |
 | Data quality rules, quarantine, assertions, impact | **[Data Quality Guides](docs/guides/data-quality/README.md)** |
@@ -345,20 +362,22 @@ Snippet files located under `snippets/` are used by the LSP server to generate a
 
 ---
 
-## 8. Engine Coding Principles (When Modifying C# Source)
+## 8. Code Principles by Surface
 
-These rules apply when you are editing the ETL-SQL engine source code — **not** when writing `.etlsql` scripts:
+### 8.1 C# and Engine Rules
+
+These rules apply when editing C# source. Engine-specific rules are identified explicitly:
 
 - **Path Resolution**: Never use relative paths in engine code. Always call `IExecutionContext.ResolvePath()` before any file I/O — this is the Zero-Trust security boundary.
 - **Logging**: `Logger.Instance` is **obsolete**. Always use the `ILogger` provided via dependency injection or pulled from `IExecutionContext`. Do not use `Console.WriteLine`.
 - **AST Nodes**: Prefer `record` types for all AST node classes to enforce immutability. Do not use mutable `class` declarations for nodes.
 - **Async**: All I/O calls must use the `Async` overloads with a `CancellationToken`. No `.Result`, `.Wait()`, or `GetAwaiter().GetResult()` in connector or handler code.
 - **Exceptions**: Connector-level provider exceptions (`SqlException`, `NpgsqlException`, etc.) must be caught and re-thrown as `ExecutionException` with a sanitized message. Never let raw provider exceptions escape the connector boundary. Reserve exceptions for exceptional conditions — do not use them for ordinary control flow. The codebase has no `Result<T>`/`ErrorOr` library and adding one falls under [§11](#11-third-party-dependency-policy).
-- **C# style**: File-scoped namespaces and primary constructors. SOLID and DRY. Constructor injection only — no service-locator lookups. 4-space indent, EditorConfig-governed; `dotnet format` runs from the pre-commit hook.
+- **C# style**: Use file-scoped namespaces. Prefer primary constructors when they improve clarity and match the surrounding project. Use constructor injection; do not introduce service-locator lookups. Use 4-space indentation and follow `.editorconfig`; `dotnet format` runs from the pre-commit hook.
 - **Web surfaces**: Prefer Minimal API `Map*` methods over controllers for new endpoints.
-- **Tests**: xUnit with FluentAssertions. `INT`/`TINYINT`/`BIGINT` all store as `decimal` at runtime — assert with an `m` suffix or `Convert.ToDecimal`, never `int`/`long`/`byte` literals.
+- **Tests**: Use xUnit assertions and follow the surrounding test project's conventions. Do not introduce a second assertion library without following [§11](#11-third-party-dependency-policy). `INT`/`TINYINT`/`BIGINT` all store as `decimal` at runtime — assert with an `m` suffix or `Convert.ToDecimal`, never `int`/`long`/`byte` literals.
 
-### 8.1 Connector-Specific Rules
+### 8.2 Connector-Specific Rules
 
 These apply when authoring or modifying any `IConnector` / `IDataSource` implementation:
 
@@ -380,11 +399,29 @@ CREATE CONNECTION sales AS MSSQL WITH(SERVER='sql01', DATABASE='SalesDB');
 
 For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](docs/architecture/Connectors.md)**.
 
+### 8.3 HTML, JavaScript, TypeScript, and VS Code Rules
+
+The repository has three browser/extension surfaces. Follow the conventions and toolchain of the surface you are changing:
+
+| Surface | Source | Stack | Targeted validation |
+| :--- | :--- | :--- | :--- |
+| VS Code extension | `src/etl-sql-vscode/src/` | Strict TypeScript, CommonJS, ES2020 | From `src/etl-sql-vscode`: `npm run compile`, `npm run lint`, `npm run test:unit` |
+| VS Code UI | `src/etl-sql-vscode/ui/src/` | React, TSX, Vite, browser DOM | From `src/etl-sql-vscode/ui`: `npm run lint`, `npm run build`, `npm run test:unit` |
+| Portal/report runtime | Portal `wwwroot` sources and `src/ETL-SQL.ReportRuntime/Resources/Shared/` | HTML, CSS, browser JavaScript | Use the UI sandbox and the asset-sync checks in [§12](#12-shared-report-runtime-assets) |
+
+- Keep TypeScript strict. Do not weaken compiler or ESLint rules to make a change pass.
+- Preserve the module system and JavaScript target configured by the package you are editing; the extension and UI use different targets.
+- Prefer typed messages and shared contracts at extension/webview boundaries. Validate untrusted message and API payloads before use.
+- Preserve keyboard navigation, focus behavior, labels, semantic HTML, and existing accessibility tests when changing UI.
+- Avoid unsafe HTML injection. Use DOM APIs or framework rendering for untrusted content; if raw HTML is required, use the existing sanitization boundary.
+- Add or update focused Vitest tests for TypeScript/React behavior. Add or extend a UI sandbox story for browser-side visual or interaction changes.
+- Do not edit generated report-runtime copies. Follow the canonical asset workflow in [§12](#12-shared-report-runtime-assets).
+
 ---
 
 ## 9. Build, Test & Run
 
-Solution file: `ETL-SQL.slnx`. Composition root: `DependencyInjectionSetup.BuildServiceProvider()` in `src/ETL-SQL.App/App/DependencyInjectionSetup.cs` — the only one, including for tests. Configuration lives in `src/appsettings.json` (engine tuning, security boundaries, connector defaults, logging).
+Solution file: `ETL-SQL.slnx`. The canonical engine/CLI composition root is `DependencyInjectionSetup.BuildServiceProvider()` in `src/ETL-SQL.App/App/DependencyInjectionSetup.cs`. Host-specific roots, such as the TUI setup, may add presentation services; focused tests may construct isolated service collections. Configuration lives in `src/appsettings.json` (engine tuning, security boundaries, connector defaults, logging).
 
 ```bash
 # Build
@@ -431,7 +468,7 @@ dotnet test ETL-SQL.slnx --filter "FullyQualifiedName~DockerStandardSandboxLifec
 dotnet test ETL-SQL.slnx --filter "FullyQualifiedName~DockerHardenedSandboxLifecycleTests"
 ```
 
-**CI gate:** 70% minimum line coverage (`scripts/Test-CoverageGate.ps1`). Tests run single-threaded — each test project's `xunit.runner.json` sets `parallelizeAssembly` and `parallelizeTestCollections` to `false`.
+**CI gate:** 70% minimum line coverage (`scripts/Test-CoverageGate.ps1`). Test projects that include `xunit.runner.json` disable assembly and collection parallelism. Do not assume the same setting in projects without that file.
 
 ### Running the application
 
@@ -442,7 +479,7 @@ dotnet run --project src/ETL-SQL.App -- ui edit MyScript.etlsql    # TUI editor
 
 ### Environment assumptions
 
-C# 13 / .NET 10, ASP.NET Core (Minimal APIs preferred for new services), EF Core over SQLite and PostgreSQL. Development is on Windows 11 with PowerShell 7+; give local commands in `dotnet` CLI + PowerShell form with backslash paths. Production runs cross-platform, so nothing in the engine may assume Windows. Tests use xUnit + FluentAssertions. Secrets go in user-secrets or `.env` — never hardcoded.
+.NET 10 with `LangVersion=latest`, ASP.NET Core (Minimal APIs preferred for new services), and EF Core over SQLite and PostgreSQL. Development is on Windows 11 with PowerShell 7+; give local commands in `dotnet` CLI + PowerShell form with backslash paths. Production runs cross-platform, so nothing in the engine may assume Windows. Tests use xUnit and the assertion style already present in the target test project. Secrets go in user-secrets or `.env` — never hardcoded.
 
 ---
 
@@ -595,7 +632,7 @@ For full usage and script details, refer to **[scripts/README.md](./scripts/READ
 - **Smoke Tests:** Runs targeted categories of fast smoke tests (Core, Security, Reporting, Portal).
   - Windows: `.\scripts\test-smoke.ps1 -Lane all`
   - Linux/macOS: `./scripts/test-smoke.sh --lane all`
-- **General Test Lanes:** Gateway script to run a specific suite — `smoke`, `fast`, `engine`, `portal`, `portal-hosted`, `browser`, `integration`, `perf`, `release`, `full`, `benchmarks`, `slt`, `spill`, `ebnf`, `fuzz-smoke`, `fuzz`.
+- **General Test Lanes:** Gateway script for named suites. Use `scripts/README.md` or the script's help for the current lane inventory.
   - Windows: `.\scripts\test-lane.ps1 -Lane fast`
   - Linux/macOS: `./scripts/test-lane.sh --lane fast`
 - **SQLite Logic Tests (SLT) Corpus:** Runs the SLT verification engine against corpus files, writing output to teed timestamped logs in `slt_results/`.

@@ -212,8 +212,14 @@ manifest as authoritative meaning.
 
 ## 5. Validation and diagnostics
 
-The parser validates structure and normalized enum spelling. The `AdvancedChartAuthoring` Analysis
-rule reports `RPT-CHART` errors for semantic violations, including:
+The parser validates structure and normalized enum spelling and stamps a source span on every chart
+node — definition, coordinate, scales, encodings, binding sources, layers, styles, conditions, position
+adjustments, color ranges, facet, and resolution.
+
+Semantic validation has one owner: `AdvancedChartSemanticValidator` in `ETL-SQL.Core`. The
+`AdvancedChartAuthoring` Analysis rule and `AdvancedChartLowerer` both run it, so an editor diagnostic
+and a report preview failure cannot disagree. It reports `RPT-CHART` errors for semantic violations,
+including:
 
 - `CHART` on a non-`CUSTOM` visual or a `CUSTOM` visual without `CHART`;
 - top-level `MAPPINGS`, `SERIES`, `OVERLAYS`, or table formatting on `CUSTOM`;
@@ -225,8 +231,22 @@ rule reports `RPT-CHART` errors for semantic violations, including:
 - unsupported conditional predicates, values, channels, or connected-mark conditions;
 - empty facets, duplicate row/column fields, or independent resolution without a facet.
 
-Diagnostics identify the visual and nested object. Runtime validation repeats safety-critical contract
-checks because scripts can execute without an editor.
+Every diagnostic is anchored to the offending node — the layer, scale, encoding, condition, facet, or
+coordinate that carries the mistake — not to the `CREATE VISUAL` header, and every duplicate name or
+binding is reported in one pass rather than only the first.
+
+Lowering never fails with a bare message. Semantic failures leave `AdvancedChartLowerer` as an
+`AdvancedChartSemanticException` carrying the same positioned diagnostics, including the two classes the
+AST cannot express — parameter resolution (undeclared or secret-bearing `@variable`, anchored at the
+offending node) and the `ChartSpec.Validate()` contract backstop (anchored at the `CHART` clause).
+`VisualBuilder` still produces a safe visual error state, and additionally publishes those diagnostics on
+`VisualManifest.diagnostics`, so a semantic authoring failure never exists only as unpositioned text
+painted inside a rendered report.
+
+The AST enums in Core and the contract enums in `Reporting.Contracts` stay separate families, bridged by
+the explicit arm-per-member mappings in `AdvancedChartEnumBridge`; parity tests keep the families
+aligned. Runtime validation repeats safety-critical contract checks because scripts can execute without
+an editor.
 
 ## 6. Lineage, rename, actions, themes, and accessibility
 

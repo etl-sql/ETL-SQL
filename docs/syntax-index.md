@@ -764,6 +764,9 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 | `TEMP_TABLE_SPILL_THRESHOLD` | Performance | 1,000,000 | [SET TEMP_TABLE_SPILL_THRESHOLD](reference/set-commands/set-temp-table-spill-threshold.md) |
 | `MAX_PARALLEL_DEGREE` | Performance | CPU Count | [SET MAX_PARALLEL_DEGREE](reference/set-commands/set-max-parallel-degree.md) |
 | `WEEK_START_DAY` | Localization | Monday | [SET WEEK_START_DAY](reference/set-commands/set-week-start-day.md) |
+| `REPORT TIME_ZONE` | Report | `UTC` | [SET REPORT](reference/set-commands/set-report.md) |
+| `REPORT LOCALE` | Report | invariant | [SET REPORT](reference/set-commands/set-report.md) |
+| `REPORT NULL_LABEL` | Report | `-` | [SET REPORT](reference/set-commands/set-report.md) |
 | `EXTERNAL_HASH_PARTITIONS` | Performance | 32 | [SET EXTERNAL_HASH_PARTITIONS](reference/set-commands/set-external-hash-partitions.md) |
 | `EXTERNAL_SORT_CHUNK_SIZE` | Performance | 50,000 | [SET EXTERNAL_SORT_CHUNK_SIZE](reference/set-commands/set-external-sort-chunk-size.md) |
 | `FOREACH_PAGE_SIZE` | Performance | 10,000 | [SET FOREACH_PAGE_SIZE](reference/set-commands/set-foreach-page-size.md) |

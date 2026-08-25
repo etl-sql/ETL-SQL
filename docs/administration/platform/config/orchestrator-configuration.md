@@ -74,6 +74,7 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `Scheduler:DefaultTimeZone` | string | `"UTC"` | Time zone used by schedules that do not name one, and the deployment default for report rendering when a `.rptsql` script does not `SET REPORT TIME_ZONE`. Accepts IANA ids and the abbreviations the language accepts. An unknown zone fails at startup rather than falling back silently. |
 | `Scheduler:MetricsIntervalSeconds` | integer | `60` | Frequency of performance metrics sweeps. |
 | `Scheduler:SleepIntervalSeconds` | integer | `30` | Frequency the scheduler wakes to scan database job queues. |
 | `Scheduler:SessionReapIntervalMinutes` | integer | `60` | Schedule frequency to clear stale user sessions. |

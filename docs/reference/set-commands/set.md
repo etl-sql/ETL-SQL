@@ -33,6 +33,9 @@ See the [SET Commands index](README.md) for the full list of options with links 
 ### Date & Locale
 - **WEEK_START_DAY = 'day'** — anchor day for RELDATE week expressions (default Monday).
 
+### Report Properties
+- **REPORT <KEY> = 'value'** — report title, branding, and deterministic formatting for a `.rptsql` script. `TIME_ZONE`, `LOCALE`, and `NULL_LABEL` set the formatting every renderer uses. See [SET REPORT](set-report.md).
+
 ### Performance Thresholds
 - **BATCHSIZE = n** — pipeline batch size (default 10,000).
 - **JOIN_SPILL_THRESHOLD = n** — rows before join spills to disk (default 100,000).
@@ -83,4 +86,5 @@ SET JOIN_SPILL_THRESHOLD = 500000;
 
 ## References
 - [SET Commands Index](README.md)
+- [SET REPORT](set-report.md)
 - [Configuration Settings Reference](../../administration/platform/appsettings-reference.md)

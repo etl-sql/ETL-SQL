@@ -379,6 +379,37 @@ Sets global metadata and overrides for the entire report. These settings affect 
 | `BACKGROUND` | CSS Background for the shell (color, gradient, or URL). | `SET REPORT BACKGROUND = '#f0f0f0';` |
 | `THEME` | Named theme applied as the **Global Default**. Themes the shell and all unthemed pages. | `SET REPORT THEME = 'dark';` |
 | `NAVIGATION` | **Nav Mode Override**. Controls the shell's navigation behavior (e.g. `Compact`, `Hidden`, `Breadcrumbs`). | `SET REPORT NAVIGATION = 'Compact';` |
+| `TIME_ZONE` | Zone every date and time in the report is rendered in. IANA ids and the abbreviations the language accepts. | `SET REPORT TIME_ZONE = 'America/New_York';` |
+| `LOCALE` | Culture used to format dates, times, and computed numbers. `''` is the invariant culture. | `SET REPORT LOCALE = 'de-DE';` |
+| `NULL_LABEL` | Text rendered in place of a NULL value. | `SET REPORT NULL_LABEL = 'n/a';` |
+
+The key list is closed. `SET REPORT TIMEZONE = 'UTC'` is a syntax error that names the supported keys, rather than a statement that parses and does nothing.
+
+### Deterministic Formatting
+
+`TIME_ZONE`, `LOCALE`, and `NULL_LABEL` are resolved on the server. Nothing is taken from the viewer's browser, so the browser, PDF, email, and terminal renderings of one report agree, and two people in different countries see the same numbers.
+
+Precedence, most specific first:
+
+- **Time zone** — `SET REPORT TIME_ZONE`, then `Scheduler:DefaultTimeZone`, then `UTC`.
+- **Locale** — `SET REPORT LOCALE`, then `Reporting:DefaultLocale`, then the invariant culture.
+- **NULL label** — a visual's `OPTIONS (NULL_LABEL = '...')`, then `SET REPORT NULL_LABEL`, then `Reporting:DefaultNullLabel`, then `-`.
+
+An unknown zone or culture is rejected when the statement runs. Named visuals and `CUSTOM` charts resolve the same values.
+
+```sql
+-- Every instant renders in New York time, formatted for a German audience
+SET REPORT TIME_ZONE = 'America/New_York';
+SET REPORT LOCALE = 'de-DE';
+SET REPORT NULL_LABEL = 'kein Wert';
+
+-- ...and this one visual says something different about its own gaps
+CREATE VISUAL Coverage AS BAR (
+  SOURCE = #coverage,
+  MAPPINGS (X = Region, Y = Pct),
+  OPTIONS (NULL_LABEL = 'not reported')
+);
+```
 
 > [!TIP]
 > **Difference from `CREATE NAVIGATION`**: `CREATE NAVIGATION` defines the **links and layout** of the menu (Tabs vs. Sidebar). `SET REPORT NAVIGATION` defines the **Shell Mode**, which can override the visibility or behavior of the navigation component (e.g., hiding it entirely for embedded reports).

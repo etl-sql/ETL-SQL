@@ -30,8 +30,8 @@ UNION ALL SELECT 'Jun', 125000, 0.38, 90000;
 --   CREATE VISUAL Step1_Named AS BAR (
 --       SOURCE = #sales, MAPPINGS (X = Month, Y = Revenue),
 --       OPTIONS (AXIS_SORT = SOURCE));
--- The named BAR is better here — it inherits themes, NULL_LABEL, and cross-filter
--- inference. This translation exists only to teach the skeleton.
+-- The named BAR is better here — it says the same thing in six lines and infers the
+-- cross-filter column. This translation exists only to teach the skeleton.
 
 CREATE VISUAL Step1_CustomBar AS CUSTOM (
     SOURCE = #sales,

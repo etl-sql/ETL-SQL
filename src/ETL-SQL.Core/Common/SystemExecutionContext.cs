@@ -10,6 +10,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Planning;
+using ETL_SQL.Core.Reporting;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
@@ -238,6 +239,12 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public string? ReportBackground { get; set; }
     public string? ReportTheme { get; set; }
     public string? ReportNavigation { get; set; }
+    public ReportFormattingSettings FormattingDefaults { get; set; } = ReportFormattingSettings.Default;
+    public string? ReportTimeZone { get; set; }
+    public string? ReportLocale { get; set; }
+    public string? ReportNullLabel { get; set; }
+    public ReportFormattingSettings EffectiveFormatting =>
+        ReportFormattingSettings.Resolve(FormattingDefaults, ReportLocale, ReportTimeZone, ReportNullLabel);
 
     public SystemExecutionContext()
     {

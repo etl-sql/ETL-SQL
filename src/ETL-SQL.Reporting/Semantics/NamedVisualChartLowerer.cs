@@ -9,7 +9,7 @@ using ETL_SQL.Reporting.Semantics;
 namespace ETL_SQL.Reporting.Semantics.Runtime;
 
 /// <summary>Lowers the existing named Report-SQL visual syntax into renderer-neutral intent.</summary>
-public sealed class NamedVisualChartLowerer
+public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
 {
     private static readonly HashSet<VisualType> Supported =
     [
@@ -53,10 +53,7 @@ public sealed class NamedVisualChartLowerer
                     : CoordinateKind.Cartesian,
                 InnerRadius: statement.VisualType == VisualType.Donut ? ResolveInnerRadius(manifest) : null),
             scales: scales,
-            formatting: new FormattingSpec(
-                CultureInfo.InvariantCulture.Name,
-                "UTC",
-                manifest.Options.GetValueOrDefault("NULL_LABEL") ?? "",
+            formatting: ChartStyleTokens.Formatting(context, manifest,
                 statement.Mappings.Select(mapping => new FieldFormat(mapping.Column, mapping.Format)).ToImmutableArray()),
             nullHandling: new NullHandlingSpec(
                 statement.VisualType == VisualType.Line || statement.VisualType == VisualType.Combo ||
@@ -64,7 +61,7 @@ public sealed class NamedVisualChartLowerer
                     ? NullValuePolicy.Gap
                     : NullValuePolicy.Skip,
                 []),
-            theme: new ThemeSpec(manifest.Styles?.GetValueOrDefault("THEME") ?? "default", BuildStyleTokens(manifest)),
+            theme: ChartStyleTokens.Theme(manifest),
             accessibility: new AccessibilitySpec(
                 title,
                 manifest.Options.GetValueOrDefault("subtitle"),
@@ -266,20 +263,6 @@ public sealed class NamedVisualChartLowerer
             .ToImmutableArray();
         return new InteractionSpec([], bindings);
     }
-
-    private static ImmutableArray<StyleToken> BuildStyleTokens(VisualManifest manifest) =>
-        (manifest.Styles ?? new Dictionary<string, string>())
-            .Where(pair => !pair.Key.Equals("STACKED", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(pair => new StyleToken(pair.Key, pair.Value))
-            .Concat(manifest.Options
-                .Where(pair => !pair.Key.Equals("STACKED", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(pair => new StyleToken(pair.Key, pair.Value)))
-            .GroupBy(token => token.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.Last())
-            .OrderBy(token => token.Name, StringComparer.OrdinalIgnoreCase)
-            .ToImmutableArray();
 
     private static bool IsOn(string? value) => value is not null &&
         (value.Equals("ON", StringComparison.OrdinalIgnoreCase) || value.Equals("TRUE", StringComparison.OrdinalIgnoreCase));

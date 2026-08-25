@@ -136,9 +136,15 @@ public sealed class AdvancedChartProductionTests
 
         evaluator.VarContext.Reset();
         evaluator.VarContext.DeclareVariable("@Target", "do-not-disclose", new VariableMetadata { IsSecret = true });
-        var error = Assert.Throws<InvalidOperationException>(() => new AdvancedChartLowerer(evaluator).Lower(statement, manifest));
+        var error = Assert.Throws<AdvancedChartSemanticException>(() => new AdvancedChartLowerer(evaluator).Lower(statement, manifest));
         Assert.Contains("secret-bearing", error.Message);
         Assert.DoesNotContain("do-not-disclose", error.Message);
+        // The failure is anchored to the offending DATUM encoding, not to the CREATE VISUAL header.
+        var diagnostic = Assert.Single(error.Diagnostics);
+        Assert.Equal(AdvancedChartSemanticValidator.DiagnosticCode, diagnostic.Code);
+        Assert.Equal(7, diagnostic.Line);
+        Assert.True(diagnostic.Line > statement.Line);
+        Assert.DoesNotContain("do-not-disclose", diagnostic.Message);
     }
 
     [Fact]

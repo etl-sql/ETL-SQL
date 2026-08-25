@@ -16,7 +16,7 @@ Many settings can also be overridden ad-hoc for a single script session using th
 | :--- | :--- |
 | [Logging Configuration](config/logging-configuration.md) | `Logging:LogLevel:*`, `Logging:AppLog:*`, `Logging:ScriptLog:*`, `Logging:TestLog:*` |
 | [Security Configuration](config/security-configuration.md) | `Security:PathProtectionMode`, `Security:ApprovedSafeZones`, `Security:DeniedEgressRanges`, `Security:MaxFileOperationsPerScript`, `Security:SpillEncryption*`, and infrastructure egress fence |
-| [Engine Configuration](config/engine-configuration.md) | `Engine:BatchSize`, `Engine:TotalMemoryGrantMB`, `Engine:MemoryGovernorPolicy`, spill thresholds, resource ceilings, execution policy controls, and observability |
+| [Engine Configuration](config/engine-configuration.md) | `Engine:BatchSize`, `Engine:TotalMemoryGrantMB`, `Engine:MemoryGovernorPolicy`, spill thresholds, resource ceilings, execution policy controls, observability, and `Reporting:Default*` report formatting |
 | [Orchestrator Configuration](config/orchestrator-configuration.md) | `Orchestrator:*`, `Orchestration:JobThrottle:*`, `Orchestration:SandboxAdmission:*`, `Orchestration:SandboxExecution:*`, `Orchestration:ResourceManagement:*`, `Scheduler:*`, `Jobs:*` |
 | [Portal Configuration](config/portal-configuration.md) | `Portal:*`, `ReportPlayer:*`, `Session:*`, `Connectors:*`, `Lineage:*`, `Snippets:*`, `ConnectionStrings:*` — including database, storage, modules, Studio, JWT, rate limiting, dataset cryptography, and identity providers |
 

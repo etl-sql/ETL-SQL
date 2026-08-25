@@ -90,9 +90,28 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 
 ---
 
+## Report Formatting
+
+Report formatting is resolved on the server. Nothing is inferred from the viewer's browser, so one report renders identically in the browser, a PDF, an email, and the terminal.
+
+| Key | Type | Default | Ad-Hoc SET Command | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `Reporting:DefaultLocale` | string | `""` | `SET REPORT LOCALE = 'culture'` | Culture used to format dates, times, and computed numbers in reports. The empty string is the invariant culture. Validated with `CultureInfo.GetCultureInfo`; an unknown culture fails rather than falling back silently. |
+| `Reporting:DefaultNullLabel` | string | `"-"` | `SET REPORT NULL_LABEL = 'text'` | Text rendered in place of a NULL value. An explicitly empty string renders nothing. |
+| `Scheduler:DefaultTimeZone` | string | `"UTC"` | `SET REPORT TIME_ZONE = 'zone'` | Time zone every date and time in a report is rendered in. Documented with the scheduler keys in [Orchestrator Configuration](orchestrator-configuration.md). |
+
+Precedence, most specific first:
+
+- **Time zone** — `SET REPORT TIME_ZONE`, then `Scheduler:DefaultTimeZone`, then `UTC`.
+- **Locale** — `SET REPORT LOCALE`, then `Reporting:DefaultLocale`, then the invariant culture.
+- **NULL label** — a visual's `OPTIONS (NULL_LABEL = '...')`, then `SET REPORT NULL_LABEL`, then `Reporting:DefaultNullLabel`, then `-`.
+
+---
+
 ## Related
 
 - [Configuration Settings Reference](../appsettings-reference.md) — full config hub
 - [Security Configuration](security-configuration.md) — sandbox limits and egress fence
+- [SET REPORT](../../../reference/set-commands/set-report.md) — per-script formatting overrides
 - [Orchestrator Configuration](orchestrator-configuration.md) — job scheduling and concurrency
 - [Platform Administration](../README.md)

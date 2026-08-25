@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Reporting;
 
 namespace ETL_SQL.Core.Parser.Components;
 
@@ -281,7 +282,13 @@ public class SystemParser : ParserComponent
         else if (_parser.Current.Type == TokenType.IDENTIFIER)
         {
             key = _parser.Current.Value.ToUpperInvariant();
+            var keyToken = _parser.Current;
             Advance();
+            // COMPAT_BREAK: 0.19
+            // Closed key set. An unrecognised key used to parse and then evaporate in the handler, so a
+            // typo produced a report that looked configured and was not.
+            if (!ReportMetadataKeys.IsKnown(key))
+                throw new SyntaxException(ReportMetadataKeys.UnknownKeyMessage(keyToken.Value), keyToken.Line, keyToken.Column);
         }
         else
             throw new SyntaxException("Expected report metadata key after SET REPORT", _parser.Current.Line, _parser.Current.Column);

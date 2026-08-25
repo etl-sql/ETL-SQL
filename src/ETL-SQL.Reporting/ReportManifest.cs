@@ -86,6 +86,14 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Navigation { get; set; }
 
+        /// <summary>
+        /// The report's resolved locale, time zone, and NULL label. Always emitted, and always
+        /// server-resolved: a renderer reads this instead of asking the machine it happens to run on,
+        /// so the browser, PDF, email, and terminal outputs of one report agree.
+        /// </summary>
+        [JsonPropertyName("formatting")]
+        public ReportFormattingManifest Formatting { get; set; } = new();
+
         /// <summary>Named visuals in script-definition order.</summary>
         [JsonPropertyName("visuals")]
         public List<VisualManifest> Visuals { get; set; } = new();
@@ -165,6 +173,22 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("stateWarnings")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<string>? StateWarnings { get; set; }
+    }
+
+    /// <summary>The report's server-resolved formatting, as carried on the wire.</summary>
+    public class ReportFormattingManifest
+    {
+        /// <summary>Culture name; the empty string is the invariant culture.</summary>
+        [JsonPropertyName("locale")]
+        public string Locale { get; set; } = ETL_SQL.Core.Reporting.ReportFormattingSettings.InvariantLocale;
+
+        /// <summary>Time-zone id every instant in this report is rendered in.</summary>
+        [JsonPropertyName("timeZone")]
+        public string TimeZone { get; set; } = ETL_SQL.Core.Reporting.ReportFormattingSettings.FallbackTimeZone;
+
+        /// <summary>Text rendered in place of a NULL value.</summary>
+        [JsonPropertyName("nullLabel")]
+        public string NullLabel { get; set; } = ETL_SQL.Core.Reporting.ReportFormattingSettings.FallbackNullLabel;
     }
 
     public record LogEntryManifest(
@@ -334,6 +358,15 @@ namespace ETL_SQL.Reporting
         /// <summary>Set when data fetch fails; causes the runtime to render an error card.</summary>
         [JsonPropertyName("error")]
         public string? Error { get; set; }
+
+        /// <summary>
+        /// Typed, positioned authoring diagnostics for this visual. Populated when a semantic authoring
+        /// failure is detected during lowering, so preview reports the same anchored failures the editor's
+        /// lint pass reports instead of only painting an unpositioned message inside the visual.
+        /// </summary>
+        [JsonPropertyName("diagnostics")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<VisualDiagnosticManifest>? Diagnostics { get; set; }
 
         /// <summary>Click/change action bindings from the ACTIONS clause.</summary>
         [JsonPropertyName("actions")]
@@ -921,6 +954,30 @@ namespace ETL_SQL.Reporting
     /// Older manifests predate <see cref="Mode"/>; consumers must fall back to deriving it
     /// from <see cref="Type"/> so previously published reports keep working.
     /// </remarks>
+    /// <summary>A typed authoring diagnostic anchored to a position in the report script.</summary>
+    public class VisualDiagnosticManifest
+    {
+        /// <summary>Diagnostic code, matching the code the lint rule emits for the same failure.</summary>
+        [JsonPropertyName("code")]
+        public string Code { get; set; } = string.Empty;
+
+        /// <summary>Human-readable description of the failure.</summary>
+        [JsonPropertyName("message")]
+        public string Message { get; set; } = string.Empty;
+
+        /// <summary>One-based line of the offending node in the report script.</summary>
+        [JsonPropertyName("line")]
+        public int Line { get; set; }
+
+        /// <summary>One-based column of the offending node in the report script.</summary>
+        [JsonPropertyName("column")]
+        public int Column { get; set; }
+
+        /// <summary>Diagnostic severity, uppercased for portability.</summary>
+        [JsonPropertyName("severity")]
+        public string Severity { get; set; } = "ERROR";
+    }
+
     public class TooltipManifest
     {
         /// <summary>Transient text tooltip mode value for <see cref="Mode"/>.</summary>

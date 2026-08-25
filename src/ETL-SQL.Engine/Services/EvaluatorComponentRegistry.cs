@@ -44,6 +44,6 @@ public class EvaluatorComponentRegistry
             serviceProvider?.GetService<ILineageCatalogStore>());
         SchemaManager = new SchemaManager(logger, evaluator, variableScopeManager);
         ProcedureExecutor = new ProcedureExecutor(variableScopeManager, evaluator);
-        ReportContext = reportContext ?? new ReportRegistry();
+        ReportContext = reportContext ?? new ReportRegistry(serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>());
     }
 }

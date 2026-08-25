@@ -309,7 +309,7 @@ namespace ETL_SQL.Reporting.Builders
                     {
                         vm.ChartSpec = chartStatement.AdvancedChart is not null
                             ? new AdvancedChartLowerer(ctx).Lower(chartStatement, vm)
-                            : new NamedVisualChartLowerer().Lower(chartStatement, vm);
+                            : new NamedVisualChartLowerer(ctx).Lower(chartStatement, vm);
                         vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData);
                     }
@@ -318,6 +318,20 @@ namespace ETL_SQL.Reporting.Builders
                         ? MatrixPivotBuilder.Build(vm)
                         : null;
                     vm.NativeSvg = new SvgChartRenderer().Render(vm);
+                }
+                catch (AdvancedChartSemanticException ex)
+                {
+                    // A CUSTOM authoring failure. Keep the safe visual error state, but also publish the
+                    // positioned diagnostics so preview and the editor agree on what failed and where.
+                    vm.Error = ex.Message;
+                    vm.Diagnostics = ex.Diagnostics.Select(diagnostic => new VisualDiagnosticManifest
+                    {
+                        Code = diagnostic.Code ?? AdvancedChartSemanticValidator.DiagnosticCode,
+                        Message = diagnostic.Message,
+                        Line = diagnostic.Line,
+                        Column = diagnostic.Column,
+                        Severity = diagnostic.Severity.ToString().ToUpperInvariant()
+                    }).ToList();
                 }
                 catch (Exception ex)
                 {

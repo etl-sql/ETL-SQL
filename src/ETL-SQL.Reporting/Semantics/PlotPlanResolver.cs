@@ -21,21 +21,22 @@ public sealed class PlotPlanResolver
         spec.Validate();
         data.Validate();
         var columns = data.Columns.ToDictionary(column => column.Name, StringComparer.OrdinalIgnoreCase);
+        var formatter = new ChartValueFormatter(spec.Formatting);
         var categories = ResolveCategories(spec, columns);
         var seriesKeys = ResolveSeries(spec, columns, categories);
         var series = seriesKeys.Select((key, index) => new ResolvedSeries(key, key, index, ResolveColor(spec, key, index))).ToImmutableArray();
         var palette = series.Select(item => new PaletteAssignment(item.Key, item.Color)).ToImmutableArray();
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
-        var layers = ResolveStacking(ResolveLayers(spec, data, columns, categories, series).ToImmutableArray());
-        var scales = ResolveScales(spec, columns, categories, layers).ToImmutableArray();
+        var layers = ResolveStacking(ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray());
+        var scales = ResolveScales(spec, columns, categories, layers, formatter).ToImmutableArray();
         var plotBounds = bounds ?? new PlotBounds(0, 0, 600, 350);
-        var facets = ResolveFacets(spec, columns, scales, plotBounds);
+        var facets = ResolveFacets(spec, columns, scales, plotBounds, formatter);
         layers = ResolveDisplayOffsets(spec, data, columns, layers, scales, facets, plotBounds);
         var sourceLayers = layers.Where(layer => layer.Style.IsDefault || !layer.Style.Any(token => token.Name == "overlayType"));
         var gapRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => datum.IsGap).Select(datum => datum.RowIndex).Distinct().Order().ToImmutableArray();
         var usedRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap).Select(datum => datum.RowIndex).ToHashSet();
         var skippedRows = Enumerable.Range(0, data.RowCount).Where(index => !usedRows.Contains(index) && !gapRows.Contains(index)).ToImmutableArray();
-        var fallback = BuildFallback(spec, layers, categories);
+        var fallback = BuildFallback(spec, layers, categories, formatter);
         var summary = BuildSummary(spec, data, series, layers, scales, facets, gapRows, skippedRows);
 
         var plan = PlotPlan.Create(
@@ -116,7 +117,8 @@ public sealed class PlotPlanResolver
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<string> categories,
-        ImmutableArray<ResolvedMarkLayer> resolvedLayers)
+        ImmutableArray<ResolvedMarkLayer> resolvedLayers,
+        ChartValueFormatter formatter)
     {
         foreach (var scale in spec.Scales)
         {
@@ -163,11 +165,13 @@ public sealed class PlotPlanResolver
                 var temporalValues = bindings.SelectMany(binding =>
                 {
                     if (binding.Field is null || !columns.TryGetValue(binding.Field, out var column))
-                        return BindingValues(binding, columns).Select(value => new { Value = value, Display = Display(value) });
+                        return BindingValues(binding, columns).Select(value => new { Value = value, Display = formatter.Format(value, binding.Field) });
                     return column.Values.Select((value, index) => new
                     {
                         Value = value,
-                        Display = column.DisplayValues.IsDefaultOrEmpty ? Display(value) : column.DisplayValues[index] ?? Display(value)
+                        Display = column.DisplayValues.IsDefaultOrEmpty
+                            ? formatter.Format(value, binding.Field)
+                            : column.DisplayValues[index] ?? formatter.Format(value, binding.Field)
                     });
                 })
                     .Where(item => item.Value.Kind != ChartValueKind.Null)
@@ -214,7 +218,7 @@ public sealed class PlotPlanResolver
                 : Enumerable.Range(0, 5).Select(index => minimum + ((maximum - minimum) * index / 4m)).ToList();
             var resolved = new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                 [ChartValue.From(minimum), ChartValue.From(maximum)], [],
-                ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray(),
+                ticks.Select(value => new PlotTick(ChartValue.From(value), formatter.Number(value))).ToImmutableArray(),
                 scale.IncludeZero);
             if (scale.ColorRange is { } colorRange)
             {
@@ -239,31 +243,32 @@ public sealed class PlotPlanResolver
         ChartDataSet data,
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<string> categories,
-        ImmutableArray<ResolvedSeries> series)
+        ImmutableArray<ResolvedSeries> series,
+        ChartValueFormatter formatter)
     {
         foreach (var layer in spec.Layers.OrderBy(item => item.ZIndex))
         {
             var overlayType = layer.Style.FirstOrDefault(token => token.Name == "overlayType")?.Value;
             if (overlayType is not null)
             {
-                yield return ResolveOverlay(layer, spec, columns, categories);
+                yield return ResolveOverlay(layer, spec, columns, categories, formatter);
                 continue;
             }
 
             var layout = layer.Style.FirstOrDefault(token => token.Name.Equals("layout", StringComparison.OrdinalIgnoreCase))?.Value;
             if (layout == "boxplot")
             {
-                yield return ResolveBoxPlot(layer, spec, data, columns, categories);
+                yield return ResolveBoxPlot(layer, spec, data, columns, categories, formatter);
                 continue;
             }
             if (layout == "waterfall")
             {
-                yield return ResolveWaterfall(layer, spec, data, columns);
+                yield return ResolveWaterfall(layer, spec, data, columns, formatter);
                 continue;
             }
             if (layout == "radar")
             {
-                foreach (var radarLayer in ResolveRadar(layer, spec, data, columns, series)) yield return radarLayer;
+                foreach (var radarLayer in ResolveRadar(layer, spec, data, columns, series, formatter)) yield return radarLayer;
                 continue;
             }
 
@@ -274,7 +279,7 @@ public sealed class PlotPlanResolver
             {
                 foreach (var resolvedSeries in series)
                 {
-                    var dataPoints = ResolveLayerData(layer, spec, data, columns, categories,
+                    var dataPoints = ResolveLayerData(layer, spec, data, columns, categories, formatter,
                         rowIndex => ValueKey(colorColumn.Values[rowIndex]) == resolvedSeries.Key);
                     yield return new ResolvedMarkLayer($"{layer.Id}-{resolvedSeries.Order:D2}", layer.Mark, layer.ZIndex + resolvedSeries.Order,
                         resolvedSeries.Key, dataPoints)
@@ -285,7 +290,7 @@ public sealed class PlotPlanResolver
             {
                 var seriesKey = explicitSeries ?? series.FirstOrDefault()?.Key;
                 yield return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, seriesKey,
-                    ResolveLayerData(layer, spec, data, columns, categories, _ => true))
+                    ResolveLayerData(layer, spec, data, columns, categories, formatter, _ => true))
                 { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
             }
         }
@@ -357,7 +362,8 @@ public sealed class PlotPlanResolver
         ChartSpec spec,
         ChartDataSet chartData,
         IReadOnlyDictionary<string, ChartColumn> columns,
-        ImmutableArray<string> categories)
+        ImmutableArray<string> categories,
+        ChartValueFormatter formatter)
     {
         // BOXPLOT supports both the ordinary X/Y form (the engine computes the
         // five-number summary) and the documented pre-calculated form used by
@@ -365,7 +371,7 @@ public sealed class PlotPlanResolver
         // verbatim; there is no raw Y column to summarise in that form.
         if (!spec.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
         {
-            var resolved = ResolveLayerData(layer, spec, chartData, columns, categories, _ => true);
+            var resolved = ResolveLayerData(layer, spec, chartData, columns, categories, formatter, _ => true);
             return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, resolved)
             { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
         }
@@ -411,9 +417,10 @@ public sealed class PlotPlanResolver
         MarkLayerSpec layer,
         ChartSpec spec,
         ChartDataSet data,
-        IReadOnlyDictionary<string, ChartColumn> columns)
+        IReadOnlyDictionary<string, ChartColumn> columns,
+        ChartValueFormatter formatter)
     {
-        var raw = ResolveLayerData(layer, spec, data, columns, [], _ => true);
+        var raw = ResolveLayerData(layer, spec, data, columns, [], formatter, _ => true);
         var running = 0m;
         var output = raw.Select(datum =>
         {
@@ -437,7 +444,8 @@ public sealed class PlotPlanResolver
         ChartSpec spec,
         ChartDataSet data,
         IReadOnlyDictionary<string, ChartColumn> columns,
-        ImmutableArray<ResolvedSeries> series)
+        ImmutableArray<ResolvedSeries> series,
+        ChartValueFormatter formatter)
     {
         var seriesBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.Color && binding.Field is not null);
         var metrics = spec.Bindings.Where(binding => binding.Channel == FieldChannel.Detail && binding.Field is not null).ToList();
@@ -452,8 +460,8 @@ public sealed class PlotPlanResolver
                 [
                     new ResolvedChannelValue(FieldChannel.Theta, ChartValue.From(binding.Field!), binding.Field),
                     new ResolvedChannelValue(FieldChannel.Radius, value,
-                        column.DisplayValues.IsDefaultOrEmpty ? Display(value) : column.DisplayValues[rowIndex])
-                ], value.Kind == ChartValueKind.Null, $"{binding.Field}: {Display(value)}");
+                        column.DisplayValues.IsDefaultOrEmpty ? formatter.Format(value, binding.Field) : column.DisplayValues[rowIndex])
+                ], value.Kind == ChartValueKind.Null, $"{binding.Field}: {formatter.Format(value, binding.Field)}");
             }).ToImmutableArray();
             yield return new ResolvedMarkLayer($"{layer.Id}-{rowIndex:D2}", layer.Mark, layer.ZIndex + rowIndex, key, points)
             { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
@@ -466,6 +474,7 @@ public sealed class PlotPlanResolver
         ChartDataSet data,
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<string> categories,
+        ChartValueFormatter formatter,
         Func<int, bool> include)
     {
         var layerBindings = layer.Bindings.IsDefaultOrEmpty ? spec.Bindings : layer.Bindings
@@ -491,7 +500,7 @@ public sealed class PlotPlanResolver
                         var rowIndex = Enumerable.Range(0, data.RowCount).FirstOrDefault(index => include(index)
                             && ValueKey(categoryColumn.Values[index]) == category
                             && string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field!].Values[index]) ?? string.Empty)) == facetKey, -1);
-                        if (rowIndex >= 0) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions));
+                        if (rowIndex >= 0) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions, formatter));
                     }
                 return rows.ToImmutableArray();
             }
@@ -501,13 +510,13 @@ public sealed class PlotPlanResolver
                 var rowIndex = Enumerable.Range(0, data.RowCount).FirstOrDefault(index => include(index) && ValueKey(categoryColumn.Values[index]) == category, -1);
                 rows.Add(rowIndex < 0
                     ? GapDatum(categoryIndex, layerBindings, categoryBinding, category)
-                    : Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions));
+                    : Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions, formatter));
             }
             return rows.ToImmutableArray();
         }
 
         for (var rowIndex = 0; rowIndex < data.RowCount; rowIndex++)
-            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions));
+            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions, formatter));
         return rows.ToImmutableArray();
     }
 
@@ -516,12 +525,13 @@ public sealed class PlotPlanResolver
         ImmutableArray<FieldBinding> bindings,
         IReadOnlyDictionary<string, ChartColumn> columns,
         NullHandlingSpec nulls,
-        ImmutableArray<EncodingConditionSpec> conditions)
+        ImmutableArray<EncodingConditionSpec> conditions,
+        ChartValueFormatter formatter)
     {
         var channels = bindings.Where(binding => binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field)).Select(binding =>
         {
             if (binding.SourceKind != BindingSourceKind.Field)
-                return new ResolvedChannelValue(binding.Channel, binding.Constant!, Display(binding.Constant!));
+                return new ResolvedChannelValue(binding.Channel, binding.Constant!, formatter.Format(binding.Constant!));
             var column = columns[binding.Field!];
             return new ResolvedChannelValue(binding.Channel, column.Values[rowIndex],
                 column.DisplayValues.IsDefaultOrEmpty ? null : column.DisplayValues[rowIndex]);
@@ -532,7 +542,7 @@ public sealed class PlotPlanResolver
                 FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close)
             && channel.Value.Kind == ChartValueKind.Null);
         return new ResolvedDatum(rowIndex, channels, requiredNull && nulls.Default == NullValuePolicy.Gap,
-            string.Join(", ", channels.Select(channel => $"{channel.Channel}: {channel.DisplayValue ?? Display(channel.Value)}")))
+            string.Join(", ", channels.Select(channel => $"{channel.Channel}: {channel.DisplayValue ?? formatter.Format(channel.Value)}")))
         {
             Encodings = ResolveConditions(conditions, rowIndex, columns)
         };
@@ -619,7 +629,8 @@ public sealed class PlotPlanResolver
         MarkLayerSpec layer,
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
-        ImmutableArray<string> categories)
+        ImmutableArray<string> categories,
+        ChartValueFormatter formatter)
     {
         var type = layer.Style.First(token => token.Name == "overlayType").Value;
         var parameterText = layer.Style.FirstOrDefault(token => token.Name == "parameter")?.Value;
@@ -644,12 +655,13 @@ public sealed class PlotPlanResolver
         {
             var xValue = xColumn is null ? ChartValue.From(index) : xColumn.Values[index];
             var xDisplay = xColumn is null || xColumn.DisplayValues.IsDefaultOrEmpty
-                ? Display(xValue)
-                : xColumn.DisplayValues[index] ?? Display(xValue);
+                ? formatter.Format(xValue)
+                : xColumn.DisplayValues[index] ?? formatter.Format(xValue);
             return new ResolvedDatum(index,
                 [
                     new ResolvedChannelValue(FieldChannel.X, xValue, xDisplay),
-                    new ResolvedChannelValue(FieldChannel.Y, value.HasValue ? ChartValue.From(value.Value) : ChartValue.Null(), value?.ToString(CultureInfo.InvariantCulture))
+                    new ResolvedChannelValue(FieldChannel.Y, value.HasValue ? ChartValue.From(value.Value) : ChartValue.Null(),
+                        value.HasValue ? formatter.Number(value.Value, "G") : formatter.NullLabel)
                 ], !value.HasValue, null);
         }).ToImmutableArray();
         return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, data)
@@ -706,7 +718,8 @@ public sealed class PlotPlanResolver
         return result;
     }
 
-    private static SemanticFallback BuildFallback(ChartSpec spec, ImmutableArray<ResolvedMarkLayer> layers, ImmutableArray<string> categories)
+    private static SemanticFallback BuildFallback(ChartSpec spec, ImmutableArray<ResolvedMarkLayer> layers,
+        ImmutableArray<string> categories, ChartValueFormatter formatter)
     {
         var sourceLayers = layers.Where(layer => layer.Mark is not MarkKind.Rule).ToList();
         var total = sourceLayers.Where(layer => layer.Mark == MarkKind.Arc).SelectMany(layer => layer.Data)
@@ -720,8 +733,8 @@ public sealed class PlotPlanResolver
                 FieldChannel.Median or FieldChannel.Close or FieldChannel.Size or FieldChannel.YEnd);
             var numeric = value is null ? null : Number(value.Value);
             var conditionDetail = datum.Encodings.IsDefaultOrEmpty ? null : string.Join(", ", datum.Encodings.Select(encoding =>
-                $"conditional {encoding.Channel}: {Display(encoding.Value)}"));
-            return new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? Display(value.Value), (layerIndex * 100000) + index)
+                $"conditional {encoding.Channel}: {formatter.Format(encoding.Value)}"));
+            return new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), (layerIndex * 100000) + index)
             {
                 Group = layer.SeriesKey,
                 Detail = datum.IsGap ? "null gap" : conditionDetail ?? (layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
@@ -734,7 +747,7 @@ public sealed class PlotPlanResolver
                 .FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.X);
             var label = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value
                 ?? layer.Style.FirstOrDefault(token => token.Name == "overlayType")?.Value ?? layer.Id;
-            return new SemanticFallbackItem(label, value is null ? "" : value.DisplayValue ?? Display(value.Value), ((sourceLayers.Count + 1) * 100000) + index)
+            return new SemanticFallbackItem(label, value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), ((sourceLayers.Count + 1) * 100000) + index)
             { Detail = "labeled reference rule", Group = "Reference" };
         })).ToImmutableArray();
         return new SemanticFallback(
@@ -749,11 +762,12 @@ public sealed class PlotPlanResolver
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<ResolvedScale> globalScales,
-        PlotBounds bounds)
+        PlotBounds bounds,
+        ChartValueFormatter formatter)
     {
         if (spec.Facet is null) return [];
         if (spec.Facet.WrapField is not null)
-            return ResolveWrappedFacets(spec, columns, globalScales, bounds);
+            return ResolveWrappedFacets(spec, columns, globalScales, bounds, formatter);
         var rowValues = FacetValues(spec.Facet.RowField, columns);
         var columnValues = FacetValues(spec.Facet.ColumnField, columns);
         if (rowValues.Count == 0) rowValues.Add(null);
@@ -774,7 +788,7 @@ public sealed class PlotPlanResolver
                         MatchesFacet(spec.Facet.ColumnField, columnLabel, columns, index))
                     .ToImmutableArray();
                 if (indices.IsDefaultOrEmpty) continue;
-                var scales = globalScales.Select(scale => Independent(scale, spec.Facet.Resolution, spec, columns, indices)).ToImmutableArray();
+                var scales = globalScales.Select(scale => Independent(scale, spec.Facet.Resolution, spec, columns, indices, formatter)).ToImmutableArray();
                 var panelBounds = new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight);
                 panels.Add(new ResolvedFacetPanel(
                     $"facet-{rowIndex:D2}-{columnIndex:D2}", rowLabel, columnLabel,
@@ -790,7 +804,8 @@ public sealed class PlotPlanResolver
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<ResolvedScale> globalScales,
-        PlotBounds bounds)
+        PlotBounds bounds,
+        ChartValueFormatter formatter)
     {
         var facet = spec.Facet!;
         var values = FacetValues(facet.WrapField, columns);
@@ -812,7 +827,7 @@ public sealed class PlotPlanResolver
             var indices = Enumerable.Range(0, sourceRowCount)
                 .Where(row => MatchesFacet(facet.WrapField, label, columns, row))
                 .ToImmutableArray();
-            var scales = globalScales.Select(scale => Independent(scale, facet.Resolution, spec, columns, indices)).ToImmutableArray();
+            var scales = globalScales.Select(scale => Independent(scale, facet.Resolution, spec, columns, indices, formatter)).ToImmutableArray();
             var panelBounds = new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight);
             panels.Add(new ResolvedFacetPanel(
                 $"facet-wrap-{index:D3}", null, label,
@@ -893,7 +908,8 @@ public sealed class PlotPlanResolver
         ScaleResolutionSpec resolution,
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
-        ImmutableArray<int> rows)
+        ImmutableArray<int> rows,
+        ChartValueFormatter formatter)
     {
         var mode = scale.Channel switch
         {
@@ -926,8 +942,8 @@ public sealed class PlotPlanResolver
             return scale with
             {
                 Domain = temporal,
-                Categories = temporal.Select(Display).ToImmutableArray(),
-                Ticks = temporal.Select(value => new PlotTick(value, Display(value))).ToImmutableArray()
+                Categories = temporal.Select(value => formatter.Format(value)).ToImmutableArray(),
+                Ticks = temporal.Select(value => new PlotTick(value, formatter.Format(value))).ToImmutableArray()
             };
         }
         var values = bindings.SelectMany(binding => rows.Select(index => Number(BindingValue(binding, columns, index))))
@@ -950,7 +966,7 @@ public sealed class PlotPlanResolver
                 throw new InvalidOperationException($"Diverging midpoint {midpoint} for independent scale '{scale.Id}' must fall inside panel domain [{minimum}, {maximum}].");
             colorRange = colorRange with
             {
-                Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray(),
+                Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), formatter.Number(value))).ToImmutableArray(),
                 AccessibleDescription = colorRange.Kind == ColorRangeKind.Diverging
                     ? $"Color ranges from {minimum:0.##} ({colorRange.Low}) through {colorRange.Midpoint:0.##} ({colorRange.Mid}) to {maximum:0.##} ({colorRange.High})."
                     : $"Color ranges from {minimum:0.##} ({colorRange.Low}) to {maximum:0.##} ({colorRange.High})."
@@ -959,7 +975,7 @@ public sealed class PlotPlanResolver
         return scale with
         {
             Domain = [ChartValue.From(minimum), ChartValue.From(maximum)],
-            Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), value.ToString("0.##", CultureInfo.InvariantCulture))).ToImmutableArray(),
+            Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), formatter.Number(value))).ToImmutableArray(),
             ColorRange = colorRange
         };
     }

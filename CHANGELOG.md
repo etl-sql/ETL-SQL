@@ -27,9 +27,55 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   terminal, accessibility, and export paths.
 - Added a parser-tested production composite report, Vega-Lite and ggplot2 conversion guidance, a
   declarative-geometry cookbook entry, and a reproducible Phase 13 closure evidence index.
+- Added `SET REPORT TIME_ZONE`, `SET REPORT LOCALE`, and `SET REPORT NULL_LABEL` as real, documented
+  report properties, with deterministic server-side precedence: `SET REPORT TIME_ZONE` then
+  `Scheduler:DefaultTimeZone` then `UTC`; `SET REPORT LOCALE` then `Reporting:DefaultLocale` then the
+  invariant culture; a visual's `OPTIONS (NULL_LABEL = '...')` then `SET REPORT NULL_LABEL` then
+  `Reporting:DefaultNullLabel` then `-`. Zones resolve through the same resolver schedules, `AT TIME
+  ZONE`, and relative dates use; locales validate with `CultureInfo.GetCultureInfo`. Nothing is
+  inferred from the viewer's browser, so the browser, PDF, email, and terminal renderings of one report
+  agree. The resolved values are carried on the manifest and survive report-context clone and clear,
+  parallel visual builds, interaction refreshes, and snapshots.
+- Added `Scheduler:DefaultTimeZone`, `Reporting:DefaultLocale`, and `Reporting:DefaultNullLabel` to
+  shipped configuration and the administration reference. An invalid configured zone or locale now
+  fails rather than silently degrading a whole deployment to the fallback.
+
+### Changed
+
+- Date and time values in charts are now rendered by the report formatter rather than reused from the
+  engine's generic row strings, because only the formatter knows the report's zone and locale. A
+  temporal string carrying no offset is anchored to UTC instead of picking up the server's local
+  offset, so the same report no longer renders different instants on two hosts.
 
 ### Fixed
 
+- An unrecognised `SET REPORT` key is now a syntax error naming the supported keys. `SET REPORT
+  TIMEZONE = 'UTC'` used to parse through the arbitrary-identifier path and then be silently discarded
+  by the handler, producing a report that looked configured and was not.
+- `CUSTOM` charts now receive the resolved theme and style tokens named visuals receive. The advanced
+  lowerer built a theme name with no tokens, so a `CREATE STYLE` theme reached `BAR` and stopped at
+  `CUSTOM` — the sharp edge for exactly the authors following the themed-dashboard recipe. Both
+  lowerers now build tokens and the resolved `FormattingSpec` through one shared path.
+
+- `CUSTOM` chart errors now point at the mistake instead of the top of the statement. The authoring
+  lint rule stamped every diagnostic on the `CREATE VISUAL` header, so on a multi-layer chart all ~20
+  possible errors squiggled the statement's first line. The parser now records a source span on every
+  chart node — coordinate, scales, encodings, binding sources, layers, styles, conditions, position
+  adjustments, color ranges, facet, and resolution — and each diagnostic is anchored to the node that
+  carries the mistake.
+- Every duplicate layer name, scale name, and encoding channel is reported in a single pass. The rule
+  previously reported only the first duplicate group, so fixing one duplicate and re-running was the
+  only way to discover the next.
+- A `CUSTOM` chart can no longer fail with no editor diagnostic at all. Semantic checks now live in one
+  shared validator that both the lint rule and the report lowerer run, so the editor and report preview
+  cannot drift. Lowering failures — including scale-inference conflicts, undeclared or secret-bearing
+  parameters, and the contract-level backstop — are raised as typed diagnostics carrying the offending
+  node's position and published on the visual manifest. A failing visual still degrades to a safe error
+  state; it just no longer exists only as unpositioned text painted inside the rendered report.
+- Replaced every mirrored-enum `Enum.Parse(value.ToString())` bridge in the advanced-chart path with
+  explicit arm-per-member mappings. Adding or renaming a member on either side used to produce a runtime
+  `ArgumentException` inside a rendered report rather than a build or test failure; parity tests now keep
+  the AST and contract enum families aligned.
 - A chart-type visual delivered without a server-rendered SVG payload no longer aborts the whole
   report page. The browser runtime called an undefined `renderChart`, so an older snapshot, a
   lightweight manifest, or an unrendered visual type raised a `ReferenceError` that took every other

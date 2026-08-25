@@ -17,6 +17,20 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.19.0 — Parser: `SET REPORT` rejects unrecognised keys
+- **What changed**: `SET REPORT <key> = '...'` accepted any identifier and the handler silently discarded anything outside its known set, so a typo produced a report that looked configured and was not. The key set is now closed and an unrecognised key is a syntax error naming the supported keys.
+- **Who is affected**: Scripts containing a `SET REPORT` key outside `TITLE`, `DESCRIPTION`, `CSS`, `JS`, `HEAD`, `BODY`, `FOOTER`, `FAVICON`, `LOGO`, `BACKGROUND`, `THEME`, `NAVIGATION`, `TIME_ZONE`, `LOCALE`, `NULL_LABEL`. Such a statement already had no effect; the change is that it now fails instead of being ignored.
+- **Migration**: Correct the key, or delete the statement. The error message lists every supported key.
+- **Diagnostic**: N/A — reported as a positioned syntax error at the key token.
+- **Earliest removal**: Immediate.
+
+### v0.19.0 — Semantic: Report time and NULL rendering resolve through report formatting
+- **What changed**: Chart date and time values were rendered from the engine's generic row strings, and an offsetless temporal string picked up the server's local offset — so the same report rendered different instants on two hosts. Temporal chart columns are now rendered by the report formatter in the resolved report time zone and locale, offsetless strings are anchored to UTC, and a NULL renders as the resolved NULL label (default `-`) instead of an empty string.
+- **Who is affected**: Reports with a date/time chart binding, and any chart containing NULL measure values. Output text changes; geometry and plan structure do not.
+- **Migration**: None required. To pin the previous NULL rendering, set `Reporting:DefaultNullLabel` to `""` or `SET REPORT NULL_LABEL = ''`. To pin a display zone or culture, use `SET REPORT TIME_ZONE` / `SET REPORT LOCALE`.
+- **Diagnostic**: N/A.
+- **Earliest removal**: N/A.
+
 ### v0.19.0 — Semantic: Invalid detail surfaces (TOOLTIP) now fail the build
 - **What changed**: A `TOOLTIP` clause whose target could not be resolved — a missing container or visual, a container cycle, a nested detail surface, or a surface over its depth/visual/node/refresh/payload budget — previously still produced a manifest, which every renderer then ignored. The report published and the tooltip simply never appeared. Manifest building now rejects the report with an `RPT21xx` diagnostic instead.
 - **Who is affected**: Reports whose `TOOLTIP` clause already pointed at something that does not exist or cannot be rendered. Such a report was already not showing its tooltip; the change is that the failure is now reported instead of silent.

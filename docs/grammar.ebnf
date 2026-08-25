@@ -754,7 +754,10 @@ style_body = "(" [ style_key "=" style_value { "," style_key "=" style_value } ]
 style_key = identifier { "-" identifier } ;
 style_value = identifier | variable_name | string_literal | number | "ON" | "OFF" | "TRUE" | "FALSE" ;
 
-set_report_metadata_statement = "SET" "REPORT" identifier "=" string_literal ;
+set_report_metadata_statement = "SET" "REPORT" report_metadata_key "=" string_literal ;
+report_metadata_key = "TITLE" | "DESCRIPTION" | "CSS" | "JS" | "HEAD" | "BODY" | "FOOTER"
+                    | "FAVICON" | "LOGO" | "BACKGROUND" | "THEME" | "NAVIGATION"
+                    | "TIME_ZONE" | "LOCALE" | "NULL_LABEL" ;
 portal_show_command = "SHOW" "PORTAL" ( "USAGE" | "OPERATIONAL" ) "METRICS" ;
 
 report_options = report_clause { "," report_clause } ;

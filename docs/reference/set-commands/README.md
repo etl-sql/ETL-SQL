@@ -23,6 +23,7 @@
 | [SET NO_SAVE_SENSITIVE](set-no-save-sensitive.md) | Controls whether sensitive literals are scrubbed from saved source. When enabled, rewrites `USE PASSWORD` literals to `PROMPT` and replaces SENSITI... |
 | [SET PROFILING](set-profiling.md) | Enables or disables per-statement timing collection. View results through `eng.profile`. |
 | [SET REGEX_MATCH_TIMEOUT](set-regex-match-timeout.md) | Sets the execution duration cap in milliseconds for regex evaluations to prevent denial-of-service from catastrophic backtracking. |
+| [SET REPORT](set-report.md) | Sets a report-level property for a `.rptsql` script: page metadata, branding, and the deterministic formatting every renderer uses. Unknown keys are rejected. |
 | [SET SHOW_SECRETS](set-show-secrets.md) | Controls whether SENSITIVE/ENCRYPTED variable values are unmasked in `eng.variables` output. This is a display-only setting and does not affect sav... |
 | [SET SPILL_COMPRESSION](set-spill-compression.md) | Controls whether data buffers spilled to disk are compressed. |
 | [SET SPILL_ENCRYPTION](set-spill-encryption.md) | Controls whether data buffers spilled to local disk during heavy queries are encrypted at rest. |

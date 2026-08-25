@@ -15,6 +15,7 @@ public sealed class VisualChartDataBuilder
             .Where(binding => binding.SourceKind == BindingSourceKind.Field && binding.Field is not null)
             .GroupBy(binding => binding.Field!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First().SemanticKind, StringComparer.OrdinalIgnoreCase);
+        var formatter = new ChartValueFormatter(spec.Formatting);
         var columns = new List<ChartColumn>();
         for (var columnIndex = 0; columnIndex < manifest.Columns.Count; columnIndex++)
         {
@@ -24,7 +25,15 @@ public sealed class VisualChartDataBuilder
                 .ToList();
             var kind = InferKind(rawValues, semanticByField.GetValueOrDefault(name));
             var values = rawValues.Select(value => ConvertValue(value, kind)).ToImmutableArray();
-            var display = manifest.Rows.Select(row => columnIndex < row.Count ? row[columnIndex] : null).ToImmutableArray();
+            // COMPAT_BREAK: 0.19
+            // Date and time columns are rendered by the chart formatter rather than reused from the
+            // engine's row strings: only the formatter knows the report's time zone and locale, and an
+            // instant printed in the server's zone is exactly the browser-dependent output the
+            // deterministic-formatting contract forbids. Every other column keeps its engine rendering,
+            // which already honours the author's MAPPINGS format.
+            var display = IsTemporal(kind)
+                ? values.Select(value => (string?)formatter.Format(value, name)).ToImmutableArray()
+                : manifest.Rows.Select(row => columnIndex < row.Count ? row[columnIndex] : null).ToImmutableArray();
             columns.Add(new ChartColumn(name, kind, semanticByField.GetValueOrDefault(name, DataSemanticKind.Nominal), values, display));
         }
 
@@ -32,6 +41,9 @@ public sealed class VisualChartDataBuilder
         data.Validate();
         return data;
     }
+
+    private static bool IsTemporal(ChartValueKind kind) =>
+        kind is ChartValueKind.Date or ChartValueKind.Time or ChartValueKind.LocalDateTime or ChartValueKind.OffsetDateTime;
 
     private static object? RawValue(VisualManifest manifest, int rowIndex, int columnIndex)
     {
@@ -76,7 +88,12 @@ public sealed class VisualChartDataBuilder
                 TimeSpan span => TimeOnly.FromTimeSpan(span),
                 _ => TimeOnly.Parse(text, CultureInfo.InvariantCulture)
             }),
-            ChartValueKind.OffsetDateTime => ChartValue.From(value is DateTimeOffset offset ? offset : DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)),
+            // COMPAT_BREAK: 0.19
+            // AssumeUniversal: a string with no offset must not pick up the server's local offset, or the
+            // same report renders different instants on two hosts.
+            ChartValueKind.OffsetDateTime => ChartValue.From(value is DateTimeOffset offset
+                ? offset
+                : DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AssumeUniversal)),
             ChartValueKind.LocalDateTime => ChartValue.FromLocal(DateTime.SpecifyKind((DateTime)value, DateTimeKind.Unspecified)),
             ChartValueKind.Boolean => ChartValue.From(Convert.ToBoolean(value, CultureInfo.InvariantCulture)),
             _ => ChartValue.From(text)

@@ -7,6 +7,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Planning;
+using ETL_SQL.Core.Reporting;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 
@@ -387,6 +388,29 @@ public interface IReportContext
     string? ReportBackground { get; set; }
     string? ReportTheme { get; set; }
     string? ReportNavigation { get; set; }
+
+    /// <summary>
+    /// Formatting defaults resolved from configuration. This is the tier below any <c>SET REPORT</c>
+    /// override, and above the hard-coded invariant/UTC/"-" fallback.
+    /// </summary>
+    ReportFormattingSettings FormattingDefaults { get; set; }
+
+    /// <summary>The <c>SET REPORT TIME_ZONE</c> override, or null when the script did not set one.</summary>
+    string? ReportTimeZone { get; set; }
+
+    /// <summary>The <c>SET REPORT LOCALE</c> override, or null when the script did not set one.</summary>
+    string? ReportLocale { get; set; }
+
+    /// <summary>The <c>SET REPORT NULL_LABEL</c> override, or null when the script did not set one.</summary>
+    string? ReportNullLabel { get; set; }
+
+    /// <summary>
+    /// The formatting every renderer must use: script override, then configuration default, then the
+    /// built-in fallback. A visual's own <c>OPTIONS (NULL_LABEL = ...)</c> is more specific still and is
+    /// applied on top of this by the chart lowerers.
+    /// </summary>
+    ReportFormattingSettings EffectiveFormatting { get; }
+
     /// <summary>Clears all visual and report definitions.</summary>
     void Clear();
 }

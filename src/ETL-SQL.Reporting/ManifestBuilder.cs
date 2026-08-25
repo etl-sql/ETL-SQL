@@ -62,6 +62,7 @@ namespace ETL_SQL.Reporting
                 Background = _ctx.ReportContext.ReportBackground,
                 Theme = _ctx.ReportContext.ReportTheme,
                 Navigation = _ctx.ReportContext.ReportNavigation,
+                Formatting = Formatting(_ctx.ReportContext.EffectiveFormatting),
             };
             RefreshTelemetry(manifest);
             var reportStyles = _styleBuilder.ResolveReportStyles();
@@ -428,6 +429,9 @@ namespace ETL_SQL.Reporting
             var defaultLimit = Math.Min(4, contextLimit);
             return Math.Max(1, Math.Min(requestedValue ?? defaultLimit, contextLimit));
         }
+
+        private static ReportFormattingManifest Formatting(ETL_SQL.Core.Reporting.ReportFormattingSettings settings) =>
+            new() { Locale = settings.Locale, TimeZone = settings.TimeZone, NullLabel = settings.NullLabel };
 
         private void RefreshTelemetry(ReportManifest manifest)
         {

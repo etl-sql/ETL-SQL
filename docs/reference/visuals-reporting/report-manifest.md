@@ -11,6 +11,13 @@ the runtime rendering contract, see [Report runtime contract](report-runtime-con
   "title":       "Sales Dashboard",
   "description": "Regional revenue analysis",
 
+  // Server-resolved formatting. Renderers read this instead of the viewer's machine.
+  "formatting": {
+    "locale":    "",
+    "timeZone":  "UTC",
+    "nullLabel": "-"
+  },
+
   "visuals": [
     {
       "name":       "RevenueByRegion",
@@ -76,8 +83,21 @@ the runtime rendering contract, see [Report runtime contract](report-runtime-con
 }
 ```
 
+## Formatting
+
+`formatting` is always present and always resolved on the server, so the browser, PDF, email, and
+terminal renderings of one report agree.
+
+- **locale** — culture name used for dates, times, and computed numbers; the empty string is the invariant culture.
+- **timeZone** — zone every instant in the report is rendered in.
+- **nullLabel** — text rendered in place of a NULL value.
+
+A visual whose `OPTIONS` carry `NULL_LABEL` overrides the report-level label for that visual only.
+See [SET REPORT](../set-commands/set-report.md) for the full precedence chain.
+
 ## References
 
+- [SET REPORT](../set-commands/set-report.md)
 - [Report runtime contract](report-runtime-contract.md)
 - [Report CLI, Hosting, and Preview](report-cli.md)
 - [Report objects](report/README.md)

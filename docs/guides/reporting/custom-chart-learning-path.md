@@ -10,7 +10,7 @@ Run the companion sample to see every step rendered:
 etl-sql run samples/08_Reporting/custom_chart_learning_path.rptsql
 ```
 
-> **When to use CUSTOM vs. named visuals.** A named visual inherits themes (`CREATE STYLE`), respects `NULL_LABEL`, infers cross-filter columns, and appears in the Report Builder. `CUSTOM` does not do any of these today. Reach for `CUSTOM` only when you need something a named visual cannot express: multiple heterogeneous layers, qualitative background bands, conditional mark styling, dual-axis compositions beyond `COMBO`, or specialized marks like `TICK` and `RULE`. If a named visual already covers your shape, use it.
+> **When to use CUSTOM vs. named visuals.** As of v0.19.0 a `CUSTOM` chart inherits `CREATE STYLE` themes and the resolved report formatting (`TIME_ZONE`, `LOCALE`, `NULL_LABEL`) exactly as a named visual does. Two gaps remain: `CUSTOM` does not infer a cross-filter column, and it does not appear in the Report Builder. Reach for `CUSTOM` only when you need something a named visual cannot express: multiple heterogeneous layers, qualitative background bands, conditional mark styling, dual-axis compositions beyond `COMBO`, or specialized marks like `TICK` and `RULE`. If a named visual already covers your shape, use it.
 
 ---
 
@@ -73,7 +73,7 @@ CREATE VISUAL Step1_CustomBar AS CUSTOM (
 - `LAYERS` — one or more marks. `RECT` draws rectangles (bars). Each layer has `ENCODINGS` that bind data columns to visual channels.
 - `TYPE` on each encoding — `ORDINAL`, `NOMINAL`, `QUANTITATIVE`, or `TEMPORAL`. This is always required and never inferred from data.
 
-The named `BAR` is strictly better here. This translation exists to teach the skeleton.
+The named `BAR` is still better here — it says the same thing in six lines, and it infers the cross-filter column that `CUSTOM` cannot. This translation exists to teach the skeleton.
 
 ---
 

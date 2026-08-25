@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Reporting;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Services;
 /// <summary>
@@ -37,9 +39,22 @@ public class ReportRegistry : IReportContext
     public string? ReportBackground { get; set; }
     public string? ReportTheme { get; set; }
     public string? ReportNavigation { get; set; }
+    public ReportFormattingSettings FormattingDefaults { get; set; } = ReportFormattingSettings.Default;
+    public string? ReportTimeZone { get; set; }
+    public string? ReportLocale { get; set; }
+    public string? ReportNullLabel { get; set; }
+    public ReportFormattingSettings EffectiveFormatting =>
+        ReportFormattingSettings.Resolve(FormattingDefaults, ReportLocale, ReportTimeZone, ReportNullLabel);
 
-    public ReportRegistry()
+    public ReportRegistry() : this(null) { }
+
+    /// <param name="configuration">
+    /// Supplies the formatting defaults. Resolved once here rather than per visual so a report cannot
+    /// render half of its charts against one default and half against another.
+    /// </param>
+    public ReportRegistry(IConfiguration? configuration)
     {
+        FormattingDefaults = ReportFormattingSettings.FromConfiguration(configuration);
         VisualDefinitions = new Dictionary<string, CreateVisualStatement>(StringComparer.OrdinalIgnoreCase);
         PageDefinitions = new Dictionary<string, CreatePageStatement>(StringComparer.OrdinalIgnoreCase);
         DatasetDefinitions = new Dictionary<string, CreateDatasetStatement>(StringComparer.OrdinalIgnoreCase);
@@ -83,7 +98,11 @@ public class ReportRegistry : IReportContext
             ReportLogo = this.ReportLogo,
             ReportBackground = this.ReportBackground,
             ReportTheme = this.ReportTheme,
-            ReportNavigation = this.ReportNavigation
+            ReportNavigation = this.ReportNavigation,
+            FormattingDefaults = this.FormattingDefaults,
+            ReportTimeZone = this.ReportTimeZone,
+            ReportLocale = this.ReportLocale,
+            ReportNullLabel = this.ReportNullLabel
         };
     }
     /// <summary>Clears all visual, page, dataset, and report-level definitions.</summary>
@@ -112,5 +131,10 @@ public class ReportRegistry : IReportContext
         ReportBackground = null;
         ReportTheme = null;
         ReportNavigation = null;
+        // Only the script's own overrides clear. FormattingDefaults came from configuration, not from
+        // the script, so clearing it here would silently demote a deployment default to the fallback.
+        ReportTimeZone = null;
+        ReportLocale = null;
+        ReportNullLabel = null;
     }
 }

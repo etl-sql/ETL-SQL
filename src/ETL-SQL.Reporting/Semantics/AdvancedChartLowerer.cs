@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
@@ -12,9 +13,17 @@ namespace ETL_SQL.Reporting.Semantics.Runtime;
 /// <summary>Lowers native advanced Report-SQL chart syntax into renderer-neutral intent.</summary>
 public sealed class AdvancedChartLowerer(IExecutionContext context)
 {
+    /// <summary>Anchor for failures that belong to the CHART clause as a whole.</summary>
+    private AstNode? _chartNode;
+
     public ChartSpec Lower(CreateVisualStatement statement, VisualManifest manifest)
     {
         var chart = statement.AdvancedChart ?? throw new InvalidOperationException("CUSTOM visual requires a CHART definition.");
+        // One shared semantic pass, identical to the one the lint rule runs, so the editor and preview
+        // can never disagree about which authoring failures exist or where they are.
+        var diagnostics = AdvancedChartSemanticValidator.Validate(chart, statement);
+        if (diagnostics.Count > 0) throw new AdvancedChartSemanticException(diagnostics);
+        _chartNode = chart.Line > 0 ? chart : statement;
         var global = chart.Encodings.Select(Binding).ToImmutableArray();
         var declaredScales = chart.Scales.Select(Scale).ToImmutableArray();
         var layers = chart.Layers.Select(layer => Layer(layer, global)).ToImmutableArray();
@@ -43,19 +52,28 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                 chart.Coordinate.EndAngle, chart.Coordinate.InnerRadius, chart.Coordinate.AspectRatio),
             declaredScales.AddRange(inferredScales.Where(inferred => declaredScales.All(declared =>
                 !declared.Id.Equals(inferred.Id, StringComparison.OrdinalIgnoreCase)))),
-            new FormattingSpec(CultureInfo.InvariantCulture.Name, "UTC", "",
+            ChartStyleTokens.Formatting(context, manifest,
                 layers.SelectMany(layer => layer.Bindings)
                     .Where(binding => binding.SourceKind == BindingSourceKind.Field && binding.Field is not null && binding.Format is not null)
                     .Select(binding => new FieldFormat(binding.Field!, binding.Format))
                     .Distinct().ToImmutableArray()),
             new NullHandlingSpec(NullValuePolicy.Gap, []),
-            new ThemeSpec(manifest.Styles?.GetValueOrDefault("THEME") ?? "default", []),
+            ChartStyleTokens.Theme(manifest),
             new AccessibilitySpec(title, manifest.Options.GetValueOrDefault("subtitle"), null, true),
             title,
             resolution,
             chart.Facet is null ? null : new FacetSpec(chart.Facet.RowField, chart.Facet.ColumnField, resolution,
                 chart.Facet.WrapField, chart.Facet.Columns));
-        spec.Validate();
+        try
+        {
+            spec.Validate();
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException)
+        {
+            // Defence in depth: the shared validator models this contract, so reaching here means the two
+            // have drifted. Publish it as a positioned diagnostic rather than an unpositioned error string.
+            throw AdvancedChartSemanticException.At(_chartNode ?? statement, ex.Message);
+        }
         return spec;
     }
 
@@ -70,10 +88,16 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             {
                 if (binding.ScaleId is not null || binding.SourceKind == BindingSourceKind.Value)
                     return binding;
+                var advancedChannel = AdvancedChartEnumBridge.Channel(binding.Channel);
+                if (advancedChannel is null)
+                {
+                    if (binding.Channel is FieldChannel.Text or FieldChannel.Tooltip or FieldChannel.Detail) return binding;
+                    throw new InvalidOperationException($"Channel {binding.Channel} has no CUSTOM grammar counterpart and cannot infer a scale.");
+                }
                 var kind = AdvancedChartScaleInference.Infer(
-                    Enum.Parse<AdvancedChartChannel>(binding.Channel.ToString()),
-                    Enum.Parse<AdvancedChartDataKind>(binding.SemanticKind.ToString()),
-                    Enum.Parse<AdvancedChartMarkKind>(layer.Mark.ToString()));
+                    advancedChannel.Value,
+                    AdvancedChartEnumBridge.DataKind(binding.SemanticKind),
+                    AdvancedChartEnumBridge.Mark(layer.Mark));
                 if (kind is null)
                 {
                     if (binding.Channel is FieldChannel.Text or FieldChannel.Tooltip or FieldChannel.Detail) return binding;
@@ -82,7 +106,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                 var axis = binding.Axis == AxisRole.Secondary ? "secondary" : "primary";
                 var scaleChannel = BaseScaleChannel(binding.Channel);
                 var id = $"inferred-{Coordinate(coordinate).ToString().ToLowerInvariant()}-{axis}-{scaleChannel.ToString().ToLowerInvariant()}";
-                var scale = new ScaleSpec(id, scaleChannel, Enum.Parse<ScaleKind>(kind.Value.ToString()), false, []);
+                var scale = new ScaleSpec(id, scaleChannel, AdvancedChartEnumBridge.Scale(kind.Value), false, []);
                 if (inferred.TryGetValue(id, out var existing) && existing.Kind != scale.Kind)
                     throw new InvalidOperationException($"Channel {binding.Channel} requires incompatible inferred scales ({existing.Kind} and {scale.Kind}); declare named scales explicitly.");
                 inferred[id] = scale;
@@ -108,13 +132,13 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         return new(
         layer.Name, Mark(layer.Mark), layer.ZIndex,
         effective,
-        layer.Styles.Select(style => new StyleToken(style.Name, Display(EvaluateLiteral(style.Value)))).ToImmutableArray(),
+        layer.Styles.Select(style => new StyleToken(style.Name, Display(EvaluateLiteral(style.Value, style)))).ToImmutableArray(),
         layer.Name)
         {
             Conditions = layer.Conditions.Select(Condition).ToImmutableArray(),
             BandSize = layer.BandSize,
             TickThickness = layer.TickThickness,
-            TickOrientation = Enum.Parse<TickOrientation>(layer.TickOrientation.ToString()),
+            TickOrientation = AdvancedChartEnumBridge.Tick(layer.TickOrientation),
             Position = Position(layer.Position)
         };
     }
@@ -122,91 +146,96 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
     private static PositionAdjustmentSpec? Position(AdvancedChartPosition position) => position.Kind == AdvancedChartPositionKind.Identity
         ? null
         : new PositionAdjustmentSpec(
-            Enum.Parse<PositionAdjustmentKind>(position.Kind.ToString()),
+            AdvancedChartEnumBridge.Position(position.Kind),
             position.X,
             position.Y,
             position.KeyField,
             position.Seed,
-            Enum.Parse<PositionAdjustmentUnit>(position.Unit.ToString()));
+            AdvancedChartEnumBridge.Unit(position.Unit));
 
     private EncodingConditionSpec Condition(AdvancedChartCondition condition) => new(
-        Enum.Parse<ConditionalEncodingChannel>(condition.Channel.ToString()),
-        Predicate(condition.Predicate),
-        EvaluateLiteral(condition.WhenTrue),
-        condition.WhenFalse is null ? null : EvaluateLiteral(condition.WhenFalse));
+        AdvancedChartEnumBridge.Condition(condition.Channel),
+        Predicate(condition.Predicate, condition),
+        EvaluateLiteral(condition.WhenTrue, condition),
+        condition.WhenFalse is null ? null : EvaluateLiteral(condition.WhenFalse, condition));
 
-    private EncodingPredicate Predicate(Expression expression) => expression switch
+    private EncodingPredicate Predicate(Expression expression, AstNode anchor) => expression switch
     {
         BinaryExpression binary when binary.Operator is TokenType.AND or TokenType.OR => new(
             binary.Operator == TokenType.AND ? PredicateKind.And : PredicateKind.Or,
-            First: Predicate(binary.Left), Second: Predicate(binary.Right)),
+            First: Predicate(binary.Left, anchor), Second: Predicate(binary.Right, anchor)),
         BinaryExpression binary when Comparison(binary.Operator) is { } comparison => new(
-            PredicateKind.Comparison, Operand(binary.Left), Operand(binary.Right), comparison),
-        UnaryExpression unary when unary.Operator == TokenType.NOT => new(PredicateKind.Not, First: Predicate(unary.Expression)),
-        IsNullExpression isNull => new(isNull.Not ? PredicateKind.IsNotNull : PredicateKind.IsNull, Left: Operand(isNull.Expression)),
-        IdentifierExpression or VariableExpression or LiteralExpression => new(PredicateKind.Truthy, Left: Operand(expression)),
-        _ => throw new InvalidOperationException($"Unsupported advanced chart condition expression '{expression.GetType().Name}'.")
+            PredicateKind.Comparison, Operand(binary.Left, anchor), Operand(binary.Right, anchor), comparison),
+        UnaryExpression unary when unary.Operator == TokenType.NOT => new(PredicateKind.Not, First: Predicate(unary.Expression, anchor)),
+        IsNullExpression isNull => new(isNull.Not ? PredicateKind.IsNotNull : PredicateKind.IsNull, Left: Operand(isNull.Expression, anchor)),
+        IdentifierExpression or VariableExpression or LiteralExpression => new(PredicateKind.Truthy, Left: Operand(expression, anchor)),
+        _ => throw AdvancedChartSemanticException.At(anchor,
+            $"Unsupported advanced chart condition expression '{expression.GetType().Name}'.")
     };
 
-    private PredicateOperand Operand(Expression expression) => expression switch
+    private PredicateOperand Operand(Expression expression, AstNode anchor) => expression switch
     {
         IdentifierExpression identifier => new(PredicateOperandKind.Field, identifier.Name.Split('.').Last(), null),
-        VariableExpression variable => new(PredicateOperandKind.Literal, null, EvaluateVariable(variable.Name)),
+        VariableExpression variable => new(PredicateOperandKind.Literal, null, EvaluateVariable(variable.Name, anchor)),
         LiteralExpression literal => new(PredicateOperandKind.Literal, null, Value(literal.Value)),
-        _ => throw new InvalidOperationException($"Advanced chart conditions support only fields, parameters, and literals; found '{expression.GetType().Name}'.")
+        _ => throw AdvancedChartSemanticException.At(anchor,
+            $"Advanced chart conditions support only fields, parameters, and literals; found '{expression.GetType().Name}'.")
     };
 
-    private ChartValue EvaluateLiteral(Expression expression) => expression switch
+    private ChartValue EvaluateLiteral(Expression expression, AstNode anchor) => expression switch
     {
         LiteralExpression literal => Value(literal.Value),
-        VariableExpression variable => EvaluateVariable(variable.Name),
-        _ => throw new InvalidOperationException("Advanced chart style, scale, and condition result values must be literals or parameters.")
+        VariableExpression variable => EvaluateVariable(variable.Name, anchor),
+        _ => throw AdvancedChartSemanticException.At(anchor,
+            "Advanced chart style, scale, and condition result values must be literals or parameters.")
     };
 
-    private ChartValue EvaluateVariable(string name)
+    private ChartValue EvaluateVariable(string name, AstNode anchor)
     {
         if (!context.VarContext.ContainsVariable(name))
-            throw new InvalidOperationException($"Advanced chart parameter '{name}' is not declared.");
+            throw AdvancedChartSemanticException.At(anchor, $"Advanced chart parameter '{name}' is not declared.");
         var metadata = context.VarContext.GetVariablesWithMetadata()
             .FirstOrDefault(item => item.Key.TrimStart('@').Equals(name.TrimStart('@'), StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrEmpty(metadata.Key) && (metadata.Value.Metadata.IsSecret || metadata.Value.Metadata.IsSensitive))
-            throw new InvalidOperationException($"Advanced chart parameter '{name}' is secret-bearing and cannot be used in an encoding binding.");
+            throw AdvancedChartSemanticException.At(anchor,
+                $"Advanced chart parameter '{name}' is secret-bearing and cannot be used in an encoding binding.");
         return Value(context.VarContext.GetVariable(name));
     }
 
     private ScaleSpec Scale(AdvancedChartScale scale) => new(
         scale.Name, Channel(scale.Channel), Scale(scale.Kind), scale.IncludeZero,
-        scale.ExplicitOrder.Select(item => Display(EvaluateLiteral(item))).ToImmutableArray(),
-        scale.Minimum is null ? null : EvaluateLiteral(scale.Minimum),
-        scale.Maximum is null ? null : EvaluateLiteral(scale.Maximum))
+        scale.ExplicitOrder.Select(item => Display(EvaluateLiteral(item, scale))).ToImmutableArray(),
+        scale.Minimum is null ? null : EvaluateLiteral(scale.Minimum, scale),
+        scale.Maximum is null ? null : EvaluateLiteral(scale.Maximum, scale))
     {
         ColorRange = scale.ColorRange is null ? null : new ColorRangeSpec(
-            Enum.Parse<ColorRangeKind>(scale.ColorRange.Kind.ToString()),
-            Display(EvaluateLiteral(scale.ColorRange.Low)),
-            Display(EvaluateLiteral(scale.ColorRange.High)),
-            scale.ColorRange.Mid is null ? null : Display(EvaluateLiteral(scale.ColorRange.Mid)),
-            scale.ColorRange.Midpoint is null ? null : PlotPlanResolver.Number(EvaluateLiteral(scale.ColorRange.Midpoint)),
-            scale.ColorRange.NullColor is null ? "#9ca3af" : Display(EvaluateLiteral(scale.ColorRange.NullColor)))
+            AdvancedChartEnumBridge.ColorRange(scale.ColorRange.Kind),
+            Display(EvaluateLiteral(scale.ColorRange.Low, scale.ColorRange)),
+            Display(EvaluateLiteral(scale.ColorRange.High, scale.ColorRange)),
+            scale.ColorRange.Mid is null ? null : Display(EvaluateLiteral(scale.ColorRange.Mid, scale.ColorRange)),
+            scale.ColorRange.Midpoint is null ? null : PlotPlanResolver.Number(EvaluateLiteral(scale.ColorRange.Midpoint, scale.ColorRange)),
+            scale.ColorRange.NullColor is null ? "#9ca3af" : Display(EvaluateLiteral(scale.ColorRange.NullColor, scale.ColorRange)))
     };
 
     private FieldBinding Binding(AdvancedChartEncoding binding)
     {
         var channel = Channel(binding.Channel);
         var semanticKind = DataKind(binding.DataKind);
-        var axis = Enum.Parse<AxisRole>(binding.Axis.ToString());
-        var sort = binding.Sort == AdvancedChartSortDirection.Source ? SortDirection.None : Enum.Parse<SortDirection>(binding.Sort.ToString());
+        var axis = AdvancedChartEnumBridge.Axis(binding.Axis);
+        var sort = AdvancedChartEnumBridge.Sort(binding.Sort);
         if (binding.Source.Kind == AdvancedChartBindingSourceKind.Field)
             return new FieldBinding(channel, binding.Source.Field, semanticKind, binding.Scale, axis, sort, binding.Format)
-            { Stack = Enum.Parse<StackMode>(binding.Stack.ToString()) };
+            { Stack = AdvancedChartEnumBridge.Stack(binding.Stack) };
 
-        var expression = binding.Source.Constant ?? throw new InvalidOperationException("Constant binding has no value.");
-        var value = EvaluateLiteral(expression);
+        var expression = binding.Source.Constant
+            ?? throw AdvancedChartSemanticException.At(binding, "Constant binding has no value.");
+        var value = EvaluateLiteral(expression, binding);
         var parameter = expression is VariableExpression variable ? variable.Name : null;
         return binding.Source.Kind == AdvancedChartBindingSourceKind.Datum
             ? FieldBinding.Datum(channel, value, semanticKind, binding.Scale, axis, parameter) with
-            { Sort = sort, Format = binding.Format, Stack = Enum.Parse<StackMode>(binding.Stack.ToString()) }
+            { Sort = sort, Format = binding.Format, Stack = AdvancedChartEnumBridge.Stack(binding.Stack) }
             : FieldBinding.Value(channel, value, semanticKind, parameter) with
-            { Sort = sort, Format = binding.Format, Stack = Enum.Parse<StackMode>(binding.Stack.ToString()) };
+            { Sort = sort, Format = binding.Format, Stack = AdvancedChartEnumBridge.Stack(binding.Stack) };
     }
 
     private static ComparisonKind? Comparison(TokenType token) => token switch
@@ -235,11 +264,11 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
     };
 
     private static string Display(ChartValue value) => PlotPlanResolver.Display(value);
-    private static MarkKind Mark(AdvancedChartMarkKind value) => Enum.Parse<MarkKind>(value.ToString());
-    private static FieldChannel Channel(AdvancedChartChannel value) => Enum.Parse<FieldChannel>(value.ToString());
-    private static DataSemanticKind DataKind(AdvancedChartDataKind value) => Enum.Parse<DataSemanticKind>(value.ToString());
-    private static ScaleKind Scale(AdvancedChartScaleKind value) => Enum.Parse<ScaleKind>(value.ToString());
-    private static CoordinateKind Coordinate(AdvancedChartCoordinateKind value) => Enum.Parse<CoordinateKind>(value.ToString());
-    private static ScaleResolutionMode Resolution(AdvancedChartResolutionMode value) => Enum.Parse<ScaleResolutionMode>(value.ToString());
+    private static MarkKind Mark(AdvancedChartMarkKind value) => AdvancedChartEnumBridge.Mark(value);
+    private static FieldChannel Channel(AdvancedChartChannel value) => AdvancedChartEnumBridge.Channel(value);
+    private static DataSemanticKind DataKind(AdvancedChartDataKind value) => AdvancedChartEnumBridge.DataKind(value);
+    private static ScaleKind Scale(AdvancedChartScaleKind value) => AdvancedChartEnumBridge.Scale(value);
+    private static CoordinateKind Coordinate(AdvancedChartCoordinateKind value) => AdvancedChartEnumBridge.Coordinate(value);
+    private static ScaleResolutionMode Resolution(AdvancedChartResolutionMode value) => AdvancedChartEnumBridge.Resolution(value);
 
 }

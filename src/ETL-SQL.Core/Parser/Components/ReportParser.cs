@@ -360,6 +360,7 @@ public class ReportParser : ParserComponent
 
     private AdvancedChartDefinition ParseAdvancedChartDefinition()
     {
+        var chartStart = _parser.Current;
         Consume(TokenType.LPAREN, "Expected '(' after CHART");
         AdvancedChartCoordinate? coordinate = null;
         var scales = new List<AdvancedChartScale>();
@@ -409,6 +410,7 @@ public class ReportParser : ParserComponent
         }
 
         Consume(TokenType.RPAREN, "Expected ')' to close CHART");
+        var chartEnd = _parser.Previous;
         if (coordinate == null)
             throw new SyntaxException("CHART requires COORDINATE.", _parser.Current.Line, _parser.Current.Column);
         if (layers.Count == 0)
@@ -421,12 +423,17 @@ public class ReportParser : ParserComponent
             Encodings = encodings.ToImmutableArray(),
             Layers = layers.ToImmutableArray(),
             Facet = facet,
-            Resolution = resolution
+            Resolution = resolution,
+            Line = chartStart.Line,
+            Column = chartStart.Column,
+            EndLine = chartEnd.EndLine,
+            EndColumn = chartEnd.EndColumn
         };
     }
 
     private AdvancedChartCoordinate ParseAdvancedChartCoordinate()
     {
+        var start = _parser.Current;
         Consume(TokenType.LPAREN, "Expected '(' after COORDINATE");
         AdvancedChartCoordinateKind? kind = null;
         decimal? startAngle = null, endAngle = null, innerRadius = null, aspectRatio = null;
@@ -462,6 +469,7 @@ public class ReportParser : ParserComponent
             Match(TokenType.COMMA);
         }
         Consume(TokenType.RPAREN, "Expected ')' after COORDINATE");
+        var end = _parser.Previous;
         if (!kind.HasValue)
             throw new SyntaxException("COORDINATE requires TYPE.", _parser.Current.Line, _parser.Current.Column);
         return new AdvancedChartCoordinate
@@ -470,7 +478,11 @@ public class ReportParser : ParserComponent
             StartAngle = startAngle,
             EndAngle = endAngle,
             InnerRadius = innerRadius,
-            AspectRatio = aspectRatio
+            AspectRatio = aspectRatio,
+            Line = start.Line,
+            Column = start.Column,
+            EndLine = end.EndLine,
+            EndColumn = end.EndColumn
         };
     }
 
@@ -521,6 +533,7 @@ public class ReportParser : ParserComponent
                 Match(TokenType.COMMA);
             }
             Consume(TokenType.RPAREN, $"Expected ')' after scale '{name}'");
+            var scaleEnd = _parser.Previous;
             if (!channel.HasValue)
                 throw new SyntaxException($"Scale '{name}' requires CHANNEL.", start.Line, start.Column);
             scales.Add(new AdvancedChartScale
@@ -535,7 +548,9 @@ public class ReportParser : ParserComponent
                 ExplicitOrder = explicitOrder.ToImmutableArray(),
                 ColorRange = colorRange,
                 Line = start.Line,
-                Column = start.Column
+                Column = start.Column,
+                EndLine = scaleEnd.EndLine,
+                EndColumn = scaleEnd.EndColumn
             });
             Match(TokenType.COMMA);
         }
@@ -545,6 +560,7 @@ public class ReportParser : ParserComponent
 
     private AdvancedChartColorRange ParseAdvancedColorRange()
     {
+        var start = _parser.Current;
         var kind = ConsumeAdvancedWord("Expected GRADIENT or DIVERGING after RANGE").ToUpperInvariant() switch
         {
             "GRADIENT" => AdvancedChartColorRangeKind.Gradient,
@@ -570,11 +586,24 @@ public class ReportParser : ParserComponent
             Match(TokenType.COMMA);
         }
         Consume(TokenType.RPAREN, "Expected ')' after color RANGE");
+        var end = _parser.Previous;
         if (low is null || high is null)
             throw new SyntaxException("Color RANGE requires LOW and HIGH.", _parser.Current.Line, _parser.Current.Column);
         if (kind == AdvancedChartColorRangeKind.Diverging && (mid is null || midpoint is null))
             throw new SyntaxException("DIVERGING color RANGE requires MID and MIDPOINT.", _parser.Current.Line, _parser.Current.Column);
-        return new AdvancedChartColorRange { Kind = kind, Low = low, Mid = mid, High = high, Midpoint = midpoint, NullColor = nullColor };
+        return new AdvancedChartColorRange
+        {
+            Kind = kind,
+            Low = low,
+            Mid = mid,
+            High = high,
+            Midpoint = midpoint,
+            NullColor = nullColor,
+            Line = start.Line,
+            Column = start.Column,
+            EndLine = end.EndLine,
+            EndColumn = end.EndColumn
+        };
     }
 
     private IEnumerable<AdvancedChartLayer> ParseAdvancedChartLayers()
@@ -633,7 +662,7 @@ public class ReportParser : ParserComponent
                 {
                     Advance();
                     Consume(TokenType.EQUALS, "Expected '=' after ORIENTATION");
-                    tickOrientation = Enum.Parse<AdvancedChartTickOrientation>(ConsumeAdvancedWord("Expected AUTO, HORIZONTAL, or VERTICAL"), true);
+                    tickOrientation = ParseAdvancedTickOrientation(ConsumeAdvancedWord("Expected AUTO, HORIZONTAL, or VERTICAL"));
                 }
                 else if (IsCurrentValue("ENCODINGS"))
                 {
@@ -657,6 +686,7 @@ public class ReportParser : ParserComponent
                 Match(TokenType.COMMA);
             }
             Consume(TokenType.RPAREN, $"Expected ')' after layer '{name}'");
+            var layerEnd = _parser.Previous;
             layers.Add(new AdvancedChartLayer
             {
                 Name = name,
@@ -671,7 +701,9 @@ public class ReportParser : ParserComponent
                 Styles = styles.ToImmutableArray(),
                 Conditions = conditions.ToImmutableArray(),
                 Line = start.Line,
-                Column = start.Column
+                Column = start.Column,
+                EndLine = layerEnd.EndLine,
+                EndColumn = layerEnd.EndColumn
             });
             Match(TokenType.COMMA);
         }
@@ -690,7 +722,14 @@ public class ReportParser : ParserComponent
             var value => throw new SyntaxException($"Unknown POSITION adjustment '{value}'.", start.Line, start.Column)
         };
         if (kind == AdvancedChartPositionKind.Identity)
-            return new AdvancedChartPosition { Kind = kind, Line = start.Line, Column = start.Column };
+            return new AdvancedChartPosition
+            {
+                Kind = kind,
+                Line = start.Line,
+                Column = start.Column,
+                EndLine = _parser.Previous.EndLine,
+                EndColumn = _parser.Previous.EndColumn
+            };
 
         Consume(TokenType.LPAREN, $"Expected '(' after POSITION {kind.ToString().ToUpperInvariant()}");
         decimal x = 0m, y = 0m;
@@ -727,7 +766,19 @@ public class ReportParser : ParserComponent
             throw new SyntaxException("POSITION JITTER uses scale/band-relative amplitudes and does not accept UNIT.", start.Line, start.Column);
         if (kind == AdvancedChartPositionKind.Nudge && (key is not null || seed != 0))
             throw new SyntaxException("POSITION NUDGE does not accept KEY or SEED.", start.Line, start.Column);
-        return new AdvancedChartPosition { Kind = kind, X = x, Y = y, KeyField = key, Seed = seed, Unit = unit, Line = start.Line, Column = start.Column };
+        return new AdvancedChartPosition
+        {
+            Kind = kind,
+            X = x,
+            Y = y,
+            KeyField = key,
+            Seed = seed,
+            Unit = unit,
+            Line = start.Line,
+            Column = start.Column,
+            EndLine = _parser.Previous.EndLine,
+            EndColumn = _parser.Previous.EndColumn
+        };
     }
 
     private static Expression NormalizeAdvancedScalar(Expression expression)
@@ -767,12 +818,29 @@ public class ReportParser : ParserComponent
                 if (expression is not LiteralExpression and not VariableExpression)
                     throw new SyntaxException($"{kind.ToString().ToUpperInvariant()} accepts only a scalar literal or declared variable.", start.Line, start.Column);
                 Consume(TokenType.RPAREN, $"Expected ')' after {kind.ToString().ToUpperInvariant()} source");
-                source = new AdvancedChartBindingSource { Kind = kind, Constant = expression, Line = start.Line, Column = start.Column };
+                source = new AdvancedChartBindingSource
+                {
+                    Kind = kind,
+                    Constant = expression,
+                    Line = start.Line,
+                    Column = start.Column,
+                    EndLine = _parser.Previous.EndLine,
+                    EndColumn = _parser.Previous.EndColumn
+                };
             }
             else
             {
-                var field = ConsumeIdentifier("Expected source column, DATUM(...), or VALUE(...) for encoding").Value;
-                source = new AdvancedChartBindingSource { Kind = AdvancedChartBindingSourceKind.Field, Field = field, Line = start.Line, Column = start.Column };
+                var fieldToken = ConsumeIdentifier("Expected source column, DATUM(...), or VALUE(...) for encoding");
+                var field = fieldToken.Value;
+                source = new AdvancedChartBindingSource
+                {
+                    Kind = AdvancedChartBindingSourceKind.Field,
+                    Field = field,
+                    Line = fieldToken.Line,
+                    Column = fieldToken.Column,
+                    EndLine = fieldToken.EndLine,
+                    EndColumn = fieldToken.EndColumn
+                };
             }
             Consume(TokenType.LPAREN, "Expected '(' after encoding binding source");
             AdvancedChartDataKind? dataKind = null;
@@ -799,6 +867,7 @@ public class ReportParser : ParserComponent
                 Match(TokenType.COMMA);
             }
             Consume(TokenType.RPAREN, "Expected ')' after encoding options");
+            var encodingEnd = _parser.Previous;
             if (!dataKind.HasValue)
                 throw new SyntaxException($"Encoding {channel} requires TYPE.", start.Line, start.Column);
             encodings.Add(new AdvancedChartEncoding
@@ -812,7 +881,9 @@ public class ReportParser : ParserComponent
                 Format = format,
                 Stack = stack,
                 Line = start.Line,
-                Column = start.Column
+                Column = start.Column,
+                EndLine = encodingEnd.EndLine,
+                EndColumn = encodingEnd.EndColumn
             });
             Match(TokenType.COMMA);
         }
@@ -841,9 +912,16 @@ public class ReportParser : ParserComponent
         var styles = new List<AdvancedChartStyle>();
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
+            var styleStart = _parser.Current;
             var name = ConsumeAdvancedWord("Expected portable style name").ToUpperInvariant();
             Consume(TokenType.EQUALS, $"Expected '=' after style '{name}'");
-            styles.Add(new AdvancedChartStyle(name, _parser.ParseExpression()));
+            styles.Add(new AdvancedChartStyle(name, _parser.ParseExpression())
+            {
+                Line = styleStart.Line,
+                Column = styleStart.Column,
+                EndLine = _parser.Previous.EndLine,
+                EndColumn = _parser.Previous.EndColumn
+            });
             Match(TokenType.COMMA);
         }
         Consume(TokenType.RPAREN, "Expected ')' after layer STYLE");
@@ -871,7 +949,9 @@ public class ReportParser : ParserComponent
                 WhenTrue = whenTrue,
                 WhenFalse = whenFalse,
                 Line = start.Line,
-                Column = start.Column
+                Column = start.Column,
+                EndLine = _parser.Previous.EndLine,
+                EndColumn = _parser.Previous.EndColumn
             });
             Match(TokenType.COMMA);
         }
@@ -881,6 +961,7 @@ public class ReportParser : ParserComponent
 
     private AdvancedChartFacet ParseAdvancedChartFacet()
     {
+        var start = _parser.Current;
         Consume(TokenType.LPAREN, "Expected '(' after FACET");
         string? row = null, column = null, wrap = null;
         int? columns = null;
@@ -903,6 +984,7 @@ public class ReportParser : ParserComponent
             Match(TokenType.COMMA);
         }
         Consume(TokenType.RPAREN, "Expected ')' after FACET");
+        var end = _parser.Previous;
         if (row == null && column == null && wrap == null)
             throw new SyntaxException("FACET requires ROW, COLUMN, or WRAP.", _parser.Current.Line, _parser.Current.Column);
         if (wrap is not null && (row is not null || column is not null))
@@ -911,11 +993,22 @@ public class ReportParser : ParserComponent
             throw new SyntaxException("FACET COLUMNS requires WRAP.", _parser.Current.Line, _parser.Current.Column);
         if (columns is < 1 or > 12)
             throw new SyntaxException("FACET COLUMNS must be between 1 and 12.", _parser.Current.Line, _parser.Current.Column);
-        return new AdvancedChartFacet { RowField = row, ColumnField = column, WrapField = wrap, Columns = columns };
+        return new AdvancedChartFacet
+        {
+            RowField = row,
+            ColumnField = column,
+            WrapField = wrap,
+            Columns = columns,
+            Line = start.Line,
+            Column = start.Column,
+            EndLine = end.EndLine,
+            EndColumn = end.EndColumn
+        };
     }
 
     private AdvancedChartResolution ParseAdvancedChartResolution()
     {
+        var start = _parser.Current;
         Consume(TokenType.LPAREN, "Expected '(' after RESOLVE");
         var x = AdvancedChartResolutionMode.Shared;
         var y = AdvancedChartResolutionMode.Shared;
@@ -932,7 +1025,16 @@ public class ReportParser : ParserComponent
             Match(TokenType.COMMA);
         }
         Consume(TokenType.RPAREN, "Expected ')' after RESOLVE");
-        return new AdvancedChartResolution { X = x, Y = y, Color = color };
+        return new AdvancedChartResolution
+        {
+            X = x,
+            Y = y,
+            Color = color,
+            Line = start.Line,
+            Column = start.Column,
+            EndLine = _parser.Previous.EndLine,
+            EndColumn = _parser.Previous.EndColumn
+        };
     }
 
     private string ConsumeAdvancedWord(string message)
@@ -948,6 +1050,14 @@ public class ReportParser : ParserComponent
         "ON" => true,
         "OFF" => false,
         var value => throw new SyntaxException($"Expected ON or OFF, got '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+    };
+
+    private AdvancedChartTickOrientation ParseAdvancedTickOrientation(string value) => value.ToUpperInvariant() switch
+    {
+        "AUTO" => AdvancedChartTickOrientation.Auto,
+        "HORIZONTAL" => AdvancedChartTickOrientation.Horizontal,
+        "VERTICAL" => AdvancedChartTickOrientation.Vertical,
+        _ => throw new SyntaxException($"Expected AUTO, HORIZONTAL, or VERTICAL, got '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
     };
 
     private AdvancedChartMarkKind ParseAdvancedMark(string value) => value.ToUpperInvariant() switch

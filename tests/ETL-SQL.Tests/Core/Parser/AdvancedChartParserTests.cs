@@ -40,7 +40,9 @@ public sealed class AdvancedChartParserTests
             reparsed.AdvancedChart.Layers.Select(layer => (layer.Name, layer.Mark, layer.ZIndex)));
         Assert.Equal(original.AdvancedChart.Facet!.RowField, reparsed.AdvancedChart.Facet!.RowField);
         Assert.Equal(original.AdvancedChart.Facet.ColumnField, reparsed.AdvancedChart.Facet.ColumnField);
-        Assert.Equal(original.AdvancedChart.Resolution, reparsed.AdvancedChart.Resolution);
+        Assert.Equal(
+            (original.AdvancedChart.Resolution.X, original.AdvancedChart.Resolution.Y, original.AdvancedChart.Resolution.Color),
+            (reparsed.AdvancedChart.Resolution.X, reparsed.AdvancedChart.Resolution.Y, reparsed.AdvancedChart.Resolution.Color));
         Assert.Equal(formatted, reparsed.ToSql());
     }
 

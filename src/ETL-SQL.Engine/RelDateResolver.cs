@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine;
@@ -12,60 +13,11 @@ namespace ETL_SQL.Engine;
 /// </summary>
 public static class RelDateResolver
 {
-    private static readonly Dictionary<string, string> TzMapping = new(StringComparer.OrdinalIgnoreCase)
-    {
-        { "UTC", "UTC" },
-        { "GMT", "UTC" },
-        { "EST", "America/New_York" },
-        { "EDT", "America/New_York" },
-        { "CST", "America/Chicago" },
-        { "CDT", "America/Chicago" },
-        { "MST", "America/Denver" },
-        { "MDT", "America/Denver" },
-        { "PST", "America/Los_Angeles" },
-        { "PDT", "America/Los_Angeles" },
-        { "CET", "Europe/Paris" },
-        { "CEST", "Europe/Paris" },
-        { "BST", "Europe/London" },
-        { "JST", "Asia/Tokyo" },
-        { "AEST", "Australia/Sydney" },
-        { "AEDT", "Australia/Sydney" }
-    };
-
-    public static TimeZoneInfo FindTimeZone(string zoneName)
-    {
-        if (TzMapping.TryGetValue(zoneName, out var mappedName))
-        {
-            zoneName = mappedName;
-        }
-
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(zoneName);
-        }
-        catch
-        {
-            // Windows fallback mapping if IANA fails (should not happen on modern .NET, but safe fallback)
-            if (zoneName.Equals("America/New_York", StringComparison.OrdinalIgnoreCase))
-                return TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
-            if (zoneName.Equals("America/Chicago", StringComparison.OrdinalIgnoreCase))
-                return TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time");
-            if (zoneName.Equals("America/Denver", StringComparison.OrdinalIgnoreCase))
-                return TimeZoneInfo.FindSystemTimeZoneById("Mountain Standard Time");
-            if (zoneName.Equals("America/Los_Angeles", StringComparison.OrdinalIgnoreCase))
-                return TimeZoneInfo.FindSystemTimeZoneById("Pacific Standard Time");
-            if (zoneName.Equals("Europe/London", StringComparison.OrdinalIgnoreCase))
-                return TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time");
-            if (zoneName.Equals("Europe/Paris", StringComparison.OrdinalIgnoreCase))
-                return TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time");
-            if (zoneName.Equals("Asia/Tokyo", StringComparison.OrdinalIgnoreCase))
-                return TimeZoneInfo.FindSystemTimeZoneById("Tokyo Standard Time");
-            if (zoneName.Equals("Australia/Sydney", StringComparison.OrdinalIgnoreCase))
-                return TimeZoneInfo.FindSystemTimeZoneById("AUS Eastern Standard Time");
-
-            throw;
-        }
-    }
+    /// <summary>
+    /// Resolves a time-zone identifier. Delegates to <see cref="TimeZoneResolver"/> so RELDATE,
+    /// schedules, and report formatting cannot drift on which spellings they accept.
+    /// </summary>
+    public static TimeZoneInfo FindTimeZone(string zoneName) => TimeZoneResolver.FindTimeZone(zoneName);
 
     /// <summary>
     /// Resolves a RELDATE expression to a concrete DateTime.
