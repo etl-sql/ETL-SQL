@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -313,6 +313,11 @@ namespace ETL_SQL.Reporting.Builders
                         vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData);
                     }
+                    // One resolved interaction contract per visual: from the plan when the visual has
+                    // one, from the authored clauses when it does not (TABLE, SLICER, focused layouts).
+                    // Nothing downstream re-derives a filter column.
+                    vm.Interaction = InteractionManifest.From(vm.PlotPlan?.Interaction
+                        ?? ChartInteractionResolver.ResolveTabular(chartStatement, vm.Columns));
                     vm.SemanticFallback = VisualSemanticFallbackBuilder.Build(vm);
                     vm.ChartConfig = vStmt.VisualType == VisualType.Matrix
                         ? MatrixPivotBuilder.Build(vm)

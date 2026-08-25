@@ -210,6 +210,215 @@ describe("renderNativeSvg()", () => {
     });
 });
 
+// ── Interaction contract ──────────────────────────────────────────────────────
+
+/** A two-bar SVG whose marks carry the server-resolved value extent. */
+function barSvg(extra = 'data-extent-axis="y" data-extent-anchor="end"'): string {
+    return '<svg xmlns="http://www.w3.org/2000/svg">' +
+        `<rect data-row-index="0" x="0" y="50" width="20" height="50" ${extra}/>` +
+        `<rect data-row-index="1" x="30" y="20" width="20" height="80" ${extra}/>` +
+        '</svg>';
+}
+
+/** A CUSTOM chart whose X binding is the second source column, as the server resolves it. */
+function offsetKeyVisual(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+        name: 'RegionalRevenue',
+        visualType: 'CUSTOM',
+        columns: ['Revenue', 'Region'],
+        rows: [['500', 'North'], ['300', 'South']],
+        options: {},
+        actions: [],
+        interaction: { key: 'Region', valueKey: 'Revenue', select: 'MULTIPLE', effect: 'HIGHLIGHT', highlight: 'PROPORTIONAL' },
+        nativeSvg: barSvg(),
+        ...overrides
+    };
+}
+
+describe('resolved interaction contract', () => {
+    it('cross-filters on the resolved key, not on the first column', async () => {
+        const posted: any[] = [];
+        const win = makeDOM(w => {
+            w.__IS_WEB__ = true;
+            w.fetch = (url: string, init: any) => {
+                posted.push({ url, body: JSON.parse(init.body) });
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ visuals: [], pages: [] }) });
+            };
+        });
+        const page = win.document.createElement('div');
+        page.className = 'page';
+        page.id = 'p1';
+        win.document.body.appendChild(page);
+        const card = win.document.createElement('div');
+        card.className = 'visual-card';
+        page.appendChild(card);
+
+        win.__reportRuntime__.renderNativeSvg(card, offsetKeyVisual(), { visuals: [] });
+        card.querySelector('[data-row-index="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(posted.length).toBe(1);
+        // 'North', keyed on Region — not '500', the value that sits in columns[0].
+        expect(posted[0].body.params).toEqual([{ name: '@Region', value: 'North' }]);
+        expect(posted[0].body.isInteraction).toBe(true);
+    });
+
+    it('does not cross-filter when the resolved key names no column in this visual', async () => {
+        const posted: any[] = [];
+        const win = makeDOM(w => {
+            w.__IS_WEB__ = true;
+            w.fetch = (url: string, init: any) => {
+                posted.push({ url, body: JSON.parse(init.body) });
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+            };
+        });
+        const page = win.document.createElement('div');
+        page.className = 'page';
+        page.id = 'p2';
+        win.document.body.appendChild(page);
+        const card = win.document.createElement('div');
+        card.className = 'visual-card';
+        page.appendChild(card);
+
+        win.__reportRuntime__.renderNativeSvg(card, offsetKeyVisual({
+            interaction: { key: 'Territory', select: 'MULTIPLE', effect: 'HIGHLIGHT', highlight: 'CATEGORICAL' }
+        }), { visuals: [] });
+        card.querySelector('[data-row-index="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Filtering on a guessed column would be a confidently wrong page. Doing nothing is correct.
+        expect(posted.length).toBe(0);
+    });
+
+    it('runs ON_CLICK actions when the visual declares no selection', () => {
+        const win = makeDOM();
+        const container = win.document.createElement('div');
+        const messages: any[] = [];
+        win.acquireVsCodeApi = () => ({ postMessage: (message: any) => messages.push(message) });
+
+        win.__reportRuntime__.renderNativeSvg(container, offsetKeyVisual({
+            interaction: { select: 'NONE', effect: 'HIGHLIGHT', highlight: 'NONE' },
+            actions: [{ type: 'SET_PARAMETER', trigger: 'ON_CLICK', parameterName: '@region', valueSource: 'COLUMN', valueColumn: 'Region' }]
+        }), { visuals: [] });
+        container.querySelector('[data-row-index="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+
+        expect(container.querySelector('svg')).not.toBeNull();
+    });
+
+    it('draws a proportional selection from the mark\'s own extent attributes', () => {
+        const win = makeDOM();
+        const container = win.document.createElement('div');
+
+        win.__reportRuntime__.renderNativeSvg(container, offsetKeyVisual({
+            highlightRows: [['250', 'North']]
+        }), { visuals: [] });
+
+        const overlay = container.querySelector('.cross-highlight-selection');
+        expect(overlay).not.toBeNull();
+        // 250 of 500 is half the bar: half the height, pushed down to the baseline edge.
+        expect(overlay!.getAttribute('height')).toBe('25');
+        expect(overlay!.getAttribute('y')).toBe('75');
+        expect(container.querySelectorAll('.cross-highlight-universe').length).toBe(2);
+    });
+
+    it('anchors a transposed extent from the left edge', () => {
+        const win = makeDOM();
+        const container = win.document.createElement('div');
+
+        win.__reportRuntime__.renderNativeSvg(container, offsetKeyVisual({
+            nativeSvg: barSvg('data-extent-axis="x" data-extent-anchor="start"'),
+            highlightRows: [['250', 'North']]
+        }), { visuals: [] });
+
+        const overlay = container.querySelector('.cross-highlight-selection');
+        expect(overlay!.getAttribute('width')).toBe('10');
+        expect(overlay!.getAttribute('x')).toBe('0');
+    });
+
+    it('falls back to the categorical treatment when no mark declares an extent', () => {
+        const win = makeDOM();
+        const container = win.document.createElement('div');
+
+        win.__reportRuntime__.renderNativeSvg(container, offsetKeyVisual({
+            nativeSvg: barSvg(''),
+            highlightRows: [['250', 'North']]
+        }), { visuals: [] });
+
+        expect(container.querySelector('.cross-highlight-selection')).toBeNull();
+        expect(container.querySelectorAll('.cross-highlighted').length).toBe(1);
+        expect(container.querySelectorAll('.cross-dimmed').length).toBe(1);
+    });
+
+    it('never infers chart geometry from the visual type', () => {
+        // The generic renderer must not recognise a chart by name. The only surviving reference is
+        // inside legacyInteraction(), the pre-v0.19 manifest shim.
+        const generic = RUNTIME_SRC.slice(RUNTIME_SRC.indexOf('function applyNativeHighlight'));
+        const body = generic.slice(0, generic.indexOf('\n    }'));
+        expect(body).not.toContain('visualType');
+        expect(body).not.toContain("'BAR'");
+        expect(body).not.toContain("'HBAR'");
+    });
+});
+
+describe('legacy interaction migration', () => {
+    it('reads the pre-v0.19 interactions map when no resolved contract is present', () => {
+        const win = makeDOM();
+        const container = win.document.createElement('div');
+
+        win.__reportRuntime__.renderNativeSvg(container, {
+            name: 'Legacy',
+            visualType: 'BAR',
+            columns: ['Region', 'Revenue'],
+            rows: [['North', '500'], ['South', '300']],
+            options: { 'mapping:x': 'Region', 'mapping:y': 'Revenue' },
+            actions: [],
+            interactions: { ON_SELECT: 'HIGHLIGHT' },
+            highlightRows: [['North', '250']],
+            nativeSvg: barSvg('')
+        }, { visuals: [] });
+
+        // A pre-v0.19 snapshot carries no extent attributes, so the shim supplies them and the
+        // proportional treatment still renders.
+        const overlay = container.querySelector('.cross-highlight-selection');
+        expect(overlay).not.toBeNull();
+        expect(overlay!.getAttribute('height')).toBe('25');
+    });
+
+    it('honours a legacy MATCHING column over the mapping fallback', async () => {
+        const posted: any[] = [];
+        const win = makeDOM(w => {
+            w.__IS_WEB__ = true;
+            w.fetch = (url: string, init: any) => {
+                posted.push(JSON.parse(init.body));
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+            };
+        });
+        const page = win.document.createElement('div');
+        page.className = 'page';
+        page.id = 'p3';
+        win.document.body.appendChild(page);
+        const card = win.document.createElement('div');
+        card.className = 'visual-card';
+        page.appendChild(card);
+
+        win.__reportRuntime__.renderNativeSvg(card, {
+            name: 'Legacy',
+            visualType: 'BAR',
+            columns: ['Revenue', 'Region'],
+            rows: [['500', 'North']],
+            options: { 'mapping:x': 'Revenue' },
+            actions: [],
+            interactions: { ON_SELECT: 'HIGHLIGHT', MATCHING: 'Region' },
+            nativeSvg: barSvg()
+        }, { visuals: [] });
+        card.querySelector('[data-row-index="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(posted.length).toBe(1);
+        expect(JSON.stringify(posted[0])).toContain('North');
+    });
+});
+
 // ── Views picker (author bookmarks + Portal saved views) ──────────────────────
 
 describe('savedViewsBase()', () => {

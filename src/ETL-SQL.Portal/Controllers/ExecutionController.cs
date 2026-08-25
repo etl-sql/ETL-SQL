@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -202,7 +202,7 @@ public class ExecutionController(
         {
             var json = await snapshotPackages.LoadLayoutJsonAsync(
                 manifestKey, keyScope: _datasetScope.TenantId);
-            manifest = JsonDocument.Parse(json).RootElement;
+            manifest = JsonDocument.Parse(BrowserDeliveryProjection.ProjectStoredJson(json)).RootElement;
         }
 
         report.LastViewedAt = DateTime.UtcNow;
@@ -422,7 +422,7 @@ public class ExecutionController(
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.SetParameterAsync(req.Name, req.Value ?? string.Empty, req.IsInteraction);
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
-        return Ok(manifest);
+        return this.BrowserManifest(manifest);
     }
 
     // ── 2.3  POST /api/reports/{id}/parameters ───────────────────────────────
@@ -449,7 +449,7 @@ public class ExecutionController(
             .Select(p => (p.Name, p.Value));
         var manifest = await svc.SetParametersAsync(updates, req.IsInteraction, req.PageName);
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
-        return Ok(manifest);
+        return this.BrowserManifest(manifest);
     }
 
     // ── 2.3b  POST /api/reports/{id}/bookmark ────────────────────────────────
@@ -477,7 +477,7 @@ public class ExecutionController(
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.ApplyBookmarkAsync(req.BookmarkName);
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
-        return Ok(manifest);
+        return this.BrowserManifest(manifest);
     }
 
     // ── 2.3c  POST /api/reports/{id}/saved-views/{viewId}/apply ─────────────
@@ -511,7 +511,7 @@ public class ExecutionController(
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.ApplySavedViewAsync(state, report.PublishedScriptHash);
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
-        return Ok(manifest);
+        return this.BrowserManifest(manifest);
     }
 
     // ── 2.4  POST /api/reports/{id}/drill ────────────────────────────────────
@@ -536,7 +536,7 @@ public class ExecutionController(
             ? await svc.DrillUpAsync(req.VisualName, req.TargetDepth)
             : await svc.DrillInAsync(req.VisualName, req.ClickedValue ?? "");
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
-        return manifest is null ? NotFound() : Ok(manifest);
+        return manifest is null ? NotFound() : this.BrowserManifest(manifest);
     }
 
     // ── 2.4  POST /api/reports/{id}/refresh-visuals ──────────────────────────
@@ -559,7 +559,7 @@ public class ExecutionController(
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.RefreshVisualsAsync(req.Visuals);
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
-        return manifest is null ? NotFound() : Ok(manifest);
+        return manifest is null ? NotFound() : this.BrowserManifest(manifest);
     }
 
     private async Task TryPersistAdHocLineageAsync(int id, string scriptPath, ETL_SQL.ReportHosting.DashboardService svc)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -599,8 +599,7 @@ const string SharedCss = @"
 /// <summary>Single-report dashboard with manifest pre-embedded for fast initial load.</summary>
 static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
 {
-    var manifestJson = JsonSerializer.Serialize(manifest,
-        new JsonSerializerOptions { WriteIndented = false })
+    var manifestJson = ETL_SQL.Reporting.BrowserDeliveryProjection.Serialize(manifest)
         .Replace("<", "\\u003c");
 
     var title = manifest.Title ?? "ETL-SQL Report Dashboard";

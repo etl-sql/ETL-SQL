@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
@@ -132,7 +132,10 @@ public sealed class SnapshotPackageService(
         var encryptedPackage = await ScopedArtifacts(keyScope).ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
         var compressedPackage = await DecryptAsync(encryptedPackage, ct, keyScope);
         var manifest = await ReadLightweightManifestFromPackageAsync(compressedPackage, rowsUrlFactory, arrowUrlFactory, ct);
-        return JsonSerializer.Serialize(manifest, JsonOptions);
+        // This loader exists only to build a browser payload, so it goes out through the browser
+        // delivery projection: a stored snapshot must not carry semantic contracts a freshly built
+        // manifest would have dropped.
+        return BrowserDeliveryProjection.Serialize(manifest);
     }
 
     public async Task<SnapshotVisualRows?> LoadRowsAsync(

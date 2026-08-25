@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -214,11 +214,9 @@ namespace ETL_SQL.LSP
                 var manifestBuilder = new ManifestBuilder(evaluator);
                 var manifest = await manifestBuilder.BuildAsync(request.text);
 
-                response.manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-                });
+                // The webview preview is a browser client, so it gets the browser projection —
+                // not the server's working object with its full semantic contracts attached.
+                response.manifestJson = ETL_SQL.Reporting.BrowserDeliveryProjection.Serialize(manifest);
             }
             catch (System.Exception ex)
             {

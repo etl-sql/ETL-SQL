@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -20,10 +20,11 @@ namespace ETL_SQL.Reporting
     /// </remarks>
     public static class DetailSurfacePayloadGuard
     {
-        private static readonly JsonSerializerOptions MeasurementOptions = new()
-        {
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
+        // What a popover costs to open is what the browser downloads, so the budget is measured
+        // through the browser delivery projection. Measuring the server's working object would
+        // charge a report for semantic contracts that never leave the server.
+        private static readonly JsonSerializerOptions MeasurementOptions =
+            BrowserDeliveryProjection.Options;
 
         /// <summary>
         /// Measures every detail surface in <paramref name="manifest"/> and throws when one

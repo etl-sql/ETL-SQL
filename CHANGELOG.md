@@ -39,6 +39,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added `Scheduler:DefaultTimeZone`, `Reporting:DefaultLocale`, and `Reporting:DefaultNullLabel` to
   shipped configuration and the administration reference. An invalid configured zone or locale now
   fails rather than silently degrading a whole deployment to the fallback.
+- `ChartSpec.InteractionSpec` is now the canonical chart interaction contract. Named `ACTIONS`/
+  `INTERACTIONS` clauses and `CUSTOM` charts lower through one shared path into typed selections and
+  trigger bindings; `PlotPlan` carries the resolved semantics — selection key, measure column,
+  selection mode, effect, and highlight treatment — and browser clients receive a compact
+  `interaction` manifest projected from it. `PlotPlan` also records each mark layer's resolved value
+  extent, which the native SVG publishes on the mark as `data-extent-axis`/`data-extent-anchor`.
+- Added a deliberate browser-delivery projection. One class classifies every manifest property as
+  delivered or server-only, and every path that hands a manifest to a browser — the Portal report and
+  designer APIs, stored snapshots, the ReportPlayer page, the LSP preview, the Workstation Editor —
+  goes through it. A test fails if a manifest property is added without being classified.
 
 ### Changed
 
@@ -46,9 +56,30 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   engine's generic row strings, because only the formatter knows the report's zone and locale. A
   temporal string carrying no offset is anchored to UTC instead of picking up the server's local
   offset, so the same report no longer renders different instants on two hosts.
+- Normal browser delivery no longer serializes `chartSpec`, `chartData`, `plotPlan`, or
+  `microCharts[].plotPlan`. Every graphical visual was shipping five representations of one chart and
+  the runtime read two, trading once-cached library bytes for uncached per-report bytes on every load.
+  Across the six representative fixtures the combined manifest fell from 170.1 KB to 65.9 KB raw
+  (15.1 KB gzip); the baseline harness now reports browser-delivered raw and gzip bytes beside the
+  server figure, so end-to-end page weight is measured rather than inferred from shared assets alone.
+  The full contracts stay available to server renderers, tests, and an explicitly authorized
+  diagnostic projection that a general query flag cannot reach.
+- The detail-surface payload budget is measured through the browser projection, so a popover is
+  charged for what it actually downloads instead of for semantic contracts that never leave the
+  server.
+- The browser runtime no longer decides chart geometry from `visual.visualType`. Proportional
+  selection highlighting reads the treatment from the resolved interaction manifest and the extent
+  from the mark's own attributes, so a chart type name no longer implies a shape. The legacy
+  `visual.interactions` map remains readable by a tested compatibility shim, which is the only
+  surviving reference to a visual's type name and is reached only for manifests built before v0.19.0.
 
 ### Fixed
 
+- `CUSTOM` charts now cross-filter on the column they are keyed on. A layered chart has no `MAPPINGS`
+  clause, so the browser's `mapping:*` lookup always missed and fell through to `visual.columns[0]` —
+  every `CUSTOM` chart filtered on whatever column its source query happened to list first. The
+  selection key is now resolved server-side from the chart's encodings. When the resolved key names no
+  column in the visual's data, a click raises no filter rather than a confidently wrong one.
 - A non-stacked `CUSTOM` `RECT` layer now honours author-supplied `Y_START`/`Y_END` and
   `X_START`/`X_END`. The channels always parsed and lint stayed silent, but both rect paths read the
   interval endpoints only under `STACK` and otherwise forced the start endpoint to zero — so a ranged

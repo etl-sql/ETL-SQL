@@ -47,6 +47,8 @@ public record FixtureMeasurement(
     double SvgExportMs,
     long SvgOutputBytes,
     long ManifestJsonBytes,
+    long BrowserManifestBytes,
+    long BrowserManifestGzipBytes,
     long ProcessAllocatedBytes,
     string ClientPaintLatency = "N/A (unsupported: requires browser CDP instrumentation)",
     string ClientHeapFootprint = "N/A (unsupported: requires browser CDP instrumentation)");
@@ -188,9 +190,14 @@ public class ReportingBaselineMeasurementHarness
             swSvg.Stop();
             var svgBytes = Encoding.UTF8.GetByteCount(svgSb.ToString());
 
-            // Manifest JSON size
+            // Manifest JSON size. Two numbers, deliberately: the server's working object with its
+            // full semantic contracts, and what a browser client actually receives after the
+            // delivery projection drops the contracts nothing in the browser reads.
             var manifestJson = JsonSerializer.Serialize(manifest);
             var manifestBytes = Encoding.UTF8.GetByteCount(manifestJson);
+            var browserJson = BrowserDeliveryProjection.Serialize(manifest);
+            var browserBytes = Encoding.UTF8.GetByteCount(browserJson);
+            var browserGzipBytes = GzipByteCount(browserJson);
 
             var visualType = manifest.Visuals.FirstOrDefault()?.VisualType.ToUpperInvariant() ?? "UNKNOWN";
 
@@ -205,10 +212,23 @@ public class ReportingBaselineMeasurementHarness
                 SvgExportMs: Math.Round(swSvg.Elapsed.TotalMilliseconds, 3),
                 SvgOutputBytes: svgBytes,
                 ManifestJsonBytes: manifestBytes,
+                BrowserManifestBytes: browserBytes,
+                BrowserManifestGzipBytes: browserGzipBytes,
                 ProcessAllocatedBytes: Math.Max(0, memAfter - memBefore)));
         }
 
         return results;
+    }
+
+    private static long GzipByteCount(string content)
+    {
+        using var buffer = new MemoryStream();
+        using (var gzip = new GZipStream(buffer, CompressionLevel.Optimal, leaveOpen: true))
+        {
+            var bytes = Encoding.UTF8.GetBytes(content);
+            gzip.Write(bytes, 0, bytes.Length);
+        }
+        return buffer.Length;
     }
 
     private static Evaluator CreateBaselineEvaluator()
@@ -293,14 +313,19 @@ public class ReportingBaselineMeasurementHarness
         sb.AppendLine();
         sb.AppendLine("Measures end-to-end fixture build time, export throughput (Markdown, CSV, SVG), output payload sizes, and process allocations across the named representative fixtures. The first fixture in a fresh test process includes runtime JIT cost. CSV is 0 B for these chart-only fixtures because the CSV renderer exports tabular visuals only.");
         sb.AppendLine();
-        sb.AppendLine("| Fixture | Visual Type | Fixture Build | Markdown Export | CSV Export | SVG Export | Manifest JSON | Process Allocated |");
-        sb.AppendLine("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |");
+        sb.AppendLine("| Fixture | Visual Type | Fixture Build | Markdown Export | CSV Export | SVG Export | Manifest JSON | Browser Delivery (raw / gzip) | Process Allocated |");
+        sb.AppendLine("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |");
 
         foreach (var f in report.FixtureMeasurements)
         {
-            sb.AppendLine($"| `{f.FixtureName}` | `{f.VisualType}` | {f.FixtureBuildMs:F2} ms | {f.MarkdownExportMs:F3} ms ({FormatBytes(f.MarkdownOutputBytes)}) | {f.CsvExportMs:F3} ms ({FormatBytes(f.CsvOutputBytes)}) | {f.SvgExportMs:F3} ms ({FormatBytes(f.SvgOutputBytes)}) | {FormatBytes(f.ManifestJsonBytes)} | {FormatBytes(f.ProcessAllocatedBytes)} |");
+            sb.AppendLine($"| `{f.FixtureName}` | `{f.VisualType}` | {f.FixtureBuildMs:F2} ms | {f.MarkdownExportMs:F3} ms ({FormatBytes(f.MarkdownOutputBytes)}) | {f.CsvExportMs:F3} ms ({FormatBytes(f.CsvOutputBytes)}) | {f.SvgExportMs:F3} ms ({FormatBytes(f.SvgOutputBytes)}) | {FormatBytes(f.ManifestJsonBytes)} | {FormatBytes(f.BrowserManifestBytes)} / {FormatBytes(f.BrowserManifestGzipBytes)} | {FormatBytes(f.ProcessAllocatedBytes)} |");
         }
 
+        sb.AppendLine();
+        sb.AppendLine($"**Combined manifest JSON:** {FormatBytes(report.FixtureMeasurements.Sum(f => f.ManifestJsonBytes))} on the server object, " +
+            $"{FormatBytes(report.FixtureMeasurements.Sum(f => f.BrowserManifestBytes))} raw / " +
+            $"{FormatBytes(report.FixtureMeasurements.Sum(f => f.BrowserManifestGzipBytes))} gzip delivered to a browser client. " +
+            "End-to-end page weight is the browser figure plus the shared assets above, not shared assets alone.");
         sb.AppendLine();
         sb.AppendLine("### Explicit Client-Side Unsupported Measurements");
         sb.AppendLine("- **Client Browser Paint / V8 Frame Latency**: `N/A (unsupported: requires headless Chrome CDP profiling in browser test runner)`");

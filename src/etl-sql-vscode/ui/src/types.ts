@@ -185,12 +185,28 @@ export interface VisualManifest {
     options: Record<string, string>;
     error?: string;
     actions: ReportAction[];
+    /** Compact resolved interaction contract. The only interaction payload v0.19+ manifests carry. */
+    interaction?: InteractionManifest;
+    /** Pre-v0.19 authored interaction map. Read only through resolveInteraction(). */
     interactions?: Record<string, string>;
     styles?: Record<string, string>;
     defaultValue?: string;
     summaryData?: TableSummaryData;
     gridStyle?: string;
     dataLabels?: DataLabelsManifest;
+}
+
+export interface InteractionManifest {
+    /** Resolved selection/cross-filter key column. */
+    key?: string;
+    /** Resolved measure column backing proportional highlighting. */
+    valueKey?: string;
+    /** NONE | SINGLE | MULTIPLE | INTERVAL */
+    select: string;
+    /** HIGHLIGHT | FILTER | SETPARAMETER | DRILL | NAVIGATE */
+    effect: string;
+    /** NONE | CATEGORICAL | PROPORTIONAL */
+    highlight: string;
 }
 
 export interface DataLabelsManifest {

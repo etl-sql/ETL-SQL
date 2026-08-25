@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
 using ETL_SQL.Core;
@@ -375,7 +375,7 @@ public class DesignerController : ControllerBase
         try
         {
             var manifest = await _previewService.BuildPreviewAsync(req.Script, req.Page, User, cancellationToken);
-            return Ok(manifest);
+            return this.BrowserManifest(manifest);
         }
         catch (ArgumentException ex)
         {

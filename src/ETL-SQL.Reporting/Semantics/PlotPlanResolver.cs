@@ -32,12 +32,18 @@ public sealed class PlotPlanResolver
         var plotBounds = bounds ?? new PlotBounds(0, 0, 600, 350);
         var facets = ResolveFacets(spec, columns, scales, plotBounds, formatter);
         layers = ResolveDisplayOffsets(spec, data, columns, layers, scales, facets, plotBounds);
+        layers = ResolveMarkExtents(spec, layers);
         var sourceLayers = layers.Where(layer => layer.Style.IsDefault || !layer.Style.Any(token => token.Name == "overlayType"));
         var gapRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => datum.IsGap).Select(datum => datum.RowIndex).Distinct().Order().ToImmutableArray();
         var usedRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap).Select(datum => datum.RowIndex).ToHashSet();
         var skippedRows = Enumerable.Range(0, data.RowCount).Where(index => !usedRows.Contains(index) && !gapRows.Contains(index)).ToImmutableArray();
         var fallback = BuildFallback(spec, layers, categories, formatter);
         var summary = BuildSummary(spec, data, series, layers, scales, facets, gapRows, skippedRows);
+
+        var interaction = ChartInteractionResolver.Resolve(
+            spec,
+            data.Columns.Select(column => column.Name).ToArray(),
+            ChartInteractionResolver.HighlightFor(layers));
 
         var plan = PlotPlan.Create(
             spec.Id,
@@ -55,10 +61,42 @@ public sealed class PlotPlanResolver
             spec.Theme.Tokens,
             facets) with
         {
-            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, plotBounds)
+            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, plotBounds),
+            Interaction = interaction
         };
         plan.Validate();
         return plan;
+    }
+
+    /// <summary>
+    /// Stamps the resolved value-extent semantics onto every layer, so renderers and the browser
+    /// learn which dimension of a mark carries its value without recognising the chart by name.
+    ///
+    /// A mark has a baseline-anchored extent only when it is a plain rectangle in Cartesian or
+    /// transposed-Cartesian space. An author-supplied interval (a ranged RECT) owns both endpoints,
+    /// so its height is a span rather than a value and nothing may treat it as one. Focused layouts
+    /// carry a `layout` style token and draw through their own geometry.
+    /// </summary>
+    private static ImmutableArray<ResolvedMarkLayer> ResolveMarkExtents(
+        ChartSpec spec,
+        ImmutableArray<ResolvedMarkLayer> layers)
+    {
+        var kind = spec.Coordinate.Kind;
+        if (kind is not (CoordinateKind.Cartesian or CoordinateKind.TransposedCartesian)) return layers;
+
+        return layers.Select(layer =>
+        {
+            if (layer.Mark != MarkKind.Rect) return layer;
+            if (!layer.Style.IsDefaultOrEmpty && layer.Style.Any(token => token.Name == "layout")) return layer;
+            if (layer.Stack == StackMode.None && layer.Data.Any(datum =>
+                    (Channel(datum, FieldChannel.YStart) is not null && Channel(datum, FieldChannel.YEnd) is not null) ||
+                    (Channel(datum, FieldChannel.XStart) is not null && Channel(datum, FieldChannel.XEnd) is not null)))
+                return layer;
+
+            return kind == CoordinateKind.Cartesian
+                ? layer with { ExtentAxis = MarkExtentAxis.Y, ExtentAnchor = MarkExtentAnchor.End }
+                : layer with { ExtentAxis = MarkExtentAxis.X, ExtentAnchor = MarkExtentAnchor.Start };
+        }).ToImmutableArray();
     }
 
     private static ImmutableArray<string> ResolveCategories(

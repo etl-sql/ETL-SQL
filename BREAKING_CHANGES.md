@@ -17,6 +17,20 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.19.0 — Semantic: CUSTOM charts cross-filter on their resolved X binding
+- **What changed**: A layered `CUSTOM` chart has no `MAPPINGS` clause, so the browser's `mapping:*` lookup found nothing and fell through to `visual.columns[0]` — every `CUSTOM` chart cross-filtered on whatever column the source query happened to list first. The selection key is now resolved server-side from the chart's encodings and delivered on `visual.interaction.key`. When the resolved key names no column in the visual's data, the click raises no filter at all instead of guessing.
+- **Who is affected**: Reports with a `CUSTOM` visual and an `INTERACTIONS (ON_SELECT = ...)` clause whose X binding is not the first column of its source query. Those reports were filtering on the wrong column.
+- **Migration**: None required — the filter now targets the column the chart is actually keyed on. A report that relied on the old column-zero behaviour should name that column explicitly with `INTERACTIONS (MATCHING = '<column>')`.
+- **Diagnostic**: N/A.
+- **Earliest removal**: N/A.
+
+### v0.19.0 — Runtime: browser manifests no longer carry `chartSpec`, `chartData`, or `plotPlan`
+- **What changed**: Every graphical visual serialized five representations of one chart to the browser; the runtime read two. Browser delivery now goes through an explicit projection that drops `chartSpec`, `chartData`, `plotPlan`, `microCharts[].plotPlan`, and the legacy `interactions` map, and adds the compact resolved `interaction` contract. Across the six representative fixtures the combined manifest fell from 170.1 KB to 65.9 KB raw (15.1 KB gzip). The full contracts remain on the server object for renderers, tests, and the explicitly authorized diagnostic projection.
+- **Who is affected**: Anything outside this repo reading those fields off a served report manifest — the Portal report API, the ReportPlayer page payload, the LSP preview manifest, or a stored snapshot served to a browser.
+- **Migration**: Read `visual.interaction` for interaction semantics and `visual.nativeSvg` for the rendered chart. A consumer that genuinely needs the semantic contracts must go through the authorized diagnostic projection; the browser options cannot produce them. The runtime keeps a tested fallback that reads the legacy `interactions` map, so manifests built before v0.19.0 — offline snapshots, cached artifacts — still render and still cross-filter.
+- **Diagnostic**: N/A.
+- **Earliest removal**: The legacy `interactions` fallback in `report-runtime.js` may be removed once pre-v0.19.0 snapshots are out of support.
+
 ### v0.19.0 — Parser: `SET REPORT` rejects unrecognised keys
 - **What changed**: `SET REPORT <key> = '...'` accepted any identifier and the handler silently discarded anything outside its known set, so a typo produced a report that looked configured and was not. The key set is now closed and an unrecognised key is a syntax error naming the supported keys.
 - **Who is affected**: Scripts containing a `SET REPORT` key outside `TITLE`, `DESCRIPTION`, `CSS`, `JS`, `HEAD`, `BODY`, `FOOTER`, `FAVICON`, `LOGO`, `BACKGROUND`, `THEME`, `NAVIGATION`, `TIME_ZONE`, `LOCALE`, `NULL_LABEL`. Such a statement already had no effect; the change is that it now fails instead of being ignored.

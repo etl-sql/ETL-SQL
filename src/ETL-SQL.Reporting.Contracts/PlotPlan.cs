@@ -64,6 +64,25 @@ public sealed record ResolvedDatum(
     public decimal DisplayOffsetY { get; init; }
 }
 
+/// <summary>
+/// The axis along which a mark's quantitative extent grows from its baseline. Resolved once,
+/// server-side, so a renderer never has to recognise a chart by name to know which dimension of a
+/// mark carries its value.
+/// </summary>
+public enum MarkExtentAxis
+{
+    None,
+    X,
+    Y
+}
+
+/// <summary>Which edge of <see cref="MarkExtentAxis"/> the mark's baseline sits on.</summary>
+public enum MarkExtentAnchor
+{
+    Start,
+    End
+}
+
 public sealed record ResolvedMarkLayer(
     string Id,
     MarkKind Mark,
@@ -73,6 +92,16 @@ public sealed record ResolvedMarkLayer(
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<StyleToken> Style { get; init; }
+
+    /// <summary>Axis carrying this layer's value extent, or <see cref="MarkExtentAxis.None"/> when
+    /// the mark has no baseline-anchored extent (points, lines, ranged rects, arcs).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public MarkExtentAxis ExtentAxis { get; init; }
+
+    /// <summary>Edge the extent grows from. Vertical bars anchor at <see cref="MarkExtentAnchor.End"/>
+    /// because screen Y grows downward; transposed bars anchor at the start.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public MarkExtentAnchor ExtentAnchor { get; init; }
     public StackMode Stack { get; init; }
     public decimal BandSize { get; init; } = .75m;
     public decimal TickThickness { get; init; } = .15m;
@@ -120,6 +149,45 @@ public sealed record SemanticFallback(
     public string? Summary { get; init; }
 }
 
+/// <summary>How a selection is drawn over the unselected universe.</summary>
+public enum SelectionHighlightMode
+{
+    None,
+    /// <summary>Selected marks are emphasised and the rest dimmed.</summary>
+    Categorical,
+    /// <summary>Each mark shows the selected share of its own value as an inset overlay.</summary>
+    Proportional
+}
+
+public sealed record ResolvedInteractionTrigger(
+    string Trigger,
+    InteractionEffect Effect,
+    string? Target = null,
+    string? Parameter = null);
+
+/// <summary>
+/// The resolved interaction semantics for one chart: which column a selection is keyed on, which
+/// column carries its measure, and how a selection is drawn. Every decision is made here, once,
+/// from resolved encodings — never re-derived downstream from mappings or a visual type name.
+/// </summary>
+public sealed record ResolvedInteraction(
+    SelectionMode Selection,
+    InteractionEffect Effect,
+    SelectionHighlightMode Highlight,
+    ImmutableArray<ResolvedInteractionTrigger> Triggers)
+{
+    /// <summary>Resolved selection/cross-filter key column.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Key { get; init; }
+
+    /// <summary>Resolved quantitative measure column backing proportional highlighting.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ValueKey { get; init; }
+
+    public static readonly ResolvedInteraction Inert =
+        new(SelectionMode.None, InteractionEffect.Highlight, SelectionHighlightMode.None, []);
+}
+
 public sealed record PlotPlan(
     string Schema,
     int Version,
@@ -146,6 +214,11 @@ public sealed record PlotPlan(
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public PlotBounds? CartesianViewport { get; init; }
+
+    /// <summary>Resolved interaction semantics. The compact browser interaction manifest is projected
+    /// from this; browser clients never receive the plan itself.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResolvedInteraction? Interaction { get; init; }
 
     public static PlotPlan Create(
         string specId,

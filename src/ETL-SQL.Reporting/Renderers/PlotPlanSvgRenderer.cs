@@ -322,7 +322,8 @@ internal sealed class PlotPlanSvgRenderer
                         ? $"{FormatDataLabel(start, DataFormat(plan))} to {FormatDataLabel(end, DataFormat(plan))}"
                         : rectLabel;
                     var rangedClass = rangedY || rangedBand ? " class='plot-range-rect'" : string.Empty;
-                    builder.AppendLine($"<rect{rangedClass} x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(drawHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'><title>{Esc(rectTitle)}</title></rect>");
+                    var extent = rangedY || rangedBand ? string.Empty : ExtentAttributes(layer);
+                    builder.AppendLine($"<rect{rangedClass} x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(drawHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'{extent}><title>{Esc(rectTitle)}</title></rect>");
                     if (showLabels)
                         builder.AppendLine($"<text x='{N(endX + (end >= start ? 4m : -4m))}' y='{N(y + 3m)}' text-anchor='{(end >= start ? "start" : "end")}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333"))}'>{Esc(rectLabel)}</text>");
                 }
@@ -539,6 +540,20 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
+    /// <summary>
+    /// Publishes the layer's resolved value extent onto the mark itself. A browser needs to know
+    /// which dimension of a rectangle carries its value to draw a proportional selection over it;
+    /// reading that off the mark keeps it from inferring geometry out of a chart's type name.
+    /// </summary>
+    private static string ExtentAttributes(ResolvedMarkLayer layer) => layer.ExtentAxis switch
+    {
+        MarkExtentAxis.Y => " data-extent-axis='y' data-extent-anchor='" + Anchor(layer.ExtentAnchor) + "'",
+        MarkExtentAxis.X => " data-extent-axis='x' data-extent-anchor='" + Anchor(layer.ExtentAnchor) + "'",
+        _ => string.Empty
+    };
+
+    private static string Anchor(MarkExtentAnchor anchor) => anchor == MarkExtentAnchor.End ? "end" : "start";
+
     private static void RenderRects(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedMarkLayer> layers, bool stacked,
         int categoryCount, decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels)
     {
@@ -595,7 +610,8 @@ internal sealed class PlotPlanSvgRenderer
                 ? $"{FormatDataLabel(start, DataFormat(plan))} to {FormatDataLabel(end, DataFormat(plan))}"
                 : label;
             var rangedClass = rangedY || rangedX ? " class='plot-range-rect'" : string.Empty;
-            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'><title>{Esc(title)}</title></rect>");
+            var extent = rangedY || rangedX ? string.Empty : ExtentAttributes(layer);
+            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'{extent}><title>{Esc(title)}</title></rect>");
             if (showLabels)
             {
                 var position = Style(plan, "DATA_LABELS:POSITION") ?? "OUTSIDE";

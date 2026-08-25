@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -43,10 +43,11 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         var resolution = new ScaleResolutionSpec(
             Resolution(chart.Resolution.X), Resolution(chart.Resolution.Y), Resolution(chart.Resolution.Color));
         var title = manifest.Options.GetValueOrDefault("title") ?? manifest.Name;
+        var resolvedBindings = bindings.ToImmutableArray();
         var spec = ChartSpec.Create(
             manifest.Name,
             statement.Source.TempTableName ?? $"inline:{manifest.Name}",
-            bindings.ToImmutableArray(),
+            resolvedBindings,
             layers,
             new CoordinateSpec(Coordinate(chart.Coordinate.Kind), chart.Coordinate.StartAngle,
                 chart.Coordinate.EndAngle, chart.Coordinate.InnerRadius, chart.Coordinate.AspectRatio),
@@ -63,7 +64,10 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             title,
             resolution,
             chart.Facet is null ? null : new FacetSpec(chart.Facet.RowField, chart.Facet.ColumnField, resolution,
-                chart.Facet.WrapField, chart.Facet.Columns));
+                chart.Facet.WrapField, chart.Facet.Columns),
+            // CUSTOM has no MAPPINGS clause, so its interaction key can only come from the resolved
+            // encodings. Lowering it here is what stops the browser cross-filtering on column zero.
+            ChartInteractionResolver.Lower(statement, resolvedBindings));
         try
         {
             spec.Validate();

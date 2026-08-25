@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -553,6 +553,7 @@ namespace ETL_SQL.Reporting
             vm.Options = newVm.Options;
             vm.Actions = newVm.Actions;
             vm.Interactions = newVm.Interactions;
+            vm.Interaction = newVm.Interaction;
             vm.Styles = newVm.Styles;
             vm.SeriesDefs = newVm.SeriesDefs;
             vm.FormattingRules = newVm.FormattingRules;

@@ -2327,6 +2327,59 @@
         return el;
     }
 
+    // ── Interaction contract ──────────────────────────────────────────────
+    //
+    // The server resolves every interaction decision — which column a selection is keyed on, which
+    // column carries its measure, and how a selection is drawn — and ships it as the compact
+    // `visual.interaction` manifest. The runtime reads that and nothing else: it never re-derives a
+    // filter column from `mapping:*` options, and never infers geometry from a visual's type name.
+    //
+    // `legacyInteraction()` is the migration path for manifests built before v0.19 — offline
+    // snapshots, cached artifacts — which carry the old `visual.interactions` map instead. It is the
+    // only place left that reads `visualType`, and it is reached only when `visual.interaction` is
+    // absent.
+
+    function resolveInteraction(visual) {
+        const resolved = visual && visual.interaction;
+        if (!resolved) return legacyInteraction(visual || {});
+        return {
+            key: resolved.key || null,
+            valueKey: resolved.valueKey || null,
+            select: String(resolved.select || 'NONE').toUpperCase(),
+            effect: String(resolved.effect || 'HIGHLIGHT').toUpperCase(),
+            highlight: String(resolved.highlight || 'NONE').toUpperCase(),
+            extent: null
+        };
+    }
+
+    function legacyInteraction(visual) {
+        const legacy = visual.interactions || {};
+        const mode = String(legacy['ON_SELECT'] || '').toUpperCase();
+        const active = !!mode && mode !== 'NONE';
+        const options = visual.options || {};
+        const key = legacy['MATCHING'] || options['mapping:x'] || options['mapping:label'] ||
+            options['mapping:name'] || options['mapping:region'] || options['mapping:y'] ||
+            (visual.columns || [])[0] || null;
+        const type = String(visual.visualType || '').toUpperCase();
+        const bar = type === 'BAR' || type === 'HBAR' || type === 'HORIZONTALBAR';
+        return {
+            key: key,
+            valueKey: options['mapping:y'] || null,
+            select: active ? 'MULTIPLE' : 'NONE',
+            effect: mode === 'FILTER' ? 'FILTER' : 'HIGHLIGHT',
+            highlight: active ? (bar ? 'PROPORTIONAL' : 'CATEGORICAL') : 'CATEGORICAL',
+            // Pre-v0.19 SVG carries no semantic extent attributes, so the shim supplies what the
+            // server now stamps on the mark itself.
+            extent: bar
+                ? { axis: type === 'BAR' ? 'y' : 'x', anchor: type === 'BAR' ? 'end' : 'start' }
+                : null
+        };
+    }
+
+    function crossFilterActive(interaction) {
+        return interaction.select !== 'NONE' && !!interaction.key;
+    }
+
     function renderNativeSvg(container, visual, manifest, pageTheme) {
         const wrapper = document.createElement('div');
         wrapper.className = 'chart-wrapper native-chart-wrapper';
@@ -2340,15 +2393,12 @@
         container.appendChild(wrapper);
 
         const clickActions = actionsFor(visual, 'ON_CLICK');
-        const interactionMode = ((visual.interactions || {})['ON_SELECT'] || '').toUpperCase();
-        const crossFilter = !!interactionMode && interactionMode !== 'NONE';
-        const options = visual.options || {};
-        const mappingColumn = options['mapping:x'] || options['mapping:label'] ||
-            options['mapping:name'] || options['mapping:region'] || options['mapping:y'] ||
-            (visual.columns || [])[0];
+        const interaction = resolveInteraction(visual);
+        const crossFilter = crossFilterActive(interaction);
+        const mappingColumn = interaction.key;
         let activeRow = null;
 
-        applyNativeHighlight(wrapper, visual, mappingColumn);
+        applyNativeHighlight(wrapper, visual, interaction);
 
         // The wrapper owns its detail surface: re-rendering or unmounting the visual
         // tears it down, so a surface can never outlive the marks it is anchored to.
@@ -2365,9 +2415,13 @@
             if (!mark) return;
             const index = Number(mark.dataset.rowIndex);
             const row = (visual.rows || [])[index] || [];
-            if (crossFilter && mappingColumn) {
-                const columnIndex = (visual.columns || []).findIndex(column => column.toLowerCase() === mappingColumn.toLowerCase());
-                const value = row[columnIndex >= 0 ? columnIndex : 0];
+            const columnIndex = crossFilter && mappingColumn
+                ? (visual.columns || []).findIndex(column => column.toLowerCase() === mappingColumn.toLowerCase())
+                : -1;
+            // No positional fallback. Cross-filtering on "whatever column came first" produces a
+            // confidently wrong filter; doing nothing is the safer failure.
+            if (columnIndex >= 0) {
+                const value = row[columnIndex];
                 if (value != null) applyPageCrossFilter(container, String(value), mappingColumn, visual.name, event);
             } else {
                 clickActions.forEach(action => executeAction(action, row, visual.columns || [], visual.name, visual));
@@ -2380,22 +2434,33 @@
         });
     }
 
-    function applyNativeHighlight(wrapper, visual, mappingColumn) {
+    // Draws the current selection over the unselected universe. Which treatment applies is a server
+    // decision carried on `interaction.highlight`; where a mark's value extent lies is a server
+    // decision carried on the mark's own `data-extent-axis`/`data-extent-anchor`. Neither is
+    // inferred here from a chart type.
+    function applyNativeHighlight(wrapper, visual, interaction) {
         if (!Array.isArray(visual.highlightRows)) return;
         const columns = visual.columns || [];
         const mappingIndex = columns.findIndex(column =>
-            column.toLowerCase() === String(mappingColumn || '').toLowerCase());
-        const valueColumn = (visual.options || {})['mapping:y'];
+            column.toLowerCase() === String(interaction.key || '').toLowerCase());
         const valueIndex = columns.findIndex(column =>
-            column.toLowerCase() === String(valueColumn || '').toLowerCase());
+            column.toLowerCase() === String(interaction.valueKey || '').toLowerCase());
         const rowKey = row => mappingIndex >= 0
             ? String(row?.[mappingIndex] ?? '')
             : JSON.stringify(row || []);
         const highlighted = new Set(visual.highlightRows.map(rowKey));
-        const type = String(visual.visualType || '').toUpperCase();
-        const barType = type === 'BAR' || type === 'HBAR' || type === 'HORIZONTALBAR';
 
-        if (barType && valueIndex >= 0) {
+        const markExtent = mark => {
+            const axis = mark.dataset.extentAxis || (interaction.extent && interaction.extent.axis);
+            if (!axis) return null;
+            return {
+                axis: String(axis).toLowerCase(),
+                anchor: String(mark.dataset.extentAnchor ||
+                    (interaction.extent && interaction.extent.anchor) || 'start').toLowerCase()
+            };
+        };
+
+        if (interaction.highlight === 'PROPORTIONAL' && valueIndex >= 0) {
             const selectedValues = new Map();
             visual.highlightRows.forEach(row => {
                 const value = Number.parseFloat(row?.[valueIndex]);
@@ -2403,7 +2468,11 @@
                 const key = rowKey(row);
                 selectedValues.set(key, (selectedValues.get(key) || 0) + value);
             });
+            let drewProportional = false;
             wrapper.querySelectorAll('rect[data-row-index]').forEach(mark => {
+                const extent = markExtent(mark);
+                if (!extent) return;
+                drewProportional = true;
                 const row = (visual.rows || [])[Number(mark.dataset.rowIndex)] || [];
                 const universeValue = Number.parseFloat(row?.[valueIndex]);
                 const selectedValue = selectedValues.get(rowKey(row));
@@ -2413,22 +2482,30 @@
                 const ratio = universeValue === 0 ? 0 : Math.max(0, Math.min(1, selectedValue / universeValue));
                 const overlay = mark.cloneNode(false);
                 overlay.removeAttribute('data-row-index');
+                overlay.removeAttribute('data-extent-axis');
+                overlay.removeAttribute('data-extent-anchor');
                 overlay.classList.remove('cross-highlight-universe');
                 overlay.classList.add('cross-highlight-selection');
                 overlay.setAttribute('pointer-events', 'none');
                 overlay.setAttribute('aria-hidden', 'true');
-                if (type === 'BAR') {
+                if (extent.axis === 'y') {
                     const fullHeight = Number.parseFloat(mark.getAttribute('height')) || 0;
                     const fullY = Number.parseFloat(mark.getAttribute('y')) || 0;
                     overlay.setAttribute('height', String(fullHeight * ratio));
-                    overlay.setAttribute('y', String(fullY + fullHeight * (1 - ratio)));
+                    // An `end` anchor puts the baseline at the high edge of the axis, so the
+                    // selected share hugs the far edge of the mark rather than its own origin.
+                    if (extent.anchor === 'end') overlay.setAttribute('y', String(fullY + fullHeight * (1 - ratio)));
                 } else {
                     const fullWidth = Number.parseFloat(mark.getAttribute('width')) || 0;
+                    const fullX = Number.parseFloat(mark.getAttribute('x')) || 0;
                     overlay.setAttribute('width', String(fullWidth * ratio));
+                    if (extent.anchor === 'end') overlay.setAttribute('x', String(fullX + fullWidth * (1 - ratio)));
                 }
                 mark.parentNode.insertBefore(overlay, mark.nextSibling);
             });
-            return;
+            // No mark declared a value extent, so there is nothing to draw a share inside of.
+            // Fall through to the categorical treatment rather than leaving the selection invisible.
+            if (drewProportional) return;
         }
 
         wrapper.querySelectorAll('[data-row-index]').forEach(mark => {
@@ -2628,8 +2705,8 @@
         const striped       = (opts['STRIPED'] || opts['striped'] || 'ON').toUpperCase() !== 'OFF';
         const clickActions  = actionsFor(visual, 'ON_CLICK');
         const isClickable   = clickActions.length > 0;
-        const interactionMode = ((visual.interactions || {})['ON_SELECT'] || '').toUpperCase();
-        const crossFilter   = !!interactionMode && interactionMode !== 'NONE';
+        const interaction   = resolveInteraction(visual);
+        const crossFilter   = crossFilterActive(interaction);
         const stateKey      = 'table:' + (visual.name || visual.id || '');
         const state         = _uiStates[stateKey] || (_uiStates[stateKey] = { sortCol: -1, sortDir: 'asc', page: 0, search: '' });
 

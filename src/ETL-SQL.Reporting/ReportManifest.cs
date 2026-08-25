@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using ETL_SQL.Reporting.Semantics;
@@ -372,10 +372,23 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("actions")]
         public List<VisualActionManifest> Actions { get; set; } = new();
 
-        /// <summary>Cross-visual selection/filter/highlight behavior from INTERACTIONS.</summary>
+        /// <summary>
+        /// Legacy pre-GoG cross-visual behavior from INTERACTIONS, kept as authored key/value pairs.
+        /// Retained for server-side consumers and the authorized diagnostic payload; the browser
+        /// delivery projection drops it in favour of <see cref="Interaction"/>.
+        /// </summary>
         [JsonPropertyName("interactions")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Interactions { get; set; }
+
+        /// <summary>
+        /// Compact resolved interaction semantics projected from <c>PlotPlan.Interaction</c>. This is
+        /// the only interaction contract normal browser clients receive: the selection key, its
+        /// measure, and how a selection is drawn, all resolved server-side.
+        /// </summary>
+        [JsonPropertyName("interaction")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public InteractionManifest? Interaction { get; set; }
 
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -411,6 +424,46 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("drillState")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public VisualDrillStateManifest? DrillState { get; set; }
+    }
+
+    /// <summary>
+    /// The browser-facing interaction contract for one visual. Deliberately compact: five scalar
+    /// fields replacing a serialized ChartSpec/PlotPlan pair, and every value already resolved so no
+    /// client re-derives a filter column from mappings or a visual type name.
+    /// </summary>
+    public sealed class InteractionManifest
+    {
+        /// <summary>Resolved selection/cross-filter key column, or null when the visual has none.</summary>
+        [JsonPropertyName("key")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Key { get; set; }
+
+        /// <summary>Resolved measure column backing proportional highlighting.</summary>
+        [JsonPropertyName("valueKey")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ValueKey { get; set; }
+
+        /// <summary>NONE, SINGLE, MULTIPLE, or INTERVAL.</summary>
+        [JsonPropertyName("select")]
+        public string Select { get; set; } = "NONE";
+
+        /// <summary>HIGHLIGHT, FILTER, SETPARAMETER, DRILL, or NAVIGATE.</summary>
+        [JsonPropertyName("effect")]
+        public string Effect { get; set; } = "HIGHLIGHT";
+
+        /// <summary>NONE, CATEGORICAL, or PROPORTIONAL.</summary>
+        [JsonPropertyName("highlight")]
+        public string Highlight { get; set; } = "NONE";
+
+        /// <summary>Projects the resolved semantics onto the wire contract.</summary>
+        public static InteractionManifest From(ETL_SQL.Reporting.Semantics.ResolvedInteraction resolved) => new()
+        {
+            Key = resolved.Key,
+            ValueKey = resolved.ValueKey,
+            Select = resolved.Selection.ToString().ToUpperInvariant(),
+            Effect = resolved.Effect.ToString().ToUpperInvariant(),
+            Highlight = resolved.Highlight.ToString().ToUpperInvariant()
+        };
     }
 
     public sealed class CascadeGraphManifest

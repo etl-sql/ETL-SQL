@@ -1,0 +1,30 @@
+-- The X binding is deliberately NOT the first source column: Revenue is column zero and Region,
+-- the category a click should cross-filter on, is column one. A client that falls through to
+-- `columns[0]` filters on a revenue amount and produces a confidently wrong page.
+
+SELECT 500 AS Revenue, 'North' AS Region, 120 AS Orders INTO #regional_sales
+UNION ALL SELECT 300, 'South', 90
+UNION ALL SELECT 450, 'East', 110;
+
+CREATE VISUAL RegionalRevenue AS CUSTOM (
+  TITLE = 'Revenue by Region',
+  SOURCE = #regional_sales,
+  INTERACTIONS (ON_SELECT = 'HIGHLIGHT'),
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      regions = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+      revenue = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0)
+    ),
+    LAYERS (
+      revenue_bars = RECT (
+        ENCODINGS (
+          X = Region (TYPE = NOMINAL, SCALE = regions),
+          Y = Revenue (TYPE = QUANTITATIVE, SCALE = revenue, AXIS = PRIMARY)
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RegionalRevenue));

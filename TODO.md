@@ -11,7 +11,7 @@ completion claim, add a new open entry with a concrete correction path.
 
 Target Release: **v0.19.0**
 Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/release-checklist.md) and
-[`docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md)
+[`docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md)
 
 Only unfinished work remains below. Keep the Platform/SaaS phases in their listed order. When a
 roadmap outcome is fully delivered and verified, update or retire its `ROADMAP.md` entry and record
@@ -89,21 +89,21 @@ The retirement's headline numbers are real (`docs/benchmarks/reporting-phase8-re
 assets 2.65 MB to 1.56 MB raw, 761 KB to 398 KB gzip; ClearScript's 131 MB multi-RID estimate to
 zero). Per-report payload moved the other way, and nothing measures that.
 
-- [ ] Stop serializing `chartSpec`, `chartData`, and `plotPlan` to normal browser clients by
+- [x] Stop serializing `chartSpec`, `chartData`, and `plotPlan` to normal browser clients by
   introducing a deliberate browser-delivery DTO/projection rather than deleting the server contracts.
-  `VisualManifest`
-  emits all three alongside `rows` and `nativeSvg` (`ReportManifest.cs`, the `chartSpec`/`chartData`/
-  `plotPlan`/`nativeSvg` properties), and `VisualBuilder` populates them on every graphical visual.
-  The browser reads exactly two: `renderNativeSvg` consumes `visual.nativeSvg` and `visual.rows`
-  (`report-runtime.js`), and no runtime path reads `plotPlan` or `chartSpec` at all — the only
-  mention is a comment. Nothing strips them before the manifest is served. That is five
-  representations of one chart on the wire where two are used, and it is why the six representative
-  fixtures record a 155.0 KB combined manifest against an 18.2 KB combined SVG. The trade as shipped
-  exchanged once-cached library bytes for uncached per-report bytes on every report load. Keep the
-  contracts available to server renderers, tests, and an explicit authorized diagnostic output; do
-  not make a general production query flag expose them accidentally. Emit the compact resolved
-  `InteractionManifest` required by browser actions/cross-filtering, then re-measure end-to-end page
-  weight — manifest plus assets — not shared assets alone.
+  **Done.** `BrowserDeliveryProjection` classifies every manifest property exactly once and owns both
+  option sets: the browser options drop `chartSpec`, `chartData`, `plotPlan`, `microCharts[].plotPlan`,
+  and the legacy `interactions` map, and the authorized diagnostic options keep them. The two are
+  separate instances, so nothing reaches the diagnostic payload from the normal path. Every browser
+  boundary goes through it — the Portal execution and designer endpoints (`this.BrowserManifest(...)`),
+  `LoadLightweightLayoutJsonAsync`, the snapshot response's stored JSON (`ProjectStoredJson`), the
+  ReportPlayer page embed, the LSP preview manifest, and the Workstation Editor preview — and the
+  server object is left intact, so PDF, markdown, and terminal still resolve against the full
+  contracts. `EveryVisualManifestProperty_IsDeliberatelyClassifiedForBrowserDelivery` fails if a new
+  property is added without a decision. Re-measured end to end: the six representative fixtures fell
+  from **170.1 KB combined manifest to 65.9 KB raw / 15.1 KB gzip** delivered, against 1.63 MB raw /
+  416.5 KB gzip of shared assets; the baseline harness now prints both figures per fixture and the
+  combined line so page weight is measured rather than inferred from shared assets alone.
 - [ ] Add a regression budget for `report-runtime.js`. It was 228,448 bytes immediately before the
   ECharts retirement (`d9fc135d~1`), 217,299 bytes immediately after, and is 280,472 bytes at
   `6ccb98d4` — now larger than the file the retirement shrank. `Measure-ReportingBaselines.ps1
@@ -149,34 +149,42 @@ zero). Per-report payload moved the other way, and nothing measures that.
   `docs/architecture/PortalUI.md`: do not turn it into a `PlotPlan` consumer or place it in the
   Report-SQL matrix. Explicitly record its ownership boundary and add dependency/license,
   accessibility, behavioural, and raw/gzip footprint gates for the operational UI asset.
-- [ ] Make `InteractionSpec` the canonical chart interaction contract and retire the duplicate legacy
-  semantic path after a compatibility migration. ADR section 3 lists tooltip, selection,
-  action, and interaction semantics as part of the `ChartSpec` contract. `NamedVisualChartLowerer`
-  populates only `InteractionBinding`s and always an empty `Selections` array; `AdvancedChartLowerer`
-  never populates interactions at all; `PlotPlan` does not carry them; no renderer reads them.
-  `SelectionSpec` and `SelectionMode` appear only in `ChartSpec.cs` and one test fixture.
-  Interactions still flow entirely through the pre-GoG `visual.actions`/`visual.interactions`
-  manifest fields. Lower both named and `CUSTOM` authoring into `InteractionSpec`, resolve it into
-  `PlotPlan`, and project only a compact `InteractionManifest` to browser clients. Keep the legacy
-  fields only for a tested migration window, then remove them and their serialized weight.
-- [ ] Fix cross-filter column selection for layered visuals by emitting and consuming the resolved
-  interaction key in the compact browser `InteractionManifest`. `renderNativeSvg` derives the filter
-  column as `options['mapping:x']` falling through a chain of other `mapping:*` keys to
-  `visual.columns[0]` (`report-runtime.js`). `CUSTOM` visuals have no `MAPPINGS` clause and therefore
-  no `mapping:*` options, so every layered chart silently lands on `visual.columns[0]` and
-  cross-filters on whatever column happens to be first. Derive the key server-side from resolved
-  encodings; do not serialize or inspect the whole `PlotPlan` in the browser. Add an end-to-end test
-  for a `CUSTOM` chart whose first source column is not its X binding. The current worktree reaches
-  the correct `Region = North` request, but `src/etl-sql-vscode`'s `test:unit` lane is red because the
-  new assertion expects the legacy parameter-map body instead of the current `params` request array;
-  finish the contract migration and make that lane green before closing this item.
-- [ ] Remove the generic browser renderer's dependence on `visual.visualType` by emitting semantic
-  highlight metadata. `applyNativeHighlight` branches on the
-  visual type being `BAR`/`HBAR`/`HORIZONTALBAR` to clone marks and compute partial-height selection
-  overlays in the browser (`report-runtime.js`). ADR section 5.2 states renderers do not inspect
-  layer names or global flags; inspecting the visual's type name to decide geometry is the same
-  failure. Resolve proportional-highlight behaviour server-side and expose it through mark attributes
-  or the compact interaction manifest so the browser can render it without knowing a chart name.
+- [x] Make `InteractionSpec` the canonical chart interaction contract and retire the duplicate legacy
+  semantic path after a compatibility migration. **Done.** `ChartInteractionResolver` is the single
+  lowering and resolution path: both `NamedVisualChartLowerer` and `AdvancedChartLowerer` call
+  `Lower(...)`, which produces real `SelectionSpec`s and typed `InteractionBinding`s from the authored
+  `ACTIONS`/`INTERACTIONS` clauses. `PlotPlanResolver` resolves that against the chart's encodings and
+  data columns into `PlotPlan.Interaction` (`ResolvedInteraction`), and `VisualBuilder` projects the
+  compact `InteractionManifest` onto `visual.interaction`. Visuals with no chart contract — TABLE,
+  SLICER, the focused layout modules — resolve through `ResolveTabular` so there is still one contract
+  per visual. `visual.actions` stays: it carries executable payload the browser genuinely consumes.
+  `visual.interactions` is gone from browser delivery; the runtime's `legacyInteraction()` shim reads
+  it only when `visual.interaction` is absent, which covers snapshots and cached artifacts built
+  before v0.19.0. Both in-repo consumers (`report-runtime.js`, `ReportTab.tsx`) are migrated and the
+  shim is pinned by tests on each side.
+- [x] Fix cross-filter column selection for layered visuals by emitting and consuming the resolved
+  interaction key in the compact browser `InteractionManifest`. **Done.** The key is resolved
+  server-side from the chart's encodings and delivered as `visual.interaction.key`; the browser's
+  `mapping:*` chain and its `visual.columns[0]` fallback are both gone, and a key that names no column
+  in the visual raises no filter at all rather than a wrong one. New fixture
+  `tests/fixtures/reporting/conformance/custom_crossfilter_offset_key.rptsql` is a `CUSTOM` chart whose
+  X binding is the second source column; it is asserted on the server
+  (`ChartInteractionContractTests`, `BrowserDeliveryCompatBreakTests`) and end to end in the browser
+  (`reportRuntime.test.ts` drives a click through JSDOM and asserts the posted request carries
+  `@Region = North`, not the column-zero revenue amount). The `src/etl-sql-vscode` `test:unit` lane is
+  green at 37 tests.
+- [x] Remove the generic browser renderer's dependence on `visual.visualType` by emitting semantic
+  highlight metadata. **Done.** `ResolvedMarkLayer` now carries `ExtentAxis`/`ExtentAnchor` — the axis
+  a mark's value grows along and the edge it grows from — resolved in `PlotPlanResolver` from the
+  coordinate kind and mark kind, and deliberately `None` for ranged rects (an author-supplied interval
+  owns both endpoints, so its height is a span, not a value) and for focused layouts. `PlotPlanSvgRenderer`
+  publishes it on the mark as `data-extent-axis`/`data-extent-anchor`, and the highlight treatment
+  itself (`CATEGORICAL` vs `PROPORTIONAL`) is resolved server-side onto the interaction manifest.
+  `applyNativeHighlight` reads both and computes the overlay generically; when no mark declares an
+  extent it falls through to the categorical treatment rather than leaving a selection invisible. A
+  test asserts the function body contains no `visualType` and no chart-type literals. The only
+  surviving reference is inside `legacyInteraction()`, the pre-v0.19 manifest shim. Representative SVG
+  goldens were re-blessed for the five fixtures whose plain rect marks gained the attributes.
 
 #### Grammar and authoring
 
@@ -291,6 +299,102 @@ coverage item above; it depends on the same harness.
   interaction bindings that `CUSTOM` has no `MAPPINGS` clause to produce. Theme tokens and the
   resolved `FormattingSpec` are no longer part of that divergence — both lowerers build them through
   `ChartStyleTokens` — so treat any difference there as a regression, not as test noise.
+
+## Documentation — Focused Topic Ownership
+
+Post-v0.19 documentation-maintenance backlog; this is not a v0.19 release gate. Review snapshot from
+2026-08-25: `docs/` contains 1,046 Markdown files, including 718 under `docs/reference/`. The focused
+reference structure is established and `node scripts/audit-syntax-index.js --strict` currently finds
+all 676 non-index reference pages linked with no broken syntax-index targets. The remaining work is
+mostly canonical ownership, consistent topic-page shape, and removal of umbrella-page duplication.
+
+Do not apply a line-count rule mechanically. A topic page owns one user question or one language
+surface and keeps its syntax, semantics, examples, guardrails, troubleshooting, and FAQ together.
+Hub pages route readers. Guides own multi-topic workflows without becoming a second syntax reference.
+Cookbooks own runnable end-to-end scenarios. Architecture pages own one subsystem model or one
+cross-cutting decision; their unit of responsibility is larger than a command or function page.
+
+- [x] Turn the current convention into an enforceable page-ownership contract. Update
+  `docs/README.md`, the templates under `docs/templates/`, and
+  `docs/architecture/standards/Help_and_Snippet_Standards.md` together so each documentation type
+  names what it owns, what it only links to, and the required local sections. Include a migration
+  rule for `docs/reference/**`: preserve runtime-help keywords, embedded-resource globs, and language
+  metadata mappings whenever a reference page moves or is renamed.
+- [x] Add a repository-wide documentation audit instead of relying only on syntax-index coverage.
+  Check local Markdown targets and anchors, duplicate canonical-topic claims, title/filename policy,
+  generated hub membership, and template conformance by reference type. Keep
+  `audit-syntax-index.js --strict`, but add the broader audit to the docs/pre-push lane. Make generated
+  README descriptions deterministic or support curated descriptions; the current generator truncates
+  arbitrary opening prose and produces weak entries such as the clipped rows in
+  `docs/architecture/README.md`.
+- [ ] Finish normalizing the focused help corpus against its type-specific templates, confirming each
+  example against the parser/formatter and live implementation while touching it. A structural audit
+  found 2 of 245 function topic pages missing at least one function baseline section
+  (`conversion/data-conversion.md` lacks the callable-page shape and `null-handler/coalesce.md` lacks
+  an explicit return section), 40 of 54 statement topic pages missing at least one explicit Syntax,
+  Example, or References section, 30 of 31 connector topic pages missing at least one explicit Syntax,
+  Security, Troubleshooting, or References section, and 37 of 38 visual topic pages not using the
+  visual template's level-2 Syntax/Example/References structure. Some affected pages contain the
+  information under unstandardized headings; migrate and verify it instead of adding duplicate prose.
+  For connectors, require every supported authentication pattern and an explicit mutually-exclusive
+  options section. For statements, keep destructive guards visible. For visuals, keep mappings,
+  options, actions, a copy-pasteable example, common failures, and local FAQ on that visual's page.
+- [ ] Replace the remaining broad user-facing manuals with small landing pages plus canonical topic
+  pages. Start with the clearest overlaps: reduce the 789-line
+  `guides/feature-guides/report-sql.md` to an authoring path and move syntax, object behavior, tooltip,
+  micro-chart, print-layout, and FAQ ownership to the existing `reference/visuals-reporting/**` pages;
+  reconcile the 500-line `guides/feature-guides/data-quality.md` with `guides/data-quality/**` and
+  `reference/statements/dml/data-quality-rules.md`; and reduce the 394-line
+  `guides/feature-guides/testing.md` to a testing entry point that routes to `guides/testing/**` and
+  the canonical script/command references. Preserve useful narrative workflows, but remove repeated
+  syntax and option inventories after their focused owners are complete.
+- [ ] Split the 515-line `reference/statements/session-control/lineage.md` by actual help topic. Give
+  `EXPORT LINEAGE`, `IMPORT LINEAGE`, lineage settings, governance tags, and each referenced
+  `eng.*` surface one canonical page, while leaving `LINEAGE` as the overview/router for the language
+  feature. Update `LanguageMetadata`, embedded-help mappings, the syntax index generator, and hover
+  tests in the same change so smaller files do not break CLI/LSP help.
+- [ ] Eliminate known competing owners before adding more pages. Choose one canonical
+  `guides/operations/one-person-quality-loop.md` page and retire the overlapping
+  `guides/patterns/one-person-quality-loop.md`; reconcile
+  `administration/platform/config/portal-configuration.md` with
+  `administration/portal/portal-config-reference.md`; and review
+  `administration/orchestration/orchestrator-portal.md` for operational topics already owned by the
+  Portal and Orchestrator administration trees. Replace retired pages with updated inbound links in
+  the same change; do not leave two pages that both require future edits for one behavior.
+- [ ] Distribute standalone FAQ answers to the page that owns each topic. Move the answers from
+  `guides/patterns/faq.md`, the FAQ portion of
+  `administration/platform/saas-operations-faq.md`, and umbrella-guide FAQ sections into the relevant
+  connector, statement, visual, CLI, configuration, or administration page. Keep a generated or
+  curated FAQ index only as navigation to those anchored answers, not as a second copy. Update the
+  task index, onboarding links, and release templates once the topic pages own the answers.
+- [ ] Keep architecture overviews, ADRs, standards, and threat-model documents cohesive; do not split
+  them solely because they are long. Refactor architecture only where a page has accumulated a second
+  kind of authority:
+
+  - `Engine.md` should remain the composition and execution-flow map, but route connector contracts,
+    Orchestrator scheduling, linting, data quality, RLS, artifact storage, and scale internals to their
+    owning subsystem pages instead of restating them.
+  - `Reporting.md` may become a short subsystem map with focused child pages for parsing/contracts,
+    manifest construction, rendering/runtime, snapshots, parameters/interactions, and hosting when
+    those areas cannot be kept accurate independently. Keep one diagram and ownership boundary in the
+    overview.
+  - Move the endpoint inventory out of `Portal.md` to a focused API reference; keep Portal tiering,
+    data ownership, authentication flow, middleware, session boundaries, and test strategy in
+    architecture. Point reconciliation tests at the new canonical pages when ownership moves.
+  - Move connector troubleshooting from `Connectors.md` into the individual connector pages and
+    Orchestrator configuration/troubleshooting from `Orchestrator.md` into administration/reference.
+    Keep interface contracts, lifecycle, batching, sanitization, and trust boundaries in architecture.
+  - Treat `DeploymentProfiles.md`, `SaaSTenantIsolation.md`, and `TenantPortability.md` as cohesive
+    cross-cutting architecture specifications. Their invariants, threat models, failure semantics, and
+    certification contracts need to be read together. Move only operator procedures, current rollout
+    status, and open delivery work to administration, `ROADMAP.md`, or this file.
+  - Keep each ADR and standard atomic and self-contained. Roadmaps and benchmark/evidence records are
+    internal planning or proof artifacts, so the user-reference page-per-topic rule does not apply to
+    them.
+- [ ] After each migration slice, regenerate affected hubs and the syntax index, run the strict index
+  audit plus the new docs audit, build the embedded help corpus, and exercise representative CLI help
+  and LSP hover topics. Do not perform a single large tree move; migrate one canonical owner at a time
+  so links, help keywords, tests, and source references change together.
 
 ## Reporting — Constrained HTML Visuals
 

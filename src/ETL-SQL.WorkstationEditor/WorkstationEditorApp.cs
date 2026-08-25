@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Net;
 using System.Text.Json;
 using ETL_SQL.Analysis.Services;
@@ -295,7 +295,8 @@ public static class WorkstationEditorApp
             try
             {
                 var manifest = await previewer.BuildPreviewAsync(request.Script ?? string.Empty, cancellationToken);
-                return Results.Json(manifest, JsonOptions);
+                return Results.Content(
+                    ETL_SQL.Reporting.BrowserDeliveryProjection.Serialize(manifest), "application/json");
             }
             catch (Exception ex)
             {

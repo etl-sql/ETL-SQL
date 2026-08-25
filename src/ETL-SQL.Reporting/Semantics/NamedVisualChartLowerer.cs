@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -68,7 +68,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 null,
                 true),
             title: title,
-            interactions: BuildInteractions(statement),
+            interactions: ChartInteractionResolver.Lower(statement, bindings),
             facet: BuildFacet(statement, bindings));
         spec.Validate();
         return spec;
@@ -242,26 +242,6 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 DomainMaximum: GaugeBound(statement, manifest, binding.Channel, "MAX")
                     ?? ParseDomain(manifest, binding.Channel, "max") ?? ParseStandardDomain(manifest, "MAX"));
         }
-    }
-
-    private static InteractionSpec BuildInteractions(CreateVisualStatement statement)
-    {
-        var bindings = statement.Actions.Select(action => new InteractionBinding(
-            action.Trigger,
-            action switch
-            {
-                SetParameterAction => InteractionEffect.SetParameter,
-                DrillDownAction or DrillInAction => InteractionEffect.Drill,
-                DrillReportAction or NavigatePageAction => InteractionEffect.Navigate,
-                _ => InteractionEffect.Highlight
-            }))
-            .Concat(statement.Interactions.Select(interaction => new InteractionBinding(
-                interaction.Key,
-                interaction.Value.Equals("FILTER", StringComparison.OrdinalIgnoreCase)
-                    ? InteractionEffect.Filter
-                    : InteractionEffect.Highlight)))
-            .ToImmutableArray();
-        return new InteractionSpec([], bindings);
     }
 
     private static bool IsOn(string? value) => value is not null &&
