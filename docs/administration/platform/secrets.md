@@ -1,4 +1,4 @@
-﻿# Secrets and Keys
+# Secrets and Keys
 
 ETL-SQL supports encrypted values for secrets such as passwords, JWT secrets, certificate
 passwords, and connection strings. Encrypted values use the `ENC:` prefix.
@@ -87,6 +87,6 @@ old key after every caller has moved. The service compares fixed-length key dige
 
 ## Related
 
-- [Portal configuration reference](../portal/portal-config-reference.md) — every setting named here
+- [Portal configuration reference](config/portal-configuration.md) — every setting named here
 - [Departmental isolation](../../architecture/decisions/departmental-isolation.md) — what must never be shared between environments
 - [State and high availability](state-and-ha.md) — which keys must be identical across HA nodes

@@ -88,7 +88,7 @@ link to the page that shows how. For language keywords, functions, and options, 
 | :--- | :--- |
 | Configure script logging, rotation, and secret redaction | [Configuring Script Logging](guides/operations/configuring-script-logging.md) |
 | Tune buffer batch sizes, phase metrics, and SQL profiling | [Tuning Pipeline Performance](guides/operations/tuning-pipeline-performance.md) |
-| Run the solo workstation quality loop | [One-Person Quality Loop](guides/operations/one-person-quality-loop.md) |
+| Run the solo workstation quality loop | [One-Person Quality Loop](guides/patterns/one-person-quality-loop.md) |
 | Write unit tests for pipeline logic with `MOCKDB` and `ASSERT` | [Pipeline Unit Testing & Mocking](guides/pipelines/pipeline-unit-testing.md) |
 | Execute test lanes and pre-push validation (contributors) | [Test Lanes & Execution](guides/testing/test-lanes-and-execution.md) |
 | Install ETL-SQL in production | [Installation and Deployment](administration/platform/installation.md) |

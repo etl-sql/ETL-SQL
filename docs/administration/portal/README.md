@@ -12,7 +12,7 @@
 | [Administration Operations Hub](operations.md) | The Admin **Operations** tab is the Portal control room for online-safe operational work. It joins |
 | [Orchestrator Management](orchestrator-integration.md) | The portal includes a built-in **Orchestrator** tab that provides a web interface for managing ETL-SQL scheduled jobs. Access is controlled by the ... |
 | [Groups and Folder Permissions](permissions.md) | Two facts worth knowing before you design a permission scheme: |
-| [Configuration Reference](portal-config-reference.md) | All settings live under the `"Portal"` key in `appsettings.json`. Every key can be overridden with an environment variable using the double-undersc... |
+| [Configuration Reference](../platform/config/portal-configuration.md) | Full portal configuration reference — all settings under the `"Portal"` key in `appsettings.json`, including SaaS/SharedTenancy, WorkloadIdentity, and KeyManagement sections. |
 | [Production Readiness Checklist](production-readiness.md) | Use this checklist before promoting the Portal to a production or customer-facing environment. Items marked **Required** will cause data loss, secu... |
 | [Publishing Reports](publishing.md) | Hub for registering a `.rptsql` script as a named report in a folder, plus versioning and sharing controls. |
 | &nbsp;&nbsp;↳ [Report Publishing Workflows](report-publishing-workflows.md) | GUI and script-first publishing, metadata tags, script hash pinning, update/delete, and environment promotion. |

@@ -12,7 +12,7 @@ These guides cover operational runtime behaviors, logging, profiling, and solo-o
 | :--- | :--- |
 | [Configuring Script Logging](configuring-script-logging.md) | Command-line logging flags, directory routing, file rotation, and credential redaction. |
 | [Tuning Pipeline Performance](tuning-pipeline-performance.md) | Buffer batch sizing (`--batch-size`), phase metrics (`--perf`), and statement-level profiling (`SET PROFILING ON`). |
-| [One-Person Quality Loop](one-person-quality-loop.md) | Complete workstation runbook: workspace policy, CLI validation, local schedules, and operator reports. |
+| [One-Person Quality Loop](../patterns/one-person-quality-loop.md) | Complete workstation runbook: workspace policy, CLI validation, local schedules, and operator reports. |
 
 ---
 

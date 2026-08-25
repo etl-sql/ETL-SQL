@@ -74,7 +74,7 @@ Run, log, and optimize workloads in development and production environments.
 | :--- | :--- |
 | [Configuring Script Logging](operations/configuring-script-logging.md) | CLI logging flags, directory routing, file rotation, and credential redaction. |
 | [Tuning Pipeline Performance](operations/tuning-pipeline-performance.md) | Buffer batch sizing (`--batch-size`), phase metrics (`--perf`), and profiling (`SET PROFILING ON`). |
-| [One-Person Quality Loop](operations/one-person-quality-loop.md) | Complete workstation runbook: workspace policy, CLI validation, local schedules, and reports. |
+| [One-Person Quality Loop](patterns/one-person-quality-loop.md) | Complete workstation runbook: workspace policy, CLI validation, local schedules, and reports. |
 
 ---
 
