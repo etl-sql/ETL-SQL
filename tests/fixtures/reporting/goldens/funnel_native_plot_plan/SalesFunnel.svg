@@ -1,0 +1,15 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='SalesFunnel-title SalesFunnel-desc' font-family='sans-serif'>
+<title id='SalesFunnel-title'>Sales Funnel</title>
+<desc id='SalesFunnel-desc'>Sales Funnel: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Sales Funnel</text>
+<polygon points='60,48 430,48 337.5,138.333 152.5,138.333' fill='#5470c6' data-row-index='0'><title>Leads: 500</title></polygon>
+<path d='M 386.75 94.167 H 442' fill='none' stroke='#9ca3af' stroke-width='1'/>
+<text x='448' y='98.167' text-anchor='start' font-size='10' fill='#374151'>Leads</text>
+<polygon points='152.5,140.333 337.5,140.333 274.6,230.667 215.4,230.667' fill='#91cc75' data-row-index='1'><title>Qualified: 250</title></polygon>
+<path d='M 309.05 186.5 H 442' fill='none' stroke='#9ca3af' stroke-width='1'/>
+<text x='448' y='190.5' text-anchor='start' font-size='10' fill='#374151'>Qualified</text>
+<polygon points='215.4,232.667 274.6,232.667 266.312,323 223.688,323' fill='#fac858' data-row-index='2'><title>Won: 80</title></polygon>
+<path d='M 273.456 278.833 H 442' fill='none' stroke='#9ca3af' stroke-width='1'/>
+<text x='448' y='282.833' text-anchor='start' font-size='10' fill='#374151'>Won</text>
+</svg>

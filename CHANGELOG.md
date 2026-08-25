@@ -14,6 +14,28 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added one golden lane covering both visual catalogs. Fixtures are discovered from
+  `tests/fixtures/reporting/conformance`, so adding a chart means adding a `.rptsql` file and blessing
+  it rather than editing C#, and each fixture reports as its own test result instead of folding into a
+  single assertion that says only that something moved. Every fixture pins four artifacts, checked in
+  beside their hashes so a change is a diff a reviewer can open: the serialized `PlotPlan`, the rendered
+  native SVG, the `SemanticFallback`, and the terminal render. The plan and the SVG are compared
+  independently — a moved plan hash is a semantic regression, a moved SVG hash with the plan holding is
+  a rendering change. Bless with `scripts\Test-ReportingGoldens.ps1 -UpdateGolden`.
+- Added `CUSTOM` grammar coverage to the golden lane for the surface named visuals cannot reach:
+  encoding inheritance and `INHERIT_ENCODINGS = OFF`, `DATUM` and `VALUE` bindings, `CONDITIONS`,
+  `STACK = NORMALIZE`, jitter and nudge placement, `FACET WRAP`, `ASPECT_RATIO`, quantitative colour
+  ranges, and `TICK`. Jitter is hashed over semantic placement and a seed, so it is deterministic by
+  construction and exactly the kind of property that would otherwise degrade silently.
+- Added asserted named-visual-to-`CUSTOM` translations. Each pair ships as one fixture holding both
+  spellings over one staged source, and the resolved layers, scales, palette, series, data, accessible
+  summary, semantic fallback, theme tokens, and formatting are compared. Identity, the per-visual-type
+  null policy, and the style tokens transcribing `MAPPINGS`/`OPTIONS` are excluded, and each exclusion
+  is itself pinned so it cannot quietly widen into hiding a real divergence.
+- Added enforcement of the determinism precondition the SVG lane depends on. The native SVG is
+  hash-stable across platforms only while the renderer stays free of clock, GUID, ambient-culture, and
+  text-measurement input; that is now asserted at the source and by rendering the same plan under a
+  locale with a different decimal separator and requiring byte equality.
 - Added short-lived, audience-bound workload identity exchange for GitHub, GitLab, Azure DevOps, and
   `private_key_jwt` schedulers. Exact tenant/issuer/subject/resource/operation policy, durable replay
   rejection, non-self one-use approvals, owner-capped service tokens, and attributed anomaly audit
@@ -56,6 +78,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Renamed and corrected two cookbook pages published under a `custom-` prefix that contain no `CHART`
+  block. `custom-choropleth-point-map.md` and `custom-alluvial-flow-composition.md` are now
+  `choropleth-point-map.md` and `alluvial-flow-composition.md`, and both describe what they actually
+  are: coordinated named visuals over shared staged data. The choropleth recipe no longer claims a
+  single layered map surface, because layered geographic composition does not exist in the `CHART`
+  grammar; it is two independent `MAP` visuals sharing a page and a source.
 - Date and time values in charts are now rendered by the report formatter rather than reused from the
   engine's generic row strings, because only the formatter knows the report's zone and locale. A
   temporal string carrying no offset is anchored to UTC instead of picking up the server's local
@@ -1203,7 +1231,6 @@ Hardening from the v0.10.0 release-readiness security review:
 - **Control Flow & Parallel Execution:** Parallel execution pipelines (`PARALLEL`), cross-script execution (`RUN SCRIPT`), and directory synchronization tasks.
 - **Notifications & Transfer Connectors:** Added `SEND EMAIL` and file transfer connectors (SFTP/SSH, FTP, Azure Blob).
 - **Linter & UI Foundations:** Added a command-line script editor, local test harness (`--test`), and baseline security linter.
-
 
 ## [Unofficial 0.1.0] — 2026-03-13
 

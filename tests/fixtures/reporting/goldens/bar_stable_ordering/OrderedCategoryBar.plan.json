@@ -1,0 +1,598 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "OrderedCategoryBar",
+  "title": "Deterministic Category Ordering",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Alpha"
+        },
+        {
+          "kind": "text",
+          "text": "Beta"
+        },
+        {
+          "kind": "text",
+          "text": "Gamma"
+        },
+        {
+          "kind": "text",
+          "text": "Delta"
+        }
+      ],
+      "categories": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Delta"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Alpha"
+          },
+          "label": "Alpha"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Beta"
+          },
+          "label": "Beta"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Gamma"
+          },
+          "label": "Gamma"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Delta"
+          },
+          "label": "Delta"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 210
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 52.5
+          },
+          "label": "52.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 105
+          },
+          "label": "105"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 157.5
+          },
+          "label": "157.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 210
+          },
+          "label": "210"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "color",
+      "channel": "color",
+      "kind": "ordinal",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Actual"
+        },
+        {
+          "kind": "text",
+          "text": "Forecast"
+        }
+      ],
+      "categories": [
+        "Actual",
+        "Forecast"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Actual"
+          },
+          "label": "Actual"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Forecast"
+          },
+          "label": "Forecast"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Actual",
+      "label": "Actual",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "key": "Forecast",
+      "label": "Forecast",
+      "order": 1,
+      "color": "#91cc75"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Actual",
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Forecast",
+      "color": "#91cc75"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Actual",
+      "label": "Actual",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Forecast",
+      "label": "Forecast",
+      "order": 1,
+      "color": "#91cc75"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary-00",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Actual",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 120
+              },
+              "displayValue": "120"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Actual"
+              },
+              "displayValue": "Actual"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Alpha, Y: 120, Color: Actual",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 180
+              },
+              "displayValue": "180"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Actual"
+              },
+              "displayValue": "Actual"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Beta, Y: 180, Color: Actual",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 140
+              },
+              "displayValue": "140"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Actual"
+              },
+              "displayValue": "Actual"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Gamma, Y: 140, Color: Actual",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Delta"
+              },
+              "displayValue": "Delta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 210
+              },
+              "displayValue": "210"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Actual"
+              },
+              "displayValue": "Actual"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Delta, Y: 210, Color: Actual",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-01",
+      "mark": "rect",
+      "zIndex": 1,
+      "seriesKey": "Forecast",
+      "data": [
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 110
+              },
+              "displayValue": "110"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Forecast"
+              },
+              "displayValue": "Forecast"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Alpha, Y: 110, Color: Forecast",
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 160
+              },
+              "displayValue": "160"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Forecast"
+              },
+              "displayValue": "Forecast"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Beta, Y: 160, Color: Forecast",
+          "encodings": []
+        },
+        {
+          "rowIndex": 6,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 150
+              },
+              "displayValue": "150"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Forecast"
+              },
+              "displayValue": "Forecast"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Gamma, Y: 150, Color: Forecast",
+          "encodings": []
+        },
+        {
+          "rowIndex": 7,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Delta"
+              },
+              "displayValue": "Delta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 200
+              },
+              "displayValue": "200"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Forecast"
+              },
+              "displayValue": "Forecast"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Delta, Y: 200, Color: Forecast",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Deterministic Category Ordering: 8 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Deterministic Category Ordering",
+    "items": [
+      {
+        "label": "Alpha",
+        "value": "120",
+        "order": 0,
+        "group": "Actual"
+      },
+      {
+        "label": "Beta",
+        "value": "180",
+        "order": 1,
+        "group": "Actual"
+      },
+      {
+        "label": "Gamma",
+        "value": "140",
+        "order": 2,
+        "group": "Actual"
+      },
+      {
+        "label": "Delta",
+        "value": "210",
+        "order": 3,
+        "group": "Actual"
+      },
+      {
+        "label": "Alpha",
+        "value": "110",
+        "order": 100000,
+        "group": "Forecast"
+      },
+      {
+        "label": "Beta",
+        "value": "160",
+        "order": 100001,
+        "group": "Forecast"
+      },
+      {
+        "label": "Gamma",
+        "value": "150",
+        "order": 100002,
+        "group": "Forecast"
+      },
+      {
+        "label": "Delta",
+        "value": "200",
+        "order": 100003,
+        "group": "Forecast"
+      }
+    ],
+    "summary": "Deterministic Category Ordering: 8 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "AXIS_SORT",
+      "value": "SOURCE"
+    },
+    {
+      "name": "HEIGHT",
+      "value": "400px"
+    },
+    {
+      "name": "LEGEND",
+      "value": "TOP"
+    },
+    {
+      "name": "mapping:series",
+      "value": "SeriesName"
+    },
+    {
+      "name": "mapping:x",
+      "value": "Category"
+    },
+    {
+      "name": "mapping:y",
+      "value": "Metric"
+    },
+    {
+      "name": "title",
+      "value": "Deterministic Category Ordering"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Category",
+    "valueKey": "Metric"
+  }
+}

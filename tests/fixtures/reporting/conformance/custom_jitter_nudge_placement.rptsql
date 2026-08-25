@@ -1,0 +1,39 @@
+SELECT 'r1' AS Id, 'Left' AS Cohort, 12 AS Score, 3 AS Rank INTO #strip_samples
+UNION ALL SELECT 'r2', 'Right', 18, 5
+UNION ALL SELECT 'r3', 'Left', 15, 2
+UNION ALL SELECT 'r4', 'Right', 21, 4;
+
+CREATE VISUAL PlacementStrip AS CUSTOM (
+  TITLE = 'Deterministic jitter on observations with nudged labels',
+  SOURCE = #strip_samples,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      score_scale = LINEAR (CHANNEL = X, INCLUDE_ZERO = OFF),
+      rank_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF)
+    ),
+    LAYERS (
+      observations = POINT (
+        Z_INDEX = 0,
+        POSITION = JITTER(X = 0.08, Y = 0.04, KEY = Id, SEED = 42),
+        ENCODINGS (
+          X = Score (TYPE = QUANTITATIVE, SCALE = score_scale),
+          Y = Rank (TYPE = QUANTITATIVE, SCALE = rank_scale),
+          X_OFFSET = Cohort (TYPE = NOMINAL),
+          DETAIL = Id (TYPE = NOMINAL)
+        )
+      ),
+      labels = TEXT (
+        Z_INDEX = 1,
+        POSITION = NUDGE(X = 0, Y = 1, UNIT = DATA),
+        ENCODINGS (
+          X = Score (TYPE = QUANTITATIVE, SCALE = score_scale),
+          Y = Rank (TYPE = QUANTITATIVE, SCALE = rank_scale),
+          TEXT = Id (TYPE = NOMINAL)
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = PlacementStrip));

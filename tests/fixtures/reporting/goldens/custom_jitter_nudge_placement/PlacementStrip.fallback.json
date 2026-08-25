@@ -1,0 +1,55 @@
+{
+  "kind": "rankedTable",
+  "heading": "Deterministic jitter on observations with nudged labels",
+  "items": [
+    {
+      "label": "12",
+      "value": "3",
+      "order": 0,
+      "group": "Rank"
+    },
+    {
+      "label": "18",
+      "value": "5",
+      "order": 1,
+      "group": "Rank"
+    },
+    {
+      "label": "15",
+      "value": "2",
+      "order": 2,
+      "group": "Rank"
+    },
+    {
+      "label": "21",
+      "value": "4",
+      "order": 3,
+      "group": "Rank"
+    },
+    {
+      "label": "12",
+      "value": "3",
+      "order": 100000,
+      "group": "Rank"
+    },
+    {
+      "label": "18",
+      "value": "5",
+      "order": 100001,
+      "group": "Rank"
+    },
+    {
+      "label": "15",
+      "value": "2",
+      "order": 100002,
+      "group": "Rank"
+    },
+    {
+      "label": "21",
+      "value": "4",
+      "order": 100003,
+      "group": "Rank"
+    }
+  ],
+  "summary": "Deterministic jitter on observations with nudged labels: 4 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

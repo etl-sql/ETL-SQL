@@ -1,0 +1,438 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "ProfitBridge",
+  "title": "Profit Bridge",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Opening"
+        },
+        {
+          "kind": "text",
+          "text": "Revenue"
+        },
+        {
+          "kind": "text",
+          "text": "Costs"
+        },
+        {
+          "kind": "text",
+          "text": "Closing"
+        }
+      ],
+      "categories": [
+        "Opening",
+        "Revenue",
+        "Costs",
+        "Closing"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Opening"
+          },
+          "label": "Opening"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Revenue"
+          },
+          "label": "Revenue"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Costs"
+          },
+          "label": "Costs"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Closing"
+          },
+          "label": "Closing"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 80
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 20
+          },
+          "label": "20"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 40
+          },
+          "label": "40"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 60
+          },
+          "label": "60"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 80
+          },
+          "label": "80"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Amount",
+      "label": "Amount",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Amount",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Amount",
+      "label": "Amount",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "ProfitBridge",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Opening"
+              },
+              "displayValue": "Opening"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1
+              },
+              "displayValue": "1"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Opening, Y: 50, Detail: 1",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Revenue"
+              },
+              "displayValue": "Revenue"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 30
+              },
+              "displayValue": "30"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80
+              },
+              "displayValue": "80"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Revenue, Y: 30, Detail: 0",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Costs"
+              },
+              "displayValue": "Costs"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": -20
+              },
+              "displayValue": "-20"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80
+              },
+              "displayValue": "80"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60
+              },
+              "displayValue": "60"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Costs, Y: -20, Detail: 0",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Closing"
+              },
+              "displayValue": "Closing"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60
+              },
+              "displayValue": "60"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1
+              },
+              "displayValue": "1"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60
+              },
+              "displayValue": "60"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Closing, Y: 60, Detail: 1",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "layout",
+          "value": "waterfall"
+        },
+        {
+          "name": "preserveRows",
+          "value": "true"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Profit Bridge: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Profit Bridge",
+    "items": [
+      {
+        "label": "Opening",
+        "value": "50",
+        "order": 0,
+        "detail": "range 0 to 50",
+        "group": "ProfitBridge"
+      },
+      {
+        "label": "Revenue",
+        "value": "30",
+        "order": 1,
+        "detail": "range 50 to 80",
+        "group": "ProfitBridge"
+      },
+      {
+        "label": "Costs",
+        "value": "-20",
+        "order": 2,
+        "detail": "range 80 to 60",
+        "group": "ProfitBridge"
+      },
+      {
+        "label": "Closing",
+        "value": "60",
+        "order": 3,
+        "detail": "range 0 to 60",
+        "group": "ProfitBridge"
+      }
+    ],
+    "summary": "Profit Bridge: 4 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "mapping:name",
+      "value": "ItemName"
+    },
+    {
+      "name": "mapping:total",
+      "value": "IsTotal"
+    },
+    {
+      "name": "mapping:value",
+      "value": "Amount"
+    },
+    {
+      "name": "TITLE",
+      "value": "Profit Bridge"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "ItemName",
+    "valueKey": "Amount"
+  }
+}

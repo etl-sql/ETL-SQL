@@ -1,0 +1,35 @@
+SELECT 'North' AS Region, 120 AS Revenue INTO #rosetta_bar
+UNION ALL SELECT 'South', 95
+UNION ALL SELECT 'East', 140
+UNION ALL SELECT 'West', 110;
+
+-- The same chart authored twice: once as a named visual, once in the CHART grammar.
+-- The golden harness compares their resolved layers, scales, palette, series, and data.
+CREATE VISUAL RosettaBarNamed AS BAR (
+  TITLE = 'Revenue by region',
+  SOURCE = #rosetta_bar,
+  MAPPINGS (X = Region, Y = Revenue),
+  OPTIONS (AXIS_SORT = SOURCE)
+);
+
+CREATE VISUAL RosettaBarCustom AS CUSTOM (
+  TITLE = 'Revenue by region',
+  SOURCE = #rosetta_bar,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      regions = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+      amounts = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+      bars = RECT (
+        ENCODINGS (
+          X = Region (TYPE = NOMINAL, SCALE = regions),
+          Y = Revenue (TYPE = QUANTITATIVE, SCALE = amounts)
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A B', MAP ('A' = RosettaBarNamed, 'B' = RosettaBarCustom));

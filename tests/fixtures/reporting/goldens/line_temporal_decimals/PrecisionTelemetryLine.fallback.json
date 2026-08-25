@@ -1,0 +1,37 @@
+{
+  "kind": "timeSeriesTable",
+  "heading": "High-Precision Daily Sensor Telemetry",
+  "items": [
+    {
+      "label": "2026-01-01",
+      "value": "98.7452",
+      "order": 0,
+      "group": "SensorReading"
+    },
+    {
+      "label": "2026-01-02",
+      "value": "104.3819",
+      "order": 1,
+      "group": "SensorReading"
+    },
+    {
+      "label": "2026-01-03",
+      "value": "101.9205",
+      "order": 2,
+      "group": "SensorReading"
+    },
+    {
+      "label": "2026-01-04",
+      "value": "112.5641",
+      "order": 3,
+      "group": "SensorReading"
+    },
+    {
+      "label": "2026-01-05",
+      "value": "108.1187",
+      "order": 4,
+      "group": "SensorReading"
+    }
+  ],
+  "summary": "High-Precision Daily Sensor Telemetry: 5 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

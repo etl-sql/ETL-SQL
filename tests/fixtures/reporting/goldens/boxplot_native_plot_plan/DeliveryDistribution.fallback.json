@@ -1,0 +1,19 @@
+{
+  "kind": "rankedTable",
+  "heading": "Delivery Distribution",
+  "items": [
+    {
+      "label": "North",
+      "value": "5.0",
+      "order": 0,
+      "group": "DeliveryDistribution"
+    },
+    {
+      "label": "South",
+      "value": "3.0",
+      "order": 1,
+      "group": "DeliveryDistribution"
+    }
+  ],
+  "summary": "Delivery Distribution: 7 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 5 skipped rows."
+}

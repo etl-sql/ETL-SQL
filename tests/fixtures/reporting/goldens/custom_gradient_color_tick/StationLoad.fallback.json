@@ -1,0 +1,55 @@
+{
+  "kind": "rankedTable",
+  "heading": "Sequential quantitative colour with a per-category target tick",
+  "items": [
+    {
+      "label": "Assembly",
+      "value": "62",
+      "order": 0,
+      "group": "Amount"
+    },
+    {
+      "label": "Paint",
+      "value": "81",
+      "order": 1,
+      "group": "Amount"
+    },
+    {
+      "label": "Trim",
+      "value": "74",
+      "order": 2,
+      "group": "Amount"
+    },
+    {
+      "label": "Final QA",
+      "value": "55",
+      "order": 3,
+      "group": "Amount"
+    },
+    {
+      "label": "Assembly",
+      "value": "70",
+      "order": 100000,
+      "group": "Amount"
+    },
+    {
+      "label": "Paint",
+      "value": "70",
+      "order": 100001,
+      "group": "Amount"
+    },
+    {
+      "label": "Trim",
+      "value": "70",
+      "order": 100002,
+      "group": "Amount"
+    },
+    {
+      "label": "Final QA",
+      "value": "70",
+      "order": 100003,
+      "group": "Amount"
+    }
+  ],
+  "summary": "Sequential quantitative colour with a per-category target tick: 4 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows. Color ranges from 0 (#e0f2fe) to 100 (#0c4a6e)."
+}

@@ -1,0 +1,35 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='RegionalSalesBar-title RegionalSalesBar-desc' font-family='sans-serif'>
+<title id='RegionalSalesBar-title'>Annual Sales by Geographic Region</title>
+<desc id='RegionalSalesBar-desc'>Annual Sales by Geographic Region: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Annual Sales by Geographic Region</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='RegionalSalesBar-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#RegionalSalesBar-plot-clip)'>
+<rect x='81.667' y='40' width='129' height='250' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>$145,000</title></rect>
+<text x='146.167' y='37' text-anchor='middle' font-size='9' fill='#444'>$145,000</text>
+<rect x='255' y='96.897' width='129' height='193.103' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>$112,000</title></rect>
+<text x='319.5' y='93.897' text-anchor='middle' font-size='9' fill='#444'>$112,000</text>
+<rect x='428.333' y='121.034' width='129' height='168.966' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>$98,000</title></rect>
+<text x='492.833' y='118.034' text-anchor='middle' font-size='9' fill='#444'>$98,000</text>
+</g>
+<text x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Americas</text>
+<text x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>EMEA</text>
+<text x='493.333' y='306' text-anchor='middle' font-size='9' fill='#666'>APAC</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>36250</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>72500</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>108750</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>145000</text>
+</svg>

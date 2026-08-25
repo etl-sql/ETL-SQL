@@ -1,0 +1,308 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "BinnedHistogram",
+  "title": "Explicit-bin histogram authored as ranged rectangles",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "bin_scale",
+      "channel": "x",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25
+          },
+          "label": "25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75
+          },
+          "label": "75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "count_scale",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25
+          },
+          "label": "25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75
+          },
+          "label": "75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Frequency",
+      "label": "Frequency",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Frequency",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Frequency",
+      "label": "Frequency",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "bins",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Frequency",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "xStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "xEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 25
+              },
+              "displayValue": "25"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 40
+              },
+              "displayValue": "40"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "XStart: 0, XEnd: 25, Y: 40",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "xStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 25
+              },
+              "displayValue": "25"
+            },
+            {
+              "channel": "xEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60
+              },
+              "displayValue": "60"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "XStart: 25, XEnd: 50, Y: 60",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "xStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "xEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 100
+              },
+              "displayValue": "100"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 20
+              },
+              "displayValue": "20"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "XStart: 50, XEnd: 100, Y: 20",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Explicit-bin histogram authored as ranged rectangles: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Explicit-bin histogram authored as ranged rectangles",
+    "items": [
+      {
+        "label": "Row 1",
+        "value": "40",
+        "order": 0,
+        "detail": "x range 0 to 25",
+        "group": "Frequency"
+      },
+      {
+        "label": "Row 2",
+        "value": "60",
+        "order": 1,
+        "detail": "x range 25 to 50",
+        "group": "Frequency"
+      },
+      {
+        "label": "Row 3",
+        "value": "20",
+        "order": 2,
+        "detail": "x range 50 to 100",
+        "group": "Frequency"
+      }
+    ],
+    "summary": "Explicit-bin histogram authored as ranged rectangles: 3 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Explicit-bin histogram authored as ranged rectangles"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "BinStart",
+    "valueKey": "Frequency"
+  }
+}

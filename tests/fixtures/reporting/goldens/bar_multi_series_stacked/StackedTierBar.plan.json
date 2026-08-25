@@ -1,0 +1,645 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "StackedTierBar",
+  "title": "Quarterly Tier Revenue Stack",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "2026-Q1"
+        },
+        {
+          "kind": "text",
+          "text": "2026-Q2"
+        }
+      ],
+      "categories": [
+        "2026-Q1",
+        "2026-Q2"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "2026-Q1"
+          },
+          "label": "2026-Q1"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "2026-Q2"
+          },
+          "label": "2026-Q2"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 170000
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 42500
+          },
+          "label": "42500"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 85000
+          },
+          "label": "85000"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 127500
+          },
+          "label": "127500"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 170000
+          },
+          "label": "170000"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "color",
+      "channel": "color",
+      "kind": "ordinal",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Enterprise"
+        },
+        {
+          "kind": "text",
+          "text": "Mid-Market"
+        },
+        {
+          "kind": "text",
+          "text": "SMB"
+        }
+      ],
+      "categories": [
+        "Enterprise",
+        "Mid-Market",
+        "SMB"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Enterprise"
+          },
+          "label": "Enterprise"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Mid-Market"
+          },
+          "label": "Mid-Market"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "SMB"
+          },
+          "label": "SMB"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Enterprise",
+      "label": "Enterprise",
+      "order": 0,
+      "color": "#1E3A8A"
+    },
+    {
+      "key": "Mid-Market",
+      "label": "Mid-Market",
+      "order": 1,
+      "color": "#3B82F6"
+    },
+    {
+      "key": "SMB",
+      "label": "SMB",
+      "order": 2,
+      "color": "#93C5FD"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Enterprise",
+      "color": "#1E3A8A"
+    },
+    {
+      "seriesKey": "Mid-Market",
+      "color": "#3B82F6"
+    },
+    {
+      "seriesKey": "SMB",
+      "color": "#93C5FD"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Enterprise",
+      "label": "Enterprise",
+      "order": 0,
+      "color": "#1E3A8A"
+    },
+    {
+      "seriesKey": "Mid-Market",
+      "label": "Mid-Market",
+      "order": 1,
+      "color": "#3B82F6"
+    },
+    {
+      "seriesKey": "SMB",
+      "label": "SMB",
+      "order": 2,
+      "color": "#93C5FD"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary-00",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Enterprise",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "2026-Q1"
+              },
+              "displayValue": "2026-Q1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 85000
+              },
+              "displayValue": "85000"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Enterprise"
+              },
+              "displayValue": "Enterprise"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 85000
+              },
+              "displayValue": "85000"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-Q1, Y: 85000, Color: Enterprise",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "2026-Q2"
+              },
+              "displayValue": "2026-Q2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 92000
+              },
+              "displayValue": "92000"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Enterprise"
+              },
+              "displayValue": "Enterprise"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 92000
+              },
+              "displayValue": "92000"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-Q2, Y: 92000, Color: Enterprise",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "zero",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-01",
+      "mark": "rect",
+      "zIndex": 1,
+      "seriesKey": "Mid-Market",
+      "data": [
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "2026-Q1"
+              },
+              "displayValue": "2026-Q1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 42000
+              },
+              "displayValue": "42000"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Mid-Market"
+              },
+              "displayValue": "Mid-Market"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 85000
+              },
+              "displayValue": "85000"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 127000
+              },
+              "displayValue": "127000"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-Q1, Y: 42000, Color: Mid-Market",
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "2026-Q2"
+              },
+              "displayValue": "2026-Q2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 47000
+              },
+              "displayValue": "47000"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Mid-Market"
+              },
+              "displayValue": "Mid-Market"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 92000
+              },
+              "displayValue": "92000"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 139000
+              },
+              "displayValue": "139000"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-Q2, Y: 47000, Color: Mid-Market",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "zero",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-02",
+      "mark": "rect",
+      "zIndex": 2,
+      "seriesKey": "SMB",
+      "data": [
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "2026-Q1"
+              },
+              "displayValue": "2026-Q1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 28000
+              },
+              "displayValue": "28000"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "SMB"
+              },
+              "displayValue": "SMB"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 127000
+              },
+              "displayValue": "127000"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 155000
+              },
+              "displayValue": "155000"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-Q1, Y: 28000, Color: SMB",
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "2026-Q2"
+              },
+              "displayValue": "2026-Q2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 31000
+              },
+              "displayValue": "31000"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "SMB"
+              },
+              "displayValue": "SMB"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 139000
+              },
+              "displayValue": "139000"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 170000
+              },
+              "displayValue": "170000"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-Q2, Y: 31000, Color: SMB",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "zero",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Quarterly Tier Revenue Stack: 6 rows, 3 ordered layers, 3 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Quarterly Tier Revenue Stack",
+    "items": [
+      {
+        "label": "2026-Q1",
+        "value": "85000",
+        "order": 0,
+        "group": "Enterprise"
+      },
+      {
+        "label": "2026-Q2",
+        "value": "92000",
+        "order": 1,
+        "group": "Enterprise"
+      },
+      {
+        "label": "2026-Q1",
+        "value": "42000",
+        "order": 100000,
+        "group": "Mid-Market"
+      },
+      {
+        "label": "2026-Q2",
+        "value": "47000",
+        "order": 100001,
+        "group": "Mid-Market"
+      },
+      {
+        "label": "2026-Q1",
+        "value": "28000",
+        "order": 200000,
+        "group": "SMB"
+      },
+      {
+        "label": "2026-Q2",
+        "value": "31000",
+        "order": 200001,
+        "group": "SMB"
+      }
+    ],
+    "summary": "Quarterly Tier Revenue Stack: 6 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "color:Enterprise",
+      "value": "#1E3A8A"
+    },
+    {
+      "name": "color:Mid-Market",
+      "value": "#3B82F6"
+    },
+    {
+      "name": "color:SMB",
+      "value": "#93C5FD"
+    },
+    {
+      "name": "HEIGHT",
+      "value": "450px"
+    },
+    {
+      "name": "LEGEND",
+      "value": "RIGHT"
+    },
+    {
+      "name": "mapping:series",
+      "value": "Tier"
+    },
+    {
+      "name": "mapping:x",
+      "value": "Quarter"
+    },
+    {
+      "name": "mapping:y",
+      "value": "Revenue"
+    },
+    {
+      "name": "title",
+      "value": "Quarterly Tier Revenue Stack"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Quarter",
+    "valueKey": "Revenue"
+  }
+}

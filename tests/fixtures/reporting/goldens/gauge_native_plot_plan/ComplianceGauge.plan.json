@@ -1,0 +1,313 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "ComplianceGauge",
+  "title": "SLA Compliance",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "radius",
+      "channel": "radius",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25
+          },
+          "label": "25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75
+          },
+          "label": "75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 1
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.25
+          },
+          "label": "0.25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.5
+          },
+          "label": "0.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.75
+          },
+          "label": "0.75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 1
+          },
+          "label": "1"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "y2",
+      "channel": "y2",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25
+          },
+          "label": "25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75
+          },
+          "label": "75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Score",
+      "label": "Score",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Score",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Score",
+      "label": "Score",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "arc",
+      "zIndex": 0,
+      "seriesKey": "Score",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 73.5
+              },
+              "displayValue": "73.5"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "y2",
+              "value": {
+                "kind": "decimal",
+                "decimal": 100
+              },
+              "displayValue": "100"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80
+              },
+              "displayValue": "80"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Radius: 73.5, Y: 0, Y2: 100, Detail: 80",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "layout",
+          "value": "gauge"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "SLA Compliance: 1 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "proportionalBreakdown",
+    "heading": "SLA Compliance",
+    "items": [
+      {
+        "label": "Row 1",
+        "value": "73.5",
+        "order": 0,
+        "detail": "100.0% of total",
+        "group": "Score"
+      }
+    ],
+    "summary": "SLA Compliance: 1 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "polar"
+  },
+  "style": [
+    {
+      "name": "mapping:goal",
+      "value": "GoalValue"
+    },
+    {
+      "name": "mapping:max",
+      "value": "MaximumValue"
+    },
+    {
+      "name": "mapping:min",
+      "value": "MinimumValue"
+    },
+    {
+      "name": "mapping:value",
+      "value": "Score"
+    },
+    {
+      "name": "TITLE",
+      "value": "SLA Compliance"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "GoalValue",
+    "valueKey": "MinimumValue"
+  }
+}

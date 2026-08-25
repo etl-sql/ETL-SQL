@@ -1,0 +1,14 @@
+{
+  "kind": "proportionalBreakdown",
+  "heading": "SLA Compliance",
+  "items": [
+    {
+      "label": "Row 1",
+      "value": "73.5",
+      "order": 0,
+      "detail": "100.0% of total",
+      "group": "Score"
+    }
+  ],
+  "summary": "SLA Compliance: 1 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

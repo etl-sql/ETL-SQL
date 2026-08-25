@@ -1,0 +1,43 @@
+{
+  "kind": "rankedTable",
+  "heading": "Cohort Velocity vs Efficiency Distribution",
+  "items": [
+    {
+      "label": "12.5",
+      "value": "85.0",
+      "order": 0,
+      "group": "Cohort A"
+    },
+    {
+      "label": "18.2",
+      "value": "92.4",
+      "order": 1,
+      "group": "Cohort A"
+    },
+    {
+      "label": "24.8",
+      "value": "78.1",
+      "order": 2,
+      "group": "Cohort A"
+    },
+    {
+      "label": "15.0",
+      "value": "64.5",
+      "order": 100000,
+      "group": "Cohort B"
+    },
+    {
+      "label": "22.1",
+      "value": "71.0",
+      "order": 100001,
+      "group": "Cohort B"
+    },
+    {
+      "label": "29.5",
+      "value": "58.2",
+      "order": 100002,
+      "group": "Cohort B"
+    }
+  ],
+  "summary": "Cohort Velocity vs Efficiency Distribution: 6 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

@@ -1,0 +1,46 @@
+{
+  "kind": "rankedTable",
+  "heading": "Revenue and Margin",
+  "items": [
+    {
+      "label": "Jan",
+      "value": "120",
+      "order": 0,
+      "group": "Revenue"
+    },
+    {
+      "label": "Feb",
+      "value": "145",
+      "order": 1,
+      "group": "Revenue"
+    },
+    {
+      "label": "Mar",
+      "value": "130",
+      "order": 2,
+      "group": "Revenue"
+    },
+    {
+      "label": "Jan",
+      "value": "0.28",
+      "order": 100000,
+      "detail": "conditional Color: #2E86C1, conditional Opacity: 1",
+      "group": "Revenue"
+    },
+    {
+      "label": "Feb",
+      "value": "0.32",
+      "order": 100001,
+      "detail": "conditional Color: #2E86C1, conditional Opacity: 1",
+      "group": "Revenue"
+    },
+    {
+      "label": "Mar",
+      "value": "-0.05",
+      "order": 100002,
+      "detail": "conditional Color: #C0392B, conditional Opacity: 0.45",
+      "group": "Revenue"
+    }
+  ],
+  "summary": "Revenue and Margin: 3 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

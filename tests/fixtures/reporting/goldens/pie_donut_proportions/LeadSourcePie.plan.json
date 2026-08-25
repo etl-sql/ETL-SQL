@@ -1,0 +1,397 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "LeadSourcePie",
+  "title": "Lead Source Proportions (Pie)",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "theta",
+      "channel": "theta",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Search"
+        },
+        {
+          "kind": "text",
+          "text": "Direct"
+        },
+        {
+          "kind": "text",
+          "text": "Referral"
+        },
+        {
+          "kind": "text",
+          "text": "Organic Social"
+        }
+      ],
+      "categories": [
+        "Search",
+        "Direct",
+        "Referral",
+        "Organic Social"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Search"
+          },
+          "label": "Search"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Direct"
+          },
+          "label": "Direct"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Referral"
+          },
+          "label": "Referral"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Organic Social"
+          },
+          "label": "Organic Social"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "radius",
+      "channel": "radius",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 4500
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 1125
+          },
+          "label": "1125"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 2250
+          },
+          "label": "2250"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 3375
+          },
+          "label": "3375"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 4500
+          },
+          "label": "4500"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Search",
+      "label": "Search",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "key": "Direct",
+      "label": "Direct",
+      "order": 1,
+      "color": "#91cc75"
+    },
+    {
+      "key": "Referral",
+      "label": "Referral",
+      "order": 2,
+      "color": "#fac858"
+    },
+    {
+      "key": "Organic Social",
+      "label": "Organic Social",
+      "order": 3,
+      "color": "#ee6666"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Search",
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Direct",
+      "color": "#91cc75"
+    },
+    {
+      "seriesKey": "Referral",
+      "color": "#fac858"
+    },
+    {
+      "seriesKey": "Organic Social",
+      "color": "#ee6666"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Search",
+      "label": "Search",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Direct",
+      "label": "Direct",
+      "order": 1,
+      "color": "#91cc75"
+    },
+    {
+      "seriesKey": "Referral",
+      "label": "Referral",
+      "order": 2,
+      "color": "#fac858"
+    },
+    {
+      "seriesKey": "Organic Social",
+      "label": "Organic Social",
+      "order": 3,
+      "color": "#ee6666"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "arc",
+      "zIndex": 0,
+      "seriesKey": "Search",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Search"
+              },
+              "displayValue": "Search"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 4500
+              },
+              "displayValue": "4500"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Theta: Search, Radius: 4500",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Direct"
+              },
+              "displayValue": "Direct"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 2800
+              },
+              "displayValue": "2800"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Theta: Direct, Radius: 2800",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Referral"
+              },
+              "displayValue": "Referral"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1900
+              },
+              "displayValue": "1900"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Theta: Referral, Radius: 1900",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Organic Social"
+              },
+              "displayValue": "Organic Social"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1200
+              },
+              "displayValue": "1200"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Theta: Organic Social, Radius: 1200",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Lead Source Proportions (Pie): 4 rows, 1 ordered layers, 4 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "proportionalBreakdown",
+    "heading": "Lead Source Proportions (Pie)",
+    "items": [
+      {
+        "label": "Search",
+        "value": "4500",
+        "order": 0,
+        "detail": "43.3% of total",
+        "group": "Search"
+      },
+      {
+        "label": "Direct",
+        "value": "2800",
+        "order": 1,
+        "detail": "26.9% of total",
+        "group": "Search"
+      },
+      {
+        "label": "Referral",
+        "value": "1900",
+        "order": 2,
+        "detail": "18.3% of total",
+        "group": "Search"
+      },
+      {
+        "label": "Organic Social",
+        "value": "1200",
+        "order": 3,
+        "detail": "11.5% of total",
+        "group": "Search"
+      }
+    ],
+    "summary": "Lead Source Proportions (Pie): 4 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "polar"
+  },
+  "style": [
+    {
+      "name": "DATA_LABELS",
+      "value": "ON"
+    },
+    {
+      "name": "DATA_LABELS:FORMAT",
+      "value": "P0"
+    },
+    {
+      "name": "HEIGHT",
+      "value": "380px"
+    },
+    {
+      "name": "LEGEND",
+      "value": "RIGHT"
+    },
+    {
+      "name": "mapping:category",
+      "value": "Channel"
+    },
+    {
+      "name": "mapping:value",
+      "value": "Leads"
+    },
+    {
+      "name": "title",
+      "value": "Lead Source Proportions (Pie)"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Channel",
+    "valueKey": "Leads"
+  }
+}

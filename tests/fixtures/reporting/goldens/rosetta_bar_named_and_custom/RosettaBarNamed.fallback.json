@@ -1,0 +1,31 @@
+{
+  "kind": "rankedTable",
+  "heading": "Revenue by region",
+  "items": [
+    {
+      "label": "North",
+      "value": "120",
+      "order": 0,
+      "group": "Revenue"
+    },
+    {
+      "label": "South",
+      "value": "95",
+      "order": 1,
+      "group": "Revenue"
+    },
+    {
+      "label": "East",
+      "value": "140",
+      "order": 2,
+      "group": "Revenue"
+    },
+    {
+      "label": "West",
+      "value": "110",
+      "order": 3,
+      "group": "Revenue"
+    }
+  ],
+  "summary": "Revenue by region: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

@@ -1,0 +1,31 @@
+SELECT 'North' AS Region, 10 AS Horizontal, 22 AS Vertical INTO #facet_samples
+UNION ALL SELECT 'North', 14, 30
+UNION ALL SELECT 'South', 11, 18
+UNION ALL SELECT 'South', 16, 26
+UNION ALL SELECT 'East', 12, 24
+UNION ALL SELECT 'West', 18, 33;
+
+CREATE VISUAL RegionSmallMultiples AS CUSTOM (
+  TITLE = 'Wrapped small multiples at a fixed aspect ratio',
+  SOURCE = #facet_samples,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN, ASPECT_RATIO = 2),
+    SCALES (
+      horizontal = LINEAR (CHANNEL = X, INCLUDE_ZERO = ON),
+      vertical = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+      observations = POINT (
+        Z_INDEX = 0,
+        ENCODINGS (
+          X = Horizontal (TYPE = QUANTITATIVE, SCALE = horizontal),
+          Y = Vertical (TYPE = QUANTITATIVE, SCALE = vertical)
+        )
+      )
+    ),
+    FACET (WRAP = Region, COLUMNS = 3),
+    RESOLVE (X = SHARED, Y = SHARED, COLOR = SHARED)
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RegionSmallMultiples));

@@ -1,0 +1,28 @@
+{
+  "kind": "rankedTable",
+  "heading": "Explicit-bin histogram authored as ranged rectangles",
+  "items": [
+    {
+      "label": "Row 1",
+      "value": "40",
+      "order": 0,
+      "detail": "x range 0 to 25",
+      "group": "Frequency"
+    },
+    {
+      "label": "Row 2",
+      "value": "60",
+      "order": 1,
+      "detail": "x range 25 to 50",
+      "group": "Frequency"
+    },
+    {
+      "label": "Row 3",
+      "value": "20",
+      "order": 2,
+      "detail": "x range 50 to 100",
+      "group": "Frequency"
+    }
+  ],
+  "summary": "Explicit-bin histogram authored as ranged rectangles: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

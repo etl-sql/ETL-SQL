@@ -1,0 +1,945 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "RegionSmallMultiples",
+  "title": "Wrapped small multiples at a fixed aspect ratio",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "horizontal",
+      "channel": "x",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": -0.90
+        },
+        {
+          "kind": "decimal",
+          "decimal": 18.90
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": -0.90
+          },
+          "label": "-0.9"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 4.05
+          },
+          "label": "4.05"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 9.00
+          },
+          "label": "9"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 13.95
+          },
+          "label": "13.95"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 18.90
+          },
+          "label": "18.9"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "vertical",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 34.65
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.00
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 8.6625
+          },
+          "label": "8.66"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 17.325
+          },
+          "label": "17.33"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25.9875
+          },
+          "label": "25.99"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 34.65
+          },
+          "label": "34.65"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Vertical",
+      "label": "Vertical",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Vertical",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Vertical",
+      "label": "Vertical",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "observations",
+      "mark": "point",
+      "zIndex": 0,
+      "seriesKey": "Vertical",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10
+              },
+              "displayValue": "10"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 22
+              },
+              "displayValue": "22"
+            },
+            {
+              "channel": "wrap",
+              "value": {
+                "kind": "text",
+                "text": "North"
+              },
+              "displayValue": "North"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 10, Y: 22, Wrap: North",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 14
+              },
+              "displayValue": "14"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 30
+              },
+              "displayValue": "30"
+            },
+            {
+              "channel": "wrap",
+              "value": {
+                "kind": "text",
+                "text": "North"
+              },
+              "displayValue": "North"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 14, Y: 30, Wrap: North",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 11
+              },
+              "displayValue": "11"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 18
+              },
+              "displayValue": "18"
+            },
+            {
+              "channel": "wrap",
+              "value": {
+                "kind": "text",
+                "text": "South"
+              },
+              "displayValue": "South"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 11, Y: 18, Wrap: South",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 16
+              },
+              "displayValue": "16"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 26
+              },
+              "displayValue": "26"
+            },
+            {
+              "channel": "wrap",
+              "value": {
+                "kind": "text",
+                "text": "South"
+              },
+              "displayValue": "South"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 16, Y: 26, Wrap: South",
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 12
+              },
+              "displayValue": "12"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 24
+              },
+              "displayValue": "24"
+            },
+            {
+              "channel": "wrap",
+              "value": {
+                "kind": "text",
+                "text": "East"
+              },
+              "displayValue": "East"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 12, Y: 24, Wrap: East",
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 18
+              },
+              "displayValue": "18"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 33
+              },
+              "displayValue": "33"
+            },
+            {
+              "channel": "wrap",
+              "value": {
+                "kind": "text",
+                "text": "West"
+              },
+              "displayValue": "West"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 18, Y: 33, Wrap: West",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Wrapped small multiples at a fixed aspect ratio: 6 rows, 1 ordered layers, 1 series, 4 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Wrapped small multiples at a fixed aspect ratio",
+    "items": [
+      {
+        "label": "10",
+        "value": "22",
+        "order": 0,
+        "group": "Vertical"
+      },
+      {
+        "label": "14",
+        "value": "30",
+        "order": 1,
+        "group": "Vertical"
+      },
+      {
+        "label": "11",
+        "value": "18",
+        "order": 2,
+        "group": "Vertical"
+      },
+      {
+        "label": "16",
+        "value": "26",
+        "order": 3,
+        "group": "Vertical"
+      },
+      {
+        "label": "12",
+        "value": "24",
+        "order": 4,
+        "group": "Vertical"
+      },
+      {
+        "label": "18",
+        "value": "33",
+        "order": 5,
+        "group": "Vertical"
+      }
+    ],
+    "summary": "Wrapped small multiples at a fixed aspect ratio: 6 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian",
+    "aspectRatio": 2
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Wrapped small multiples at a fixed aspect ratio"
+    }
+  ],
+  "facets": [
+    {
+      "id": "facet-wrap-000",
+      "columnLabel": "North",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 175
+      },
+      "rowIndices": [
+        0,
+        1
+      ],
+      "scales": [
+        {
+          "id": "horizontal",
+          "channel": "x",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": -0.90
+            },
+            {
+              "kind": "decimal",
+              "decimal": 18.90
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": -0.90
+              },
+              "label": "-0.9"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 4.05
+              },
+              "label": "4.05"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 9.00
+              },
+              "label": "9"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 13.95
+              },
+              "label": "13.95"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 18.90
+              },
+              "label": "18.9"
+            }
+          ],
+          "includesZero": true
+        },
+        {
+          "id": "vertical",
+          "channel": "y",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            {
+              "kind": "decimal",
+              "decimal": 34.65
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.00
+              },
+              "label": "0"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 8.6625
+              },
+              "label": "8.66"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 17.325
+              },
+              "label": "17.33"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 25.9875
+              },
+              "label": "25.99"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 34.65
+              },
+              "label": "34.65"
+            }
+          ],
+          "includesZero": true
+        }
+      ],
+      "cartesianViewport": {
+        "x": 49.285714285714285714285714285,
+        "y": 0,
+        "width": 101.42857142857142857142857143,
+        "height": 175
+      }
+    },
+    {
+      "id": "facet-wrap-001",
+      "columnLabel": "South",
+      "bounds": {
+        "x": 200,
+        "y": 0,
+        "width": 200,
+        "height": 175
+      },
+      "rowIndices": [
+        2,
+        3
+      ],
+      "scales": [
+        {
+          "id": "horizontal",
+          "channel": "x",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": -0.90
+            },
+            {
+              "kind": "decimal",
+              "decimal": 18.90
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": -0.90
+              },
+              "label": "-0.9"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 4.05
+              },
+              "label": "4.05"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 9.00
+              },
+              "label": "9"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 13.95
+              },
+              "label": "13.95"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 18.90
+              },
+              "label": "18.9"
+            }
+          ],
+          "includesZero": true
+        },
+        {
+          "id": "vertical",
+          "channel": "y",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            {
+              "kind": "decimal",
+              "decimal": 34.65
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.00
+              },
+              "label": "0"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 8.6625
+              },
+              "label": "8.66"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 17.325
+              },
+              "label": "17.33"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 25.9875
+              },
+              "label": "25.99"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 34.65
+              },
+              "label": "34.65"
+            }
+          ],
+          "includesZero": true
+        }
+      ],
+      "cartesianViewport": {
+        "x": 249.28571428571428571428571428,
+        "y": 0,
+        "width": 101.42857142857142857142857143,
+        "height": 175
+      }
+    },
+    {
+      "id": "facet-wrap-002",
+      "columnLabel": "East",
+      "bounds": {
+        "x": 400,
+        "y": 0,
+        "width": 200,
+        "height": 175
+      },
+      "rowIndices": [
+        4
+      ],
+      "scales": [
+        {
+          "id": "horizontal",
+          "channel": "x",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": -0.90
+            },
+            {
+              "kind": "decimal",
+              "decimal": 18.90
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": -0.90
+              },
+              "label": "-0.9"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 4.05
+              },
+              "label": "4.05"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 9.00
+              },
+              "label": "9"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 13.95
+              },
+              "label": "13.95"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 18.90
+              },
+              "label": "18.9"
+            }
+          ],
+          "includesZero": true
+        },
+        {
+          "id": "vertical",
+          "channel": "y",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            {
+              "kind": "decimal",
+              "decimal": 34.65
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.00
+              },
+              "label": "0"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 8.6625
+              },
+              "label": "8.66"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 17.325
+              },
+              "label": "17.33"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 25.9875
+              },
+              "label": "25.99"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 34.65
+              },
+              "label": "34.65"
+            }
+          ],
+          "includesZero": true
+        }
+      ],
+      "cartesianViewport": {
+        "x": 449.28571428571428571428571428,
+        "y": 0,
+        "width": 101.42857142857142857142857143,
+        "height": 175
+      }
+    },
+    {
+      "id": "facet-wrap-003",
+      "columnLabel": "West",
+      "bounds": {
+        "x": 0,
+        "y": 175,
+        "width": 200,
+        "height": 175
+      },
+      "rowIndices": [
+        5
+      ],
+      "scales": [
+        {
+          "id": "horizontal",
+          "channel": "x",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": -0.90
+            },
+            {
+              "kind": "decimal",
+              "decimal": 18.90
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": -0.90
+              },
+              "label": "-0.9"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 4.05
+              },
+              "label": "4.05"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 9.00
+              },
+              "label": "9"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 13.95
+              },
+              "label": "13.95"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 18.90
+              },
+              "label": "18.9"
+            }
+          ],
+          "includesZero": true
+        },
+        {
+          "id": "vertical",
+          "channel": "y",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            {
+              "kind": "decimal",
+              "decimal": 34.65
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.00
+              },
+              "label": "0"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 8.6625
+              },
+              "label": "8.66"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 17.325
+              },
+              "label": "17.33"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 25.9875
+              },
+              "label": "25.99"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 34.65
+              },
+              "label": "34.65"
+            }
+          ],
+          "includesZero": true
+        }
+      ],
+      "cartesianViewport": {
+        "x": 49.285714285714285714285714285,
+        "y": 175,
+        "width": 101.42857142857142857142857143,
+        "height": 175
+      }
+    }
+  ],
+  "cartesianViewport": {
+    "x": 224.28571428571428571428571428,
+    "y": 0,
+    "width": 151.42857142857142857142857143,
+    "height": 350
+  },
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Horizontal",
+    "valueKey": "Vertical"
+  }
+}

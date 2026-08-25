@@ -1,0 +1,95 @@
+{
+  "kind": "rankedTable",
+  "heading": "Ranged qualitative bands with an actual bar and a target rule",
+  "items": [
+    {
+      "label": "Revenue",
+      "value": "50",
+      "order": 0,
+      "detail": "range 0 to 50",
+      "group": "Actual"
+    },
+    {
+      "label": "Margin",
+      "value": "50",
+      "order": 1,
+      "detail": "range 0 to 50",
+      "group": "Actual"
+    },
+    {
+      "label": "NPS",
+      "value": "50",
+      "order": 2,
+      "detail": "range 0 to 50",
+      "group": "Actual"
+    },
+    {
+      "label": "Revenue",
+      "value": "75",
+      "order": 100000,
+      "detail": "range 50 to 75",
+      "group": "Actual"
+    },
+    {
+      "label": "Margin",
+      "value": "75",
+      "order": 100001,
+      "detail": "range 50 to 75",
+      "group": "Actual"
+    },
+    {
+      "label": "NPS",
+      "value": "70",
+      "order": 100002,
+      "detail": "range 50 to 70",
+      "group": "Actual"
+    },
+    {
+      "label": "Revenue",
+      "value": "100",
+      "order": 200000,
+      "detail": "range 75 to 100",
+      "group": "Actual"
+    },
+    {
+      "label": "Margin",
+      "value": "100",
+      "order": 200001,
+      "detail": "range 75 to 100",
+      "group": "Actual"
+    },
+    {
+      "label": "NPS",
+      "value": "100",
+      "order": 200002,
+      "detail": "range 70 to 100",
+      "group": "Actual"
+    },
+    {
+      "label": "Revenue",
+      "value": "92",
+      "order": 300000,
+      "group": "Actual"
+    },
+    {
+      "label": "Margin",
+      "value": "80",
+      "order": 300001,
+      "group": "Actual"
+    },
+    {
+      "label": "NPS",
+      "value": "78",
+      "order": 300002,
+      "group": "Actual"
+    },
+    {
+      "label": "target_rule",
+      "value": "Revenue",
+      "order": 500000,
+      "detail": "labeled reference rule",
+      "group": "Reference"
+    }
+  ],
+  "summary": "Ranged qualitative bands with an actual bar and a target rule: 3 rows, 5 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

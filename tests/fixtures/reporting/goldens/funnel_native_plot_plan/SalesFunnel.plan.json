@@ -1,0 +1,288 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "SalesFunnel",
+  "title": "Sales Funnel",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Leads"
+        },
+        {
+          "kind": "text",
+          "text": "Qualified"
+        },
+        {
+          "kind": "text",
+          "text": "Won"
+        }
+      ],
+      "categories": [
+        "Leads",
+        "Qualified",
+        "Won"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Leads"
+          },
+          "label": "Leads"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Qualified"
+          },
+          "label": "Qualified"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Won"
+          },
+          "label": "Won"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 500
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 125
+          },
+          "label": "125"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 250
+          },
+          "label": "250"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 375
+          },
+          "label": "375"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 500
+          },
+          "label": "500"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "StageValue",
+      "label": "StageValue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "StageValue",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "StageValue",
+      "label": "StageValue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "StageValue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Leads"
+              },
+              "displayValue": "Leads"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 500
+              },
+              "displayValue": "500"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Leads, Y: 500",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Qualified"
+              },
+              "displayValue": "Qualified"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 250
+              },
+              "displayValue": "250"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Qualified, Y: 250",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Won"
+              },
+              "displayValue": "Won"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80
+              },
+              "displayValue": "80"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Won, Y: 80",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "layout",
+          "value": "funnel"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Sales Funnel: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Sales Funnel",
+    "items": [
+      {
+        "label": "Leads",
+        "value": "500",
+        "order": 0,
+        "group": "StageValue"
+      },
+      {
+        "label": "Qualified",
+        "value": "250",
+        "order": 1,
+        "group": "StageValue"
+      },
+      {
+        "label": "Won",
+        "value": "80",
+        "order": 2,
+        "group": "StageValue"
+      }
+    ],
+    "summary": "Sales Funnel: 3 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "mapping:name",
+      "value": "StageName"
+    },
+    {
+      "name": "mapping:value",
+      "value": "StageValue"
+    },
+    {
+      "name": "TITLE",
+      "value": "Sales Funnel"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "StageName",
+    "valueKey": "StageValue"
+  }
+}

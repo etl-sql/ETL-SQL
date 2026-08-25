@@ -1,0 +1,49 @@
+SELECT 'Q1' AS Period, 40 AS Enterprise, 35 AS Midmarket, 25 AS Smb, 0 AS IsProjected INTO #revenue_mix
+UNION ALL SELECT 'Q2', 55, 30, 15, 0
+UNION ALL SELECT 'Q3', 30, 30, 40, 1;
+
+CREATE VISUAL RevenueMixShare AS CUSTOM (
+  TITLE = 'Normalized revenue mix dimmed on the projected period',
+  SOURCE = #revenue_mix,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      periods = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+      share = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+      enterprise = RECT (
+        Z_INDEX = 0,
+        BAND_SIZE = 0.8,
+        ENCODINGS (
+          X = Period (TYPE = NOMINAL, SCALE = periods),
+          Y = Enterprise (TYPE = QUANTITATIVE, SCALE = share, STACK = NORMALIZE)
+        ),
+        STYLE (FILL = '#1e3a8a'),
+        CONDITIONS (OPACITY WHEN IsProjected = 1 THEN 0.5 ELSE 1)
+      ),
+      midmarket = RECT (
+        Z_INDEX = 1,
+        BAND_SIZE = 0.8,
+        ENCODINGS (
+          X = Period (TYPE = NOMINAL, SCALE = periods),
+          Y = Midmarket (TYPE = QUANTITATIVE, SCALE = share, STACK = NORMALIZE)
+        ),
+        STYLE (FILL = '#3b82f6'),
+        CONDITIONS (OPACITY WHEN IsProjected = 1 THEN 0.5 ELSE 1)
+      ),
+      smb = RECT (
+        Z_INDEX = 2,
+        BAND_SIZE = 0.8,
+        ENCODINGS (
+          X = Period (TYPE = NOMINAL, SCALE = periods),
+          Y = Smb (TYPE = QUANTITATIVE, SCALE = share, STACK = NORMALIZE)
+        ),
+        STYLE (FILL = '#93c5fd'),
+        CONDITIONS (OPACITY WHEN IsProjected = 1 THEN 0.5 ELSE 1)
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RevenueMixShare));

@@ -3,39 +3,17 @@ using System.Security.Cryptography;
 using System.Text;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Semantics.Runtime;
-using ETL_SQL.Tests.Reporting.Conformance;
 using Xunit.Abstractions;
 
 namespace ETL_SQL.Tests.Reporting;
 
 public sealed class NativeSvgGeometryGoldenTests(ITestOutputHelper output)
 {
-    private static readonly Dictionary<string, string> RepresentativeGoldens = new(StringComparer.Ordinal)
-    {
-        ["bar_stable_ordering.rptsql"] = "F44399723133A8C78E60015311ACC87CBA227FA2638802C7B64D64DADB1D1BFB",
-        ["bar_multi_series_stacked.rptsql"] = "ECC3DCF47C213FB773B51144BE02C1157E22776AD96DA17BC57C6E3454F0C395",
-        ["line_temporal_decimals.rptsql"] = "4B3E7774F04A849DABE789D178B1960F43CD7B425C86F87AE94B31FDDCCAFB4D",
-        ["line_null_gaps.rptsql"] = "ACD69082B93E3E41436574A622BFA7E75C2B99B6A409952AE630A621F970D6A7",
-        ["scatter_multi_series_inferred.rptsql"] = "58985BBE9930F105CEC5CD6AEB23138106C816C871B5B15E22A9544B99ACDE83",
-        ["pie_donut_proportions.rptsql"] = "C19159B66C3F92A7A358735758EFD3EF76073F1AA79764C920B3A9D7C1D77E36",
-        ["combo_dual_axes.rptsql"] = "ACCF38D699DEAB727D4B6F2F30D98291EE8F19D88F60E8E0B253FF766720ED9B",
-        ["rule_statistical_overlays.rptsql"] = "5B22447D8BD56EFCC3B26B631697884ABCB7A79B1347BBC27114B0C408FB70F8",
-        ["custom_ranged_rect_bands.rptsql"] = "4DE6B133C56B2CFC2F3AB4D16929DE72308C3576306ADB346950E03624E9B0EF",
-        ["custom_ranged_rect_histogram.rptsql"] = "35ADAACED03E0C9434FF65BD0CEB3319A9650601005AD306C7BAB241B5980ECA"
-    };
-
-    [Fact]
-    public async Task RepresentativeNativeSvg_GeometryMatchesApprovedGoldens()
-    {
-        var differences = new List<string>();
-        foreach (var (fixture, expected) in RepresentativeGoldens)
-        {
-            var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync(fixture);
-            var actual = Hash(RepresentativeVisualConformanceHarness.RenderSvg(manifest, manifest.Visuals.First().Name)!);
-            if (!actual.Equals(expected, StringComparison.Ordinal)) differences.Add($"{fixture}={actual}");
-        }
-        Assert.True(differences.Count == 0, string.Join(Environment.NewLine, differences));
-    }
+    // The representative fixture goldens moved to ETL_SQL.Tests.Reporting.Goldens.ReportingGoldenTests,
+    // which discovers fixtures from the directory, pins the resolved PlotPlan and the SVG independently,
+    // checks the artifacts in beside their hashes, and reports each fixture as its own test result. Both
+    // catalogs (named visuals and CUSTOM) run on that one harness. What stays here is the micro-chart
+    // geometry, which is built from a factory rather than a fixture and has no place in that lane.
 
     [Fact]
     public void MicroChartGeometry_IsDeterministicAndWithinMeasuredRenderBudget()

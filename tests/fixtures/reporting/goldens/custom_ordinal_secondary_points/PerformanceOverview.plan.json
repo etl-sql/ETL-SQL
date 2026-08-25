@@ -1,0 +1,482 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "PerformanceOverview",
+  "title": "Revenue and Margin",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "months",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Jan"
+        },
+        {
+          "kind": "text",
+          "text": "Feb"
+        },
+        {
+          "kind": "text",
+          "text": "Mar"
+        }
+      ],
+      "categories": [
+        "Jan",
+        "Feb",
+        "Mar"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Jan"
+          },
+          "label": "Jan"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Feb"
+          },
+          "label": "Feb"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Mar"
+          },
+          "label": "Mar"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "revenue",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 152.25
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.00
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 38.0625
+          },
+          "label": "38.06"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 76.125
+          },
+          "label": "76.13"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 114.1875
+          },
+          "label": "114.19"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 152.25
+          },
+          "label": "152.25"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "margin",
+      "channel": "y2",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": -0.0685
+        },
+        {
+          "kind": "decimal",
+          "decimal": 0.3385
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": -0.0685
+          },
+          "label": "-0.07"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.03325
+          },
+          "label": "0.03"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.1350
+          },
+          "label": "0.14"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.23675
+          },
+          "label": "0.24"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.3385
+          },
+          "label": "0.34"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Revenue",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "revenue_bars",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Jan"
+              },
+              "displayValue": "Jan"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 120
+              },
+              "displayValue": "120"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Jan, Y: 120",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Feb"
+              },
+              "displayValue": "Feb"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 145
+              },
+              "displayValue": "145"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Feb, Y: 145",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Mar"
+              },
+              "displayValue": "Mar"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 130
+              },
+              "displayValue": "130"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Mar, Y: 130",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "margin_points",
+      "mark": "point",
+      "zIndex": 1,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Jan"
+              },
+              "displayValue": "Jan"
+            },
+            {
+              "channel": "y2",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.28
+              },
+              "displayValue": "0.28"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Jan, Y2: 0.28",
+          "encodings": [
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#2E86C1"
+              }
+            },
+            {
+              "channel": "opacity",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1
+              }
+            }
+          ]
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Feb"
+              },
+              "displayValue": "Feb"
+            },
+            {
+              "channel": "y2",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.32
+              },
+              "displayValue": "0.32"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Feb, Y2: 0.32",
+          "encodings": [
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#2E86C1"
+              }
+            },
+            {
+              "channel": "opacity",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1
+              }
+            }
+          ]
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Mar"
+              },
+              "displayValue": "Mar"
+            },
+            {
+              "channel": "y2",
+              "value": {
+                "kind": "decimal",
+                "decimal": -0.05
+              },
+              "displayValue": "-0.05"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Mar, Y2: -0.05",
+          "encodings": [
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#C0392B"
+              }
+            },
+            {
+              "channel": "opacity",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.45
+              }
+            }
+          ]
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Revenue and Margin: 3 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Revenue and Margin",
+    "items": [
+      {
+        "label": "Jan",
+        "value": "120",
+        "order": 0,
+        "group": "Revenue"
+      },
+      {
+        "label": "Feb",
+        "value": "145",
+        "order": 1,
+        "group": "Revenue"
+      },
+      {
+        "label": "Mar",
+        "value": "130",
+        "order": 2,
+        "group": "Revenue"
+      },
+      {
+        "label": "Jan",
+        "value": "0.28",
+        "order": 100000,
+        "detail": "conditional Color: #2E86C1, conditional Opacity: 1",
+        "group": "Revenue"
+      },
+      {
+        "label": "Feb",
+        "value": "0.32",
+        "order": 100001,
+        "detail": "conditional Color: #2E86C1, conditional Opacity: 1",
+        "group": "Revenue"
+      },
+      {
+        "label": "Mar",
+        "value": "-0.05",
+        "order": 100002,
+        "detail": "conditional Color: #C0392B, conditional Opacity: 0.45",
+        "group": "Revenue"
+      }
+    ],
+    "summary": "Revenue and Margin: 6 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Revenue and Margin"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Month",
+    "valueKey": "Revenue"
+  }
+}

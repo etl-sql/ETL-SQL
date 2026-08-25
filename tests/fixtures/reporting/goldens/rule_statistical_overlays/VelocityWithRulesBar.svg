@@ -1,0 +1,61 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='VelocityWithRulesBar-title VelocityWithRulesBar-desc' font-family='sans-serif'>
+<title id='VelocityWithRulesBar-title'>Engineering Velocity vs Target Benchmarks</title>
+<desc id='VelocityWithRulesBar-desc'>Engineering Velocity vs Target Benchmarks: 6 rows, 4 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Engineering Velocity vs Target Benchmarks</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='424.4' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='424.4' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='424.4' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='424.4' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='424.4' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='424.4' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='VelocityWithRulesBar-plot-clip'><rect x='60' y='40' width='364.4' height='250'/></clipPath></defs>
+<g clip-path='url(#VelocityWithRulesBar-plot-clip)'>
+<rect x='67.592' y='120.645' width='44.55' height='169.355' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>42</title></rect>
+<rect x='128.325' y='96.452' width='44.55' height='193.548' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>48</title></rect>
+<rect x='189.058' y='132.742' width='44.55' height='157.258' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>39</title></rect>
+<rect x='249.792' y='68.226' width='44.55' height='221.774' fill='#5470c6' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>55</title></rect>
+<rect x='310.525' y='84.355' width='44.55' height='205.645' fill='#5470c6' fill-opacity='1' data-row-index='4' data-extent-axis='y' data-extent-anchor='end'><title>51</title></rect>
+<rect x='371.258' y='40' width='44.55' height='250' fill='#5470c6' fill-opacity='1' data-row-index='5' data-extent-axis='y' data-extent-anchor='end'><title>62</title></rect>
+<g class='plot-overlay' data-overlay-type='Goal' data-z-index='100'>
+<line x1='60' y1='88.387' x2='424.4' y2='88.387' stroke='#DC2626' stroke-width='2' stroke-dasharray='7 5'/>
+</g>
+<g class='plot-overlay' data-overlay-type='Average' data-z-index='101'>
+<line x1='60' y1='90.403' x2='424.4' y2='90.403' stroke='#2563EB' stroke-width='2' stroke-dasharray='1 5'/>
+</g>
+<g class='plot-overlay' data-overlay-type='MovingAvg' data-z-index='102'>
+<circle cx='151.1' cy='108.548' r='4' fill='#059669' stroke='white' stroke-width='1.5' data-row-index='1'><title>45</title></circle>
+<circle cx='211.833' cy='114.597' r='4' fill='#059669' stroke='white' stroke-width='1.5' data-row-index='2'><title>43.5</title></circle>
+<circle cx='272.567' cy='100.484' r='4' fill='#059669' stroke='white' stroke-width='1.5' data-row-index='3'><title>47</title></circle>
+<circle cx='333.3' cy='76.29' r='4' fill='#059669' stroke='white' stroke-width='1.5' data-row-index='4'><title>53</title></circle>
+<circle cx='394.033' cy='62.177' r='4' fill='#059669' stroke='white' stroke-width='1.5' data-row-index='5'><title>56.5</title></circle>
+<path d='M 151.1 108.548 L 211.833 114.597 L 272.567 100.484 L 333.3 76.29 L 394.033 62.177' fill='none' stroke='#059669' stroke-width='3' stroke-linejoin='round' stroke-linecap='round'/>
+</g>
+</g>
+<path class='plot-overlay-label-leader' d='M 397.033 62.177 L 401.033 51.677' fill='none' stroke='#059669' stroke-width='1'/>
+<rect class='plot-overlay-label-bg' x='401.033' y='44.177' width='110.6' height='14' rx='2' fill='white' fill-opacity='.94'/>
+<text class='plot-overlay-label' x='404.033' y='55.177' text-anchor='start' font-size='9' font-weight='600' fill='#059669'>2-Sprint Moving Avg</text>
+<path class='plot-overlay-label-leader' d='M 427.4 88.387 L 431.4 77.887' fill='none' stroke='#DC2626' stroke-width='1'/>
+<rect class='plot-overlay-label-bg' x='431.4' y='70.387' width='137.6' height='14' rx='2' fill='white' fill-opacity='.94'/>
+<text class='plot-overlay-label' x='434.4' y='81.387' text-anchor='start' font-size='9' font-weight='600' fill='#DC2626'>Target Velocity (50 pts)</text>
+<path class='plot-overlay-label-leader' d='M 427.4 90.403 L 431.4 92.887' fill='none' stroke='#2563EB' stroke-width='1'/>
+<rect class='plot-overlay-label-bg' x='431.4' y='85.387' width='116' height='14' rx='2' fill='white' fill-opacity='.94'/>
+<text class='plot-overlay-label' x='434.4' y='96.387' text-anchor='start' font-size='9' font-weight='600' fill='#2563EB'>Average (Historical)</text>
+<text x='90.367' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 1</text>
+<text x='151.1' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 2</text>
+<text x='211.833' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 3</text>
+<text x='272.567' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 4</text>
+<text x='333.3' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 5</text>
+<text x='394.033' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 6</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>15.5</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>31</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>46.5</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>62</text>
+</svg>

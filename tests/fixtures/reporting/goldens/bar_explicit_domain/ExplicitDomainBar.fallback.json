@@ -1,0 +1,31 @@
+{
+  "kind": "rankedTable",
+  "heading": "Headcount by Department with Explicit Domain",
+  "items": [
+    {
+      "label": "Dept A",
+      "value": "150",
+      "order": 0,
+      "group": "Headcount"
+    },
+    {
+      "label": "Dept B",
+      "value": "320",
+      "order": 1,
+      "group": "Headcount"
+    },
+    {
+      "label": "Dept C",
+      "value": "280",
+      "order": 2,
+      "group": "Headcount"
+    },
+    {
+      "label": "Dept D",
+      "value": "410",
+      "order": 3,
+      "group": "Headcount"
+    }
+  ],
+  "summary": "Headcount by Department with Explicit Domain: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

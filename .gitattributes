@@ -16,3 +16,7 @@ designer.js         text eol=lf
 designer.css        text eol=lf
 arrow.min.js        text eol=lf
 feedback.js         text eol=lf
+
+# Reporting golden artifacts are compared and hashed byte for byte across Windows and Linux runners.
+# Pin them to LF so a Windows checkout (core.autocrlf=true) cannot change what the lane is comparing.
+tests/fixtures/reporting/goldens/**  text eol=lf

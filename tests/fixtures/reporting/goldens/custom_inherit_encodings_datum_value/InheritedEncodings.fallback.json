@@ -1,0 +1,53 @@
+{
+  "kind": "rankedTable",
+  "heading": "Chart-scope encodings inherited by one layer and isolated in another",
+  "items": [
+    {
+      "label": "Alpha",
+      "value": "120",
+      "order": 0,
+      "group": "Revenue"
+    },
+    {
+      "label": "Beta",
+      "value": "180",
+      "order": 1,
+      "group": "Revenue"
+    },
+    {
+      "label": "Gamma",
+      "value": "95",
+      "order": 2,
+      "group": "Revenue"
+    },
+    {
+      "label": "Alpha",
+      "value": "gap",
+      "order": 100000,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Beta",
+      "value": "gap",
+      "order": 100001,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Gamma",
+      "value": "gap",
+      "order": 100002,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "target_rule",
+      "value": "Alpha",
+      "order": 300000,
+      "detail": "labeled reference rule",
+      "group": "Reference"
+    }
+  ],
+  "summary": "Chart-scope encodings inherited by one layer and isolated in another: 3 rows, 3 ordered layers, 1 series, 1 facet panels, 3 gaps, 0 skipped rows."
+}

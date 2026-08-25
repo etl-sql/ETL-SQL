@@ -1,0 +1,55 @@
+{
+  "kind": "proportionalBreakdown",
+  "heading": "Model Comparison",
+  "items": [
+    {
+      "label": "Speed",
+      "value": "88",
+      "order": 0,
+      "group": "Model A"
+    },
+    {
+      "label": "Reliability",
+      "value": "92",
+      "order": 1,
+      "group": "Model A"
+    },
+    {
+      "label": "Efficiency",
+      "value": "75",
+      "order": 2,
+      "group": "Model A"
+    },
+    {
+      "label": "Coverage",
+      "value": "83",
+      "order": 3,
+      "group": "Model A"
+    },
+    {
+      "label": "Speed",
+      "value": "76",
+      "order": 100000,
+      "group": "Model B"
+    },
+    {
+      "label": "Reliability",
+      "value": "85",
+      "order": 100001,
+      "group": "Model B"
+    },
+    {
+      "label": "Efficiency",
+      "value": "91",
+      "order": 100002,
+      "group": "Model B"
+    },
+    {
+      "label": "Coverage",
+      "value": "79",
+      "order": 100003,
+      "group": "Model B"
+    }
+  ],
+  "summary": "Model Comparison: 2 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

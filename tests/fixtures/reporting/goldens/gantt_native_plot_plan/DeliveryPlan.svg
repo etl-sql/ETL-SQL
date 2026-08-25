@@ -1,0 +1,17 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='DeliveryPlan-title DeliveryPlan-desc' font-family='sans-serif'>
+<title id='DeliveryPlan-title'>Delivery Plan</title>
+<desc id='DeliveryPlan-desc'>Delivery Plan: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Delivery Plan</text>
+<defs><marker id='gantt-arrow' markerWidth='7' markerHeight='7' refX='6' refY='3.5' orient='auto'><path d='M0,0 L7,3.5 L0,7 Z' fill='#6b7280'/></marker></defs>
+<rect x='60' y='57.5' width='173.333' height='48.333' rx='2' fill='#5470c6' data-row-index='0'><title>Design: 2026-01-01 – 2026-01-05</title></rect>
+<rect x='60' y='57.5' width='173.333' height='48.333' rx='2' fill='#111827' fill-opacity='.28'/>
+<text x='54' y='85.667' text-anchor='end' font-size='9' fill='#4b5563'>Design</text>
+<rect x='276.667' y='140.833' width='260' height='48.333' rx='2' fill='#5470c6' data-row-index='1'><title>Build: 2026-01-06 – 2026-01-12</title></rect>
+<rect x='276.667' y='140.833' width='130' height='48.333' rx='2' fill='#111827' fill-opacity='.28'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#4b5563'>Build</text>
+<path d='M 580 239.333 L 589 248.333 L 580 257.333 L 571 248.333 Z' fill='#5470c6' data-row-index='2'><title>Launch</title></path>
+<text x='54' y='252.333' text-anchor='end' font-size='9' fill='#4b5563'>Launch</text>
+<path d='M 233.333 81.667 L 245.333 81.667 L 245.333 165 L 276.667 165' fill='none' stroke='#6b7280' stroke-width='1.5' marker-end='url(#gantt-arrow)'/>
+<path d='M 536.667 165 L 548.667 165 L 548.667 248.333 L 580 248.333' fill='none' stroke='#6b7280' stroke-width='1.5' marker-end='url(#gantt-arrow)'/>
+</svg>

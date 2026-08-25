@@ -1,0 +1,42 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='StationLoad-title StationLoad-desc' font-family='sans-serif'>
+<title id='StationLoad-title'>Sequential quantitative colour with a per-category target tick</title>
+<desc id='StationLoad-desc'>Sequential quantitative colour with a per-category target tick: 4 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows. Color ranges from 0 (#e0f2fe) to 100 (#0c4a6e).</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Sequential quantitative colour with a per-category target tick</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='StationLoad-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#StationLoad-plot-clip)'>
+<rect x='76.25' y='135' width='96.5' height='155' fill='#BAD4E4' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>62</title></rect>
+<rect x='206.25' y='87.5' width='96.5' height='202.5' fill='#5886A2' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>81</title></rect>
+<rect x='336.25' y='105' width='96.5' height='185' fill='#81A6BD' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>74</title></rect>
+<rect x='466.25' y='152.5' width='96.5' height='137.5' fill='#1D577A' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>55</title></rect>
+<line class='plot-tick' x1='66.5' y1='115' x2='183.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='0'><title>Target</title></line>
+<line class='plot-tick' x1='196.5' y1='115' x2='313.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='1'><title>Target</title></line>
+<line class='plot-tick' x1='326.5' y1='115' x2='443.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='2'><title>Target</title></line>
+<line class='plot-tick' x1='456.5' y1='115' x2='573.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='3'><title>Target</title></line>
+</g>
+<text x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Assembly</text>
+<text x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Paint</text>
+<text x='385' y='306' text-anchor='middle' font-size='9' fill='#666'>Trim</text>
+<text x='515' y='306' text-anchor='middle' font-size='9' fill='#666'>Final QA</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>25</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>50</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>75</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>100</text>
+<defs><linearGradient id='StationLoad-continuous-color'><stop offset='0%' stop-color='#e0f2fe'/><stop offset='100%' stop-color='#0c4a6e'/></linearGradient></defs>
+<rect class='plot-colorbar' x='460' y='28' width='110' height='9' fill='url(#StationLoad-continuous-color)'><title>Color ranges from 0 (#e0f2fe) to 100 (#0c4a6e).</title></rect>
+<text x='460' y='47' font-size='8' fill='#555'>0</text>
+<text x='570' y='47' text-anchor='end' font-size='8' fill='#555'>100</text>
+</svg>

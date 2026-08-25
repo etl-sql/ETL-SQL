@@ -1,0 +1,25 @@
+{
+  "kind": "timeSeriesTable",
+  "heading": "Delivery Plan",
+  "items": [
+    {
+      "label": "2026-01-01",
+      "value": "Design",
+      "order": 0,
+      "group": "TaskName"
+    },
+    {
+      "label": "2026-01-06",
+      "value": "Build",
+      "order": 1,
+      "group": "TaskName"
+    },
+    {
+      "label": "2026-01-13",
+      "value": "Launch",
+      "order": 2,
+      "group": "TaskName"
+    }
+  ],
+  "summary": "Delivery Plan: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

@@ -1,0 +1,43 @@
+{
+  "kind": "rankedTable",
+  "heading": "Quarterly Tier Revenue Stack",
+  "items": [
+    {
+      "label": "2026-Q1",
+      "value": "85000",
+      "order": 0,
+      "group": "Enterprise"
+    },
+    {
+      "label": "2026-Q2",
+      "value": "92000",
+      "order": 1,
+      "group": "Enterprise"
+    },
+    {
+      "label": "2026-Q1",
+      "value": "42000",
+      "order": 100000,
+      "group": "Mid-Market"
+    },
+    {
+      "label": "2026-Q2",
+      "value": "47000",
+      "order": 100001,
+      "group": "Mid-Market"
+    },
+    {
+      "label": "2026-Q1",
+      "value": "28000",
+      "order": 200000,
+      "group": "SMB"
+    },
+    {
+      "label": "2026-Q2",
+      "value": "31000",
+      "order": 200001,
+      "group": "SMB"
+    }
+  ],
+  "summary": "Quarterly Tier Revenue Stack: 6 rows, 3 ordered layers, 3 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

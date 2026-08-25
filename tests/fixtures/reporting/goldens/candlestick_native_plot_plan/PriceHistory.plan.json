@@ -1,0 +1,383 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "PriceHistory",
+  "title": "Price History",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "D1"
+        },
+        {
+          "kind": "text",
+          "text": "D2"
+        },
+        {
+          "kind": "text",
+          "text": "D3"
+        }
+      ],
+      "categories": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "D1"
+          },
+          "label": "D1"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "D2"
+          },
+          "label": "D2"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "D3"
+          },
+          "label": "D3"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 16
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 4
+          },
+          "label": "4"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 8
+          },
+          "label": "8"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 12
+          },
+          "label": "12"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 16
+          },
+          "label": "16"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "PriceHistory",
+      "label": "PriceHistory",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "PriceHistory",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "PriceHistory",
+      "label": "PriceHistory",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "PriceHistory",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "D1"
+              },
+              "displayValue": "D1"
+            },
+            {
+              "channel": "open",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10
+              },
+              "displayValue": "10"
+            },
+            {
+              "channel": "high",
+              "value": {
+                "kind": "decimal",
+                "decimal": 14
+              },
+              "displayValue": "14"
+            },
+            {
+              "channel": "low",
+              "value": {
+                "kind": "decimal",
+                "decimal": 8
+              },
+              "displayValue": "8"
+            },
+            {
+              "channel": "close",
+              "value": {
+                "kind": "decimal",
+                "decimal": 12
+              },
+              "displayValue": "12"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: D1, Open: 10, High: 14, Low: 8, Close: 12",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "D2"
+              },
+              "displayValue": "D2"
+            },
+            {
+              "channel": "open",
+              "value": {
+                "kind": "decimal",
+                "decimal": 12
+              },
+              "displayValue": "12"
+            },
+            {
+              "channel": "high",
+              "value": {
+                "kind": "decimal",
+                "decimal": 15
+              },
+              "displayValue": "15"
+            },
+            {
+              "channel": "low",
+              "value": {
+                "kind": "decimal",
+                "decimal": 9
+              },
+              "displayValue": "9"
+            },
+            {
+              "channel": "close",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10
+              },
+              "displayValue": "10"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: D2, Open: 12, High: 15, Low: 9, Close: 10",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "D3"
+              },
+              "displayValue": "D3"
+            },
+            {
+              "channel": "open",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10
+              },
+              "displayValue": "10"
+            },
+            {
+              "channel": "high",
+              "value": {
+                "kind": "decimal",
+                "decimal": 16
+              },
+              "displayValue": "16"
+            },
+            {
+              "channel": "low",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10
+              },
+              "displayValue": "10"
+            },
+            {
+              "channel": "close",
+              "value": {
+                "kind": "decimal",
+                "decimal": 15
+              },
+              "displayValue": "15"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: D3, Open: 10, High: 16, Low: 10, Close: 15",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "layout",
+          "value": "candlestick"
+        },
+        {
+          "name": "preserveRows",
+          "value": "true"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Price History: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Price History",
+    "items": [
+      {
+        "label": "D1",
+        "value": "12",
+        "order": 0,
+        "group": "PriceHistory"
+      },
+      {
+        "label": "D2",
+        "value": "10",
+        "order": 1,
+        "group": "PriceHistory"
+      },
+      {
+        "label": "D3",
+        "value": "15",
+        "order": 2,
+        "group": "PriceHistory"
+      }
+    ],
+    "summary": "Price History: 3 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "COLOR_DOWN",
+      "value": "#ef5350"
+    },
+    {
+      "name": "COLOR_UP",
+      "value": "#26a69a"
+    },
+    {
+      "name": "mapping:close",
+      "value": "ClosePrice"
+    },
+    {
+      "name": "mapping:high",
+      "value": "HighPrice"
+    },
+    {
+      "name": "mapping:low",
+      "value": "LowPrice"
+    },
+    {
+      "name": "mapping:open",
+      "value": "OpenPrice"
+    },
+    {
+      "name": "mapping:x",
+      "value": "PeriodName"
+    },
+    {
+      "name": "TITLE",
+      "value": "Price History"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "PeriodName"
+  }
+}

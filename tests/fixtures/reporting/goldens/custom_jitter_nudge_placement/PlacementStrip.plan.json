@@ -1,0 +1,603 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "PlacementStrip",
+  "title": "Deterministic jitter on observations with nudged labels",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "score_scale",
+      "channel": "x",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 11.55
+        },
+        {
+          "kind": "decimal",
+          "decimal": 21.45
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 11.55
+          },
+          "label": "11.55"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 14.025
+          },
+          "label": "14.03"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 16.50
+          },
+          "label": "16.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 18.975
+          },
+          "label": "18.98"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 21.45
+          },
+          "label": "21.45"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "rank_scale",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 1.85
+        },
+        {
+          "kind": "decimal",
+          "decimal": 5.15
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 1.85
+          },
+          "label": "1.85"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 2.675
+          },
+          "label": "2.68"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 3.50
+          },
+          "label": "3.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 4.325
+          },
+          "label": "4.33"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 5.15
+          },
+          "label": "5.15"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "inferred-cartesian-primary-xoffset",
+      "channel": "xOffset",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Left"
+        },
+        {
+          "kind": "text",
+          "text": "Right"
+        }
+      ],
+      "categories": [
+        "Left",
+        "Right"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Left"
+          },
+          "label": "Left"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Right"
+          },
+          "label": "Right"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Rank",
+      "label": "Rank",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Rank",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Rank",
+      "label": "Rank",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "observations",
+      "mark": "point",
+      "zIndex": 0,
+      "seriesKey": "Rank",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 12
+              },
+              "displayValue": "12"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 3
+              },
+              "displayValue": "3"
+            },
+            {
+              "channel": "xOffset",
+              "value": {
+                "kind": "text",
+                "text": "Left"
+              },
+              "displayValue": "Left"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "text",
+                "text": "r1"
+              },
+              "displayValue": "r1"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 12, Y: 3, XOffset: Left, Detail: r1",
+          "encodings": [],
+          "displayOffsetX": -178.98482940151036113611174292,
+          "displayOffsetY": -8.100096288216240056416196655
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 18
+              },
+              "displayValue": "18"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 5
+              },
+              "displayValue": "5"
+            },
+            {
+              "channel": "xOffset",
+              "value": {
+                "kind": "text",
+                "text": "Right"
+              },
+              "displayValue": "Right"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "text",
+                "text": "r2"
+              },
+              "displayValue": "r2"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 18, Y: 5, XOffset: Right, Detail: r2",
+          "encodings": [],
+          "displayOffsetX": 170.18422078306611143506044978,
+          "displayOffsetY": -11.550961449707814658559071925
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 15
+              },
+              "displayValue": "15"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 2
+              },
+              "displayValue": "2"
+            },
+            {
+              "channel": "xOffset",
+              "value": {
+                "kind": "text",
+                "text": "Left"
+              },
+              "displayValue": "Left"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "text",
+                "text": "r3"
+              },
+              "displayValue": "r3"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 15, Y: 2, XOffset: Left, Detail: r3",
+          "encodings": [],
+          "displayOffsetX": -139.87327151699138851438573110,
+          "displayOffsetY": 13.518412480939078165412867145
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 21
+              },
+              "displayValue": "21"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 4
+              },
+              "displayValue": "4"
+            },
+            {
+              "channel": "xOffset",
+              "value": {
+                "kind": "text",
+                "text": "Right"
+              },
+              "displayValue": "Right"
+            },
+            {
+              "channel": "detail",
+              "value": {
+                "kind": "text",
+                "text": "r4"
+              },
+              "displayValue": "r4"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 21, Y: 4, XOffset: Right, Detail: r4",
+          "encodings": [],
+          "displayOffsetX": 187.85932552110894007531810542,
+          "displayOffsetY": -10.707980124684400847606548910
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto",
+      "position": {
+        "kind": "jitter",
+        "x": 0.08,
+        "y": 0.04,
+        "stableKeyField": "Id",
+        "seed": 42,
+        "unit": "band"
+      }
+    },
+    {
+      "id": "labels",
+      "mark": "text",
+      "zIndex": 1,
+      "seriesKey": "Rank",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 12
+              },
+              "displayValue": "12"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 3
+              },
+              "displayValue": "3"
+            },
+            {
+              "channel": "text",
+              "value": {
+                "kind": "text",
+                "text": "r1"
+              },
+              "displayValue": "r1"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 12, Y: 3, Text: r1",
+          "encodings": [],
+          "displayOffsetY": -106.06060606060606060606060605
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 18
+              },
+              "displayValue": "18"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 5
+              },
+              "displayValue": "5"
+            },
+            {
+              "channel": "text",
+              "value": {
+                "kind": "text",
+                "text": "r2"
+              },
+              "displayValue": "r2"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 18, Y: 5, Text: r2",
+          "encodings": [],
+          "displayOffsetY": -106.06060606060606060606060608
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 15
+              },
+              "displayValue": "15"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 2
+              },
+              "displayValue": "2"
+            },
+            {
+              "channel": "text",
+              "value": {
+                "kind": "text",
+                "text": "r3"
+              },
+              "displayValue": "r3"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 15, Y: 2, Text: r3",
+          "encodings": [],
+          "displayOffsetY": -106.06060606060606060606060605
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 21
+              },
+              "displayValue": "21"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 4
+              },
+              "displayValue": "4"
+            },
+            {
+              "channel": "text",
+              "value": {
+                "kind": "text",
+                "text": "r4"
+              },
+              "displayValue": "r4"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 21, Y: 4, Text: r4",
+          "encodings": [],
+          "displayOffsetY": -106.06060606060606060606060605
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto",
+      "position": {
+        "kind": "nudge",
+        "x": 0,
+        "y": 1,
+        "seed": 0,
+        "unit": "data"
+      }
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Deterministic jitter on observations with nudged labels: 4 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Deterministic jitter on observations with nudged labels",
+    "items": [
+      {
+        "label": "12",
+        "value": "3",
+        "order": 0,
+        "group": "Rank"
+      },
+      {
+        "label": "18",
+        "value": "5",
+        "order": 1,
+        "group": "Rank"
+      },
+      {
+        "label": "15",
+        "value": "2",
+        "order": 2,
+        "group": "Rank"
+      },
+      {
+        "label": "21",
+        "value": "4",
+        "order": 3,
+        "group": "Rank"
+      },
+      {
+        "label": "12",
+        "value": "3",
+        "order": 100000,
+        "group": "Rank"
+      },
+      {
+        "label": "18",
+        "value": "5",
+        "order": 100001,
+        "group": "Rank"
+      },
+      {
+        "label": "15",
+        "value": "2",
+        "order": 100002,
+        "group": "Rank"
+      },
+      {
+        "label": "21",
+        "value": "4",
+        "order": 100003,
+        "group": "Rank"
+      }
+    ],
+    "summary": "Deterministic jitter on observations with nudged labels: 8 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Deterministic jitter on observations with nudged labels"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Score",
+    "valueKey": "Rank"
+  }
+}

@@ -1,0 +1,68 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='RevenueTrellis-title RevenueTrellis-desc' font-family='sans-serif'>
+<title id='RevenueTrellis-title'>Revenue by Region</title>
+<desc id='RevenueTrellis-desc'>Revenue by Region: 4 rows, 1 ordered layers, 1 series, 2 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Revenue by Region</text>
+<g transform='translate(0,0)'><svg xmlns='http://www.w3.org/2000/svg' width='300' height='350' viewBox='0 0 300 350' role='img' aria-labelledby='RevenueTrellis-title RevenueTrellis-desc' font-family='sans-serif'>
+<title id='RevenueTrellis-title'>North</title>
+<desc id='RevenueTrellis-desc'>Revenue by Region: 4 rows, 1 ordered layers, 1 series, 2 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='300' height='350' fill='white'/>
+<text x='150' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>North</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='280' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='280' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='280' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='280' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='280' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='280' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='RevenueTrellis-plot-clip'><rect x='60' y='40' width='220' height='250'/></clipPath></defs>
+<g clip-path='url(#RevenueTrellis-plot-clip)'>
+<rect x='73.75' y='165' width='81.5' height='125' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>10</title></rect>
+<rect x='183.75' y='40' width='81.5' height='250' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>20</title></rect>
+</g>
+<text x='115' y='306' text-anchor='middle' font-size='9' fill='#666'>A</text>
+<text x='225' y='306' text-anchor='middle' font-size='9' fill='#666'>B</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>5</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>10</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>15</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>20</text>
+</svg>
+</g>
+<g transform='translate(300,0)'><svg xmlns='http://www.w3.org/2000/svg' width='300' height='350' viewBox='0 0 300 350' role='img' aria-labelledby='RevenueTrellis-title RevenueTrellis-desc' font-family='sans-serif'>
+<title id='RevenueTrellis-title'>South</title>
+<desc id='RevenueTrellis-desc'>Revenue by Region: 4 rows, 1 ordered layers, 1 series, 2 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='300' height='350' fill='white'/>
+<text x='150' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>South</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='280' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='280' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='280' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='280' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='280' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='280' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='RevenueTrellis-plot-clip'><rect x='60' y='40' width='220' height='250'/></clipPath></defs>
+<g clip-path='url(#RevenueTrellis-plot-clip)'>
+<rect x='73.75' y='202.5' width='81.5' height='87.5' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>7</title></rect>
+<rect x='183.75' y='115' width='81.5' height='175' fill='#5470c6' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>14</title></rect>
+</g>
+<text x='115' y='306' text-anchor='middle' font-size='9' fill='#666'>A</text>
+<text x='225' y='306' text-anchor='middle' font-size='9' fill='#666'>B</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>5</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>10</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>15</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>20</text>
+</svg>
+</g>
+</svg>
