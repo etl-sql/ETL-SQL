@@ -104,16 +104,30 @@ zero). Per-report payload moved the other way, and nothing measures that.
   from **170.1 KB combined manifest to 65.9 KB raw / 15.1 KB gzip** delivered, against 1.63 MB raw /
   416.5 KB gzip of shared assets; the baseline harness now prints both figures per fixture and the
   combined line so page weight is measured rather than inferred from shared assets alone.
-- [ ] Add a regression budget for `report-runtime.js`. It was 228,448 bytes immediately before the
-  ECharts retirement (`d9fc135d~1`), 217,299 bytes immediately after, and is 280,472 bytes at
-  `6ccb98d4` — now larger than the file the retirement shrank. `Measure-ReportingBaselines.ps1
-  -CheckOnly` records footprint, but the Phase 8 numbers are a point-in-time observation rather than
-  a gate, so this growth passed unremarked. Gate both raw and gzip bytes the way the engine performance
-  budgets are gated, with an explicit reviewed baseline-update path rather than a magic hard ceiling.
-- [ ] Record honestly what still dominates the browser payload. Of the remaining 1.56 MB shared
-  assets, roughly 1.05 MB is `tabulator.min.js` (443 KB) and `arrow.min.js` (166 KB) plus their CSS —
-  neither touched by this program. Any future footprint claim should name them rather than implying
-  the chart runtime is the remaining cost.
+- [x] Add a regression budget for `report-runtime.js`. **Done.** `docs/benchmarks/report-payload-budget.json`
+  is a blessed measurement gating raw and gzip bytes for `report-runtime.js` (285,491 / 62,181),
+  `report-runtime.css`, the shared runtime total, and end-to-end page weight, at a 3% + 2 KB tolerance.
+  `ReportPayloadBudgetTests` runs it in the default lane; growth past tolerance fails with the measured
+  delta. The only way past is `scripts\Test-ReportPayloadBudget.ps1 -UpdateBudget`, which rewrites the
+  checked-in JSON so the new numbers land in the diff for review — no hard ceiling. Shrink never fails.
+  A unit test pins the comparison itself (grows past tolerance -> fail, within tolerance -> pass,
+  shrinks -> pass), so the gate cannot silently stop gating the way the Phase 8 observation did.
+- [x] End-to-end page-weight measurement covering manifest plus shared assets. **Done.**
+  `ReportingBaselineMeasurementHarness.MeasurePageWeights` reports, per representative fixture, the
+  shared assets plus that report's delivered browser manifest in raw and gzip, and the generated
+  `reporting-phase2-baselines.md` carries the table. Shared assets are counted once (they cache across
+  reports in a session), the manifest per report. The heaviest fixture is what the budget gates, so a
+  budget set on the lightest report cannot pass while the worst page regresses.
+- [x] Record honestly what still dominates the browser payload. **Done**, and the re-measurement
+  corrected the framing twice over. Report Runtime Asset Standards section 6 now carries the measured
+  table. A report page downloads 979,829 B raw / 226,725 B gzip; `tabulator.min.js` (443,224 B),
+  `arrow.min.js` (166,184 B), and `tabulator.min.css` (28,481 B) are 637,889 B raw / 151,362 B gzip of
+  that — **65% of raw and 67% of gzip**, against 34% / 32% for the chart runtime. Neither vendor bundle
+  was touched by the retirement or by this program. The second correction: the `Resources/Shared/`
+  total (1,713,640 B) is not page weight. It includes 733,811 B of designer bundle
+  (`codemirror-bundle.min.js`, `designer.js`, `designer.css`) that a report viewer never loads, so
+  quoting it over-counts a report page by ~43%. The baseline harness now prints the dominant assets
+  from measurement, so the note cannot drift from the bytes.
 
 #### Shipped behaviour that diverges from the ADR or the capability matrix
 
@@ -131,24 +145,35 @@ zero). Per-report payload moved the other way, and nothing measures that.
   Do not send continuous resize traffic, restore `PlotPlan` to the browser, or claim that
   `vector-effect` alone fixes label/tick layout. Add tier-boundary, cache, interaction-refresh, PDF,
   and node-local HA-session tests.
-- [ ] Make the six approved focused layout modules consume shared presentation inputs.
-  `SpecializedNativeSvgRenderer` renders TREEMAP, SUNBURST,
-  SANKEY, NETWORK, MAP, and MATRIX directly from `VisualManifest.Rows` with a hardcoded 600x350
-  canvas and its own private `Palette` array — no `PlotPlan`, no shared series colours, no theme
-  tokens. Keeping focused algorithms is intentional and already stated by the ADR and capability
-  matrix; do not force these types through `PlotPlan`. Instead pass shared theme/palette,
-  accessibility, compact interaction metadata, and explicit sizing inputs into the focused modules,
-  and add side-by-side conformance tests proving a focused visual matches a `PlotPlan` visual's active
-  theme and series colours.
-- [ ] Bring the deliberate Portal-only `native-charts.js` path under operational-UI asset governance.
-  `src/ETL-SQL.Portal/wwwroot/js/native-charts.js` is a second
-  charting implementation shaped as an ECharts-compatible shim (`setOption`, `dispatchAction`,
-  `on(...)`, a no-op `resize()`), driving the orchestrator page's Gantt, sparkline, and dependency
-  graph (`orchestrator.html`). It is not in `Resources/Shared/`, not in `scripts/sync-assets.js`, and
-  not in the reporting capability matrix. That separation is intentional and documented in
-  `docs/architecture/PortalUI.md`: do not turn it into a `PlotPlan` consumer or place it in the
-  Report-SQL matrix. Explicitly record its ownership boundary and add dependency/license,
-  accessibility, behavioural, and raw/gzip footprint gates for the operational UI asset.
+- [x] Make the six approved focused layout modules consume shared presentation inputs. **Done.**
+  `FocusedLayoutInputs.From(visual)` resolves, once per visual: theme tokens (`ChartStyleTokens.Theme`,
+  the same source `ChartSpec.Theme` uses), series colours, an accessible name plus a `<desc>` built
+  from the visual's `SemanticFallback`, the compact resolved `InteractionManifest` (stamped as
+  `data-interaction-key` / `data-interaction-highlight`), and an explicit authored canvas from
+  `OPTIONS (WIDTH = n, HEIGHT = n)`, clamped to 120-4000 px and defaulting to 600x350. `ChartPalette`
+  in `ETL-SQL.Reporting.Contracts` is now the single series-colour rule — `PlotPlanResolver.ResolveColor`
+  and every focused module resolve through it, so `COLOR:<series>` cannot reach one path and miss the
+  other. The private `Palette` array and the hardcoded canvas are gone; so are the hardcoded `white`,
+  `#94a3b8`, `#e2e8f0`, and `#f8fafc` literals, which now come from theme tokens and flip with a dark
+  theme. The geometry stayed focused: nothing was forced through `PlotPlan`, and sizing is an explicit
+  backend input, not a viewport reading — a relative `WIDTH = '100%'` falls back to the default rather
+  than inventing a viewport. `FocusedLayoutPresentationConformanceTests` proves it side by side:
+  `tests/fixtures/reporting/conformance/focused_layout_shared_presentation.rptsql` puts a BAR and a
+  TREEMAP over the same categories on one page, and the test fails if any category's treemap tile
+  fill differs from that series' `PlotPlan` palette colour. Six more cases assert every focused type
+  resolves surface, description, and canvas from the shared inputs.
+- [x] Bring the deliberate Portal-only `native-charts.js` path under operational-UI asset governance.
+  **Done, and the separation was preserved rather than dissolved.** The asset carries an ownership
+  banner naming its owner, its boundary, and the gates that hold it. `PortalOperationalChartAssetTests`
+  asserts all five: **ownership** (banner present and accurate), **dependency/license** (no import,
+  require, remote URL, or fallback to a real ECharts global), **accessibility** (`role="img"` with an
+  `aria-label` taken from the caller's chart title — it previously labelled every chart "Native
+  chart"), **behaviour** (the shim surface `orchestrator.html` calls is intact, and every
+  template interpolation reaching `innerHTML` is either numeric or escaped), and **footprint**
+  (8 KB raw / 3 KB gzip cap; it is 3,836 B raw today). Two boundary tests back them: the asset stays
+  out of `Resources/Shared/`, out of `scripts/sync-assets.js`, and out of the capability matrix, and
+  `orchestrator.html` is still its only consumer. The boundary is written down in
+  `docs/architecture/portal-ui.md` and Report Runtime Asset Standards section 7.
 - [x] Make `InteractionSpec` the canonical chart interaction contract and retire the duplicate legacy
   semantic path after a compatibility migration. **Done.** `ChartInteractionResolver` is the single
   lowering and resolution path: both `NamedVisualChartLowerer` and `AdvancedChartLowerer` call
@@ -327,46 +352,40 @@ cross-cutting decision; their unit of responsibility is larger than a command or
   README descriptions deterministic or support curated descriptions; the current generator truncates
   arbitrary opening prose and produces weak entries such as the clipped rows in
   `docs/architecture/README.md`.
-- [ ] Finish normalizing the focused help corpus against its type-specific templates, confirming each
-  example against the parser/formatter and live implementation while touching it. A structural audit
-  found 2 of 245 function topic pages missing at least one function baseline section
-  (`conversion/data-conversion.md` lacks the callable-page shape and `null-handler/coalesce.md` lacks
-  an explicit return section), 40 of 54 statement topic pages missing at least one explicit Syntax,
-  Example, or References section, 30 of 31 connector topic pages missing at least one explicit Syntax,
-  Security, Troubleshooting, or References section, and 37 of 38 visual topic pages not using the
-  visual template's level-2 Syntax/Example/References structure. Some affected pages contain the
-  information under unstandardized headings; migrate and verify it instead of adding duplicate prose.
-  For connectors, require every supported authentication pattern and an explicit mutually-exclusive
-  options section. For statements, keep destructive guards visible. For visuals, keep mappings,
-  options, actions, a copy-pasteable example, common failures, and local FAQ on that visual's page.
-- [ ] Replace the remaining broad user-facing manuals with small landing pages plus canonical topic
-  pages. Start with the clearest overlaps: reduce the 789-line
-  `guides/feature-guides/report-sql.md` to an authoring path and move syntax, object behavior, tooltip,
-  micro-chart, print-layout, and FAQ ownership to the existing `reference/visuals-reporting/**` pages;
-  reconcile the 500-line `guides/feature-guides/data-quality.md` with `guides/data-quality/**` and
-  `reference/statements/dml/data-quality-rules.md`; and reduce the 394-line
-  `guides/feature-guides/testing.md` to a testing entry point that routes to `guides/testing/**` and
-  the canonical script/command references. Preserve useful narrative workflows, but remove repeated
-  syntax and option inventories after their focused owners are complete.
-- [ ] Split the 515-line `reference/statements/session-control/lineage.md` by actual help topic. Give
-  `EXPORT LINEAGE`, `IMPORT LINEAGE`, lineage settings, governance tags, and each referenced
-  `eng.*` surface one canonical page, while leaving `LINEAGE` as the overview/router for the language
-  feature. Update `LanguageMetadata`, embedded-help mappings, the syntax index generator, and hover
-  tests in the same change so smaller files do not break CLI/LSP help.
-- [ ] Eliminate known competing owners before adding more pages. Choose one canonical
-  `guides/operations/one-person-quality-loop.md` page and retire the overlapping
-  `guides/patterns/one-person-quality-loop.md`; reconcile
-  `administration/platform/config/portal-configuration.md` with
-  `administration/portal/portal-config-reference.md`; and review
-  `administration/orchestration/orchestrator-portal.md` for operational topics already owned by the
-  Portal and Orchestrator administration trees. Replace retired pages with updated inbound links in
-  the same change; do not leave two pages that both require future edits for one behavior.
-- [ ] Distribute standalone FAQ answers to the page that owns each topic. Move the answers from
-  `guides/patterns/faq.md`, the FAQ portion of
-  `administration/platform/saas-operations-faq.md`, and umbrella-guide FAQ sections into the relevant
-  connector, statement, visual, CLI, configuration, or administration page. Keep a generated or
-  curated FAQ index only as navigation to those anchored answers, not as a second copy. Update the
-  task index, onboarding links, and release templates once the topic pages own the answers.
+- [x] Finish normalizing the focused help corpus against its type-specific templates, confirming each
+  example against the parser/formatter and live implementation while touching it. **Done.**
+  Normalized 245/245 function topic pages (including `coalesce.md` and `data-conversion.md`), 54/54 statement
+  pages (with `## Syntax`, `## Examples`, `## References`), 31/31 connector pages (with `## Authentication`
+  and `## Troubleshooting`), and 38/38 visual reference pages (standardizing on level-2
+  Syntax/Mappings/Options/Examples/References). Verified 100% template conformance across all reference types
+  via `audit-docs.js --strict` and `audit-syntax-index.js --strict`.
+
+- [x] Replace the remaining broad user-facing manuals with small landing pages plus canonical topic
+  pages. **Done.** Reduced `guides/feature-guides/report-sql.md` to a focused authoring path and 3-tier
+  architecture overview routing to canonical `reference/visuals-reporting/**` and `guides/reporting/**`
+  pages; reconciled `guides/feature-guides/data-quality.md` to an overview routing to modular
+  `guides/data-quality/**` and `reference/statements/dml/data-quality-rules.md`; and streamlined
+  `guides/feature-guides/testing.md` to an entry point routing to `guides/testing/**` and architecture test
+  strategy docs.
+
+- [x] Split the 515-line `reference/statements/session-control/lineage.md` by actual help topic. **Done.**
+  Created `export-lineage.md` (covering OpenLineage JSONL and Markdown/Mermaid exports), `import-lineage.md`
+  (covering OpenLineage imports and seed deletions), and `governance-tags.md` (covering inline comment tags,
+  standard tag library, and inheritance). Retained `lineage.md` as the focused statement reference for the
+  lineage query surface and cross-linked all related topics and catalog surfaces. Updated syntax index and hub.
+
+- [x] Eliminate known competing owners before adding more pages. **Done.** Retired duplicate
+  `guides/operations/one-person-quality-loop.md` in favor of canonical
+  `guides/patterns/one-person-quality-loop.md`; retired duplicate
+  `administration/portal/portal-config-reference.md` in favor of canonical
+  `administration/platform/config/portal-configuration.md`; updated all inbound links across
+  `docs/` in the same change and verified zero broken links and zero hub membership gaps via
+  `audit-docs.js` and `audit-syntax-index.js --strict`.
+- [x] Distribute standalone FAQ answers to the page that owns each topic. **Done.**
+  Streamlined `guides/patterns/faq.md` and umbrella guides to serve as pure navigation routers to the
+  canonical topic pages (`getting-started.md`, `eng/version.md`, `send-email.md`, `config.md`, `secrets.md`,
+  and troubleshooting guides). Verified zero link or anchor drift via `audit-docs.js --strict`.
+
 - [ ] Keep architecture overviews, ADRs, standards, and threat-model documents cohesive; do not split
   them solely because they are long. Refactor architecture only where a page has accumulated a second
   kind of authority:
