@@ -1,0 +1,115 @@
+{
+  "kind": "rankedTable",
+  "heading": "Plan-Backed Categories",
+  "items": [
+    {
+      "label": "Alpha",
+      "value": "120",
+      "order": 0,
+      "group": "Alpha"
+    },
+    {
+      "label": "Beta",
+      "value": "gap",
+      "order": 1,
+      "detail": "null gap",
+      "group": "Alpha"
+    },
+    {
+      "label": "Gamma",
+      "value": "gap",
+      "order": 2,
+      "detail": "null gap",
+      "group": "Alpha"
+    },
+    {
+      "label": "Delta",
+      "value": "gap",
+      "order": 3,
+      "detail": "null gap",
+      "group": "Alpha"
+    },
+    {
+      "label": "Alpha",
+      "value": "gap",
+      "order": 100000,
+      "detail": "null gap",
+      "group": "Beta"
+    },
+    {
+      "label": "Beta",
+      "value": "180",
+      "order": 100001,
+      "group": "Beta"
+    },
+    {
+      "label": "Gamma",
+      "value": "gap",
+      "order": 100002,
+      "detail": "null gap",
+      "group": "Beta"
+    },
+    {
+      "label": "Delta",
+      "value": "gap",
+      "order": 100003,
+      "detail": "null gap",
+      "group": "Beta"
+    },
+    {
+      "label": "Alpha",
+      "value": "gap",
+      "order": 200000,
+      "detail": "null gap",
+      "group": "Gamma"
+    },
+    {
+      "label": "Beta",
+      "value": "gap",
+      "order": 200001,
+      "detail": "null gap",
+      "group": "Gamma"
+    },
+    {
+      "label": "Gamma",
+      "value": "140",
+      "order": 200002,
+      "group": "Gamma"
+    },
+    {
+      "label": "Delta",
+      "value": "gap",
+      "order": 200003,
+      "detail": "null gap",
+      "group": "Gamma"
+    },
+    {
+      "label": "Alpha",
+      "value": "gap",
+      "order": 300000,
+      "detail": "null gap",
+      "group": "Delta"
+    },
+    {
+      "label": "Beta",
+      "value": "gap",
+      "order": 300001,
+      "detail": "null gap",
+      "group": "Delta"
+    },
+    {
+      "label": "Gamma",
+      "value": "gap",
+      "order": 300002,
+      "detail": "null gap",
+      "group": "Delta"
+    },
+    {
+      "label": "Delta",
+      "value": "210",
+      "order": 300003,
+      "group": "Delta"
+    }
+  ],
+  "summary": "Plan-Backed Categories: 4 rows, 4 ordered layers, 4 series, 1 facet panels, 4 gaps, 0 skipped rows."
+}

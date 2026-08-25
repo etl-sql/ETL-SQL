@@ -1,0 +1,54 @@
+╭─Plan-Backed Categories───────────────────────────────────────────────────────────────────────────╮
+│ Plan-Backed Categories: 4 rows, 4 ordered layers, 4 series, 1 facet panels, 4 gaps, 0 skipped    │
+│ rows.                                                                                            │
+│ Alpha (grouped fractional bars)                                                                  │
+│ Alpha                                                                                            │
+│   Alpha  ▶████████████████████████████████████████████████████████ 120                           │
+│ Beta                                                                                             │
+│          gap                                                                                     │
+│ Gamma                                                                                            │
+│          gap                                                                                     │
+│ Delta                                                                                            │
+│          gap                                                                                     │
+│ Beta (grouped fractional bars)                                                                   │
+│ Alpha                                                                                            │
+│          gap                                                                                     │
+│ Beta                                                                                             │
+│   Beta   ▶████████████████████████████████████████████████████████ 180                           │
+│ Gamma                                                                                            │
+│          gap                                                                                     │
+│ Delta                                                                                            │
+│          gap                                                                                     │
+│ Gamma (grouped fractional bars)                                                                  │
+│ Alpha                                                                                            │
+│          gap                                                                                     │
+│ Beta                                                                                             │
+│          gap                                                                                     │
+│ Gamma                                                                                            │
+│   Gamma  ▶████████████████████████████████████████████████████████ 140                           │
+│ Delta                                                                                            │
+│          gap                                                                                     │
+│ Delta (grouped fractional bars)                                                                  │
+│ Alpha                                                                                            │
+│          gap                                                                                     │
+│ Beta                                                                                             │
+│          gap                                                                                     │
+│ Gamma                                                                                            │
+│          gap                                                                                     │
+│ Delta                                                                                            │
+│   Delta  ▶████████████████████████████████████████████████████████ 210                           │
+│ ● Alpha (#5470c6)  ◆ Beta (#91cc75)  ▲ Gamma (#fac858)  ■ Delta (#ee6666)                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+╭─Focused Layout Categories─────────────────────────────────────╮
+│ Focused Layout Categories: 4 hierarchy nodes in source order. │
+│                                                               │
+│   Item    Value   Meaning                                     │
+│ ───────────────────────────────────────────────               │
+│   Alpha     120   proportional hierarchy node                 │
+│   Beta      180   proportional hierarchy node                 │
+│   Gamma     140   proportional hierarchy node                 │
+│   Delta     210   proportional hierarchy node                 │
+│                                                               │
+╰───────────────────────────────────────────────────────────────╯

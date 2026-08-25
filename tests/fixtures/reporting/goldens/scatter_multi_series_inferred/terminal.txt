@@ -1,0 +1,14 @@
+╭─Cohort Velocity vs Efficiency Distribution───────────────────────────────────────────────────────╮
+│ Cohort Velocity vs Efficiency Distribution: 6 rows, 2 ordered layers, 2 series, 1 facet panels,  │
+│ 0 gaps, 0 skipped rows.                                                                          │
+│ ● Cohort A (point glyph ●)                                                                       │
+│   92.4 ┼                       ⠁                                                                 │
+│        │                                                                                         │
+│        │                                                                                         │
+│  85.25 ┼ ⠄                                                                                       │
+│        │                                                                                         │
+│        │                                                                                         │
+│   78.1 ┼                                                ⢀                                        │
+│ X: 12.5 … 24.8  │  Y: 78.1 … 92.4                                                                │
+│ ● Cohort A (#5470c6)  ◆ Cohort B (#91cc75)                                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

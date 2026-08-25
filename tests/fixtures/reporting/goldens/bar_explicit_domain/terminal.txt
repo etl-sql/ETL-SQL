@@ -1,0 +1,9 @@
+╭─Headcount by Department with Explicit Domain─────────────────────────────────────────────────────╮
+│ Headcount by Department with Explicit Domain: 4 rows, 1 ordered layers, 1 series, 1 facet        │
+│ panels, 0 gaps, 0 skipped rows.                                                                  │
+│ Headcount (fractional bars)                                                                      │
+│ Dept A ▶████████████████████▌ 150                                                                │
+│ Dept B ▶███████████████████████████████████████████▊ 320                                         │
+│ Dept C ▶██████████████████████████████████████▎ 280                                              │
+│ Dept D ▶████████████████████████████████████████████████████████ 410                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

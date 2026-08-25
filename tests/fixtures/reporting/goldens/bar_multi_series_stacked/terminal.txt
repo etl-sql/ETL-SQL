@@ -1,0 +1,10 @@
+╭─Quarterly Tier Revenue Stack─────────────────────────────────────────────────────────────────────╮
+│ Quarterly Tier Revenue Stack: 6 rows, 3 ordered layers, 3 series, 1 facet panels, 0 gaps, 0      │
+│ skipped rows.                                                                                    │
+│ Enterprise (grouped fractional bars)                                                             │
+│ 2026-Q1                                                                                          │
+│   Enterp… ▶██████████████████████████████████████████████████▉ 85000                             │
+│ 2026-Q2                                                                                          │
+│   Enterp… ▶███████████████████████████████████████████████████████ 92000                         │
+│ ● Enterprise (#1E3A8A)  ◆ Mid-Market (#3B82F6)  ▲ SMB (#93C5FD)                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

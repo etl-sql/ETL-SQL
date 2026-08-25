@@ -161,6 +161,11 @@ etlsql.db
 # them, so a baseline could go stale and no reviewer could tell — which is exactly what happened
 # when the governance sidebar was reworked and its baseline kept describing the old menu.
 !tests/ETL-SQL.Portal.BrowserTests/Snapshots/*.snapshot.txt
+# Reporting golden terminal renders. Same reasoning, same trap: the blanket *.txt above swallowed
+# every one of them on the commit that introduced the lane, so the artifacts passed locally and
+# were absent on a fresh checkout. The lane fails when a hash matches but its artifact is missing,
+# which is how that was caught.
+!tests/fixtures/reporting/goldens/**/terminal.txt
 *.cs.scratch
 *.etlsql.scratch
 

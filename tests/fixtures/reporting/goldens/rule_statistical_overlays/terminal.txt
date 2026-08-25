@@ -1,0 +1,14 @@
+╭─Engineering Velocity vs Target Benchmarks────────────────────────────────────────────────────────╮
+│ Engineering Velocity vs Target Benchmarks: 6 rows, 4 ordered layers, 1 series, 1 facet panels, 0 │
+│ gaps, 0 skipped rows.                                                                            │
+│ ■ Velocity  ● 2-Sprint Moving Avg  ── Target Velocity (50 pts)  ── Average (Historical)          │
+│     62 ┼                             ⣿⣿⡇                                                         │
+│        │ ⡀⡀⡀⡀⡀⡀⣀⣀⣀⡀⡀⡀⡀⡀⡀⡀⡀⣿⣿⣇⣀⡠⣤⣴⣶⡊⡉⡉⣿⣿⡇⡀                                                        │
+│        │  ⣤⣤⡄  ⢸⣿⣿⠒⠒⠤⠤⠤⠔⠒⠒⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇                                                         │
+│        │  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇                                                         │
+│     31 ┼  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇                                                         │
+│        │  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇                                                         │
+│        │  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇                                                         │
+│      0 ┼  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇  ⣿⣿⡇  ⢸⣿⣿   ⣿⣿⡇                                                         │
+│ 0 … 62  Sprint 1    Sprint 2    Sprint 3    Sprint 4    Sprint 5    Sprint 6                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -1,0 +1,15 @@
+╭─Production Volume vs Quality Pass Rate───────────────────────────────────────────────────────────╮
+│ Production Volume vs Quality Pass Rate: 4 rows, 2 ordered layers, 2 series, 1 facet panels, 0    │
+│ gaps, 0 skipped rows.                                                                            │
+│ ■ UnitsProduced  ● QualityPassRate                                                               │
+│    610 ┼                           ⣿⣿⣿⣿                                                          │
+│        │           ⣶⣶⣶⣶    ⣀⣀⣀⣀    ⣿⣿⣿⣿                                                          │
+│        │   ⣶⣶⣶⣶    ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿                                                          │
+│        │   ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿                                                          │
+│    305 ┼   ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿                                                          │
+│        │   ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿                                                          │
+│        │   ⣿⣿⣿⣿⣀⣀⣀⣀⣿⣿⣿⣿⣀⣀⣀⣀⣿⣿⣿⣿⣀⣀⡠⠤⣿⣿⣿⣿                                                          │
+│      0 ┼   ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿    ⣿⣿⣿⣿                                                          │
+│ 0 … 610  Week 1    Week 2    Week 3    Week 4                                                    │
+│ ● UnitsProduced (#2563EB)  ◆ QualityPassRate (#E11D48)                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

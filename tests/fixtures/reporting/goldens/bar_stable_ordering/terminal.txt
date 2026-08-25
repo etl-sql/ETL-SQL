@@ -1,0 +1,14 @@
+╭─Deterministic Category Ordering──────────────────────────────────────────────────────────────────╮
+│ Deterministic Category Ordering: 8 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0   │
+│ skipped rows.                                                                                    │
+│ Actual (grouped fractional bars)                                                                 │
+│ Alpha                                                                                            │
+│   Actual ▶████████████████████████████████ 120                                                   │
+│ Beta                                                                                             │
+│   Actual ▶████████████████████████████████████████████████ 180                                   │
+│ Gamma                                                                                            │
+│   Actual ▶█████████████████████████████████████▍ 140                                             │
+│ Delta                                                                                            │
+│   Actual ▶████████████████████████████████████████████████████████ 210                           │
+│ ● Actual (#5470c6)  ◆ Forecast (#91cc75)                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

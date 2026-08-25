@@ -1,0 +1,8 @@
+╭─Explicit-bin histogram authored as ranged rectangles─────────────────────────────────────────────╮
+│ Explicit-bin histogram authored as ranged rectangles: 3 rows, 1 ordered layers, 1 series, 1      │
+│ facet panels, 0 gaps, 0 skipped rows.                                                            │
+│ Frequency (fractional bars)                                                                      │
+│ row 1  ▶█████████████████████████████████████▍ 40                                                │
+│ row 2  ▶████████████████████████████████████████████████████████ 60                              │
+│ row 3  ▶██████████████████▋ 20                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

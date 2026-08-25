@@ -1,0 +1,933 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "SharedPaletteBar",
+  "title": "Plan-Backed Categories",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Alpha"
+        },
+        {
+          "kind": "text",
+          "text": "Beta"
+        },
+        {
+          "kind": "text",
+          "text": "Gamma"
+        },
+        {
+          "kind": "text",
+          "text": "Delta"
+        }
+      ],
+      "categories": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Delta"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Alpha"
+          },
+          "label": "Alpha"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Beta"
+          },
+          "label": "Beta"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Gamma"
+          },
+          "label": "Gamma"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Delta"
+          },
+          "label": "Delta"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 210
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 52.5
+          },
+          "label": "52.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 105
+          },
+          "label": "105"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 157.5
+          },
+          "label": "157.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 210
+          },
+          "label": "210"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "color",
+      "channel": "color",
+      "kind": "ordinal",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Alpha"
+        },
+        {
+          "kind": "text",
+          "text": "Beta"
+        },
+        {
+          "kind": "text",
+          "text": "Gamma"
+        },
+        {
+          "kind": "text",
+          "text": "Delta"
+        }
+      ],
+      "categories": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Delta"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Alpha"
+          },
+          "label": "Alpha"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Beta"
+          },
+          "label": "Beta"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Gamma"
+          },
+          "label": "Gamma"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Delta"
+          },
+          "label": "Delta"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Alpha",
+      "label": "Alpha",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "key": "Beta",
+      "label": "Beta",
+      "order": 1,
+      "color": "#91cc75"
+    },
+    {
+      "key": "Gamma",
+      "label": "Gamma",
+      "order": 2,
+      "color": "#fac858"
+    },
+    {
+      "key": "Delta",
+      "label": "Delta",
+      "order": 3,
+      "color": "#ee6666"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Alpha",
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Beta",
+      "color": "#91cc75"
+    },
+    {
+      "seriesKey": "Gamma",
+      "color": "#fac858"
+    },
+    {
+      "seriesKey": "Delta",
+      "color": "#ee6666"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Alpha",
+      "label": "Alpha",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Beta",
+      "label": "Beta",
+      "order": 1,
+      "color": "#91cc75"
+    },
+    {
+      "seriesKey": "Gamma",
+      "label": "Gamma",
+      "order": 2,
+      "color": "#fac858"
+    },
+    {
+      "seriesKey": "Delta",
+      "label": "Delta",
+      "order": 3,
+      "color": "#ee6666"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary-00",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Alpha",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 120
+              },
+              "displayValue": "120"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Alpha, Y: 120, Color: Alpha",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Delta"
+              },
+              "displayValue": "Delta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-01",
+      "mark": "rect",
+      "zIndex": 1,
+      "seriesKey": "Beta",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 180
+              },
+              "displayValue": "180"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Beta, Y: 180, Color: Beta",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Delta"
+              },
+              "displayValue": "Delta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-02",
+      "mark": "rect",
+      "zIndex": 2,
+      "seriesKey": "Gamma",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 140
+              },
+              "displayValue": "140"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Gamma, Y: 140, Color: Gamma",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Delta"
+              },
+              "displayValue": "Delta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-03",
+      "mark": "rect",
+      "zIndex": 3,
+      "seriesKey": "Delta",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Delta"
+              },
+              "displayValue": "Delta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 210
+              },
+              "displayValue": "210"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Delta"
+              },
+              "displayValue": "Delta"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Delta, Y: 210, Color: Delta",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Plan-Backed Categories: 4 rows, 4 ordered layers, 4 series, 1 facet panels, 4 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Plan-Backed Categories",
+    "items": [
+      {
+        "label": "Alpha",
+        "value": "120",
+        "order": 0,
+        "group": "Alpha"
+      },
+      {
+        "label": "Beta",
+        "value": "gap",
+        "order": 1,
+        "detail": "null gap",
+        "group": "Alpha"
+      },
+      {
+        "label": "Gamma",
+        "value": "gap",
+        "order": 2,
+        "detail": "null gap",
+        "group": "Alpha"
+      },
+      {
+        "label": "Delta",
+        "value": "gap",
+        "order": 3,
+        "detail": "null gap",
+        "group": "Alpha"
+      },
+      {
+        "label": "Alpha",
+        "value": "gap",
+        "order": 100000,
+        "detail": "null gap",
+        "group": "Beta"
+      },
+      {
+        "label": "Beta",
+        "value": "180",
+        "order": 100001,
+        "group": "Beta"
+      },
+      {
+        "label": "Gamma",
+        "value": "gap",
+        "order": 100002,
+        "detail": "null gap",
+        "group": "Beta"
+      },
+      {
+        "label": "Delta",
+        "value": "gap",
+        "order": 100003,
+        "detail": "null gap",
+        "group": "Beta"
+      },
+      {
+        "label": "Alpha",
+        "value": "gap",
+        "order": 200000,
+        "detail": "null gap",
+        "group": "Gamma"
+      },
+      {
+        "label": "Beta",
+        "value": "gap",
+        "order": 200001,
+        "detail": "null gap",
+        "group": "Gamma"
+      },
+      {
+        "label": "Gamma",
+        "value": "140",
+        "order": 200002,
+        "group": "Gamma"
+      },
+      {
+        "label": "Delta",
+        "value": "gap",
+        "order": 200003,
+        "detail": "null gap",
+        "group": "Gamma"
+      },
+      {
+        "label": "Alpha",
+        "value": "gap",
+        "order": 300000,
+        "detail": "null gap",
+        "group": "Delta"
+      },
+      {
+        "label": "Beta",
+        "value": "gap",
+        "order": 300001,
+        "detail": "null gap",
+        "group": "Delta"
+      },
+      {
+        "label": "Gamma",
+        "value": "gap",
+        "order": 300002,
+        "detail": "null gap",
+        "group": "Delta"
+      },
+      {
+        "label": "Delta",
+        "value": "210",
+        "order": 300003,
+        "group": "Delta"
+      }
+    ],
+    "summary": "Plan-Backed Categories: 16 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "AXIS_SORT",
+      "value": "SOURCE"
+    },
+    {
+      "name": "mapping:series",
+      "value": "Category"
+    },
+    {
+      "name": "mapping:x",
+      "value": "Category"
+    },
+    {
+      "name": "mapping:y",
+      "value": "Metric"
+    },
+    {
+      "name": "title",
+      "value": "Plan-Backed Categories"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Category",
+    "valueKey": "Metric"
+  }
+}

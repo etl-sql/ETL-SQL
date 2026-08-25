@@ -193,6 +193,22 @@
         }
       ]
     },
+    "focused_layout_shared_presentation.rptsql": {
+      "terminal": "8907DBD4A6832E0C3D0550242D86A7A7F5F9F819E0C63952D6C6FB29FFCC0441",
+      "visuals": [
+        {
+          "name": "SharedPaletteBar",
+          "plan": "9B31C2FABD8CF6E1B4B570D3C9E8844F7CD7A48809EF48B96FFF482817C02FC1",
+          "svg": "1F65C74A196C4415067786499163ED6CC8DB10452B17B5BC98C35A7757F3EE81",
+          "fallback": "7AD2A7FC55557100825F691297625925CCFBF2410A128FA4AE6226A2FC52487B"
+        },
+        {
+          "name": "SharedPaletteTreemap",
+          "svg": "15B79BFB0E906C46C8D2D6EBB628798CB3B870F6A1E675319CCAEF17EF7380EB",
+          "fallback": "AE128AEE1A987200C316150D5076027210ADA3A85E424D97BA29E9470683EE8B"
+        }
+      ]
+    },
     "funnel_native_plot_plan.rptsql": {
       "terminal": "319B66B2C002D69667B0CCFF8319E54A907B134DD4F39A9CB769A7C31B36D107",
       "visuals": [

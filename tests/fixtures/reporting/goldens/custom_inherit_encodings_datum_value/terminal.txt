@@ -1,0 +1,13 @@
+╭─Chart-scope encodings inherited by one layer and isolated in another─────────────────────────────╮
+│ Chart-scope encodings inherited by one layer and isolated in another: 3 rows, 3 ordered layers,  │
+│ 1 series, 1 facet panels, 3 gaps, 0 skipped rows.                                                │
+│ Revenue (fractional bars)                                                                        │
+│ Alpha  ▶█████████████████████████████████████▍ 120                                               │
+│ Beta   ▶████████████████████████████████████████████████████████ 180                             │
+│ Gamma  ▶█████████████████████████████▌ 95                                                        │
+│ ──────── Revenue: 150                                                                            │
+│ Revenue (point glyph ●)                                                                          │
+│ ○ Alpha: gap                                                                                     │
+│ ○ Beta: gap                                                                                      │
+│ ○ Gamma: gap                                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

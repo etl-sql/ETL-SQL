@@ -1,0 +1,22 @@
+╭─Lead Source Proportions (Pie)────────────────────────────────────────────────────────────────────╮
+│ Lead Source Proportions (Pie): 4 rows, 1 ordered layers, 4 series, 1 facet panels, 0 gaps, 0     │
+│ skipped rows.                                                                                    │
+│ Proportional breakdown (proportional components)                                                 │
+│ Search             ██████████████████████▌ 43.3% (4500)                                          │
+│ Direct             ██████████████ 26.9% (2800)                                                   │
+│ Referral           █████████▌ 18.3% (1900)                                                       │
+│ Organic Social     ██████ 11.5% (1200)                                                           │
+│ ● Search (#5470c6)  ◆ Direct (#91cc75)  ▲ Referral (#fac858)  ■ Organic Social (#ee6666)         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+╭─Lead Source Breakdown (Donut)────────────────────────────────────────────────────────────────────╮
+│ Lead Source Breakdown (Donut): 4 rows, 1 ordered layers, 4 series, 1 facet panels, 0 gaps, 0     │
+│ skipped rows.                                                                                    │
+│ Proportional breakdown (proportional components)                                                 │
+│ Search             ██████████████████████▌ 43.3% (4500)                                          │
+│ Direct             ██████████████ 26.9% (2800)                                                   │
+│ Referral           █████████▌ 18.3% (1900)                                                       │
+│ Organic Social     ██████ 11.5% (1200)                                                           │
+│ ● Search (#5470c6)  ◆ Direct (#91cc75)  ▲ Referral (#fac858)  ■ Organic Social (#ee6666)         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

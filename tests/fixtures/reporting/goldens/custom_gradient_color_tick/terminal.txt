@@ -1,0 +1,16 @@
+╭─Sequential quantitative colour with a per-category target tick───────────────────────────────────╮
+│ Sequential quantitative colour with a per-category target tick: 4 rows, 2 ordered layers, 1      │
+│ series, 1 facet panels, 0 gaps, 0 skipped rows. Color ranges from 0 (#e0f2fe) to 100 (#0c4a6e).  │
+│ Amount (grouped fractional bars)                                                                 │
+│ Assembly                                                                                         │
+│   18       ▶█████████████████████████████████████████▍ 62                                        │
+│ Paint                                                                                            │
+│   64       ▶██████████████████████████████████████████████████████ 81                            │
+│ Trim                                                                                             │
+│   45       ▶█████████████████████████████████████████████████▍ 74                                │
+│ Final QA                                                                                         │
+│   92       ▶████████████████████████████████████▋ 55                                             │
+│ ──────── Amount: 70                                                                              │
+│ ■ low  →  ■ high                                                                                 │
+│ Color ranges from 0 (#e0f2fe) to 100 (#0c4a6e).                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

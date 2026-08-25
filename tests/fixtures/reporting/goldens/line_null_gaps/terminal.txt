@@ -1,0 +1,13 @@
+╭─Discontinuous Telemetry with Missing Values──────────────────────────────────────────────────────╮
+│ Discontinuous Telemetry with Missing Values: 6 rows, 1 ordered layers, 1 series, 1 facet panels, │
+│ 2 gaps, 0 skipped rows.                                                                          │
+│ ● Measurement (Braille line; 2 gaps)                                                             │
+│   22.1 ┼                                                ⠈                                        │
+│        │                                                                                         │
+│        │                             ⠈                                                           │
+│   16.3 ┼                                                                                         │
+│        │          ⣀                                                                              │
+│        │     ⢀⡠⠤⠒⠉                                                                               │
+│   10.5 ┼ ⣀⠤⠒⠉⠁                                                                                   │
+│ 10.5 … 22.1                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

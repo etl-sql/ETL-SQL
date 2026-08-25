@@ -1,0 +1,31 @@
+{
+  "kind": "hierarchy",
+  "heading": "Focused Layout Categories",
+  "items": [
+    {
+      "label": "Alpha",
+      "value": "120",
+      "order": 0,
+      "detail": "proportional hierarchy node"
+    },
+    {
+      "label": "Beta",
+      "value": "180",
+      "order": 1,
+      "detail": "proportional hierarchy node"
+    },
+    {
+      "label": "Gamma",
+      "value": "140",
+      "order": 2,
+      "detail": "proportional hierarchy node"
+    },
+    {
+      "label": "Delta",
+      "value": "210",
+      "order": 3,
+      "detail": "proportional hierarchy node"
+    }
+  ],
+  "summary": "Focused Layout Categories: 4 hierarchy nodes in source order."
+}
