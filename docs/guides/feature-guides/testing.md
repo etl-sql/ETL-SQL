@@ -1,11 +1,11 @@
-# Testing
+﻿# Testing
 
-For the overall lane model and cleanup guidance, see [Test_Strategy.md](../../architecture/roadmaps/Test_Strategy.md).
+For the overall lane model and cleanup guidance, see [Test_Strategy.md](../../architecture/roadmaps/test-strategy.md).
 For enterprise release-gate evidence and prioritization, see
-[Enterprise Release Gates](../../architecture/decisions/Enterprise_Release_Gates.md).
+[Enterprise Release Gates](../../architecture/decisions/enterprise-release-gates.md).
 For enterprise security review and full-suite release evidence, use
-[Enterprise Security Review Packet](../../architecture/decisions/Enterprise_Security_Review_Packet.md) and
-[Enterprise Release Evidence Checklist](../../architecture/decisions/Enterprise_Release_Evidence_Checklist.md).
+[Enterprise Security Review Packet](../../architecture/decisions/enterprise-security-review-packet.md) and
+[Enterprise Release Evidence Checklist](../../architecture/decisions/enterprise-release-evidence-checklist.md).
 
 > [!TIP]
 > **Looking for focused guides?** See the modular [Contributor Testing Guides](../testing/README.md):
@@ -251,7 +251,7 @@ The script writes timestamped JSON/Markdown reports and phase logs under `releas
 
 `fast` is the bounded quick-feedback lane. `full` runs the normal xUnit test projects and skips the benchmark executable, deployment-only SLT corpus, and Portal tests tagged `Integration` so `dotnet test` output stays meaningful.
 
-For release claim tracking, see [Release_Capability_Matrix.md](../../architecture/roadmaps/Release_Capability_Matrix.md). Keep release notes aligned with the strongest automated evidence in that matrix.
+For release claim tracking, see [Release_Capability_Matrix.md](../../architecture/roadmaps/release-capability-matrix.md). Keep release notes aligned with the strongest automated evidence in that matrix.
 
 ## ETL Scenario Golden Tests
 

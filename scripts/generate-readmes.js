@@ -35,10 +35,10 @@ function cleanMarkdownLinks(text) {
 function extractMetadata(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.split(/\r?\n/);
-  
+
   let title = path.basename(filePath, '.md');
   let description = '';
-  
+
   // Try to find H1 header
   for (let line of lines) {
     line = line.trim();
@@ -47,9 +47,19 @@ function extractMetadata(filePath) {
       break;
     }
   }
-  
-  // Try to find first description paragraph
-  let foundTitle = false;
+
+  // Curated description takes priority: <!-- description: your text here -->
+  // Must appear within the first 10 lines to be recognised.
+  const curatedRe = /<!--\s*description:\s*(.+?)\s*-->/i;
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const m = curatedRe.exec(lines[i]);
+    if (m) {
+      description = m[1].trim();
+      return { title, description };
+    }
+  }
+
+  // Fall back to first prose paragraph
   let inFence = false;
   for (let line of lines) {
     line = line.trim();
@@ -61,10 +71,7 @@ function extractMetadata(filePath) {
       continue;
     }
     if (inFence) continue;
-    if (line.startsWith('# ')) {
-      foundTitle = true;
-      continue;
-    }
+    if (line.startsWith('# ')) continue;
     // Skip anything that is not prose about the page.
     //
     // `<!--` matters: several pages carry an AST-name marker (`<!-- SearchPortalCatalogStatement -->`)
@@ -86,7 +93,7 @@ function extractMetadata(filePath) {
     }
     break;
   }
-  
+
   return { title, description };
 }
 

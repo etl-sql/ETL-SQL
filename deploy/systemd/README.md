@@ -1,4 +1,4 @@
-# systemd Deployment Templates
+﻿# systemd Deployment Templates
 
 This directory contains Linux `systemd` templates for isolated ETL-SQL environments. Each environment gets separate Portal and Orchestrator service instances, a dedicated service user, a private data root, per-instance environment configuration, and independently managed ports and keys.
 
@@ -32,4 +32,4 @@ After installing more than one environment, verify isolation:
 ../verify/verify-isolation.sh /srv/etl-sql/*/*.env
 ```
 
-See [`../README.md`](../README.md) for the platform overview and [`../../docs/architecture/decisions/Departmental_Isolation.md`](../../docs/architecture/decisions/Departmental_Isolation.md) for the full runbook.
+See [`../README.md`](../README.md) for the platform overview and [`../../docs/architecture/decisions/Departmental_Isolation.md`](../../docs/architecture/decisions/departmental-isolation.md) for the full runbook.

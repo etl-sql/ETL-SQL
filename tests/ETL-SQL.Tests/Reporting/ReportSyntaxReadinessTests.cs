@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -48,7 +48,7 @@ namespace ETL_SQL.Tests.Reporting
             yield return Path.Combine(root, "docs", "guides", "feature-guides", "report-sql.md");
             yield return Path.Combine(root, "docs", "guides", "onboarding", "getting-started.md");
             yield return Path.Combine(root, "docs", "guides", "patterns", "sample-guide.md");
-            yield return Path.Combine(root, "docs", "architecture", "roadmaps", "Portal_Strategy.md");
+            yield return Path.Combine(root, "docs", "architecture", "roadmaps", "portal-strategy.md");
 
             var reportDir = Path.Combine(root, "docs", "reference", "visuals-reporting", "report");
             if (Directory.Exists(reportDir))

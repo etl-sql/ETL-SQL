@@ -1,11 +1,11 @@
-using ETL_SQL.App.Portability;
+﻿using ETL_SQL.App.Portability;
 using ETL_SQL.Core.Portability;
 using ETL_SQL.Orchestrator.Storage;
 
 namespace ETL_SQL.Tests.Portability;
 
 /// <summary>
-/// Import (TenantPortability.md §11). The Portal and Orchestrator targets are faked so the ordering
+/// Import (tenant-portability.md §11). The Portal and Orchestrator targets are faked so the ordering
 /// and refusal rules can be asserted without a Portal or an engine — those rules are the substance,
 /// and they are exactly what a mocked-out integration test would hide.
 /// </summary>

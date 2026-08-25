@@ -1,4 +1,4 @@
-# SaaS Operator Best Practices & FAQ
+﻿# SaaS Operator Best Practices & FAQ
 
 This guide provides practical operational patterns, architectural blueprints, and best practices for managed service providers (MSPs), centralized IT teams, and SaaS operators hosting **ETL-SQL** for multiple small-to-medium enterprise (SME) clients.
 
@@ -291,9 +291,9 @@ When `StorageUsedMb` reaches `MaxStorageMb`:
 ---
 
 ## Related Documentation
-- [Deployment Profile Architecture](../../architecture/DeploymentProfiles.md)
-- [SaaS Tenant Isolation Specification](../../architecture/SaaSTenantIsolation.md)
-- [Tenant Portability & Exit](../../architecture/TenantPortability.md)
+- [Deployment Profile Architecture](../../architecture/deployment-profiles.md)
+- [SaaS Tenant Isolation Specification](../../architecture/saas-tenant-isolation.md)
+- [Tenant Portability & Exit](../../architecture/tenant-portability.md)
 - [Platform Configuration Settings Reference](appsettings-reference.md)
 - [Secure Outbound Gateway Guide](secure-outbound-gateway.md)
 - [Backup, Monitoring, and Health Guide](backup-and-monitoring.md)

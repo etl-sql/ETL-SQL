@@ -1,21 +1,23 @@
 # Hub Title
 
-One sentence: what this area covers and who it is for. A hub orients and links; it does
-not restate syntax, options, or settings — those live in focused reference pages.
+> **Page-type: Hub / README**
+> Owns: orientation and links for one documentation area.
+> Links to (does not restate): all focused pages within the area. Does NOT restate syntax,
+> options, or settings owned by focused reference pages.
+> Required sections: opening description, topic table or list, common tasks, see also.
 
-## Start Here
-
-- [Most common entry point](../reference/README.md) - what the reader most likely wants first.
+One sentence: what this area covers and who it is for.
 
 ## Topics
 
-- [Focused topic](../reference/README.md) - one line on what it covers.
-- [Focused topic](../reference/README.md) - one line on what it covers.
-- [Focused topic](../reference/README.md) - one line on what it covers.
+| Page | Description |
+| :--- | :--- |
+| [Focused topic](../reference/README.md) | One line on what it covers. |
+| [Focused topic](../reference/README.md) | One line on what it covers. |
 
 ## Common Tasks
 
-- [How do I …](../task-index.md) - link into the task index or a cookbook recipe.
+- [How do I …](../task-index.md) — link into the task index or a cookbook recipe.
 
 ## See Also
 

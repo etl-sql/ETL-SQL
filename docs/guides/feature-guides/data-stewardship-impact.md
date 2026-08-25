@@ -1,4 +1,4 @@
-# Data Stewardship and Impact Analysis
+﻿# Data Stewardship and Impact Analysis
 
 > [!TIP]
 > This topic has moved to the **[Data Quality & Governance](../data-quality/data-stewardship-and-impact.md)** guide suite. The focused guide there contains additional examples and remediation patterns.
@@ -256,4 +256,4 @@ For each source table, the response `impact` object summarizes downstream report
 - [Report-SQL Guide](report-sql.md)
 - [Portal User Guide](../tooling/portal-user.md)
 - [Governance Core](../../administration/platform/governance.md)
-- [Data Stewardship Strategy](../../architecture/roadmaps/Data_Stewardship_Strategy.md)
+- [Data Stewardship Strategy](../../architecture/roadmaps/data-stewardship-strategy.md)

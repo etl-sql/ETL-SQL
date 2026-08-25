@@ -1,4 +1,4 @@
-# Orchestrator Configuration
+﻿# Orchestrator Configuration
 
 > **Applies to:** Team · Enterprise · SaaS
 
@@ -128,7 +128,7 @@ Sandbox execution routes scheduled jobs through a hardened Docker provider. It r
 | `Orchestration:SandboxExecution:Profiles:{name}:MaxCpuCores` | number | CPU cores the attempt may consume per wall-clock second. Required; an unbounded workload starves co-tenants. |
 
 > [!NOTE]
-> See [SaaS Tenant Isolation Architecture](../../../architecture/SaaSTenantIsolation.md) for the full sandbox profile and tenant entitlement model.
+> See [SaaS Tenant Isolation Architecture](../../../architecture/saas-tenant-isolation.md) for the full sandbox profile and tenant entitlement model.
 
 ---
 

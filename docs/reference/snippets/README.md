@@ -1,4 +1,4 @@
-# Snippets
+﻿# Snippets
 
 Snippets are reusable autocomplete templates for ETL-SQL scripts and Report-SQL reports. They appear in the TUI, VS Code language server completions, and `HELP SNIPPETS`.
 
@@ -66,4 +66,4 @@ The editor cycles through `«placeholder»` fields when the snippet is accepted.
 - [Autocomplete Snippets Source](../../../snippets/README.md)
 - [Configuration Settings](../../administration/platform/appsettings-reference.md)
 - [Help Statement](../statements/session-control/help.md)
-- [Help and Snippet Standards](../../architecture/standards/Help_and_Snippet_Standards.md)
+- [Help and Snippet Standards](../../architecture/standards/help-and-snippet-standards.md)

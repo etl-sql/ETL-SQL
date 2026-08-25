@@ -1,4 +1,4 @@
-# Health Monitoring and Audit Log
+﻿# Health Monitoring and Audit Log
 
 The Portal health endpoints, and the audit log of who viewed, exported, published and changed what.
 
@@ -43,7 +43,7 @@ artifact storage readability, and node-registry/lease-store connectivity. It ret
 `"status": "Healthy"` when all three checks are `ok`, otherwise HTTP 503.
 
 For operational alert thresholds, Prometheus routing, and runbook links, see
-[Alerting and Service Objectives](../../architecture/decisions/Alerting_Service_Objectives.md). The Portal emits active
+[Alerting and Service Objectives](../../architecture/decisions/alerting-service-objectives.md). The Portal emits active
 alert conditions through the operational digest and through `/metrics` as
 `etlsql_portal_operational_alert_active{severity,alert_code,runbook,...}` so external monitoring
 systems can handle deduplication, severity routing, recovery notifications, and escalation.

@@ -1,4 +1,4 @@
-# ggplot2 to ETL-SQL Concepts
+﻿# ggplot2 to ETL-SQL Concepts
 
 [« Back to Report-SQL Guides](README.md)
 
@@ -60,5 +60,5 @@ There is no hidden equivalent of `stat_bin`, `stat_smooth`, `stat_density`, `sta
 ## References
 
 - [Report-SQL Guide](../feature-guides/report-sql.md)
-- [Native Grammar ADR](../../architecture/decisions/GrammarOfGraphicsSpecIR.md)
+- [Native Grammar ADR](../../architecture/decisions/grammar-of-graphics-spec-ir.md)
 - [Declarative Geometry Sample](../../../samples/08_Reporting/declarative_geometry_refinements.rptsql)

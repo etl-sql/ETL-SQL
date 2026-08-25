@@ -1,4 +1,4 @@
-# Deployment profile transitions
+﻿# Deployment profile transitions
 
 ETL-SQL promotions preserve source-controlled pipeline and report logic while changing target
 bindings, persistence, identity, and operational controls. Always retain the preflight, package,
@@ -143,5 +143,5 @@ single-boundary workflow does not certify rolling upgrades across a fleet of ten
 
 - [Deployment promotion](deployment-promotion.md)
 - [Operator CLI](operator-cli.md)
-- [Deployment Profile Standard](../../architecture/standards/Deployment_Profile_Standards.md)
+- [Deployment Profile Standard](../../architecture/standards/deployment-profile-standards.md)
 - [Portal administration](../portal/README.md)

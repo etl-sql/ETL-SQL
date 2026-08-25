@@ -1,10 +1,10 @@
-using ETL_SQL.Core.Multitenancy;
+﻿using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Tests.Multitenancy;
 
 /// <summary>
 /// SaaS isolation domain 1: tenant context is server-derived, and a caller-supplied identifier cannot
-/// widen scope (SaaSTenantIsolation.md §6). Every other domain assumes this one holds.
+/// widen scope (saas-tenant-isolation.md §6). Every other domain assumes this one holds.
 /// </summary>
 public sealed class TenantContextTests
 {

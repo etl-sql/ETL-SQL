@@ -1,4 +1,4 @@
-# ETL-SQL Engine Architecture
+﻿# ETL-SQL Engine Architecture
 
 Engineering reference for contributors. Covers the full project dependency graph, what each project owns, the Evaluator statement dispatch loop, `#temp` table scoping, pushdown decision logic, Orchestrator job scheduling, the Connector interface contract, and the Linting pipeline.
 
@@ -518,7 +518,7 @@ LintStatementHandler.Execute(LintStatement, IExecutionContext)
 Column rules are declared as tag comments (`/* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */`) and
 enforced by the engine, not by any host. A CLI run on a workstation enforces them exactly as the
 Portal does. Full rule and clause syntax lives in
-[DataQualityRules.md](decisions/DataQualityRules.md); this section covers only where they sit in
+[DataQualityRules.md](decisions/data-quality-rules.md); this section covers only where they sit in
 execution.
 
 | Piece | Role |
@@ -547,7 +547,7 @@ Portal's steward views read.
 
 Row-level security is an engine feature, not a Portal one: the filtering happens in expression
 evaluation, so the same script filters identically under the CLI, the Report Player and the Portal.
-Design detail is in [RowLevelSecurity.md](decisions/RowLevelSecurity.md).
+Design detail is in [RowLevelSecurity.md](decisions/row-level-security.md).
 
 The engine contributes three things:
 
@@ -616,7 +616,7 @@ semantics. `IObjectStore` exposes opaque versions and conditional object operati
 immutable SHA-256 object, a database fence claim, and an authoritative conditional commit record.
 Readers follow only the commit record. Copy/delete is never treated as atomic rename. S3 and Azure
 Blob implement the same provider contract and hostile suite. The full protocol and failure model are
-in [Object-Native Artifact Storage Contract](decisions/ObjectNativeArtifactStorage.md).
+in [Object-Native Artifact Storage Contract](decisions/object-native-artifact-storage.md).
 
 ---
 
@@ -653,7 +653,7 @@ the advisor, so today the subsystem records what it *would* do without changing 
 That is by design — the controller's contract is that pipelines opt in at safe boundaries — but it
 means the presence of nine files under `Adaptive/` should not be read as adaptive behaviour being
 live. Design and staging in
-[AdaptiveExecutionController.md](decisions/AdaptiveExecutionController.md).
+[AdaptiveExecutionController.md](decisions/adaptive-execution-controller.md).
 
 The static tuning inputs described under [Scale & Large Dataset
 Handling](#scale--large-dataset-handling) — `Engine:BatchSize`, `MaxParallelDegree`,
@@ -685,7 +685,7 @@ it is reported, so an unreachable event sink can never turn a denial into an all
 
 ## Scale & Large Dataset Handling
 
-ETL-SQL processes data in batches and can spill intermediate results to disk when in-memory thresholds are exceeded. This section covers where those decisions are made and what mechanisms are in play. For design rationale and profiling targets see [`docs/architecture/roadmaps/LargeDatasets.md`](roadmaps/LargeDatasets.md).
+ETL-SQL processes data in batches and can spill intermediate results to disk when in-memory thresholds are exceeded. This section covers where those decisions are made and what mechanisms are in play. For design rationale and profiling targets see [`docs/architecture/roadmaps/LargeDatasets.md`](roadmaps/large-datasets.md).
 
 ### SelectStatementHandler execution strategies
 

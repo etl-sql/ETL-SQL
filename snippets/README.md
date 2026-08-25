@@ -1,4 +1,4 @@
-# Autocomplete Snippets
+﻿# Autocomplete Snippets
 
 This folder is the source of truth for built-in ETL-SQL autocomplete snippets.
 
@@ -64,4 +64,4 @@ The editor uses `«` and `»` to identify tab-stop placeholders. Keep placeholde
 ## Related Documentation
 
 - [Snippet Reference](../docs/reference/snippets/README.md)
-- [Help and Snippet Standards](../docs/architecture/standards/Help_and_Snippet_Standards.md)
+- [Help and Snippet Standards](../docs/architecture/standards/help-and-snippet-standards.md)

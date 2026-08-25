@@ -1,5 +1,11 @@
 # FUNCTION_NAME
 
+> **Page-type: Reference — function**
+> Owns: signature, parameters, return type, null behavior, remarks, and a copy-pasteable example
+> for one function.
+> Links to (does not restate): other functions it depends on; statement pages for context.
+> Required sections: Syntax, Parameters, Returns, Null Behavior, Example, References.
+
 One-sentence description of what the function returns.
 
 ## Syntax
@@ -10,8 +16,8 @@ FUNCTION_NAME(argument [, optional_argument])
 
 ## Parameters
 
-- **argument** - Type and meaning.
-- **optional_argument** - Type, default behavior, and valid values.
+- **argument** — Type and meaning.
+- **optional_argument** — Type, default behavior, and valid values.
 
 ## Returns
 
@@ -35,4 +41,3 @@ FROM #stage;
 ## References
 
 - [Standard Library](../reference/functions/README.md)
-

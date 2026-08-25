@@ -1,4 +1,4 @@
-# Portal State, Data Roots, and High Availability
+﻿# Portal State, Data Roots, and High Availability
 
 Where the Portal keeps its state, which directories it is allowed to touch, and what a multi-node high-availability deployment requires.
 
@@ -9,7 +9,7 @@ Where the Portal keeps its state, which directories it is allowed to touch, and 
 | **Solo / Workstation** | **N/A.** A workstation has no Portal state and no availability contract. |
 | **Team / SME** | The data-roots table below. High availability is **out of profile** — the supported Team default is a single node. If you need HA, you are running the Enterprise profile. **Set `Portal:Topology:ExpectedMode` explicitly**, especially on PostgreSQL: see the warning below. |
 | **Enterprise / Corporate** | Everything here. Shared PostgreSQL, shared artifact roots, one shared key ring, and an **identical** JWT secret, dataset at-rest key and Orchestrator key on every node. A node with its own key ring serves traffic and then fails unpredictably per request. |
-| **SaaS / Departmental** | As Enterprise, with a **separate set of all of it per environment**. No database, artifact root, key ring or outbox path may be shared; see [departmental isolation](../../architecture/decisions/Departmental_Isolation.md). |
+| **SaaS / Departmental** | As Enterprise, with a **separate set of all of it per environment**. No database, artifact root, key ring or outbox path may be shared; see [departmental isolation](../../architecture/decisions/departmental-isolation.md). |
 
 ## Portal State and Data Roots
 
@@ -138,7 +138,7 @@ Operational requirements:
 
 For the supported standalone, departmental, and HA topologies; readiness response contract; failure
 certification matrix; and responsibility boundary between ETL-SQL and infrastructure, see
-[`docs/architecture/decisions/HA_Topology_Failure_Certification.md`](../../architecture/decisions/HA_Topology_Failure_Certification.md).
+[`docs/architecture/decisions/HA_Topology_Failure_Certification.md`](../../architecture/decisions/ha-topology-failure-certification.md).
 
 ### Containerized HA Clustering (Docker Compose)
 

@@ -1,4 +1,4 @@
-# ETL-SQL Connectors Architecture & Engineering Reference
+﻿# ETL-SQL Connectors Architecture & Engineering Reference
 
 **Applies to ETL-SQL 0.18.0**
 
@@ -753,4 +753,4 @@ services.AddSingleton<IConnector, SnowflakeConnector>();
 
 ---
 
-*Refer to [Connectors_Standards.md](standards/Connectors_Standards.md) for governance rules and [Data Connectors](../reference/connectors/README.md) for connector syntax.*
+*Refer to [Connectors_Standards.md](standards/connectors-standards.md) for governance rules and [Data Connectors](../reference/connectors/README.md) for connector syntax.*

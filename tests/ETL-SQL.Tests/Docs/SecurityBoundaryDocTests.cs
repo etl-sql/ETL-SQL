@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace ETL_SQL.Tests.Docs;
 
@@ -26,7 +26,7 @@ public sealed class SecurityBoundaryDocTests
     private static string EnterpriseReleaseGates() =>
         System.Text.RegularExpressions.Regex.Replace(
             System.IO.File.ReadAllText(System.IO.Path.Combine(
-                RepoRoot, "docs", "architecture", "decisions", "Enterprise_Release_Gates.md")),
+                RepoRoot, "docs", "architecture", "decisions", "enterprise-release-gates.md")),
             @"\s+", " ");
 
     private static string OperationDoc(string fileName) =>
@@ -89,7 +89,7 @@ public sealed class SecurityBoundaryDocTests
     [Fact]
     public void EnterpriseSecurityReviewPacket_RequiresSignedReviewAndClosedHighFindings()
     {
-        var text = OperationDoc("Enterprise_Security_Review_Packet.md");
+        var text = OperationDoc("enterprise-security-review-packet.md");
         Assert.Contains("Status: Prepared, not signed off", text, System.StringComparison.OrdinalIgnoreCase);
         Assert.Contains("senior security reviewer", text, System.StringComparison.OrdinalIgnoreCase);
         Assert.Contains("cannot close with any open high-severity finding",
@@ -100,7 +100,7 @@ public sealed class SecurityBoundaryDocTests
     [Fact]
     public void EnterpriseReleaseEvidenceChecklist_PinsFullSuiteEvidenceRequirements()
     {
-        var text = OperationDoc("Enterprise_Release_Evidence_Checklist.md");
+        var text = OperationDoc("enterprise-release-evidence-checklist.md");
         Assert.Contains("Status: Prepared checklist, not release evidence",
             text, System.StringComparison.OrdinalIgnoreCase);
         Assert.Contains("test-lane.ps1 -Lane fast", text, System.StringComparison.OrdinalIgnoreCase);
@@ -138,7 +138,7 @@ public sealed class SecurityBoundaryDocTests
         var text = Todo();
         string[] evidenceGates =
         [
-            "Enterprise_Release_Evidence_Checklist.md",
+            "enterprise-release-evidence-checklist.md",
             "test-lane.ps1",
             "Test-PreRelease.ps1",
             "Test-EnterpriseHardeningCertification.ps1",

@@ -1,4 +1,4 @@
-# CREATE TOOL
+﻿# CREATE TOOL
 
 Registers a custom executable tool within the session for subsequent execution via `EXECUTE TOOL`. This allows arbitrary scripts (Python, PowerShell, etc.) or binaries to participate in the data pipeline by processing JSON Lines data over standard input and output streams.
 
@@ -48,5 +48,5 @@ EXPECT SCHEMA (id INT, email STRING);
 ```
 
 ## References
-- [Script Composition Standards](../../../architecture/standards/Script_Composition_Standards.md)
+- [Script Composition Standards](../../../architecture/standards/script-composition-standards.md)
 - [Statement Reference](../README.md)

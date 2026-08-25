@@ -1,4 +1,4 @@
-# EXECUTE TOOL
+﻿# EXECUTE TOOL
 
 Executes a previously registered custom executable tool. Data is streamed into the process's standard input in JSON Lines format and read from its standard output in JSON Lines format, ensuring safe processing of large datasets without exhausting memory.
 
@@ -32,5 +32,5 @@ EXECUTE TOOL 'EnvironmentCleanup';
 ```
 
 ## References
-- [Script Composition Standards](../../../architecture/standards/Script_Composition_Standards.md)
+- [Script Composition Standards](../../../architecture/standards/script-composition-standards.md)
 - [Statement Reference](../README.md)

@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Xunit;
 
 namespace ETL_SQL.Tests.Docs;
@@ -81,7 +81,7 @@ public sealed class DeploymentProfileContractTests
     }
 
     private static string Standard() => File.ReadAllText(Path.Combine(
-        RepoRoot, "docs", "architecture", "standards", "Deployment_Profile_Standards.md")).Replace("\r\n", "\n");
+        RepoRoot, "docs", "architecture", "standards", "deployment-profile-standards.md")).Replace("\r\n", "\n");
 
     private static string FindRepoRoot()
     {

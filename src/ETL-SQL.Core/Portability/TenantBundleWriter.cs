@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -116,7 +116,7 @@ public static class TenantBundleWriter
         {
             throw new ArgumentException(
                 "A SaaS-sourced bundle must be encrypted to a tenant-supplied recipient key " +
-                "(TenantPortability.md §13.1). Refusing to write tenant payloads in the clear.",
+                "(tenant-portability.md §13.1). Refusing to write tenant payloads in the clear.",
                 nameof(request));
         }
 

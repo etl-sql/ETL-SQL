@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -83,7 +83,7 @@ namespace ETL_SQL.Tests
                 $"Insert performance degraded {ratio:F1}x from first to last chunk " +
                 $"({firstMs:N0}ms → {lastMs:N0}ms). " +
                 "Likely O(n²) growth in DataTable scan or identifier resolution. " +
-                "See docs/architecture/roadmaps/LargeDatasets.md for the spill-to-disk fix.");
+                "See docs/architecture/roadmaps/large-datasets.md for the spill-to-disk fix.");
 
             // Streaming SELECT: measure whether ExecuteQuery streams or materializes.
             GC.Collect();

@@ -1,4 +1,4 @@
-# CHART
+﻿# CHART
 
 Defines renderer-neutral native mark layers, encodings, scales, coordinates, conditional presentation, and facet composition for a `CUSTOM` Report-SQL visual. Data preparation remains visible in ETL-SQL statements and `#temp` tables; `CHART` does not accept embedded Vega-Lite or hidden transforms.
 
@@ -110,5 +110,5 @@ CREATE VISUAL RevenueAndMargin AS CUSTOM (
 ## References
 
 - [Report-SQL Guide](../../../guides/feature-guides/report-sql.md)
-- [Native Advanced Chart Authoring Decision](../../../architecture/decisions/NativeAdvancedChartAuthoring.md)
-- [Script Composition Standards](../../../architecture/standards/Script_Composition_Standards.md)
+- [Native Advanced Chart Authoring Decision](../../../architecture/decisions/native-advanced-chart-authoring.md)
+- [Script Composition Standards](../../../architecture/standards/script-composition-standards.md)

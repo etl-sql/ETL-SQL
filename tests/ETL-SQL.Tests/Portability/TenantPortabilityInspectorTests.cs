@@ -1,10 +1,10 @@
-using ETL_SQL.App.Portability;
+﻿using ETL_SQL.App.Portability;
 using ETL_SQL.Core.Portability;
 
 namespace ETL_SQL.Tests.Portability;
 
 /// <summary>
-/// Preflight (TenantPortability.md §10) answers "can this target accept the bundle, and what must it
+/// Preflight (tenant-portability.md §10) answers "can this target accept the bundle, and what must it
 /// supply first?" — a different question from validation's "is this intact and authentic?".
 /// </summary>
 public sealed class TenantPortabilityInspectorTests : IDisposable

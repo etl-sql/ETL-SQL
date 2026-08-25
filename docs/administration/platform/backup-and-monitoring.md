@@ -1,4 +1,4 @@
-# Backup, Monitoring, and Health
+﻿# Backup, Monitoring, and Health
 
 Backing up ETL-SQL state, proving the backup restores, and wiring health and failure signals into your own monitoring.
 
@@ -50,7 +50,7 @@ roots as one coordinated recovery set. ETL-SQL does not back up PostgreSQL for y
   explicitly reviewed.
 
 For supported RPO/RTO targets, restore-drill evidence, cross-environment clone safety, and regional
-failure procedures, see [`docs/architecture/decisions/Disaster_Recovery_Objectives.md`](../../architecture/decisions/Disaster_Recovery_Objectives.md).
+failure procedures, see [`docs/architecture/decisions/Disaster_Recovery_Objectives.md`](../../architecture/decisions/disaster-recovery-objectives.md).
 
 ### Logs
 

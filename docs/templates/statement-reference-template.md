@@ -1,5 +1,11 @@
 # STATEMENT
 
+> **Page-type: Reference — statement**
+> Owns: syntax, semantics, options, examples, guardrails, errors, and references for one
+> statement or clause.
+> Links to (does not restate): connector pages for dialect notes; the syntax index.
+> Required sections: Syntax, Semantics, Examples, Guardrails or Errors, References.
+
 One-sentence description of what the statement does.
 
 ## Syntax
@@ -14,7 +20,7 @@ Describe execution context, side effects, and result shape.
 
 ## Options
 
-- **Option** - Description.
+- **Option** — Description.
 
 ## Examples
 
@@ -24,11 +30,12 @@ STATEMENT example_here;
 
 ## Guardrails
 
-Document security boundaries, dialect restrictions, transaction requirements, or WHAT_IF recommendations.
+Document security boundaries, dialect restrictions, transaction requirements, or WHAT_IF
+recommendations. Keep any destructive guard visible here.
 
 ## Errors
 
-- **Error condition** - Cause and fix.
+- **Error condition** — Cause and fix.
 
 ## References
 

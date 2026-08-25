@@ -1,4 +1,4 @@
-# Secure Outbound Data Gateway
+﻿# Secure Outbound Data Gateway
 
 The Gateway lets ETL-SQL reach private databases, file roots, and APIs **without inbound firewall
 exceptions**. It is an outbound-connected, tenant-attested policy enforcement point — not a VPN, a
@@ -159,5 +159,5 @@ by a late ambiguous report.
 
 ## See also
 
-- [SaaS Tenant Isolation Architecture §11](../../architecture/SaaSTenantIsolation.md#11-secure-outbound-data-gateway)
+- [SaaS Tenant Isolation Architecture §11](../../architecture/saas-tenant-isolation.md#11-secure-outbound-data-gateway)
 - [Configuration reference](appsettings-reference.md)

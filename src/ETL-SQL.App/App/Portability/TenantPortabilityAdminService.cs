@@ -1,4 +1,4 @@
-using ETL_SQL.App.Admin;
+﻿using ETL_SQL.App.Admin;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Portal;
 using ETL_SQL.Core;
@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ETL_SQL.App.Portability;
 
 /// <summary>
-/// The <c>etl-sql admin tenant</c> verbs (TenantPortability.md §16).
+/// The <c>etl-sql admin tenant</c> verbs (tenant-portability.md §16).
 /// </summary>
 /// <remarks>
 /// <c>validate</c> and <c>preflight</c> are the customer-side verbs, and they matter most: someone

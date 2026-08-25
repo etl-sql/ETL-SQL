@@ -119,7 +119,7 @@ Fix the focused failure, rerun the same lane, and retain only evidence that matc
 
 ## References
 
-- [Deployment profile strategy](../../architecture/roadmaps/Deployment_Profile_Strategy.md)
+- [Deployment profile strategy](../../architecture/roadmaps/deployment-profile-strategy.md)
 - [Deployment profile transitions](profile-transitions.md)
 - [Deployment promotion](deployment-promotion.md)
 - [Release checklist](../../releases/release-checklist.md)

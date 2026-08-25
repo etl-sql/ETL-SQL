@@ -1,4 +1,4 @@
-# Capacity Test Results
+﻿# Capacity Test Results
 
 Store measured Portal and Orchestrator capacity reports here in dated subdirectories.
 
@@ -37,7 +37,7 @@ The checked-in developer-workstation starter baseline is documented in
 [`reference-local/README.md`](reference-local/README.md).
 
 For administrator-facing server sizing guidance, see
-[`docs/architecture/decisions/Capacity_Planning.md`](../docs/architecture/decisions/Capacity_Planning.md).
+[`docs/architecture/decisions/Capacity_Planning.md`](../docs/architecture/decisions/capacity-planning.md).
 
 When publishing Orchestrator job capacity, record the row profile used. A `SELECT 1` no-op job is
 useful for scheduler and trigger lower bounds, but normal operator guidance should start with a

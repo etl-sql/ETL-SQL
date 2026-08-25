@@ -1,8 +1,8 @@
-# ETL-SQL Release Checklist
+﻿# ETL-SQL Release Checklist
 
 A physical, copy-pasteable checklist for cutting a release. It wraps the real scripts under
 `scripts/` so a release is reproducible and auditable. Strategy and rationale live in
-[`Release_Workflows.md`](../architecture/roadmaps/Release_Workflows.md); this file is the step list.
+[`Release_Workflows.md`](../architecture/roadmaps/release-workflows.md); this file is the step list.
 
 > **Tooling note.** This checklist is the authoritative release policy. The local validation driver is
 > `scripts/Test-PreRelease.ps1`
@@ -30,7 +30,7 @@ Replace `x.y.z` with the target version (current target: **0.18.0**) throughout.
 - [ ] `ROADMAP.md` items for this release are either done or explicitly deferred.
 - [ ] `TODO.md` active-release items are closed or moved to `ROADMAP.md`.
 - [ ] Deployment-profile portability review is complete using
-      [`Deployment_Profile_Standards.md`](../architecture/standards/Deployment_Profile_Standards.md):
+      [`Deployment_Profile_Standards.md`](../architecture/standards/deployment-profile-standards.md):
       canonical scripts/reports/rules/tags/assertions remain portable, smallest-safe profiles were
       preserved, and target bindings or new N/A boundaries are explicit.
 - [ ] Release claims name only profiles/transitions with current linked evidence; changed matrix
@@ -106,7 +106,7 @@ Replace `x.y.z` with the target version (current target: **0.18.0**) throughout.
       no separate grant: a report author already has full access to the data their query reaches, so
       preview-as (like admin run-as) only changes RLS-predicate evaluation, while the previewer's own
       authority still gates dataset/connection access. Data isolation from an author is a DB-layer
-      responsibility, out of scope. See open question 1 in [`RowLevelSecurity.md`](../architecture/decisions/RowLevelSecurity.md).
+      responsibility, out of scope. See open question 1 in [`RowLevelSecurity.md`](../architecture/decisions/row-level-security.md).
 
 ## Phase 3 — Validation and certification evidence
 

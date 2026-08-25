@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -21,7 +21,7 @@ namespace ETL_SQL.Portal.Tests;
 public sealed class HaAndSecurityDocReconciliationTests
 {
     private static string HaDoc() => File.ReadAllText(Path.Combine(
-        RepoRoot(), "docs", "architecture", "decisions", "HA_Topology_Failure_Certification.md"));
+        RepoRoot(), "docs", "architecture", "decisions", "ha-topology-failure-certification.md"));
 
     private static string ReadinessSource() => File.ReadAllText(Path.Combine(
         RepoRoot(), "src", "ETL-SQL.Portal", "Services", "PortalTopologyReadinessService.cs"));
@@ -160,7 +160,7 @@ public sealed class HaAndSecurityDocReconciliationTests
 
         var docs = new[]
         {
-            Path.Combine(RepoRoot(), "docs", "architecture", "decisions", "HA_Topology_Failure_Certification.md"),
+            Path.Combine(RepoRoot(), "docs", "architecture", "decisions", "ha-topology-failure-certification.md"),
             Path.Combine(RepoRoot(), "TODO.md")
         };
 

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using ETL_SQL.Core.Portability;
 using ETL_SQL.Orchestrator.Storage;
@@ -63,7 +63,7 @@ public sealed record TenantImportResult(
     string? RefusalReason = null);
 
 /// <summary>
-/// Imports a tenant bundle into a target deployment (TenantPortability.md §11).
+/// Imports a tenant bundle into a target deployment (tenant-portability.md §11).
 /// </summary>
 /// <remarks>
 /// Two rules shape the whole flow. Nothing mutates until preflight passes, so a bundle that is

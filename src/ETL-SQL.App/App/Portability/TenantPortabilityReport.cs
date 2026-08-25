@@ -1,4 +1,4 @@
-using ETL_SQL.Core.Portability;
+﻿using ETL_SQL.Core.Portability;
 
 namespace ETL_SQL.App.Portability;
 
@@ -28,7 +28,7 @@ public sealed record TenantPortabilityPreflight(
 
 /// <summary>
 /// Non-mutating bundle inspection for the <c>admin tenant validate</c> and
-/// <c>admin tenant preflight</c> verbs (TenantPortability.md §10, §16).
+/// <c>admin tenant preflight</c> verbs (tenant-portability.md §10, §16).
 /// </summary>
 /// <remarks>
 /// Preflight answers a different question from validation. Validation asks "is this bundle intact and

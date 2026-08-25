@@ -1,4 +1,4 @@
-# Contributing to ETL-SQL
+﻿# Contributing to ETL-SQL
 
 Thank you for your interest in contributing! This document explains how to set up a development environment, the conventions we follow, and what the review process looks like.
 
@@ -120,7 +120,7 @@ ETL-SQL/
 
 Projects are strictly tiered and the layering is enforced by `ArchitectureBoundaryTests` against the
 live `csproj` reference graph. See [AGENTS.md §10](AGENTS.md#10-engine-architecture-patterns) for the
-tier table, and [docs/architecture/Engine.md](docs/architecture/Engine.md) for what each project owns.
+tier table, and [docs/architecture/Engine.md](docs/architecture/engine.md) for what each project owns.
 
 ---
 
@@ -163,8 +163,8 @@ back-to-back pushes queue the runners; cancel superseded runs when the queue bac
 ### Engine Code
 
 Before touching the engine, read:
-- **[docs/architecture/Engine.md](docs/architecture/Engine.md)** — dispatch loop, `#temp` scoping, pushdown logic
-- **[docs/architecture/Connectors.md](docs/architecture/Connectors.md)** — connector interface contract and lifecycle
+- **[docs/architecture/Engine.md](docs/architecture/engine.md)** — dispatch loop, `#temp` scoping, pushdown logic
+- **[docs/architecture/Connectors.md](docs/architecture/connectors.md)** — connector interface contract and lifecycle
 - **[AGENTS.md](AGENTS.md)** §8 — Engine Coding Principles (async, ILogger, record types)
 
 **Key rules enforced by CI:**
@@ -176,7 +176,7 @@ Before touching the engine, read:
 
 ### New Connectors
 
-See [docs/architecture/standards/Connectors_Standards.md](docs/architecture/standards/Connectors_Standards.md) for the full compliance checklist (25 items). The short version:
+See [docs/architecture/standards/Connectors_Standards.md](docs/architecture/standards/connectors-standards.md) for the full compliance checklist (25 items). The short version:
 1. Implement `IConnector` and `IDataSource` (or `IDatabaseSource` for SQL engines)
 2. Register in `DependencyInjectionSetup.cs`
 3. Add a `GetSupportedOptions()` implementation documenting every `WITH()` key
@@ -185,7 +185,7 @@ See [docs/architecture/standards/Connectors_Standards.md](docs/architecture/stan
 
 ### Presentation / TUI
 
-See [docs/architecture/standards/Presentation_Standards.md](docs/architecture/standards/Presentation_Standards.md) — the color system, layout rules, and error sanitization requirements.
+See [docs/architecture/standards/Presentation_Standards.md](docs/architecture/standards/presentation-standards.md) — the color system, layout rules, and error sanitization requirements.
 
 ### Browser-side UI (portal / report runtime)
 
@@ -254,7 +254,7 @@ When your change affects user-facing behavior, update the relevant docs:
 | New built-in function | [docs/reference/functions/](docs/reference/functions/README.md) — signature, return type, and copy-pasteable example required |
 | New connector or connector option | [docs/reference/connectors/](docs/reference/connectors/README.md) — include both authentication patterns |
 | New file/email/Docker operation | [docs/reference/file-operations/](docs/reference/file-operations/README.md) |
-| New connector implementation | [docs/architecture/Connectors.md](docs/architecture/Connectors.md) |
+| New connector implementation | [docs/architecture/Connectors.md](docs/architecture/connectors.md) |
 | Security behavior change | [SECURITY.md](SECURITY.md) |
 | Breaking syntax change | [BREAKING_CHANGES.md](BREAKING_CHANGES.md) and [docs/guides/onboarding/migration-guide.md](docs/guides/onboarding/migration-guide.md) |
 | User-facing code, docs, samples, scripts, or workflow changes | Add a `changelog.d/<feature>.md` fragment; the pre-release gate compiles it into [CHANGELOG.md](CHANGELOG.md) |

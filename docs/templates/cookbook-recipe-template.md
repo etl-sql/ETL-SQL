@@ -1,5 +1,14 @@
 # Recipe Title
 
+> **Page-type: Cookbook recipe**
+> Owns: one self-contained, runnable end-to-end scenario
+> (extract → stage → validate → merge → cleanup → notify).
+> Links to (does not restate): guide pages for workflow context; reference pages for syntax.
+> Required sections: Goal, Requirements, Complete Script, Validation, Cleanup,
+> Operational Notes.
+> The complete script must run as-is without editing beyond connection and credential
+> substitution.
+
 Describe the scenario and final outcome.
 
 ## Goal
@@ -13,7 +22,8 @@ What this recipe accomplishes.
 ## Complete Script
 
 ```sql
--- Complete runnable script.
+-- Complete runnable script covering:
+-- Extract → Stage → Validate → Merge → Cleanup → Notify
 ```
 
 ## Validation
@@ -30,5 +40,5 @@ What this recipe accomplishes.
 
 ## Operational Notes
 
-Document scheduling, WHAT_IF usage, lineage, audit, secrets, retries, and alerting considerations.
-
+Document scheduling, WHAT_IF usage, lineage, audit, secrets, retries, and alerting
+considerations.

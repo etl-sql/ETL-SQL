@@ -1,4 +1,4 @@
-# ETL-SQL Reporting Architecture & Engineering Reference
+﻿# ETL-SQL Reporting Architecture & Engineering Reference
 
 This document describes the internal mechanics of the ETL-SQL reporting subsystem — the layer responsible for parsing `.rptsql` files, evaluating their data sources, building serializable manifests, and serving interactive dashboards. It is the primary reference for engineers working on `ETL-SQL.ReportBuilder`, `ETL-SQL-Report`, and the reporting runtime.
 
@@ -778,7 +778,7 @@ because unknown references are dropped during reconciliation and the reader stil
 - **Offline:** in an offline snapshot (`window.__ETLSNAP__`) a bookmark applies from the manifest's
   precomputed envelope with no server. Frozen rows cannot change, and the reader is told so.
 
-See the [Author Bookmarks ADR](decisions/AuthorBookmarks.md) for the accepted contract.
+See the [Author Bookmarks ADR](decisions/author-bookmarks.md) for the accepted contract.
 
 ## 11. Execution Phases Reference
 
@@ -799,8 +799,8 @@ See the [Author Bookmarks ADR](decisions/AuthorBookmarks.md) for the accepted co
 ## 12. Related Subsystem Architecture
 
 For detailed information about adjacent subsystems, refer to the following architecture references:
-- **Portal:** [Portal.md](Portal.md) documents the ASP.NET Core web host service exposing catalogs, dashboards, and access control.
-- **Portal UI & Designer:** [PortalUI.md](PortalUI.md) describes the shared browser designer interface for parsing and generating Report-SQL scripts.
-- **Orchestrator:** [Orchestrator.md](Orchestrator.md) covers background scheduling execution engines that run report ingestion pipelines.
+- **Portal:** [Portal.md](portal.md) documents the ASP.NET Core web host service exposing catalogs, dashboards, and access control.
+- **Portal UI & Designer:** [PortalUI.md](portal-ui.md) describes the shared browser designer interface for parsing and generating Report-SQL scripts.
+- **Orchestrator:** [Orchestrator.md](orchestrator.md) covers background scheduling execution engines that run report ingestion pipelines.
 
 ---

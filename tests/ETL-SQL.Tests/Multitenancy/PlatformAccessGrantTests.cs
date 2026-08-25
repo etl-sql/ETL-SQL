@@ -1,10 +1,10 @@
-using ETL_SQL.Core.Multitenancy;
+﻿using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Tests.Multitenancy;
 
 /// <summary>
 /// SaaS isolation domain 2: platform and tenant identity are separate, and platform administration
-/// cannot implicitly impersonate a tenant user (SaaSTenantIsolation.md §4, §7).
+/// cannot implicitly impersonate a tenant user (saas-tenant-isolation.md §4, §7).
 /// </summary>
 public sealed class PlatformAccessGrantTests
 {

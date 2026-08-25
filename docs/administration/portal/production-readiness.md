@@ -1,4 +1,4 @@
-# Production Readiness Checklist
+﻿# Production Readiness Checklist
 
 Use this checklist before promoting the Portal to a production or customer-facing environment. Items marked **Required** will cause data loss, security exposure, or service failure if skipped. Items marked **Recommended** reduce operational risk.
 
@@ -26,7 +26,7 @@ Use this checklist before promoting the Portal to a production or customer-facin
 - [ ] **Required** — Run the portal as a managed service (Windows Service or systemd unit) so it restarts automatically on host reboot or crash.
 - [ ] **Required** — Treat a restart or node heartbeat lease loss as cancellation of in-flight portal executions. Polling remains durable through `PortalExecutionJobs`; abandoned `Pending`/`Running` jobs return `Cancelled` with an interruption reason and must be submitted again.
 - [ ] **Required** — Set `Portal:Topology:ExpectedMode` explicitly unless this is a plain single-node install with default paths. `Auto` infers `HighAvailability` from PostgreSQL **or** a configured `Portal:Storage:KeyRingPath`, and never infers `Departmental` — so a departmental or single-node deployment that merely moved its key ring is held out of rotation with `ha-requires-portal-postgres` until it is told what it is.
-- [ ] **Recommended** — Verify `/healthz` returns `Healthy` before directing user traffic. Use `/healthz` for load-balancer probes and `/health` for richer monitoring dashboards. If it returns 503, read the `findings` array: every code is listed with its cause and remedy in [HA Topology Failure Certification](../../architecture/decisions/HA_Topology_Failure_Certification.md#readiness-and-health).
+- [ ] **Recommended** — Verify `/healthz` returns `Healthy` before directing user traffic. Use `/healthz` for load-balancer probes and `/health` for richer monitoring dashboards. If it returns 503, read the `findings` array: every code is listed with its cause and remedy in [HA Topology Failure Certification](../../architecture/decisions/ha-topology-failure-certification.md#readiness-and-health).
 - [ ] **Recommended** — If the Orchestrator is deployed separately, confirm `Portal:Orchestrator:ApiUrl` and both `ApiKey` values match. Verify the connection via the Admin → Orchestrator page.
 - [ ] **Recommended** — Configure SMTP for subscriptions. Test an outbound email from Admin → Connections before creating live subscriptions.
 

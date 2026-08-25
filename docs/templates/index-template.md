@@ -1,5 +1,10 @@
 # Index Title
 
+> **Page-type: Index**
+> Owns: cross-reference locator mapping keywords, tasks, or topics to the pages that own them.
+> Links to (does not restate): focused reference pages. Does NOT duplicate their content.
+> Required sections: opening description, grouped table(s), See Also.
+
 One sentence describing what this index maps and how to use it.
 
 > [!NOTE]

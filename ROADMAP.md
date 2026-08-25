@@ -1,13 +1,13 @@
-# ETL-SQL Product Roadmap
+﻿# ETL-SQL Product Roadmap
 
 This document describes future product outcomes and their sequencing. Detailed architecture belongs
 in the linked decisions and architecture documents, executable release work belongs in `TODO.md`,
 and shipped outcomes belong in `CHANGELOG.md` and the release notes under `docs/releases/`.
 
 The stable deployment-profile topology is defined in
-[`docs/architecture/DeploymentProfiles.md`](docs/architecture/DeploymentProfiles.md). The Enterprise
+[`docs/architecture/DeploymentProfiles.md`](docs/architecture/deployment-profiles.md). The Enterprise
 operating model and trust hierarchy are defined in
-[`docs/architecture/roadmaps/Enterprise_Platform_Strategy.md`](docs/architecture/roadmaps/Enterprise_Platform_Strategy.md).
+[`docs/architecture/roadmaps/Enterprise_Platform_Strategy.md`](docs/architecture/roadmaps/enterprise-platform-strategy.md).
 
 ## Roadmap Authoring Contract
 
@@ -93,7 +93,7 @@ out-of-scope bytes unchanged and that invalid intermediate edits do not reset th
 
 **Status:** Shipped
 **Horizon:** Delivered
-**Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
+**Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/grammar-of-graphics-spec-ir.md)
 
 ETL-SQL needs its own typed, versioned visual contract so report meaning is not defined by an ECharts
 option object. Named `.rptsql` visual types remain the easy path and lower into a semantic `ChartSpec`;
@@ -131,7 +131,7 @@ source-controlled SQL.
 
 **Status:** Shipped
 **Horizon:** Current
-**Authoritative design:** [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md), subject to the GoG boundary above
+**Authoritative design:** [`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/micro-charts-and-html-embedding.md), subject to the GoG boundary above
 
 Cards and tables should support native sparklines and progress indicators that remain meaningful in
 browser, export, email, and terminal surfaces. Their small geometry surface makes them an early proving
@@ -161,7 +161,7 @@ measured payload/render costs across representative small and tabular datasets.
 
 **Status:** Shipped
 **Horizon:** Current
-**Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
+**Authoritative design:** [`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/grammar-of-graphics-spec-ir.md)
 
 Reports should remain useful over SSH, in air-gapped environments, and in terminal workflows by
 lowering chart semantics to blocks, Braille cells, text, tables, and proportional components.
@@ -186,7 +186,7 @@ ordering, fallback tests, and screen-reader/plain-text review fixtures.
 
 **Status:** Delivered
 **Horizon:** Delivered
-**Authoritative design:** [Cascading Slicers and Atomic Parameter State](docs/architecture/decisions/CascadingSlicersAndAtomicParameters.md)
+**Authoritative design:** [Cascading Slicers and Atomic Parameter State](docs/architecture/decisions/cascading-slicers-and-atomic-parameters.md)
 
 Parent filter selections should constrain descendant option sets and update invalid selections
 atomically across offline snapshots, local vectors, and live queries. Filter bindings should declare
@@ -222,7 +222,7 @@ documentation, Gemini baselines, and production conformance tests use the same c
 
 **Status:** Complete  
 **Horizon:** Delivered  
-**Authoritative design:** [`docs/architecture/decisions/AuthorBookmarks.md`](docs/architecture/decisions/AuthorBookmarks.md)
+**Authoritative design:** [`docs/architecture/decisions/AuthorBookmarks.md`](docs/architecture/decisions/author-bookmarks.md)
 
 Authors need source-controlled report states that atomically apply parameters, active page, and
 supported presentation state. A bookmark is distinct from a user-created Portal saved view and from

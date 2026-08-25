@@ -1,4 +1,4 @@
-# Administration by Deployment Profile
+﻿# Administration by Deployment Profile
 
 The administration docs are organised by **task**, because a fact should live in exactly one place.
 This page is the other axis: it gives each deployment profile an ordered path through those tasks,
@@ -7,7 +7,7 @@ so you can read only what applies to you.
 Profiles are **cumulative operating profiles, not editions** — the same `.etlsql` and `.rptsql`
 artifacts run under all four. A larger profile adds operational and trust boundaries; it never
 changes what a script means. See
-[Deployment Profile Standards](../architecture/standards/Deployment_Profile_Standards.md) for the
+[Deployment Profile Standards](../architecture/standards/deployment-profile-standards.md) for the
 capability matrix and evidence contract.
 
 ---
@@ -87,7 +87,7 @@ data. **Everything in Enterprise, applied separately to every environment.**
 
 This is the profile where the failure mode is not "I forgot a setting" but "I shared one":
 
-1. [Departmental isolation](../architecture/decisions/Departmental_Isolation.md) — the contract for
+1. [Departmental isolation](../architecture/decisions/departmental-isolation.md) — the contract for
    what must never be shared. Read it before provisioning the second environment, not after.
 2. Generate a plan per environment with `GET /api/admin/environments/plan?environmentId=&portBase=`.
    It derives every isolated resource, port and key requirement from the environment id, so the
@@ -112,5 +112,5 @@ This is the profile where the failure mode is not "I forgot a setting" but "I sh
 
 ## Related
 
-- [Deployment Profile Standards](../architecture/standards/Deployment_Profile_Standards.md) — capability matrix and evidence contract
+- [Deployment Profile Standards](../architecture/standards/deployment-profile-standards.md) — capability matrix and evidence contract
 - [Platform administration](platform/README.md) · [Portal administration](portal/README.md) · [Orchestration](orchestration/README.md)

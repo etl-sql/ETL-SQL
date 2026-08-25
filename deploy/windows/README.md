@@ -1,4 +1,4 @@
-# Windows Service Deployment Template
+﻿# Windows Service Deployment Template
 
 This directory contains the Windows service installer for isolated ETL-SQL environments. Each environment gets separate Portal and Orchestrator services, a dedicated service account, ACL-locked storage, per-service configuration, and independently managed ports and keys.
 
@@ -32,4 +32,4 @@ After installing more than one environment, verify isolation and ACL boundaries:
 pwsh -File ..\verify\Test-Isolation.ps1 C:\ETL-SQL\*\*.env -CheckAcls
 ```
 
-See [`../README.md`](../README.md) for the platform overview and [`../../docs/architecture/decisions/Departmental_Isolation.md`](../../docs/architecture/decisions/Departmental_Isolation.md) for the full runbook.
+See [`../README.md`](../README.md) for the platform overview and [`../../docs/architecture/decisions/Departmental_Isolation.md`](../../docs/architecture/decisions/departmental-isolation.md) for the full runbook.

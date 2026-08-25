@@ -1,4 +1,4 @@
-# ETL-SQL: AI Agent Instruction Manual
+﻿# ETL-SQL: AI Agent Instruction Manual
 
 Welcome, Agent. You are assisting in the development and operation of **ETL-SQL**, a hybrid engine that executes SQL-like syntax against diverse data sources (SQL, NoSQL, FlatFiles) with an emphasis on portability and "Zero-Trust" security.
 
@@ -84,7 +84,7 @@ Do not generate or approve ETL-SQL that:
   `SET WHAT_IF ON` validation pass or an explicit transaction/rollback guard.
 
 Before authoring destructive work, read the applicable statement reference and
-[connector/security standard](docs/architecture/standards/Connectors_Standards.md). Keep the safety
+[connector/security standard](docs/architecture/standards/connectors-standards.md). Keep the safety
 mechanism visible in the script.
 
 ---
@@ -120,7 +120,7 @@ Use the smallest pattern that preserves correctness and portability:
 - Use `CREATE JOB` for recurring work and `RUN SCRIPT` for composable modules.
 
 For complete runnable patterns, use the [ETL Cookbook](docs/cookbooks/etl/README.md) and
-[Script Composition Standards](docs/architecture/standards/Script_Composition_Standards.md).
+[Script Composition Standards](docs/architecture/standards/script-composition-standards.md).
 
 ---
 
@@ -136,12 +136,12 @@ documents when a canonical reference already owns them.
 | Find runnable samples | [Sample Guide](docs/guides/patterns/sample-guide.md) |
 | Author reports | [Reporting Guides](docs/guides/reporting/README.md) |
 | Operate Portal or Orchestrator | [Administration](docs/administration/platform/README.md) |
-| Understand engine internals | [Engine Architecture](docs/architecture/Engine.md) |
-| Change parser or syntax | [Parser/Lexer Architecture](docs/architecture/ParserLexer.md) and [Language Syntax Standards](docs/architecture/standards/Language_Syntax_Standards.md) |
-| Change reporting | [Reporting Architecture](docs/architecture/Reporting.md) and [Reporting Semantic Contracts](docs/architecture/ReportingSemanticContracts.md) |
-| Change Portal, LSP, or VS Code | [Portal](docs/architecture/Portal.md), [Language Server](docs/architecture/LanguageServer.md), and [VS Code Extension](docs/architecture/VSCodeExtension.md) |
-| Change connectors | [Connector Architecture](docs/architecture/Connectors.md) and [Connector Standards](docs/architecture/standards/Connectors_Standards.md) |
-| Change deployment behavior | [Deployment Profiles](docs/architecture/DeploymentProfiles.md) |
+| Understand engine internals | [Engine Architecture](docs/architecture/engine.md) |
+| Change parser or syntax | [Parser/Lexer Architecture](docs/architecture/parser-lexer.md) and [Language Syntax Standards](docs/architecture/standards/language-syntax-standards.md) |
+| Change reporting | [Reporting Architecture](docs/architecture/reporting.md) and [Reporting Semantic Contracts](docs/architecture/reporting-semantic-contracts.md) |
+| Change Portal, LSP, or VS Code | [Portal](docs/architecture/portal.md), [Language Server](docs/architecture/language-server.md), and [VS Code Extension](docs/architecture/vs-code-extension.md) |
+| Change connectors | [Connector Architecture](docs/architecture/connectors.md) and [Connector Standards](docs/architecture/standards/connectors-standards.md) |
+| Change deployment behavior | [Deployment Profiles](docs/architecture/deployment-profiles.md) |
 | Cut a release | [Release Checklist](docs/releases/release-checklist.md) |
 
 Architecture documentation must match the live source. Grammar documentation must match parser-tested
@@ -212,7 +212,7 @@ These apply when authoring or modifying any `IConnector` / `IDataSource` impleme
 - **No aliases / no legacy fallbacks**: If two option names existed, pick one and remove the other. Product has no live users — consistency now costs nothing.
 - **CREATE CONNECTION syntax**: Options go directly in parentheses after the type name. `WITH()` is not used on `CREATE CONNECTION`. `WITH()` is valid in CTEs and `ALTER CONNECTION` only.
 
-For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](docs/architecture/Connectors.md)**.
+For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](./docs/architecture/standards/connectors-standards.md)** and **[Architecture/Connectors.md](docs/architecture/connectors.md)**.
 
 ### 8.3 HTML, JavaScript, TypeScript, and VS Code Rules
 
@@ -423,7 +423,7 @@ Before changing a browser-side report/portal component, prototype and visually v
 
 ## 13. Source Boundary Rules for Agents
 
-Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](./docs/architecture/roadmaps/Source_Boundary_Migration_Plan.md)**.
+Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](./docs/architecture/roadmaps/source-boundary-migration-plan.md)**.
 
 - Keep Core focused on shared language contracts, Engine focused on execution, Connectors focused on provider I/O, and host shells focused on hosting.
 - Move linting, lineage, explain, dialect checks, help verification, and diagnostics toward `ETL-SQL.Analysis` in small, testable steps.

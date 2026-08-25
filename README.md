@@ -1,4 +1,4 @@
-# ETL-SQL™
+﻿# ETL-SQL™
 
 <p align="center">
   <img src="docs/assets/logo.png" alt="ETL-SQL Logo" width="160" />
@@ -346,14 +346,14 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 | Document | Description |
 | :--- | :--- |
-| [Engine Architecture](docs/architecture/Engine.md) | Parser, AST, evaluator internals, dispatch, linting, and execution model. |
-| [Reporting Architecture](docs/architecture/Reporting.md) | Report runtime, manifest builder, renderer, exports, and parameter binding. |
-| [Connector Architecture](docs/architecture/Connectors.md) | Connector interfaces, lifecycle, pushdown, and security boundaries. |
-| [Lineage Architecture](docs/architecture/Lineage.md) | Lineage capture, history queries, export formats, and orchestration integration. |
-| [VS Code Extension](docs/architecture/VSCodeExtension.md) | LSP, REPL channels, notebook controller, results panel, and report preview. |
+| [Engine Architecture](docs/architecture/engine.md) | Parser, AST, evaluator internals, dispatch, linting, and execution model. |
+| [Reporting Architecture](docs/architecture/reporting.md) | Report runtime, manifest builder, renderer, exports, and parameter binding. |
+| [Connector Architecture](docs/architecture/connectors.md) | Connector interfaces, lifecycle, pushdown, and security boundaries. |
+| [Lineage Architecture](docs/architecture/lineage.md) | Lineage capture, history queries, export formats, and orchestration integration. |
+| [VS Code Extension](docs/architecture/vs-code-extension.md) | LSP, REPL channels, notebook controller, results panel, and report preview. |
 | [Contributor Testing Guides](docs/guides/testing/README.md) | Test lanes (`test-lane.ps1`), golden scenarios, and enterprise security certification. |
-| [Connector Certification Matrix](docs/architecture/standards/Connector_Certification_Matrix.md) | Connector test classes, certification tiers, and release gate coverage. |
-| [Release Workflows](docs/architecture/roadmaps/Release_Workflows.md) | Local-first release validation and packaging workflow. |
+| [Connector Certification Matrix](docs/architecture/standards/connector-certification-matrix.md) | Connector test classes, certification tiers, and release gate coverage. |
+| [Release Workflows](docs/architecture/roadmaps/release-workflows.md) | Local-first release validation and packaging workflow. |
 | [Security Policy](SECURITY.md) | Zero-trust sandbox, cryptographic architecture, and audit policy. |
 | [AI Agent Manual](AGENTS.md) | Mandatory instruction set for AI-assisted development in this repo. |
 
@@ -366,7 +366,7 @@ ETL-SQL moves and transforms real data, so we have tried to test as much of it a
 - **Over 6,900 automated unit and integration tests** (xUnit) spanning the parser, evaluator, expression and type system, connectors, security guardrails, native reporting engine, language server, and Portal.
 - **Over 11,500 SQL-correctness checks.** The dedicated SQLite [`sqllogictest`](https://www.sqlite.org/sqllogictest/) lane currently runs 42 active files containing 9,375 query records and 2,160 statement records. The excluded index-optimization corpus relies on indexing physical tables, while ETL-SQL currently supports indexes on in-memory `#temp` tables.
 - **71 VS Code extension and UI unit tests** (Vitest), plus separate Node-based smoke checks for report designer and portal components.
-- **Layered connector integration coverage** using disposable containers where practical (including MSSQL, Postgres, MySQL, Oracle, SFTP, Kafka, MongoDB, Neo4j, S3/MinIO, Azure Blob/Azurite, SMTP/MailPit, Portal, and Orchestrator), provider emulators for BigQuery and Snowflake, and local files or loopback services for connectors such as Parquet, Avro, REST, and SharePoint. See the [Connector Certification Matrix](docs/architecture/standards/Connector_Certification_Matrix.md) for provider-specific coverage and remaining external-provider gaps.
+- **Layered connector integration coverage** using disposable containers where practical (including MSSQL, Postgres, MySQL, Oracle, SFTP, Kafka, MongoDB, Neo4j, S3/MinIO, Azure Blob/Azurite, SMTP/MailPit, Portal, and Orchestrator), provider emulators for BigQuery and Snowflake, and local files or loopback services for connectors such as Parquet, Avro, REST, and SharePoint. See the [Connector Certification Matrix](docs/architecture/standards/connector-certification-matrix.md) for provider-specific coverage and remaining external-provider gaps.
 - **Performance and scale tests** exercise large-dataset and spill paths, including Standard-tier scenarios that scale to one million rows, plus a BenchmarkDotNet suite. Scale-certification scripts can compare results with checked-in baselines and fail on configured regressions.
 - **A 70% line-coverage threshold in CI** when the generated coverage summary is parsed successfully. The local pre-release workflow runs asset checks, dependency audits, build, smoke, fast, sample, VS Code, and Smoke-tier scale checks by default; SLT, Docker integration, Standard-tier scale, and installer validation are opt-in phases.
 

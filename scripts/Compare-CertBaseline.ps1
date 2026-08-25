@@ -1,11 +1,11 @@
-<#
+﻿<#
 .SYNOPSIS
     Compares a cert-report.json against a stored baseline and reports regressions.
 
 .DESCRIPTION
     Compares scale certification scenarios by correctness first, then by scenario-aware
     performance bands. Schema v1 reports from Test-ScaleCertification.ps1 are supported, and the
-    schema v2 shape from Docs/Design/PerformanceRegressionQuality.md is accepted when baselines add
+    schema v2 shape from Docs/Design/performance-regression-quality.md is accepted when baselines add
     distribution objects and checked-in bands.
 
     Missing baselines and hardware mismatches are warnings. Correctness regressions always fail.

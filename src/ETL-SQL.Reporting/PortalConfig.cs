@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ETL_SQL.Portal;
@@ -351,7 +351,7 @@ public class OperationalDigestConfig
     public bool AlertOnPendingMigrations { get; set; } = true;
 
     /// <summary>Base path or URL used in emitted alert runbook links.</summary>
-    public string RunbookBaseUri { get; set; } = "docs/architecture/decisions/Alerting_Service_Objectives.md";
+    public string RunbookBaseUri { get; set; } = "docs/architecture/decisions/alerting-service-objectives.md";
 }
 
 public class PortalLoadBalancerConfig

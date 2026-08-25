@@ -1,4 +1,4 @@
-# Contributor Testing Guides
+﻿# Contributor Testing Guides
 
 [« Back to Guides](../README.md)
 
@@ -22,5 +22,5 @@ These guides describe how to execute, extend, and audit the test suites that gua
 
 ## Related References
 
-- [Architecture: Test Strategy](../../architecture/roadmaps/Test_Strategy.md)
-- [Enterprise Release Gates](../../architecture/decisions/Enterprise_Release_Gates.md)
+- [Architecture: Test Strategy](../../architecture/roadmaps/test-strategy.md)
+- [Enterprise Release Gates](../../architecture/decisions/enterprise-release-gates.md)

@@ -1,4 +1,4 @@
-# Tenant Portability Signing Keys
+﻿# Tenant Portability Signing Keys
 
 Tenant portability manifests are signed by the exporting operator with an OpenPGP signing key.
 This runbook defines how operators publish, rotate, retire, revoke, and retain those verification
@@ -90,6 +90,6 @@ record contains no private-key material or passphrase.
 
 ## References
 
-- [Tenant Portability Architecture](../../architecture/TenantPortability.md)
+- [Tenant Portability Architecture](../../architecture/tenant-portability.md)
 - [Service Accounts](../../reference/portal-commands/service-accounts.md)
 - [CLI Reference: admin tenant](../../reference/cli/admin-tenant.md)

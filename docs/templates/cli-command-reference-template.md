@@ -1,5 +1,11 @@
 # etl-sql COMMAND
 
+> **Page-type: Reference — CLI command**
+> Owns: synopsis, arguments, options, exit codes, examples, and notes for one CLI command or
+> subcommand.
+> Links to (does not restate): getting-started guide for workflow context.
+> Required sections: Synopsis, Arguments, Options, Exit Codes, Examples, Notes, References.
+
 One-sentence description of what the command does.
 
 <!-- GENERATED: the sections below are produced from the System.CommandLine tree in

@@ -1,5 +1,11 @@
 # Configuration Area
 
+> **Page-type: Reference — configuration**
+> Owns: every setting in one configuration area with type, default, scope, and security notes.
+> Links to (does not restate): administration pages for operational procedures.
+> Required sections: Settings table, Details (for non-trivial settings), Example, Security
+> Notes, References.
+
 One sentence: which subsystem these settings control and where they are set
 (`appsettings.json` section, environment variable, or `SET` command).
 

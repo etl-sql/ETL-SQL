@@ -1,4 +1,4 @@
-# Vega-Lite to ETL-SQL Conversion
+﻿# Vega-Lite to ETL-SQL Conversion
 
 [« Back to Report-SQL Guides](README.md)
 
@@ -134,5 +134,5 @@ Give every production visual a meaningful `TITLE`, bind useful `TOOLTIP`/`DETAIL
 ## References
 
 - [Report-SQL Guide](../feature-guides/report-sql.md)
-- [Native Grammar ADR](../../architecture/decisions/GrammarOfGraphicsSpecIR.md)
+- [Native Grammar ADR](../../architecture/decisions/grammar-of-graphics-spec-ir.md)
 - [Declarative Geometry Sample](../../../samples/08_Reporting/declarative_geometry_refinements.rptsql)

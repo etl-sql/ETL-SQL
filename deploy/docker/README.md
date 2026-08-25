@@ -1,10 +1,10 @@
-# Docker Compose — isolated departmental environments
+﻿# Docker Compose — isolated departmental environments
 
 Run multiple fully isolated ETL-SQL environments (dev/test/prod or per department) with Docker
 Compose. Each environment is a self-contained stack: its own PostgreSQL instance and volume, its own
 Portal and Orchestrator databases, its own artifact root, its own keys, and its own port block.
 Nothing is shared between environments — see
-[Departmental_Isolation.md](../../docs/architecture/decisions/Departmental_Isolation.md).
+[Departmental_Isolation.md](../../docs/architecture/decisions/departmental-isolation.md).
 
 ## Files
 

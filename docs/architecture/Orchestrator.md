@@ -1,4 +1,4 @@
-# ETL-SQL Orchestrator Architecture & Engineering Reference
+﻿# ETL-SQL Orchestrator Architecture & Engineering Reference
 
 **Applies to ETL-SQL 0.18.0**
 
@@ -246,7 +246,7 @@ When `AtTime` is set (e.g., `'22:00'`) and `Unit = DAY`, the next run is calcula
 
 ### 3.4 Execution lease (duplicate-run prevention)
 
-Every run — scheduled or manually triggered — first claims a per-job lease stored in the `Jobs` row (`LeaseOwner`, `LeaseExpiresAt`, UTC ISO-8601). The claim is one atomic `UPDATE ... WHERE` lease-free-or-expired, riding the configured relational job store's write guarantees, so **two scheduler processes sharing one job DB produce exactly one execution per due occurrence**. The owner id is `machine:pid:guid`, unique per process start. A heartbeat renews the lease at one-third of `Scheduler:JobLeaseSeconds` (default 600s; floor 30s); if renewal fails because the lease expired and was reclaimed, the run cancels itself rather than risk a duplicate. A lease abandoned by a crash self-heals at expiry and the occurrence reruns — at-least-once semantics. For multi-node HA posture and failure certification, see [HA Topology Failure Certification](decisions/HA_Topology_Failure_Certification.md).
+Every run — scheduled or manually triggered — first claims a per-job lease stored in the `Jobs` row (`LeaseOwner`, `LeaseExpiresAt`, UTC ISO-8601). The claim is one atomic `UPDATE ... WHERE` lease-free-or-expired, riding the configured relational job store's write guarantees, so **two scheduler processes sharing one job DB produce exactly one execution per due occurrence**. The owner id is `machine:pid:guid`, unique per process start. A heartbeat renews the lease at one-third of `Scheduler:JobLeaseSeconds` (default 600s; floor 30s); if renewal fails because the lease expired and was reclaimed, the run cancels itself rather than risk a duplicate. A lease abandoned by a crash self-heals at expiry and the occurrence reruns — at-least-once semantics. For multi-node HA posture and failure certification, see [HA Topology Failure Certification](decisions/ha-topology-failure-certification.md).
 
 ### 3.5 Node capacity and quarantine
 
@@ -667,8 +667,8 @@ All Orchestrator configuration is bound from `appsettings.json` in the host appl
 
 ---
 
-*For the engine internals (Evaluator, Lexer, Parser, AST), see [Engine.md](Engine.md).*
-*For connector implementation details, see [Connectors.md](Connectors.md).*
+*For the engine internals (Evaluator, Lexer, Parser, AST), see [Engine.md](engine.md).*
+*For connector implementation details, see [Connectors.md](connectors.md).*
 *For the language scheduling syntax (`CREATE JOB`, `RUN SCRIPT`, `PARALLEL`), see [Orchestrator Jobs](../reference/orchestrator-jobs/README.md) and [Control Flow](../reference/control-flow/README.md).*
 
 ---
@@ -676,6 +676,6 @@ All Orchestrator configuration is bound from `appsettings.json` in the host appl
 ## 13. Related Subsystem Architecture
 
 For detailed information about adjacent subsystems, refer to the following architecture references:
-- **Portal:** [Portal.md](Portal.md) explains REST APIs, authentication policies, and portal-proxied scheduler endpoints.
-- **Reporting Engine:** [Reporting.md](Reporting.md) covers visual manifest structures and report file generation layers.
-- **Portal UI & Designer:** [PortalUI.md](PortalUI.md) documents visual script editing, designer parsing, and DAG graph modeling.
+- **Portal:** [Portal.md](portal.md) explains REST APIs, authentication policies, and portal-proxied scheduler endpoints.
+- **Reporting Engine:** [Reporting.md](reporting.md) covers visual manifest structures and report file generation layers.
+- **Portal UI & Designer:** [PortalUI.md](portal-ui.md) documents visual script editing, designer parsing, and DAG graph modeling.

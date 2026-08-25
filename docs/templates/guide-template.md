@@ -1,5 +1,11 @@
 # Guide Title
 
+> **Page-type: Guide**
+> Owns: multi-topic workflow with audience, prerequisites, steps, validation, and troubleshooting.
+> Links to (does not restate): reference pages for individual statement or function details.
+> Does NOT duplicate syntax inventories owned by reference pages.
+> Required sections: Audience, Prerequisites, Workflow, Validation, Related Reference.
+
 Short description of the workflow and outcome.
 
 ## Audience
@@ -28,9 +34,8 @@ Describe how to verify the workflow worked.
 
 ## Troubleshooting
 
-- **Symptom** - Cause and fix.
+- **Symptom** — Cause and fix.
 
 ## Related Reference
 
 - [Reference](../reference/README.md)
-

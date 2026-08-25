@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": "etl-sql.deployment-profile-certification/v1",
   "runId": "20260802-164646",
   "commit": "ec4cb8bfe5dab170f1cfda6700aa46f4a1442fc2",
@@ -9,7 +9,7 @@
     " M ROADMAP.md",
     " M TODO.md",
     " M docs/administration/platform/operator-cli.md",
-    " M docs/architecture/roadmaps/Deployment_Profile_Strategy.md",
+    " M docs/architecture/roadmaps/deployment-profile-strategy.md",
     " M docs/architecture/standards/README.md",
     " M docs/guides/data-quality.md",
     " M docs/guides/sample-guide.md",
@@ -72,7 +72,7 @@
     "?? certification-results/deployment-profiles-smoke/",
     "?? docs/administration/platform/deployment-promotion.md",
     "?? docs/administration/platform/profile-transitions.md",
-    "?? docs/architecture/standards/Deployment_Profile_Standards.md",
+    "?? docs/architecture/standards/deployment-profile-standards.md",
     "?? docs/guides/one-person-quality-loop.md",
     "?? docs/reference/cli/scan.md",
     "?? docs/reference/eng/data-quality-failures.md",

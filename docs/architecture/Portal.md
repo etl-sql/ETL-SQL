@@ -1,4 +1,4 @@
-# Architecture: ETL-SQL Portal
+﻿# Architecture: ETL-SQL Portal
 
 The Portal (`ETL-SQL-Portal`) is an ASP.NET Core 10 web application that exposes report execution, snapshot management, subscriptions, and user/group administration through a REST API and a static HTML/JS front-end. It sits at **Tier 5** of the dependency hierarchy, above the shared report hosting/runtime services it calls for execution.
 
@@ -656,6 +656,6 @@ by the administration guides rather than restated here.
 ## 10. Related Subsystem Architecture
 
 For detailed information about adjacent subsystems, refer to the following architecture references:
-- **Reporting Engine:** [Reporting.md](Reporting.md) documents the manifest builder, parameter mapping, and layout rendering details.
-- **Portal UI & Designer:** [PortalUI.md](PortalUI.md) describes the client-side design canvas, editor, and API structures.
-- **Orchestrator Scheduler:** [Orchestrator.md](Orchestrator.md) details how the backend scheduler schedules and triggers catalog subscriptions.
+- **Reporting Engine:** [Reporting.md](reporting.md) documents the manifest builder, parameter mapping, and layout rendering details.
+- **Portal UI & Designer:** [PortalUI.md](portal-ui.md) describes the client-side design canvas, editor, and API structures.
+- **Orchestrator Scheduler:** [Orchestrator.md](orchestrator.md) details how the backend scheduler schedules and triggers catalog subscriptions.

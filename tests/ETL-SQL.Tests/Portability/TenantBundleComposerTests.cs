@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using ETL_SQL.App.Portability;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Portability;
@@ -8,7 +8,7 @@ using ETL_SQL.Orchestrator.Storage;
 namespace ETL_SQL.Tests.Portability;
 
 /// <summary>
-/// Composition of the unified bundle from the exports that already exist (TenantPortability.md §5).
+/// Composition of the unified bundle from the exports that already exist (tenant-portability.md §5).
 /// The Portal side is faked because <c>ETL-SQL.App</c> cannot reference the Portal — it only ever
 /// speaks HTTP to it — and composition logic should not need a running Portal to be testable.
 /// </summary>

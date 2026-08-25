@@ -1,4 +1,4 @@
-# Installation and Deployment
+﻿# Installation and Deployment
 
 Installing ETL-SQL as workstation tooling, as managed services, or as a multi-node cluster.
 
@@ -28,7 +28,7 @@ The Orchestrator and Portal may run on the same host, on separate hosts, or as m
 load-balanced nodes. Single-node deployments use SQLite by default. Practical High Availability
 deployments use shared PostgreSQL state plus shared Portal artifact roots; configure the portal with
 the orchestrator API URL and shared API key when the services are split. Use
-[Operations/Capacity_Planning.md](../../architecture/decisions/Capacity_Planning.md) when deciding whether to start
+[Operations/Capacity_Planning.md](../../architecture/decisions/capacity-planning.md) when deciding whether to start
 shared or split the services.
 
 ---

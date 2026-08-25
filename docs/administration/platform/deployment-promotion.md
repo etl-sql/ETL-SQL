@@ -1,4 +1,4 @@
-# Deployment promotion
+﻿# Deployment promotion
 
 Deployment promotion starts with a read-only inventory. The preflight separates portable scripts
 and policy from catalog state, target-specific bindings, protected material, operational evidence,
@@ -168,7 +168,7 @@ remains idempotent once the report is green.
 
 ## References
 
-- [Deployment Profile Standard](../../architecture/standards/Deployment_Profile_Standards.md)
-- [Deployment Profile and Portability Strategy](../../architecture/roadmaps/Deployment_Profile_Strategy.md)
+- [Deployment Profile Standard](../../architecture/standards/deployment-profile-standards.md)
+- [Deployment Profile and Portability Strategy](../../architecture/roadmaps/deployment-profile-strategy.md)
 - [Operator CLI](operator-cli.md)
 - [Deployment profile transitions](profile-transitions.md)

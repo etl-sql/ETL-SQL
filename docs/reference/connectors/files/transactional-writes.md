@@ -1,4 +1,4 @@
-# TRANSACTIONAL FILE WRITES
+﻿# TRANSACTIONAL FILE WRITES
 
 `TRANSACTIONAL=ON` prevents consumers from observing a partial local file and preserves the prior
 target when serialization, encryption, compression, cancellation, or publication fails.
@@ -46,4 +46,4 @@ SELECT * FROM #validated_rows;
 
 - [File Connectors](README.md)
 - [SFTP](../services/sftp.md)
-- [Connector Standards](../../../architecture/standards/Connectors_Standards.md)
+- [Connector Standards](../../../architecture/standards/connectors-standards.md)

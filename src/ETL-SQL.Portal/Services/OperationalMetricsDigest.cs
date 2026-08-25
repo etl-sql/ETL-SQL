@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using static ETL_SQL.Portal.Services.OperationalMetricsService;
 
 namespace ETL_SQL.Portal.Services;
@@ -268,7 +268,7 @@ public static class OperationalMetricsDigest
     private static string BuildRunbook(OperationalDigestConfig cfg, string code)
     {
         var baseUri = string.IsNullOrWhiteSpace(cfg.RunbookBaseUri)
-            ? "docs/architecture/decisions/Alerting_Service_Objectives.md"
+            ? "docs/architecture/decisions/alerting-service-objectives.md"
             : cfg.RunbookBaseUri.Trim();
         return baseUri.Contains('#', StringComparison.Ordinal)
             ? baseUri
