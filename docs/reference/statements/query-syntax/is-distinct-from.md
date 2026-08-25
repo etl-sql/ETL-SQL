@@ -39,3 +39,9 @@ SELECT * FROM #data WHERE notes IS NOT DISTINCT FROM @expected;
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [Expressions and Operators](../expressions-and-operators.md)
+- [Statements](../README.md)

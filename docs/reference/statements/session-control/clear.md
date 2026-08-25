@@ -30,3 +30,15 @@ CLEAR SESSIONS STALE;
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [Statements](../README.md)
+
+## Examples
+
+```sql
+CLEAR ALL;
+CLEAR TABLES;
+```

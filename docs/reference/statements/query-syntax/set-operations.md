@@ -1,6 +1,8 @@
 # Set Operations
 
 
+## Syntax
+
 ```sql
 SELECT region FROM #east_sales
 UNION
@@ -38,3 +40,11 @@ SELECT 3 AS a;                    -- (1,2), (3, NULL)
 - [Statement Reference](../README.md)
 - [Syntax Index](../../../syntax-index.md)
 
+
+## Examples
+
+```sql
+SELECT id FROM #src1
+UNION ALL
+SELECT id FROM #src2;
+```

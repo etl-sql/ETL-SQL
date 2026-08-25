@@ -7,6 +7,8 @@ Rotates rows into columns (`PIVOT`) for cross-tab analytical matrix reporting, o
 ## SQL-Standard Clause Syntax
 
 ### PIVOT
+## Syntax
+
 ```sql
 SELECT <group_columns...>, <pivoted_columns...>
 FROM <source_table>

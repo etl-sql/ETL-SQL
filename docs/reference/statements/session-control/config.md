@@ -33,3 +33,9 @@ SELECT Value FROM #api_config WHERE Option = 'URL';
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [SET](config.md)
+- [Statements](../README.md)

@@ -8,6 +8,8 @@ ETL-SQL supports modular scripting through user-defined stored procedures, scala
 
 Defines a reusable procedural block with input/output parameters:
 
+## Syntax
+
 ```sql
 CREATE PROCEDURE ArchiveSales @olderThan DATE
 AS
@@ -91,3 +93,9 @@ DROP VIEW IF EXISTS ActiveCustomers;
 - [Lifecycle Capability Matrix](lifecycle-matrix.md)
 - [Execution Blocks](execution-blocks.md)
 - [Syntax Index](../../syntax-index.md)
+
+## Examples
+
+```sql
+RUN SCRIPT 'scripts/daily_etl.etlsql';
+```

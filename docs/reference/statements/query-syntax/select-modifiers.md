@@ -8,6 +8,8 @@ Modern query ergonomics inspired by DuckDB and Snowflake. Includes inline wildca
 
 Modify a `*` wildcard projection without manually enumerating every unchanged column. Applied in order: `EXCLUDE`, then `REPLACE`, then `RENAME`.
 
+## Syntax
+
 ```sql
 -- 1. EXCLUDE: Drops specific sensitive or internal columns
 SELECT * EXCLUDE (internal_secret, ssn) FROM users;
@@ -137,3 +139,10 @@ SEND FILE '#export_feed' TO 'outbound/users_sanitized.csv' AT sftp_out;
 - [ETL Cookbook: PII Masking & Hashing](../../../cookbooks/etl/pii-masking-and-hashing.md)
 - [ETL Cookbook: Staged Ingestion](../../../cookbooks/etl/staged-ingestion.md)
 - [Syntax Index](../../../syntax-index.md)
+
+## Examples
+
+```sql
+SELECT TOP 10 * FROM #orders;
+SELECT DISTINCT category FROM #products;
+```

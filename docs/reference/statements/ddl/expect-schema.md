@@ -49,3 +49,9 @@ EXPECT SCHEMA #orders FROM 'testdata/Specs/customer_spec.json' ON DRIFT WARN;
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [Statements](../README.md)
+- [Data Quality](../../../guides/feature-guides/data-quality.md)

@@ -24,3 +24,10 @@ GROUP BY department;
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [SELECT](select-modifiers.md)
+- [WINDOW](window.md)
+- [Statements](../README.md)

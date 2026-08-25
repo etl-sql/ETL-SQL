@@ -8,6 +8,8 @@ DELETE removes rows from a target table. Without WHERE, all rows are removed; pr
 DELETE FROM <target> [WHERE <condition>];
 ```
 
+## Examples
+
 ```sql
 -- Remove specific rows
 DELETE FROM #staging WHERE status = 'failed';
@@ -22,7 +24,11 @@ FOREACH @id IN (SELECT id FROM #orphans) BEGIN
 END;
 ```
 
+## Guardrails
+
 DELETE on a connection table issues the DELETE on the remote database. DELETE on a #temp table removes rows from the in-memory working set. To remove all rows and reset identity, use TRUNCATE TABLE.
 
-References:
+## References
+
+- [TRUNCATE](truncate.md)
 - [Statements](../README.md)

@@ -40,3 +40,9 @@ Result: all attempted checks passed.
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [CREATE CONNECTION](create.md)
+- [Connectors](../../connectors/README.md)

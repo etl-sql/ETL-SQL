@@ -7,6 +7,8 @@ Spawns, manages, and connects to ephemeral database containers during test runs 
 
 ## Spawning a Container
 
+## Syntax
+
 ```sql
 USE DOCKER('<image>') [AS <alias>];
 
@@ -70,3 +72,9 @@ CLOSE DOCKER;
 - [Statement Reference](README.md)
 - [CREATE CONNECTION](ddl/create.md)
 - [Syntax Index](../../syntax-index.md)
+
+## Examples
+
+```sql
+USE DOCKER CONTAINER 'my-postgres' IMAGE 'postgres:16';
+```

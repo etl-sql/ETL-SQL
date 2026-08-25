@@ -13,6 +13,8 @@ UPDATE <target>
 
 The FROM clause allows joining to another table to derive the new values.
 
+## Examples
+
 ```sql
 -- Simple update
 UPDATE #orders SET status = 'complete' WHERE processed = 1;
@@ -35,7 +37,11 @@ UPDATE SalesDB.dbo.Orders
   WHERE status = 'pending' AND order_date < @cutoff;
 ```
 
+## Guardrails
+
 @@ROWCOUNT reflects the number of rows affected after UPDATE.
 
-References:
+## References
+
+- [MERGE](merge.md)
 - [Statements](../README.md)

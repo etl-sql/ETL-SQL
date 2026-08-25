@@ -20,6 +20,10 @@ FROM #orders
 WHERE status = 'Active';
 ```
 
+## Examples
+
+See syntax above.
+
 ## Notes
 - Supported `ALTER` forms vary by object kind. See the [Lifecycle Capability Matrix](../lifecycle-matrix.md).
 - Only `ADD` and `DROP` column actions are supported.
@@ -30,5 +34,5 @@ WHERE status = 'Active';
 - `ALTER VIEW` requires the view to exist. Use `CREATE OR ALTER VIEW` for idempotent scripts.
 - See: CREATE TABLE, CREATE VIEW, SELECT INTO
 
-References:
+## References
 - [Statements](../README.md)

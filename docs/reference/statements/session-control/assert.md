@@ -37,3 +37,10 @@ ASSERT (
 References:
 - [Statements](../README.md)
 - [ASSERT JOB](assert-job.md)
+
+
+## References
+
+- [ASSERT TABLE](assert-table.md)
+- [ASSERT JOB](assert-job.md)
+- [Statements](../README.md)

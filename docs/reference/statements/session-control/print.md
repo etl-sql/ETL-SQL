@@ -5,6 +5,8 @@ Syntax:
 
 The expression can be a string literal, a variable, or a string expression. Non-string values are converted automatically.
 
+## Syntax
+
 ```sql
 -- Simple message
 PRINT 'Starting load...';
@@ -27,3 +29,15 @@ In headless mode PRINT writes to stdout. In the TUI editor messages appear in th
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [Statements](../README.md)
+
+## Examples
+
+```sql
+PRINT 'Pipeline starting...';
+PRINT @RecordCount;
+```

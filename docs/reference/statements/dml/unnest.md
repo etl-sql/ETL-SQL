@@ -4,6 +4,8 @@ Table-valued functions that expand a list/array value into rows. Each element be
 ## Usage
 Use in the `FROM` clause or via `CROSS APPLY` (for correlated, per-row expansion):
 
+## Syntax
+
 ```sql
 -- Standalone
 SELECT u.Value FROM UNNEST([10, 20, 30]) AS u;          -- 3 rows: 10, 20, 30
@@ -27,3 +29,9 @@ SELECT u.Value FROM FLATTEN([[1, 2], [3, 4]]) AS u;     -- 1, 2, 3, 4
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [Statements](../README.md)
+- [SELECT](select.md)

@@ -23,3 +23,9 @@ WHERE email ILIKE '%@company.com';
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [Expressions and Operators](../expressions-and-operators.md)
+- [Statements](../README.md)

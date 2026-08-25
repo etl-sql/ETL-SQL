@@ -8,6 +8,8 @@ High-level declarative data preparation statements that generate inspectable in-
 
 Generates a comprehensive date dimension table populated with fiscal, calendar, weekday, and ISO date attributes:
 
+## Syntax
+
 ```sql
 GENERATE CALENDAR FROM <start_date> TO <end_date> INTO <destination_table>;
 ```

@@ -4,6 +4,8 @@ Tracks column-level data provenance across all SELECT, INSERT, UPDATE, and MERGE
 
 ## Querying Lineage
 
+## Syntax
+
 ```sql
 -- Query lineage for all tables in the session
 SELECT * FROM eng.lineage;
@@ -513,3 +515,8 @@ Use `eng.protected_data_suggestions` for non-authoritative review findings. Sugg
 
 References:
 - [Specialized Operations](../../../administration/platform/README.md)
+
+
+## References
+
+- [Statements](../README.md)

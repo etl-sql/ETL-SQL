@@ -2,6 +2,8 @@
 
 Defines print layout overrides (page breaks, keep-together, exclusions) on individual visuals within a paginated report.
 
+## Syntax
+
 ```sql
 CREATE VISUAL DepartmentChart AS BAR (
     ...
@@ -20,3 +22,9 @@ CREATE VISUAL DepartmentChart AS BAR (
 
 ## References
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)
+
+## Examples
+
+```sql
+PRINT_LAYOUT (ORIENTATION = LANDSCAPE, PAGE_SIZE = A4);
+```

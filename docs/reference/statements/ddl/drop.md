@@ -32,13 +32,22 @@ EXECUTE portal BEGIN
 END;
 ```
 
+## Examples
+
+See syntax above.
+
 ## Notes
 - Use `DROP <kind> IF EXISTS <name>` where supported; the post-name form `DROP <kind> <name> IF EXISTS` is retired. See the [Lifecycle Capability Matrix](../lifecycle-matrix.md).
 - Dropping a #temp table that does not exist raises a runtime error; guard with `IF` checks if needed.
 - Connections are session-scoped by default; they are automatically released when the script ends.
 - Dropping an index does not drop the table.
 - Portal variants require a PORTAL connection and admin/manage permissions as enforced by the portal.
-- See: CREATE, CLEAR SESSION
+
+## References
+
+- [Statements](../README.md)
+- [CREATE](create.md)
+- [ALTER](alter.md)
 
 References:
 - [Statements](../README.md)

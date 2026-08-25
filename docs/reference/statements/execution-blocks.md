@@ -8,6 +8,8 @@
 ### Native SQL Pushdown
 Pushes a SQL block to a remote connection in its native dialect.
 
+## Syntax
+
 ```sql
 DECLARE @minId  INT         = 100;
 DECLARE @status VARCHAR(20) = 'Active';
@@ -21,6 +23,8 @@ END
 ```
 
 Parameters: `?` = sequential, `?1`/`?2` = indexed.
+
+## Examples
 
 ### Dynamic SQL
 Executes a string as SQL. If `AT` is specified, it executes on the remote connection; otherwise, it executes locally as an ETL-SQL script.

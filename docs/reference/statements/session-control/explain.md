@@ -41,3 +41,9 @@ SELECT operation, target, estimated_rows, pushdown
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [ANALYZE](analyze.md)
+- [Statements](../README.md)

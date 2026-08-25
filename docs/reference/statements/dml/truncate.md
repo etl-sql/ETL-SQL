@@ -8,6 +8,8 @@ TRUNCATE removes all rows from a table quickly by deallocating storage pages rat
 TRUNCATE TABLE <target>;
 ```
 
+## Examples
+
 ```sql
 -- Clear a staging table before reloading
 TRUNCATE TABLE #staging;
@@ -21,7 +23,11 @@ TRUNCATE TABLE #results;
 INSERT INTO #results SELECT id, SUM(amount) FROM #orders GROUP BY id;
 ```
 
+## Guardrails
+
 TRUNCATE is not logged row-by-row, so it cannot be rolled back on all database platforms. Behaviour is platform-specific for remote connections. For #temp tables it is always safe and instant.
 
-References:
+## References
+
+- [DELETE](delete.md)
 - [Statements](../README.md)

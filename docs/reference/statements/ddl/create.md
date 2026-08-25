@@ -49,6 +49,10 @@ EXECUTE portal BEGIN
 END;
 ```
 
+## Examples
+
+See syntax above for connections, tables, indexes, sets, and views.
+
 ## Notes
 - Connection types: MSSQL, POSTGRES, MYSQL, SQLITE, ORACLE, FLATFILE, SFTP, S3, SMTP, API, SNOWFLAKE, BIGQUERY, REDSHIFT, ODBC.
 - Supported lifecycle modifiers vary by object kind. See the [Lifecycle Capability Matrix](../lifecycle-matrix.md) before using `CREATE IF NOT EXISTS`, `CREATE OR ALTER`, or `CREATE OR REPLACE`.
@@ -56,7 +60,12 @@ END;
 - `CREATE TABLE` is optional when using `SELECT ... INTO #table`. The schema is inferred automatically.
 - `CREATE VIEW` stores a query definition only; rows are evaluated when the view is selected.
 - Portal administration variants require `EXECUTE <portal-connection> BEGIN ... END`.
-- See: DROP, USE SETS, ENCRYPT
+
+## References
+
+- [Statements](../README.md)
+- [DROP](drop.md)
+- [ALTER](alter.md)
 
 References:
 - [Statements](../README.md)

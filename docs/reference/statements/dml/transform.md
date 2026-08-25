@@ -2,6 +2,8 @@
 
 Applies a table-level transformation algorithm to a source table, writing the output to a target table.
 
+## Syntax
+
 ```sql
 TRANSFORM #target
 FROM #source

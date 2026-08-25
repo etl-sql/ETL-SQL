@@ -2,6 +2,8 @@
 
 Defines the physical page layout (size, margins, orientation, scale) for a `CREATE PAGE` statement.
 
+## Syntax
+
 ```sql
 CREATE PAGE Revenue AS PAGINATED (
     STRUCTURE = 'A',
@@ -26,3 +28,9 @@ CREATE PAGE Revenue AS PAGINATED (
 
 ## References
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)
+
+## Examples
+
+```sql
+PAGE_LAYOUT (COLUMNS = 12, PADDING = 16);
+```

@@ -26,3 +26,9 @@ SELECT * FROM #plan;
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [EXPLAIN](explain.md)
+- [Statements](../README.md)

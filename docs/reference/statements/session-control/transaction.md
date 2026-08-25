@@ -48,3 +48,16 @@ END CATCH;
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [Statements](../README.md)
+
+## Examples
+
+```sql
+BEGIN TRANSACTION;
+INSERT INTO db.Orders SELECT * FROM #new_orders;
+COMMIT TRANSACTION;
+```

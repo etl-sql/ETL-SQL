@@ -4,6 +4,17 @@ ETL-SQL uses one object-lifecycle vocabulary where an object has stable identity
 `CREATE`, `CREATE OR ALTER`, `CREATE OR REPLACE`, `ALTER`, `DROP`, and `DROP IF EXISTS`.
 Unsupported object/mode pairs are parser errors; they must not parse as a plain `CREATE`.
 
+## Syntax
+
+```sql
+CREATE [OR ALTER | OR REPLACE] [IF NOT EXISTS] object_type name ...;
+DROP object_type [IF EXISTS] name;
+```
+
+## Examples
+
+See capability matrix tables below for supported combinations by object tier.
+
 Legend: ✓ supported, — unsupported, n/a not an object-lifecycle form.
 
 ## Core and Orchestrator objects
@@ -84,3 +95,10 @@ References:
 - [DROP](ddl/drop.md)
 - [Report-SQL Guide](../../guides/feature-guides/report-sql.md)
 - [Job Orchestration](../orchestrator-jobs/schedule.md)
+
+
+## References
+
+- [CREATE](ddl/create.md)
+- [ALTER](ddl/alter.md)
+- [DROP](ddl/drop.md)

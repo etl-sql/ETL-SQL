@@ -1,6 +1,8 @@
 # WINDOW
 WINDOW defines reusable named window specifications for analytic functions in a `SELECT` query. Named windows avoid repeating the same `PARTITION BY`, `ORDER BY`, and frame clauses across multiple `OVER` expressions.
 
+## Syntax
+
 ```sql
 SELECT <columns>,
   <window_function>() OVER <window_name> AS <alias>
@@ -40,3 +42,16 @@ WINDOW ordered_months AS (ORDER BY month);
 
 References:
 - [Statements](../README.md)
+
+
+## References
+
+- [SELECT](../dml/select.md)
+- [Statements](../README.md)
+
+## Examples
+
+```sql
+SELECT id, amount, SUM(amount) OVER (PARTITION BY category ORDER BY date) AS running_total
+FROM #orders;
+```
