@@ -6,8 +6,8 @@ Welcome, Agent. You are assisting in the development and operation of **ETL-SQL*
 
 | Section | Use it for |
 | :--- | :--- |
-| [1](#1-the-mental-model--read-this-first)–[5](#5-scripting-patterns--how-to-think-about-a-request) | Writing `.etlsql` / `.rptsql` scripts |
-| [6](#6-documentation-library-map)–[7](#7-documentation-stewardship-rules) | Finding and writing documentation |
+| [1](#1-the-mental-model)–[5](#5-script-composition) | Writing `.etlsql` / `.rptsql` scripts |
+| [6](#6-documentation-routing)–[7](#7-documentation-stewardship-rules) | Finding and writing documentation |
 | [8](#8-code-principles-by-surface)–[10](#10-engine-architecture-patterns) | Modifying C#, HTML, JavaScript, TypeScript, and VS Code source |
 | [11](#11-third-party-dependency-policy)–[19](#19-cross-platform-line-endings--pre-push-validation) | Dependencies, assets, releases, and gates |
 
@@ -25,304 +25,127 @@ Applies to chat responses, commit messages, docs, and code comments.
 
 ---
 
-## 1. The Mental Model — Read This First
+## 1. The Mental Model
 
-ETL-SQL is **not** a traditional SQL engine. It is an **orchestration conductor** that coordinates multiple heterogeneous data sources. Before writing any script, internalize this:
+ETL-SQL is an orchestration engine, not a traditional database. It owns session variables and
+`#temp` tables, evaluates ETL-SQL language features, and coordinates reads and writes across
+heterogeneous connections.
 
-```
-┌───────────────────────────────────────────────────────┐
-│              ETL-SQL Engine ("The Brain")             │
-│  - Holds @variables and #temp tables in memory        │
-│  - Evaluates ETL-SQL syntax                           │
-│  - Coordinates reads/writes across connections        │
-└────────────┬──────────────┬──────────────┬────────────┘
-             │              │              │
-       MSSQL conn     FLATFILE conn   SFTP conn
-       (remote SQL)   (local file)  (remote files)
-```
+- **Engine context** — variables, `#temp` tables, control flow, portable transformations, validation,
+  lineage, and cross-source work.
+- **Remote context** — SQL executed by a named database connection. An `EXECUTE ... BEGIN ... END`
+  block is passed to that connection in its native dialect.
+- **Data movement** — cross-source data flows through the engine. Stage it before transforming,
+  validating, masking, or loading it elsewhere.
 
-**The Golden Rule**: Data always flows *through* the engine. When you move data from Postgres to a CSV, you typically stage it in an engine `#temp` table first — this is where `WHERE` filters, `REGEX`, `HASHBYTES`, and lineage tagging happen. The remote engines only receive simple SQL they understand natively.
-
-### 1.0 Product Positioning — Keep This Front and Center
-
-When writing user-facing docs, examples, READMEs, release notes, or onboarding material, make the differentiators explicit:
-
-- **Script-first** — pipelines, reports, jobs, validation, and governance metadata are plain-text `.etlsql` / `.rptsql` artifacts.
-- **Source-control friendly** — changes are diffable, reviewable, testable, packageable, and runnable in CLI, VS Code, notebooks, Orchestrator, Portal, and CI/CD.
-- **The T is back in ETL** — transformation, validation, masking, fuzzy matching, enrichment, lineage tagging, and quality gates can happen before loading or publishing.
-- **ELT tradeoffs without ELT lock-in** — compatible work can push down to databases, but cross-source work stays portable instead of being trapped in one warehouse dialect or split across Python, schedulers, and BI designer files.
-- **Lineage and tags are native** — lineage metadata follows data through transformations into reports and can be queried, diagrammed, or exported.
-- **Zero-trust operations** — path boundaries, script immutability, encrypted secrets, `SECRET:name` references, `WHAT_IF`, audit, and governance policies are part of the execution model.
-
-### 1.1 Engine Context vs. Remote Context
-
-| Context | What runs here | Examples |
-| :--- | :--- | :--- |
-| **Engine** | ETL-SQL syntax, variables, functions, `#temp` tables, `FOREACH`, `IF`, `MERGE` | `SELECT ... INTO #stage FROM conn.Table` |
-| **Remote** | Native SQL of the target engine, passed verbatim | `EXECUTE mssql_conn BEGIN ... END` |
-
-**Implication**: If you write `SELECT TOP 10` and the connection is Postgres, the engine will catch this at lint time because `TOP` is in Postgres's excluded keyword list. Use `LIMIT 10` instead, or push the query via `EXECUTE ... BEGIN ... END` only.
+When writing user-facing material, keep the product position clear: ETL-SQL is script-first and
+source-control friendly; it keeps transformation visible and portable instead of locking it into one
+warehouse; and lineage, tags, validation, and zero-trust operations are part of the execution model.
 
 ---
 
-## 2. Dialect & Syntax Reference
+## 2. Script Authoring Rule — Read the Focused Reference
 
-ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full syntax, see the Reference library:
+Do not treat this file as a syntax manual. Before writing or reviewing `.etlsql` or `.rptsql`, read
+[the syntax index](docs/syntax-index.md) and the focused reference page for every nontrivial statement,
+function, connector, or visual involved.
 
-| Document | Contents |
+The parser, immutable AST, canonical formatter, tests, and focused reference page are authoritative.
+If they disagree, inspect the implementation and fix the stale surface. Do not infer current syntax
+from old samples, roadmap prose, release notes, or examples in `AGENTS.md`.
+
+Use these starting points:
+
+| Task | Required starting point |
 | :--- | :--- |
-| **[Syntax Index](docs/syntax-index.md)** | Searchable map for statements, functions, connector options, visual types, variables, and CLI commands |
-| **[Statement Reference](docs/reference/statements/README.md)** | Focused pages for variables, control flow, query clauses, DML, DDL, execution, scheduling, and session commands |
-| **[Data Connectors](docs/reference/connectors/README.md)** | Connector tokens, options, authentication patterns, and quick-reference tables |
-| **[Standard Library](docs/reference/functions/README.md)** | Data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with signatures and examples |
-| **[File Operations](docs/reference/file-operations/README.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, SSH key generation, Docker integration, and advanced file ops |
-| **[Lineage.md](docs/reference/statements/session-control/lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
-| **[Data Quality Rules](docs/reference/statements/dml/data-quality-rules.md)** | `@expect`/`@fail` column rules, the `ON FAILURE` routing clause, quarantine/warn capture schema; see also [ASSERT JOB](docs/reference/statements/session-control/assert-job.md) for run-metric assertions |
-| **[Relative Date Parameters](docs/reference/functions/datetime/reldate.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
-| **[Report-SQL Guide](docs/guides/feature-guides/report-sql.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
-| **[Administration](docs/administration/platform/README.md)** | Production deployment, HA configuration, Governance Core, OIDC setup, backup/restore, health checks |
-
-Key syntax facts:
-- **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
-- **Temp tables**: `#TableName` — prefix with `#` for in-memory engine-side tables
-- **Encrypted strings**: `'ENC:base64...'` — set session password first with `USE PASSWORD = '...'`
-- **Connectors**: Use the [Data Connectors reference](docs/reference/connectors/README.md) for the current supported tokens and options; do not copy connector inventories into other docs.
-- **Suspension**: `WAITFOR DELAY 'hh:mm:ss'` — fixed pause; `WAITFOR TIME 'hh:mm:ss'` — pause until clock time
-- **Data quality**: `@expect`/`@fail` tags on SELECT columns enforce value rules; a trailing `ON FAILURE` clause routes them. `ASSERT JOB` asserts on the run's own metrics. See [Data Quality Rules](docs/reference/statements/dml/data-quality-rules.md) and [ASSERT JOB](docs/reference/statements/session-control/assert-job.md)
-
-> [!NOTE]
-> `WAITFOR` has four supported forms:
-> - `WAITFOR DELAY 'hh:mm:ss'` — fixed pause
-> - `WAITFOR TIME 'hh:mm:ss'` — pause until wall-clock time
-> - `WAITFOR (condition)` — polls the expression at 200ms intervals until it returns a truthy value; condition may be a scalar expression or a subquery (e.g. `WAITFOR (SELECT COUNT(*) FROM #t) > 0`)
-> - `WAIT UNTIL condition` — preferred alias for `WAITFOR (condition)`
->
-> The `WHILE` loop with `WAITFOR DELAY` inside remains the preferred pattern when you need a custom poll interval or inter-check logic.
-
-### 2.1 Report-SQL (`.rptsql`) Key Facts
-
-`.rptsql` files are standard ETL-SQL scripts with additional statement types. Use the [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) as the full reference. Critical patterns to get right:
-
-- **File structure**: normal ETL-SQL data prep statements first, then `CREATE VISUAL`, `CREATE PAGE`, `CREATE DATASET`, `CREATE CONTAINER`, `CREATE NAVIGATION` at the end
-- **Report metadata**: `SET REPORT TITLE = '...'` and `SET REPORT DESCRIPTION = '...'` (optional, appear before visuals)
-- **Visual types**: Use the [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) for the current visual inventory and mappings.
-- **Interactive bindings** — If a control has a `SOURCE` (like `SLICER`), bind the parameter to the mapped column name. If it lacks a `SOURCE` (like `DATEPICKER` or `SLIDER`), you **must** bind it to the literal keyword `value`:
-  ```sql
-  -- Slicer (has SOURCE)
-  ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
-  
-  -- Datepicker (no SOURCE)
-  ACTIONS (ON_CHANGE = SET_PARAMETER(@startDate, value))
-  ```
-- **STRUCTURE** is a CSS grid-template-areas string:
-  ```sql
-  STRUCTURE = 'A A / B C'   -- two rows; A spans both columns; B and C share the second row
-  ```
-- **MAP slots are quoted strings**: `MAP ('A' = VisualName, 'B' = OtherVisual)`
-- **Buttons use the page-style form**: `CREATE BUTTON ButtonName AS (...)`; do not use typed button aliases.
-- **CREATE DATASET ENCRYPT modes**: `ENCRYPT = MACHINE` (no creds), `ENCRYPT = PASSWORD, PASSWORD = '...'`, or `ENCRYPT = KEYFILE, KEYFILE = '...'`. (Note: This is different from the `WITH(ENCRYPT=ON, PASSWORD='...')` syntax used for file connectors).
-- **Filter types** (`DATEPICKER`, `SLIDER`, `SEARCH`) do not require a `SOURCE` clause
-- **MULTISELECT** requires a `SOURCE` clause for its option list
-- **STYLE** cascades: page-level `STYLE (THEME = dark)` applies to all charts; visual-level `STYLE` overrides it
-- **Portal administration is script-first** inside `EXECUTE portal BEGIN...END`; use the [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) for the current command inventory.
-
----
-
-### 2.2 Enterprise Operations Key Facts
-
-The platform now includes shipped enterprise operations features. When generating scripts, editing server code, or writing docs, do not assume ETL-SQL is single-node or SQLite-only.
-
-- **Practical High Availability is shipped**: Portal and Orchestrator support shared PostgreSQL state, shared Portal artifact roots, node heartbeats, lease fencing, leader election, node-capacity heartbeats, health probes, and load-balancer session affinity.
-- **Single-node defaults remain SQLite/local storage**. Multi-node HA requires `Portal:Database:Provider=Postgres`, `Orchestrator:Database:Provider=Postgres`, shared Portal storage roots (`Smb`/UNC), a shared Data Protection key ring, and identical JWT/orchestrator/dataset keys across Portal nodes.
-- **Interactive report sessions are node-local**. HA deployments must use sticky routing on `ETLSQL_PORTAL_AFFINITY` or the configured `Portal:LoadBalancer:SessionAffinityCookieName`.
-- **Load balancers should probe `GET /healthz`** for Portal node readiness. Use `GET /health` for richer monitoring. Orchestrator API routes require `X-Orchestrator-Key`; unauthenticated network-reachable Orchestrator startup is rejected.
-- **Lease fencing matters**. Scheduled jobs, refreshes, shared artifact writes, and migration/singleton work use database-backed leases/fencing. Do not replace these with node-local locks or in-memory ownership.
-- **Governance Core is shipped** across hosts: typed organization policy, policy enforcement at lint and execution boundaries, `SECRET:name` references via configured secret providers, redaction of raw secret values and `SECRET:` references, and durable remote audit outbox with optional fail-closed mutation behavior.
-- **Enterprise Identity is active work**. OIDC support includes federated login/logout/token refresh, issuer/audience/claim validation, OIDC-only account binding, and dynamic group-claim sync. The next phase adds service accounts and approval workflows. Check `TODO.md` and `ROADMAP.md` before assuming identity behavior is complete.
-
-For production configuration details, use **[Administration](docs/administration/platform/README.md)** as the source of truth. For the stable Solo/Team/Enterprise/SaaS topology, provider, binding, state, and authority model, use **[DeploymentProfiles.md](./docs/architecture/DeploymentProfiles.md)**. For the long-term enterprise operating model, use **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)**.
+| Statements and clauses | [Statement Reference](docs/reference/statements/README.md) |
+| Connectors and authentication | [Data Connectors](docs/reference/connectors/README.md) |
+| Functions and data types | [Standard Library](docs/reference/functions/README.md) |
+| File operations and transfer | [File Operations](docs/reference/file-operations/README.md) |
+| Report-SQL and visuals | [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) |
+| Lineage and data quality | [Lineage](docs/reference/statements/session-control/lineage.md) and [Data Quality Guides](docs/guides/data-quality/README.md) |
+| Production and HA | [Administration](docs/administration/platform/README.md) |
 
 ---
 
 ## 3. Zero-Trust Security Guardrails
 
-As an AI, you **MUST NOT** generate ETL-SQL scripts that:
+Do not generate or approve ETL-SQL that:
 
-- Attempt to read from or write to `.sql`, `.etlsql`, or `.rptsql` script files — the engine blocks this via the **Script Immutability Guardrail**
-- Access system directories (`C:\Windows`, `C:\bin`, `/etc`, `/root`, `.git`, `.ssh` **when not accessed via SFTP/KEYFILE**)
-- Perform operations on the root of any drive (e.g. `C:\` directly)
-- Exceed 100 file operations or 5 levels of recursion without a `SET ALLOW_FILE_OPERATIONS = <n>` or `SET ALLOW_RECURSIVE_LAYERS = <n>` statement in the script
-- Log, print, or concatenate connection strings, passwords, API keys, or `ENC:` values into any output string
-- Use `DELETE`, `MERGE`, `TRUNCATE`, or destructive file operations without either a `BEGIN TRANSACTION`/`ROLLBACK` guard or a `SET WHAT_IF ON` validation block first
+- Reads from or writes to `.sql`, `.etlsql`, or `.rptsql` script files.
+- Accesses system directories such as `C:\Windows`, `C:\bin`, `/etc`, or `/root`; a drive root;
+  `.git`; or local `.ssh` content. SFTP and explicit `KEYFILE` use remain governed by their focused
+  references and path policy.
+- Exceeds 100 file operations or five recursion levels without explicit
+  `SET ALLOW_FILE_OPERATIONS` or `SET ALLOW_RECURSIVE_LAYERS` authorization.
+- Logs, prints, concatenates, serializes, or otherwise exposes connection strings, passwords, API
+  keys, raw secret values, `SECRET:` references, or `ENC:` values.
+- Uses `DELETE`, `MERGE`, `TRUNCATE`, or destructive file operations without either a
+  `SET WHAT_IF ON` validation pass or an explicit transaction/rollback guard.
 
-**Recommended safe pattern for any destructive operation:**
-```sql
--- Phase 1: Always validate with WHAT_IF first
-SET WHAT_IF ON;
-DELETE FROM prod_db.logs WHERE log_date < '2024-01-01';
-SET WHAT_IF OFF;
-
--- Phase 2: Run for real only after validating the output
-DELETE FROM prod_db.logs WHERE log_date < '2024-01-01';
-```
-
-For full security governance rules, see **[Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** (Part I — The Inviolable Rules).
+Before authoring destructive work, read the applicable statement reference and
+[connector/security standard](docs/architecture/standards/Connectors_Standards.md). Keep the safety
+mechanism visible in the script.
 
 ---
 
-## 4. Dialect Awareness
+## 4. Engine and Remote Dialects
 
-ETL-SQL is **dialect-aware**. A keyword that is valid in the ETL-SQL engine layer may be rejected by the linter if the **target connection** is a specific database type.
+Dialect validity depends on where an expression executes.
 
-| Keyword / Feature | MSSQL | Postgres | Oracle | File connectors |
-| :--- | :---: | :---: | :---: | :---: |
-| `TOP n` | ✓ | ✗ (use `LIMIT`) | ✗ (use `ROWNUM`) | — |
-| `GETDATE()` | ✓ | ✗ (use `NOW()`) | ✗ (use `SYSDATE`) | — |
-| `ISNULL(v, d)` | ✓ | ✗ (use `COALESCE`) | ✗ (use `NVL`) | — |
-| `DATALENGTH()` | ✓ | ✗ | ✗ | — |
-| `IDENTITY` column | ✓ | ✗ | ✗ | — |
-| SQL pushdown | ✓ | ✓ | ✓ | ✗ |
+- In an `EXECUTE connection BEGIN ... END` block, write the target system's native SQL. ETL-SQL
+  passes the block through.
+- A query against a remote connection must satisfy that connector's supported dialect and pushdown
+  rules. Run lint; do not assume T-SQL keywords are portable.
+- Queries over `#temp` tables and file-backed data run in engine context and use ETL-SQL semantics.
+- When portability or execution context is uncertain, stage remote data into a `#temp` table and
+  perform cross-source transformations in the engine.
 
-**Rules for generating cross-dialect scripts:**
-- When the `FROM` clause references a **file connector**, use ETL-SQL engine functions (`ISNULL`, `COALESCE`, `GETDATE()`) — not database-specific ones.
-- When writing an `EXECUTE ... BEGIN...END` block, use the **target connection's native dialect verbatim** — the engine passes it unchanged.
-- When in doubt, write a query against a `#temp` table (engine context) rather than directly against a remote connection.
+Do not maintain keyword compatibility tables here. The connector reference, dialect metadata, linter,
+and tests own those details.
 
 ---
 
-## 5. Scripting Patterns — How to Think About a Request
+## 5. Script Composition
 
-When a user asks you to write a script, follow this decision tree:
+Use the smallest pattern that preserves correctness and portability:
 
-### 5.1 Is this a simple SELECT for inspection?
-```sql
-CREATE CONNECTION src AS MSSQL(SERVER='...', DATABASE='...', TRUSTED_CONNECTION=TRUE);
-SELECT TOP 100 * FROM src.dbo.MyTable WHERE Status = 'Active';
-```
+- A simple inspection query may read directly from one source.
+- Cross-source ETL stages source columns into an engine `#temp` table, transforms and validates
+  there, then loads or merges into the destination.
+- Keep database-specific work inside an explicit remote execution block.
+- Validate destructive operations with `WHAT_IF` or a transaction/rollback guard before execution.
+- Use connector-backed file operations, use explicit allowed paths, check existence before destructive
+  file work, and encrypt sensitive content before transfer.
+- Use `CREATE JOB` for recurring work and `RUN SCRIPT` for composable modules.
 
-### 5.2 Is this an Extract → Transform → Load?
-Use the **staged ingestion pattern** (never write directly from source to target without staging):
-```sql
-CREATE CONNECTION src AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
-CREATE CONNECTION dest AS MSSQL(SERVER='...', DATABASE='...', TRUSTED_CONNECTION=TRUE);
-
-DECLARE @Cutoff DATETIME = DATEADD(DAY, -1, GETDATE());
-
-BEGIN TRY
-    -- 1. Extract only source columns. The engine binds @Cutoff for the remote query.
-    SELECT id, name, email
-    INTO #extracted
-    FROM src.customers
-    WHERE updated_at > @Cutoff;
-
-    -- 2. Transform in engine context.
-    SELECT id, UPPER(name) AS name, email, GETDATE() AS loaded_at
-    INTO #staging
-    FROM #extracted;
-
-    -- 3. Validate / clean
-    UPDATE #staging SET email = NULL WHERE email NOT LIKE '%@%';
-
-    -- 4. Preview the destructive load.
-    SET WHAT_IF ON;
-    MERGE INTO dest.dbo.Customers AS T
-    USING #staging AS S ON T.id = S.id
-    WHEN MATCHED AND S.name <> T.name THEN
-        UPDATE SET T.name = S.name, T.loaded_at = S.loaded_at
-    WHEN NOT MATCHED THEN
-        INSERT (id, name, email, loaded_at) VALUES (S.id, S.name, S.email, S.loaded_at);
-    SET WHAT_IF OFF;
-
-    -- 5. Run for real only after validating the WHAT_IF output.
-    MERGE INTO dest.dbo.Customers AS T
-    USING #staging AS S ON T.id = S.id
-    WHEN MATCHED AND S.name <> T.name THEN
-        UPDATE SET T.name = S.name, T.loaded_at = S.loaded_at
-    WHEN NOT MATCHED THEN
-        INSERT (id, name, email, loaded_at) VALUES (S.id, S.name, S.email, S.loaded_at);
-
-    PRINT 'Load complete.';
-END TRY
-BEGIN CATCH
-    PRINT 'Error: ' + ERROR_MESSAGE();
-    THROW;
-END CATCH
-```
-
-### 5.3 Is this a file operation?
-- Use `FLATFILE`, not raw `File.*` calls
-- Always use `IF FILE_EXISTS(...)` before destructive operations
-- Encrypt before transmitting via SFTP: `ENCRYPT FILE ... → SEND FILE ... AT sftp_conn`
-
-### 5.4 Does this involve scheduling?
-Use `CREATE JOB` for recurring tasks; use `RUN SCRIPT` to break large scripts into composable modules.
-
-For 29 production-grade complete recipes, see the **[ETL Cookbook](./docs/cookbooks/etl/README.md)**.
+For complete runnable patterns, use the [ETL Cookbook](docs/cookbooks/etl/README.md) and
+[Script Composition Standards](docs/architecture/standards/Script_Composition_Standards.md).
 
 ---
 
-## 6. Documentation Library Map
+## 6. Documentation Routing
 
-Use this map to find the right document for any task.
+Use the narrowest authoritative document for the task. Do not copy inventories or syntax into other
+documents when a canonical reference already owns them.
 
-### Writing Scripts
-| Need | Document |
+| Need | Source |
 | :--- | :--- |
-| Find syntax by keyword | **[Syntax Index](docs/syntax-index.md)** |
-| Statement syntax | **[Statement Reference](docs/reference/statements/README.md)** |
-| Connector options and authentication | **[Data Connectors](docs/reference/connectors/README.md)** |
-| Functions (string, date, math, regex, window) | **[Standard Library](docs/reference/functions/README.md)** |
-| File ops, email, transfer, Docker, keys | **[File Operations](docs/reference/file-operations/README.md)** |
-| Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** |
-| Relative date parameters (`@TODAY`, offsets, report filters) | **[Relative Date Parameters](docs/reference/functions/datetime/reldate.md)** |
-| Complete production recipes | **[Cookbook](docs/cookbooks/etl/README.md)** |
-| Pipeline mental model for new users | **[Getting Started](docs/guides/onboarding/getting-started.md)** |
-| Sample script inventory in `/samples/` | **[Sample Guide](docs/guides/patterns/sample-guide.md)** |
-| Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/feature-guides/report-sql.md)** |
-| Dashboard authoring, parameters, slicers, RLS, themes | **[Reporting Guides](docs/guides/reporting/README.md)** |
-| Data quality rules, quarantine, assertions, impact | **[Data Quality Guides](docs/guides/data-quality/README.md)** |
-| Pipelines, orchestration, parallel execution, DAGs | **[Pipeline Guides](docs/guides/pipelines/README.md)** |
-| Contributor testing, test lanes, SLT corpus | **[Testing Guides](docs/guides/testing/README.md)** |
-| Portal end-user tasks (browse, export, share, views) | **[Portal User Guides](docs/guides/tooling/portal/README.md)** |
-| Visual Report Builder (WYSIWYG 12-col grid, ergonomics, drag-and-drop) | **[Visual Report Builder Guide](docs/guides/tooling/report-builder.md)** |
-| Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](./docs/architecture/standards/Script_Composition_Standards.md)** |
-| Production install, HA, Governance Core, OIDC | **[Administration](docs/administration/platform/README.md)** |
-| Portal user/admin operations | **[Portal Admin](docs/administration/portal/README.md)** |
-| Orchestrator job operations | **[Job Orchestration](docs/administration/orchestration/README.md)** |
-| Deployment profiles, portability boundaries, and SaaS topology | **[Deployment Profile Architecture](./docs/architecture/DeploymentProfiles.md)** |
-| SaaS tenant isolation, hardened execution, checkpoints, and outbound Gateway | **[SaaS Tenant Isolation Architecture](./docs/architecture/SaaSTenantIsolation.md)** |
-| SaaS operator best practices, multi-tenant fleet hosting, and FAQ | **[SaaS Operator FAQ](docs/administration/platform/saas-operations-faq.md)** |
-| Tenant export/import, rebinding, cutover, and SaaS exit | **[Tenant Portability Architecture](./docs/architecture/TenantPortability.md)** |
-| Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)** |
+| Learn the pipeline model | [Getting Started](docs/guides/onboarding/getting-started.md) |
+| Find shipped syntax | [Syntax Index](docs/syntax-index.md) |
+| Find runnable samples | [Sample Guide](docs/guides/patterns/sample-guide.md) |
+| Author reports | [Reporting Guides](docs/guides/reporting/README.md) |
+| Operate Portal or Orchestrator | [Administration](docs/administration/platform/README.md) |
+| Understand engine internals | [Engine Architecture](docs/architecture/Engine.md) |
+| Change parser or syntax | [Parser/Lexer Architecture](docs/architecture/ParserLexer.md) and [Language Syntax Standards](docs/architecture/standards/Language_Syntax_Standards.md) |
+| Change reporting | [Reporting Architecture](docs/architecture/Reporting.md) and [Reporting Semantic Contracts](docs/architecture/ReportingSemanticContracts.md) |
+| Change Portal, LSP, or VS Code | [Portal](docs/architecture/Portal.md), [Language Server](docs/architecture/LanguageServer.md), and [VS Code Extension](docs/architecture/VSCodeExtension.md) |
+| Change connectors | [Connector Architecture](docs/architecture/Connectors.md) and [Connector Standards](docs/architecture/standards/Connectors_Standards.md) |
+| Change deployment behavior | [Deployment Profiles](docs/architecture/DeploymentProfiles.md) |
+| Cut a release | [Release Checklist](docs/releases/release-checklist.md) |
 
-### Contributing Engine Code
-| Need | Document |
-| :--- | :--- |
-| How connectors work internally | **[Architecture/Connectors.md](docs/architecture/Connectors.md)** |
-| Engine internals (parser, evaluator, AST, pushdown) | **[Architecture/Engine.md](docs/architecture/Engine.md)** |
-| Parser/Lexer internals, adding a new statement type | **[Architecture/ParserLexer.md](docs/architecture/ParserLexer.md)** |
-| Variable scoping, procedures, `RUN SCRIPT`, output parameters | **[Architecture/VariableScoping.md](docs/architecture/VariableScoping.md)** |
-| Expression evaluation, type system, NULL propagation | **[Architecture/ExpressionEvaluation.md](docs/architecture/ExpressionEvaluation.md)** |
-| Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](docs/architecture/Presentation.md)** |
-| TUI editor internals (buffer, highlighting, autocomplete) | **[Architecture/TuiEditor.md](docs/architecture/TuiEditor.md)** |
-| Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](docs/architecture/Orchestrator.md)** |
-| Portal auth, data model, HA topology, API, health checks | **[Architecture/Portal.md](docs/architecture/Portal.md)** |
-| Portal UI — DAG visualization, designer, lite editor, execution model | **[Architecture/PortalUI.md](docs/architecture/PortalUI.md)** |
-| Report-SQL runtime and semantic contracts | **[Architecture/Reporting.md](docs/architecture/Reporting.md)**, **[ReportingSemanticContracts.md](docs/architecture/ReportingSemanticContracts.md)** |
-| LSP server (completions, diagnostics, hover, schema autocomplete) | **[Architecture/LanguageServer.md](docs/architecture/LanguageServer.md)** |
-| VS Code extension (commands, REPL, results panel, report preview) | **[Architecture/VSCodeExtension.md](docs/architecture/VSCodeExtension.md)** |
-| Grammar State Engine model, autocomplete, and doc-testing | **[Architecture/GrammarStateEngine.md](docs/architecture/GrammarStateEngine.md)** |
-| C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](./docs/architecture/standards/Engine_Coding_Standards.md)** |
-| Rules for writing a new connector | **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** |
-| Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](./docs/architecture/standards/Language_Syntax_Standards.md)** |
-| Protocol for breaking changes | **[Standards/Breaking_Change_Standards.md](./docs/architecture/standards/Breaking_Change_Standards.md)** |
-| Rules for third-party dependencies | **[Standards/Third_Party_Dependency_Standards.md](./docs/architecture/standards/Third_Party_Dependency_Standards.md)** |
-| Source boundaries and project ownership | **[Standards/Source_Boundary_Standards.md](./docs/architecture/standards/Source_Boundary_Standards.md)** |
-| Rules for report runtime assets | **[Standards/Report_Runtime_Asset_Standards.md](./docs/architecture/standards/Report_Runtime_Asset_Standards.md)** |
-| Rules for touching the presentation layer | **[Standards/Presentation_Standards.md](./docs/architecture/standards/Presentation_Standards.md)** |
-| Rules for writing help docs & snippets | **[Standards/Help_and_Snippet_Standards.md](./docs/architecture/standards/Help_and_Snippet_Standards.md)** |
-| Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](./docs/architecture/roadmaps/Engine_Upgrade_Strategy.md)** |
-| Cutting a release (checklist, version bump, validation gate, tag/publish) | **[release-checklist.md](./docs/releases/release-checklist.md)** |
+Architecture documentation must match the live source. Grammar documentation must match parser-tested
+syntax. Check `TODO.md` and `ROADMAP.md` before describing unfinished work as shipped.
 
 ---
 
@@ -388,14 +211,6 @@ These apply when authoring or modifying any `IConnector` / `IDataSource` impleme
 - **ResolvePath for file path options**: Any connector option accepting a file path (`CREDENTIAL_FILE`, `KEY_FILE`, `CERT_FILE`, `PRIVATE_KEY_FILE`, `PATH`) must call `context.ResolvePath()` before any I/O, even when the connector is not in the engine tier.
 - **No aliases / no legacy fallbacks**: If two option names existed, pick one and remove the other. Product has no live users — consistency now costs nothing.
 - **CREATE CONNECTION syntax**: Options go directly in parentheses after the type name. `WITH()` is not used on `CREATE CONNECTION`. `WITH()` is valid in CTEs and `ALTER CONNECTION` only.
-
-```sql
--- Correct
-CREATE CONNECTION sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='s3cr3t');
-
--- Wrong (stale syntax — WITH() is not valid on CREATE CONNECTION)
-CREATE CONNECTION sales AS MSSQL WITH(SERVER='sql01', DATABASE='SalesDB');
-```
 
 For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](docs/architecture/Connectors.md)**.
 
@@ -642,24 +457,6 @@ For full usage and script details, refer to **[scripts/README.md](./scripts/READ
 
 ---
 
-## 15. Common Mistakes to Avoid
-
-| Mistake | Correct pattern |
-| :--- | :--- |
-| Writing `SELECT TOP 10` against a Postgres connection | Use `LIMIT 10` or push via `EXECUTE pg_conn BEGIN SELECT ... LIMIT 10; END` |
-| Using relative paths: `FROM 'data\input.csv'` | Always use absolute paths: `FROM 'C:\Data\input.csv'` |
-| Printing a connection string in a PRINT or exception message | Never include connection strings, passwords, or tokens in any output |
-| Running a `DELETE` or `MERGE` without a safety check | Wrap in `SET WHAT_IF ON` first, then re-run without it |
-| Forgetting `IF FILE_EXISTS()` before `COPY FILE` or `ENCRYPT FILE` | Check existence first to avoid silent no-ops or errors |
-| Using `Logger.Instance` in C# engine code | Use injected `ILogger` from `IExecutionContext` |
-| Declaring `class` for AST nodes in C# | Use `record` types for all AST nodes |
-| Using `Firebird` as a connector token | Firebird is not a supported connector; use `ODBC` with a Firebird driver instead |
-| Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src AS FLATFILE('my.csv'); SELECT * FROM src` |
-| Using `PWD=` as an ETL-SQL-owned connection option | Use `PASSWORD=` for ETL-SQL-created options. Vendor-native pass-through syntax such as ODBC `PWD` is valid when the connector intentionally exposes it. |
-| Writing `CREATE CONNECTION ... WITH(option=value)` | `WITH()` is not valid on `CREATE CONNECTION`. Options go directly in parentheses: `CREATE CONNECTION c AS MSSQL(SERVER='s', PASSWORD='p')` |
-
----
-
 ## 16. Breaking Change Protocol
 
 A **breaking change** is any modification that could produce different results for identical script input. This includes:
@@ -700,7 +497,6 @@ ETL-SQL strictly follows [Semantic Versioning 2.0.0](https://semver.org/). Agent
 - Active development happens on the **release branch for the version in flight** (e.g. `release/v0.19.0`). Branch features and fixes off that branch, not off `dev` or `main`, and open pull requests back into it.
 - After a stable release is tagged, critical bug fixes and security hotfixes are applied (or cherry-picked) to that version's `release/vX.Y.Z` branch, shipped as a patch, and merged forward.
 - Batch work into a single push. Every push to `main` or a `release/**` branch runs the full ~40-minute CI; back-to-back pushes queue the runners. Cancel superseded runs when the queue backs up.
-- Enable the repo's hooks once per clone so staged C# is formatted and formatting drift never breaks the CI gate: `git config core.hooksPath scripts`. Same command on every platform — no symlink or elevation needed. The hook refuses a partially staged C# file that also has unstaged edits, so unrelated local work is never swept into a commit.
 
 ### 16.3 Release Flow
 
@@ -759,14 +555,24 @@ All agents, contributors, and maintainers must strictly adhere to this core engi
 
 To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions runs:
 
-1. **Shell Scripts (`.sh`) Must Use LF**:
+1. **Enable and Verify Repository Hooks**:
+   - Once per clone, run `git config core.hooksPath scripts`. The same command works on every
+     platform and requires no symlink or elevation.
+   - Before the first commit, verify `git config --get core.hooksPath` returns `scripts`.
+   - Do not bypass commit or push hooks unless the reported failure is proven unrelated to the staged
+     change and the staged diff has been validated independently. Record the bypass and the unrelated
+     failure in the handoff.
+   - Hooks must inspect staged content for commit-specific checks. If a hook blocks a commit because
+     of unrelated unstaged files, fix the hook's scope instead of formatting, staging, or modifying
+     someone else's work.
+2. **Shell Scripts (`.sh`) Must Use LF**:
    - Shell scripts (`*.sh`) and systemd units (`*.service`) must strictly use LF line endings (CRLF causes `bad interpreter` / bash syntax errors on Linux runners).
    - Normalize with: `node scripts/check-shell-line-endings.js --fix`
-2. **Shared Report Runtime Assets Must Use LF**:
+3. **Shared Report Runtime Assets Must Use LF**:
    - Always edit canonical assets in `src/ETL-SQL.ReportRuntime/Resources/Shared/` and run `node .\scripts\sync-assets.js` followed by `node .\scripts\sync-assets.js -Check`.
-3. **C# Text/Doc Assertions Must Normalize Line Endings**:
+4. **C# Text/Doc Assertions Must Normalize Line Endings**:
    - When writing C# tests that read markdown or text files from disk via `File.ReadAllText()`, never assume `\r\n` or `\n`. Always use `.Replace("\r\n", "\n")` or regex `\r?\n` for cross-platform stability.
-4. **Always Run Pre-Push Validation Locally**:
+5. **Always Run Pre-Push Validation Locally**:
    - Before pushing to remote, always execute `.\scripts\Test-PrePush.ps1` (or verify via git pre-push hook). It verifies formatting, asset sync, syntax index sync, link coverage, flaky sleep patterns, test lane inventory, and fast contract tests in ~30 seconds.
 
 ---
