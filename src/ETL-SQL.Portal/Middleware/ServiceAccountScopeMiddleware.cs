@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using Microsoft.EntityFrameworkCore;
@@ -21,10 +23,30 @@ public sealed class ServiceAccountScopeMiddleware(RequestDelegate next)
         // more. Null still means default-deny.
         var required = RequiredScopes(context.Request);
         var scopes = context.User.FindAll(TokenService.ScopeClaim).Select(value => value.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var workloadBinding = context.User.FindFirstValue(TokenService.WorkloadBindingClaim);
         if (required is null || !required.Any(scopes.Contains))
         {
+            if (workloadBinding is not null)
+                await AuditWorkloadDenialAsync(context, workloadBinding, "scope_denied");
             await DenyAsync(context, "service_account_scope_denied", required is null ? null : string.Join(' ', required));
             return;
+        }
+
+        // Federated workload tokens are narrower than ordinary service tokens. Their policy-bound
+        // resource is the exact API path and their operation is the single scope minted at exchange.
+        // This prevents a CI token approved for one report/job from exercising the owner's authority
+        // over another object that happens to use the same scope.
+        if (workloadBinding is not null)
+        {
+            var resource = context.User.FindFirstValue(TokenService.WorkloadResourceClaim) ?? "";
+            var operation = context.User.FindFirstValue(TokenService.WorkloadOperationClaim) ?? "";
+            if (!FixedEquals(resource, context.Request.Path.Value ?? "")
+                || !required.Contains(operation, StringComparer.OrdinalIgnoreCase))
+            {
+                await AuditWorkloadDenialAsync(context, workloadBinding, "resource_operation_denied");
+                await DenyAsync(context, "workload_resource_operation_denied", operation);
+                return;
+            }
         }
 
         // Identity administration is the one place a token can change who may log in and with what
@@ -41,6 +63,25 @@ public sealed class ServiceAccountScopeMiddleware(RequestDelegate next)
         }
 
         await next(context);
+    }
+
+    private static async Task AuditWorkloadDenialAsync(
+        HttpContext context, string bindingId, string reason)
+    {
+        var audit = context.RequestServices?.GetService<AuditService>();
+        if (audit is null) return;
+        int? ownerId = int.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsed)
+            ? parsed : null;
+        await audit.LogAsync(ownerId, "WORKLOAD_IDENTITY_USE_DENIED", "WorkloadIdentity", bindingId,
+            $"Reason={reason}; Path={context.Request.Path}; Method={context.Request.Method}",
+            actorType: "ExternalWorkload", actorId: bindingId);
+    }
+
+    private static bool FixedEquals(string left, string right)
+    {
+        var a = Encoding.UTF8.GetBytes(left);
+        var b = Encoding.UTF8.GetBytes(right);
+        return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
     }
 
     private static async Task DenyAsync(HttpContext context, string error, string? requiredScope)

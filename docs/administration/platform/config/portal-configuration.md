@@ -283,6 +283,48 @@ In Shared (multi-tenant) mode, each binding requires a `Scope` naming its tenant
 | `RequiredClaims` | `[]` | Claim types that must be present in the validated id_token. |
 | `ClockSkewSeconds` | `60` | Allowed id_token lifetime clock skew. |
 
+### Workload identity (`Portal:Identity:WorkloadIdentity`)
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Enabled` | `false` | Enables signed workload assertion exchange at `/api/auth/workload-token`. |
+| `MaximumAssertionLifetimeSeconds` | `600` | Maximum external assertion lifetime. Effective range is 60–600 seconds. |
+| `ClockSkewSeconds` | `30` | Assertion lifetime skew. Effective range is 0–120 seconds. |
+| `Bindings` | `[]` | Exact federation policies described below. Wildcards are unsupported. |
+
+Each binding contains `Id`, `Provider`, `ServiceAccountClientId`, `TenantId`, `Issuer`, `Subject`,
+`Audience`, `Resource`, `Operations`, `Enabled`, and `RequireApproval`. `Provider` is `github`,
+`gitlab`, `azure_devops`, or `private_key_jwt`. `Resource` is the exact Portal API path and every
+operation must be an existing service-account scope. For `private_key_jwt`, also set `PublicKeyPem`
+to the public key or certificate PEM; never place the private key in Portal configuration.
+
+```json
+{
+  "Portal": {
+    "Identity": {
+      "WorkloadIdentity": {
+        "Enabled": true,
+        "MaximumAssertionLifetimeSeconds": 600,
+        "Bindings": [
+          {
+            "Id": "github-main-report",
+            "Provider": "github",
+            "ServiceAccountClientId": "sa_0123456789abcdef0123456789abcdef",
+            "TenantId": "production",
+            "Issuer": "https://token.actions.githubusercontent.com",
+            "Subject": "repo:etl-sql/ETL-SQL:ref:refs/heads/main",
+            "Audience": "etl-sql-ci",
+            "Resource": "/api/reports/42/execute",
+            "Operations": ["reports.execute"],
+            "RequireApproval": true
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
 ### LDAP (`Portal:Identity:Ldap`)
 
 | Key | Default | Description |
@@ -306,3 +348,4 @@ In Shared (multi-tenant) mode, each binding requires a `Scope` naming its tenant
 - [State and HA](../state-and-ha.md) — HA topology and shared storage requirements
 - [Portal Administration](../../portal/README.md)
 - [Platform Administration](../README.md)
+- [Workload Identity and Machine-to-Machine Security](../../../architecture/workload-identity.md)

@@ -58,6 +58,7 @@ PortalSecret            (encrypted secret store: SECRET:name for Portal-hosted e
 PortalSharedConnection  (governed connection catalog: SHARED:alias; Target/OptionsJson encrypted at rest)
 AdminServiceRun         (per-run ledger for the native admin background services)
 ServiceAccount          (scoped machine identities, capped by their owner's authority)
+WorkloadIdentityReplay  (tenant-scoped, hashed one-use assertion and approval IDs)
 SharedIdentityAuthority (tenant-owned OIDC authority metadata; client secrets remain external)
 PolicyVersionEntity / PolicyMachineEntity   (enterprise policy authority + machine registry)
 GatewayEnrollmentEntity                     (gateway machine enrollment tokens and bootstrap metadata)
@@ -615,7 +616,9 @@ by the administration guides rather than restated here.
 | `/api/portal/navigation` | Any | Which top-level entry points to offer **this** caller. The shell applies the answer; it does not compute one. Two destinations cannot be decided from a token claim — Docs depends on the Documentation module, Studio on the `StudioAccess` capability — so pages that guessed offered a Docs link that 404s and a Studio link to everyone |
 | `/api/auth/oidc` | Public | OIDC federation — the enterprise identity path |
 | `/api/auth/service-token` | Public (client credentials) | Service-account token issue |
+| `/api/auth/workload-token` | Public (signed assertion) | Short-lived, exact-resource workload token exchange |
 | `/api/admin/service-accounts` | Admin | Scoped machine identities, capped by their owner's authority |
+| `/api/admin/workload-identity/approvals` | Admin (non-owner) | Signed one-use approval for sensitive workload exchange |
 | `/api/admin/identity/authorities` | Admin | Tenant-scoped shared-host OIDC authority registration, rotation metadata, enablement, and deletion |
 | `/api/admin/policy-authority` | Admin | Enterprise policy publish, activate, canary, roll back, impact |
 | `/api/policy-authority` | Machine | Policy distribution to enrolled machines |

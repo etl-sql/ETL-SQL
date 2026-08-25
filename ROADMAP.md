@@ -379,13 +379,13 @@ partial writes, lost responses, retries, storage outages, reconciliation, and ga
 
 ### Identity — Workload Identity and M2M Hardening
 
-**Status:** Incremental  
-**Horizon:** Later  
-**Authoritative design:** Not yet decided
+**Status:** Shipped
+**Horizon:** Current
+**Authoritative design:** [Workload Identity and Machine-to-Machine Security](docs/architecture/workload-identity.md)
 
 Service-account administration, client credentials, scopes, ownership, rotation, revocation, audit,
-and Portal/Orchestrator authorization have shipped. The next increment reduces dependence on long-lived
-shared secrets and hardens automated publication and execution.
+and Portal/Orchestrator authorization ship alongside short-lived GitHub, GitLab, Azure DevOps, and
+`private_key_jwt` federation for automated publication and execution.
 
 **Why now:** CI/CD and scheduled workloads should converge on short-lived, audience-bound,
 secretless credentials as hosted and enterprise automation expands.

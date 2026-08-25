@@ -100,6 +100,34 @@ public sealed class ServiceAccountScopeMiddlewareTests
         Assert.Equal(StatusCodes.Status403Forbidden, publish.Response.StatusCode);
     }
 
+    [Fact]
+    public async Task WorkloadToken_IsBoundToExactResourcePathAndOperation()
+    {
+        var called = false;
+        var middleware = new ServiceAccountScopeMiddleware(_ =>
+        {
+            called = true;
+            return Task.CompletedTask;
+        });
+        var allowed = WorkloadContext("POST", "/api/reports/7/execute",
+            "/api/reports/7/execute", ServiceAccountScopes.ReportsExecute);
+        await middleware.InvokeAsync(allowed);
+        Assert.True(called);
+
+        called = false;
+        var otherResource = WorkloadContext("POST", "/api/reports/8/execute",
+            "/api/reports/7/execute", ServiceAccountScopes.ReportsExecute);
+        await middleware.InvokeAsync(otherResource);
+        Assert.False(called);
+        Assert.Equal(StatusCodes.Status403Forbidden, otherResource.Response.StatusCode);
+
+        var otherOperation = WorkloadContext("POST", "/api/reports/7/execute",
+            "/api/reports/7/execute", ServiceAccountScopes.OrchestratorExecute,
+            tokenScope: ServiceAccountScopes.ReportsExecute);
+        await middleware.InvokeAsync(otherOperation);
+        Assert.Equal(StatusCodes.Status403Forbidden, otherOperation.Response.StatusCode);
+    }
+
     private static DefaultHttpContext Context(string method, string path, string scope)
     {
         var context = new DefaultHttpContext();
@@ -111,6 +139,18 @@ public sealed class ServiceAccountScopeMiddlewareTests
             new Claim(TokenService.ScopeClaim, scope)
         ], "test"));
         context.Response.Body = new MemoryStream();
+        return context;
+    }
+
+    private static DefaultHttpContext WorkloadContext(
+        string method, string path, string resource, string operation, string? tokenScope = null)
+    {
+        var context = Context(method, path, tokenScope ?? operation);
+        context.User.AddIdentity(new ClaimsIdentity([
+            new Claim(TokenService.WorkloadBindingClaim, "ci-main"),
+            new Claim(TokenService.WorkloadResourceClaim, resource),
+            new Claim(TokenService.WorkloadOperationClaim, operation)
+        ]));
         return context;
     }
 }

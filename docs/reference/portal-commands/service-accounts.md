@@ -138,6 +138,48 @@ Content-Type: application/json
 Use the returned `accessToken` as `Authorization: Bearer <accessToken>`. Request a new token when it
 expires; service accounts do not use the refresh-token endpoint.
 
+### Workload identity authentication
+
+CI and scheduled workloads should exchange their provider assertion without using the client secret:
+
+```http
+POST /api/auth/workload-token
+Content-Type: application/json
+
+{
+  "subjectToken": "<provider-oidc-jwt-or-private-key-jwt>",
+  "audience": "etl-sql-ci",
+  "resource": "/api/reports/42/execute",
+  "operation": "reports.execute",
+  "approvalToken": null
+}
+```
+
+The returned token carries only the requested operation and works only on the exact `resource` path.
+The external assertion is one-use and may live no more than ten minutes. GitHub, GitLab, Azure DevOps,
+and `private_key_jwt` bindings use the same policy fields. Configure the provider issuer, exact
+subject, audience, service-account client ID, tenant, resource, and operation under
+`Portal:Identity:WorkloadIdentity:Bindings`.
+
+For a binding with `RequireApproval: true`, a different administrator first requests a five-minute,
+one-use approval:
+
+```http
+POST /api/admin/workload-identity/approvals
+Authorization: Bearer <admin-jwt>
+Content-Type: application/json
+
+{
+  "bindingId": "production-report-publish",
+  "resource": "/api/reports/42/execute",
+  "operation": "reports.execute"
+}
+```
+
+Pass its `approvalToken` to the exchange. The service-account owner cannot approve their own
+workload. See [Workload Identity and Machine-to-Machine Security](../../architecture/workload-identity.md)
+for the complete threat model, rotation procedure, and certification evidence.
+
 ## Rotation And Revocation
 
 - `POST /api/admin/service-accounts/{id}/rotate-secret` invalidates the old secret and all issued JWTs.
@@ -156,3 +198,4 @@ after restoring into another environment or whenever backup custody is uncertain
 
 ## References
 - [Administrators Guide](../../administration/platform/README.md)
+- [Workload Identity and Machine-to-Machine Security](../../architecture/workload-identity.md)

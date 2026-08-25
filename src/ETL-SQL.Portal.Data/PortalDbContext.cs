@@ -46,6 +46,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ReportAlert> ReportAlerts => Set<ReportAlert>();
     public DbSet<AlertNotification> AlertNotifications => Set<AlertNotification>();
     public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
+    public DbSet<WorkloadIdentityReplay> WorkloadIdentityReplays => Set<WorkloadIdentityReplay>();
     public DbSet<PolicyVersionEntity> PolicyVersions => Set<PolicyVersionEntity>();
     public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
     public DbSet<GatewayEnrollmentEntity> GatewayEnrollments => Set<GatewayEnrollmentEntity>();
@@ -233,6 +234,16 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Version).IsConcurrencyToken();
             e.HasOne(x => x.OwnerUser).WithMany().HasForeignKey(x => x.OwnerUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<WorkloadIdentityReplay>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.BindingId).HasMaxLength(128);
+            e.Property(x => x.TokenIdHash).HasMaxLength(64);
+            e.HasIndex(x => new { x.TenantId, x.BindingId, x.TokenIdHash }).IsUnique();
+            e.HasIndex(x => x.ExpiresAt);
         });
 
         builder.Entity<PortalExecutionJob>(e =>

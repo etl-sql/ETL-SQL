@@ -517,6 +517,17 @@ public class ServiceAccount : IVersionedEntity
     public long Version { get; set; } = 1;
 }
 
+/// <summary>Durable one-use ledger for federated workload assertions across Portal nodes.</summary>
+public class WorkloadIdentityReplay
+{
+    public long Id { get; set; }
+    public string TenantId { get; set; } = "";
+    public string BindingId { get; set; } = "";
+    public string TokenIdHash { get; set; } = "";
+    public DateTime ExpiresAt { get; set; }
+    public DateTime UsedAt { get; set; } = DateTime.UtcNow;
+}
+
 // ── Subscriptions ─────────────────────────────────────────────────────────────
 
 public enum SubscriptionFormat { PDF, CSV, Markdown, Link }

@@ -16,6 +16,9 @@ public class TokenService(PortalConfig config)
     public const string ServiceAccountIdClaim = "service_account_id";
     public const string ScopeClaim = "scope";
     public const string TenantClaim = "tenant_id";
+    public const string WorkloadBindingClaim = "workload_binding_id";
+    public const string WorkloadResourceClaim = "workload_resource";
+    public const string WorkloadOperationClaim = "workload_operation";
 
     // Pinning iss/aud scopes these tokens to portal API access: another token type signed
     // with the same shared secret (or a portal token replayed against a different consumer
@@ -68,7 +71,8 @@ public class TokenService(PortalConfig config)
 
     public string GenerateServiceJwt(ServiceAccount account, IEnumerable<string> roles,
         IEnumerable<string> scopes, IEnumerable<string>? studioCapabilities = null,
-        TenantContext? tenantContext = null)
+        TenantContext? tenantContext = null, string? workloadBindingId = null,
+        string? workloadResource = null, string? workloadOperation = null)
     {
         var claims = new List<Claim>
         {
@@ -80,6 +84,12 @@ public class TokenService(PortalConfig config)
             new(ServiceAccountIdClaim, account.Id),
             new(SecurityStampClaim, account.SecurityStamp)
         };
+        if (workloadBindingId is not null)
+        {
+            claims.Add(new(WorkloadBindingClaim, workloadBindingId));
+            claims.Add(new(WorkloadResourceClaim, workloadResource ?? string.Empty));
+            claims.Add(new(WorkloadOperationClaim, workloadOperation ?? string.Empty));
+        }
         foreach (var role in roles.Distinct(StringComparer.OrdinalIgnoreCase))
             claims.Add(new Claim(ClaimTypes.Role, role));
         foreach (var scope in scopes.Distinct(StringComparer.OrdinalIgnoreCase))

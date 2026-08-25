@@ -607,6 +607,37 @@ public class IdentityConfig
     public string Provider { get; set; } = "Local";
     public OidcIdentityConfig Oidc { get; set; } = new();
     public LdapIdentityConfig Ldap { get; set; } = new();
+    public WorkloadIdentityConfig WorkloadIdentity { get; set; } = new();
+}
+
+/// <summary>Short-lived workload assertions accepted in place of a service-account secret.</summary>
+public class WorkloadIdentityConfig
+{
+    public bool Enabled { get; set; }
+    public int MaximumAssertionLifetimeSeconds { get; set; } = 600;
+    public int ClockSkewSeconds { get; set; } = 30;
+    public List<WorkloadIdentityBindingConfig> Bindings { get; set; } = new();
+}
+
+/// <summary>
+/// One exact external workload-to-service-account authorization. Every field is conjunctive; wildcards
+/// are deliberately unsupported so federation cannot broaden the owning service account.
+/// </summary>
+public sealed record WorkloadIdentityBindingConfig
+{
+    public string Id { get; set; } = "";
+    public string Provider { get; set; } = "";
+    public string ServiceAccountClientId { get; set; } = "";
+    public string TenantId { get; set; } = "";
+    public string Issuer { get; set; } = "";
+    public string Subject { get; set; } = "";
+    public string Audience { get; set; } = "";
+    public string Resource { get; set; } = "";
+    public string[] Operations { get; set; } = [];
+    public bool Enabled { get; set; } = true;
+    public bool RequireApproval { get; set; }
+    /// <summary>PEM certificate/public key for private_key_jwt. OIDC providers must leave this empty.</summary>
+    public string? PublicKeyPem { get; set; }
 }
 
 public class OidcIdentityConfig

@@ -300,6 +300,15 @@ builder.Services.AddIdentity<PortalUser, PortalRole>(opt =>
 .AddDefaultTokenProviders();
 builder.Services.AddScoped<IPasswordHasher<ServiceAccount>, PasswordHasher<ServiceAccount>>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ServiceAccountSecurityStateCache>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.WorkloadIdentityReplayCache>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.IWorkloadIdentityReplayStore>(sp =>
+    sp.GetRequiredService<ETL_SQL.Portal.Services.WorkloadIdentityReplayCache>());
+builder.Services.AddScoped<ETL_SQL.Portal.Services.IWorkloadIdentityApprovalService,
+    ETL_SQL.Portal.Services.WorkloadIdentityApprovalService>();
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.IWorkloadIdentitySigningKeyProvider,
+    ETL_SQL.Portal.Services.WorkloadIdentitySigningKeyProvider>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.IWorkloadIdentityFederationService,
+    ETL_SQL.Portal.Services.WorkloadIdentityFederationService>();
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
 // Use a zero-filled placeholder when no secret is configured so the service can start.

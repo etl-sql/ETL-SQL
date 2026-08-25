@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added short-lived, audience-bound workload identity exchange for GitHub, GitLab, Azure DevOps, and
+  `private_key_jwt` schedulers. Exact tenant/issuer/subject/resource/operation policy, durable replay
+  rejection, non-self one-use approvals, owner-capped service tokens, and attributed anomaly audit
+  make CI and scheduled workloads secretless while client-secret exchange remains compatible.
 - Completed tenant-portability correctness and scale: v2 bundles now bind a cross-system consistency
   point, reconciled stable-ID/hash/owner/ACL/exclusion inventory, certified delta sequencing, and
   resumable content-addressed chunks over the object-native storage contract.

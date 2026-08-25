@@ -14,6 +14,7 @@
 | [ETL-SQL Orchestrator Architecture & Engineering Reference](orchestrator.md) | **Applies to ETL-SQL 0.18.0** |
 | [ETL-SQL Parser & Lexer Deep Dive](parser-lexer.md) | This document is the primary reference for developers adding new statement types, modifying grammar, or debugging parse errors. For the higher-leve... |
 | [Architecture: ETL-SQL Portal](portal.md) | The Portal (`ETL-SQL-Portal`) is an ASP.NET Core 10 web application that exposes report execution, snapshot management, subscriptions, and user/gro... |
+| [Workload Identity and Machine-to-Machine Security](workload-identity.md) | Federation and token-exchange threat model, policy contract, replay, approvals, and certification evidence. |
 | [Architecture: Portal UI — Visual Designer & DAG Visualization](portal-ui.md) | This document is the authoritative strategy reference for the Portal UI initiative (`v0.9.0-portal-ui`). It governs all design, technology, and sco... |
 | [ETL-SQL Presentation Layer Architecture](presentation.md) | **Applies to ETL-SQL 0.18.0** |
 | [ETL-SQL Reporting Architecture & Engineering Reference](reporting.md) | This document describes the internal mechanics of the ETL-SQL reporting subsystem — the layer responsible for parsing `.rptsql` files, evaluating t... |

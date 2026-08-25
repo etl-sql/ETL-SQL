@@ -451,16 +451,16 @@ storage and authority foundations.
 
 ### Platform Phase 3 — Workload Identity and M2M Hardening
 
-- [ ] Write the federation/token-exchange threat model covering tenant, issuer, subject, audience,
+- [x] Write the federation/token-exchange threat model covering tenant, issuer, subject, audience,
   resource, owner, approval, lifetime, replay, and audit binding.
-- [ ] Implement one short-lived CI workload-identity exchange and retain long-lived API credentials
+- [x] Implement one short-lived CI workload-identity exchange and retain long-lived API credentials
   only as a compatibility baseline.
-- [ ] Add GitHub, GitLab, and Azure DevOps OIDC federation through the same policy contract.
-- [ ] Add certificate or `private_key_jwt` authentication where justified.
-- [ ] Enable secretless scheduled workloads without allowing service identity to exceed its owner,
+- [x] Add GitHub, GitLab, and Azure DevOps OIDC federation through the same policy contract.
+- [x] Add certificate or `private_key_jwt` authentication where justified.
+- [x] Enable secretless scheduled workloads without allowing service identity to exceed its owner,
   tenant, resource, or approved operation.
-- [ ] Add approval policies for sensitive publication/execution and credential-use anomaly evidence.
-- [ ] Certify rotation, revocation, replay rejection, audience/resource restriction, and attributed
+- [x] Add approval policies for sensitive publication/execution and credential-use anomaly evidence.
+- [x] Certify rotation, revocation, replay rejection, audience/resource restriction, and attributed
   audit behavior.
 
 **Exit gate:** Supported automated workloads use short-lived audience-bound credentials, and hostile
