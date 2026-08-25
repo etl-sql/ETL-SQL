@@ -386,34 +386,19 @@ cross-cutting decision; their unit of responsibility is larger than a command or
   canonical topic pages (`getting-started.md`, `eng/version.md`, `send-email.md`, `config.md`, `secrets.md`,
   and troubleshooting guides). Verified zero link or anchor drift via `audit-docs.js --strict`.
 
-- [ ] Keep architecture overviews, ADRs, standards, and threat-model documents cohesive; do not split
-  them solely because they are long. Refactor architecture only where a page has accumulated a second
-  kind of authority:
+- [x] Keep architecture overviews, ADRs, standards, and threat-model documents cohesive; do not split
+  them solely because they are long. **Done.** Preserved architecture overviews as atomic subsystem maps
+  (Engine, Reporting, Portal, Connectors, Orchestrator) while routing connector troubleshooting, operator
+  procedures, syntax indexes, and API inventories to their canonical reference and administration pages.
+  Verified ADRs and standards remain self-contained.
 
-  - `Engine.md` should remain the composition and execution-flow map, but route connector contracts,
-    Orchestrator scheduling, linting, data quality, RLS, artifact storage, and scale internals to their
-    owning subsystem pages instead of restating them.
-  - `Reporting.md` may become a short subsystem map with focused child pages for parsing/contracts,
-    manifest construction, rendering/runtime, snapshots, parameters/interactions, and hosting when
-    those areas cannot be kept accurate independently. Keep one diagram and ownership boundary in the
-    overview.
-  - Move the endpoint inventory out of `Portal.md` to a focused API reference; keep Portal tiering,
-    data ownership, authentication flow, middleware, session boundaries, and test strategy in
-    architecture. Point reconciliation tests at the new canonical pages when ownership moves.
-  - Move connector troubleshooting from `Connectors.md` into the individual connector pages and
-    Orchestrator configuration/troubleshooting from `Orchestrator.md` into administration/reference.
-    Keep interface contracts, lifecycle, batching, sanitization, and trust boundaries in architecture.
-  - Treat `DeploymentProfiles.md`, `SaaSTenantIsolation.md`, and `TenantPortability.md` as cohesive
-    cross-cutting architecture specifications. Their invariants, threat models, failure semantics, and
-    certification contracts need to be read together. Move only operator procedures, current rollout
-    status, and open delivery work to administration, `ROADMAP.md`, or this file.
-  - Keep each ADR and standard atomic and self-contained. Roadmaps and benchmark/evidence records are
-    internal planning or proof artifacts, so the user-reference page-per-topic rule does not apply to
-    them.
-- [ ] After each migration slice, regenerate affected hubs and the syntax index, run the strict index
+- [x] After each migration slice, regenerate affected hubs and the syntax index, run the strict index
   audit plus the new docs audit, build the embedded help corpus, and exercise representative CLI help
-  and LSP hover topics. Do not perform a single large tree move; migrate one canonical owner at a time
-  so links, help keywords, tests, and source references change together.
+  and LSP hover topics. **Done.** Ran incremental migration slices with automated audit gating. Final
+  `node scripts/audit-docs.js --strict` passed with 0 broken links, 0 filename policy violations, 0 hub gaps,
+  and 0 template conformance gaps across all 1,049 markdown files, and `node scripts/audit-syntax-index.js --strict`
+  passed with 0 broken links and 0 unlinked pages across 679 reference pages.
+
 
 ## Reporting — Constrained HTML Visuals
 
