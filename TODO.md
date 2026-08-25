@@ -13,25 +13,28 @@ Target Release: **v0.19.0**
 Authoritative Policy: [`docs/releases/release-checklist.md`](docs/releases/release-checklist.md) and
 [`docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md)
 
-The numbered phases below are the primary product dependency chain. Do not begin a dependent phase
-until the preceding exit gate passes. The Platform/SaaS lane may run in parallel after its own design
-gates, but its tasks must remain in the listed order. When a roadmap outcome is fully delivered and
-verified, update or retire its `ROADMAP.md` entry and record the shipped result in `CHANGELOG.md`.
+Only unfinished work remains below. Keep the Platform/SaaS phases in their listed order. When a
+roadmap outcome is fully delivered and verified, update or retire its `ROADMAP.md` entry and record
+the shipped result in `CHANGELOG.md`.
 
 ## Release Gate Follow-ups
 
-These failures were observed during the post-Phase 2 full-solution test run and are unrelated to the
-GoG contract changes.
+Open release follow-ups confirmed by the completion audit.
 
-- [x] Restore or generate `src/etl-sql-vscode/ui/dist/index.html` before browser-story tests, or make
-  the VS Code webview stories self-contained, so the results, preview, preview-sink, designer, and
-  visual-flow fixtures do not fail with HTTP 404 responses.
-- [x] Document the `/api/gateway/enrollment` area exposed by `GatewayBootstrapController.cs` in
-  `docs/architecture/Portal.md` so the API architecture reconciliation test passes.
-- [x] Add `GatewayEnrollmentEntity` to the persisted-entity summary in
-  `docs/architecture/Portal.md` so the data-model reconciliation test passes.
-- [x] Give the `gw-enrollModal` overlay in `gateways-admin.js` a semantic, accessible dialog role and
-  name so `PortalDialogAccessibilityTests` passes.
+- [ ] Make the VS Code webview UI sandbox work from a clean checkout. The story fetches the ignored
+  `src/etl-sql-vscode/ui/dist/index.html`, while `tools/ui-sandbox/serve.ps1` neither builds that
+  bundle nor provides a self-contained fixture. Add a deterministic build/setup step or remove the
+  generated-bundle dependency, then cover the results, preview, preview-sink, designer, and
+  visual-flow fixtures with a clean-tree browser test.
+- [ ] Ship and exercise a real offline `.etlsnap` viewer/bootstrap before claiming offline bookmark
+  or detail-popover replay. The shared runtime implements and tests the `window.__ETLSNAP__` branch,
+  but no product host sets that flag today. Wire package loading to the runtime, prove bookmark and
+  tooltip/detail replay without network access, and reconcile the offline claims in the Report-SQL,
+  bookmark, tooltip, reporting-architecture, and report-CLI documentation.
+- [ ] Reconcile the completed object-native artifact-storage work in `ROADMAP.md`. The implementation,
+  ADR, S3/Azure hostile provider suite, portability integration, and changelog entry are present, but
+  the roadmap still says the provider contract is undecided and lists the completed delivery slices
+  as future work.
 
 ### Found during the post-Phase 13 declarative-graphics review
 
@@ -46,14 +49,14 @@ work starts.
 The design questions from this review are resolved. Implement in this order so a later item does not
 restore payload or coupling removed by an earlier one:
 
-1. **v0.19 correctness and authoring:** repair diagnostics, ranged `RECT`, `CUSTOM` themes/null
-   labels/cross-filtering, examples, and the unsafe enum bridges.
+1. **v0.19 correctness and authoring:** finish `CUSTOM` cross-filtering, correct the misleading
+   recipes, build the shared golden harness, and assert the learning-path translations.
 2. **v0.19 delivery and footprint:** publish a browser-specific manifest DTO, add compact resolved
    interaction metadata, remove unused semantic payload from normal delivery, and gate raw plus gzip
    size.
 3. **v0.19 contract completion:** make `InteractionSpec` canonical, give focused layout modules the
-   shared theme/palette/interaction/sizing inputs they need, and remove chart-type decisions from the
-   generic browser renderer.
+   shared theme/palette/interaction/sizing inputs they need, remove chart-type decisions from the
+   generic browser renderer, and bring Portal operational charts under their own asset gates.
 4. **Post-v0.19 bounded features:** responsive layout tiers and expanded statistical, financial, and
    geographic `CUSTOM` composition. These are accepted product directions, but are not v0.19 exit
    gates and must not be smuggled into the correctness fixes above.
@@ -163,7 +166,10 @@ zero). Per-report payload moved the other way, and nothing measures that.
   no `mapping:*` options, so every layered chart silently lands on `visual.columns[0]` and
   cross-filters on whatever column happens to be first. Derive the key server-side from resolved
   encodings; do not serialize or inspect the whole `PlotPlan` in the browser. Add an end-to-end test
-  for a `CUSTOM` chart whose first source column is not its X binding.
+  for a `CUSTOM` chart whose first source column is not its X binding. The current worktree reaches
+  the correct `Region = North` request, but `src/etl-sql-vscode`'s `test:unit` lane is red because the
+  new assertion expects the legacy parameter-map body instead of the current `params` request array;
+  finish the contract migration and make that lane green before closing this item.
 - [ ] Remove the generic browser renderer's dependence on `visual.visualType` by emitting semantic
   highlight metadata. `applyNativeHighlight` branches on the
   visual type being `BAR`/`HBAR`/`HORIZONTALBAR` to clone marks and compute partial-height selection
@@ -174,21 +180,6 @@ zero). Per-report payload moved the other way, and nothing measures that.
 
 #### Grammar and authoring
 
-- [x] Make `RECT` honour author-supplied `Y_START`/`Y_END`. **Done.** Non-stacked `RECT` layers now
-  resolve both interval pairs end to end: `AdvancedChartSemanticValidator` and `ChartSpec.Validate()`
-  enforce endpoint pairing and matching quantitative/temporal types for `RECT` (and no longer label
-  every interval diagnostic `RULE`), and reject `Y`/`Y2` beside `Y_START`/`Y_END` and `X`/`X2` beside
-  `X_START`/`X_END` instead of choosing a renderer heuristic. Both endpoints participate in scale-domain
-  resolution, including a chart that mixes a stacked layer with a ranged one, where the stacked
-  baselines no longer erase the ranged layer's contribution. `RenderRects` and the transposed rect path
-  read the authored endpoints, and `X_START`/`X_END` over a continuous scale gives an explicit-bin
-  histogram (the vertical extent when transposed). The terminal renderer draws offset spans, and the
-  semantic fallback carries both endpoints, so PDF/email/markdown surfaces inherit the fix.
-  `RangedRectTests` pins plan/domain/geometry/transposed/terminal/fallback plus the stacked
-  no-regression case, `AdvancedChartDiagnosticParityTests` pins the four new negative shapes across
-  lint and preview, and `custom_ranged_rect_bands.rptsql` / `custom_ranged_rect_histogram.rptsql` are
-  new golden fixtures. `samples/10_Kitchen_Sinks/39_CUSTOM_LAYERS.rptsql` now expresses its bullet
-  bands as three ranged rects instead of four overlapping full-height rects ordered by `Z_INDEX`.
 - [ ] **Post-v0.19:** expose statistical and financial channels in `CUSTOM`.
   `ReportParser.ParseAdvancedChannel` and `AdvancedChartChannel` expose eighteen channels;
   `FieldChannel` additionally carries `Low`, `Q1`, `Median`, `Q3`, `High`, `Open`, and `Close`, which
@@ -205,16 +196,6 @@ zero). Per-report payload moved the other way, and nothing measures that.
   rather than one layered surface. Define projection, geometry/map-source authority, region/point/
   label/route encodings, interaction semantics, zero-trust map-path handling, terminal fallback, and
   export behaviour before adding the enum member; an enum-only change is not an implementation.
-- [x] Make every mirrored-enum bridge compile-time safe without violating the Core/reporting project
-  boundary. **Done.** The enum families stay separate — the AST belongs to Core, the contract to
-  `Reporting.Contracts` — and every bridge is now an explicit arm-per-member switch in
-  `AdvancedChartEnumBridge`, with no `Enum.Parse(value.ToString())` left anywhere in the advanced-chart
-  path. `AdvancedChartEnumBridgeParityTests` pins the families member-for-member, including the two
-  deliberate asymmetries: `FieldChannel`'s statistical/financial/facet members have no grammar
-  counterpart, and the grammar's `SORT = SOURCE` maps onto the contract's `SortDirection.None`.
-  `AdvancedChartAuthoringRule` no longer re-implements `ChartSpec.Validate()`; both it and
-  `AdvancedChartLowerer` run the one shared `AdvancedChartSemanticValidator` in Core.
-
 #### Published examples
 
 Sharing a chart is meant to be "here is the script" — no gallery and no marketplace feature, which is
@@ -229,25 +210,6 @@ whole distribution mechanism, so their accuracy carries the weight a feature wou
   describe them honestly as coordinated named visuals. Geographic composition is accepted but
   deferred above, so do not fake a single layered surface before that contract exists. Add genuinely
   grammar-backed recipes later with the corresponding statistical/financial and geographic features.
-- [x] Anchor advanced-chart diagnostics to the offending node. **Done.** `ReportParser` now stamps a
-  full source span (start and end) on every advanced-chart node: definition, coordinate, scales, color
-  ranges, encodings, binding sources, layers, styles, conditions, position adjustments, facet, and
-  resolution. Diagnostics are anchored to the node that carries the mistake, with the enclosing node as
-  fallback. `AdvancedChartDiagnosticParityTests.Diagnostics_AnchorToTheOffendingNodeNotTheCreateVisualHeader`
-  pins it. This also gives hover and go-to-definition on scale references somewhere to attach.
-- [x] Report every duplicate, not the first. **Done.** Duplicate detection reports one diagnostic per
-  repeated occurrence, anchored to that occurrence, for layer names, scale names, global encoding
-  channels, per-layer encoding channels, and per-layer style names.
-- [x] Close the gap where a chart fails with no editor diagnostic at all. **Done.**
-  `AdvancedChartSemanticValidator` (Core) is the single source of semantic truth; the lint rule is now a
-  thin projection onto `LintResult` and `AdvancedChartLowerer` runs the same pass before lowering, so the
-  checks are no longer manually mirrored. Failures leave lowering as `AdvancedChartSemanticException`
-  carrying positioned `Diagnostic`s, and `VisualBuilder` publishes them on `VisualManifest.diagnostics`
-  alongside the existing safe visual error state. Two classes the AST cannot express are still positioned:
-  parameter resolution (undeclared or secret-bearing `@variable`) at the offending node, and the
-  `ChartSpec.Validate()` backstop at the `CHART` clause. `AdvancedChartDiagnosticParityTests` asserts lint
-  and preview emit identical code/message/line/column for every lowering failure class, and that the
-  shipped `CUSTOM` examples lint clean.
 - [ ] **Post-v0.19:** treat a Report Builder `CHART` editor as a future goal, not a current correctness
   gap. `CUSTOM` is absent from the
   designer's visual-type registry (`designer.js`, `VCATEGORIES`), and
@@ -321,25 +283,6 @@ named visuals, which is the common direction. `docs/reference/visuals-reporting/
 a reference and two finished showpieces with no path between them. Sequence this with the golden
 coverage item above; it depends on the same harness.
 
-- [x] Build the progression as a numbered sample under `samples/08_Reporting/`, with a guide that
-  walks it. The sample is the source of truth: `Test-AllSamples.ps1` parses and runs samples, whereas
-  doc snippets rely on `DocumentationSyntaxTests`, which is currently red and silently mis-scoping
-  indented fences (see the Phase 11 item above). Place the prose as a guide, not under
-  `docs/reference` — reference is the embedded runtime help keyed on keywords, and this is a tutorial.
-  Sample: `samples/08_Reporting/custom_chart_learning_path.rptsql`.
-  Guide: `docs/guides/reporting/custom-chart-learning-path.md`.
-- [x] Frame every named-visual translation as a Rosetta stone, never as a recommendation. A `BAR`
-  written as `CUSTOM` is something no one should ship, and on this codebase it is strictly worse than
-  `BAR`: the advanced path drops theme tokens, ignores `NULL_LABEL`, and falls through to
-  `visual.columns[0]` for cross-filtering. Unframed, this teaches authors to reimplement named visuals
-  badly and to file the resulting gaps as bugs. Say plainly at each step that the named visual already
-  does this.
-- [x] Make each step add exactly one concept, and end the progression past the boundary where no named
-  visual can follow — the crossing point is the lesson, not the translation. A workable spine: one
-  `RECT` layer as `BAR`; add a `RULE` target, noting `BAR` plus an overlay still covers it; add a
-  second scale and a `POINT` layer, noting that this is `COMBO`; then add qualitative bands behind the
-  bar to reach a bullet chart, which has no named equivalent. The reader watches the exact edit where
-  `CUSTOM` starts paying for itself.
 - [ ] Assert the translations rather than asserting them in prose. `NamedVisualChartLowerer` already
   lowers `BAR` into a `ChartSpec`, so each named/`CUSTOM` pair can ship as two fixtures whose resolved
   plans are compared by the golden harness. The teaching claim then becomes a test that cannot rot
@@ -348,820 +291,59 @@ coverage item above; it depends on the same harness.
   interaction bindings that `CUSTOM` has no `MAPPINGS` clause to produce. Theme tokens and the
   resolved `FormattingSpec` are no longer part of that divergence — both lowerers build them through
   `ChartStyleTokens` — so treat any difference there as a regression, not as test noise.
-- [x] State what an author gives up by choosing `CUSTOM`: theming, `NULL_LABEL`, Report Builder
-  visibility, and cross-filter column inference. Authors hit these regardless; documenting them as a
-  known trade beats discovering them, and it keeps pressure on closing them. Revisit this list as those
-  items are fixed so the guide does not outlive the limitation. Documented in the guide's opening
-  callout and restated at Step 1.
 
-
-## Reporting and Authoring Critical Path
-
-### Phase 1 — Lossless Report Builder Editing (Gate Zero)
-
-Authoritative guide: [`docs/guides/tooling/report-builder.md`](docs/guides/tooling/report-builder.md)
-
-- [x] Route every LSP-hosted designer mutation through `DesignerScriptPatcher`; remove the legacy
-  full-script regeneration path from `DesignerLspHandler.cs`.
-- [x] Add multi-page mutation coverage proving an edit on a later page cannot shift or rewrite an
-  earlier page.
-- [x] Add CTE-chain coverage proving presentation edits preserve all data-preparation statements.
-- [x] Add repeated-mutation fuzz coverage for at least 50 moves/property changes under CRLF and LF.
-- [x] Preserve comments and trivia inside visual bodies, including `MAPPINGS`, `OPTIONS`, actions,
-  styles, and other nested clauses.
-- [x] Keep the WYSIWYG canvas usable during transient syntax errors and surface localized diagnostics
-  without resetting the last valid state.
-- [x] Define reusable round-trip fixtures for future nested GoG syntax so new grammar uses surgical
-  patching from its first implementation.
-
-**Exit gate:** Embedded and LSP designer paths pass byte-preservation tests showing that a
-presentation-only edit changes only the intended statement span; multi-page, CTE, trivia, line-ending,
-sequential-mutation, and transient-error suites are green.
-
-**Completed:** Shared Portal/LSP surgical patching, reusable nested-clause fixtures, 50-cycle LF/CRLF
-coverage, transient-error canvas retention, and host-parity regression suites are green.
-
-### Phase 2 — GoG Semantic Contracts and Baselines
-
-Authoritative design:
-[`docs/architecture/decisions/GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/GrammarOfGraphicsSpecIR.md)
-
-- [x] Define a versioned, immutable, dependency-light `ChartSpec` contract for typed bindings, mark
-  layers, coordinate and scale intent, formatting, interactions, themes, and accessibility metadata.
-- [x] Define typed columnar chart data preserving decimals, temporal values and offsets, booleans,
-  nominal/ordinal intent, nulls, and raw values separately from formatted display values.
-- [x] Define the deterministic `PlotPlan` contract for domains, category order, ticks, palettes,
-  series, legends, null policy, resolved layers, and semantic summaries.
-- [x] Keep renderer and pixel-emission dependencies out of Core; document the Core/reporting project
-  boundary and enforce it with source-boundary tests.
-- [x] Add stable serialization/version tests for `ChartSpec`, typed chart data, and `PlotPlan`.
-- [x] Build the cross-backend conformance harness and initial capability matrix before migrating a
-  visual type.
-- [x] Capture reproducible pre-migration baselines for browser bundle size, fixture build/export time,
-  output size, and memory using named fixtures.
-
-**Exit gate:** Contracts serialize deterministically, typed-value tests pass, dependency boundaries are
-enforced, the conformance harness can compare renderer results, and baseline evidence is checked in.
-
-**Completed:** Versioned BCL-only semantic contracts, typed columnar values, deterministic golden
-serialization, source-boundary enforcement, cross-backend semantic projection comparisons, a
-source-backed 36-visual capability matrix, and reproducible named-fixture baseline evidence are green.
-
-### Phase 3 — Representative GoG Vertical Slice
-
-- [x] Lower existing named syntax directly to `ChartSpec` for `BAR`, `LINE`, `SCATTER`, `PIE` or
-  `DONUT`, and `COMBO`, plus `RULE` annotations.
-- [x] Resolve the representative set through one `PlotPlan` path with stable domains, ordering,
-  palettes, legends, ticks, dual axes, gaps, and null behavior.
-- [x] Generate ECharts options transiently from `PlotPlan`; remove ECharts-shaped state from the
-  semantic contract for migrated visuals.
-- [x] Implement native SVG output for the representative Cartesian, polar, layered, and annotation
-  cases without adding rendering dependencies to Core.
-- [x] Implement terminal output for the same representative plans to prove the contract is not a
-  renamed browser chart schema.
-- [x] Route at least one PDF or email export path for the representative set without server-side V8.
-- [x] Preserve current named visual syntax and add parser, LSP, Report Builder, runtime, and export
-  regression coverage for every migrated type.
-
-**Exit gate:** The representative set passes shared semantic assertions and backend-specific goldens
-across ECharts, native SVG, terminal, and at least one V8-free export path; the capability matrix
-accurately records remaining ECharts-only behavior.
-
-**Completed:** Named `BAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, and `COMBO` syntax now lowers to
-typed data and one deterministic `PlotPlan`, including `RULE` overlays. ECharts is a transient browser
-adapter for these visuals; native SVG, semantic terminal output, and static PDF use the same plan,
-with representative parser, LSP, Report Builder, runtime, export, and cross-backend conformance
-coverage checked in.
-
-### Phase 4 — Native Static Export and Micro-Charts
-
-Authoritative design:
-[`docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md`](docs/architecture/decisions/MicroChartsAndHtmlEmbedding.md),
-constrained by the GoG ADR.
-
-- [x] Harden native SVG scale, tick, path, label, theme, and accessibility behavior for the
-  representative chart set.
-- [x] Add one native `CARD` sparkline backed by the GoG contracts.
-- [x] Add one native `TABLE` cell sparkline and one progress indicator backed by the same contracts.
-- [x] Add browser, PDF, email image, terminal, screen-reader, and plain-text fallbacks for each
-  micro-chart.
-- [x] Measure the JSON-columnar/Arrow crossover using representative payload, parse, memory, and
-  interaction fixtures; do not encode an arbitrary permanent row threshold.
-- [x] Add geometry goldens, export snapshots, typed-data tests, payload budgets, and render-cost
-  measurements.
-
-**Exit gate:** Card/table micro-charts render from the same semantic plan on every supported surface,
-export without V8 for supported cases, have accessible fallbacks, and meet measured payload/render
-budgets.
-
-### Phase 5 — Semantic Terminal and Accessibility Fallbacks
-
-- [x] Lower rectangles/bars to fractional blocks, lines/areas to Braille or block canvases, points to
-  distinguishable glyphs, rules to labeled references, and arcs to proportional terminal components.
-- [x] Render coordinated facets at supported terminal widths without changing shared data ordering or
-  scale meaning.
-- [x] Add semantic fallbacks: maps to ranked regional breakdowns, Sankey to transition/drop-off
-  tables, treemap/sunburst to proportional hierarchies, and networks to degree/connection summaries.
-- [x] Reuse one summary/fallback contract for terminal, screen-reader output, and plain-text email.
-- [x] Add terminal snapshots at supported widths plus semantic assertions for values, series order,
-  palette identity where color exists, null handling, and truncation.
-- [x] Keep rich TUI form controls and full keyboard-navigation redesign out of this phase unless they
-  are separately approved; they must not delay semantic chart portability.
-
-**Exit gate:** The capability matrix identifies a useful native or semantic fallback for every current
-graphical type, and terminal/accessibility fixtures preserve the analytical meaning of each case.
-
-**Completed:** `PlotPlan` marks now lower to fractional blocks, Braille canvases, distinct point
-glyphs, labeled rules, and proportional components. Facets retain resolved row/category ordering at
-40-, 80-, and 120-column targets. One serialized `SemanticFallback` contract supplies terminal,
-screen-reader/manifest, and Markdown/plain-text delivery for native charts plus ranked maps,
-transition/drop-off flows, proportional hierarchies, and network degree/connection summaries.
-
-### Phase 6 — Cascading Slicers and Atomic Parameter State
-
-- [x] Write and accept the interaction design for filter bindings, inferred dependencies, multiple
-  parents, null/All behavior, multi-select values, invalid descendant selections, and atomic updates.
-- [x] Add parser and AST support only after the syntax has minimal parser-accepted examples and
-  Report Builder round-trip fixtures.
-- [x] Implement one parent/child local-vector flow for offline and snapshot use.
-- [x] Implement multiple-parent dependency graph compilation and author-time cycle diagnostics.
-- [x] Implement equivalent topologically ordered live-query refresh behavior.
-- [x] Define and implement invalid-selection policies without observable intermediate parameter states.
-- [x] Add conformance tests proving equivalent local-vector, offline snapshot, and live-query results.
-
-**Exit gate:** State-transition tests cover null/All, multi-select, invalid descendants, cycles,
-concurrent changes, and atomic offline/live behavior; accepted syntax is supported by parser, LSP,
-documentation, and lossless designer editing.
-
-**Completed:** Accepted `CASCADE` syntax now compiles LOCAL and LIVE filter DAGs, retains snapshot
-option vectors, applies stable topological refreshes, and commits parameter/visual state through one
-manifest reference swap. CLEAR/FIRST/ERROR, null/All, JSON and legacy multi-select values, multiple
-parents, cycles, rollback, and concurrent requests have production state-transition coverage. Parser,
-formatter, Analysis lint, LSP snippet/hover, Report Builder round trips, runtime assets, and reference
-documentation share the same contract. Gemini's Phase 6 fixture/baseline suite remains as independent
-regression evidence alongside production conformance tests.
-
-### Phase 7 — Native Advanced Chart Authoring
-
-- [x] Write the language proposal for native mark layers, scales, coordinates, conditions, and facets;
-  do not add embedded Vega-Lite runtime syntax.
-- [x] Review the proposal against existing parser behavior, language standards, transformation
-  transparency, lineage, actions/interactions, themes, and accessibility.
-- [x] Implement parser, immutable AST, formatter, Analysis-tier lint, LSP completion/hover, and rename
-  support together for each accepted grammar slice.
-- [x] Extend Report Builder parsing and surgical mutation support with trivia-preserving fixtures for
-  every accepted nested form.
-- [x] Add layering and dual-axis support, then conditions and one-dimensional faceting, then
-  two-dimensional composition and shared/independent scale policies.
-- [x] Keep aggregation, lookup, filtering, calculation, windowing, and statistical preparation in
-  visible ETL-SQL/`#temp` operations rather than adding hidden visual transforms.
-
-**Exit gate:** Every new grammar form has a minimal working example, parser/LSP/formatter/designer
-coverage, lineage behavior, cross-backend conformance, and no undocumented renderer-specific state.
-
-**Completed:** Accepted renderer-neutral `CUSTOM`/`CHART` syntax now covers ordered mark layers,
-named scales, Cartesian/transposed/polar coordinates, dual axes, conditional encodings, one- and
-two-dimensional facets, and shared/independent scale resolution without embedded Vega-Lite or
-hidden data transforms. Immutable AST and contracts, canonical formatting, Analysis lint and
-lineage, LSP completion/hover/scoped rename, lossless Report Builder preservation, native SVG,
-terminal, transient ECharts compilation, capability inventory, documentation, and parser-tested
-examples share the same contract. Gemini's Phase 7 semantic-readiness suite remains as independent
-regression evidence alongside the production conformance tests.
-
-### Phase 8 — Standard Catalog Migration and ECharts Retirement
-
-- [x] Group remaining standard visuals by shared semantics and migrate them in independently testable
-  batches rather than one catalog-wide rewrite.
-- [x] Expand native Cartesian, polar, statistical, hierarchical, and annotation coverage with shared
-  `PlotPlan` conformance and visual goldens.
-- [x] Evaluate `GANTT` as a native time/band/rect/rule/text/dependency-path composition before
-  classifying it as a specialized layout.
-- [x] Evaluate focused layout modules for maps, force networks, Sankey, treemap, and sunburst only
-  after the native contract is stable.
-- [x] Before adding any layout dependency, complete license, maintenance, transitive-dependency,
-  necessity, notices, and inventory checks required by the third-party policy.
-- [x] Conditionally omit ECharts from reports only when the capability matrix proves every contained
-  visual and interaction is native.
-- [x] Remove `EChartsSsrRenderer`, ClearScript/V8 packages, and ECharts runtime assets only after no
-  certified browser, export, interaction, or regression path requires them.
-- [x] Re-measure bundled/compressed size, cold start, memory, export time, and output size; report
-  actual results rather than preserving a speculative size promise.
-
-**Exit gate:** All graphical types are native or deliberately use an approved specialized module,
-cross-surface evidence is green, ECharts/ClearScript have no remaining consumers, and dependency
-inventories and runtime assets are synchronized.
-
-### Phase 9 — Author Bookmarks
-
-- [x] Record the accepted three-part model: `CREATE BOOKMARK` defines shared, source-controlled report
-  state; Portal saved views are private per-user snapshots; URL state is only an identifier pointing
-  to one of those definitions. Keep `CREATE SETS !name` exclusively for engine/environment
-  configuration. Bookmark parameter assignments may reuse its parsing/evaluation infrastructure but
-  not its syntax, namespace, activation behavior, or secret-bearing state.
-- [x] Accept canonical author syntax around `CREATE BOOKMARK BookmarkName AS (...)`, with typed
-  `PARAMETERS (...)`, `PAGE = PageName`, optional `DEFAULT = ON`, and an initially constrained
-  `STATE (...)` block. Add `APPLY_BOOKMARK(BookmarkName)` as the in-canvas action. Reject duplicate
-  bookmark identifiers and more than one author default.
-- [x] Define a versioned, serializable resolved bookmark state. The first delivery includes typed
-  parameter/control values, active page, and named-object `VISIBLE`/`COLLAPSED` state. Cross-filter
-  selections are durable only when represented by declared parameters. Defer hover/tooltips,
-  animation, scroll position, maximized visuals, table paging/search, arbitrary CSS mutations,
-  matrix expansion, sort state, and drill paths until each has a stable cross-surface contract.
-- [x] Establish launch precedence: explicit URL bookmark, explicitly selected Portal saved view,
-  the user's default Portal saved view, the author default bookmark, then declared parameter and
-  navigation defaults. A stale personal view must never prevent the base report from opening.
-  *(DONE. The runtime resolves precedence in order with graceful fallback at every step. The two
-  lookup endpoints now exist: `GET /api/reports/{id}/saved-views/{viewId}` and
-  `.../saved-views/default`, the latter answering **204** rather than 404 when the reader has no
-  personal default. Actual application uses `POST .../saved-views/{viewId}/apply`, which performs
-  reconciliation and refresh as one server transaction. The runtime addresses all three from
-  `__API_BASE__`.)*
-- [x] Add parser, immutable AST, formatter, manifest, Analysis lint, LSP completion/hover/snippet,
-  rename, documentation, syntax-index, and Report Builder round-trip support. Author bookmark page,
-  visual, container, and parameter references must be statically safe and rename-aware.
-  *(DONE. LSP: `BookmarkSymbols` backs completion where only a bookmark identifier is valid
-  (`APPLY_BOOKMARK(`, `DROP BOOKMARK`), hover documentation, and rename across the declaration plus
-  every `APPLY_BOOKMARK`/`DROP BOOKMARK` site — `AdvancedChartRenameProvider` is now
-  `ReportRenameProvider`. Page, visual/container, and parameter targets inside bookmark definitions
-  participate in the target symbol's rename, while `BookmarkValidationRule` rejects stale or
-  type-incompatible authored references.
-  Report Builder: `DesignerStateDto.Bookmarks` carries them through parse → edit → patch with values
-  as authored source text, plus a sidebar panel to add/edit/make-default/remove.)*
-- [x] Apply a bookmark as one transaction through the cascading-parameter engine: resolve and
-  validate all references and typed values, stage parameter reconciliation and affected visuals,
-  validate page/presentation state, publish one manifest, and roll back the entire application on
-  failure. Do not apply parameters through sequential browser requests.
-  *(DONE: `BookmarkApplicationService.Reconcile` resolves+validates+reconciles the envelope against the
-  manifest; `DashboardService.ApplyBookmarkAsync` stages on a manifest clone, runs
-  `ReportInteractionRefresher` through the cascade engine, publishes ONE manifest carrying `AppliedState`,
-  and rolls back the whole application on any failure. Exposed at `POST /api/bookmark` (ReportPlayer) and
-  `POST /api/reports/{id}/bookmark` (Portal, with permission checks); the client applies the single
-  published `appliedState` as one swap. Tested incl. cascade-invalid rollback.)*
-- [x] Add Report Player and Portal bookmark pickers plus button/action invocation. The Portal picker
-  must distinguish author bookmarks from `My saved views`, and support save-as, update, make-default,
-  delete, reset-to-report-default, and actual application of the user's default view.
-  *(DONE. One accessible "Views" menu replaces the bookmark-only picker: author bookmarks and
-  My saved views as separately labelled groups, with save-as, update, make-default, delete,
-  save-as-default, and reset-to-report-default. Full WAI-ARIA menu-button keyboard model
-  (arrows/Home/End/Escape/Tab, roving tabindex, focus restore); the name and delete prompts reuse the
-  shared accessible dialogs. The saved-view half is absent where the API does not exist — the
-  ReportPlayer, VS Code preview, and offline snapshots — rather than rendered as dead controls.
-  `POST .../saved-views/default` also bound its body to `Dictionary<string,string>` while the client
-  posted `{ state, parameters }`, so "Save Default View" could not have worked; it now takes the
-  envelope.)*
-- [x] Converge Portal saved views on the same versioned resolved-state envelope while retaining
-  backward compatibility for existing `ParametersJson`/`FiltersJson`. Persist the report revision or
-  script hash used to create the view and reconcile unknown/deleted state with warnings.
-  *(DONE. Create/update build a canonical envelope, upgrading a legacy parameter/filter map on write
-  and reading one as an envelope on read, so pre-envelope rows converge without a data migration; the
-  legacy columns stay populated for older clients. Malformed state is rejected rather than stored. The
-  server — not the client — stamps both the envelope and row `ScriptHash` from the report's
-  `PublishedScriptHash`, and a later
-  republish surfaces as a `driftWarning` on read. Drift never blocks: unknown references are dropped
-  during reconciliation and the reader still gets the view. Re-capturing re-stamps the revision.)*
-- [x] Support author-bookmark replay in offline snapshots and identifier-only URL hashes. Never place
-  arbitrary parameter, filter, search, drill, or presentation values in browser history, referrers,
-  logs, or generated share URLs. Re-check report and saved-view ownership when resolving Portal
-  identifiers.
-  *(DONE. Ownership is re-checked on every saved-view resolution rather than trusted from the URL: a
-  view belonging to another user answers exactly as a deleted one does, so an identifier cannot probe
-  for someone else's views. `applyParametersOffline` was a dead hook — guarded on a function that was
-  never defined, so an offline bookmark fell through to a network call that cannot succeed; it now
-  applies from the manifest's precomputed envelope with no server, and says that the snapshot's
-  figures cannot change. `history.replaceState` failing on an opaque origin no longer aborts the
-  application. **Scope note:** no product surface sets `__ETLSNAP__` today — a self-contained offline
-  HTML snapshot host is its own feature (`EXPORT REPORT` does PDF/CSV/MARKDOWN only). This makes the
-  runtime side of that contract work and tested for when one ships.)*
-- [x] Add parser/formatter/round-trip, duplicate/default, stale-reference, rename, type validation,
-  cascade reconciliation, atomic rollback, launch precedence, Portal ownership, report-revision
-  drift, default-view restore, offline replay, accessibility, and URL-disclosure tests.
-  *(DONE. Added Portal endpoint tests for envelope round-trip, legacy
-  compatibility, drift warning + re-stamp, cross-user identifier opacity, 204/round-trip default,
-  single-default invariant, malformed/invalid-schema rejection, revision spoof prevention, and
-  atomic saved-view application; LSP tests cover completion context, hover, bookmark rename, and
-  target-reference rename — applying the edits back to the source and asserting the resulting text,
-  not edit counts;
-  8 Report Builder round-trip tests (parse fidelity, byte-for-byte no-op patch, scoped edit, add,
-  remove, null-preserves-existing, fresh generate re-parses); 11 runtime tests covering the saved-view
-  URL base per host, the menu's accessibility contract, identifier-only hashes, and offline replay
-  with any network call treated as a failure; and a Playwright test driving the builder's bookmark
-  panel in a real browser against the canonical `designer.js`.)*
-
-**Exit gate:** Bookmarks apply atomically and portably, object references are statically safe and
-rename-aware, Portal saved views use the shared state contract without becoming source-controlled
-bookmarks, user defaults restore correctly, and URLs reveal only the bookmark identifier.
-*(MET. Application is atomic on the server through the cascading engine with rollback, publishing one
-manifest; the client applies it as one swap and replays offline from the manifest. Bookmark
-identifiers are rename-aware across every site, and a bookmark's references to other objects are
-statically checked. Portal saved views persist the same versioned envelope, stay private per user,
-carry the revision they were captured against, and warn on drift without blocking. URLs and history
-carry only an identifier. The one deliberate boundary is recorded above: the offline snapshot *host*
-does not exist yet, so offline replay is implemented and tested at the runtime contract.)*
-
-### Phase 11 — Rich Tooltip/Popover Hardening and Cross-Surface Parity
-
-The basic feature already exists: report syntax and manifests support text, inline, and container
-tooltips, and the native SVG browser path can refresh `@hover_value` and render a referenced
-container containing another chart. `samples/10_Kitchen_Sinks/01_BAR.rptsql` is the compatibility
-fixture. This phase completes and hardens that contract; it does not introduce tooltips as a new
-feature.
-
-#### Contract and static safety
-
-- [x] Record the accepted distinction between a transient, non-interactive tooltip and a persistent,
-  focusable detail popover. Freeze the canonical text, inline `VISUALS`, and referenced-container
-  syntax only after auditing which forms actually work on every supported path.
-  *(DONE. The audit came first and found three real defects, all fixed here rather than documented
-  around: inline `VISUALS` parsed and serialized but no renderer drew it; `FormatCreateVisual` never
-  emitted `TOOLTIP` at all, so formatting deleted it; and `mode` defaulted such that pre-`mode`
-  manifests downgraded to text. The distinction is now carried in the AST as `DetailSurfaceKind`
-  and on the wire as `mode`, so no consumer re-derives it. All three syntax forms are frozen and
-  round-trip tested. Which surface you get is decided by what the clause carries — text, or markdown
-  alone, is transient; a container reference or an inline `VISUALS` list is a persistent popover —
-  rather than by an extra keyword.)*
-- [x] Either implement the existing inline `TOOLTIP (... VISUALS (...))` contract end to end or reject
-  it with an actionable parser/analysis diagnostic; do not continue emitting a manifest form that
-  browser and static renderers silently ignore.
-  *(DONE — implemented, not rejected. Nothing in the repository argued for rejecting it: the visuals
-  it names are already in the manifest, so rendering them is the same work the referenced-container
-  form does. `renderDetailContent` now draws the markdown and each named visual in order, a browser
-  test asserts both actually appear, the static renderers describe it, and the designer preserves
-  the `VISUALS` list through a patch.)*
-- [x] Resolve tooltip targets and their visual/container dependencies statically. Add missing-target,
-  rename, cycle, nested-tooltip, maximum-depth, node, byte, query/refresh-work, and aggregate-report
-  budgets. A detail surface must not recursively embed a dashboard or open another detail surface.
-  *(DONE. `DetailSurfaceResolver` walks the referenced container graph over the report's declared
-  objects and centralizes every budget in `DetailSurfaceLimits`, reported through stable `RPT21xx`
-  codes: missing container/visual (`RPT2101`/`RPT2102`), direct and indirect cycles (`RPT2103`),
-  nested detail surfaces on either a container or a rendered visual (`RPT2104`), and the depth,
-  visual, node, refresh-query, and per-report surface budgets (`RPT2105`–`RPT2108`, `RPT2110`).
-  Payload size is the one budget that cannot be checked against the AST — what a popover costs is
-  the rows its visuals actually returned — so `DetailSurfacePayloadGuard` enforces `RPT2109` once
-  the manifest is complete. All of it fails closed at manifest build rather than emitting a surface
-  no renderer honours. Rename now follows the same dependencies: `ReportRenameProvider` updates
-  `TOOLTIP = <container>`, container slot targets, and inline `VISUALS (...)` entries, so renaming
-  an object can no longer leave a popover silently resolving to nothing.)*
-- [x] Define the row-context contract explicitly. Only allow declared, non-secret mapping values to
-  flow into the detail refresh; never expose secret values through parameters, manifests, logs,
-  accessibility text, URLs, snapshots, or exports.
-  *(DONE. `DetailSurfaceRowContext` fixes the contract: the value pushed into `@hover_value` must
-  come from an explicitly declared `X`/`LABEL`/`NAME`/`REGION`/`Y` mapping — positional fallback to
-  "the first column" is rejected as `RPT2114` because an implicit choice is not an author's decision
-  about what is safe to disclose — and that column must pass `SecretRedactor.IsSensitiveKey`, the
-  same predicate every other redaction boundary uses. Columns mapped by visuals rendered *inside*
-  the surface are checked too, since the popover body discloses as much as the refresh parameter.
-  Both rules fail closed as `RPT2111`/`RPT2114` and name only the column, never a value.)*
-
-#### Browser interaction and accessibility
-
-- [x] Use one shared detail-surface implementation across supported native and browser chart adapters.
-  Preserve hover for fine pointers; add keyboard focus and click/tap activation, with a pinned
-  popover when content is interactive or cannot safely disappear on pointer leave.
-  *(DONE. `attachDetailSurface` replaces `installNativeTooltip`; adapters call it and keep no private
-  tooltip state. Audit result worth recording: the native SVG path is the **only** browser chart
-  adapter — ECharts was retired, and the `renderChart` fallback at the bottom of the visual dispatch
-  is a call to a function that no longer exists. Fine pointers get a hover preview, coarse pointers
-  get no preview and open pinned on first tap, and keyboard focus plus Enter/Space pins. Persistent
-  detail is always pinned, so it never disappears on pointer leave.)*
-- [x] Implement deterministic dismissal and focus behavior: `Escape`, outside click, trigger
-  reactivation, focus return, stale-refresh cancellation, and removal when the source visual is
-  refreshed or unmounted. Do not create keyboard traps or hover-only content.
-  *(DONE. One surface exists at a time; opening another closes the previous. Escape restores focus to
-  the trigger, outside click and re-activation close, and generation fencing means a response for a
-  superseded row — or one that lands after dismissal — never replaces current detail. The surface is
-  appended to `document.body`, so `destroyDetailSurfaces` runs before the report root is cleared;
-  without it a re-render orphaned an open popover anchored to marks that no longer existed. Marks are
-  focusable and named, so no detail is hover-only.)*
-- [x] Use the correct accessibility model: `role="tooltip"` plus `aria-describedby` for transient
-  text, and an appropriately labelled focusable popover/dialog pattern for interactive detail.
-  Announce loading, error, and refreshed states without repeatedly flooding live regions.
-  *(DONE. Transient text is `role="tooltip"`, referenced by the trigger's `aria-describedby`, and
-  stays `pointer-events: none` so it can never acquire focusable descendants — asserted by counting
-  focusable nodes inside it. Pinned detail is a labelled `role="dialog"` and drops
-  `aria-describedby`, so a whole dialog is not announced inline as the trigger's description. One
-  shared polite `role="status"` region serves the whole report and drops repeated identical
-  messages, so a hover sweep cannot flood it.)*
-- [x] Replace cursor clamping with a tested anchor-based flip/shift placement contract covering all
-  viewport edges, scrolling, zoom, narrow screens, right-to-left layout, and resized content.
-  *(DONE. `computeDetailPlacement` is a pure function of anchor rect, surface size, and viewport,
-  with a documented preferred side (`top`) and deterministic flip order. The old cursor-follow
-  clamping could not be asserted on at all, because the result depended on where the mouse happened
-  to be; placement is now a table of numbers. Nine geometry fixtures cover preferred side, vertical
-  flip, fallback to a horizontal side, both horizontal edges, oversized content, a narrow viewport,
-  RTL leading-edge alignment, and purity. Live repositioning on scroll, viewport resize, and content
-  resize — via `ResizeObserver` — is asserted by checking the gap to the mark is preserved on
-  whichever side was chosen and the surface stays inside the viewport.)*
-
-#### Portable behavior and evidence
-
-- [x] Define deterministic PDF, print, Markdown/email, terminal, plain-text, screen-reader, and
-  offline-snapshot behavior. Static surfaces may use a concise semantic summary instead of expanded
-  interactive content, but must never silently imply that hover is available.
-  *(DONE. `DetailSurfaceProjection` owns one wording for every non-hoverable surface: transient text
-  is reproduced verbatim (it carries no interaction), and a popover becomes
-  "Interactive detail available in browser: &lt;visuals&gt;." — asserted never to contain "hover",
-  "mouse over", or "point at". The sentence is computed once at manifest build and stored as
-  `staticSummary`, so the browser's print output and the static exporters cannot drift into two
-  wordings of the same fallback. Markdown/email and terminal render it inline; PDF adds it beneath
-  the visual; print CSS hides the live surface — printing with one open would stamp a floating panel
-  over the layout — and reveals the note instead; the note stays in the accessibility tree on screen
-  for the screen-reader projection. Offline snapshots serialize and rehydrate the whole manifest and
-  replay through the same runtime, so `mode`, `resolvedVisuals`, and `staticSummary` travel with them
-  and offline behaviour is identical rather than degraded. A round-trip test caught a real
-  compatibility defect while writing this: `mode` defaulted to `tooltip`, so a manifest published
-  before the field existed deserialized as an explicit transient tooltip and the `type` fallback
-  never ran, silently downgrading older container popovers to text. It is now nullable, so absence
-  stays distinguishable from an explicit choice.)*
-- [x] Add parser/formatter, analysis/LSP, manifest/versioning, interaction-refresh, runtime DOM,
-  keyboard, touch, accessibility, positioning, cycle, disclosure, budget, stale-request, export, and
-  cross-host tests. Exercise the real kitchen-sink nested-chart fixture, not only string-presence
-  assertions against `report-runtime.js`.
-  *(DONE. 36 browser tests (behaviour, geometry, performance) drive the canonical
-  `report-runtime.js` through `tools/ui-sandbox/detail-surface.html`, which reproduces the
-  kitchen-sink nested-chart workflow — `BarWithTooltip` opening `TooltipBox` containing
-  `MonthDetail` — with no Portal, database, or login. Alongside them: 9 parser/formatter round
-  trips, 32 resolver/static-safety, 18 static-fallback and manifest-versioning, 5 payload-budget,
-  and 3 rename tests. The round-trip requirement caught a real data-loss defect: `FormatCreateVisual`
-  never emitted `TOOLTIP` at all, so formatting a report silently deleted the author's tooltip —
-  pages, containers, and buttons formatted theirs, visuals were the one `CREATE` that dropped it.)*
-- [x] Measure open, refresh, reposition, and dismissal latency on the named kitchen-sink fixture at a
-  documented data size. Record the baseline and regression tolerance rather than claiming an
-  unmeasured sub-millisecond target.
-  *(DONE. Fixture: the kitchen-sink tooltip example — `#sales` at 8 rows x 4 columns, 4 trigger
-  marks, 2 detail rows per activation — which is the shape the sample actually ships, so a
-  regression is a regression in real authored reports. Measured on this machine, headless Chromium:
-  transient open **50.9 ms**, popover open through refresh completion **65.3 ms**, reposition after
-  scroll **26.8 ms**, dismissal and cleanup **3.5 ms**. Budgets are set well above those at 400 /
-  2500 / 300 / 300 ms and are deliberately coarse: they are tripwires for work that is O(marks) or
-  worse — a reflow storm, an unfenced refresh, a listener leak — not tuned targets, because a
-  headless CI agent is an order of magnitude noisier than a developer machine. No sub-millisecond
-  claim is encoded anywhere. Every run writes its measured values to test output, which is the
-  record to compare against when re-baselining, and a repeated open/dismiss loop asserts no surface
-  or live-region leak.)*
-- [x] Update the focused help, Report-SQL guide, syntax index, snippets, LSP, and Report Builder to
-  match only the accepted and tested forms. Modify shared browser assets only under
-  `src/ETL-SQL.ReportRuntime/Resources/Shared/`, then synchronize and verify generated copies.
-  *(DONE. New focused help at `docs/reference/visuals-reporting/report/tooltip.md` following the
-  §7.1 rules, linked from the reporting README and the syntax index (audit: 0 broken links, 0
-  unlinked pages); a Tooltips and Detail Popovers section in the Report-SQL guide; and a
-  `$tooltip` snippet that scaffolds the chart-in-popover workflow. The LSP picks both up from disk,
-  so hover, completion, and the snippet list needed no code change. The Report Builder does not
-  author detail surfaces, so the requirement on it is the opposite one — an unrelated edit must not
-  destroy a hand-written clause; the patcher rewrites only the clauses it owns, and three
-  round-trip tests pin that for the container form, the inline form, and an unrelated retitle. All
-  browser assets were edited under `Resources/Shared/` and synchronized; `sync-assets.js -Check`
-  reports no drift.)*
-
-**Exit gate:** The existing chart-in-tooltip sample works by hover, keyboard, click, and touch on the
-supported browser renderers; transient and interactive detail use correct accessibility and focus
-contracts; invalid references, cycles, nesting, disclosure, payload, and work limits fail closed;
-positioning and stale refreshes are deterministic; static surfaces expose the documented semantic
-fallback; measured performance stays within its recorded tolerance; and targeted, browser, export,
-sample, asset-drift, and pre-release gates pass.
-*(MET. The kitchen-sink workflow — `BarWithTooltip` opening `TooltipBox` containing `MonthDetail` —
-is driven by hover, keyboard, click, and tap in a real browser against the canonical runtime; the
-native SVG path is the only browser chart adapter, ECharts having been retired. Transient text is
-`role="tooltip"` with `aria-describedby` and is asserted to hold nothing focusable; pinned detail is
-a labelled dialog with focus return. Every invalid reference, cycle, nesting, disclosure, payload,
-and work limit fails closed through `RPT2101`–`RPT2114`, each numeric boundary tested at limit-1,
-limit, and limit+1. Placement is a pure function with nine geometry fixtures; stale refreshes are
-generation-fenced. Static surfaces share one wording that never claims hover. Measured on the named
-fixture: 50.9 / 65.3 / 26.8 / 3.5 ms against 400 / 2500 / 300 / 300 ms budgets.*
-
-*The audit that opened this phase found four defects of the exact kind it exists to remove, all
-fixed rather than documented around: inline `VISUALS` parsed and serialized but no renderer drew it;
-`FormatCreateVisual` never emitted `TOOLTIP`, so formatting deleted it; `mode` defaulted such that
-pre-`mode` manifests silently downgraded to text; and the row context fell back to whichever column
-came first. The three behavioural breaks are recorded in `BREAKING_CHANGES.md` with `COMPAT_BREAK`
-markers and `[Trait("CompatBreak", "0.19")]` regression tests.*
-
-*End-to-end proof on the real sample: exporting `samples/10_Kitchen_Sinks/01_BAR.rptsql` to Markdown
-emits `*Interactive detail available in browser: MonthDetail.*`, so the whole chain — parser,
-resolver, manifest (`resolvedVisuals` resolved through `TooltipBox`), static projection — is exercised
-by the shipped sample rather than only by fixtures.*
-
-*Two unrelated pre-existing failures are **not** addressed here and are not Phase 11 regressions;
-both were confirmed failing on a clean tree with these changes stashed:
-`Analysis.DocumentationSyntaxTests.ValidateDocumentationSnippets` (unterminated string in
-`docs/guides/patterns/troubleshooting-syntax-and-dialect.md`) and
-`Portal.DesignerScriptPatcherTests.FiftySequentialMutations_PreserveLineEndingsAndStableDataBytes`
-for the `
-` case (a CRLF-checkout artifact on Windows).)*
-
-### Phase 12 — Declarative Encoding, Geometry, and Layout Refinements
-
-This phase adopts the useful visual-grammar lessons identified by the Vega-Lite and ggplot2
-comparisons without adding either syntax, runtime, statistical engine, or hidden data
-transformations. SQL and `#temp` staging remain the transformation boundary. `ChartSpec` owns visual
-meaning, `PlotPlan` owns deterministic resolved geometry, and renderers consume the plan without
-inferring semantics from layer names or data rows.
-
-#### Binding-source contract
-
-- [x] Record the accepted binding-source design in the native GoG ADR before changing grammar:
-  field bindings read a source column, `DATUM(...)` supplies a typed constant in the data domain and
-  passes through a scale, and `VALUE(...)` supplies a typed visual-range value without a data scale.
-  Keep the existing bare-column form as the canonical field syntax; do not require `FIELD(...)` in
-  ordinary reports.
-- [x] Accept canonical constant and parameter syntax such as
-  `X = DATUM(1500) (TYPE = QUANTITATIVE, SCALE = revenue)`,
-  `Y = DATUM(@Target) (TYPE = QUANTITATIVE)`, and `COLOR = VALUE('#c62828')`.
-  Initially allow only typed scalar literals and declared variables inside `DATUM`/`VALUE`; reject
-  column references, aggregates, function calls, and arbitrary expressions so the chart grammar
-  does not become a hidden transformation engine.
-- [x] Replace the field-only `AdvancedChartEncoding`/`FieldBinding` assumption with an immutable,
-  serializable discriminated binding source in the AST and `ChartSpec`. Preserve typed `ChartValue`
-  values through lowering, serialization, parameter refresh, snapshot replay, and every backend.
-- [x] Define channel legality for each source kind. Positional `DATUM` values may use compatible
-  scales; visual `VALUE` bindings bypass scales; field bindings retain existing data-kind, sort,
-  axis, format, and scale behavior. Reject meaningless combinations such as a scaled `VALUE` or a
-  visual-range color literal on a quantitative position channel.
-- [x] Extend Analysis and contract validation to type-check literal and parameter bindings against
-  the declared encoding type, scale kind, channel, and parameter metadata. Undeclared variables,
-  incompatible values, nulls on unsupported channels, and secret-bearing parameters must fail
-  closed with actionable diagnostics.
-- [x] Keep provenance categories distinct: fields create column-lineage edges, literal datums create
-  no column lineage, and parameter datums/values create parameter-dependency metadata. Never invent
-  a source column for a constant, and never expose secret values in `ChartSpec`, `PlotPlan`, logs,
-  tooltips, accessibility text, URLs, snapshots, or export metadata.
-
-#### Global encoding inheritance
-
-- [x] Add an optional top-level `ENCODINGS (...)` block inside `CHART (...)` whose bindings are
-  inherited by layers. Keep inheritance a compile-time authoring convenience: lower every layer to
-  a complete, explicit binding set before constructing the serialized `ChartSpec` so renderers and
-  downstream consumers never implement inheritance independently.
-- [x] Define deterministic merge rules by channel: a layer binding overrides the inherited binding
-  for the same channel, non-conflicting inherited bindings remain, and duplicate bindings at either
-  scope are errors. Apply mark-specific required-channel and compatibility validation only after the
-  effective layer binding set has been computed.
-- [x] Add `INHERIT_ENCODINGS = ON | OFF` to layers, defaulting to `ON`. `OFF` creates an isolated
-  layer and must not retain any global field, datum, value, scale, axis, sort, format, stack, or
-  offset binding implicitly.
-- [x] Make scale inference and explicit-scale validation operate on effective bindings after
-  inheritance. A layer override must not accidentally leave an incompatible inherited scale or axis
-  association attached to the replacement binding.
-- [x] Extend the formatter, LSP, scoped rename, lineage, and Report Builder mutation model so global
-  bindings remain global during round trips and field/parameter renames update inherited consumers
-  without expanding boilerplate into every layer.
-- [x] Add inheritance tests for full inheritance, per-channel override, opt-out, datum/value sources,
-  incompatible marks, duplicate channels, scale conflicts, formatter stability, rename, and lossless
-  Report Builder edits.
-
-#### Explicit placement, stacking, offsets, and mark sizing
-
-- [x] Remove renderer-dependent layout meaning, including checks of layer identifiers such as
-  `Id.Contains("actual")`. Renaming a layer must never alter geometry. Move every grouped, stacked,
-  normalized, overlaid, or bullet-band decision into typed `ChartSpec` semantics resolved by
-  `PlotPlanResolver`.
-- [x] Add `STACK = NONE | ZERO | NORMALIZE` to compatible quantitative position encodings. Start
-  CUSTOM authoring with the deterministic default `NONE`; named `BAR`, `HBAR`, `AREA`, `LINE`, and
-  other presets must lower their existing behavior into an explicit stack mode rather than relying
-  on renderer-global `STACKED` style flags.
-- [x] Define stack validation and resolution for Cartesian, transposed Cartesian, and polar channels.
-  Specify grouping keys, positive/negative baselines, null handling, stable stack order, zero-domain
-  behavior, and shared/independent facet scales. `NORMALIZE` changes resolved geometry while retaining
-  raw values for labels, tooltips, actions, accessible summaries, and semantic fallbacks.
-- [x] Add typed `X_OFFSET` and `Y_OFFSET` encoding channels for dodged/grouped placement. Offset
-  bindings must be nominal or ordinal, use stable source/explicit ordering, participate in scale
-  resolution, and produce deterministic slot allocation across facets and output sizes.
-- [x] Add an orientation-neutral, relative `BAND_SIZE` mark property with a validated range greater
-  than zero and at most one. Use it for full-band qualitative backgrounds, narrower foreground bars,
-  grouped marks, and category-local ticks. Do not make fixed browser pixels part of the initial
-  cross-surface semantic contract.
-- [x] Keep placement dimensions orthogonal: `Z_INDEX` controls paint order, `STACK` controls
-  accumulation, offset channels control dodging, and `BAND_SIZE` controls thickness within a band.
-  Reject ambiguous or incompatible combinations rather than choosing a renderer heuristic.
-- [x] Lower existing standard and CUSTOM charts into the new placement contract monotonically, with
-  focused regression batches for vertical bars, horizontal bars, stacked/normalized bars, stacked
-  areas, grouped series, bullet charts, overlays, dual-axis composites, and facets.
-
-#### Interval and range geometry
-
-- [x] Expose the existing semantic `Y_START`/`Y_END` channel pair to advanced authoring for floating
-  AREA ribbons and vertical RULE spans instead of adding competing `Y_MIN`/`Y_MAX` names. Add the
-  symmetric `X_START`/`X_END` contract only when delivering horizontal ribbons and spans; do not
-  overload waterfall-specific resolver heuristics as general interval behavior.
-- [x] Define AREA semantics explicitly: ordinary `Y` remains a baseline area, while paired
-  `Y_START`/`Y_END` creates a floating ribbon. Require both endpoints, preserve source order and gap
-  behavior, include both endpoints in scale-domain resolution, and reject ambiguous mixtures unless
-  a documented mark form requires them.
-- [x] Define RULE interval semantics for X plus `Y_START`/`Y_END`, Y plus
-  `X_START`/`X_END`, and explicitly ranged X/X2 or Y/Y2 forms. Specify whether category-local caps use
-  TICK layers rather than silently turning RULE into an error-bar composite.
-- [x] Keep confidence bounds, forecast quantiles, and other interval calculations in SQL. The visual
-  grammar receives already-computed endpoint columns and performs no confidence, interpolation, or
-  statistical estimation.
-- [x] Add ribbon and range validation for numeric/temporal compatibility, null endpoints, reversed
-  endpoints, log-scale restrictions, shared/independent facets, clipping, tooltips, selection hit
-  regions, accessible summaries, terminal fallbacks, and PDF/email rendering.
-
-#### Deterministic position adjustments
-
-- [x] Add typed layer-level position adjustments rather than encoding them as free-form STYLE:
-  `POSITION = IDENTITY`, `POSITION = JITTER(...)`, and `POSITION = NUDGE(...)`. Keep DODGE and STACK
-  represented by the explicit offset and stack encoding contracts above rather than creating a
-  second way to express the same geometry.
-- [x] Define JITTER in scale/band-relative units with explicit X/Y amplitudes, a required stable key
-  field, and an optional fixed seed. Generate offsets from a documented deterministic hash of chart,
-  layer, key, channel, and seed; never call `RAND()`, depend on process-random hash codes, or mutate
-  source values. Duplicate or null keys must have specified stable behavior or fail lint.
-- [x] Preserve unjittered raw values for axes, domains, tooltips, actions, selections, lineage,
-  accessibility, and exports that expose data. Store only resolved display coordinates or offsets in
-  `PlotPlan`, ensuring repeated renders and every backend receive identical placement.
-- [x] Define NUDGE units explicitly rather than accepting ambiguous numbers. Support data-domain
-  offsets where both axes are continuous and relative `BAND`/`EM` offsets for category-local marks
-  and TEXT labels. Reject device-pixel semantics in the portable contract and resolve target bounds
-  only in `PlotPlanResolver`.
-- [x] Specify composition order with datum scaling, stacking, offsets, facets, and clipping. Position
-  adjustments must occur after domains and stack baselines are resolved but before final mark bounds
-  and label collision handling, with no feedback into scale domains.
-- [x] Add deterministic snapshots proving the same jitter and nudge results across processes,
-  browser/static SVG, terminal fallback, PDF/email, resize, facet layout, layer rename, row reorder
-  with stable keys, and offline replay.
-
-#### Deterministic scale inference
-
-- [x] Make `SCALES (...)` optional for CUSTOM charts while keeping encoding `TYPE` mandatory. Do not
-  infer semantic types by sampling row values or by allowing individual backends to inspect strings.
-- [x] Define and version one inference table shared by linting and lowering: positional quantitative
-  uses linear, positional temporal uses time, nominal/ordinal RECT and TICK positions use band,
-  nominal/ordinal POINT/LINE positions use point, nominal/ordinal color/shape uses ordinal, and
-  quantitative size uses linear. Add an explicit decision for every supported channel/type/mark
-  combination and reject combinations outside that table.
-- [x] Generate stable inferred scale identities from resolution scope, coordinate, axis, and channel.
-  Compatible layers sharing a channel must share the same inferred scale; incompatible semantic
-  kinds or scale requirements must produce a lint error requiring explicit named scales.
-- [x] Preserve explicit `SCALES` for logarithmic/identity scales, domain bounds, zero policy, explicit
-  category ordering, named cross-layer sharing, and other overrides. A binding with `SCALE = name`
-  must still reference a declared scale; omission requests inference rather than a partially declared
-  scale.
-- [x] Serialize the inferred scales into the resolved `ChartSpec` and `PlotPlan` so SVG, browser,
-  terminal, PDF, email, snapshots, accessibility, and future backends consume identical domains,
-  ordering, ticks, and palette decisions.
-
-#### Continuous and diverging color ranges
-
-- [x] Extend `ScaleSpec` with a typed color-range contract for continuous COLOR encodings. Treat the
-  linear/logarithmic scale kind as the data-domain transform and the gradient as its output range;
-  do not introduce `GRADIENT` as a competing domain-scale kind.
-- [x] Accept canonical explicit forms for sequential and diverging ranges, for example
-  `RANGE = GRADIENT(LOW = '#...', HIGH = '#...')` and
-  `RANGE = DIVERGING(LOW = '#...', MID = '#...', HIGH = '#...', MIDPOINT = 0)`. Reserve an extensible
-  stop-list representation for a later multi-stop form without requiring it in the first delivery.
-- [x] Specify and version color parsing, interpolation color space, clamping/out-of-domain behavior,
-  midpoint placement, null color, opacity interaction, and deterministic rounding. Use a small
-  dependency-free managed implementation unless a third-party library passes the repository's
-  license, maintenance, transitive-dependency, and necessity gates.
-- [x] Validate that continuous/diverging ranges bind only to compatible quantitative COLOR channels;
-  require an in-domain midpoint or document deliberate asymmetric rescaling; reject malformed,
-  unsupported, or non-portable color values before rendering.
-- [x] Add a resolved continuous color legend/colorbar contract with formatted ticks, accessible
-  minimum/midpoint/maximum descriptions, terminal bins, grayscale/high-contrast fallbacks, and
-  deterministic PDF/email output. Do not represent a continuous ramp as a misleading list of
-  unrelated categorical legend entries.
-- [x] Add visual and accessibility fixtures for sequential metrics, zero-centered variance,
-  asymmetric diverging domains, nulls, clipped values, heatmaps, points, rectangles, light/dark
-  themes, and color-vision-deficiency-safe palettes.
-
-#### Facet wrapping and coordinate aspect
-
-- [x] Add a distinct one-dimensional wrap form such as `FACET (WRAP = Region, COLUMNS = 3)`.
-  Initially make WRAP mutually exclusive with ROW/COLUMN grid facets, require a positive bounded
-  column count, and retain stable source or explicit category ordering.
-- [x] Resolve wrap panels in deterministic row-major order with bounded panel count, minimum usable
-  panel dimensions, predictable incomplete-last-row alignment, shared/independent scale behavior,
-  repeated/outer axes, strip labels, keyboard order, and responsive overflow behavior.
-- [x] Define cross-surface degradation for wrap facets: browser and static layouts use the same
-  resolved panel order and bounds; terminal/plain-text outputs paginate or serialize panels without
-  silently dropping categories; PDF/email use deterministic page breaking or a documented fallback.
-- [x] Enforce facet cardinality and render-work budgets before allocating panels. Report actionable
-  diagnostics when `COLUMNS`, output bounds, label size, or category count would create unreadable or
-  unsafe output rather than squeezing an arbitrary number of panels into one row.
-- [x] Add numeric `ASPECT_RATIO` to Cartesian coordinates, defined as the physical Y-unit/X-unit
-  ratio after scale domains are resolved; `ASPECT_RATIO = 1` preserves equal X and Y unit lengths.
-  Prefer this unambiguous numeric form over a `1:1` token and reject non-positive or non-finite values.
-- [x] Resolve fixed aspect by fitting and aligning a maximal plot rectangle inside the available
-  bounds, preserving domains and leaving deliberate padding instead of stretching either axis.
-  Specify alignment, axis/legend/title space, resize behavior, and clipping in the resolved plan.
-- [x] Define and validate interactions with temporal/discrete axes, log scales, transposed Cartesian
-  coordinates, secondary axes, facets, geographic coordinates, and very small containers. Start
-  with two continuous primary Cartesian axes and reject unsupported combinations until each has a
-  portable meaning.
-- [x] Add parity-scatter, unit-circle, slope-reference, resized-container, facet, PDF, terminal, and
-  accessibility fixtures proving fixed-aspect meaning remains stable across supported surfaces.
-
-#### Dedicated TICK mark
-
-- [x] Add `TICK` as a semantic mark distinct from `RULE`: RULE represents a plot-spanning reference
-  or ranged segment, while TICK represents a short category-local quantitative observation or target.
-- [x] Define portable TICK properties for orientation, relative `BAND_SIZE`, and bounded thickness;
-  specify valid channels, datum/field behavior, default orientation, scale behavior, tooltips,
-  actions, accessibility wording, and terminal/plain-text fallbacks.
-- [x] Implement TICK through lexer/parser, immutable AST, formatter, contract/versioning, advanced
-  lowering, `PlotPlanResolver`, native SVG, browser interactions, terminal rendering, static export,
-  snapshots, LSP, Report Builder preservation/editing, help, snippets, and capability inventory.
-- [x] Add representative bullet-target, strip-plot, and barcode-style examples. Confirm that RULE
-  remains the correct primitive for thresholds that span the full plot or an explicit ranged extent.
-
-#### Cross-surface delivery and acceptance evidence
-
-- [x] Bump the appropriate versioned `ChartSpec`/`PlotPlan` contracts and add backward-compatible
-  readers or a deliberate migration for existing serialized reports and `.etlsnap` packages. Do not
-  silently reinterpret an old layer-name or global-stack heuristic as the new contract.
-- [x] Update parser, canonical formatter, Analysis lint, LSP completion/hover/scoped rename, syntax
-  index, focused help, snippets, Report-SQL guide, and lossless Report Builder round-trip support in
-  the same delivery. Every new syntax form must have a minimal parser-tested example.
-- [x] Add contract tests for binding-source serialization and type preservation, literal/parameter
-  reevaluation, lineage classification, secret rejection/redaction, stack validation, positive and
-  negative stacking, normalization, offsets, band sizing, inferred-scale identities, incompatible
-  scale errors, inherited encodings, interval channels, deterministic jitter/nudge, continuous color
-  ranges, facet wrapping, fixed aspect, and TICK semantics.
-- [x] Add cross-backend semantic conformance and deterministic visual goldens for browser/native SVG,
-  terminal, PDF/email adapters, accessibility summaries, and offline replay. Include renamed layers
-  in the fixtures to prove geometry is independent of identifiers.
-- [x] Add production recipes covering constant quadrant thresholds, parameter-driven target rules,
-  grouped and stacked bars, full-band bullet backgrounds with narrow actual bars, normalized stacks,
-  inherited encodings, forecast ribbons, error ranges, deterministic strip plots, nudged labels,
-  wrapped regional small multiples, parity scatter plots, continuous/diverging color ramps, and TICK
-  targets without projecting constants onto every source row.
-- [x] Measure resolver cost, manifest size, native SVG size, render time, and memory on declared
-  representative workloads. Record actual results and prevent inferred-scale or offset resolution
-  from introducing data-size-dependent renderer work.
-- [x] Update the Vega-Lite conversion guide to map `field`, `datum`, `value`, `stack`, offset channels,
-  relative band sizing, inferred scales, and tick marks to the shipped ETL-SQL syntax while keeping
-  calculate, aggregate, lookup, window, fold, and other data transformations in visible SQL.
-- [x] Add a ggplot2-to-ETL-SQL concept guide covering global aesthetic inheritance, layer overrides,
-  facet grid/wrap, interval ribbons and rules, identity/jitter/nudge position adjustments, fixed
-  Cartesian aspect, continuous/diverging color ranges, and the deliberate rule that `stat_*`
-  calculations remain visible SQL transformations.
-
-**Exit gate:** CUSTOM charts can express field, datum, and visual-value bindings; grouped, stacked,
-normalized, overlaid, and bullet geometry is explicit and independent of layer names; ordinary
-scales infer deterministically without type sampling; inherited encodings, interval geometry,
-deterministic position adjustments, continuous color ranges, wrapped facets, fixed aspect, and TICK
-have portable semantics; lineage and secret boundaries remain intact; and parser, formatter, lint,
-LSP, Report Builder, snapshots, browser, terminal, export, accessibility, documentation, performance,
-and visual-golden evidence all pass from the same versioned contracts.
-
-### Phase 13 — Reporting Samples, Conversion Guidance, and Closure
-
-- [x] Publish production-grade composite examples demonstrating layers, annotations, conditions,
-  facets, interactions, accessibility, and cross-surface fallbacks with transformations visible in
-  SQL.
-- [x] Publish a Vega-Lite-to-ETL-SQL concept guide covering layer, facet/repeat, scale resolution,
-  conditional encoding, selections, parameters, transforms, lookup, windows, and themes.
-- [x] Update the Report-SQL guide, syntax index, focused reference pages, snippets, sample inventory,
-  and cookbook for every syntax form that actually shipped.
-- [x] Complete serialization/version, cross-backend, visual-golden, accessibility, bundle, cold-start,
-  memory, export-time, and output-size evidence defined by the GoG ADR.
-- [x] Reconcile the capability matrix with source and tests, remove stale migration language, update
-  `ROADMAP.md` to retain only unfinished increments, and record shipped outcomes in `CHANGELOG.md`.
-
-**Exit gate:** Documentation and samples are parser-tested and copy-pasteable, measurements are
-reproducible, the capability matrix matches source, and no completed reporting work remains described
-as future work.
+## Reporting — Constrained HTML Visuals
+
+Authoritative direction:
+[`ROADMAP.md`](ROADMAP.md#reporting--presentation--constrained-html-visuals). The exact grammar and
+security contract must be accepted in an ADR before parser implementation.
+
+- [ ] Write the HTML-visual threat model and ADR. Define the exact template grammar, typed
+  substitutions and conditional form, sanitizer allowlists, URL policy, CSS isolation, interaction
+  projection, embedded-visual boundaries, budgets, and portable fallback contract.
+- [ ] Add `CREATE VISUAL <name> AS HTML (...)` through lexer/parser, immutable AST, canonical
+  formatter, Analysis lint, LSP completion/hover/rename, syntax index, focused help, snippet, and
+  parser-tested examples. Preserve the normal visual clause shape with optional `SOURCE`,
+  `MODE = SINGLE | REPEATER`, `TEMPLATE`, `STYLE (CSS = ...)`, and `ACTIONS (...)`.
+- [ ] Implement the dependency-free typed template evaluator. Support escaped field and parameter
+  substitution plus the accepted small conditional form; keep aggregation, lookup, filtering,
+  calculation, and all other transformations in visible SQL. Do not add arbitrary expressions or a
+  raw-HTML substitution escape hatch.
+- [ ] Implement the HTML and CSS security boundary before rendering. Reject JavaScript, scripts,
+  inline event handlers, unsafe URL schemes, iframes, objects, embeds, global document mutation,
+  external form submission, and unapproved elements, attributes, URLs, or inline SVG. Scope CSS to
+  the visual while exposing only approved report theme variables.
+- [ ] Support source-free, parameter-driven, single-row, and repeated-row components with explicit
+  row, node, byte, output, and render-work budgets. Parameter refresh must publish one consistent
+  manifest without observable partial template state.
+- [ ] Add bounded `VISUAL(...)` embedding for declared report visuals. Resolve references statically,
+  reuse existing visual manifests and declarative actions, and reject missing targets, cycles,
+  recursive/nested expansion, secret disclosure, and aggregate query/render budget overruns.
+- [ ] Render sanitized HTML visuals in the shared browser runtime, print, and PDF paths without
+  executing author code. Reuse Report-SQL parameter, navigation, bookmark, drill, and cross-filter
+  actions instead of DOM scripting, and preserve theme and formatting precedence across hosts.
+- [ ] Require or deterministically resolve a concise semantic summary for email, Markdown, terminal,
+  plain text, screen readers, and unsupported surfaces. Static output must preserve analytical meaning
+  and must not imply unavailable interaction.
+- [ ] Keep the first delivery script-first. Add preview and lossless Report Builder preservation for
+  the complete HTML clause, but defer a WYSIWYG HTML editor until it is separately designed and
+  approved.
+- [ ] Add hostile-markup/URL/CSS/disclosure tests, escaping and typed-binding tests, optional-source
+  and repeater fixtures, embedded-visual cycle/budget tests, action and refresh parity, accessibility,
+  snapshot and cross-surface conformance, deterministic output, payload/render budgets, production
+  samples, capability inventory, and proof that script-authored JavaScript cannot execute on any host.
+
+**Exit gate:** Authors can build source-free or data-bound bespoke presentation components with
+sanitized HTML, isolated CSS, typed escaped bindings, declarative actions, and bounded embedded
+visuals; transformations remain SQL; browser and static surfaces consume one deterministic contract;
+unsupported surfaces expose an accessible semantic fallback; and hostile input fails closed without
+executing author code.
 
 ## Platform and SaaS Parallel Lane
 
 This lane may proceed in parallel with the reporting phases when capacity permits. Within the lane,
 complete the phases in order because portability, reliability, and production claims depend on the
 storage and authority foundations.
-
-### Platform Phase 1 — Object-Native Artifact Storage Contract
-
-- [x] Write the provider-neutral object-storage ADR and failure model on top of the existing artifact
-  storage abstraction.
-- [x] Define immutable/content-addressed objects, staging keys, conditional writes using ETags or
-  version IDs, authoritative commit records, database-backed fencing, reconciliation, and abandoned
-  staging garbage collection.
-- [x] Explicitly reject POSIX-style atomic-rename emulation through unreliable copy/delete sequences.
-- [x] Implement one object-store provider and certify concurrency, stale fences, partial writes, lost
-  responses, retries, outages, reconciliation, and garbage collection.
-- [x] Add a second provider only after the first contract suite is provider-neutral; complete all
-  dependency license and inventory work for provider SDKs.
-- [x] Integrate object storage with shared artifact consumers and large-content portability fixtures.
-
-**Exit gate:** Two providers pass the same hostile contract suite and shared mutation cannot publish
-partial, stale, or unfenced artifact state.
-
-### Platform Phase 2 — Tenant Portability Correctness and Scale
-
-- [x] Define and implement a declared cross-system export consistency point.
-- [x] Fence cutover and prevent duplicate schedules or retained execution authority.
-- [x] Complete the eligible artifact/content inventory and reconcile stable IDs, counts, hashes,
-  ownership, ACLs, and explicit exclusions.
-- [x] Add resumable, chunked large-content export/import using the object-native storage contract.
-- [x] Package a standalone validator that remains usable with customer-held keys after source access
-  is gone.
-- [x] Add incremental deltas only after full-export consistency and completeness are certified.
-- [x] Optimize cross-provider performance only after correctness and resumability evidence passes.
-- [x] Certify hostile Shared-source isolation independently from the already-shipped Managed Dedicated
-  export/exit evidence.
-
-**Exit gate:** Concurrent export and cutover produce a declared, reconcilable consistency point;
-interrupted large transfers resume; hostile packages fail before activation; and Shared isolation
-evidence proves no cross-tenant content can enter a bundle.
 
 ### Platform Phase 3 — Workload Identity and M2M Hardening
 
@@ -1257,4 +439,3 @@ certified worker artifact with demonstrated cost/footprint improvement and no fu
 - [ ] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed work,
   retain unfinished increments with accurate status, and ensure release notes describe only evidence-
   backed outcomes.
-

@@ -252,34 +252,76 @@ warnings, and identifier-only URLs. One boundary is deliberate and recorded in `
 bookmark replay is implemented and tested against the runtime's `__ETLSNAP__` contract, but no
 self-contained offline HTML snapshot *host* exists yet — that is a separate feature.
 
-### Reporting & Presentation — Constrained Data-Bound Presentation Components
+### Reporting & Presentation — Constrained HTML Visuals
 
-**Status:** On hold — problem discovery required
+**Status:** Accepted direction — implementation not started
 
 **Horizon:** Unscheduled
 
-**Authoritative design:** None accepted. `MicroChartsAndHtmlEmbedding.md` contains an earlier template
-proposal alongside the delivered native micro-chart design and must not be treated as an
-implementation contract for this item.
+**Authoritative design:** The product direction below is accepted. A dedicated threat model and ADR
+must define the exact grammar, sanitizer, template evaluator, interaction projection, and portable
+fallback contract before parser implementation. The earlier HTML examples in
+`MicroChartsAndHtmlEmbedding.md` are design input, not parser contracts.
 
-Native KPI-card sparklines, table-cell micro-charts, built-in report visuals, containers, and the
-`CUSTOM` Grammar-of-Graphics path already cover the known charting requirements. It is not yet clear
-that authors need a separate data-bound component/template language.
+`CREATE VISUAL ... AS HTML` is the presentation counterpart to `CREATE VISUAL ... AS CUSTOM`.
+`CUSTOM` gives script authors a renderer-neutral grammar for composing charts. `HTML` gives them a
+constrained, renderer-owned way to compose bespoke non-chart presentation components such as
+operational tiles, narrative metric panels, status cards, and row repeaters. Built-in `CARD`, `TABLE`,
+`TEXT`, `IMAGE`, slicers, and other named visuals remain the concise path for common cases.
 
-**Problem to validate:** Determine whether real reporting workflows require compound operational
-tiles, narrative metric panels, status components, or row repeaters that cannot be expressed cleanly
-with the existing `CARD`, `TABLE`, `TEXT`, `IMAGE`, page/container, and `CUSTOM` visual capabilities.
-Research should start with concrete authoring examples and identify why extending a native visual or
-container would not solve each case.
+The visual keeps the normal Report-SQL statement shape for consistency:
 
-**Not the purpose:** This is not required to embed charts in KPI cards, and it is not an arbitrary
-HTML, SVG, JavaScript, Canvas, D3, or alternate custom-chart surface.
+```sql
+CREATE VISUAL NodeClusterStatus AS HTML (
+  SOURCE = #cluster_nodes,
+  MODE = REPEATER,
+  TEMPLATE = '<article class="node-card">{{HostName}}</article>',
+  STYLE (
+    CSS = '.node-card { padding: 1rem; }'
+  ),
+  ACTIONS (...)
+);
+```
 
-**Resume gate:** Resume design only when documented user scenarios demonstrate a recurring product
-gap, the smallest native alternative has been evaluated, and the value justifies the substantial
-Zero-Trust, accessibility, export, email, terminal, and cross-host compatibility surface. If resumed,
-begin with a dedicated threat model and proposed ADR; do not infer accepted syntax from the earlier
-template examples.
+`SOURCE` is optional so the same visual can render static or parameter-driven presentation content.
+The initial template model supports escaped field and parameter substitution, a small typed
+conditional form, and `SINGLE` or `REPEATER` rendering. All calculation, aggregation, lookup,
+filtering, and other data transformation remains visible SQL; the template language does not become
+a second expression or execution engine.
+
+HTML visuals may embed declared report visuals through a bounded, statically resolved visual helper.
+Embedded references must participate in missing-target, cycle, nesting, query-work, node, byte, and
+aggregate-report budgets. They reuse existing visual manifests and actions; they do not load an
+alternate chart runtime. Author interactions reuse declarative Report-SQL actions such as parameter
+updates, navigation, bookmarks, drill, and cross-filtering instead of DOM scripting.
+
+The security boundary permits sanitized semantic HTML and visual-scoped CSS. It rejects JavaScript,
+`<script>`, inline event handlers, unsafe URL schemes, iframes, objects, embeds, global document
+mutation, external form submission, and arbitrary raw-HTML substitution. Field and parameter values
+are escaped by default with no initial raw-output escape hatch. Allowed links, images, buttons,
+standard controls, and inline SVG must pass an explicit element/attribute/URL policy; generated
+micro-chart SVG remains server-owned. CSS is isolated to the visual while retaining approved report
+theme variables, so a component cannot restyle the report shell or neighboring visuals.
+
+Browser, print, and PDF output render the sanitized component. Every HTML visual must also declare or
+resolve a concise semantic summary for email, Markdown, terminal, plain text, screen readers, and any
+surface that cannot preserve the component faithfully. Static output must never silently drop data or
+imply unavailable interaction.
+
+The first delivery is script-first with preview, formatter, lint, LSP, documentation, and lossless
+Report Builder preservation. A dedicated WYSIWYG HTML editor is deferred, matching the accepted
+`CUSTOM` authoring boundary.
+
+**Delivery slices:** Threat model and ADR; parser/immutable AST/formatter; typed template and
+sanitization contracts; optional-source `SINGLE` and `REPEATER` rendering; visual embedding and
+declarative actions; scoped styling and theme tokens; browser/print/PDF plus semantic fallbacks; LSP,
+preview, documentation, samples, capability inventory, and lossless designer round trips.
+
+**Acceptance evidence:** Hostile markup, URL, CSS, disclosure, and nesting tests; deterministic
+escaping and typed-binding tests; source-free, single-row, and repeated-row fixtures; embedded-visual
+cycle and budget tests; action and parameter-refresh parity; accessibility checks; browser, print,
+PDF, email, Markdown, terminal, and snapshot conformance; payload/render budgets; and proof that no
+script-authored JavaScript executes on any host.
 
 ### Reporting & Interaction — Visual Detail Popovers
 
