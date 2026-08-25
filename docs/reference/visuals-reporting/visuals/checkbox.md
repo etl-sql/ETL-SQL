@@ -1,13 +1,31 @@
-Type: CHECKBOX
+# CHECKBOX
 A boolean toggle switch. The state (true/false) is bound to a BIT or BOOLEAN variable via ACTIONS.
 
 Mappings: none
 
-Properties:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS CHECKBOX (
+  OPTIONS (
+    ...
+  )
+);
+```
+
+## Mappings
+
+Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
+
+## Options
+
 - **LABEL_POSITION = TOP|LEFT|HIDDEN** - position of the visual name label (default: TOP)
 
-Actions:
+## Actions
+
 - **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when the checkbox is toggled; passes 1 (true) or 0 (false) to @variable
+
+## Examples
 
 ```sql
 DECLARE @show_details BIT = 0;
@@ -25,5 +43,6 @@ CREATE VISUAL SalesTable AS TABLE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

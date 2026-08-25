@@ -1,15 +1,30 @@
-Type: SANKEY
+# SANKEY
 A flow diagram where values travel between source and destination nodes through weighted links. Ideal for budget allocations, supply chains, conversion funnels, and category-to-category revenue flows.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS SANKEY (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **SOURCE** - source node name; alias FROM accepted (required)
 - **TARGET** - destination node name; alias TO accepted (required)
 - **VALUE** - numeric flow magnitude (required)
 
-Options:
+## Options
+
   TITLE   = 'text'
 
 Note: Node names in SOURCE/FROM and TARGET/TO are deduplicated automatically. A name may appear on both sides, such as a distribution hub. Circular flows are supported but may reduce readability.
+
+## Examples
 
 ```sql
 -- Revenue flow from region to product category
@@ -29,5 +44,6 @@ CREATE VISUAL RegionCategoryFlow AS SANKEY (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

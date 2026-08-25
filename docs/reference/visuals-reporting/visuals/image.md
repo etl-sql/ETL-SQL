@@ -1,15 +1,30 @@
-Type: IMAGE
+# IMAGE
 Embeds a static or dynamic image such as a logo, product photo, map snapshot, or QR code. The source can be a file path, URL, or base-64 data URI from a query.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS IMAGE (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **SRC** - column containing the image path/URL/data-URI (use with SOURCE query) or omit SOURCE and use DEFAULT = 'path/url' for a static image
 
-Options:
+## Options
+
 - **FIT = 'contain'|'cover'|'fill'|'none'** - CSS object-fit behaviour (default 'contain')
 - **WIDTH = 'css-value'** - e.g. '100%', '300px'
   HEIGHT  = 'css-value'
 
 Static image (no query needed):
+## Examples
+
 ```sql
 CREATE VISUAL Logo AS IMAGE (
   DEFAULT = '/assets/company-logo.png',
@@ -29,5 +44,6 @@ CREATE VISUAL ProductHero AS IMAGE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

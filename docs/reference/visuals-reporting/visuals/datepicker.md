@@ -1,15 +1,33 @@
-Type: DATEPICKER
+# DATEPICKER
 An interactive date-selection control. No SOURCE or data query is required. The selected date is bound to a script variable via ACTIONS, which is then used to filter other visuals.
 
 Mappings: none
 
-Options:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS DATEPICKER (
+  OPTIONS (
+    ...
+  )
+);
+```
+
+## Mappings
+
+Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
+
+## Options
+
 - **DEFAULT = 'YYYY-MM-DD'** - initial date (or omit for today)
 - **MIN = 'YYYY-MM-DD'** - earliest selectable date
 - **MAX = 'YYYY-MM-DD'** - latest selectable date (or 'TODAY')
 
-Actions:
+## Actions
+
 - **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when the user picks a date; passes ISO string to @variable
+
+## Examples
 
 ```sql
 -- Declare the variable the picker will drive
@@ -36,5 +54,6 @@ CREATE VISUAL SalesTrend AS LINE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

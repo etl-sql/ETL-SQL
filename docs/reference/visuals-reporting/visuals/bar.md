@@ -2,6 +2,8 @@
 
 Renders a category-based bar or column chart to visualize metrics across different groups or series.
 
+## Syntax
+
 ```sql
 CREATE VISUAL VisualName AS BAR (
     SOURCE = #tableName,
@@ -22,27 +24,27 @@ CREATE VISUAL VisualName AS BAR (
 );
 ```
 
-### Visual Types
+## Visual Types
 - **BAR** - Vertical column chart (default).
 - **HBAR** - Horizontal bar chart.
 
-### Mappings
+## Mappings
 - **X** - The column containing categories/groups for the X-axis (required).
 - **Y** - The column containing metrics/numeric values for the Y-axis (required).
 - **SERIES** - The column containing series breakdown for multi-series grouping or stacking (optional).
 
-### Configuration Options
+## Options
 - **STACKED = ON\|OFF** - Enables stacked bars instead of grouped columns when SERIES is mapped. Default is `OFF`.
 - **LEGEND = ON\|OFF** - Toggles visual series legend. Default is `ON`.
 - **LABEL_POSITION = INSIDE\|OUTSIDE\|NONE** - Toggles and positions data labels. Default is `NONE`.
 - **AXIS_SORT = ASC\|DESC\|SOURCE\|VALUE\|VALUE_DESC** - Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
 
-### Interactive Actions
+## Actions
 - **ON_CLICK = DRILL_IN(HIERARCHY = (...))** - Enables hierarchical drilling, such as Year to Quarter to Month, on click with breadcrumb navigation.
 - **ON_CLICK = SET_PARAMETER(...)** - Binds category selection to updates of a query parameter.
 - **ON_CLICK = RUN_SCRIPT(...)** - Runs an external script with parameters.
 
-### Examples
+## Examples
 
 ```sql
 -- Simple ranked bar chart
@@ -62,5 +64,5 @@ CREATE VISUAL SalesByPeriod AS BAR (
 );
 ```
 
-### References
+## References
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

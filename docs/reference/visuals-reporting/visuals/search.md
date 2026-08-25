@@ -1,15 +1,33 @@
-Type: SEARCH
+# SEARCH
 A free-text search input. The typed value is bound to a STRING variable via ACTIONS. Use with LIKE or a CONTAINS expression to filter other visuals.
 
 Mappings: none
 
-Options:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS SEARCH (
+  OPTIONS (
+    ...
+  )
+);
+```
+
+## Mappings
+
+Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
+
+## Options
+
 - **PLACEHOLDER = 'hint text'** - greyed-out text shown when the input is empty
 - **DEFAULT = 'initial text'** - pre-populated value on load
 - **DEBOUNCE = n** - milliseconds to wait after keypress before firing (default 300)
 
-Actions:
+## Actions
+
   ON_CHANGE = SET_PARAMETER(@variable, value)
+
+## Examples
 
 ```sql
 DECLARE @search STRING = '';
@@ -29,5 +47,6 @@ CREATE VISUAL CustomerTable AS TABLE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

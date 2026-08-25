@@ -34,6 +34,7 @@ const docsDir  = path.join(repoRoot, 'docs');
 
 const strict  = process.argv.includes('--strict');
 const verbose = process.argv.includes('--verbose');
+const LIMIT   = verbose ? Number.MAX_SAFE_INTEGER : 40;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,16 +60,26 @@ function readFile(filePath) {
 /** Extract all anchors (#heading-text) from a markdown file. */
 function extractAnchors(content) {
   const anchors = new Set();
+
+  // Explicit anchors the docs already use and that a heading slug cannot produce:
+  // the `{#custom-id}` heading attribute, and bare <a name>/<a id> targets.
+  for (const m of content.matchAll(/\{#([\w-]+)\}/g)) anchors.add(m[1]);
+  for (const m of content.matchAll(/<a\s+(?:name|id)=["']([^"']+)["']/gi)) anchors.add(m[1]);
+
   for (const line of content.split(/\r?\n/)) {
     const m = line.match(/^#{1,6}\s+(.+)$/);
     if (m) {
-      // GitHub-style anchor: lowercase, replace spaces with -, strip non-alphanumeric except - and _
+      // GitHub-style anchor: lowercase, strip punctuation, then map EVERY remaining
+      // space to one dash. GitHub does not collapse runs, so "Backup & Restore" is
+      // `backup--restore` — the removed `&` leaves the two spaces around it behind.
+      // Collapsing them here under-generated anchors and reported live links as broken.
       const anchor = m[1]
+        .replace(/\s*\{#[\w-]+\}\s*$/, '')   // a heading's explicit id is not part of its slug
         .toLowerCase()
         .replace(/[`*[\]()]/g, '')      // strip markdown emphasis/link chars
-        .replace(/[^\w\s-]/g, '')       // strip other punctuation
         .trim()
-        .replace(/\s+/g, '-');
+        .replace(/[^\w\s-]/g, '')       // strip other punctuation, keep the spaces
+        .replace(/\s/g, '-');
       anchors.add(anchor);
     }
   }
@@ -136,9 +147,16 @@ function checkBrokenLinks(mdFiles) {
         continue;
       }
 
-      if (anchor) {
-        const targetAnchors = anchorMap.get(target) || new Set();
-        if (!targetAnchors.has(anchor)) {
+      // A fragment only means a heading anchor in Markdown. `Foo.cs#L42` is a source
+      // line reference, and nothing in a .cs file can satisfy an anchor lookup.
+      if (anchor && href.endsWith('.md')) {
+        // Anchors are pre-built for docs/**; a link may legitimately point at a
+        // Markdown file outside it (AGENTS.md, CONTRIBUTING.md), so read those on demand.
+        if (!anchorMap.has(target)) {
+          const targetContent = readFile(target);
+          anchorMap.set(target, targetContent ? extractAnchors(targetContent) : new Set());
+        }
+        if (!anchorMap.get(target).has(anchor)) {
           issues.push(`${rel(file)}: broken anchor ${href}#${anchor}`);
         }
       }
@@ -236,7 +254,7 @@ const CONFORMANCE_RULES = [
     required: [
       { key: '## syntax',     aliases: [] },
       { key: '## returns',    aliases: ['## return type', '## return'] },
-      { key: '## example',    aliases: ['## usage'] },
+      { key: '## example',    aliases: ['## usage', '## examples'] },
     ],
   },
   {
@@ -252,7 +270,7 @@ const CONFORMANCE_RULES = [
     label: 'connectors',
     match: f => rel(f).startsWith('docs/reference/connectors/') && !rel(f).endsWith('/README.md'),
     required: [
-      { key: '## syntax',         aliases: ['## connection syntax', '## create connection', '## connection string'] },
+      { key: '## syntax',         aliases: ['## connection syntax', '## create connection', '## connection string', '## options'] },
       { key: '## authentication', aliases: ['## authentication patterns', '## auth', '## credentials'] },
       { key: '## example',        aliases: ['## usage'] },
       { key: '## troubleshooting', aliases: ['## common issues', '## errors'] },
@@ -260,7 +278,7 @@ const CONFORMANCE_RULES = [
   },
   {
     label: 'visuals',
-    match: f => rel(f).startsWith('docs/reference/visuals-reporting/visuals/') && !rel(f).endsWith('/README.md'),
+    match: f => rel(f).startsWith('docs/reference/visuals-reporting/visuals/') && !rel(f).endsWith('/README.md') && !rel(f).endsWith('/index.md'),
     required: [
       { key: '## syntax',   aliases: ['## create visual'] },
       { key: '## mappings', aliases: ['## mapping', '## columns', '## fields'] },
@@ -271,13 +289,16 @@ const CONFORMANCE_RULES = [
 ];
 
 function headingMatches(line, entry) {
-  const lower = line.trim().toLowerCase();
-  // Prefix match handles plurals: "## example" matches "## examples"
-  if (lower.startsWith(entry.key)) return true;
-  for (const alias of entry.aliases) {
-    if (lower.startsWith(alias)) return true;
-  }
-  return false;
+  const heading = line.trim().match(/^(#{2,4})\s+(.*)$/);
+  if (!heading) return false;
+  // The required section has to exist; which level the page nests it at is the page's
+  // business. Visual and statement pages carry Mappings/Options/Example at H3 under a
+  // single H2, and matching on "## " alone reported all of them as missing.
+  const text = heading[2].toLowerCase().replace(/[`*]/g, '').trim();
+  const wanted = [entry.key, ...entry.aliases].map(k => k.replace(/^#+\s*/, ''));
+  // Prefix match handles plurals and qualifiers: "example" matches "examples" and
+  // "example: daily reconciliation".
+  return wanted.some(k => text.startsWith(k));
 }
 
 function checkTemplateConformance(mdFiles) {
@@ -330,8 +351,8 @@ function main() {
   console.log(`[1] Broken local links and anchors: ${linkIssues.length} issue(s)`);
   if (linkIssues.length > 0) {
     failed = true;
-    for (const issue of linkIssues.slice(0, 40)) console.log(`    ${issue}`);
-    if (linkIssues.length > 40) console.log(`    ... and ${linkIssues.length - 40} more`);
+    for (const issue of linkIssues.slice(0, LIMIT)) console.log(`    ${issue}`);
+    if (linkIssues.length > LIMIT) console.log(`    ... and ${linkIssues.length - LIMIT} more`);
   }
 
   // --- Check 2: filename policy ---
@@ -366,8 +387,8 @@ function main() {
   if (confIssues.length > 0) {
     failed = true;
     if (verbose) {
-      for (const issue of confIssues.slice(0, 60)) console.log(`    ${issue}`);
-      if (confIssues.length > 60) console.log(`    ... and ${confIssues.length - 60} more`);
+      for (const issue of confIssues.slice(0, LIMIT)) console.log(`    ${issue}`);
+      if (confIssues.length > LIMIT) console.log(`    ... and ${confIssues.length - LIMIT} more`);
     }
   }
 

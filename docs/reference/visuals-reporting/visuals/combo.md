@@ -1,19 +1,34 @@
-Type: COMBO
+# COMBO
 A combined bar + line chart on shared axes. Use it to compare a volume metric (bars) with a rate or trend metric (line), such as revenue bars with margin percent line.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS COMBO (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **X** - shared category / time axis
 - **Y** - bar metric (left Y axis)
 - **Y2** - line metric (right Y axis)
 - **COLOR** - optional series grouping for the bars
 
-Options:
+## Options
+
 - **STACKED = ON|OFF** - stack the bars (default OFF)
 - **SMOOTH = ON|OFF** - smooth the line (default OFF)
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
   Y_AXIS  (LABEL = 'left axis label')
   Y2_AXIS (LABEL = 'right axis label')
   LEGEND  = ON|OFF
+
+## Examples
 
 ```sql
 SELECT
@@ -38,5 +53,6 @@ CREATE VISUAL RevenueWithMargin AS COMBO (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

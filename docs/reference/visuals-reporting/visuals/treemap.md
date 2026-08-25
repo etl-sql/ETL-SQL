@@ -2,16 +2,31 @@
 
 Displays flat or hierarchical data as squarified nested rectangles sized by value.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS TREEMAP (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **NAME** - category label for each tile
 - **VALUE** - determines tile area (must be positive)
 - **PARENT** - optional; enables hierarchy (parent category name, or empty for root)
 - **COLOR** - optional; column used to colour tiles independently of size
 
-Options:
+## Options
+
 - **COLORS** - discrete category-to-color assignments such as `COLORS ('Hardware' = '#4e79a7')`
 - **SHOW_VALUES = ON|OFF** - show value inside tile (default ON)
 - **SHOW_PERCENT = ON|OFF** - show % of total inside tile (default OFF)
+
+## Examples
 
 ```sql
 -- Flat treemap (no hierarchy)
@@ -35,5 +50,6 @@ CREATE VISUAL HierRevenue AS TREEMAP (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

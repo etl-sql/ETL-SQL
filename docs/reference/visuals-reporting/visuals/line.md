@@ -1,18 +1,33 @@
-Type: LINE / AREA
+# LINE / AREA
 A line chart for trend and time-series data. Set AREA = ON to fill the region below the line. Multiple series are drawn when the SOURCE contains a COLOR grouping column or multiple Y-axis columns.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS LINE (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **X** - category or time axis (required)
 - **Y** - metric to plot; list multiple columns for multi-series
 - **COLOR** - column used to split rows into separate named series
 
-Options:
+## Options
+
 - **SMOOTH = ON|OFF** - Bezier-smoothed curves instead of straight segments (default OFF)
 - **SYMBOLS = ON|OFF** - show data-point markers on the line (default OFF)
 - **AREA = ON|OFF** - fill the region below the line (default OFF)
 - **STACKED = ON|OFF** - stack multiple series vertically (default OFF)
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
   TITLE   = 'text'
+
+## Examples
 
 ```sql
 -- Single-series daily trend
@@ -48,5 +63,6 @@ CREATE VISUAL StackedArea AS LINE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

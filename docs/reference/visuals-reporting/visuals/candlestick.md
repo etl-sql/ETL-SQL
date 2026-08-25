@@ -1,19 +1,34 @@
-Type: CANDLESTICK
+# CANDLESTICK
 An OHLC candlestick chart for visualizing price movement over time. Each candle shows Open, High, Low, and Close values for a period.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS CANDLESTICK (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **X** - date or period label on the category axis (required)
 - **OPEN** - opening price (required)
 - **HIGH** - session high (required)
 - **LOW** - session low (required)
 - **CLOSE** - closing price (required)
 
-Options:
+## Options
+
 - **COLOR_UP = '#hex'** - candle color when close >= open (default green)
 - **COLOR_DOWN = '#hex'** - candle color when close < open (default red)
   TITLE      = 'text'
 
 Positional fallback: if MAPPINGS are omitted, columns are assumed in X, OPEN, HIGH, LOW, CLOSE order.
+
+## Examples
 
 ```sql
 SELECT
@@ -35,5 +50,6 @@ CREATE VISUAL AcmeChart AS CANDLESTICK (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

@@ -2,16 +2,31 @@
 
 A circular chart with a center hole. It uses PIE semantics and can show a center KPI.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS DONUT (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **VALUE** - numeric metric that determines each slice's area (required)
 - **NAME** - label for each slice (required)
 
-Options:
+## Options
+
 - **INNER_RADIUS = number** - hole size as a fraction from `0` to `0.9`, or as a percentage; the default is `0.45`
 - **ROSE_MODE = ON|OFF** - "nightingale" mode: radius also varies with value
 - **LEGEND = ON|OFF** - show legend (default ON)
 - **CENTER_LABEL = 'text'** - text displayed in the centre hole
 - **CENTER_VALUE = 'text'** - prominent value displayed in the centre hole; `{total}` is replaced with the slice total
+
+## Examples
 
 ```sql
 SELECT channel, SUM(revenue) AS total
@@ -30,5 +45,6 @@ CREATE VISUAL RevenueDonut AS DONUT (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

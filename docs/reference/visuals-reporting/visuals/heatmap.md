@@ -1,16 +1,31 @@
-Type: HEATMAP
+# HEATMAP
 A grid where cell colour intensity represents a metric value. Useful for showing patterns across two categorical dimensions (e.g. day-of-week vs. hour, region vs. product).
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS HEATMAP (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **X** - column axis categories
 - **Y** - row axis categories
 - **VALUE** - the metric that drives cell colour intensity
 
-Options:
+## Options
+
 - **COLORS** - two-stop or three-stop gradient, e.g. COLORS = ('#eff3ff', '#08519c')
 - **SHOW_VALUES = ON|OFF** - display the numeric value inside each cell (default OFF)
   X_AXIS (LABEL = 'text')
   Y_AXIS (LABEL = 'text')
+
+## Examples
 
 ```sql
 SELECT
@@ -32,5 +47,6 @@ CREATE VISUAL OrderHeatmap AS HEATMAP (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

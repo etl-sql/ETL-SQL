@@ -1,17 +1,32 @@
-Type: GANTT
+# GANTT
 A project timeline chart where each row is a task bar spanning a START and END date. Tasks are displayed top-to-bottom in source order. Ideal for project plans, sprint schedules, and phase timelines.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS GANTT (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **Y** - task label; alias LABEL accepted (required)
 - **START** - start date or datetime; alias X accepted (required)
 - **END** - end date or datetime; alias X2 accepted (required)
 - **COLOR** - per-task bar color as a hex string (optional; all bars share one color if omitted)
 
-Options:
+## Options
+
   TITLE         = 'text'
   COLOR:PRIMARY = '#5470c6'   -- default bar color when no COLOR mapping is supplied
 
 Note: START and END values are parsed as time values; 'YYYY-MM-DD' string format is recommended for date-only tasks. Each source row produces one bar. Tasks with the same Y label are grouped on one Y-axis slot, so use distinct labels per row for a traditional Gantt.
+
+## Examples
 
 ```sql
 -- Project milestone Gantt chart
@@ -32,5 +47,6 @@ CREATE VISUAL ProjectTimeline AS GANTT (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

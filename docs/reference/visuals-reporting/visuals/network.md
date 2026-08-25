@@ -1,18 +1,33 @@
-Type: NETWORK
+# NETWORK
 A force-directed graph showing relationships between entities. Nodes are auto-detected from the FROM and TO columns; edges connect them with optional weights. Useful for lineage graphs, collaboration networks, and co-occurrence analysis.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS NETWORK (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **FROM** - source node name (required)
 - **TO** - destination node name (required)
 - **VALUE** - edge weight; affects line thickness (optional)
 - **NODE_GROUP** - category used for node coloring and legend; alias GROUP accepted (optional)
 
-Options:
+## Options
+
   TITLE     = 'text'
   REPULSION = 1000     -- force strength pushing nodes apart (integer; increase to spread dense clusters)
   LAYOUT    = FORCE    -- FORCE (default) or CIRCULAR
 
 Note: All node names from both FROM and TO are placed in the same node set. CIRCULAR arranges nodes in a ring, which works well for small symmetric graphs.
+
+## Examples
 
 ```sql
 -- Salesperson co-sell network (who shares a product category)
@@ -40,5 +55,6 @@ CREATE VISUAL CollabNetwork AS NETWORK (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

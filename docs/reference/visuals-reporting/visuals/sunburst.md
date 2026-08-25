@@ -1,5 +1,18 @@
-Type: SUNBURST
+# SUNBURST
 A radial hierarchical chart where each ring represents a level of the hierarchy, sized proportionally by value. Useful for showing part-to-whole relationships across multiple levels simultaneously.
+
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS SUNBURST (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
 
 Two mapping modes:
 
@@ -14,10 +27,13 @@ Explicit parent-child:
 - **PARENT** - parent node name; empty or null marks a root node (required)
 - **VALUE** - numeric measure (required)
 
-Options:
+## Options
+
   TITLE   = 'text'
 
 Note: Level-column mode is simpler for flat GROUP BY results. Parent-child mode handles ragged hierarchies where branches have different depths.
+
+## Examples
 
 ```sql
 -- Implicit mode: 3-level revenue breakdown (Category > Region > Salesperson)
@@ -38,5 +54,6 @@ CREATE VISUAL RevenueTree AS SUNBURST (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

@@ -49,6 +49,8 @@ CREATE VISUAL CardName AS CARD (
 - **DELTA_FORMAT = '.NET format string'** - format for the delta display
 - **DELTA_LABEL = 'text'** - label shown next to the delta
 
+## Examples
+
 ```sql
 SELECT
     SUM(revenue)                                       AS revenue,
@@ -73,7 +75,7 @@ CREATE VISUAL RevKPI AS CARD (
 );
 ```
 
-Native card sparkline:
+### Native Card Sparkline
 
 ```sql
 SELECT 'Mon' AS day, 10 AS amount INTO #daily;

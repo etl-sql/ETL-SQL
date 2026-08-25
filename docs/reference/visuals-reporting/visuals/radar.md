@@ -1,16 +1,33 @@
-Type: RADAR
+# RADAR
 A spider / radar chart that compares one or more series across multiple axes radiating from a central point. Best for comparing items across 4–12 dimensions.
 
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS RADAR (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 Data shape:
+
 - **First column** - series name (one row per item being compared)
 - **Other columns** - one numeric column per dimension; column headers become axis labels
 
-Options:
+## Options
+
 - **MIN** - explicit minimum for all axes (default 0)
 - **MAX** - explicit maximum for all axes (auto-scaled to 110% of data max if omitted)
   TITLE   = 'text'
 
 Single-series example (one product across performance dimensions):
+## Examples
+
 ```sql
 SELECT 'ModelA' AS model, 88 AS speed, 92 AS reliability, 75 AS efficiency, 83 AS coverage, 95 AS accuracy
   INTO #perf;
@@ -34,5 +51,6 @@ CREATE VISUAL CompareRadar AS RADAR (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

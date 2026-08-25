@@ -1,20 +1,39 @@
-Type: NUMBERBOX
+# NUMBERBOX
 A numeric input field with validation. The value is bound to an INT or DECIMAL variable via ACTIONS.
 
 Mappings: none
 
-Properties:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS NUMBERBOX (
+  OPTIONS (
+    ...
+  )
+);
+```
+
+## Mappings
+
+Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
+
+### Properties
+
 - **LABEL_POSITION = TOP|LEFT|HIDDEN** - position of the visual name label (default: TOP)
 - **MIN = n** - minimum allowed value
 - **MAX = n** - maximum allowed value
 - **DECIMALS = n** - number of decimal places to allow (default: 0)
 
-Options:
+## Options
+
 - **PLACEHOLDER = 'hint text'** - greyed-out text shown when the input is empty
 - **DEFAULT = n** - pre-populated value on load
 
-Actions:
+## Actions
+
 - **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when the value changes; passes the numeric result to @variable
+
+## Examples
 
 ```sql
 DECLARE @threshold DECIMAL = 500.00;
@@ -33,5 +52,6 @@ CREATE VISUAL OrdersTable AS TABLE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

@@ -1,17 +1,36 @@
-Type: TEXTBOX
+# TEXTBOX
 A single-line text input field. The typed value is bound to a STRING variable via ACTIONS.
 
 Mappings: none
 
-Properties:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS TEXTBOX (
+  OPTIONS (
+    ...
+  )
+);
+```
+
+## Mappings
+
+Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
+
+### Properties
+
 - **LABEL_POSITION = TOP|LEFT|HIDDEN** - position of the visual name label (default: TOP)
 
-Options:
+## Options
+
 - **PLACEHOLDER = 'hint text'** - greyed-out text shown when the input is empty
 - **DEFAULT = 'initial text'** - pre-populated value on load
 
-Actions:
+## Actions
+
 - **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when the user types or clears the field
+
+## Examples
 
 ```sql
 DECLARE @user_filter STRING = '';
@@ -28,5 +47,6 @@ CREATE VISUAL UserList AS TABLE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

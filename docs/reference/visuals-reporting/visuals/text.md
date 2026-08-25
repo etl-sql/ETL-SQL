@@ -1,10 +1,28 @@
-Type: TEXT
+# TEXT
 Renders a free-form Markdown or plain-text block. Ideal for report headers, narrative commentary, research-paper-style paragraphs, disclaimers, and dynamic text driven by query results.
 
 Use CONTENT to supply the markdown directly. DEFAULT is accepted as an alias for backward compatibility.
 For dynamic text built from a query, use SOURCE with MAPPINGS (CONTENT = col). The first row's value is rendered.
 
-Options:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS TEXT (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
+- **CONTENT** - Dynamic text column from `SOURCE` (renders the first row's value).
+
+Static text supplies markdown directly via `CONTENT = '...'` without `MAPPINGS`.
+
+## Options
+
 - **MARKDOWN = ON|OFF** - render CONTENT as Markdown (default ON; set OFF for plain escaped text)
   ALIGN    = 'left'|'center'|'right'  (default 'left')
 
@@ -13,6 +31,8 @@ fenced code blocks (```), `[links](http://example.com)`, unordered lists (- item
 blockquotes (> text), tables (|col|col|), horizontal rules (---).
 
 Static (most common):
+## Examples
+
 ```sql
 CREATE VISUAL Summary AS TEXT (
   CONTENT = '## Q1 2026 Executive Summary
@@ -55,5 +75,6 @@ CREATE VISUAL Narrative AS TEXT (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

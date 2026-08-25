@@ -21,7 +21,7 @@ CREATE VISUAL RecentOrders AS TABLE (
 );
 ```
 
-## Mappings (Inside MAPPINGS block)
+## Mappings
 
 - **`column_name`**: Include column with its original name.
 - **`column_name AS 'Display Name'`**: Rename the column header.
@@ -63,7 +63,7 @@ FORMATTING (
 )
 ```
 
-## Native Micro-Chart Example
+## Examples
 
 ```sql
 CREATE VISUAL GoalStatus AS TABLE (

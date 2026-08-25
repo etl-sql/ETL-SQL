@@ -1,16 +1,31 @@
-Type: BUBBLE
+# BUBBLE
 A scatter chart where a third numeric column controls the radius of each circle, making it ideal for showing three-variable relationships simultaneously.
 
-Mappings:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS BUBBLE (
+  SOURCE = #tableName,
+  MAPPINGS (
+    ...
+  )
+);
+```
+
+## Mappings
+
 - **X** - horizontal numeric axis (required)
 - **Y** - vertical numeric axis (required)
 - **SIZE** - numeric column controlling circle radius (optional; uniform size if omitted)
 - **LABEL** - column shown in the tooltip
 
-Options:
+## Options
+
   TITLE   = 'text'
 
 Note: SIZE values are automatically scaled to a display range of 5 to 65 px. Use SCATTER if you do not need variable point sizes.
+
+## Examples
 
 ```sql
 -- Market analysis: price vs. margin, sized by revenue
@@ -35,5 +50,6 @@ CREATE VISUAL MarketBubble AS BUBBLE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

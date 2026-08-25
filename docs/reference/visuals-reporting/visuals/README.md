@@ -1,4 +1,4 @@
-# VISUALS Reference
+﻿# VISUALS Reference
 
 [« Back to parent](../README.md)
 
@@ -30,6 +30,7 @@
 | [radar](radar.md) | Type: RADAR |
 | [RELDATEPICKER](reldatepicker.md) | A filter control for selecting relative or absolute date values. Combines a free-text input that accepts relative date expressions (e.g. `D-7`, `M-... |
 | [sankey](sankey.md) | Type: SANKEY |
+| [CHART](chart.md) | Native mark layers, encodings, scales, coordinates, conditional presentation, and facet composition for a `CUSTOM` visual. |
 | [scatter](scatter.md) | Type: SCATTER / BUBBLE |
 | [search](search.md) | Type: SEARCH |
 | [slicer](slicer.md) | Type: SLICER |

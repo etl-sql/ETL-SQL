@@ -17,6 +17,10 @@ CREATE VISUAL MyPicker AS RELDATEPICKER (
 );
 ```
 
+## Mappings
+
+Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
+
 ## Options
 
 | Option  | Description                          | Example         |
@@ -47,7 +51,7 @@ The text box accepts any string your ETL-SQL script reads as a parameter. Relati
 
 The quick-pick buttons (Today, D-1, D-7, D-30, M-1, M-3, Y-1) write directly to the text box and trigger `ON_CHANGE`. Clicking the 📅 button opens the system date picker; selecting a date writes the ISO date (`YYYY-MM-DD`) to the text box.
 
-## Example - Date range with relative defaults
+## Examples
 
 ```sql
 CREATE VISUAL StartPicker AS RELDATEPICKER (
@@ -70,5 +74,8 @@ DECLARE @EndDate   DATE = RELDATE(@End);
 SELECT * FROM orders WHERE order_date BETWEEN @StartDate AND @EndDate;
 ```
 
-References:
+## References
+
+- [DATEPICKER](datepicker.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

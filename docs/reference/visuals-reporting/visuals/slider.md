@@ -1,16 +1,34 @@
-Type: SLIDER
+# SLIDER
 A numeric range control. The slider value is bound to a script variable via ACTIONS, letting users filter or parameterise other visuals interactively.
 
 Mappings: none
 
-Options:
+## Syntax
+
+```sql
+CREATE VISUAL VisualName AS SLIDER (
+  OPTIONS (
+    ...
+  )
+);
+```
+
+## Mappings
+
+Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
+
+## Options
+
 - **MIN = n** - minimum value (default 0)
 - **MAX = n** - maximum value (default 100)
 - **STEP = n** - increment per tick (default 1)
 - **DEFAULT = n** - initial position
 
-Actions:
+## Actions
+
   ON_CHANGE = SET_PARAMETER(@variable, value)
+
+## Examples
 
 ```sql
 DECLARE @min_sales DECIMAL = 0;
@@ -26,5 +44,6 @@ CREATE VISUAL SalesTable AS TABLE (
 );
 ```
 
-References:
+## References
+
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)
