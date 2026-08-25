@@ -11,9 +11,12 @@
 | [CLEAR SESSION](clear.md) | Cleans up session state: temp files, recovery manifests, encrypted session data, and disk-spill artifacts. |
 | [CONFIG](config.md) | Retrieves a list of all configured options and values for the specified connection name. For security and compliance, sensitive credentials such as... |
 | [EXPLAIN](explain.md) | Shows the execution plan for a SELECT or DML statement without running it. |
+| [EXPORT LINEAGE](export-lineage.md) | Exports captured column-level data provenance and governance metadata to OpenLineage JSONL or Markdown/Mermaid. |
 | [GENERATE](generate.md) | Creates synthetic or mock data rows and loads them into a #temp table. Useful for testing, seeding, and load simulation. |
+| [Governance Tags](governance-tags.md) | Attaches metadata tags to tables and columns via inline SQL comments and tracks automatic lineage inheritance. |
 | [HELP](help.md) | Displays documentation for a keyword, function, connector, or option directly in the REPL or output pane. |
-| [LINEAGE](lineage.md) | Tracks column-level data provenance across all SELECT, INSERT, UPDATE, and MERGE operations in a script. Records how each output column was derived... |
+| [IMPORT LINEAGE](import-lineage.md) | Imports upstream OpenLineage metadata to connect provenance across decoupled script runs or batch pipelines. |
+| [LINEAGE](lineage.md) | Tracks column-level data provenance across all SELECT, INSERT, UPDATE, and MERGE operations in a script. |
 | [LINT](lint.md) | Runs static analysis on an ETL-SQL script and reports rule violations without executing the script. |
 | [print](print.md) | PRINT writes a message to the console output or execution log. |
 | [REQUIRE](require.md) | Declares a minimum ETL-SQL engine version required to run this script. Fails fast with a clear error if the runtime is too old. |
