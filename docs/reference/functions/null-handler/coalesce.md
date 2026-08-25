@@ -18,11 +18,17 @@ expression1 ?? expression2 [?? expressionN]
 
 ---
 
-## Parameters & Return Type
+## Parameters
 
 - **`value1, value2, ...`** — Expressions of compatible data types. Supports literals, columns, subqueries, and scalar functions.
-- **Return Type**: Inferred from the highest precedence type among the provided arguments (e.g. `VARCHAR` and `INT` yields compatible string conversion; `INT` and `DECIMAL` yields `DECIMAL`).
-- **Null Behavior**: Returns `NULL` if and only if **all** evaluated arguments are `NULL`.
+
+## Returns
+
+Inferred from the highest precedence type among the provided arguments (e.g. `VARCHAR` and `INT` yields compatible string conversion; `INT` and `DECIMAL` yields `DECIMAL`).
+
+## Null Behavior
+
+Returns `NULL` if and only if **all** evaluated arguments are `NULL`.
 
 ---
 

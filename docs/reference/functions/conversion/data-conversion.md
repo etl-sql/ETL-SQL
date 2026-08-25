@@ -4,13 +4,25 @@ Convert values between ETL-SQL [data types](../../data-types.md). Use [`CAST`](c
 conversion (raises on failure) and [`TRY_CAST`](try_cast.md) for safe conversion (returns `NULL` on
 failure); see also [`CONVERT`](convert.md).
 
-## `CAST(expression AS type)`
-Strict conversion. Raises `ExecutionException` if conversion fails.
-
-## `TRY_CAST(expression AS type)`
-Safe conversion. Returns `NULL` if conversion fails. Ideal for dirty source data.
+## Syntax
 
 ```sql
+CAST(expression AS target_type)
+TRY_CAST(expression AS target_type)
+CONVERT(target_type, expression [, style])
+```
+
+## Description
+
+- **`CAST(expression AS target_type)`** — Strict conversion. Raises `ExecutionException` if conversion fails.
+- **`TRY_CAST(expression AS target_type)`** — Safe conversion. Returns `NULL` if conversion fails. Ideal for dirty source data.
+- **`CONVERT(target_type, expression [, style])`** — T-SQL style type conversion.
+
+## Returns
+
+The converted value in the requested target data type, or `NULL` if using `TRY_CAST` on unconvertible input.
+
+## Examples
 -- Numeric
 SELECT CAST('42' AS INT)              AS i;   -- 42
 SELECT CAST('# Title' AS MARKDOWN)    AS md;  -- Evaluated as Markdown in UI
