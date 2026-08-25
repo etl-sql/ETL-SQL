@@ -269,6 +269,115 @@ This is the crossing point. The reader has watched one chart grow from a simple 
 | `BAND_SIZE` | Step 4 | Relative mark thickness |
 | `TICK` | Step 4 | Category-local target marker |
 
+## Advanced Composition Patterns
+
+### 1. Dual-Axis Zero Baseline Synchronization
+
+When displaying two metrics with drastically different units (e.g., Revenue in Dollars on `Y` vs. Profit Margin % on `Y2`), enforce zero-alignment by setting `INCLUDE_ZERO = ON` on both linear scales:
+
+```sql
+CREATE VISUAL SynchronizedDualAxis AS CUSTOM (
+    SOURCE = #monthly_kpis,
+    TITLE = 'Revenue & Margin with Synchronized Zero Baselines',
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            time_scale   = BAND (CHANNEL = X, ORDER = SOURCE),
+            rev_scale    = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON),
+            margin_scale = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = ON)
+        ),
+        LAYERS (
+            revenue_bars = RECT (
+                Z_INDEX = 0,
+                BAND_SIZE = 0.5,
+                ENCODINGS (
+                    X = Month (TYPE = TEMPORAL, SCALE = time_scale),
+                    Y = Revenue (TYPE = QUANTITATIVE, SCALE = rev_scale)
+                ),
+                STYLE (FILL = '#3b82f6')
+            ),
+            margin_line = LINE (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    X = Month (TYPE = TEMPORAL, SCALE = time_scale),
+                    Y = MarginPct (TYPE = QUANTITATIVE, SCALE = margin_scale)
+                ),
+                STYLE (COLOR = '#10b981', STROKE_WIDTH = 2)
+            )
+        )
+    )
+);
+```
+
+### 2. Conditional Layer Visibility (Parameter-Driven Toggles)
+
+To toggle reference lines, targets, or confidence bands dynamically from a dashboard checkbox or parameter (e.g., `@ShowTargets`), bind layer `OPACITY` conditionally:
+
+```sql
+CREATE VISUAL ParameterToggledTarget AS CUSTOM (
+    SOURCE = #sales_performance,
+    TITLE = 'Sales with Toggleable Target Threshold',
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            dept_scale = BAND (CHANNEL = X, ORDER = SOURCE),
+            val_scale  = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+        ),
+        LAYERS (
+            sales_bars = RECT (
+                Z_INDEX = 0,
+                ENCODINGS (
+                    X = Department (TYPE = NOMINAL, SCALE = dept_scale),
+                    Y = ActualSales (TYPE = QUANTITATIVE, SCALE = val_scale)
+                )
+            ),
+            target_line = RULE (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    Y = TargetSales (TYPE = QUANTITATIVE, SCALE = val_scale)
+                ),
+                STYLE (COLOR = '#ef4444', STROKE_WIDTH = 2),
+                CONDITIONS (
+                    OPACITY WHEN @ShowTargets = FALSE THEN 0 ELSE 1
+                )
+            )
+        )
+    )
+);
+```
+
+### 3. Entity Highlighting (Focus vs. Context Series)
+
+To highlight a single selected company or category against grey context background series:
+
+```sql
+CREATE VISUAL FocusEntityHighlight AS CUSTOM (
+    SOURCE = #market_share,
+    TITLE = 'Competitor Market Share with Selected Focus',
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            x_scale = LINEAR (CHANNEL = X, INCLUDE_ZERO = OFF),
+            y_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF)
+        ),
+        LAYERS (
+            scatter_points = POINT (
+                ENCODINGS (
+                    X = Growth (TYPE = QUANTITATIVE, SCALE = x_scale),
+                    Y = Margin (TYPE = QUANTITATIVE, SCALE = y_scale),
+                    COLOR = Company (TYPE = NOMINAL)
+                ),
+                CONDITIONS (
+                    COLOR   WHEN Company = @SelectedCompany THEN '#2563eb' ELSE '#cbd5e1',
+                    SIZE    WHEN Company = @SelectedCompany THEN 100 ELSE 30,
+                    OPACITY WHEN Company = @SelectedCompany THEN 1.0 ELSE 0.4
+                )
+            )
+        )
+    )
+);
+```
+
 ---
 
 ## Where to go next

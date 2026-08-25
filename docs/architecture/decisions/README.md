@@ -1,4 +1,4 @@
-﻿# DECISIONS Reference
+# DECISIONS Reference
 
 [« Back to parent](../README.md)
 
@@ -39,3 +39,4 @@
 | [Architecture Decision Record: Micro-Charts, Sparklines & HTML Template Embedding](micro-charts-and-html-embedding.md) | **Status:** Accepted. Sparkline and progress micro-charts inside CARD and TABLE cells. |
 | [Architecture Decision & Migration Ledger: Standard Visual Catalog Migration](standard-visual-migration-ledger.md) | Implemented; Phase 8 complete. Per-visual record of the standard catalog's migration onto PlotPlan. |
 | [Verified Viewer Context for Gateway PostgreSQL Resources](verified-viewer-context.md) | Separates asserted application context from delegated authentication and defines the signed envelope and PostgreSQL installation contract. |
+| [Provider-Neutral Fault Certification](provider-neutral-fault-certification.md) | Provider-neutral fault certification scenarios and observations across local, Docker, and cloud adapters. |

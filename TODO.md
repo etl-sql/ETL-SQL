@@ -145,6 +145,11 @@ zero). Per-report payload moved the other way, and nothing measures that.
   Do not send continuous resize traffic, restore `PlotPlan` to the browser, or claim that
   `vector-effect` alone fixes label/tick layout. Add tier-boundary, cache, interaction-refresh, PDF,
   and node-local HA-session tests.
+- [ ] **Post-v0.19:** implement smart label collision avoidance and viewBox bounds heuristics for `TEXT` mark
+  layers and dense category axes. Clustered scatter points, multi-series line labels, and crowded discrete
+  band axes currently render overlapping text nodes. Implement deterministic server-side bounding box
+  estimation with priority-based label occlusion pruning, angle staggering, or leader line callouts,
+  ensuring executive-ready rendering without requiring manual SQL label filtering.
 - [x] Make the six approved focused layout modules consume shared presentation inputs. **Done.**
   `FocusedLayoutInputs.From(visual)` resolves, once per visual: theme tokens (`ChartStyleTokens.Theme`,
   the same source `ChartSpec.Theme` uses), series colours, an accessible name plus a `<desc>` built
@@ -553,15 +558,15 @@ documented security claim matches the identity actually authenticated by the dat
 
 ### Platform Phase 5 — Provider-Neutral Fault Certification
 
-- [ ] Define reusable scenarios for process/worker loss, lease expiry and fencing races, database
+- [x] Define reusable scenarios for process/worker loss, lease expiry and fencing races, database
   disconnect, partial artifact operations, storage outage, network partition, duplicate delivery,
   clock skew, and disk exhaustion before selecting a hosting-specific chaos tool.
-- [ ] Implement deterministic local fault hooks and evidence capture.
-- [ ] Add Docker/cloud adapters without changing scenario semantics.
-- [ ] Prove no split-brain mutation, stale authority reuse, silent loss, or duplicate committed result.
-- [ ] Permit named-checkpoint resume claims only for workloads that establish explicit resumable
+- [x] Implement deterministic local fault hooks and evidence capture.
+- [x] Add Docker/cloud adapters without changing scenario semantics.
+- [x] Prove no split-brain mutation, stale authority reuse, silent loss, or duplicate committed result.
+- [x] Permit named-checkpoint resume claims only for workloads that establish explicit resumable
   checkpoint semantics; verify safe failure and deliberate retry for all other workloads.
-- [ ] Integrate the fault matrix into deployment-profile certification.
+- [x] Integrate the fault matrix into deployment-profile certification.
 
 **Exit gate:** Repeated fault runs produce durable evidence for every supported provider/profile and
 make no recovery claim stronger than the workload's checkpoint contract.
