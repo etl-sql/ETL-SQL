@@ -26,7 +26,7 @@ Global bindings are expanded into each effective layer during lowering. The seri
 
 ## Intervals and Reference Geometry
 
-Use `AREA` with `Y_START`/`Y_END` for a precomputed ribbon and `RULE` for plot-spanning thresholds or explicit ranged segments. Use `TICK` for a short category-local observation or target. Confidence intervals, forecast quantiles, error bounds, smoothing, interpolation, and model estimates must already be columns produced by SQL.
+Use `AREA` with `Y_START`/`Y_END` for a precomputed ribbon, `RECT` with `Y_START`/`Y_END` for a `geom_rect`-style band or floating bar (and `X_START`/`X_END` for precomputed histogram bins), and `RULE` for plot-spanning thresholds or explicit ranged segments. Use `TICK` for a short category-local observation or target. Confidence intervals, forecast quantiles, error bounds, smoothing, interpolation, and model estimates must already be columns produced by SQL.
 
 ```sql
 SELECT Period,

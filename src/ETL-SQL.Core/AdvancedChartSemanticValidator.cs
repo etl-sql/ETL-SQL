@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core.Common;
@@ -283,6 +283,18 @@ public static class AdvancedChartSemanticValidator
         var channels = effective.Select(encoding => encoding.Channel).ToHashSet();
         switch (layer.Mark)
         {
+            case AdvancedChartMarkKind.Rect:
+                // A ranged rectangle owns its own extent on an axis, so the author supplies both
+                // endpoints and nothing else that would also claim that axis.
+                ValidateIntervalPair(results, layer, effective, AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd, "X_START/X_END", layerNode);
+                ValidateIntervalPair(results, layer, effective, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd, "Y_START/Y_END", layerNode);
+                if (channels.Contains(AdvancedChartChannel.YStart) &&
+                    (channels.Contains(AdvancedChartChannel.Y) || channels.Contains(AdvancedChartChannel.Y2)))
+                    Add(results, layerNode, $"RECT layer '{layer.Name}' cannot combine Y or Y2 with Y_START/Y_END; the interval endpoints are the rectangle's extent.");
+                if (channels.Contains(AdvancedChartChannel.XStart) &&
+                    (channels.Contains(AdvancedChartChannel.X) || channels.Contains(AdvancedChartChannel.X2)))
+                    Add(results, layerNode, $"RECT layer '{layer.Name}' cannot combine X or X2 with X_START/X_END; the interval endpoints are the rectangle's extent.");
+                break;
             case AdvancedChartMarkKind.Area:
                 var hasStart = channels.Contains(AdvancedChartChannel.YStart);
                 var hasEnd = channels.Contains(AdvancedChartChannel.YEnd);
@@ -327,16 +339,17 @@ public static class AdvancedChartSemanticValidator
         string name,
         AstNode layerNode)
     {
+        var mark = layer.Mark.ToString().ToUpperInvariant();
         var first = effective.FirstOrDefault(encoding => encoding.Channel == start);
         var second = effective.FirstOrDefault(encoding => encoding.Channel == end);
         if ((first is null) != (second is null))
         {
-            Add(results, layerNode, $"RULE layer '{layer.Name}' requires both endpoints in {name}.");
+            Add(results, layerNode, $"{mark} layer '{layer.Name}' requires both endpoints in {name}.");
             return;
         }
         if (first is null) return;
         ValidateIntervalTypes(results, effective, start, end, layerNode,
-            $"RULE layer '{layer.Name}' interval {name} requires matching quantitative or temporal endpoint types.");
+            $"{mark} layer '{layer.Name}' interval {name} requires matching quantitative or temporal endpoint types.");
     }
 
     private static void ValidateIntervalTypes(

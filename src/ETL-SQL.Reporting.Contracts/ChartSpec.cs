@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 
 namespace ETL_SQL.Reporting.Semantics;
@@ -485,6 +485,15 @@ public sealed record ChartSpec(
                 layer.Bindings.Any(binding => binding.Channel is FieldChannel.XOffset or FieldChannel.YOffset))
                 throw new InvalidDataException($"Layer '{layer.Id}' cannot combine STACK with an offset channel.");
             var channels = layer.Bindings.Select(binding => binding.Channel).ToHashSet();
+            if (layer.Mark == MarkKind.Rect)
+            {
+                ValidateIntervalPair(layer, FieldChannel.XStart, FieldChannel.XEnd, "X_START/X_END");
+                ValidateIntervalPair(layer, FieldChannel.YStart, FieldChannel.YEnd, "Y_START/Y_END");
+                if (channels.Contains(FieldChannel.YStart) && (channels.Contains(FieldChannel.Y) || channels.Contains(FieldChannel.Y2)))
+                    throw new InvalidDataException($"RECT layer '{layer.Id}' cannot combine Y or Y2 with Y_START/Y_END; the interval endpoints are the rectangle's extent.");
+                if (channels.Contains(FieldChannel.XStart) && (channels.Contains(FieldChannel.X) || channels.Contains(FieldChannel.X2)))
+                    throw new InvalidDataException($"RECT layer '{layer.Id}' cannot combine X or X2 with X_START/X_END; the interval endpoints are the rectangle's extent.");
+            }
             if (layer.Mark == MarkKind.Area)
             {
                 var hasStart = channels.Contains(FieldChannel.YStart);
@@ -556,16 +565,17 @@ public sealed record ChartSpec(
 
     private static void ValidateIntervalPair(MarkLayerSpec layer, FieldChannel start, FieldChannel end, string name)
     {
+        var mark = layer.Mark.ToString().ToUpperInvariant();
         var first = layer.Bindings.FirstOrDefault(binding => binding.Channel == start);
         var second = layer.Bindings.FirstOrDefault(binding => binding.Channel == end);
         if ((first is null) == (second is null))
         {
             if (first is null) return;
             if (first.SemanticKind != second!.SemanticKind || first.SemanticKind is not (DataSemanticKind.Quantitative or DataSemanticKind.Temporal))
-                throw new InvalidDataException($"RULE layer '{layer.Id}' interval {name} requires matching quantitative or temporal endpoint types.");
+                throw new InvalidDataException($"{mark} layer '{layer.Id}' interval {name} requires matching quantitative or temporal endpoint types.");
             return;
         }
-        throw new InvalidDataException($"RULE layer '{layer.Id}' requires both endpoints in {name}.");
+        throw new InvalidDataException($"{mark} layer '{layer.Id}' requires both endpoints in {name}.");
     }
 
     private static bool CompatibleScaleChannel(FieldChannel scale, FieldChannel binding) => scale == binding ||

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -155,10 +155,17 @@ public sealed class PlotPlanResolver
             }
             if (scale.Channel is FieldChannel.Y or FieldChannel.Y2 && resolvedLayers.Any(layer => layer.Stack != StackMode.None))
             {
+                // Stacked baselines replace the raw measure values (NORMALIZE rescales them entirely), but a
+                // ranged layer sharing the chart still owns its authored endpoints and must stay inside the domain.
                 raw = resolvedLayers.Where(layer => layer.Stack != StackMode.None).SelectMany(layer => layer.Data)
                     .SelectMany(datum => datum.Channels)
                     .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd && channel.Value.Kind != ChartValueKind.Null)
-                    .Select(channel => channel.Value).ToList();
+                    .Select(channel => channel.Value)
+                    .Concat(resolvedLayers.Where(layer => layer.Stack == StackMode.None).SelectMany(layer => layer.Data)
+                        .SelectMany(datum => datum.Channels)
+                        .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd && channel.Value.Kind != ChartValueKind.Null)
+                        .Select(channel => channel.Value))
+                    .ToList();
             }
             if (scale.Kind == ScaleKind.Time)
             {
@@ -718,6 +725,23 @@ public sealed class PlotPlanResolver
         return result;
     }
 
+    /// <summary>Describes an author-supplied ranged rectangle so non-visual surfaces keep both endpoints.</summary>
+    private static string? IntervalDetail(ResolvedDatum datum, ChartValueFormatter formatter)
+    {
+        var parts = new List<string>();
+        Append(FieldChannel.XStart, FieldChannel.XEnd, "x range");
+        Append(FieldChannel.YStart, FieldChannel.YEnd, "range");
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+
+        void Append(FieldChannel start, FieldChannel end, string name)
+        {
+            var first = datum.Channels.FirstOrDefault(channel => channel.Channel == start);
+            var second = datum.Channels.FirstOrDefault(channel => channel.Channel == end);
+            if (first is null || second is null) return;
+            parts.Add($"{name} {first.DisplayValue ?? formatter.Format(first.Value)} to {second.DisplayValue ?? formatter.Format(second.Value)}");
+        }
+    }
+
     private static SemanticFallback BuildFallback(ChartSpec spec, ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<string> categories, ChartValueFormatter formatter)
     {
@@ -734,10 +758,11 @@ public sealed class PlotPlanResolver
             var numeric = value is null ? null : Number(value.Value);
             var conditionDetail = datum.Encodings.IsDefaultOrEmpty ? null : string.Join(", ", datum.Encodings.Select(encoding =>
                 $"conditional {encoding.Channel}: {formatter.Format(encoding.Value)}"));
+            var interval = layer.Mark == MarkKind.Rect && layer.Stack == StackMode.None ? IntervalDetail(datum, formatter) : null;
             return new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), (layerIndex * 100000) + index)
             {
                 Group = layer.SeriesKey,
-                Detail = datum.IsGap ? "null gap" : conditionDetail ?? (layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
+                Detail = datum.IsGap ? "null gap" : interval ?? conditionDetail ?? (layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
                     ? $"{numeric.Value / total:P1} of total"
                     : null)
             };

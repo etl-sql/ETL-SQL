@@ -1,0 +1,26 @@
+SELECT 0 AS BinStart, 25 AS BinEnd, 40 AS Frequency INTO #bins
+UNION ALL SELECT 25, 50, 60
+UNION ALL SELECT 50, 100, 20;
+
+CREATE VISUAL BinnedHistogram AS CUSTOM (
+  TITLE = 'Explicit-bin histogram authored as ranged rectangles',
+  SOURCE = #bins,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      bin_scale = LINEAR (CHANNEL = X, INCLUDE_ZERO = ON, MIN = 0, MAX = 100),
+      count_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0, MAX = 100)
+    ),
+    LAYERS (
+      bins = RECT (
+        ENCODINGS (
+          X_START = BinStart (TYPE = QUANTITATIVE, SCALE = bin_scale),
+          X_END = BinEnd (TYPE = QUANTITATIVE, SCALE = bin_scale),
+          Y = Frequency (TYPE = QUANTITATIVE, SCALE = count_scale)
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = BinnedHistogram));

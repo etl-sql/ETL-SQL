@@ -174,19 +174,20 @@ zero). Per-report payload moved the other way, and nothing measures that.
 
 #### Grammar and authoring
 
-- [ ] Make `RECT` honour author-supplied `Y_START`/`Y_END`; silent rejection is not the target. The
-  channels parse for any
-  mark (`ReportParser.ParseAdvancedChannel` maps `Y_START`/`Y_END`/`X_START`/`X_END`), and the
-  renderer already consumes resolved interval endpoints — but only when the layer is stacked. Both
-  `RenderRects` and the transposed rect path read `YStart`/`YEnd` under
-  `layer.Stack != StackMode.None` and otherwise force the start endpoint to zero
-  (`PlotPlanSvgRenderer.cs`). `ChartSpec.Validate()` constrains interval pairing for `AREA` and
-  `RULE` only, and `AdvancedChartAuthoringRule` adds nothing for `RECT`. So a ranged bar — a
-  qualitative band, an explicit-bin histogram, a floating variance bar — parses, lints clean, and
-  renders from zero with the author's start endpoint silently discarded. Update validation, scale
-  domain calculation, Cartesian and transposed resolution, SVG/terminal/fallback rendering, and
-  golden coverage together; a renderer-only change is incomplete. Supporting it also lets
-  `samples/10_Kitchen_Sinks/39_CUSTOM_LAYERS.rptsql` express its bullet
+- [x] Make `RECT` honour author-supplied `Y_START`/`Y_END`. **Done.** Non-stacked `RECT` layers now
+  resolve both interval pairs end to end: `AdvancedChartSemanticValidator` and `ChartSpec.Validate()`
+  enforce endpoint pairing and matching quantitative/temporal types for `RECT` (and no longer label
+  every interval diagnostic `RULE`), and reject `Y`/`Y2` beside `Y_START`/`Y_END` and `X`/`X2` beside
+  `X_START`/`X_END` instead of choosing a renderer heuristic. Both endpoints participate in scale-domain
+  resolution, including a chart that mixes a stacked layer with a ranged one, where the stacked
+  baselines no longer erase the ranged layer's contribution. `RenderRects` and the transposed rect path
+  read the authored endpoints, and `X_START`/`X_END` over a continuous scale gives an explicit-bin
+  histogram (the vertical extent when transposed). The terminal renderer draws offset spans, and the
+  semantic fallback carries both endpoints, so PDF/email/markdown surfaces inherit the fix.
+  `RangedRectTests` pins plan/domain/geometry/transposed/terminal/fallback plus the stacked
+  no-regression case, `AdvancedChartDiagnosticParityTests` pins the four new negative shapes across
+  lint and preview, and `custom_ranged_rect_bands.rptsql` / `custom_ranged_rect_histogram.rptsql` are
+  new golden fixtures. `samples/10_Kitchen_Sinks/39_CUSTOM_LAYERS.rptsql` now expresses its bullet
   bands as three ranged rects instead of four overlapping full-height rects ordered by `Z_INDEX`.
 - [ ] **Post-v0.19:** expose statistical and financial channels in `CUSTOM`.
   `ReportParser.ParseAdvancedChannel` and `AdvancedChartChannel` expose eighteen channels;

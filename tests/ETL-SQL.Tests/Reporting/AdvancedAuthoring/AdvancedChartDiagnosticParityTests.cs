@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -155,6 +155,55 @@ public sealed class AdvancedChartDiagnosticParityTests
                 )))
             """,
             "STACK requires a quantitative"
+        },
+        {
+            "RECT interval missing its second endpoint",
+            """
+                SCALES (months = BAND (CHANNEL = X), revenue = LINEAR (CHANNEL = Y)),
+                LAYERS (bars = RECT (ENCODINGS (
+                  X = Month (TYPE = ORDINAL, SCALE = months),
+                  Y_START = Revenue (TYPE = QUANTITATIVE, SCALE = revenue)
+                )))
+            """,
+            "RECT layer 'bars' requires both endpoints in Y_START/Y_END"
+        },
+        {
+            "RECT interval endpoints with mismatched types",
+            """
+                SCALES (months = BAND (CHANNEL = X), revenue = LINEAR (CHANNEL = Y)),
+                LAYERS (bars = RECT (ENCODINGS (
+                  X = Month (TYPE = ORDINAL, SCALE = months),
+                  Y_START = Revenue (TYPE = QUANTITATIVE, SCALE = revenue),
+                  Y_END = Month (TYPE = ORDINAL, SCALE = revenue)
+                )))
+            """,
+            "interval Y_START/Y_END requires matching quantitative or temporal endpoint types"
+        },
+        {
+            "RECT combining Y with an interval",
+            """
+                SCALES (months = BAND (CHANNEL = X), revenue = LINEAR (CHANNEL = Y)),
+                LAYERS (bars = RECT (ENCODINGS (
+                  X = Month (TYPE = ORDINAL, SCALE = months),
+                  Y = Revenue (TYPE = QUANTITATIVE, SCALE = revenue),
+                  Y_START = Revenue (TYPE = QUANTITATIVE, SCALE = revenue),
+                  Y_END = Revenue (TYPE = QUANTITATIVE, SCALE = revenue)
+                )))
+            """,
+            "cannot combine Y or Y2 with Y_START/Y_END"
+        },
+        {
+            "RECT combining X with a horizontal interval",
+            """
+                SCALES (months = BAND (CHANNEL = X), revenue = LINEAR (CHANNEL = Y)),
+                LAYERS (bars = RECT (ENCODINGS (
+                  X = Month (TYPE = ORDINAL, SCALE = months),
+                  X_START = Revenue (TYPE = QUANTITATIVE),
+                  X_END = Revenue (TYPE = QUANTITATIVE),
+                  Y = Revenue (TYPE = QUANTITATIVE, SCALE = revenue)
+                )))
+            """,
+            "cannot combine X or X2 with X_START/X_END"
         },
         {
             "independent resolution without FACET",

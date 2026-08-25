@@ -49,6 +49,19 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- A non-stacked `CUSTOM` `RECT` layer now honours author-supplied `Y_START`/`Y_END` and
+  `X_START`/`X_END`. The channels always parsed and lint stayed silent, but both rect paths read the
+  interval endpoints only under `STACK` and otherwise forced the start endpoint to zero — so a ranged
+  bar, a qualitative band, or an explicit-bin histogram lowered cleanly and then rendered from the
+  baseline with the author's start silently discarded. Both endpoints now take part in scale-domain
+  resolution, Cartesian and transposed geometry, native SVG, terminal, semantic fallback, and the
+  PDF/email export paths that share them. Pairing is enforced: each interval requires both endpoints
+  with matching quantitative or temporal types, and a ranged `RECT` rejects `Y`/`Y2` alongside
+  `Y_START`/`Y_END` and `X`/`X2` alongside `X_START`/`X_END` rather than picking a renderer heuristic.
+  Stacked `RECT` behaviour is unchanged — its endpoints are still resolver-computed — and is pinned by
+  regression tests. The bullet card in `samples/10_Kitchen_Sinks/39_CUSTOM_LAYERS.rptsql` now expresses
+  its qualitative bands as three ranged rectangles instead of four overlapping full-height bars ordered
+  by `Z_INDEX`.
 - An unrecognised `SET REPORT` key is now a syntax error naming the supported keys. `SET REPORT
   TIMEZONE = 'UTC'` used to parse through the arbitrary-identifier path and then be silently discarded
   by the handler, producing a report that looked configured and was not.

@@ -26,6 +26,7 @@ Only scalar literals and declared, non-secret parameters are valid inside `DATUM
 | `bandSize`-like relative width | Layer `BAND_SIZE = 0.65` |
 | tick mark | `TICK`, with `BAND_SIZE`, `THICKNESS`, and `ORIENTATION` |
 | ranged area | `AREA` with paired `Y_START` and `Y_END` |
+| ranged bar / `x`,`x2` bin rect | `RECT` with paired `Y_START`/`Y_END` or `X_START`/`X_END` |
 | ranged rule | `RULE` with paired start/end or X/X2 and Y/Y2 channels |
 | jitter / nudge | Layer `POSITION = JITTER(...)` or `POSITION = NUDGE(...)` |
 

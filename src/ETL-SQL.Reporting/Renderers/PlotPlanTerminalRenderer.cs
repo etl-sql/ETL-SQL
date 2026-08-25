@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -92,7 +92,7 @@ internal static class PlotPlanTerminalRenderer
         else if (rectLayers.Count > 0)
         {
             foreach (var item in rectLayers)
-                content.Add(RenderRectangles(plan, item.Data, item.Label, item.Color, width));
+                content.Add(RenderRectangles(plan, item.Layer, item.Data, item.Label, item.Color, width));
             foreach (var item in ruleLayers)
                 content.Add(RenderRule(item.Data, item.Label, item.Color));
             foreach (var item in continuousLayers)
@@ -110,7 +110,7 @@ internal static class PlotPlanTerminalRenderer
             {
                 content.Add(item.Layer.Mark switch
                 {
-                    MarkKind.Rect => RenderRectangles(plan, item.Data, item.Label, item.Color, width),
+                    MarkKind.Rect => RenderRectangles(plan, item.Layer, item.Data, item.Label, item.Color, width),
                     MarkKind.Line or MarkKind.Area => RenderLine(item.Data, item.Label, item.Color, width, item.Layer.Mark == MarkKind.Area),
                     MarkKind.Point => RenderPoints(item.Data, item.Label, item.Color, item.Series?.Order ?? 0),
                     MarkKind.Rule or MarkKind.Tick => RenderRule(item.Data, item.Label, item.Color),
@@ -229,6 +229,7 @@ internal static class PlotPlanTerminalRenderer
         var primaryRect = rectLayers[0];
         var categories = primaryRect.Data.Select(Label).ToList();
         var allValues = rectLayers.SelectMany(l => l.Data.Select(Value))
+            .Concat(rectLayers.Where(l => IsRangedRect(l.Layer, l.Data)).SelectMany(l => l.Data.Select(IntervalStart)))
             .Concat(lineLayers.SelectMany(l => l.Data.Select(Value)))
             .Concat(ruleLayers.SelectMany(r => r.Data.Select(Value)))
             .Where(v => v.HasValue)
@@ -253,6 +254,7 @@ internal static class PlotPlanTerminalRenderer
             var ansi = SafeAnsiColor(rect.Color);
             headerParts.Add($"[{ansi}]■[/] [bold]{Markup.Escape(rect.Label)}[/]");
             var values = rect.Data.Select(Value).ToList();
+            var ranged = IsRangedRect(rect.Layer, rect.Data);
             for (var index = 0; index < rect.Data.Count; index++)
             {
                 var val = values[index];
@@ -260,7 +262,8 @@ internal static class PlotPlanTerminalRenderer
                 var slotCenter = (index + 0.5m) * slotWidth;
                 var xStart = Math.Max(0, (int)(slotCenter - barWidthDots / 2m));
                 var xEnd = Math.Min(canvas.DotWidth - 1, xStart + barWidthDots - 1);
-                var baseY = canvas.DotHeight - 1 - (int)((0m - min) / (max - min) * (canvas.DotHeight - 1));
+                var baseline = ranged ? IntervalStart(rect.Data[index]) ?? 0m : 0m;
+                var baseY = canvas.DotHeight - 1 - (int)((baseline - min) / (max - min) * (canvas.DotHeight - 1));
                 var topY = canvas.DotHeight - 1 - (int)((val.Value - min) / (max - min) * (canvas.DotHeight - 1));
                 var y0 = Math.Min(baseY, topY);
                 var y1 = Math.Max(baseY, topY);
@@ -315,8 +318,9 @@ internal static class PlotPlanTerminalRenderer
             new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]  [bold]{Markup.Escape(catAxis)}[/]"));
     }
 
-    private static IRenderable RenderRectangles(PlotPlan plan, IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
+    private static IRenderable RenderRectangles(PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
     {
+        if (IsRangedRect(layer, data)) return RenderRangedRectangles(data, series, color, width);
         var isHeatmap = data.Count > 0 &&
             data.Select(d => DisplayChannel(d, FieldChannel.X)).Where(s => !string.IsNullOrEmpty(s)).Distinct().Count() > 1 &&
             data.Select(d => DisplayChannel(d, FieldChannel.Y)).Where(s => !string.IsNullOrEmpty(s)).Distinct().Count() > 1 &&
@@ -379,6 +383,55 @@ internal static class PlotPlanTerminalRenderer
             return new Markup($"{Markup.Escape(label)} [{ansi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}");
         }).ToList();
         rows.Insert(0, new Markup($"[bold]{Markup.Escape(series)}[/] [grey](fractional bars)[/]"));
+        return new Rows(rows);
+    }
+
+    /// <summary>True when the author supplied both interval endpoints; resolver-computed stack endpoints do not count.</summary>
+    private static bool IsRangedRect(ResolvedMarkLayer layer, IReadOnlyList<ResolvedDatum> data) =>
+        layer.Mark == MarkKind.Rect && layer.Stack == StackMode.None &&
+        data.Any(datum => IntervalStart(datum).HasValue && IntervalEnd(datum).HasValue);
+
+    private static decimal? IntervalStart(ResolvedDatum datum) =>
+        PlotPlanResolver.Number(Channel(datum, FieldChannel.YStart) ?? ChartValue.Null());
+
+    private static decimal? IntervalEnd(ResolvedDatum datum) =>
+        PlotPlanResolver.Number(Channel(datum, FieldChannel.YEnd) ?? ChartValue.Null());
+
+    /// <summary>Renders ranged rectangles as offset spans so both endpoints survive in a terminal.</summary>
+    private static IRenderable RenderRangedRectangles(IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
+    {
+        var spans = data.Select(datum => (Datum: datum, Start: IntervalStart(datum), End: IntervalEnd(datum)))
+            .Where(item => !item.Datum.IsGap && item.Start.HasValue && item.End.HasValue)
+            .Select(item => (item.Datum, Start: Math.Min(item.Start!.Value, item.End!.Value), End: Math.Max(item.Start!.Value, item.End!.Value)))
+            .ToList();
+        if (spans.Count == 0) return new Markup("[grey]all values are gaps[/]");
+        var minimum = spans.Min(item => item.Start);
+        var maximum = spans.Max(item => item.End);
+        if (minimum == maximum) maximum = minimum + 1m;
+        var labelWidth = Math.Clamp(data.Select(Label).DefaultIfEmpty("").Max(label => label.Length), 6, Math.Max(6, width / 3));
+        var barWidth = Math.Max(8, width - labelWidth - 22);
+        var ansi = SafeAnsiColor(color);
+        var rows = new List<IRenderable>
+        {
+            new Markup($"[bold]{Markup.Escape(series)}[/] [grey](ranged bars {minimum.ToString(CultureInfo.InvariantCulture)} … {maximum.ToString(CultureInfo.InvariantCulture)})[/]")
+        };
+        foreach (var datum in data)
+        {
+            var label = Truncate(Label(datum), labelWidth).PadRight(labelWidth);
+            var start = IntervalStart(datum);
+            var end = IntervalEnd(datum);
+            if (datum.IsGap || !start.HasValue || !end.HasValue)
+            {
+                rows.Add(new Markup($"{Markup.Escape(label)} [grey]gap[/]"));
+                continue;
+            }
+            var low = Math.Min(start.Value, end.Value);
+            var high = Math.Max(start.Value, end.Value);
+            var lead = Math.Clamp((int)Math.Round((low - minimum) / (maximum - minimum) * barWidth), 0, barWidth);
+            var fill = Math.Clamp((int)Math.Round((high - low) / (maximum - minimum) * barWidth), 1, barWidth - lead);
+            rows.Add(new Markup($"{Markup.Escape(label)} {new string(' ', lead)}[{ansi}]{new string('█', fill)}[/] " +
+                $"{Markup.Escape(start.Value.ToString(CultureInfo.InvariantCulture))} to {Markup.Escape(end.Value.ToString(CultureInfo.InvariantCulture))}"));
+        }
         return new Rows(rows);
     }
 

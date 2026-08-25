@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using ETL_SQL.Reporting;
@@ -19,7 +19,9 @@ public sealed class NativeSvgGeometryGoldenTests(ITestOutputHelper output)
         ["scatter_multi_series_inferred.rptsql"] = "58985BBE9930F105CEC5CD6AEB23138106C816C871B5B15E22A9544B99ACDE83",
         ["pie_donut_proportions.rptsql"] = "C19159B66C3F92A7A358735758EFD3EF76073F1AA79764C920B3A9D7C1D77E36",
         ["combo_dual_axes.rptsql"] = "106459E60E1EA8C7453C1F097766678C46D17D113EEE7A5F8EDF2F815DC55F0B",
-        ["rule_statistical_overlays.rptsql"] = "D0F1FE86F5A7DDA34BB3F85CE7BE857EF0325C452AE78AF5B038EA40E2B239F8"
+        ["rule_statistical_overlays.rptsql"] = "D0F1FE86F5A7DDA34BB3F85CE7BE857EF0325C452AE78AF5B038EA40E2B239F8",
+        ["custom_ranged_rect_bands.rptsql"] = "A773127E4C889A59D4B87BDB321C756ECCAFDE80E176FA7CDD724BCC881AEC80",
+        ["custom_ranged_rect_histogram.rptsql"] = "35ADAACED03E0C9434FF65BD0CEB3319A9650601005AD306C7BAB241B5980ECA"
     };
 
     [Fact]

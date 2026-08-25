@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -154,7 +154,7 @@ internal sealed class PlotPlanSvgRenderer
             switch (layer.Mark)
             {
                 case MarkKind.Rect:
-                    RenderRects(builder, plan, layer, rectLayers, layer.Stack != StackMode.None, categories.Length, plotWidth, plotHeight, yScale, color, showLabels);
+                    RenderRects(builder, plan, layer, rectLayers, layer.Stack != StackMode.None, categories.Length, plotWidth, plotHeight, xScale, yScale, color, showLabels);
                     break;
                 case MarkKind.Line:
                     var lineScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
@@ -227,7 +227,8 @@ internal sealed class PlotPlanSvgRenderer
     {
         var plotWidth = plan.Bounds.Width - Left - Right;
         var plotHeight = plan.Bounds.Height - Top - Bottom;
-        var categories = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X)?.Categories ?? [];
+        var bandScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
+        var categories = bandScale?.Categories ?? [];
         var rectLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect).ToList();
         var stacked = rectLayers.Any(layer => layer.Stack != StackMode.None);
         var slot = plotHeight / Math.Max(1, categories.Length);
@@ -250,6 +251,14 @@ internal sealed class PlotPlanSvgRenderer
             {
                 var datum = layer.Data[index];
                 var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
+                // Transposed marks read the value axis horizontally; an author-supplied Y_START/Y_END pair
+                // is the whole extent, so such a datum carries no plain Y and must not be discarded here.
+                var rangeStart = layer.Mark == MarkKind.Rect && layer.Stack == StackMode.None
+                    ? PositionNumber(Channel(datum, FieldChannel.YStart)) : null;
+                var rangeEnd = layer.Mark == MarkKind.Rect && layer.Stack == StackMode.None
+                    ? PositionNumber(Channel(datum, FieldChannel.YEnd)) : null;
+                var rangedY = rangeStart.HasValue && rangeEnd.HasValue;
+                value ??= rangedY ? rangeEnd : null;
                 if (datum.IsGap || !value.HasValue) continue;
                 var x = MapHorizontal(value.Value, scale, plotWidth) + datum.DisplayOffsetX;
                 var y = Top + slot * (index + .5m) + datum.DisplayOffsetY;
@@ -258,12 +267,16 @@ internal sealed class PlotPlanSvgRenderer
                 if (layer.Mark == MarkKind.Rect)
                 {
                     var layerIndex = Math.Max(0, rectLayers.IndexOf(layer));
-                    var start = layer.Stack != StackMode.None
-                        ? PlotPlanResolver.Number(Channel(datum, FieldChannel.YStart) ?? ChartValue.From(0m)) ?? 0m
-                        : 0m;
-                    var end = layer.Stack != StackMode.None
-                        ? PlotPlanResolver.Number(Channel(datum, FieldChannel.YEnd) ?? ChartValue.From(start + value.Value)) ?? start + value.Value
-                        : start + value.Value;
+                    var start = rangedY
+                        ? rangeStart!.Value
+                        : layer.Stack != StackMode.None
+                            ? PlotPlanResolver.Number(Channel(datum, FieldChannel.YStart) ?? ChartValue.From(0m)) ?? 0m
+                            : 0m;
+                    var end = rangedY
+                        ? rangeEnd!.Value
+                        : layer.Stack != StackMode.None
+                            ? PlotPlanResolver.Number(Channel(datum, FieldChannel.YEnd) ?? ChartValue.From(start + value.Value)) ?? start + value.Value
+                            : start + value.Value;
                     var startX = MapHorizontal(start, scale, plotWidth) + datum.DisplayOffsetX;
                     var endX = MapHorizontal(end, scale, plotWidth) + datum.DisplayOffsetX;
                     var groupHeight = slot * layer.BandSize;
@@ -289,11 +302,29 @@ internal sealed class PlotPlanSvgRenderer
                         barHeight = groupHeight;
                         top = y - groupHeight / 2m;
                     }
+                    var drawHeight = Math.Max(1m, barHeight - 1m);
+                    // Transposing swaps the axes, so an X_START/X_END span becomes the vertical extent and
+                    // replaces the category band this datum would otherwise occupy.
+                    var spanStart = layer.Stack == StackMode.None ? PositionNumber(Channel(datum, FieldChannel.XStart)) : null;
+                    var spanEnd = layer.Stack == StackMode.None ? PositionNumber(Channel(datum, FieldChannel.XEnd)) : null;
+                    var rangedBand = spanStart.HasValue && spanEnd.HasValue && bandScale is not null && Continuous(bandScale);
+                    if (rangedBand)
+                    {
+                        var firstY = MapVertical(spanStart!.Value, bandScale!, plotHeight) + datum.DisplayOffsetY;
+                        var secondY = MapVertical(spanEnd!.Value, bandScale!, plotHeight) + datum.DisplayOffsetY;
+                        top = Math.Min(firstY, secondY);
+                        drawHeight = Math.Max(1m, Math.Abs(secondY - firstY));
+                    }
                     var barLeft = Math.Min(startX, endX);
                     var barWidth = Math.Max(1m, Math.Abs(endX - startX));
-                    builder.AppendLine($"<rect x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(Math.Max(1m, barHeight - 1m))}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></rect>");
+                    var rectLabel = FormatDataLabel(rangedY ? end : value.Value, DataFormat(plan));
+                    var rectTitle = rangedY
+                        ? $"{FormatDataLabel(start, DataFormat(plan))} to {FormatDataLabel(end, DataFormat(plan))}"
+                        : rectLabel;
+                    var rangedClass = rangedY || rangedBand ? " class='plot-range-rect'" : string.Empty;
+                    builder.AppendLine($"<rect{rangedClass} x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(drawHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'><title>{Esc(rectTitle)}</title></rect>");
                     if (showLabels)
-                        builder.AppendLine($"<text x='{N(endX + (value.Value >= 0m ? 4m : -4m))}' y='{N(y + 3m)}' text-anchor='{(value.Value >= 0m ? "start" : "end")}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333"))}'>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</text>");
+                        builder.AppendLine($"<text x='{N(endX + (end >= start ? 4m : -4m))}' y='{N(y + 3m)}' text-anchor='{(end >= start ? "start" : "end")}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333"))}'>{Esc(rectLabel)}</text>");
                 }
                 else if (layer.Mark == MarkKind.Rule)
                 {
@@ -509,52 +540,80 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static void RenderRects(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedMarkLayer> layers, bool stacked,
-        int categoryCount, decimal plotWidth, decimal plotHeight, ResolvedScale? scale, string color, bool showLabels)
+        int categoryCount, decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels)
     {
-        if (categoryCount == 0 || scale is null) return;
+        if (scale is null) return;
+        // A non-stacked layer whose author supplied X_START/X_END owns its horizontal extent outright and
+        // needs no category band. A stacked layer's endpoints are resolver-computed, so it keeps the band.
+        var rangedX = !stacked && xScale is not null && Continuous(xScale) &&
+            layer.Data.Any(datum => Channel(datum, FieldChannel.XStart) is not null && Channel(datum, FieldChannel.XEnd) is not null);
+        if (categoryCount == 0 && !rangedX) return;
         var layerIndex = Enumerable.Range(0, layers.Count).First(index => ReferenceEquals(layers[index], layer));
         var layerCount = Math.Max(1, layers.Count);
-        var slot = plotWidth / categoryCount;
+        var slot = plotWidth / Math.Max(1, categoryCount);
         var groupWidth = slot * layer.BandSize;
         var barWidth = stacked ? groupWidth : groupWidth / layerCount;
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
+            if (datum.IsGap) continue;
             var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
-            if (datum.IsGap || !value.HasValue) continue;
-            var start = layer.Stack != StackMode.None
-                ? PlotPlanResolver.Number(Channel(datum, FieldChannel.YStart) ?? ChartValue.From(0m)) ?? 0m
-                : 0m;
-            var end = layer.Stack != StackMode.None
-                ? PlotPlanResolver.Number(Channel(datum, FieldChannel.YEnd) ?? ChartValue.From(start + value.Value)) ?? start + value.Value
-                : start + value.Value;
+            var rangeStart = stacked ? null : PositionNumber(Channel(datum, FieldChannel.YStart));
+            var rangeEnd = stacked ? null : PositionNumber(Channel(datum, FieldChannel.YEnd));
+            var rangedY = rangeStart.HasValue && rangeEnd.HasValue;
+            if (!rangedY && !value.HasValue) continue;
+            var start = rangedY
+                ? rangeStart!.Value
+                : stacked
+                    ? PlotPlanResolver.Number(Channel(datum, FieldChannel.YStart) ?? ChartValue.From(0m)) ?? 0m
+                    : 0m;
+            var end = rangedY
+                ? rangeEnd!.Value
+                : stacked
+                    ? PlotPlanResolver.Number(Channel(datum, FieldChannel.YEnd) ?? ChartValue.From(start + value!.Value)) ?? start + value!.Value
+                    : start + value!.Value;
             var startY = MapY(start, scale, plotHeight) + datum.DisplayOffsetY;
             var endY = MapY(end, scale, plotHeight) + datum.DisplayOffsetY;
             var x = Left + slot * index + (slot - groupWidth) / 2m + (stacked ? 0m : layerIndex * barWidth) + datum.DisplayOffsetX;
+            var width = Math.Max(1m, barWidth - 1m);
+            if (rangedX)
+            {
+                var spanStart = PositionNumber(Channel(datum, FieldChannel.XStart));
+                var spanEnd = PositionNumber(Channel(datum, FieldChannel.XEnd));
+                if (!spanStart.HasValue || !spanEnd.HasValue) continue;
+                var first = MapX(spanStart.Value, xScale!, plotWidth) + datum.DisplayOffsetX;
+                var second = MapX(spanEnd.Value, xScale!, plotWidth) + datum.DisplayOffsetX;
+                x = Math.Min(first, second);
+                width = Math.Max(1m, Math.Abs(second - first));
+            }
             var datumColor = ResolveDatumColor(plan, datum, color);
             var opacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m;
             var top = Math.Min(startY, endY);
             var barHeight = Math.Max(1m, Math.Abs(startY - endY));
-            builder.AppendLine($"<rect x='{N(x)}' y='{N(top)}' width='{N(Math.Max(1m, barWidth - 1m))}' height='{N(barHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></rect>");
+            var label = FormatDataLabel(rangedY ? end : value!.Value, DataFormat(plan));
+            var title = rangedY
+                ? $"{FormatDataLabel(start, DataFormat(plan))} to {FormatDataLabel(end, DataFormat(plan))}"
+                : label;
+            var rangedClass = rangedY || rangedX ? " class='plot-range-rect'" : string.Empty;
+            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'><title>{Esc(title)}</title></rect>");
             if (showLabels)
             {
                 var position = Style(plan, "DATA_LABELS:POSITION") ?? "OUTSIDE";
                 var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444");
                 var labelSize = Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9";
                 var labelWeight = Style(plan, "DATA_LABELS:FONT_WEIGHT");
-                var label = FormatDataLabel(value.Value, DataFormat(plan));
-                var labelX = x + barWidth / 2m;
+                var labelX = x + width / 2m;
                 var labelY = top - 3m;
                 var anchor = "middle";
                 if (position.Contains("RIGHT", StringComparison.OrdinalIgnoreCase))
                 {
-                    labelX = x + barWidth + 3m;
+                    labelX = x + width + 3m;
                     labelY = top + barHeight / 2m + 3m;
                     anchor = "start";
                 }
                 else if (position.Contains("INSIDE", StringComparison.OrdinalIgnoreCase))
                 {
-                    labelY = value.Value >= 0m ? top + 13m : top + barHeight - 4m;
+                    labelY = end >= start ? top + 13m : top + barHeight - 4m;
                     labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "white");
                 }
                 builder.AppendLine($"<text x='{N(labelX)}' y='{N(labelY)}' text-anchor='{anchor}' font-size='{Esc(labelSize)}' fill='{Esc(labelColor)}'{(string.IsNullOrWhiteSpace(labelWeight) ? string.Empty : $" font-weight='{Esc(labelWeight)}'")}>{Esc(label)}</text>");
@@ -1345,11 +1404,22 @@ internal sealed class PlotPlanSvgRenderer
         return Left + Ratio(value, minimum, maximum, scale.Kind) * plotWidth;
     }
 
+    /// <summary>Maps a transposed positional value onto the vertical axis in category order, top to bottom.</summary>
+    private static decimal MapVertical(decimal value, ResolvedScale scale, decimal plotHeight)
+    {
+        var (minimum, maximum) = Domain(scale);
+        return Top + Ratio(value, minimum, maximum, scale.Kind) * plotHeight;
+    }
+
     private static decimal MapY(decimal value, ResolvedScale scale, decimal plotHeight)
     {
         var (minimum, maximum) = Domain(scale);
         return Top + plotHeight - Ratio(value, minimum, maximum, scale.Kind) * plotHeight;
     }
+
+    /// <summary>True when a resolved scale carries a continuous domain that interval endpoints can map onto.</summary>
+    private static bool Continuous(ResolvedScale scale) =>
+        scale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic or ScaleKind.Time;
 
     private static (decimal Minimum, decimal Maximum) Domain(ResolvedScale scale)
     {

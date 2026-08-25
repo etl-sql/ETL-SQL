@@ -1,0 +1,64 @@
+SELECT 'Revenue' AS Metric, 92 AS Actual, 83 AS Target,
+       0 AS PoorStart, 50 AS PoorEnd, 50 AS FairStart, 75 AS FairEnd, 75 AS GoodStart, 100 AS GoodEnd
+INTO #bullet_bands
+UNION ALL SELECT 'Margin', 80, 92, 0, 50, 50, 75, 75, 100
+UNION ALL SELECT 'NPS', 78, 80, 0, 50, 50, 70, 70, 100;
+
+CREATE VISUAL BulletBands AS CUSTOM (
+  TITLE = 'Ranged qualitative bands with an actual bar and a target rule',
+  SOURCE = #bullet_bands,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN),
+    SCALES (
+      metric_scale = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+      val_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0, MAX = 100)
+    ),
+    LAYERS (
+      band_poor = RECT (
+        Z_INDEX = 1,
+        ENCODINGS (
+          X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+          Y_START = PoorStart (TYPE = QUANTITATIVE, SCALE = val_scale),
+          Y_END = PoorEnd (TYPE = QUANTITATIVE, SCALE = val_scale)
+        ),
+        STYLE (FILL = '#9e9e9e', OPACITY = 0.9)
+      ),
+      band_fair = RECT (
+        Z_INDEX = 2,
+        ENCODINGS (
+          X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+          Y_START = FairStart (TYPE = QUANTITATIVE, SCALE = val_scale),
+          Y_END = FairEnd (TYPE = QUANTITATIVE, SCALE = val_scale)
+        ),
+        STYLE (FILL = '#bdbdbd', OPACITY = 0.8)
+      ),
+      band_good = RECT (
+        Z_INDEX = 3,
+        ENCODINGS (
+          X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+          Y_START = GoodStart (TYPE = QUANTITATIVE, SCALE = val_scale),
+          Y_END = GoodEnd (TYPE = QUANTITATIVE, SCALE = val_scale)
+        ),
+        STYLE (FILL = '#e0e0e0', OPACITY = 0.6)
+      ),
+      actual_bar = RECT (
+        Z_INDEX = 4,
+        BAND_SIZE = 0.4,
+        ENCODINGS (
+          X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+          Y = Actual (TYPE = QUANTITATIVE, SCALE = val_scale)
+        )
+      ),
+      target_rule = RULE (
+        Z_INDEX = 5,
+        ENCODINGS (
+          X = Metric (TYPE = NOMINAL, SCALE = metric_scale),
+          Y = Target (TYPE = QUANTITATIVE, SCALE = val_scale)
+        ),
+        STYLE (COLOR = '#000000', STROKE_WIDTH = 3)
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = BulletBands));
