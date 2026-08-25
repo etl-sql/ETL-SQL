@@ -18,6 +18,7 @@
 | [Architecture: Portal UI — Visual Designer & DAG Visualization](portal-ui.md) | This document is the authoritative strategy reference for the Portal UI initiative (`v0.9.0-portal-ui`). It governs all design, technology, and sco... |
 | [ETL-SQL Presentation Layer Architecture](presentation.md) | **Applies to ETL-SQL 0.18.0** |
 | [ETL-SQL Reporting Architecture & Engineering Reference](reporting.md) | This document describes the internal mechanics of the ETL-SQL reporting subsystem — the layer responsible for parsing `.rptsql` files, evaluating t... |
+| [Reporting Semantic Contracts](reporting-semantic-contracts.md) | The renderer-neutral, versioned contract between Report-SQL authoring and every graphical or semantic output backend. |
 | [ETL-SQL SaaS Tenant Isolation Architecture](saas-tenant-isolation.md) | **Status:** Approved target architecture; Managed Dedicated and Shared SaaS implementation and |
 | [ETL-SQL Tenant Portability Architecture](tenant-portability.md) | **Status:** Minimum configuration/artifact bundle and Managed Dedicated SaaS → Enterprise exit shipped; |
 | [ETL-SQL TUI Interactive Editor Architecture](tui-editor.md) | This document describes the internal design of the terminal IDE in `ETL-SQL.TUI` — the interactive editor, syntax highlighting, autocomplete, execu... |

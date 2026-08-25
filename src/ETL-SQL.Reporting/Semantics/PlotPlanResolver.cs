@@ -13,9 +13,6 @@ namespace ETL_SQL.Reporting.Semantics.Runtime;
 /// <summary>Resolves all shared semantic decisions once, before any backend renders.</summary>
 public sealed class PlotPlanResolver
 {
-    private static readonly string[] PaletteColors =
-    ["#5470c6", "#91cc75", "#fac858", "#ee6666", "#73c0de", "#3ba272", "#fc8452"];
-
     public PlotPlan Resolve(ChartSpec spec, ChartDataSet data, PlotBounds? bounds = null)
     {
         spec.Validate();
@@ -1166,8 +1163,7 @@ public sealed class PlotPlanResolver
         (scales.FirstOrDefault(scale => scale.ColorRange is not null)?.ColorRange is { } range ? " " + range.AccessibleDescription : string.Empty);
 
     private static string ResolveColor(ChartSpec spec, string key, int index) =>
-        spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals($"COLOR:{key}", StringComparison.OrdinalIgnoreCase))?.Value
-        ?? PaletteColors[index % PaletteColors.Length];
+        ChartPalette.Resolve(spec.Theme.Tokens, key, index);
 
     private static IEnumerable<ChartValue> BindingValues(FieldBinding binding, IReadOnlyDictionary<string, ChartColumn> columns)
     {

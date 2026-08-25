@@ -53,6 +53,23 @@ public record FixtureMeasurement(
     string ClientPaintLatency = "N/A (unsupported: requires browser CDP instrumentation)",
     string ClientHeapFootprint = "N/A (unsupported: requires browser CDP instrumentation)");
 
+/// <summary>
+/// End-to-end page weight for one report: what a browser actually downloads to see it. Shared assets
+/// are counted once — they are cached across reports in a session — and the per-report manifest is
+/// counted per report. Quoting shared-asset totals alone understates a page; quoting the manifest
+/// alone understates it far more.
+/// </summary>
+public record PageWeightMeasurement(
+    string FixtureName,
+    long ManifestRawBytes,
+    long ManifestGzipBytes,
+    long SharedAssetRawBytes,
+    long SharedAssetGzipBytes)
+{
+    public long TotalRawBytes => ManifestRawBytes + SharedAssetRawBytes;
+    public long TotalGzipBytes => ManifestGzipBytes + SharedAssetGzipBytes;
+}
+
 public record BaselineReport(
     DateTime TimestampUtc,
     string GitBranch,
@@ -62,6 +79,7 @@ public record BaselineReport(
     long TotalBundleGzipBytes,
     long TotalBundleBrotliBytes,
     IReadOnlyList<FixtureMeasurement> FixtureMeasurements,
+    IReadOnlyList<PageWeightMeasurement> PageWeights,
     IReadOnlyList<VisualCapabilityEntry> CapabilityMatrix);
 
 public class ReportingBaselineMeasurementHarness
@@ -82,6 +100,7 @@ public class ReportingBaselineMeasurementHarness
             TotalBundleGzipBytes: bundleAssets.Sum(b => b.GzipBytes),
             TotalBundleBrotliBytes: bundleAssets.Sum(b => b.BrotliBytes),
             FixtureMeasurements: fixtureMeasurements,
+            PageWeights: MeasurePageWeights(bundleAssets, fixtureMeasurements),
             CapabilityMatrix: VisualCapabilityMatrix.AllCapabilities);
     }
 
@@ -123,6 +142,26 @@ public class ReportingBaselineMeasurementHarness
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Combines the two halves of the browser cost into the number that actually matters: shared
+    /// assets plus the report's own delivered manifest.
+    /// </summary>
+    public static IReadOnlyList<PageWeightMeasurement> MeasurePageWeights(
+        IReadOnlyList<BundleAssetMeasurement> bundleAssets,
+        IReadOnlyList<FixtureMeasurement> fixtures)
+    {
+        var sharedRaw = bundleAssets.Sum(asset => asset.RawBytes);
+        var sharedGzip = bundleAssets.Sum(asset => asset.GzipBytes);
+        return fixtures
+            .Select(fixture => new PageWeightMeasurement(
+                fixture.FixtureName,
+                fixture.BrowserManifestBytes,
+                fixture.BrowserManifestGzipBytes,
+                sharedRaw,
+                sharedGzip))
+            .ToList();
     }
 
     public static async Task<IReadOnlyList<FixtureMeasurement>> MeasureRepresentativeFixturesAsync(string repoRoot)
@@ -327,6 +366,21 @@ public class ReportingBaselineMeasurementHarness
             $"{FormatBytes(report.FixtureMeasurements.Sum(f => f.BrowserManifestGzipBytes))} gzip delivered to a browser client. " +
             "End-to-end page weight is the browser figure plus the shared assets above, not shared assets alone.");
         sb.AppendLine();
+        sb.AppendLine("### End-to-End Page Weight");
+        sb.AppendLine();
+        sb.AppendLine("What a browser downloads to render one report: the shared runtime assets plus that report's delivered manifest. Shared assets are counted once because they are cached across reports in a session; the manifest is per report. Neither half alone is the page weight.");
+        sb.AppendLine();
+        sb.AppendLine("| Fixture | Manifest (raw / gzip) | Shared assets (raw / gzip) | **Page weight (raw / gzip)** |");
+        sb.AppendLine("| :--- | :---: | :---: | :---: |");
+        foreach (var weight in report.PageWeights)
+        {
+            sb.AppendLine($"| `{weight.FixtureName}` | {FormatBytes(weight.ManifestRawBytes)} / {FormatBytes(weight.ManifestGzipBytes)} " +
+                $"| {FormatBytes(weight.SharedAssetRawBytes)} / {FormatBytes(weight.SharedAssetGzipBytes)} " +
+                $"| **{FormatBytes(weight.TotalRawBytes)} / {FormatBytes(weight.TotalGzipBytes)}** |");
+        }
+        sb.AppendLine();
+        sb.AppendLine(DominantAssetNote(report));
+        sb.AppendLine();
         sb.AppendLine("### Explicit Client-Side Unsupported Measurements");
         sb.AppendLine("- **Client Browser Paint / V8 Frame Latency**: `N/A (unsupported: requires headless Chrome CDP profiling in browser test runner)`");
         sb.AppendLine("- **Client DOM/ECharts Heap Memory**: `N/A (unsupported: requires browser CDP memory heap snapshots)`");
@@ -338,6 +392,19 @@ public class ReportingBaselineMeasurementHarness
         sb.Append(VisualCapabilityMatrix.ToMarkdownTable());
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Names what actually dominates the shared payload, measured rather than asserted. A footprint
+    /// claim that does not name the top contributors implies the chart runtime is the remaining cost.
+    /// </summary>
+    public static string DominantAssetNote(BaselineReport report)
+    {
+        var top = report.BundleAssets.OrderByDescending(asset => asset.RawBytes).Take(4).ToList();
+        if (top.Count == 0) return "**Dominant shared assets:** none measured.";
+        var share = report.TotalBundleRawBytes <= 0 ? 0d : (double)top.Sum(asset => asset.RawBytes) / report.TotalBundleRawBytes;
+        var named = string.Join(", ", top.Select(asset => $"`{asset.RelativePath}` ({FormatBytes(asset.RawBytes)} raw / {FormatBytes(asset.GzipBytes)} gzip)"));
+        return $"**Dominant shared assets:** {named} — {share:P0} of the shared raw total.";
     }
 
     private static string FormatBytes(long bytes)

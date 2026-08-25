@@ -1,3 +1,20 @@
+/*!
+ * ETL-SQL Portal operational charts — native-charts.js
+ *
+ * Owner: ETL-SQL Report Portal (internal operator UI). Not a shared report runtime asset.
+ *
+ * Boundary — deliberate, see docs/architecture/portal-ui.md:
+ *   - Lives in the Portal wwwroot. NOT in ETL-SQL.ReportRuntime/Resources/Shared/, NOT synchronized
+ *     by scripts/sync-assets.js, NOT in the Report-SQL capability matrix.
+ *   - NOT a PlotPlan consumer, and must not become one. It draws the orchestrator page's Gantt,
+ *     sparkline, and dependency-graph views only.
+ *   - Zero third-party dependencies. No import, no require, no remote URL.
+ *
+ * Gates: docs/architecture/standards/report-runtime-asset-standards.md section 7, asserted by
+ * PortalOperationalChartAssetTests (ownership, dependency/license, accessibility, behaviour, footprint).
+ *
+ * Copyright (c) ETL-SQL contributors. Licensed under the repository's license.
+ */
 (function (global) {
   'use strict';
   const instances = new WeakMap();
@@ -32,7 +49,8 @@
       const maximum = Math.max(1, ...values.map(Math.abs)), slot = (width - pad * 2) / Math.max(1, values.length);
       marks = values.map((value, index) => { const h = Math.abs(value) / maximum * (height - pad * 2); return `<rect data-index="${index}" x="${pad + index * slot + slot * .15}" y="${height - pad - h}" width="${slot * .7}" height="${h}" rx="2" fill="#3b82f6"/>`; }).join('');
     }
-    host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Native chart" style="width:100%;height:100%">${marks}</svg>`;
+    const label = option.title?.text || option.aria?.label || host.dataset?.chartLabel || 'Operational chart';
+    host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(label)}" style="width:100%;height:100%">${marks}</svg>`;
   }
 
   global.nativeCharts = { init, getInstanceByDom: host => instances.get(host) };

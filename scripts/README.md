@@ -114,6 +114,7 @@ and performance claims; they are not part of the default test lanes.
 | **[`Test-SpillAllocProfile.ps1`](./Test-SpillAllocProfile.ps1)** | PowerShell | Cross-platform | Profiles allocation, GC and I/O for the Gate F `#temp` round trip and writes a spill-allocation report. |
 | **[`Compare-AllocBudget.ps1`](./Compare-AllocBudget.ps1)** | PowerShell | Cross-platform | Compares a spill-allocation profile against its checked-in budget and fails on regression. Bless a new budget with `-UpdateBudget`. |
 | **[`Compare-CertBaseline.ps1`](./Compare-CertBaseline.ps1)** | PowerShell | Cross-platform | Compares a `cert-report.json` against the stored baseline and reports regressions. |
+| **[`Test-ReportPayloadBudget.ps1`](./Test-ReportPayloadBudget.ps1)** | PowerShell | Cross-platform | Gates raw and gzip bytes for the shared report runtime and end-to-end page weight against `docs/benchmarks/report-payload-budget.json`. Bless a new budget with `-UpdateBudget`. Also runs in the default test lane via `ReportPayloadBudgetTests`. |
 
 ### Repository guardrails
 

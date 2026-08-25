@@ -1,0 +1,48 @@
+-- Conformance Fixture: Focused Layout Shared Presentation
+-- A BAR (lowered through PlotPlan) and a TREEMAP (focused native layout) over the same categories.
+-- Both must resolve the same theme and the same series colours; only the geometry differs.
+
+SET REPORT TITLE = 'Conformance: Focused Layout Shared Presentation';
+SET REPORT DESCRIPTION = 'Focused layout modules consume the same theme and palette as PlotPlan visuals.';
+
+SELECT 'Alpha' AS Category, 120 AS Metric INTO #focused_shared
+UNION ALL SELECT 'Beta', 180
+UNION ALL SELECT 'Gamma', 140
+UNION ALL SELECT 'Delta', 210;
+
+CREATE VISUAL SharedPaletteBar AS BAR (
+    TITLE = 'Plan-Backed Categories',
+    SOURCE = #focused_shared,
+    MAPPINGS (
+        X = Category,
+        Y = Metric,
+        SERIES = Category
+    ),
+    OPTIONS (
+        AXIS_SORT = SOURCE
+    )
+);
+
+CREATE VISUAL SharedPaletteTreemap AS TREEMAP (
+    TITLE = 'Focused Layout Categories',
+    SOURCE = #focused_shared,
+    MAPPINGS (
+        NAME = Category,
+        VALUE = Metric
+    ),
+    OPTIONS (
+        WIDTH = 720,
+        HEIGHT = 420
+    ),
+    INTERACTIONS (
+        ON_SELECT = FILTER,
+        MATCHING = Category
+    )
+);
+
+CREATE PAGE FocusedPresentationDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A / B',
+        MAP ('A' = SharedPaletteBar, 'B' = SharedPaletteTreemap)
+    )
+);

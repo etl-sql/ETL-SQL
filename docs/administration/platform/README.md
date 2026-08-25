@@ -1,4 +1,4 @@
-# PLATFORM Reference
+﻿# PLATFORM Reference
 
 [« Back to parent](../README.md)
 
@@ -30,6 +30,7 @@
 | [Row-Level Security](row-level-security.md) | Folder and dataset permissions control **which reports a user can open** — the coarse-grained gate. |
 | [SaaS Operator Best Practices & FAQ](saas-operations-faq.md) | Practical operating patterns, tenant isolation blueprints, and FAQs for hosting multi-tenant SME fleets. |
 | [Secrets and Keys](secrets.md) | ETL-SQL supports encrypted values for secrets such as passwords, JWT secrets, certificate |
+| [Secure Outbound Data Gateway](secure-outbound-gateway.md) | Reach private databases, file roots, and APIs without inbound firewall exceptions, through an outbound-connected tenant-attested policy enforcement point. |
 | [Central Security Events and SIEM Delivery](security-events.md) | Security events are separate from diagnostic logs and governance audit records: a dedicated versioned contract with a durable local outbox and opti... |
 | [Portal State, Data Roots, and High Availability](state-and-ha.md) | Where the Portal keeps its state, which directories it is allowed to touch, and what a multi-node high-availability deployment requires. |
 | [Tenant Portability Signing Keys](tenant-portability-signing-keys.md) | Tenant portability manifests are signed by the exporting operator with an OpenPGP signing key. |

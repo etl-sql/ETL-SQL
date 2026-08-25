@@ -1,4 +1,4 @@
-# RELEASES Reference
+﻿# RELEASES Reference
 
 [« Back to parent](../README.md)
 
@@ -18,6 +18,7 @@
 | [v0.15.0 Performance Results](v0.15.0-performance-results.md) | Generated 2026-07-12 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX (CHUCKPC). |
 | [ETL-SQL v0.15.0](v0.15.0.md) | **Released:** 2026-07-12 |
 | [ETL-SQL v0.16.0](v0.16.0.md) | **Released:** 2026-07-19 |
+| [ETL-SQL v0.18.0](v0.18.0.md) | **Released:** 2026-08-20 |
 | [v0.17.0 Code Review & Security Pass](v0.17.0-code-review.md) | **Reviewed:** 2026-07-26 · **Range:** `v0.16.0..HEAD` (191 commits, 268 files, +52k/-2.9k in `src`) |
 | [v0.17.0 Performance Results — Scale Certification](v0.17.0-performance-results.md) | **Status:** Decision record. **There is no v0.17.0 performance regression.** Both certification |
 | [ETL-SQL v0.17.0](v0.17.0.md) | **Released:** 2026-07-26 |

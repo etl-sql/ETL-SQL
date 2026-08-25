@@ -53,6 +53,37 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   delivered or server-only, and every path that hands a manifest to a browser — the Portal report and
   designer APIs, stored snapshots, the ReportPlayer page, the LSP preview, the Workstation Editor —
   goes through it. A test fails if a manifest property is added without being classified.
+- Added a browser payload regression budget. Raw and gzip bytes for `report-runtime.js`,
+  `report-runtime.css`, the shared runtime total, and end-to-end page weight are now gated against a
+  blessed measurement in `docs/benchmarks/report-payload-budget.json` on every default test run, with
+  a 3% plus 2 KB tolerance. `report-runtime.js` had grown from 217,299 bytes just after the external
+  chart runtime was retired back past that size with nothing failing, because footprint was observed
+  in a report rather than gated. Growth past tolerance now fails, and the only way past it is
+  `scripts\Test-ReportPayloadBudget.ps1 -UpdateBudget`, which rewrites the checked-in budget so the
+  new numbers land in the diff for review — not a hard-coded ceiling to argue with.
+- Added end-to-end page-weight measurement to the reporting baseline harness: per fixture, the shared
+  runtime assets plus that report's delivered browser manifest, raw and gzip. The report also names
+  what actually dominates the payload, measured rather than asserted.
+- Documented what the browser payload is actually made of. Of the 979,829 B raw / 226,725 B gzip a
+  report page downloads, Tabulator and Arrow plus their CSS are 637,889 B / 151,362 B — 65% of raw and
+  67% of gzip. The chart runtime is 34% and 32%. Neither vendor bundle was touched by the chart-runtime
+  retirement or by this release's delivery work, and a footprint claim that does not name them is
+  wrong by roughly a factor of two. The `Resources/Shared/` total is also not page weight: it includes
+  733,811 B of designer bundle a report viewer never loads.
+- The six focused native layout modules — `TREEMAP`, `SUNBURST`, `SANKEY`, `NETWORK`, `MAP`, `MATRIX` —
+  now consume shared presentation inputs instead of inventing their own. `FocusedLayoutInputs`
+  resolves the visual's theme tokens, series colours, accessible name and description, compact resolved
+  interaction metadata, and an explicit authored canvas (`OPTIONS (WIDTH = n, HEIGHT = n)`, clamped,
+  defaulting to 600×350); `ChartPalette` is now the single series-colour rule the plan-backed path and
+  the focused path both resolve through. The geometry stays focused on purpose — these types are not
+  lowered through `PlotPlan` — and sizing remains an explicit backend input, not a viewport reading.
+  Side-by-side conformance tests render a focused visual and a plan-backed visual over the same data
+  and fail if their series colours diverge.
+- Brought the Portal-only `native-charts.js` operational chart adapter under its own asset governance:
+  an ownership banner naming its boundary, plus ownership, dependency/license, accessibility,
+  behavioural, and raw/gzip footprint gates. It stays out of `Resources/Shared/`, out of
+  `sync-assets.js`, out of the Report-SQL capability matrix, and is not a `PlotPlan` consumer — that
+  separation is the decision, and the gates hold it to the separation rather than dissolving it.
 
 ### Changed
 
@@ -71,6 +102,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - The detail-surface payload budget is measured through the browser projection, so a popover is
   charged for what it actually downloads instead of for semantic contracts that never leave the
   server.
+- Focused layout SVGs now carry the resolved interaction key (`data-interaction-key`) and highlight
+  treatment, a themed surface and text colour, and a `<desc>` built from the visual's semantic
+  fallback. They previously drew on a hardcoded 600×350 white canvas with a private colour array, so a
+  `TREEMAP` and a `BAR` of the same categories on one page could disagree on colour.
+- The Portal orchestrator page's chart adapter now takes its `aria-label` from the caller's chart
+  title instead of labelling every chart "Native chart".
 - The browser runtime no longer decides chart geometry from `visual.visualType`. Proportional
   selection highlighting reads the treatment from the resolved interaction manifest and the extent
   from the mark's own attributes, so a chart type name no longer implies a shape. The legacy

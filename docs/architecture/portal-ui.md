@@ -171,6 +171,26 @@ Follows the identical pattern used for `ETL-SQL.ReportRuntime/Resources/Shared/`
 The Portal uses its small dependency-free `native-charts.js` adapter for internal Gantt, sparkline,
 and dependency-graph views. It handles deterministic SVG nodes, links, labels, and click events.
 
+#### `native-charts.js` ownership boundary
+
+`src/ETL-SQL.Portal/wwwroot/js/native-charts.js` is owned by the Report Portal as internal operator
+UI. It is a second charting implementation on purpose, and it stays separate:
+
+- **Not** in `src/ETL-SQL.ReportRuntime/Resources/Shared/`, **not** synchronized by
+  `scripts/sync-assets.js`, and **not** in the Report-SQL capability matrix.
+- **Not** a `PlotPlan` consumer, and it must not become one. Report visuals resolve through
+  `PlotPlan` or through the focused native layout modules; operational graphics do neither.
+- Shipped to Portal operators, not to report viewers, so it never counts toward report page weight.
+- Shaped as an ECharts-compatible shim (`init`, `setOption`, `resize`, `dispose`, `on`,
+  `dispatchAction`, `getInstanceByDom`) only because `orchestrator.html` calls it that way. There is
+  no ECharts dependency and no fallback to one.
+
+Being separate does not mean being ungoverned. The asset carries an ownership banner and is held to
+ownership, dependency/license, accessibility, behavioural, and raw/gzip footprint gates —
+[Report Runtime Asset Standards §7](standards/report-runtime-asset-standards.md#7-portal-operational-ui-assets),
+asserted by `PortalOperationalChartAssetTests`. Its only consumer is `orchestrator.html`; adding a
+second one is a decision, not a detail.
+
 Wrapper function signature (implemented once in `designer.js`, also available standalone):
 
 ```js

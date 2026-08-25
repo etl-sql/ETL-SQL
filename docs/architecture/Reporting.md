@@ -468,6 +468,31 @@ focused `SpecializedNativeSvgRenderer`; it performs deterministic managed-code l
 projection without a client chart engine. `TABLE`, `CARD`, narrative, media, and filter controls keep
 their purpose-built DOM/static renderers.
 
+#### Focused layout modules and shared presentation inputs
+
+The six focused types keep their own geometry — squarified tiles, radial arcs, ranked flows, GeoJSON
+projection — and are not lowered through `PlotPlan`. That is the approved boundary, and forcing them
+through the plan would buy nothing.
+
+They do **not** keep their own presentation. `FocusedLayoutInputs.From(visual)` resolves, once per
+visual, the same inputs a plan-backed visual gets:
+
+| Input | Resolved from | Shared with |
+|---|---|---|
+| Theme tokens | `ChartStyleTokens.Theme(visual)` — `CREATE STYLE` and visual `OPTIONS` | `ChartSpec.Theme` |
+| Series colour | `ChartPalette.Resolve` — the authored `COLOR:<series>` token, else the shared default at that position | `PlotPlanResolver.ResolveColor` |
+| Accessibility | `role="img"`, `aria-label` from the title, `<desc>` from the visual's `SemanticFallback` summary | `PlotPlan.AccessibleSummary` |
+| Interaction | The compact resolved `InteractionManifest`, stamped as `data-interaction-key` / `data-interaction-highlight` | `PlotPlan.Interaction` |
+| Sizing | Explicit authored `OPTIONS (WIDTH = n, HEIGHT = n)`, clamped to 120–4000 px, default 600×350 | — |
+
+Sizing is an explicit backend input. A focused module never derives a canvas from a viewport;
+responsive layout tiers are a separate, later feature with their own backend inputs.
+
+`ChartPalette` is the single series-colour rule for the whole reporting layer. A focused module
+holding its own colour array is exactly how two visuals of the same categories end up different
+colours on one page; `FocusedLayoutPresentationConformanceTests` renders a focused visual and a
+plan-backed visual side by side over the same data and fails if their series colours diverge.
+
 Every graphical `VisualManifest` carries `NativeSvg`. The browser imports this SVG into the DOM and
 wires `data-row-index` marks to actions, cross-filtering, drill context, and native `<title>` tooltips.
 No JavaScript option compiler or server-side script engine participates in rendering.
@@ -599,7 +624,7 @@ owned by the caller; a userless trusted publication falls back to the destinatio
 The at-rest key is a recovery dependency, not just a runtime setting. Production startup fails for
 missing, weak, invalid, or unresolved key-version configuration. Operators must back up the current and
 previous key mappings together with the database and dataset directory. See the
-[Portal Administrator Guide](../administration/portal/publishing.md#65-dataset-at-rest-key-lifecycle)
+[Portal Administrator Guide](../administration/portal/report-versioning-and-promotion.md#dataset-at-rest-key-lifecycle)
 for provisioning, rotation, restore, and orphan-reconciliation procedures.
 
 ---

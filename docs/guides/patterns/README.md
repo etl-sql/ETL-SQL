@@ -1,4 +1,4 @@
-# Patterns, Best Practices & Troubleshooting
+﻿# Patterns, Best Practices & Troubleshooting
 
 [« Back to Guides](../README.md)
 
@@ -23,11 +23,16 @@ This section contains operational playbooks, sample catalog maps, and domain-foc
 | Guide | Description |
 | :--- | :--- |
 | [Sample Guide](sample-guide.md) | Comprehensive map of 160+ runnable `.etlsql` and `.rptsql` samples in `/samples/`. |
-| [One-Person Quality Loop](../operations/one-person-quality-loop.md) | Complete workstation runbook: workspace policy, CLI validation, local schedules, and operator reports. |
+| [One-Person Quality Loop](one-person-quality-loop.md) | Complete workstation runbook: workspace policy, CLI validation, local schedules, and operator reports. |
 
 ---
 
 ## Best Practices Links
+
+| Guide | Description |
+| :--- | :--- |
+| [ETL-SQL Pipeline & Report-SQL Best Practices Guide](etl-sql-best-practices.md) | Designing resilient, secure, and performant `.etlsql` pipelines and `.rptsql` dashboards. |
+| [Logging and Performance Tuning](logging-and-performance.md) | Where ETL-SQL writes its logs, how to raise detail when something is wrong, and the levers that change how a slow script uses memory and disk. |
 
 - [Staged vs. Direct Streaming Ingestion](../pipelines/staged-vs-streaming-ingestion.md)
 - [Script Resilience & Checkpoints](../pipelines/script-resilience-and-checkpoints.md)

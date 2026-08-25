@@ -1,4 +1,4 @@
-# REPORT Reference
+﻿# REPORT Reference
 
 [« Back to parent](../README.md)
 
@@ -6,6 +6,9 @@
 | :--- | :--- |
 | [ACTIONS](actions.md) | Interactive charts, tables, controls, and buttons can trigger one or more actions when a user interacts with them. |
 | [BUTTON](button.md) | An interactive button that triggers a navigation action, page refresh, or parameter update when clicked. |
+| [BOOKMARK](bookmark.md) | Named combinations of parameter values, page, and UI state, declared in the report script and replayed at runtime. |
+| [CASCADE](cascade.md) | A dependent `SLICER` or `MULTISELECT` option set, and the atomic policy applied when a parent parameter change invalidates a descendant selection. |
+| [PRINT_LAYOUT](print-layout.md) | Physical page dimensions, print margins, and pagination break rules for paginated reports and high-fidelity PDF export. |
 | [CONTAINER](container.md) | Groups visuals within a page using its own nested layout grid. Useful for grouping related charts in a card region, a scrollable sub-panel, or a co... |
 | [DATASET](dataset.md) | Defines a shared, optionally cached data source that can be used by multiple visuals or pages within a report. Datasets are evaluated once and stor... |
 | [Report-SQL](index.md) | Report-SQL extends ETL-SQL with components for building interactive dashboards: datasets, visuals, pages, navigation, containers, buttons, and styles. |
