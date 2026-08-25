@@ -16,6 +16,20 @@ public interface IGatewayResourceExecutor
         IReadOnlyList<string>? parameters,
         GatewayOperationBounds bounds,
         CancellationToken cancellationToken);
+
+    Task<GatewayExecutionResult> ExecuteAsync(
+        GatewayResource resource,
+        GatewayOperationClass operationClass,
+        string? request,
+        IReadOnlyList<string>? parameters,
+        VerifiedViewerContext? viewerContext,
+        GatewayOperationBounds bounds,
+        CancellationToken cancellationToken)
+    {
+        if (viewerContext is not null)
+            throw new GatewayProtocolException("This connector executor cannot consume verified viewer context.");
+        return ExecuteAsync(resource, operationClass, request, parameters, bounds, cancellationToken);
+    }
 }
 
 /// <summary>A bounded result: columns plus row batches already clipped to the operation's limits.</summary>
@@ -37,10 +51,12 @@ public sealed record GatewayExecutionResult(
 public sealed class GatewayOperationDispatcher(
     GatewayResourceRegistry registry,
     IGatewayResourceExecutor executor,
-    GatewayOutcomeLedger ledger)
+    GatewayOutcomeLedger ledger,
+    IViewerContextEnvelopeVerifier? viewerContextVerifier = null)
 {
     public async Task<IReadOnlyList<GatewayFrame>> DispatchAsync(
-        GatewayFrame frame, string sessionTenantId, string sessionGatewayId, CancellationToken cancellationToken)
+        GatewayFrame frame, string sessionTenantId, string sessionGatewayId, CancellationToken cancellationToken,
+        string? sessionNodeId = null)
     {
         ArgumentNullException.ThrowIfNull(frame);
 
@@ -68,7 +84,7 @@ public sealed class GatewayOperationDispatcher(
             frame.OperationId!, sessionTenantId, sessionGatewayId, frame.ResourceId!,
             frame.OperationClass, frame.Effect,
             frame.Bounds ?? GatewayOperationBounds.Default,
-            frame.CorrelationId ?? frame.OperationId!);
+            frame.CorrelationId ?? frame.OperationId!, sessionNodeId);
 
         try
         {
@@ -79,8 +95,38 @@ public sealed class GatewayOperationDispatcher(
             return [GatewayFrame.Fault(frame.OperationId, ex.Message)];
         }
 
-        // Reconnect: a committed write is returned, never repeated; an ambiguous one is escalated
-        // rather than silently re-run or reported as a clean failure.
+        GatewayResource resource;
+        try
+        {
+            resource = await registry
+                .ResolveForExecutionAsync(operation.ResourceId, operation.Class, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (GatewayResourceException ex)
+        {
+            return [GatewayFrame.Fault(operation.OperationId, ex.Message)];
+        }
+
+        VerifiedViewerContext? verifiedViewerContext = null;
+        try
+        {
+            if (resource.ViewerContextPolicy is not null)
+            {
+                if (frame.ViewerContext is null || viewerContextVerifier is null)
+                    throw new GatewayProtocolException("Verified viewer context is required for this resource.");
+                verifiedViewerContext = viewerContextVerifier.Verify(frame.ViewerContext, operation, resource);
+            }
+            else if (frame.ViewerContext is not null)
+            {
+                throw new GatewayProtocolException("This resource does not accept viewer context.");
+            }
+        }
+        catch (GatewayProtocolException ex)
+        {
+            return [GatewayFrame.Fault(operation.OperationId, ex.Message)];
+        }
+
+        // Reconnect decisions happen only after any asserted context has been authenticated.
         switch (ledger.DecideReconnect(sessionTenantId, operation.OperationId))
         {
             case GatewayReconnectAction.ReturnRecordedOutcome:
@@ -110,18 +156,6 @@ public sealed class GatewayOperationDispatcher(
                 ];
         }
 
-        GatewayResource resource;
-        try
-        {
-            resource = await registry
-                .ResolveForExecutionAsync(operation.ResourceId, operation.Class, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (GatewayResourceException ex)
-        {
-            return [GatewayFrame.Fault(operation.OperationId, ex.Message)];
-        }
-
         // A resource's registered limits can only tighten what the cloud asked for.
         var bounds = operation.Bounds.NarrowTo(resource.Limits);
         ledger.RecordDispatched(operation with { Bounds = bounds });
@@ -132,8 +166,25 @@ public sealed class GatewayOperationDispatcher(
         try
         {
             var result = await executor
-                .ExecuteAsync(resource, operation.Class, frame.Request, frame.Parameters, bounds, deadline.Token)
+                .ExecuteAsync(resource, operation.Class, frame.Request, frame.Parameters,
+                    verifiedViewerContext, bounds, deadline.Token)
                 .ConfigureAwait(false);
+
+            if (verifiedViewerContext is not null)
+            {
+                SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                    SecurityEventSeverity.Information,
+                    SecurityEventType.ViewerContextAccepted,
+                    verifiedViewerContext.ViewerId,
+                    verifiedViewerContext.ExecutingCredentialId,
+                    $"gateway-resource:{resource.ResourceId}",
+                    SecurityEventDecision.Allowed,
+                    "Verified application viewer context accepted; PostgreSQL authenticated the recorded executing credential.") with
+                {
+                    TenantId = operation.TenantId,
+                    CorrelationId = operation.CorrelationId
+                });
+            }
 
             var rows = result.Rows.Count > bounds.MaxRows
                 ? result.Rows.Take((int)Math.Min(bounds.MaxRows, int.MaxValue)).ToList()

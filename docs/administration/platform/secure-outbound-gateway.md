@@ -87,6 +87,23 @@ etlsql gateway resource approve --resource-id corp-sql-sales
 etlsql gateway resource list
 ```
 
+To enable asserted viewer context on PostgreSQL, configure the same Base64 256-bit-or-longer
+`ETLSQL_VIEWER_CONTEXT_HMAC_KEY` in the Portal and Gateway secret stores. Give the resource an
+expected PostgreSQL `session_user` for audit:
+
+```powershell
+etlsql gateway resource propose --resource-id corp-pg-reports --connector POSTGRES `
+  --target 'Host=db.corp.internal;Database=Reports;Password=${CREDENTIAL}' `
+  --credential-ref ENV:ETLSQL_GATEWAY_REPORTS --operations READ `
+  --executing-credential-id svc_reporting --viewer-claims viewer_groups,viewer_roles `
+  --viewer-context-ttl-seconds 60
+```
+
+This does not delegate the viewer identity to PostgreSQL. PostgreSQL authenticates the service
+credential; the signed viewer values are parameterized, transaction-local application context.
+OIDC roles and groups never select PostgreSQL roles. See
+[Verified Viewer Context](../../architecture/decisions/verified-viewer-context.md).
+
 `list` exposes the ID, state, connector, and operation classes only. Disablement is immediate for
 new operations:
 

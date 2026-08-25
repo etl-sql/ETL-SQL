@@ -472,17 +472,17 @@ cross-tenant, cross-resource, replay, approval-bypass, rotation, and revocation 
 
 ### Platform Phase 4 — Verified Viewer Context Threat Model and First Connector
 
-- [ ] Write an ADR that separates asserted application context, OAuth delegated/on-behalf-of
+- [x] Write an ADR that separates asserted application context, OAuth delegated/on-behalf-of
   authentication, and Kerberos constrained delegation and states the assurance of each.
-- [ ] Define a cryptographically authenticated Portal-to-Gateway envelope bound to tenant, resource,
+- [x] Define a cryptographically authenticated Portal-to-Gateway envelope bound to tenant, resource,
   operation, viewer, executing credential, expiry, and replay protection.
-- [ ] Define resource-specific claim allowlists, reserved keys, parameterized installation,
+- [x] Define resource-specific claim allowlists, reserved keys, parameterized installation,
   transaction-local lifetime, fail-closed behavior, and connection-pool cleanup.
-- [ ] Implement one asserted-context connector without claiming that the database authenticated the
+- [x] Implement one asserted-context connector without claiming that the database authenticated the
   viewer.
-- [ ] Prohibit deriving PostgreSQL role changes directly from OIDC roles or groups.
-- [ ] Audit both the verified viewer context and the executing service credential.
-- [ ] Add forgery, replay, cross-tenant/resource, reserved-key, injection, transaction-lifetime, and
+- [x] Prohibit deriving PostgreSQL role changes directly from OIDC roles or groups.
+- [x] Audit both the verified viewer context and the executing service credential.
+- [x] Add forgery, replay, cross-tenant/resource, reserved-key, injection, transaction-lifetime, and
   pool-reuse tests before adding more connectors.
 
 **Exit gate:** The first connector passes the complete hostile-context and pool-cleanup suite, and the

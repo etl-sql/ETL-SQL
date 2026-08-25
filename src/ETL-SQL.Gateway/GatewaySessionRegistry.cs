@@ -36,6 +36,18 @@ public interface IGatewaySession : IAsyncDisposable
         string? request,
         IReadOnlyList<string>? parameters,
         CancellationToken cancellationToken);
+
+    Task<GatewayExecutionResult> ExecuteAsync(
+        GatewayOperation operation,
+        string? request,
+        IReadOnlyList<string>? parameters,
+        ViewerContextEnvelope? viewerContext,
+        CancellationToken cancellationToken)
+    {
+        if (viewerContext is not null)
+            throw new GatewayProtocolException("This Gateway session cannot carry verified viewer context.");
+        return ExecuteAsync(operation, request, parameters, cancellationToken);
+    }
 }
 
 /// <summary>

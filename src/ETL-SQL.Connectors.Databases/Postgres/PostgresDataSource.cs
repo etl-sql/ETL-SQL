@@ -6,6 +6,7 @@ using System.Threading;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using Npgsql;
 
@@ -473,6 +474,80 @@ namespace ETL_SQL.Connectors.Postgres
                 await conn.DisposeAsync();
                 _transactionalConnection = null;
                 throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
+        }
+
+        /// <summary>
+        /// Starts the transaction that carries asserted viewer values and installs them with
+        /// parameterized set_config(..., true). PostgreSQL still authenticates the connection's
+        /// service credential; this method never executes SET ROLE or derives a role from claims.
+        /// </summary>
+        public async Task BeginVerifiedViewerContextAsync(
+            VerifiedViewerContext viewerContext,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(viewerContext);
+            if (_activeTransaction is not null)
+                throw new ExecutionException("Verified viewer context requires a fresh PostgreSQL transaction.");
+
+            var conn = new NpgsqlConnection(_connectionString);
+            try
+            {
+                await conn.OpenAsync(cancellationToken);
+                _transactionalConnection = conn;
+                _activeTransaction = await conn.BeginTransactionAsync(cancellationToken);
+
+                await using (var identityCommand = CreateCommand("SELECT session_user", conn))
+                {
+                    identityCommand.Transaction = _activeTransaction;
+                    var authenticatedIdentity = Convert.ToString(
+                        await identityCommand.ExecuteScalarAsync(cancellationToken));
+                    if (!string.Equals(authenticatedIdentity, viewerContext.ExecutingCredentialId,
+                        StringComparison.Ordinal))
+                    {
+                        throw new ExecutionException(
+                            "The PostgreSQL identity does not match the viewer context executing credential.");
+                    }
+                }
+
+                var values = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["etlsql.viewer_id"] = viewerContext.ViewerId,
+                    ["etlsql.real_viewer_id"] = viewerContext.RealViewerId,
+                    ["etlsql.executing_credential"] = viewerContext.ExecutingCredentialId,
+                    ["etlsql.tenant_id"] = viewerContext.TenantId,
+                    ["etlsql.resource_id"] = viewerContext.ResourceId,
+                    ["etlsql.operation_id"] = viewerContext.OperationId
+                };
+                foreach (var (key, value) in viewerContext.Claims)
+                    values[$"etlsql.claim_{key.ToLowerInvariant().Replace('-', '_')}"] = value;
+
+                foreach (var (name, value) in values)
+                {
+                    await using var command = CreateCommand("SELECT set_config(@name, @value, true)", conn);
+                    command.Transaction = _activeTransaction;
+                    command.Parameters.AddWithValue("name", name);
+                    command.Parameters.AddWithValue("value", value);
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    if (_activeTransaction is not null)
+                        await _activeTransaction.RollbackAsync(CancellationToken.None);
+                }
+                finally
+                {
+                    if (_activeTransaction is not null) await _activeTransaction.DisposeAsync();
+                    await conn.DisposeAsync();
+                    _activeTransaction = null;
+                    _transactionalConnection = null;
+                }
+                if (ShouldWrapProviderException(ex))
+                    throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+                throw;
             }
         }
 

@@ -943,6 +943,9 @@ namespace ETL_SQL.App
         private static readonly Option<string?> GatewayLocalTargetOption = new("--target") { Description = "Local connector target; use ${CREDENTIAL} for the resolved credential." };
         private static readonly Option<string?> GatewayCredentialOption = new("--credential-ref") { Description = "Local credential reference in ENV:name form." };
         private static readonly Option<string?> GatewayOperationsOption = new("--operations") { Description = "Comma-separated READ, WRITE, EXECUTE operation classes." };
+        private static readonly Option<string?> GatewayExecutingCredentialIdOption = new("--executing-credential-id") { Description = "Expected PostgreSQL session_user for audit; enables verified viewer context." };
+        private static readonly Option<string?> GatewayViewerClaimsOption = new("--viewer-claims") { Description = "Allowlist: viewer_groups, viewer_roles, viewer_scopes, is_admin." };
+        private static readonly Option<int?> GatewayViewerLifetimeOption = new("--viewer-context-ttl-seconds") { Description = "Signed viewer context lifetime from 1 to 300 seconds (default 60)." };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -1874,7 +1877,8 @@ namespace ETL_SQL.App
             var resourceCommand = new Command("resource", "Administer the protected Gateway-local resource registry")
             {
                 GatewayResourceIdOption, GatewayConnectorTypeOption, GatewayLocalTargetOption,
-                GatewayCredentialOption, GatewayOperationsOption
+                GatewayCredentialOption, GatewayOperationsOption, GatewayExecutingCredentialIdOption,
+                GatewayViewerClaimsOption, GatewayViewerLifetimeOption
             };
             var proposeCommand = new Command("propose", "Propose a local connector resource");
             proposeCommand.SetAction(context => Dispatch(context, "gateway-resource-propose", handler));
@@ -2273,6 +2277,9 @@ namespace ETL_SQL.App
                 cliContext.GatewayLocalTarget = TryGetString(res, GatewayLocalTargetOption);
                 cliContext.GatewayCredentialReference = TryGetString(res, GatewayCredentialOption);
                 cliContext.GatewayOperations = TryGetString(res, GatewayOperationsOption);
+                cliContext.GatewayExecutingCredentialId = TryGetString(res, GatewayExecutingCredentialIdOption);
+                cliContext.GatewayViewerContextClaims = TryGetString(res, GatewayViewerClaimsOption);
+                cliContext.GatewayViewerContextLifetimeSeconds = res.GetValue(GatewayViewerLifetimeOption);
             }
             else if (commandName == "init")
             {

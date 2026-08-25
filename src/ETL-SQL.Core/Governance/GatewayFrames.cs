@@ -67,6 +67,7 @@ public sealed record GatewayFrame
     /// <summary>Bounded connector-specific request text, e.g. a parameterised query. Never a destination.</summary>
     public string? Request { get; init; }
     public IReadOnlyList<string>? Parameters { get; init; }
+    public ViewerContextEnvelope? ViewerContext { get; init; }
 
     public IReadOnlyList<IReadOnlyList<string?>>? Rows { get; init; }
     public IReadOnlyList<string>? Columns { get; init; }

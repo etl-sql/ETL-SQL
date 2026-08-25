@@ -21,7 +21,8 @@ public enum SecurityEventType
     ResourceLimitViolation,
     CatalogMutation,
     CapabilityAccessed,
-    ExecutionCompleted
+    ExecutionCompleted,
+    ViewerContextAccepted
 }
 
 public enum SecurityEventDecision

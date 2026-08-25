@@ -73,7 +73,8 @@ public sealed record GatewayOperation(
     GatewayOperationClass Class,
     GatewayOperationEffect Effect,
     GatewayOperationBounds Bounds,
-    string CorrelationId)
+    string CorrelationId,
+    string? GatewayNodeId = null)
 {
     public void Validate()
     {

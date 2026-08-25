@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Gateway;
@@ -7,7 +8,8 @@ namespace ETL_SQL.Portal.Services;
 /// <summary>Catalog-authorized Portal route into an authenticated outbound Gateway session.</summary>
 public sealed class PortalGatewayOperationRouter(
     IGatewayEnrollmentStore enrollments,
-    GatewaySessionRegistry sessions) : IGatewayOperationRouter
+    GatewaySessionRegistry sessions,
+    IViewerContextEnvelopeSigner? viewerContextSigner = null) : IGatewayOperationRouter
 {
     public async Task<GatewayRoutedResult> ExecuteAsync(
         ExecutionIdentity identity, GatewayResourceBinding binding,
@@ -42,8 +44,40 @@ public sealed class PortalGatewayOperationRouter(
 
         var operation = new GatewayOperation(
             Guid.NewGuid().ToString("N"), tenantId, binding.GatewayId, binding.ResourceId,
-            operationClass, effect, bounds, Guid.NewGuid().ToString("N"));
-        var result = await session.ExecuteAsync(operation, request, parameters, cancellationToken).ConfigureAwait(false);
+            operationClass, effect, bounds, Guid.NewGuid().ToString("N"), session.NodeId);
+        ViewerContextEnvelope? viewerContext = null;
+        if (resource?.ViewerContextPolicy is not null)
+        {
+            if (viewerContextSigner is null || string.IsNullOrWhiteSpace(resource.ExecutingCredentialId))
+                throw new ExecutionException("Verified viewer context is not configured for this Gateway resource.");
+            viewerContext = viewerContextSigner.Sign(
+                operation, identity.EffectiveUser, identity.RealUser, resource.ExecutingCredentialId,
+                BuildClaims(identity, resource.ViewerContextPolicy), resource.ViewerContextPolicy);
+        }
+        var result = await session.ExecuteAsync(operation, request, parameters, viewerContext, cancellationToken)
+            .ConfigureAwait(false);
         return new GatewayRoutedResult(result.Columns, result.Rows, result.Truncated);
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildClaims(
+        ExecutionIdentity identity, ViewerContextPolicy policy)
+    {
+        var claims = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var allowed in policy.AllowedClaims)
+        {
+            var value = allowed.ToLowerInvariant() switch
+            {
+                "viewer_groups" => JsonSerializer.Serialize(
+                    identity.Groups.OrderBy(item => item, StringComparer.OrdinalIgnoreCase)),
+                "viewer_roles" => JsonSerializer.Serialize(
+                    identity.Roles.OrderBy(item => item, StringComparer.OrdinalIgnoreCase)),
+                "viewer_scopes" => JsonSerializer.Serialize(
+                    identity.Scopes.OrderBy(item => item, StringComparer.OrdinalIgnoreCase)),
+                "is_admin" => identity.IsAdmin ? "true" : "false",
+                _ => null
+            };
+            if (value is not null) claims[allowed] = value;
+        }
+        return claims;
     }
 }

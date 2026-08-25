@@ -303,6 +303,9 @@ public class CliContext
     public bool GatewayInstallService { get; set; }
     public bool GatewayNonInteractive { get; set; }
     public string? GatewayResourceId { get; set; }
+    public string? GatewayExecutingCredentialId { get; set; }
+    public string? GatewayViewerContextClaims { get; set; }
+    public int? GatewayViewerContextLifetimeSeconds { get; set; }
     public string? GatewayConnectorType { get; set; }
     public string? GatewayLocalTarget { get; set; }
     public string? GatewayCredentialReference { get; set; }

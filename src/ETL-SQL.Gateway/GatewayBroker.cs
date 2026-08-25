@@ -253,6 +253,14 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         string? request,
         IReadOnlyList<string>? parameters,
         CancellationToken cancellationToken)
+        => await ExecuteAsync(operation, request, parameters, null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<GatewayExecutionResult> ExecuteAsync(
+        GatewayOperation operation,
+        string? request,
+        IReadOnlyList<string>? parameters,
+        ViewerContextEnvelope? viewerContext,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(operation);
 
@@ -276,7 +284,8 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                 Bounds = operation.Bounds,
                 CorrelationId = operation.CorrelationId,
                 Request = request,
-                Parameters = parameters
+                Parameters = parameters,
+                ViewerContext = viewerContext
             };
 
             var serialized = opFrame.Serialize();

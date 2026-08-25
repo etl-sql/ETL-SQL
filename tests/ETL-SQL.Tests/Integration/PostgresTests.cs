@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Connectors.Postgres;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -34,6 +36,58 @@ namespace ETL_SQL.Tests.Integration
             await TestDataTypes(eval, connStr);
             await TestFunctions(eval, connStr);
             await TestMetadata(eval, connStr);
+        }
+
+        [Fact]
+        public async Task VerifiedViewerContext_IsParameterizedTransactionLocalAndClearedBeforePoolReuse()
+        {
+            var connStr = _fixture.PostgresConnectionString;
+            var context = SystemExecutionContext.Instance;
+            const string hostile = "finance'; SET ROLE postgres; --";
+            string executingRole;
+            await using (var baseline = new NpgsqlConnection(connStr))
+            {
+                await baseline.OpenAsync();
+                await using var role = new NpgsqlCommand("SELECT current_user", baseline);
+                executingRole = (string)(await role.ExecuteScalarAsync())!;
+            }
+
+            await using (var mismatched = new PostgresDataSource(context, connStr))
+            {
+                var denied = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+                    mismatched.BeginVerifiedViewerContextAsync(new VerifiedViewerContext(
+                        "tenant-a", "postgres-reports", "op-denied", "viewer", "viewer",
+                        "different-database-user", new Dictionary<string, string>(), DateTimeOffset.UtcNow),
+                        CancellationToken.None));
+                Assert.Contains("does not match", denied.Message);
+            }
+
+            await using (var source = new PostgresDataSource(context, connStr))
+            {
+                await source.BeginVerifiedViewerContextAsync(new VerifiedViewerContext(
+                    "tenant-a", "postgres-reports", "op-1", hostile, "real-viewer",
+                    executingRole, new Dictionary<string, string> { ["department"] = hostile },
+                    DateTimeOffset.UtcNow), CancellationToken.None);
+
+                var batch = await source.ExecuteRawSql(
+                    "SELECT current_setting('etlsql.viewer_id') AS viewer, " +
+                    "current_setting('etlsql.claim_department') AS department, current_user AS role",
+                    null, CancellationToken.None).FirstAsync();
+                var row = Assert.Single(batch.Rows);
+                Assert.Equal(hostile, row["viewer"]);
+                Assert.Equal(hostile, row["department"]);
+                Assert.Equal(executingRole, row["role"]);
+                await source.CommitAsync();
+            }
+
+            await using var reused = new NpgsqlConnection(connStr);
+            await reused.OpenAsync();
+            await using var check = new NpgsqlCommand(
+                "SELECT current_setting('etlsql.viewer_id', true), current_user", reused);
+            await using var reader = await check.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.True(reader.IsDBNull(0) || reader.GetString(0) == string.Empty);
+            Assert.Equal(executingRole, reader.GetString(1));
         }
 
         private async Task TestDataTypes(Evaluator eval, string connStr)

@@ -31,3 +31,4 @@
 | [Design Spec: Smart Snippets and Schema-Aware Code Generation](smart-snippets-spec.md) | This document outlines the design and workflow for **Smart Snippets** in ETL-SQL. It details how slash commands (like `/merge` and `/upsert`) can i... |
 | [Design Spec: Unified Notebook & Script Execution (Virtual Cells and Checkpoints)](unified-notebook-script-execution.md) | This document specifies the design for unifying the `.etlnb` (ETL-SQL Notebook) execution controller with plain-text `.etlsql` and `.rptsql` script... |
 | [Design Spec: Job, Schedule, and Alerting Refactor](job-schedule-notification.md) | This document outlines the architectural changes for establishing a unified, many-to-many scheduling |
+| [Verified Viewer Context for Gateway PostgreSQL Resources](verified-viewer-context.md) | Separates asserted application context from delegated authentication and defines the signed envelope and PostgreSQL installation contract. |

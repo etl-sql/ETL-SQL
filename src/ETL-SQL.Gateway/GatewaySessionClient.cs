@@ -112,7 +112,7 @@ public sealed class GatewaySessionClient(
             if (frame is null) break;
 
             var responses = await dispatcher
-                .DispatchAsync(frame, options.TenantId, options.GatewayId, cancellationToken)
+                .DispatchAsync(frame, options.TenantId, options.GatewayId, cancellationToken, options.EffectiveNodeId)
                 .ConfigureAwait(false);
 
             foreach (var response in responses)

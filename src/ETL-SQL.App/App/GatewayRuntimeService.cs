@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Postgres;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
@@ -42,7 +43,8 @@ internal static class GatewayRuntimeService
 
         var registry = new GatewayResourceRegistry(Path.Combine(GatewaySetupService.ConfigDirectory, "resources.protected"));
         var ledger = new GatewayOutcomeLedger(Path.Combine(GatewaySetupService.ConfigDirectory, "outcomes.json"));
-        var dispatcher = new GatewayOperationDispatcher(registry, new ConnectorResourceExecutor(connectors), ledger);
+        var dispatcher = new GatewayOperationDispatcher(
+            registry, new ConnectorResourceExecutor(connectors), ledger, CreateViewerContextVerifier(logger));
         var publishedResources = await registry.PublishAsync().ConfigureAwait(false);
         var host = new GatewayHost(new GatewayHostOptions(new GatewaySessionOptions(
             new Uri(config.BrokerUrl), config.TenantId, config.GatewayId,
@@ -64,6 +66,24 @@ internal static class GatewayRuntimeService
         finally { Console.CancelKeyPress -= handler; }
     }
 
+    private static IViewerContextEnvelopeVerifier? CreateViewerContextVerifier(ILogger logger)
+    {
+        var encodedKey = Environment.GetEnvironmentVariable("ETLSQL_VIEWER_CONTEXT_HMAC_KEY");
+        if (string.IsNullOrWhiteSpace(encodedKey)) return null;
+        try
+        {
+            var keyId = Environment.GetEnvironmentVariable("ETLSQL_VIEWER_CONTEXT_KEY_ID") ?? "portal-gateway-v1";
+            return new HmacViewerContextEnvelopeService(
+                keyId, Convert.FromBase64String(encodedKey), new ViewerContextReplayStore(
+                    Path.Combine(GatewaySetupService.ConfigDirectory, "viewer-context-replay.json")));
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        {
+            logger.Error("The Gateway viewer context verification key is malformed.");
+            return null;
+        }
+    }
+
     private sealed record ConnectorRequest(
         string Table,
         IReadOnlyList<string>? Columns = null,
@@ -79,6 +99,14 @@ internal static class GatewayRuntimeService
             GatewayResource resource, GatewayOperationClass operationClass,
             string? request, IReadOnlyList<string>? parameters,
             GatewayOperationBounds bounds, CancellationToken cancellationToken)
+            => await ExecuteAsync(resource, operationClass, request, parameters, null, bounds, cancellationToken)
+                .ConfigureAwait(false);
+
+        public async Task<GatewayExecutionResult> ExecuteAsync(
+            GatewayResource resource, GatewayOperationClass operationClass,
+            string? request, IReadOnlyList<string>? parameters,
+            VerifiedViewerContext? viewerContext,
+            GatewayOperationBounds bounds, CancellationToken cancellationToken)
         {
             var operation = ParseRequest(request);
             var connector = connectors.GetConnector(resource.ConnectorType)
@@ -90,6 +118,14 @@ internal static class GatewayRuntimeService
             try
             {
                 await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, target).WithTable(operation.Table);
+                PostgresDataSource? contextSource = null;
+                if (viewerContext is not null)
+                {
+                    contextSource = source as PostgresDataSource
+                        ?? throw new InvalidOperationException("Verified viewer context is supported only by the PostgreSQL connector.");
+                    await contextSource.BeginVerifiedViewerContextAsync(viewerContext, cancellationToken)
+                        .ConfigureAwait(false);
+                }
                 if (operationClass == GatewayOperationClass.Execute)
                     throw new NotSupportedException("The local connector does not expose a bounded execute operation.");
                 if (operationClass == GatewayOperationClass.Write)
@@ -98,6 +134,7 @@ internal static class GatewayRuntimeService
                     var columns = operation.Columns ?? throw new InvalidOperationException("A write requires columns.");
                     await source.WriteBatches(ToBatches(columns, operation.Rows, cancellationToken), operation.Append, cancellationToken)
                         .ConfigureAwait(false);
+                    if (contextSource is not null) await contextSource.CommitAsync().ConfigureAwait(false);
                     return new GatewayExecutionResult(columns, [], false);
                 }
 
@@ -119,6 +156,7 @@ internal static class GatewayRuntimeService
                     }
                     if (truncated) break;
                 }
+                if (contextSource is not null) await contextSource.CommitAsync().ConfigureAwait(false);
                 return new GatewayExecutionResult(resultColumns, rows, truncated);
             }
             finally { limiter.Release(); }

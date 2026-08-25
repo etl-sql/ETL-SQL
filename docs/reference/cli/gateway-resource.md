@@ -14,9 +14,12 @@ etl-sql gateway resource <subcommand> [options]
 | :--- | :--- |
 | `--connector` | Registered connector type. |
 | `--credential-ref` | Local credential reference in ENV:name form. |
+| `--executing-credential-id` | Expected PostgreSQL session_user for audit; enables verified viewer context. |
 | `--operations` | Comma-separated READ, WRITE, EXECUTE operation classes. |
 | `--resource-id` | Stable local resource ID. |
 | `--target` | Local connector target; use ${CREDENTIAL} for the resolved credential. |
+| `--viewer-claims` | Allowlist: viewer_groups, viewer_roles, viewer_scopes, is_admin. |
+| `--viewer-context-ttl-seconds` | Signed viewer context lifetime from 1 to 300 seconds (default 60). |
 
 ## Subcommands
 

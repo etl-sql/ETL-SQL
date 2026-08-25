@@ -34,10 +34,31 @@ internal static class GatewayResourceAdminService
                         return 1;
                     }
                     var operations = ParseOperations(context.GatewayOperations);
+                    ViewerContextPolicy? viewerContextPolicy = null;
+                    if (!string.IsNullOrWhiteSpace(context.GatewayExecutingCredentialId))
+                    {
+                        if (!string.Equals(context.GatewayConnectorType, "POSTGRES", StringComparison.OrdinalIgnoreCase))
+                        {
+                            logger.Error("Verified viewer context is currently supported only for POSTGRES resources.");
+                            return 1;
+                        }
+                        var allowedClaims = (context.GatewayViewerContextClaims ?? string.Empty)
+                            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                        viewerContextPolicy = new ViewerContextPolicy(
+                            allowedClaims, context.GatewayViewerContextLifetimeSeconds ?? 60);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(context.GatewayViewerContextClaims)
+                        || context.GatewayViewerContextLifetimeSeconds is not null)
+                    {
+                        logger.Error("--viewer-claims and --viewer-context-ttl-seconds require --executing-credential-id.");
+                        return 1;
+                    }
                     await registry.ProposeAsync(new GatewayResource(
                         context.GatewayResourceId, context.GatewayConnectorType,
                         context.GatewayLocalTarget, context.GatewayCredentialReference,
-                        operations, new GatewayResourceLimits())).ConfigureAwait(false);
+                        operations, new GatewayResourceLimits(),
+                        ExecutingCredentialId: context.GatewayExecutingCredentialId,
+                        ViewerContextPolicy: viewerContextPolicy)).ConfigureAwait(false);
                     logger.Info("Gateway resource {ResourceId} is proposed and remains inert until approved.", context.GatewayResourceId);
                     return 0;
 

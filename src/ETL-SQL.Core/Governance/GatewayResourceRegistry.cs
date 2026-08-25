@@ -49,7 +49,9 @@ public sealed record GatewayResource(
     GatewayOperationClass AllowedOperations,
     GatewayResourceLimits Limits,
     GatewayResourceState State = GatewayResourceState.Proposed,
-    string? DisplayName = null)
+    string? DisplayName = null,
+    string? ExecutingCredentialId = null,
+    ViewerContextPolicy? ViewerContextPolicy = null)
 {
     /// <summary>
     /// The projection published to the tenant catalog: identity, connector type, what it can do, and
@@ -57,7 +59,8 @@ public sealed record GatewayResource(
     /// store cloud-side precisely because it cannot be dialled.
     /// </summary>
     public GatewayPublishedResource ToPublishedMetadata() => new(
-        ResourceId, ConnectorType, AllowedOperations, Limits, State, DisplayName);
+        ResourceId, ConnectorType, AllowedOperations, Limits, State, DisplayName,
+        ExecutingCredentialId, ViewerContextPolicy);
 }
 
 /// <summary>Bounded non-secret resource metadata as the tenant catalog sees it.</summary>
@@ -67,7 +70,9 @@ public sealed record GatewayPublishedResource(
     GatewayOperationClass AllowedOperations,
     GatewayResourceLimits Limits,
     GatewayResourceState State,
-    string? DisplayName);
+    string? DisplayName,
+    string? ExecutingCredentialId = null,
+    ViewerContextPolicy? ViewerContextPolicy = null);
 
 /// <summary>Thrown when a registry operation is refused. Never contains a target or credential.</summary>
 public sealed class GatewayResourceException(string message) : Exception(message);
@@ -249,6 +254,22 @@ public sealed class GatewayResourceRegistry
         {
             throw new GatewayResourceException(
                 "Gateway resource limits must all be positive; an absent bound would mean unbounded.");
+        }
+        if (resource.ViewerContextPolicy is not null)
+        {
+            if (string.IsNullOrWhiteSpace(resource.ExecutingCredentialId))
+                throw new GatewayResourceException(
+                    "A viewer-context resource requires an opaque executing credential ID.");
+            if (!string.Equals(resource.ConnectorType, "POSTGRES", StringComparison.OrdinalIgnoreCase))
+                throw new GatewayResourceException(
+                    "Verified viewer context is currently supported only for POSTGRES resources.");
+            if (resource.ExecutingCredentialId.Length > 128
+                || resource.ExecutingCredentialId.Any(character =>
+                    !(char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' or ':')))
+                throw new GatewayResourceException(
+                    "The executing credential ID may contain only letters, digits, period, underscore, hyphen, and colon.");
+            try { resource.ViewerContextPolicy.Validate(); }
+            catch (GatewayProtocolException ex) { throw new GatewayResourceException(ex.Message); }
         }
     }
 }
