@@ -1,0 +1,17 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='ProfitBridge-title ProfitBridge-desc' font-family='sans-serif'>
+<title id='ProfitBridge-title'>Profit Bridge</title>
+<desc id='ProfitBridge-desc'>Profit Bridge: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Profit Bridge</text>
+<rect x='79.5' y='133.75' width='91' height='156.25' fill='#2980b9' data-row-index='0'><title>Opening: 50</title></rect>
+<text x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Opening</text>
+<line x1='190' y1='133.75' x2='209.5' y2='133.75' stroke='#9ca3af' stroke-dasharray='3 2'/>
+<rect x='209.5' y='40' width='91' height='93.75' fill='#27ae60' data-row-index='1'><title>Revenue: 30</title></rect>
+<text x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Revenue</text>
+<line x1='320' y1='40' x2='339.5' y2='40' stroke='#9ca3af' stroke-dasharray='3 2'/>
+<rect x='339.5' y='40' width='91' height='62.5' fill='#e74c3c' data-row-index='2'><title>Costs: -20</title></rect>
+<text x='385' y='306' text-anchor='middle' font-size='9' fill='#666'>Costs</text>
+<line x1='450' y1='102.5' x2='469.5' y2='102.5' stroke='#9ca3af' stroke-dasharray='3 2'/>
+<rect x='469.5' y='102.5' width='91' height='187.5' fill='#2980b9' data-row-index='3'><title>Closing: 60</title></rect>
+<text x='515' y='306' text-anchor='middle' font-size='9' fill='#666'>Closing</text>
+</svg>

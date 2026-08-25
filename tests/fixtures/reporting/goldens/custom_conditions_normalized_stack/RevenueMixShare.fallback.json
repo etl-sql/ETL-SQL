@@ -1,0 +1,70 @@
+{
+  "kind": "rankedTable",
+  "heading": "Normalized revenue mix dimmed on the projected period",
+  "items": [
+    {
+      "label": "Q1",
+      "value": "40",
+      "order": 0,
+      "detail": "conditional Opacity: 1",
+      "group": "Enterprise"
+    },
+    {
+      "label": "Q2",
+      "value": "55",
+      "order": 1,
+      "detail": "conditional Opacity: 1",
+      "group": "Enterprise"
+    },
+    {
+      "label": "Q3",
+      "value": "30",
+      "order": 2,
+      "detail": "conditional Opacity: 0.5",
+      "group": "Enterprise"
+    },
+    {
+      "label": "Q1",
+      "value": "35",
+      "order": 100000,
+      "detail": "conditional Opacity: 1",
+      "group": "Enterprise"
+    },
+    {
+      "label": "Q2",
+      "value": "30",
+      "order": 100001,
+      "detail": "conditional Opacity: 1",
+      "group": "Enterprise"
+    },
+    {
+      "label": "Q3",
+      "value": "30",
+      "order": 100002,
+      "detail": "conditional Opacity: 0.5",
+      "group": "Enterprise"
+    },
+    {
+      "label": "Q1",
+      "value": "25",
+      "order": 200000,
+      "detail": "conditional Opacity: 1",
+      "group": "Enterprise"
+    },
+    {
+      "label": "Q2",
+      "value": "15",
+      "order": 200001,
+      "detail": "conditional Opacity: 1",
+      "group": "Enterprise"
+    },
+    {
+      "label": "Q3",
+      "value": "40",
+      "order": 200002,
+      "detail": "conditional Opacity: 0.5",
+      "group": "Enterprise"
+    }
+  ],
+  "summary": "Normalized revenue mix dimmed on the projected period: 3 rows, 3 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

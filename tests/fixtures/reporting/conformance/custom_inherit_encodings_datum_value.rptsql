@@ -1,0 +1,45 @@
+SELECT 'Alpha' AS Segment, 120 AS Revenue, 'North' AS Territory INTO #inherit_source
+UNION ALL SELECT 'Beta', 180, 'North'
+UNION ALL SELECT 'Gamma', 95, 'South';
+
+CREATE VISUAL InheritedEncodings AS CUSTOM (
+  TITLE = 'Chart-scope encodings inherited by one layer and isolated in another',
+  SOURCE = #inherit_source,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      segments = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+      amounts = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0, MAX = 200)
+    ),
+    ENCODINGS (
+      X = Segment (TYPE = NOMINAL, SCALE = segments),
+      Y = Revenue (TYPE = QUANTITATIVE, SCALE = amounts)
+    ),
+    LAYERS (
+      inherited_bars = RECT (
+        Z_INDEX = 0,
+        ENCODINGS (
+          X = Segment (TYPE = NOMINAL, SCALE = segments),
+          Y = Revenue (TYPE = QUANTITATIVE, SCALE = amounts)
+        )
+      ),
+      target_rule = RULE (
+        Z_INDEX = 1,
+        ENCODINGS (
+          Y = DATUM(150) (TYPE = QUANTITATIVE, SCALE = amounts),
+          COLOR = VALUE('#b91c1c') (TYPE = NOMINAL)
+        )
+      ),
+      isolated_points = POINT (
+        Z_INDEX = 2,
+        INHERIT_ENCODINGS = OFF,
+        ENCODINGS (
+          X = Territory (TYPE = NOMINAL),
+          Y = Revenue (TYPE = QUANTITATIVE, SCALE = amounts)
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = InheritedEncodings));

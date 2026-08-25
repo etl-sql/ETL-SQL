@@ -1,0 +1,614 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "StationLoad",
+  "title": "Sequential quantitative colour with a per-category target tick",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "stations",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Assembly"
+        },
+        {
+          "kind": "text",
+          "text": "Paint"
+        },
+        {
+          "kind": "text",
+          "text": "Trim"
+        },
+        {
+          "kind": "text",
+          "text": "Final QA"
+        }
+      ],
+      "categories": [
+        "Assembly",
+        "Paint",
+        "Trim",
+        "Final QA"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Assembly"
+          },
+          "label": "Assembly"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Paint"
+          },
+          "label": "Paint"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Trim"
+          },
+          "label": "Trim"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Final QA"
+          },
+          "label": "Final QA"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "amounts",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25
+          },
+          "label": "25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75
+          },
+          "label": "75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "intensity",
+      "channel": "color",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25
+          },
+          "label": "25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75
+          },
+          "label": "75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        }
+      ],
+      "includesZero": false,
+      "colorRange": {
+        "kind": "gradient",
+        "low": "#e0f2fe",
+        "high": "#0c4a6e",
+        "nullColor": "#9ca3af",
+        "ticks": [
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            "label": "0"
+          },
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 25
+            },
+            "label": "25"
+          },
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 50
+            },
+            "label": "50"
+          },
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 75
+            },
+            "label": "75"
+          },
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 100
+            },
+            "label": "100"
+          }
+        ],
+        "accessibleDescription": "Color ranges from 0 (#e0f2fe) to 100 (#0c4a6e)."
+      }
+    }
+  ],
+  "series": [
+    {
+      "key": "Amount",
+      "label": "Amount",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Amount",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Amount",
+      "label": "Amount",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "load_bars",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Amount",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Assembly"
+              },
+              "displayValue": "Assembly"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 62
+              },
+              "displayValue": "62"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "decimal",
+                "decimal": 18
+              },
+              "displayValue": "18"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Assembly, Y: 62, Color: 18",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Paint"
+              },
+              "displayValue": "Paint"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 81
+              },
+              "displayValue": "81"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "decimal",
+                "decimal": 64
+              },
+              "displayValue": "64"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Paint, Y: 81, Color: 64",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Trim"
+              },
+              "displayValue": "Trim"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 74
+              },
+              "displayValue": "74"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "decimal",
+                "decimal": 45
+              },
+              "displayValue": "45"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Trim, Y: 74, Color: 45",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Final QA"
+              },
+              "displayValue": "Final QA"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 55
+              },
+              "displayValue": "55"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "decimal",
+                "decimal": 92
+              },
+              "displayValue": "92"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Final QA, Y: 55, Color: 92",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "target",
+      "mark": "tick",
+      "zIndex": 1,
+      "seriesKey": "Amount",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Assembly"
+              },
+              "displayValue": "Assembly"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 70
+              },
+              "displayValue": "70"
+            },
+            {
+              "channel": "tooltip",
+              "value": {
+                "kind": "text",
+                "text": "Target"
+              },
+              "displayValue": "Target"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Assembly, Y: 70, Tooltip: Target",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Paint"
+              },
+              "displayValue": "Paint"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 70
+              },
+              "displayValue": "70"
+            },
+            {
+              "channel": "tooltip",
+              "value": {
+                "kind": "text",
+                "text": "Target"
+              },
+              "displayValue": "Target"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Paint, Y: 70, Tooltip: Target",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Trim"
+              },
+              "displayValue": "Trim"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 70
+              },
+              "displayValue": "70"
+            },
+            {
+              "channel": "tooltip",
+              "value": {
+                "kind": "text",
+                "text": "Target"
+              },
+              "displayValue": "Target"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Trim, Y: 70, Tooltip: Target",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Final QA"
+              },
+              "displayValue": "Final QA"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 70
+              },
+              "displayValue": "70"
+            },
+            {
+              "channel": "tooltip",
+              "value": {
+                "kind": "text",
+                "text": "Target"
+              },
+              "displayValue": "Target"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Final QA, Y: 70, Tooltip: Target",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.9,
+      "tickThickness": 0.25,
+      "tickOrientation": "horizontal"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Sequential quantitative colour with a per-category target tick: 4 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows. Color ranges from 0 (#e0f2fe) to 100 (#0c4a6e).",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Sequential quantitative colour with a per-category target tick",
+    "items": [
+      {
+        "label": "Assembly",
+        "value": "62",
+        "order": 0,
+        "group": "Amount"
+      },
+      {
+        "label": "Paint",
+        "value": "81",
+        "order": 1,
+        "group": "Amount"
+      },
+      {
+        "label": "Trim",
+        "value": "74",
+        "order": 2,
+        "group": "Amount"
+      },
+      {
+        "label": "Final QA",
+        "value": "55",
+        "order": 3,
+        "group": "Amount"
+      },
+      {
+        "label": "Assembly",
+        "value": "70",
+        "order": 100000,
+        "group": "Amount"
+      },
+      {
+        "label": "Paint",
+        "value": "70",
+        "order": 100001,
+        "group": "Amount"
+      },
+      {
+        "label": "Trim",
+        "value": "70",
+        "order": 100002,
+        "group": "Amount"
+      },
+      {
+        "label": "Final QA",
+        "value": "70",
+        "order": 100003,
+        "group": "Amount"
+      }
+    ],
+    "summary": "Sequential quantitative colour with a per-category target tick: 8 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Sequential quantitative colour with a per-category target tick"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Station",
+    "valueKey": "Amount"
+  }
+}

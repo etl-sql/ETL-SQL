@@ -1,8 +1,10 @@
 # Sankey & Alluvial Flow Diagrams
 
-**Pattern**: Multi-stage flow and transition analysis representing weighted flows between discrete stages (e.g. Traffic Source → Landing Page → Signup → Paid Customer). Demonstrates both native `SANKEY` flow constructs and Grammar of Graphics ribbon composition techniques.
+**Pattern**: Multi-stage flow and transition analysis representing weighted flows between discrete stages (e.g. Traffic Source → Landing Page → Signup → Paid Customer). Built from coordinated named visuals — a `SANKEY` flow diagram alongside supporting visuals over the same staged `#temp` tables.
 
 **Demonstrates**: `SANKEY`, `MAPPINGS (FROM, TO, VALUE)`, `OPTIONS (NODE_WIDTH, NODE_PADDING)`, and multi-stage pipeline flow modeling.
+
+> Every visual here is a named visual. Ribbon geometry is not composed in the `CHART` grammar — `SANKEY` owns its own layout — so the recipe stages each flow stage into a `#temp` table and lets the named visuals read from it.
 
 ```sql
 SET REPORT TITLE = 'User Acquisition & Conversion Alluvial Flow';

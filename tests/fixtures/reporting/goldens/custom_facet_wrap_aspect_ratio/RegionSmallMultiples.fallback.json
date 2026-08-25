@@ -1,0 +1,43 @@
+{
+  "kind": "rankedTable",
+  "heading": "Wrapped small multiples at a fixed aspect ratio",
+  "items": [
+    {
+      "label": "10",
+      "value": "22",
+      "order": 0,
+      "group": "Vertical"
+    },
+    {
+      "label": "14",
+      "value": "30",
+      "order": 1,
+      "group": "Vertical"
+    },
+    {
+      "label": "11",
+      "value": "18",
+      "order": 2,
+      "group": "Vertical"
+    },
+    {
+      "label": "16",
+      "value": "26",
+      "order": 3,
+      "group": "Vertical"
+    },
+    {
+      "label": "12",
+      "value": "24",
+      "order": 4,
+      "group": "Vertical"
+    },
+    {
+      "label": "18",
+      "value": "33",
+      "order": 5,
+      "group": "Vertical"
+    }
+  ],
+  "summary": "Wrapped small multiples at a fixed aspect ratio: 6 rows, 1 ordered layers, 1 series, 4 facet panels, 0 gaps, 0 skipped rows."
+}

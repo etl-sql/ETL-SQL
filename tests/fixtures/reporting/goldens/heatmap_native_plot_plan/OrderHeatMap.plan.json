@@ -1,0 +1,386 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "OrderHeatMap",
+  "title": "Orders by Period",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "AM"
+        },
+        {
+          "kind": "text",
+          "text": "PM"
+        }
+      ],
+      "categories": [
+        "AM",
+        "PM"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "AM"
+          },
+          "label": "AM"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "PM"
+          },
+          "label": "PM"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Mon"
+        },
+        {
+          "kind": "text",
+          "text": "Tue"
+        }
+      ],
+      "categories": [
+        "Mon",
+        "Tue"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Mon"
+          },
+          "label": "Mon"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Tue"
+          },
+          "label": "Tue"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "size",
+      "channel": "size",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 42
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 10.5
+          },
+          "label": "10.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 21
+          },
+          "label": "21"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 31.5
+          },
+          "label": "31.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 42
+          },
+          "label": "42"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "DayName",
+      "label": "DayName",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "DayName",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "DayName",
+      "label": "DayName",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "DayName",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "AM"
+              },
+              "displayValue": "AM"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "text",
+                "text": "Mon"
+              },
+              "displayValue": "Mon"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 12
+              },
+              "displayValue": "12"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: AM, Y: Mon, Size: 12",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "PM"
+              },
+              "displayValue": "PM"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "text",
+                "text": "Mon"
+              },
+              "displayValue": "Mon"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 30
+              },
+              "displayValue": "30"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: PM, Y: Mon, Size: 30",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "AM"
+              },
+              "displayValue": "AM"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "text",
+                "text": "Tue"
+              },
+              "displayValue": "Tue"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 18
+              },
+              "displayValue": "18"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: AM, Y: Tue, Size: 18",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "PM"
+              },
+              "displayValue": "PM"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "text",
+                "text": "Tue"
+              },
+              "displayValue": "Tue"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 42
+              },
+              "displayValue": "42"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: PM, Y: Tue, Size: 42",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "layout",
+          "value": "heatmap"
+        },
+        {
+          "name": "preserveRows",
+          "value": "true"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Orders by Period: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Orders by Period",
+    "items": [
+      {
+        "label": "AM",
+        "value": "Mon",
+        "order": 0,
+        "group": "DayName"
+      },
+      {
+        "label": "PM",
+        "value": "Mon",
+        "order": 1,
+        "group": "DayName"
+      },
+      {
+        "label": "AM",
+        "value": "Tue",
+        "order": 2,
+        "group": "DayName"
+      },
+      {
+        "label": "PM",
+        "value": "Tue",
+        "order": 3,
+        "group": "DayName"
+      }
+    ],
+    "summary": "Orders by Period: 4 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "mapping:value",
+      "value": "Orders"
+    },
+    {
+      "name": "mapping:x",
+      "value": "PeriodName"
+    },
+    {
+      "name": "mapping:y",
+      "value": "DayName"
+    },
+    {
+      "name": "SHOW_VALUES",
+      "value": "True"
+    },
+    {
+      "name": "TITLE",
+      "value": "Orders by Period"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "PeriodName",
+    "valueKey": "DayName"
+  }
+}

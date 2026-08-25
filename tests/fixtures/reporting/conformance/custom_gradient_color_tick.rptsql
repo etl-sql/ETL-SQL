@@ -1,0 +1,45 @@
+SELECT 'Assembly' AS Station, 62 AS Amount, 70 AS Target, 18 AS Intensity INTO #station_load
+UNION ALL SELECT 'Paint', 81, 70, 64
+UNION ALL SELECT 'Trim', 74, 70, 45
+UNION ALL SELECT 'Final QA', 55, 70, 92;
+
+CREATE VISUAL StationLoad AS CUSTOM (
+  TITLE = 'Sequential quantitative colour with a per-category target tick',
+  SOURCE = #station_load,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      stations = BAND (CHANNEL = X, INCLUDE_ZERO = OFF, ORDER = SOURCE),
+      amounts = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, MIN = 0, MAX = 100),
+      intensity = LINEAR (
+        CHANNEL = COLOR,
+        MIN = 0,
+        MAX = 100,
+        RANGE = GRADIENT(LOW = '#e0f2fe', HIGH = '#0c4a6e')
+      )
+    ),
+    LAYERS (
+      load_bars = RECT (
+        Z_INDEX = 0,
+        ENCODINGS (
+          X = Station (TYPE = NOMINAL, SCALE = stations),
+          Y = Amount (TYPE = QUANTITATIVE, SCALE = amounts),
+          COLOR = Intensity (TYPE = QUANTITATIVE, SCALE = intensity)
+        )
+      ),
+      target = TICK (
+        Z_INDEX = 1,
+        BAND_SIZE = 0.9,
+        THICKNESS = 0.25,
+        ORIENTATION = HORIZONTAL,
+        ENCODINGS (
+          X = Station (TYPE = NOMINAL, SCALE = stations),
+          Y = Target (TYPE = QUANTITATIVE, SCALE = amounts),
+          TOOLTIP = VALUE('Target') (TYPE = NOMINAL)
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = StationLoad));

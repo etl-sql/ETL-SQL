@@ -1,0 +1,35 @@
+{
+  "kind": "proportionalBreakdown",
+  "heading": "Lead Source Breakdown (Donut)",
+  "items": [
+    {
+      "label": "Search",
+      "value": "4500",
+      "order": 0,
+      "detail": "43.3% of total",
+      "group": "Search"
+    },
+    {
+      "label": "Direct",
+      "value": "2800",
+      "order": 1,
+      "detail": "26.9% of total",
+      "group": "Search"
+    },
+    {
+      "label": "Referral",
+      "value": "1900",
+      "order": 2,
+      "detail": "18.3% of total",
+      "group": "Search"
+    },
+    {
+      "label": "Organic Social",
+      "value": "1200",
+      "order": 3,
+      "detail": "11.5% of total",
+      "group": "Search"
+    }
+  ],
+  "summary": "Lead Source Breakdown (Donut): 4 rows, 1 ordered layers, 4 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

@@ -1,0 +1,542 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "InheritedEncodings",
+  "title": "Chart-scope encodings inherited by one layer and isolated in another",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "segments",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Alpha"
+        },
+        {
+          "kind": "text",
+          "text": "Beta"
+        },
+        {
+          "kind": "text",
+          "text": "Gamma"
+        }
+      ],
+      "categories": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Alpha"
+          },
+          "label": "Alpha"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Beta"
+          },
+          "label": "Beta"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Gamma"
+          },
+          "label": "Gamma"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "amounts",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 200
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 150
+          },
+          "label": "150"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 200
+          },
+          "label": "200"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "inferred-cartesian-primary-x",
+      "channel": "x",
+      "kind": "point",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Alpha"
+        },
+        {
+          "kind": "text",
+          "text": "Beta"
+        },
+        {
+          "kind": "text",
+          "text": "Gamma"
+        }
+      ],
+      "categories": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Alpha"
+          },
+          "label": "Alpha"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Beta"
+          },
+          "label": "Beta"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Gamma"
+          },
+          "label": "Gamma"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Revenue",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "inherited_bars",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 120
+              },
+              "displayValue": "120"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Alpha, Y: 120",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 180
+              },
+              "displayValue": "180"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Beta, Y: 180",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 95
+              },
+              "displayValue": "95"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Gamma, Y: 95",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "target_rule",
+      "mark": "rule",
+      "zIndex": 1,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 150
+              },
+              "displayValue": "150"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#b91c1c"
+              },
+              "displayValue": "#b91c1c"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Alpha, Y: 150, Color: #b91c1c",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 150
+              },
+              "displayValue": "150"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#b91c1c"
+              },
+              "displayValue": "#b91c1c"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Beta, Y: 150, Color: #b91c1c",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 150
+              },
+              "displayValue": "150"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#b91c1c"
+              },
+              "displayValue": "#b91c1c"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Gamma, Y: 150, Color: #b91c1c",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "isolated_points",
+      "mark": "point",
+      "zIndex": 2,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [
+      0,
+      1,
+      2
+    ],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Chart-scope encodings inherited by one layer and isolated in another: 3 rows, 3 ordered layers, 1 series, 1 facet panels, 3 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Chart-scope encodings inherited by one layer and isolated in another",
+    "items": [
+      {
+        "label": "Alpha",
+        "value": "120",
+        "order": 0,
+        "group": "Revenue"
+      },
+      {
+        "label": "Beta",
+        "value": "180",
+        "order": 1,
+        "group": "Revenue"
+      },
+      {
+        "label": "Gamma",
+        "value": "95",
+        "order": 2,
+        "group": "Revenue"
+      },
+      {
+        "label": "Alpha",
+        "value": "gap",
+        "order": 100000,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Beta",
+        "value": "gap",
+        "order": 100001,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Gamma",
+        "value": "gap",
+        "order": 100002,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "target_rule",
+        "value": "Alpha",
+        "order": 300000,
+        "detail": "labeled reference rule",
+        "group": "Reference"
+      }
+    ],
+    "summary": "Chart-scope encodings inherited by one layer and isolated in another: 7 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Chart-scope encodings inherited by one layer and isolated in another"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Segment",
+    "valueKey": "Revenue"
+  }
+}

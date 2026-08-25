@@ -1,0 +1,426 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "GappedLineVisual",
+  "title": "Discontinuous Telemetry with Missing Values",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Day 1"
+        },
+        {
+          "kind": "text",
+          "text": "Day 2"
+        },
+        {
+          "kind": "text",
+          "text": "Day 3"
+        },
+        {
+          "kind": "text",
+          "text": "Day 4"
+        },
+        {
+          "kind": "text",
+          "text": "Day 5"
+        },
+        {
+          "kind": "text",
+          "text": "Day 6"
+        }
+      ],
+      "categories": [
+        "Day 1",
+        "Day 2",
+        "Day 3",
+        "Day 4",
+        "Day 5",
+        "Day 6"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Day 1"
+          },
+          "label": "Day 1"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Day 2"
+          },
+          "label": "Day 2"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Day 3"
+          },
+          "label": "Day 3"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Day 4"
+          },
+          "label": "Day 4"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Day 5"
+          },
+          "label": "Day 5"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Day 6"
+          },
+          "label": "Day 6"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 23.205
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.000
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 5.80125
+          },
+          "label": "5.8"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 11.6025
+          },
+          "label": "11.6"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 17.40375
+          },
+          "label": "17.4"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 23.205
+          },
+          "label": "23.21"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Measurement",
+      "label": "Measurement",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Measurement",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Measurement",
+      "label": "Measurement",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "line",
+      "zIndex": 0,
+      "seriesKey": "Measurement",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Day 1"
+              },
+              "displayValue": "Day 1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10.5
+              },
+              "displayValue": "10.5"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Day 1, Y: 10.5",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Day 2"
+              },
+              "displayValue": "Day 2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 14.2
+              },
+              "displayValue": "14.2"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Day 2, Y: 14.2",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Day 3"
+              },
+              "displayValue": "Day 3"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "tooltip": "X: Day 3, Y: -",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Day 4"
+              },
+              "displayValue": "Day 4"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 18.9
+              },
+              "displayValue": "18.9"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Day 4, Y: 18.9",
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Day 5"
+              },
+              "displayValue": "Day 5"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "tooltip": "X: Day 5, Y: -",
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Day 6"
+              },
+              "displayValue": "Day 6"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 22.1
+              },
+              "displayValue": "22.1"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Day 6, Y: 22.1",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [
+      2,
+      4
+    ],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Discontinuous Telemetry with Missing Values: 6 rows, 1 ordered layers, 1 series, 1 facet panels, 2 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Discontinuous Telemetry with Missing Values",
+    "items": [
+      {
+        "label": "Day 1",
+        "value": "10.5",
+        "order": 0,
+        "group": "Measurement"
+      },
+      {
+        "label": "Day 2",
+        "value": "14.2",
+        "order": 1,
+        "group": "Measurement"
+      },
+      {
+        "label": "Day 3",
+        "value": "gap",
+        "order": 2,
+        "detail": "null gap",
+        "group": "Measurement"
+      },
+      {
+        "label": "Day 4",
+        "value": "18.9",
+        "order": 3,
+        "group": "Measurement"
+      },
+      {
+        "label": "Day 5",
+        "value": "gap",
+        "order": 4,
+        "detail": "null gap",
+        "group": "Measurement"
+      },
+      {
+        "label": "Day 6",
+        "value": "22.1",
+        "order": 5,
+        "group": "Measurement"
+      }
+    ],
+    "summary": "Discontinuous Telemetry with Missing Values: 6 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "CONNECT_NULLS",
+      "value": "False"
+    },
+    {
+      "name": "HEIGHT",
+      "value": "400px"
+    },
+    {
+      "name": "LEGEND",
+      "value": "OFF"
+    },
+    {
+      "name": "mapping:x",
+      "value": "DayLabel"
+    },
+    {
+      "name": "mapping:y",
+      "value": "Measurement"
+    },
+    {
+      "name": "title",
+      "value": "Discontinuous Telemetry with Missing Values"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "DayLabel",
+    "valueKey": "Measurement"
+  }
+}

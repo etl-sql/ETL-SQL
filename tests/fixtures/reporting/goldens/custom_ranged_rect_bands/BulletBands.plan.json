@@ -1,0 +1,794 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "BulletBands",
+  "title": "Ranged qualitative bands with an actual bar and a target rule",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "metric_scale",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Revenue"
+        },
+        {
+          "kind": "text",
+          "text": "Margin"
+        },
+        {
+          "kind": "text",
+          "text": "NPS"
+        }
+      ],
+      "categories": [
+        "Revenue",
+        "Margin",
+        "NPS"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Revenue"
+          },
+          "label": "Revenue"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Margin"
+          },
+          "label": "Margin"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "NPS"
+          },
+          "label": "NPS"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "val_scale",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25
+          },
+          "label": "25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75
+          },
+          "label": "75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Actual",
+      "label": "Actual",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Actual",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Actual",
+      "label": "Actual",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "band_poor",
+      "mark": "rect",
+      "zIndex": 1,
+      "seriesKey": "Actual",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Revenue"
+              },
+              "displayValue": "Revenue"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Revenue, YStart: 0, YEnd: 50",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Margin"
+              },
+              "displayValue": "Margin"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Margin, YStart: 0, YEnd: 50",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "NPS"
+              },
+              "displayValue": "NPS"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: NPS, YStart: 0, YEnd: 50",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "FILL",
+          "value": "#9e9e9e"
+        },
+        {
+          "name": "OPACITY",
+          "value": "0.9"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "band_fair",
+      "mark": "rect",
+      "zIndex": 2,
+      "seriesKey": "Actual",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Revenue"
+              },
+              "displayValue": "Revenue"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 75
+              },
+              "displayValue": "75"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Revenue, YStart: 50, YEnd: 75",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Margin"
+              },
+              "displayValue": "Margin"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 75
+              },
+              "displayValue": "75"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Margin, YStart: 50, YEnd: 75",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "NPS"
+              },
+              "displayValue": "NPS"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 70
+              },
+              "displayValue": "70"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: NPS, YStart: 50, YEnd: 70",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "FILL",
+          "value": "#bdbdbd"
+        },
+        {
+          "name": "OPACITY",
+          "value": "0.8"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "band_good",
+      "mark": "rect",
+      "zIndex": 3,
+      "seriesKey": "Actual",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Revenue"
+              },
+              "displayValue": "Revenue"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 75
+              },
+              "displayValue": "75"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 100
+              },
+              "displayValue": "100"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Revenue, YStart: 75, YEnd: 100",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Margin"
+              },
+              "displayValue": "Margin"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 75
+              },
+              "displayValue": "75"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 100
+              },
+              "displayValue": "100"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Margin, YStart: 75, YEnd: 100",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "NPS"
+              },
+              "displayValue": "NPS"
+            },
+            {
+              "channel": "yStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 70
+              },
+              "displayValue": "70"
+            },
+            {
+              "channel": "yEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 100
+              },
+              "displayValue": "100"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: NPS, YStart: 70, YEnd: 100",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "FILL",
+          "value": "#e0e0e0"
+        },
+        {
+          "name": "OPACITY",
+          "value": "0.6"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "actual_bar",
+      "mark": "rect",
+      "zIndex": 4,
+      "seriesKey": "Actual",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Revenue"
+              },
+              "displayValue": "Revenue"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 92
+              },
+              "displayValue": "92"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Revenue, Y: 92",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Margin"
+              },
+              "displayValue": "Margin"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80
+              },
+              "displayValue": "80"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Margin, Y: 80",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "NPS"
+              },
+              "displayValue": "NPS"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 78
+              },
+              "displayValue": "78"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: NPS, Y: 78",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "x",
+      "stack": "none",
+      "bandSize": 0.4,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "target_rule",
+      "mark": "rule",
+      "zIndex": 5,
+      "seriesKey": "Actual",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Revenue"
+              },
+              "displayValue": "Revenue"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 83
+              },
+              "displayValue": "83"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Revenue, Y: 83",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Margin"
+              },
+              "displayValue": "Margin"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 92
+              },
+              "displayValue": "92"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Margin, Y: 92",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "NPS"
+              },
+              "displayValue": "NPS"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80
+              },
+              "displayValue": "80"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: NPS, Y: 80",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "COLOR",
+          "value": "#000000"
+        },
+        {
+          "name": "STROKE_WIDTH",
+          "value": "3"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Ranged qualitative bands with an actual bar and a target rule: 3 rows, 5 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Ranged qualitative bands with an actual bar and a target rule",
+    "items": [
+      {
+        "label": "Revenue",
+        "value": "50",
+        "order": 0,
+        "detail": "range 0 to 50",
+        "group": "Actual"
+      },
+      {
+        "label": "Margin",
+        "value": "50",
+        "order": 1,
+        "detail": "range 0 to 50",
+        "group": "Actual"
+      },
+      {
+        "label": "NPS",
+        "value": "50",
+        "order": 2,
+        "detail": "range 0 to 50",
+        "group": "Actual"
+      },
+      {
+        "label": "Revenue",
+        "value": "75",
+        "order": 100000,
+        "detail": "range 50 to 75",
+        "group": "Actual"
+      },
+      {
+        "label": "Margin",
+        "value": "75",
+        "order": 100001,
+        "detail": "range 50 to 75",
+        "group": "Actual"
+      },
+      {
+        "label": "NPS",
+        "value": "70",
+        "order": 100002,
+        "detail": "range 50 to 70",
+        "group": "Actual"
+      },
+      {
+        "label": "Revenue",
+        "value": "100",
+        "order": 200000,
+        "detail": "range 75 to 100",
+        "group": "Actual"
+      },
+      {
+        "label": "Margin",
+        "value": "100",
+        "order": 200001,
+        "detail": "range 75 to 100",
+        "group": "Actual"
+      },
+      {
+        "label": "NPS",
+        "value": "100",
+        "order": 200002,
+        "detail": "range 70 to 100",
+        "group": "Actual"
+      },
+      {
+        "label": "Revenue",
+        "value": "92",
+        "order": 300000,
+        "group": "Actual"
+      },
+      {
+        "label": "Margin",
+        "value": "80",
+        "order": 300001,
+        "group": "Actual"
+      },
+      {
+        "label": "NPS",
+        "value": "78",
+        "order": 300002,
+        "group": "Actual"
+      },
+      {
+        "label": "target_rule",
+        "value": "Revenue",
+        "order": 500000,
+        "detail": "labeled reference rule",
+        "group": "Reference"
+      }
+    ],
+    "summary": "Ranged qualitative bands with an actual bar and a target rule: 13 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "transposedCartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Ranged qualitative bands with an actual bar and a target rule"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Metric",
+    "valueKey": "Actual"
+  }
+}

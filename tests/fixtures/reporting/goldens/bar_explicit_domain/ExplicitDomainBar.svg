@@ -1,0 +1,36 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='ExplicitDomainBar-title ExplicitDomainBar-desc' font-family='sans-serif'>
+<title id='ExplicitDomainBar-title'>Headcount by Department with Explicit Domain</title>
+<desc id='ExplicitDomainBar-desc'>Headcount by Department with Explicit Domain: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Headcount by Department with Explicit Domain</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='ExplicitDomainBar-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#ExplicitDomainBar-plot-clip)'>
+<rect x='76.25' y='215' width='96.5' height='75' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>150</title></rect>
+<rect x='206.25' y='130' width='96.5' height='160' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>320</title></rect>
+<rect x='336.25' y='150' width='96.5' height='140' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>280</title></rect>
+<rect x='466.25' y='85' width='96.5' height='205' fill='#5470c6' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>410</title></rect>
+</g>
+<text x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Dept A</text>
+<text x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Dept B</text>
+<text x='385' y='306' text-anchor='middle' font-size='9' fill='#666'>Dept C</text>
+<text x='515' y='306' text-anchor='middle' font-size='9' fill='#666'>Dept D</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>125</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>250</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>375</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>500</text>
+<text x='320' y='342' text-anchor='middle' font-size='10' fill='#444'>Department Unit</text>
+<text x='12' y='165' text-anchor='middle' font-size='10' fill='#444' transform='rotate(-90 12 165)'>Total Headcount</text>
+</svg>

@@ -1,0 +1,34 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='PlacementStrip-title PlacementStrip-desc' font-family='sans-serif'>
+<title id='PlacementStrip-title'>Deterministic jitter on observations with nudged labels</title>
+<desc id='PlacementStrip-desc'>Deterministic jitter on observations with nudged labels: 4 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Deterministic jitter on observations with nudged labels</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='PlacementStrip-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#PlacementStrip-plot-clip)'>
+<text x='60' y='96.818' text-anchor='middle' font-size='10' fill='#5470c6'>r1</text>
+<text x='580' y='-54.697' text-anchor='middle' font-size='10' fill='#5470c6'>r2</text>
+<text x='1100' y='172.576' text-anchor='middle' font-size='10' fill='#5470c6'>r3</text>
+<text x='1620' y='21.061' text-anchor='middle' font-size='10' fill='#5470c6'>r4</text>
+<circle class='plot-point' cx='-95.348' cy='194.779' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='0'></circle>
+<circle class='plot-point' cx='568.972' cy='39.813' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='1'></circle>
+<circle class='plot-point' cx='101.339' cy='292.155' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='2'></circle>
+<circle class='plot-point' cx='744.223' cy='116.413' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='3'></circle>
+</g>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>1.85</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>2.68</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>3.5</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>4.33</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>5.15</text>
+</svg>

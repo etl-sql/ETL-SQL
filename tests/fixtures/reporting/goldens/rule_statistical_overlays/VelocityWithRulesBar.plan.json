@@ -1,0 +1,980 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "VelocityWithRulesBar",
+  "title": "Engineering Velocity vs Target Benchmarks",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Sprint 1"
+        },
+        {
+          "kind": "text",
+          "text": "Sprint 2"
+        },
+        {
+          "kind": "text",
+          "text": "Sprint 3"
+        },
+        {
+          "kind": "text",
+          "text": "Sprint 4"
+        },
+        {
+          "kind": "text",
+          "text": "Sprint 5"
+        },
+        {
+          "kind": "text",
+          "text": "Sprint 6"
+        }
+      ],
+      "categories": [
+        "Sprint 1",
+        "Sprint 2",
+        "Sprint 3",
+        "Sprint 4",
+        "Sprint 5",
+        "Sprint 6"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Sprint 1"
+          },
+          "label": "Sprint 1"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Sprint 2"
+          },
+          "label": "Sprint 2"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Sprint 3"
+          },
+          "label": "Sprint 3"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Sprint 4"
+          },
+          "label": "Sprint 4"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Sprint 5"
+          },
+          "label": "Sprint 5"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Sprint 6"
+          },
+          "label": "Sprint 6"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 62
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 15.5
+          },
+          "label": "15.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 31
+          },
+          "label": "31"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 46.5
+          },
+          "label": "46.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 62
+          },
+          "label": "62"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Velocity",
+      "label": "Velocity",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Velocity",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Velocity",
+      "label": "Velocity",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Velocity",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 1"
+              },
+              "displayValue": "Sprint 1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 42
+              },
+              "displayValue": "42"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Sprint 1, Y: 42",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 2"
+              },
+              "displayValue": "Sprint 2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 48
+              },
+              "displayValue": "48"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Sprint 2, Y: 48",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 3"
+              },
+              "displayValue": "Sprint 3"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 39
+              },
+              "displayValue": "39"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Sprint 3, Y: 39",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 4"
+              },
+              "displayValue": "Sprint 4"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 55
+              },
+              "displayValue": "55"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Sprint 4, Y: 55",
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 5"
+              },
+              "displayValue": "Sprint 5"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 51
+              },
+              "displayValue": "51"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Sprint 5, Y: 51",
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 6"
+              },
+              "displayValue": "Sprint 6"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 62
+              },
+              "displayValue": "62"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Sprint 6, Y: 62",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "rule-00-goal",
+      "mark": "rule",
+      "zIndex": 100,
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 1"
+              },
+              "displayValue": "Sprint 1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 2"
+              },
+              "displayValue": "Sprint 2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 3"
+              },
+              "displayValue": "Sprint 3"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 4"
+              },
+              "displayValue": "Sprint 4"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 5"
+              },
+              "displayValue": "Sprint 5"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 6"
+              },
+              "displayValue": "Sprint 6"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "Goal"
+        },
+        {
+          "name": "parameter",
+          "value": "50"
+        },
+        {
+          "name": "lineStyle",
+          "value": "dashed"
+        },
+        {
+          "name": "color",
+          "value": "#DC2626"
+        },
+        {
+          "name": "label",
+          "value": "Target Velocity (50 pts)"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "rule-01-average",
+      "mark": "rule",
+      "zIndex": 101,
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 1"
+              },
+              "displayValue": "Sprint 1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 49.5
+              },
+              "displayValue": "49.5"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 2"
+              },
+              "displayValue": "Sprint 2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 49.5
+              },
+              "displayValue": "49.5"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 3"
+              },
+              "displayValue": "Sprint 3"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 49.5
+              },
+              "displayValue": "49.5"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 4"
+              },
+              "displayValue": "Sprint 4"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 49.5
+              },
+              "displayValue": "49.5"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 5"
+              },
+              "displayValue": "Sprint 5"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 49.5
+              },
+              "displayValue": "49.5"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 6"
+              },
+              "displayValue": "Sprint 6"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 49.5
+              },
+              "displayValue": "49.5"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "Average"
+        },
+        {
+          "name": "parameter",
+          "value": ""
+        },
+        {
+          "name": "lineStyle",
+          "value": "dotted"
+        },
+        {
+          "name": "color",
+          "value": "#2563EB"
+        },
+        {
+          "name": "label",
+          "value": "Average (Historical)"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "rule-02-movingavg",
+      "mark": "line",
+      "zIndex": 102,
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 1"
+              },
+              "displayValue": "Sprint 1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              },
+              "displayValue": "-"
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 2"
+              },
+              "displayValue": "Sprint 2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 45
+              },
+              "displayValue": "45"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 3"
+              },
+              "displayValue": "Sprint 3"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 43.5
+              },
+              "displayValue": "43.5"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 4"
+              },
+              "displayValue": "Sprint 4"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 47
+              },
+              "displayValue": "47"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 5"
+              },
+              "displayValue": "Sprint 5"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 53
+              },
+              "displayValue": "53"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Sprint 6"
+              },
+              "displayValue": "Sprint 6"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 56.5
+              },
+              "displayValue": "56.5"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "MovingAvg"
+        },
+        {
+          "name": "parameter",
+          "value": "2"
+        },
+        {
+          "name": "lineStyle",
+          "value": "solid"
+        },
+        {
+          "name": "color",
+          "value": "#059669"
+        },
+        {
+          "name": "label",
+          "value": "2-Sprint Moving Avg"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Engineering Velocity vs Target Benchmarks: 6 rows, 4 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Engineering Velocity vs Target Benchmarks",
+    "items": [
+      {
+        "label": "Sprint 1",
+        "value": "42",
+        "order": 0,
+        "group": "Velocity"
+      },
+      {
+        "label": "Sprint 2",
+        "value": "48",
+        "order": 1,
+        "group": "Velocity"
+      },
+      {
+        "label": "Sprint 3",
+        "value": "39",
+        "order": 2,
+        "group": "Velocity"
+      },
+      {
+        "label": "Sprint 4",
+        "value": "55",
+        "order": 3,
+        "group": "Velocity"
+      },
+      {
+        "label": "Sprint 5",
+        "value": "51",
+        "order": 4,
+        "group": "Velocity"
+      },
+      {
+        "label": "Sprint 6",
+        "value": "62",
+        "order": 5,
+        "group": "Velocity"
+      },
+      {
+        "label": "Sprint 1",
+        "value": "gap",
+        "order": 100000,
+        "detail": "null gap"
+      },
+      {
+        "label": "Sprint 2",
+        "value": "45",
+        "order": 100001
+      },
+      {
+        "label": "Sprint 3",
+        "value": "43.5",
+        "order": 100002
+      },
+      {
+        "label": "Sprint 4",
+        "value": "47",
+        "order": 100003
+      },
+      {
+        "label": "Sprint 5",
+        "value": "53",
+        "order": 100004
+      },
+      {
+        "label": "Sprint 6",
+        "value": "56.5",
+        "order": 100005
+      },
+      {
+        "label": "Target Velocity (50 pts)",
+        "value": "Sprint 1",
+        "order": 300000,
+        "detail": "labeled reference rule",
+        "group": "Reference"
+      },
+      {
+        "label": "Average (Historical)",
+        "value": "Sprint 1",
+        "order": 300001,
+        "detail": "labeled reference rule",
+        "group": "Reference"
+      }
+    ],
+    "summary": "Engineering Velocity vs Target Benchmarks: 14 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "HEIGHT",
+      "value": "450px"
+    },
+    {
+      "name": "LEGEND",
+      "value": "TOP"
+    },
+    {
+      "name": "mapping:x",
+      "value": "Sprint"
+    },
+    {
+      "name": "mapping:y",
+      "value": "Velocity"
+    },
+    {
+      "name": "title",
+      "value": "Engineering Velocity vs Target Benchmarks"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Sprint",
+    "valueKey": "Velocity"
+  }
+}

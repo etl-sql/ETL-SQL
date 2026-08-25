@@ -1,0 +1,33 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='InheritedEncodings-title InheritedEncodings-desc' font-family='sans-serif'>
+<title id='InheritedEncodings-title'>Chart-scope encodings inherited by one layer and isolated in another</title>
+<desc id='InheritedEncodings-desc'>Chart-scope encodings inherited by one layer and isolated in another: 3 rows, 3 ordered layers, 1 series, 1 facet panels, 3 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Chart-scope encodings inherited by one layer and isolated in another</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='InheritedEncodings-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#InheritedEncodings-plot-clip)'>
+<rect x='81.667' y='140' width='129' height='150' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
+<rect x='255' y='65' width='129' height='225' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>180</title></rect>
+<rect x='428.333' y='171.25' width='129' height='118.75' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>95</title></rect>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#888888' stroke-width='2'/>
+</g>
+<text x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Alpha</text>
+<text x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>Beta</text>
+<text x='493.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Gamma</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>50</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>100</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>150</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>200</text>
+</svg>

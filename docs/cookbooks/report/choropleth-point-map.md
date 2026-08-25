@@ -1,8 +1,10 @@
 # Choropleth Maps with Point Overlays
 
-**Pattern**: Dual-layer geographic visualization combining regional density shading (choropleth) with discrete site/hub coordinates and bubble markers. Provides both macroscopic regional context and microscopic facility-level operational metrics on a single map surface.
+**Pattern**: Two coordinated named `MAP` visuals over the same staged data — one shading regions by density, one plotting site coordinates as sized bubbles — placed side by side on a page so regional context and facility detail read together.
 
-**Demonstrates**: `MAP`, `CHOROPLETH` regional shading, geo-coordinate point overlays (`LATITUDE`, `LONGITUDE`, `SIZE`, `COLOR`), and custom regional projection options.
+**Demonstrates**: `MAP` with `MAPPINGS (REGION, VALUE)` for choropleth shading, `MAP` with `MAPPINGS (LATITUDE, LONGITUDE, SIZE, COLOR)` for coordinate points, and page layout that reads the two together.
+
+> These are two independent visuals, not one layered surface. Report-SQL has no geographic composition in the `CHART` grammar, so a choropleth and its point overlay cannot share a single projected canvas. Give each visual the same page and the same staged source and the reader gets the pairing.
 
 ```sql
 SET REPORT TITLE = 'US Regional Revenue & Fulfillment Hub Logistics';

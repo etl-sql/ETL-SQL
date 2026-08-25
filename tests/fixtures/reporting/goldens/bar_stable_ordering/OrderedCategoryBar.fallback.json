@@ -1,0 +1,55 @@
+{
+  "kind": "rankedTable",
+  "heading": "Deterministic Category Ordering",
+  "items": [
+    {
+      "label": "Alpha",
+      "value": "120",
+      "order": 0,
+      "group": "Actual"
+    },
+    {
+      "label": "Beta",
+      "value": "180",
+      "order": 1,
+      "group": "Actual"
+    },
+    {
+      "label": "Gamma",
+      "value": "140",
+      "order": 2,
+      "group": "Actual"
+    },
+    {
+      "label": "Delta",
+      "value": "210",
+      "order": 3,
+      "group": "Actual"
+    },
+    {
+      "label": "Alpha",
+      "value": "110",
+      "order": 100000,
+      "group": "Forecast"
+    },
+    {
+      "label": "Beta",
+      "value": "160",
+      "order": 100001,
+      "group": "Forecast"
+    },
+    {
+      "label": "Gamma",
+      "value": "150",
+      "order": 100002,
+      "group": "Forecast"
+    },
+    {
+      "label": "Delta",
+      "value": "200",
+      "order": 100003,
+      "group": "Forecast"
+    }
+  ],
+  "summary": "Deterministic Category Ordering: 8 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

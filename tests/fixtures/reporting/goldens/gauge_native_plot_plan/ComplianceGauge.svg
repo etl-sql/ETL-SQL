@@ -1,0 +1,10 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='ComplianceGauge-title ComplianceGauge-desc' font-family='sans-serif'>
+<title id='ComplianceGauge-title'>SLA Compliance</title>
+<desc id='ComplianceGauge-desc'>SLA Compliance: 1 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>SLA Compliance</text>
+<path d='M 215.854 269.646 A 119 119 0 1 1 384.146 269.646' fill='none' stroke='#e5e7eb' stroke-width='24' stroke-linecap='round'/>
+<path class='plot-gauge-value' data-gauge-style='PROGRESS' d='M 215.854 269.646 A 119 119 0 1 1 406.451 132.31' fill='none' stroke='#5470c6' stroke-width='24' stroke-linecap='round'/>
+<line class='plot-gauge-goal' x1='399.757' y1='169.7' x2='435.313' y2='164.068' stroke='#111827' stroke-width='3'><title>Goal: 80</title></line>
+<text class='plot-gauge-value-label' x='300' y='190.5' text-anchor='middle' font-size='18' font-weight='bold' fill='#333'>73.5</text>
+</svg>

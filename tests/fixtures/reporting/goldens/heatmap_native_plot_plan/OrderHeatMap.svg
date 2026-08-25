@@ -1,0 +1,14 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='OrderHeatMap-title OrderHeatMap-desc' font-family='sans-serif'>
+<title id='OrderHeatMap-title'>Orders by Period</title>
+<desc id='OrderHeatMap-desc'>Orders by Period: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Orders by Period</text>
+<rect class='plot-heat-cell' x='60' y='40' width='259' height='124' fill='#A5BDF3' data-row-index='0'><title>AM / Mon: 12</title></rect>
+<rect class='plot-heat-cell' x='320' y='40' width='259' height='124' fill='#537BE3' data-row-index='1'><title>PM / Mon: 30</title></rect>
+<rect class='plot-heat-cell' x='60' y='165' width='259' height='124' fill='#8AA7EE' data-row-index='2'><title>AM / Tue: 18</title></rect>
+<rect class='plot-heat-cell' x='320' y='165' width='259' height='124' fill='#1D4ED8' data-row-index='3'><title>PM / Tue: 42</title></rect>
+<text x='190' y='306' text-anchor='middle' font-size='9' fill='#666'>AM</text>
+<text x='450' y='306' text-anchor='middle' font-size='9' fill='#666'>PM</text>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>Mon</text>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>Tue</text>
+</svg>

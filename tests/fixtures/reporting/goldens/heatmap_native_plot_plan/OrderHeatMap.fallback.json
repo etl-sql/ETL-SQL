@@ -1,0 +1,31 @@
+{
+  "kind": "rankedTable",
+  "heading": "Orders by Period",
+  "items": [
+    {
+      "label": "AM",
+      "value": "Mon",
+      "order": 0,
+      "group": "DayName"
+    },
+    {
+      "label": "PM",
+      "value": "Mon",
+      "order": 1,
+      "group": "DayName"
+    },
+    {
+      "label": "AM",
+      "value": "Tue",
+      "order": 2,
+      "group": "DayName"
+    },
+    {
+      "label": "PM",
+      "value": "Tue",
+      "order": 3,
+      "group": "DayName"
+    }
+  ],
+  "summary": "Orders by Period: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

@@ -1,0 +1,38 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='InferredScatterVisual-title InferredScatterVisual-desc' font-family='sans-serif'>
+<title id='InferredScatterVisual-title'>Cohort Velocity vs Efficiency Distribution</title>
+<desc id='InferredScatterVisual-desc'>Cohort Velocity vs Efficiency Distribution: 6 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Cohort Velocity vs Efficiency Distribution</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='InferredScatterVisual-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#InferredScatterVisual-plot-clip)'>
+<circle class='plot-point' cx='83.636' cy='100.54' r='11.2' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='0'></circle>
+<circle class='plot-point' cx='242.139' cy='51.364' r='22' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='1'></circle>
+<circle class='plot-point' cx='425.668' cy='146.393' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='2'></circle>
+<circle class='plot-point' cx='153.155' cy='236.77' r='4' fill='#91cc75' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='3'></circle>
+<circle class='plot-point' cx='350.588' cy='193.575' r='14.8' fill='#91cc75' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='4'></circle>
+<circle class='plot-point' cx='556.364' cy='278.636' r='22' fill='#91cc75' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='5'></circle>
+</g>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>56.49</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>65.9</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>75.3</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>84.71</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>94.11</text>
+<text x='320' y='342' text-anchor='middle' font-size='10' fill='#444'>Velocity (m/s)</text>
+<text x='12' y='165' text-anchor='middle' font-size='10' fill='#444' transform='rotate(-90 12 165)'>Efficiency (%)</text>
+<rect x='60' y='21' width='9' height='9' fill='#5470c6'/>
+<text x='73' y='29' font-size='9' fill='#444'>Cohort A</text>
+<rect x='133' y='21' width='9' height='9' fill='#91cc75'/>
+<text x='146' y='29' font-size='9' fill='#444'>Cohort B</text>
+</svg>

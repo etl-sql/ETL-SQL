@@ -1,0 +1,622 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "InferredScatterVisual",
+  "title": "Cohort Velocity vs Efficiency Distribution",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 11.650
+        },
+        {
+          "kind": "decimal",
+          "decimal": 30.350
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 11.650
+          },
+          "label": "11.65"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 16.325
+          },
+          "label": "16.33"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 21.000
+          },
+          "label": "21"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25.675
+          },
+          "label": "25.68"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 30.350
+          },
+          "label": "30.35"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 56.490
+        },
+        {
+          "kind": "decimal",
+          "decimal": 94.110
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 56.490
+          },
+          "label": "56.49"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 65.895
+          },
+          "label": "65.9"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75.300
+          },
+          "label": "75.3"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 84.705
+          },
+          "label": "84.71"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 94.110
+          },
+          "label": "94.11"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "size",
+      "channel": "size",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 20
+        },
+        {
+          "kind": "decimal",
+          "decimal": 60
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 20
+          },
+          "label": "20"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 30
+          },
+          "label": "30"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 40
+          },
+          "label": "40"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 60
+          },
+          "label": "60"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "color",
+      "channel": "color",
+      "kind": "ordinal",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Cohort A"
+        },
+        {
+          "kind": "text",
+          "text": "Cohort B"
+        }
+      ],
+      "categories": [
+        "Cohort A",
+        "Cohort B"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Cohort A"
+          },
+          "label": "Cohort A"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Cohort B"
+          },
+          "label": "Cohort B"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Cohort A",
+      "label": "Cohort A",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "key": "Cohort B",
+      "label": "Cohort B",
+      "order": 1,
+      "color": "#91cc75"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Cohort A",
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Cohort B",
+      "color": "#91cc75"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Cohort A",
+      "label": "Cohort A",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Cohort B",
+      "label": "Cohort B",
+      "order": 1,
+      "color": "#91cc75"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary-00",
+      "mark": "point",
+      "zIndex": 0,
+      "seriesKey": "Cohort A",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 12.5
+              },
+              "displayValue": "12.5"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 85.0
+              },
+              "displayValue": "85.0"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 30
+              },
+              "displayValue": "30"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Cohort A"
+              },
+              "displayValue": "Cohort A"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 12.5, Y: 85.0, Size: 30, Color: Cohort A",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 18.2
+              },
+              "displayValue": "18.2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 92.4
+              },
+              "displayValue": "92.4"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 45
+              },
+              "displayValue": "45"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Cohort A"
+              },
+              "displayValue": "Cohort A"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 18.2, Y: 92.4, Size: 45, Color: Cohort A",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 24.8
+              },
+              "displayValue": "24.8"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 78.1
+              },
+              "displayValue": "78.1"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 20
+              },
+              "displayValue": "20"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Cohort A"
+              },
+              "displayValue": "Cohort A"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 24.8, Y: 78.1, Size: 20, Color: Cohort A",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-01",
+      "mark": "point",
+      "zIndex": 1,
+      "seriesKey": "Cohort B",
+      "data": [
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 15.0
+              },
+              "displayValue": "15.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 64.5
+              },
+              "displayValue": "64.5"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 35
+              },
+              "displayValue": "35"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Cohort B"
+              },
+              "displayValue": "Cohort B"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 15.0, Y: 64.5, Size: 35, Color: Cohort B",
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 22.1
+              },
+              "displayValue": "22.1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 71.0
+              },
+              "displayValue": "71.0"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Cohort B"
+              },
+              "displayValue": "Cohort B"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 22.1, Y: 71.0, Size: 50, Color: Cohort B",
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 29.5
+              },
+              "displayValue": "29.5"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 58.2
+              },
+              "displayValue": "58.2"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60
+              },
+              "displayValue": "60"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Cohort B"
+              },
+              "displayValue": "Cohort B"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 29.5, Y: 58.2, Size: 60, Color: Cohort B",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Cohort Velocity vs Efficiency Distribution: 6 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Cohort Velocity vs Efficiency Distribution",
+    "items": [
+      {
+        "label": "12.5",
+        "value": "85.0",
+        "order": 0,
+        "group": "Cohort A"
+      },
+      {
+        "label": "18.2",
+        "value": "92.4",
+        "order": 1,
+        "group": "Cohort A"
+      },
+      {
+        "label": "24.8",
+        "value": "78.1",
+        "order": 2,
+        "group": "Cohort A"
+      },
+      {
+        "label": "15.0",
+        "value": "64.5",
+        "order": 100000,
+        "group": "Cohort B"
+      },
+      {
+        "label": "22.1",
+        "value": "71.0",
+        "order": 100001,
+        "group": "Cohort B"
+      },
+      {
+        "label": "29.5",
+        "value": "58.2",
+        "order": 100002,
+        "group": "Cohort B"
+      }
+    ],
+    "summary": "Cohort Velocity vs Efficiency Distribution: 6 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "axis:x:label",
+      "value": "Velocity (m/s)"
+    },
+    {
+      "name": "axis:y:label",
+      "value": "Efficiency (%)"
+    },
+    {
+      "name": "HEIGHT",
+      "value": "450px"
+    },
+    {
+      "name": "LEGEND",
+      "value": "TOP"
+    },
+    {
+      "name": "mapping:color",
+      "value": "Cohort"
+    },
+    {
+      "name": "mapping:size",
+      "value": "SampleSize"
+    },
+    {
+      "name": "mapping:x",
+      "value": "Velocity"
+    },
+    {
+      "name": "mapping:y",
+      "value": "Efficiency"
+    },
+    {
+      "name": "title",
+      "value": "Cohort Velocity vs Efficiency Distribution"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Velocity",
+    "valueKey": "Efficiency"
+  }
+}

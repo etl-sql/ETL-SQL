@@ -1,0 +1,527 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "ModelComparison",
+  "title": "Model Comparison",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "theta",
+      "channel": "theta",
+      "kind": "ordinal",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Speed"
+        },
+        {
+          "kind": "text",
+          "text": "Reliability"
+        },
+        {
+          "kind": "text",
+          "text": "Efficiency"
+        },
+        {
+          "kind": "text",
+          "text": "Coverage"
+        }
+      ],
+      "categories": [
+        "Speed",
+        "Reliability",
+        "Efficiency",
+        "Coverage"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Speed"
+          },
+          "label": "Speed"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Reliability"
+          },
+          "label": "Reliability"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Efficiency"
+          },
+          "label": "Efficiency"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Coverage"
+          },
+          "label": "Coverage"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "radius",
+      "channel": "radius",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25
+          },
+          "label": "25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50
+          },
+          "label": "50"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75
+          },
+          "label": "75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "color",
+      "channel": "color",
+      "kind": "ordinal",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Model A"
+        },
+        {
+          "kind": "text",
+          "text": "Model B"
+        }
+      ],
+      "categories": [
+        "Model A",
+        "Model B"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Model A"
+          },
+          "label": "Model A"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Model B"
+          },
+          "label": "Model B"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Model A",
+      "label": "Model A",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "key": "Model B",
+      "label": "Model B",
+      "order": 1,
+      "color": "#91cc75"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Model A",
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Model B",
+      "color": "#91cc75"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Model A",
+      "label": "Model A",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Model B",
+      "label": "Model B",
+      "order": 1,
+      "color": "#91cc75"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary-00",
+      "mark": "line",
+      "zIndex": 0,
+      "seriesKey": "Model A",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Speed"
+              },
+              "displayValue": "Speed"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 88
+              },
+              "displayValue": "88"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Speed: 88",
+          "encodings": []
+        },
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Reliability"
+              },
+              "displayValue": "Reliability"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 92
+              },
+              "displayValue": "92"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Reliability: 92",
+          "encodings": []
+        },
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Efficiency"
+              },
+              "displayValue": "Efficiency"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 75
+              },
+              "displayValue": "75"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Efficiency: 75",
+          "encodings": []
+        },
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Coverage"
+              },
+              "displayValue": "Coverage"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 83
+              },
+              "displayValue": "83"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Coverage: 83",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "layout",
+          "value": "radar"
+        },
+        {
+          "name": "preserveRows",
+          "value": "true"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-01",
+      "mark": "line",
+      "zIndex": 1,
+      "seriesKey": "Model B",
+      "data": [
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Speed"
+              },
+              "displayValue": "Speed"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 76
+              },
+              "displayValue": "76"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Speed: 76",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Reliability"
+              },
+              "displayValue": "Reliability"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 85
+              },
+              "displayValue": "85"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Reliability: 85",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Efficiency"
+              },
+              "displayValue": "Efficiency"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 91
+              },
+              "displayValue": "91"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Efficiency: 91",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Coverage"
+              },
+              "displayValue": "Coverage"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 79
+              },
+              "displayValue": "79"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "Coverage: 79",
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "layout",
+          "value": "radar"
+        },
+        {
+          "name": "preserveRows",
+          "value": "true"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Model Comparison: 2 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "proportionalBreakdown",
+    "heading": "Model Comparison",
+    "items": [
+      {
+        "label": "Speed",
+        "value": "88",
+        "order": 0,
+        "group": "Model A"
+      },
+      {
+        "label": "Reliability",
+        "value": "92",
+        "order": 1,
+        "group": "Model A"
+      },
+      {
+        "label": "Efficiency",
+        "value": "75",
+        "order": 2,
+        "group": "Model A"
+      },
+      {
+        "label": "Coverage",
+        "value": "83",
+        "order": 3,
+        "group": "Model A"
+      },
+      {
+        "label": "Speed",
+        "value": "76",
+        "order": 100000,
+        "group": "Model B"
+      },
+      {
+        "label": "Reliability",
+        "value": "85",
+        "order": 100001,
+        "group": "Model B"
+      },
+      {
+        "label": "Efficiency",
+        "value": "91",
+        "order": 100002,
+        "group": "Model B"
+      },
+      {
+        "label": "Coverage",
+        "value": "79",
+        "order": 100003,
+        "group": "Model B"
+      }
+    ],
+    "summary": "Model Comparison: 8 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "polar"
+  },
+  "style": [
+    {
+      "name": "MAX",
+      "value": "100"
+    },
+    {
+      "name": "MIN",
+      "value": "0"
+    },
+    {
+      "name": "TITLE",
+      "value": "Model Comparison"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "ModelName"
+  }
+}

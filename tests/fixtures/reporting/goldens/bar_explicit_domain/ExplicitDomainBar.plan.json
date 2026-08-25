@@ -1,0 +1,351 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "ExplicitDomainBar",
+  "title": "Headcount by Department with Explicit Domain",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Dept A"
+        },
+        {
+          "kind": "text",
+          "text": "Dept B"
+        },
+        {
+          "kind": "text",
+          "text": "Dept C"
+        },
+        {
+          "kind": "text",
+          "text": "Dept D"
+        }
+      ],
+      "categories": [
+        "Dept A",
+        "Dept B",
+        "Dept C",
+        "Dept D"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Dept A"
+          },
+          "label": "Dept A"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Dept B"
+          },
+          "label": "Dept B"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Dept C"
+          },
+          "label": "Dept C"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Dept D"
+          },
+          "label": "Dept D"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 500
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 125
+          },
+          "label": "125"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 250
+          },
+          "label": "250"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 375
+          },
+          "label": "375"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 500
+          },
+          "label": "500"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Headcount",
+      "label": "Headcount",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Headcount",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Headcount",
+      "label": "Headcount",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Headcount",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Dept A"
+              },
+              "displayValue": "Dept A"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 150
+              },
+              "displayValue": "150"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Dept A, Y: 150",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Dept B"
+              },
+              "displayValue": "Dept B"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 320
+              },
+              "displayValue": "320"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Dept B, Y: 320",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Dept C"
+              },
+              "displayValue": "Dept C"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 280
+              },
+              "displayValue": "280"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Dept C, Y: 280",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Dept D"
+              },
+              "displayValue": "Dept D"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 410
+              },
+              "displayValue": "410"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Dept D, Y: 410",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Headcount by Department with Explicit Domain: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Headcount by Department with Explicit Domain",
+    "items": [
+      {
+        "label": "Dept A",
+        "value": "150",
+        "order": 0,
+        "group": "Headcount"
+      },
+      {
+        "label": "Dept B",
+        "value": "320",
+        "order": 1,
+        "group": "Headcount"
+      },
+      {
+        "label": "Dept C",
+        "value": "280",
+        "order": 2,
+        "group": "Headcount"
+      },
+      {
+        "label": "Dept D",
+        "value": "410",
+        "order": 3,
+        "group": "Headcount"
+      }
+    ],
+    "summary": "Headcount by Department with Explicit Domain: 4 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "axis:x:label",
+      "value": "Department Unit"
+    },
+    {
+      "name": "axis:y:label",
+      "value": "Total Headcount"
+    },
+    {
+      "name": "axis:y:max",
+      "value": "500"
+    },
+    {
+      "name": "axis:y:min",
+      "value": "0"
+    },
+    {
+      "name": "HEIGHT",
+      "value": "420px"
+    },
+    {
+      "name": "mapping:x",
+      "value": "Dept"
+    },
+    {
+      "name": "mapping:y",
+      "value": "Headcount"
+    },
+    {
+      "name": "title",
+      "value": "Headcount by Department with Explicit Domain"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Dept",
+    "valueKey": "Headcount"
+  }
+}

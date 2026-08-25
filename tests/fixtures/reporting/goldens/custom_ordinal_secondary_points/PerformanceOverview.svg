@@ -1,0 +1,45 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='PerformanceOverview-title PerformanceOverview-desc' font-family='sans-serif'>
+<title id='PerformanceOverview-title'>Revenue and Margin</title>
+<desc id='PerformanceOverview-desc'>Revenue and Margin: 3 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Revenue and Margin</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='PerformanceOverview-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#PerformanceOverview-plot-clip)'>
+<rect x='81.667' y='92.956' width='129' height='197.044' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
+<rect x='255' y='51.905' width='129' height='238.095' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>145</title></rect>
+<rect x='428.333' y='76.535' width='129' height='213.465' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>130</title></rect>
+<circle class='plot-point' cx='146.667' cy='75.934' r='4' fill='#2E86C1' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='0'></circle>
+<circle class='plot-point' cx='320' cy='51.364' r='4' fill='#2E86C1' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='1'></circle>
+<circle class='plot-point' cx='493.333' cy='278.636' r='4' fill='#C0392B' fill-opacity='0.45' stroke='white' stroke-width='1.5' data-row-index='2'></circle>
+</g>
+<text x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Jan</text>
+<text x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>Feb</text>
+<text x='493.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Mar</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>38.06</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>76.13</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>114.19</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>152.25</text>
+<line x1='580' y1='290' x2='584' y2='290' stroke='#bbb'/>
+<text x='586' y='294' font-size='9' fill='#666'>-0.07</text>
+<line x1='580' y1='227.5' x2='584' y2='227.5' stroke='#bbb'/>
+<text x='586' y='231.5' font-size='9' fill='#666'>0.03</text>
+<line x1='580' y1='165' x2='584' y2='165' stroke='#bbb'/>
+<text x='586' y='169' font-size='9' fill='#666'>0.14</text>
+<line x1='580' y1='102.5' x2='584' y2='102.5' stroke='#bbb'/>
+<text x='586' y='106.5' font-size='9' fill='#666'>0.24</text>
+<line x1='580' y1='40' x2='584' y2='40' stroke='#bbb'/>
+<text x='586' y='44' font-size='9' fill='#666'>0.34</text>
+</svg>

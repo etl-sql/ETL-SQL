@@ -1,0 +1,45 @@
+{
+  "kind": "rankedTable",
+  "heading": "Discontinuous Telemetry with Missing Values",
+  "items": [
+    {
+      "label": "Day 1",
+      "value": "10.5",
+      "order": 0,
+      "group": "Measurement"
+    },
+    {
+      "label": "Day 2",
+      "value": "14.2",
+      "order": 1,
+      "group": "Measurement"
+    },
+    {
+      "label": "Day 3",
+      "value": "gap",
+      "order": 2,
+      "detail": "null gap",
+      "group": "Measurement"
+    },
+    {
+      "label": "Day 4",
+      "value": "18.9",
+      "order": 3,
+      "group": "Measurement"
+    },
+    {
+      "label": "Day 5",
+      "value": "gap",
+      "order": 4,
+      "detail": "null gap",
+      "group": "Measurement"
+    },
+    {
+      "label": "Day 6",
+      "value": "22.1",
+      "order": 5,
+      "group": "Measurement"
+    }
+  ],
+  "summary": "Discontinuous Telemetry with Missing Values: 6 rows, 1 ordered layers, 1 series, 1 facet panels, 2 gaps, 0 skipped rows."
+}

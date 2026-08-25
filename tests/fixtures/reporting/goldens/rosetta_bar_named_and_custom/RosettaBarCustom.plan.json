@@ -1,0 +1,319 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "RosettaBarCustom",
+  "title": "Revenue by region",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "regions",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "North"
+        },
+        {
+          "kind": "text",
+          "text": "South"
+        },
+        {
+          "kind": "text",
+          "text": "East"
+        },
+        {
+          "kind": "text",
+          "text": "West"
+        }
+      ],
+      "categories": [
+        "North",
+        "South",
+        "East",
+        "West"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "North"
+          },
+          "label": "North"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "South"
+          },
+          "label": "South"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "East"
+          },
+          "label": "East"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "West"
+          },
+          "label": "West"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "amounts",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 140
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 35
+          },
+          "label": "35"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 70
+          },
+          "label": "70"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 105
+          },
+          "label": "105"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 140
+          },
+          "label": "140"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Revenue",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "bars",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "North"
+              },
+              "displayValue": "North"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 120
+              },
+              "displayValue": "120"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: North, Y: 120",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "South"
+              },
+              "displayValue": "South"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 95
+              },
+              "displayValue": "95"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: South, Y: 95",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "East"
+              },
+              "displayValue": "East"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 140
+              },
+              "displayValue": "140"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: East, Y: 140",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "West"
+              },
+              "displayValue": "West"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 110
+              },
+              "displayValue": "110"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: West, Y: 110",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Revenue by region: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Revenue by region",
+    "items": [
+      {
+        "label": "North",
+        "value": "120",
+        "order": 0,
+        "group": "Revenue"
+      },
+      {
+        "label": "South",
+        "value": "95",
+        "order": 1,
+        "group": "Revenue"
+      },
+      {
+        "label": "East",
+        "value": "140",
+        "order": 2,
+        "group": "Revenue"
+      },
+      {
+        "label": "West",
+        "value": "110",
+        "order": 3,
+        "group": "Revenue"
+      }
+    ],
+    "summary": "Revenue by region: 4 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Revenue by region"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Region",
+    "valueKey": "Revenue"
+  }
+}

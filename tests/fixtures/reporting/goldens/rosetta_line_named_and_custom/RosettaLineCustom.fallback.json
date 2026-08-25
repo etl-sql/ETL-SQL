@@ -1,0 +1,31 @@
+{
+  "kind": "rankedTable",
+  "heading": "Daily visits",
+  "items": [
+    {
+      "label": "2026-01-01",
+      "value": "42",
+      "order": 0,
+      "group": "Visits"
+    },
+    {
+      "label": "2026-01-02",
+      "value": "55",
+      "order": 1,
+      "group": "Visits"
+    },
+    {
+      "label": "2026-01-03",
+      "value": "48",
+      "order": 2,
+      "group": "Visits"
+    },
+    {
+      "label": "2026-01-04",
+      "value": "61",
+      "order": 3,
+      "group": "Visits"
+    }
+  ],
+  "summary": "Daily visits: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

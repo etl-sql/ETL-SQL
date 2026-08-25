@@ -1,0 +1,55 @@
+{
+  "kind": "rankedTable",
+  "heading": "Production Volume vs Quality Pass Rate",
+  "items": [
+    {
+      "label": "Week 1",
+      "value": "450",
+      "order": 0,
+      "group": "UnitsProduced"
+    },
+    {
+      "label": "Week 2",
+      "value": "520",
+      "order": 1,
+      "group": "UnitsProduced"
+    },
+    {
+      "label": "Week 3",
+      "value": "480",
+      "order": 2,
+      "group": "UnitsProduced"
+    },
+    {
+      "label": "Week 4",
+      "value": "610",
+      "order": 3,
+      "group": "UnitsProduced"
+    },
+    {
+      "label": "Week 1",
+      "value": "96.2",
+      "order": 100000,
+      "group": "QualityPassRate"
+    },
+    {
+      "label": "Week 2",
+      "value": "94.8",
+      "order": 100001,
+      "group": "QualityPassRate"
+    },
+    {
+      "label": "Week 3",
+      "value": "97.1",
+      "order": 100002,
+      "group": "QualityPassRate"
+    },
+    {
+      "label": "Week 4",
+      "value": "98.4",
+      "order": 100003,
+      "group": "QualityPassRate"
+    }
+  ],
+  "summary": "Production Volume vs Quality Pass Rate: 4 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

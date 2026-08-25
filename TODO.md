@@ -213,6 +213,18 @@ zero). Per-report payload moved the other way, and nothing measures that.
 
 #### Grammar and authoring
 
+- [ ] **Found while building the golden lane:** an unrecognised `MAPPINGS` role is accepted silently and
+  produces a wrong chart. `CREATE VISUAL x AS BAR (MAPPINGS (CATEGORY = Region, VALUE = Revenue))`
+  parses and evaluates with no diagnostic, but no visual documents a `CATEGORY` role — the canonical
+  named-`BAR` spelling is `X`/`Y`. The result is a plan with no X scale at all: the category axis is
+  missing, and the semantic fallback a screen reader and the terminal read labels the rows "Row 1",
+  "Row 2", "Row 3" instead of the actual categories. This is a wrong answer, not a crash, so it is at
+  least P0 by the triage rule. Reproduce by changing the `MAPPINGS` in
+  `tests/fixtures/reporting/conformance/rosetta_bar_named_and_custom.rptsql` back to `CATEGORY`/`VALUE`
+  and re-blessing. Decide whether unknown roles should be a lint warning or a hard validation error,
+  then cover every named visual type — this was found on `BAR` because that is what the Rosetta pair
+  used, and nothing suggests `BAR` is special.
+
 - [ ] **Post-v0.19:** expose statistical and financial channels in `CUSTOM`.
   `ReportParser.ParseAdvancedChannel` and `AdvancedChartChannel` expose eighteen channels;
   `FieldChannel` additionally carries `Low`, `Q1`, `Median`, `Q3`, `High`, `Open`, and `Close`, which
@@ -235,14 +247,18 @@ Sharing a chart is meant to be "here is the script" — no gallery and no market
 the deliberate simplification against tools like Power BI. That makes the published examples the
 whole distribution mechanism, so their accuracy carries the weight a feature would.
 
-- [ ] Rename and correct the two cookbook pages published as declarative-graphics recipes that contain
-  no `CHART (` block: `docs/cookbooks/report/custom-choropleth-point-map.md` and
-  `docs/cookbooks/report/custom-alluvial-flow-composition.md`. Both are ordinary named visuals, both
-  carry the `custom-` prefix, and both shipped in `1888d892` alongside the two that do use the
-  grammar. Drop the `custom-` prefix and every claim that they demonstrate layered `CUSTOM` grammar;
-  describe them honestly as coordinated named visuals. Geographic composition is accepted but
-  deferred above, so do not fake a single layered surface before that contract exists. Add genuinely
-  grammar-backed recipes later with the corresponding statistical/financial and geographic features.
+- [x] Rename and correct the two cookbook pages published as declarative-graphics recipes that contain
+  no `CHART (` block. **Done.** They are now `docs/cookbooks/report/choropleth-point-map.md` and
+  `docs/cookbooks/report/alluvial-flow-composition.md`, linked under the new names from the cookbook
+  index. Both now describe what they are: coordinated named visuals over shared staged data. The
+  choropleth page dropped its "single map surface" claim and says plainly that Report-SQL has no
+  geographic composition in the `CHART` grammar, so a choropleth and its point overlay cannot share a
+  projected canvas — two `MAP` visuals on one page and one source is the pairing an author gets. The
+  alluvial page dropped "Grammar of Graphics ribbon composition"; `SANKEY` owns its own layout. No
+  layered surface was faked ahead of the deferred geographic contract. `custom-bullet-target-
+  performance.md` and `custom-marginal-scatter-plot.md` keep their prefix — they genuinely contain
+  `CHART (`. Grammar-backed recipes for the rest arrive with the statistical/financial and geographic
+  features.
 - [ ] **Post-v0.19:** treat a Report Builder `CHART` editor as a future goal, not a current correctness
   gap. `CUSTOM` is absent from the
   designer's visual-type registry (`designer.js`, `VCATEGORIES`), and
@@ -255,44 +271,77 @@ whole distribution mechanism, so their accuracy carries the weight a feature wou
 
 #### Golden output coverage for `CUSTOM` charts
 
-Standard visuals are pinned by SVG hash in `NativeSvgGeometryGoldenTests.RepresentativeGoldens` —
-eight fixtures under `tests/fixtures/reporting/conformance/`. `CUSTOM` has no equivalent.
-`AdvancedChartProductionTests` is 22 tests of contract properties (`Assert.Equal(.4m, ...YEnd)`,
-`Assert.Equal(BindingSourceKind.Datum, ...)`) and pins no output at all, so a renderer change that
-shifts every advanced-chart mark, or drops a layer, passes the whole file green. The single `CUSTOM`
-fixture in the corpus, `custom_ordinal_secondary_points.rptsql`, is consumed by
-`StandardCatalogCartesianMigrationTests`, not by a golden. Build the lane once, for both catalogs.
+**Closed.** One lane now covers both catalogs: `ReportingGoldenTests` discovers every fixture under
+`tests/fixtures/reporting/conformance/` and pins the resolved `PlotPlan`, the native SVG, the
+`SemanticFallback`, and the terminal render as checked-in artifacts, hashed in `index.json`. Blessing
+is `scripts/Test-ReportingGoldens.ps1 -UpdateGolden`.
 
-- [ ] Pin two hashes per fixture, not one: the resolved `PlotPlan` and the rendered SVG, compared
-  independently. A single SVG hash reports that something moved but cannot separate a broken chart
+The state this replaced: standard visuals were pinned by SVG hash in
+`NativeSvgGeometryGoldenTests.RepresentativeGoldens` — ten hand-listed fixtures folded into one
+assertion — and `CUSTOM` had no equivalent. `AdvancedChartProductionTests` is 22 tests of contract
+properties (`Assert.Equal(.4m, ...YEnd)`, `Assert.Equal(BindingSourceKind.Datum, ...)`) and pins no
+output at all, so a renderer change that shifted every advanced-chart mark, or dropped a layer, passed
+the whole file green.
+
+- [x] Pin two hashes per fixture, not one: the resolved `PlotPlan` and the rendered SVG, compared
+  independently. **Done.** `ReportingGoldenTests` compares them as separate artifacts, so the failure
+  message distinguishes the two cases rather than reporting one merged movement.
+  Original rationale: A single SVG hash reports that something moved but cannot separate a broken chart
   from a nudged label. With both, a plan hash that holds while the SVG hash moves is a pure rendering
   change to review, and a plan hash that moves is a semantic regression to stop on. The plan hash is
   the durable gate: `PlotPlan.Validate()` already enforces deterministic series, legend, and layer
   ordering, and `ChartContractSerializer` already carries stable-serialization coverage from
   `GrammarOfGraphicsContractTests`.
-- [ ] Commit the artifacts, not only their hashes. The current goldens store bare SHA-256 strings in a
+- [x] Commit the artifacts, not only their hashes. **Done.** Every fixture has a directory under
+  `tests/fixtures/reporting/goldens/` holding `<visual>.plan.json`, `<visual>.svg`,
+  `<visual>.fallback.json`, and `terminal.txt`; `index.json` keeps the hashes as the fast comparison.
+  The lane also fails when a hash matches but the checked-in artifact does not, so the two cannot
+  drift apart. 35 charts across 32 fixtures come to ~1 MB of text, most of it serialized plans.
+  Original rationale: The current goldens store bare SHA-256 strings in a
   C# dictionary, so when one moves the diff reads `AE3BF4... -> 7C21B9...` and a reviewer can only
   trust it or reproduce it by hand — a hash change is not reviewable. Check in the SVG and the
   serialized plan beside each fixture and keep the hash as the fast comparison. The entire
   representative SVG set is 18.2 KB, so the cost is negligible and blessing becomes a diff a human can
   open in a browser.
-- [ ] Discover fixtures from the directory and drive them with `[Theory]`/`MemberData`, so adding a
-  chart means adding files rather than editing C#, and so each fixture reports as its own test result.
+- [x] Discover fixtures from the directory and drive them with `[Theory]`/`MemberData`. **Done.**
+  `ReportingGoldenHarness.DiscoverFixtures` enumerates `tests/fixtures/reporting/conformance` in
+  ordinal order, and each fixture is its own theory case naming the chart that moved. Discovery
+  yields a sentinel rather than an empty set, so an empty directory fails instead of reporting a
+  green lane with zero cases, and `GoldenIndex_HasNoEntriesWithoutAFixture` fails on a stale entry.
+  Superseded detail:
   `RepresentativeNativeSvg_GeometryMatchesApprovedGoldens` currently folds all eight fixtures into one
   `Assert.True` with a joined string, which reports "something moved" instead of naming the chart.
-- [ ] Migrate the eight existing standard-catalog fixtures onto the same harness rather than standing
-  up a parallel `CUSTOM`-only lane. Items two and three are improvements the standard goldens want on
+- [x] Migrate the existing standard-catalog fixtures onto the same harness. **Done.** The hard-coded
+  `RepresentativeGoldens` dictionary in `NativeSvgGeometryGoldenTests` is gone; every fixture in the
+  conformance directory now runs on the one harness, which took the pinned set from ten hand-listed
+  entries to all 32. `GoldenLane_CoversBothTheNamedAndCustomCatalogs` fails if either catalog stops
+  being represented. Micro-chart geometry stayed behind — it is built from a factory, not a fixture.
+  Original rationale: Items two and three are improvements the standard goldens want on
   their own merits, and one harness keeps the two catalogs from drifting into different definitions of
   "pinned".
-- [ ] Choose the `CUSTOM` corpus to cover what the grammar reaches and named visuals cannot, since
-  that is the uncovered surface: encoding inheritance and `INHERIT_ENCODINGS = OFF`, `DATUM` and
+- [x] Choose the `CUSTOM` corpus to cover what the grammar reaches and named visuals cannot. **Done.**
+  Five fixtures were added: `custom_inherit_encodings_datum_value` (chart-scope inheritance,
+  `INHERIT_ENCODINGS = OFF`, `DATUM`, `VALUE`), `custom_conditions_normalized_stack` (`CONDITIONS`,
+  `STACK = NORMALIZE`), `custom_jitter_nudge_placement` (`JITTER` with a seed, `NUDGE`, `X_OFFSET`),
+  `custom_facet_wrap_aspect_ratio` (`FACET WRAP`, `ASPECT_RATIO`, `RESOLVE`), and
+  `custom_gradient_color_tick` (quantitative `GRADIENT` colour range, `TICK`). Terminal and
+  `SemanticFallback` are pinned for every fixture in the lane, both catalogs, not only these.
+  Original rationale: encoding inheritance and `INHERIT_ENCODINGS = OFF`, `DATUM` and
   `VALUE` bindings, `CONDITIONS`, `STACK = NORMALIZE`, jitter and nudge placement, `FACET WRAP`,
   `ASPECT_RATIO`, quantitative color ranges, and `TICK`. Jitter especially — it is SHA-256 over
   semantic layer placement, stable key, channel, and seed, so it is deterministic by construction and
   therefore exactly the kind of property that degrades silently. Pin the terminal render and the
   `SemanticFallback` from the same fixtures too; both consume the same plan and neither has `CUSTOM`
   coverage today.
-- [ ] Record the determinism precondition the SVG lane depends on, and keep it enforced. Native SVG is
+- [x] Record the determinism precondition the SVG lane depends on, and keep it enforced. **Done.**
+  `NativeSvgDeterminismPreconditionTests` asserts it four ways: the same plan rendered under `de-DE`
+  is byte-identical to the invariant render (the decimal separator is the sharpest locale probe);
+  repeated renders are equal and carry no clock-derived text or GUID; every `font-family` is the
+  generic `sans-serif`; and the renderer source contains no clock, GUID, ambient-culture, or
+  text-measurement API. The last one fails at the moment the option is taken rather than when CI
+  hashes start disagreeing with a developer machine, and its message says what to do then — pin
+  metrics or make the SVG lane advisory, with the plan hash staying the durable gate.
+  Original rationale: Native SVG is
   currently hash-stable across platforms because `PlotPlanSvgRenderer` emits no timestamp, GUID, or
   `CurrentCulture` formatting and uses a generic `sans-serif` family with no text measurement. ADR
   section 8.2 explicitly permits text measurement "where needed"; the day that option is taken, SVG
@@ -300,9 +349,11 @@ fixture in the corpus, `custom_ordinal_secondary_points.rptsql`, is consumed by
   CI. Design for it now — the plan hash stays the durable gate, and if text measurement lands the SVG
   lane needs pinned metrics or must become advisory. Add an assertion that the rendered SVG contains
   no locale- or clock-derived text so the precondition cannot regress unnoticed.
-- [ ] Provide blessing under the existing convention — an `-UpdateGolden` switch matching
-  `Test-SpillAllocProfile.ps1 -UpdateBudget` — and make the refreshed artifacts, not just the hashes,
-  the thing that lands in the commit.
+- [x] Provide blessing under the existing convention. **Done.** `scripts/Test-ReportingGoldens.ps1`
+  takes `-UpdateGolden` (plus `-Fixture` for iterating on one chart), setting
+  `ETLSQL_REPORTING_GOLDEN_UPDATE` the way `Test-ReportPayloadBudget.ps1 -UpdateBudget` does. It
+  rewrites the artifacts, then prints the `git status` of the golden directory so the refreshed SVG,
+  plan, fallback, and terminal files are what lands in the commit and gets reviewed.
 
 
 #### A learning path from named visuals into `CUSTOM`
@@ -316,7 +367,19 @@ named visuals, which is the common direction. `docs/reference/visuals-reporting/
 a reference and two finished showpieces with no path between them. Sequence this with the golden
 coverage item above; it depends on the same harness.
 
-- [ ] Assert the translations rather than asserting them in prose. `NamedVisualChartLowerer` already
+- [x] Assert the translations rather than asserting them in prose. **Done.**
+  `NamedVisualToCustomRosettaTests` pairs each named visual with its `CUSTOM` spelling in one fixture
+  over one staged source, so the comparison cannot drift apart through the data. Compared: resolved
+  layers, scales, palette, series, data, accessible summary, semantic fallback, theme tokens, and
+  formatting. `BAR` and `LINE` pairs are equal across all of it. Excluded, and each exclusion pinned
+  by its own assertion so it cannot widen: identity (spec/scale/layer ids name the authoring form),
+  the per-visual-type null policy (`BAR` skips a null row, `LINE` gaps it; `CUSTOM` resolves the
+  grammar default), and the style tokens transcribing `MAPPINGS`/`OPTIONS` (`mapping:x`, `mapping:y`,
+  `AXIS_SORT`). Interaction turned out **not** to be divergent — resolved key and value key agree —
+  so it is asserted equal rather than excused. Theme tokens and `FormattingSpec` are inside the scope
+  as recorded; the only formatting difference is that named lowering lists its mapped columns as
+  entries carrying no format, and a test fails the moment one of those starts carrying one.
+  Original rationale: `NamedVisualChartLowerer` already
   lowers `BAR` into a `ChartSpec`, so each named/`CUSTOM` pair can ship as two fixtures whose resolved
   plans are compared by the golden harness. The teaching claim then becomes a test that cannot rot
   when the lowerer changes. Scope the comparison to resolved layers, scales, palette, and data:

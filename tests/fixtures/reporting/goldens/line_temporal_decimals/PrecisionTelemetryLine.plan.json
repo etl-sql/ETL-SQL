@@ -1,0 +1,387 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
+  "version": 2,
+  "specId": "PrecisionTelemetryLine",
+  "title": "High-Precision Daily Sensor Telemetry",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "time",
+      "domain": [
+        {
+          "kind": "offsetDateTime",
+          "offsetDateTime": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "kind": "offsetDateTime",
+          "offsetDateTime": "2026-01-02T00:00:00+00:00"
+        },
+        {
+          "kind": "offsetDateTime",
+          "offsetDateTime": "2026-01-03T00:00:00+00:00"
+        },
+        {
+          "kind": "offsetDateTime",
+          "offsetDateTime": "2026-01-04T00:00:00+00:00"
+        },
+        {
+          "kind": "offsetDateTime",
+          "offsetDateTime": "2026-01-05T00:00:00+00:00"
+        }
+      ],
+      "categories": [
+        "2026-01-01",
+        "2026-01-02",
+        "2026-01-03",
+        "2026-01-04",
+        "2026-01-05"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "offsetDateTime",
+            "offsetDateTime": "2026-01-01T00:00:00+00:00"
+          },
+          "label": "2026-01-01"
+        },
+        {
+          "value": {
+            "kind": "offsetDateTime",
+            "offsetDateTime": "2026-01-02T00:00:00+00:00"
+          },
+          "label": "2026-01-02"
+        },
+        {
+          "value": {
+            "kind": "offsetDateTime",
+            "offsetDateTime": "2026-01-03T00:00:00+00:00"
+          },
+          "label": "2026-01-03"
+        },
+        {
+          "value": {
+            "kind": "offsetDateTime",
+            "offsetDateTime": "2026-01-04T00:00:00+00:00"
+          },
+          "label": "2026-01-04"
+        },
+        {
+          "value": {
+            "kind": "offsetDateTime",
+            "offsetDateTime": "2026-01-05T00:00:00+00:00"
+          },
+          "label": "2026-01-05"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 118.192305
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.000000
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 29.54807625
+          },
+          "label": "29.55"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 59.0961525
+          },
+          "label": "59.1"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 88.64422875
+          },
+          "label": "88.64"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 118.192305
+          },
+          "label": "118.19"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "SensorReading",
+      "label": "SensorReading",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "SensorReading",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "SensorReading",
+      "label": "SensorReading",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "line",
+      "zIndex": 0,
+      "seriesKey": "SensorReading",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "offsetDateTime",
+                "offsetDateTime": "2026-01-01T00:00:00+00:00"
+              },
+              "displayValue": "2026-01-01"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 98.7452
+              },
+              "displayValue": "98.7452"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-01-01, Y: 98.7452",
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "offsetDateTime",
+                "offsetDateTime": "2026-01-02T00:00:00+00:00"
+              },
+              "displayValue": "2026-01-02"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 104.3819
+              },
+              "displayValue": "104.3819"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-01-02, Y: 104.3819",
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "offsetDateTime",
+                "offsetDateTime": "2026-01-03T00:00:00+00:00"
+              },
+              "displayValue": "2026-01-03"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 101.9205
+              },
+              "displayValue": "101.9205"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-01-03, Y: 101.9205",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "offsetDateTime",
+                "offsetDateTime": "2026-01-04T00:00:00+00:00"
+              },
+              "displayValue": "2026-01-04"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 112.5641
+              },
+              "displayValue": "112.5641"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-01-04, Y: 112.5641",
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "offsetDateTime",
+                "offsetDateTime": "2026-01-05T00:00:00+00:00"
+              },
+              "displayValue": "2026-01-05"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 108.1187
+              },
+              "displayValue": "108.1187"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: 2026-01-05, Y: 108.1187",
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "High-Precision Daily Sensor Telemetry: 5 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "timeSeriesTable",
+    "heading": "High-Precision Daily Sensor Telemetry",
+    "items": [
+      {
+        "label": "2026-01-01",
+        "value": "98.7452",
+        "order": 0,
+        "group": "SensorReading"
+      },
+      {
+        "label": "2026-01-02",
+        "value": "104.3819",
+        "order": 1,
+        "group": "SensorReading"
+      },
+      {
+        "label": "2026-01-03",
+        "value": "101.9205",
+        "order": 2,
+        "group": "SensorReading"
+      },
+      {
+        "label": "2026-01-04",
+        "value": "112.5641",
+        "order": 3,
+        "group": "SensorReading"
+      },
+      {
+        "label": "2026-01-05",
+        "value": "108.1187",
+        "order": 4,
+        "group": "SensorReading"
+      }
+    ],
+    "summary": "High-Precision Daily Sensor Telemetry: 5 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "axis:x:label",
+      "value": "Observation Timestamp (UTC)"
+    },
+    {
+      "name": "axis:y:label",
+      "value": "Calibrated Index (units)"
+    },
+    {
+      "name": "HEIGHT",
+      "value": "420px"
+    },
+    {
+      "name": "mapping:x",
+      "value": "ObservedDate"
+    },
+    {
+      "name": "mapping:y",
+      "value": "SensorReading"
+    },
+    {
+      "name": "SMOOTH",
+      "value": "True"
+    },
+    {
+      "name": "title",
+      "value": "High-Precision Daily Sensor Telemetry"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "ObservedDate",
+    "valueKey": "SensorReading"
+  }
+}
