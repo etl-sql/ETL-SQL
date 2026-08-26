@@ -455,9 +455,9 @@ silent loss, or false checkpoint-resume claim.
 
 ### SaaS Reliability — Production Canaries
 
-**Status:** Accepted  
+**Status:** Complete
 **Horizon:** Launch Gate — Hosted production  
-**Authoritative design:** Not yet decided
+**Authoritative design:** [Production canaries](docs/administration/platform/production-canaries.md)
 
 A hosted fleet needs isolated synthetic journeys that detect correctness and latency regressions in
 reports, jobs, Gateway, export, and notification paths before customers do.

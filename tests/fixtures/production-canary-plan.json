@@ -1,0 +1,65 @@
+{
+  "schema": "etl-sql.production-canary-plan/v1",
+  "environment": "hosted-production",
+  "isolation": {
+    "tenantId": "synthetic-canary-tenant",
+    "identityId": "synthetic-canary-runner",
+    "resourceNamespace": "synthetic-canary-resources",
+    "quotaPool": "synthetic-canary-quota",
+    "maximumMonthlyCostUsd": 250.00,
+    "customerNetworkAccessAllowed": false,
+    "customerCapacityAllowed": false
+  },
+  "credentialRotationInterval": "1.00:00:00",
+  "maximumCredentialLifetime": "2.00:00:00",
+  "journeys": [
+    {
+      "id": "ExternalHealth",
+      "slo": { "availabilityPercent": 99.95, "maximumLatency": "00:00:02", "evaluationWindow": "00:05:00" },
+      "regions": [ "us-central", "us-east" ],
+      "failureDomains": [ "zone-a", "zone-b" ],
+      "etlSqlAlertRoute": "sre-etlsql-page",
+      "dependencyAlertRoute": "sre-synthetic-dependency-ticket"
+    },
+    {
+      "id": "Report",
+      "slo": { "availabilityPercent": 99.90, "maximumLatency": "00:00:08", "evaluationWindow": "00:10:00" },
+      "regions": [ "us-central", "us-east" ],
+      "failureDomains": [ "zone-a", "zone-b" ],
+      "etlSqlAlertRoute": "sre-etlsql-page",
+      "dependencyAlertRoute": "sre-synthetic-dependency-ticket"
+    },
+    {
+      "id": "Job",
+      "slo": { "availabilityPercent": 99.90, "maximumLatency": "00:00:15", "evaluationWindow": "00:10:00" },
+      "regions": [ "us-central", "us-east" ],
+      "failureDomains": [ "zone-a", "zone-b" ],
+      "etlSqlAlertRoute": "sre-etlsql-page",
+      "dependencyAlertRoute": "sre-synthetic-dependency-ticket"
+    },
+    {
+      "id": "Gateway",
+      "slo": { "availabilityPercent": 99.90, "maximumLatency": "00:00:05", "evaluationWindow": "00:10:00" },
+      "regions": [ "us-central", "us-east" ],
+      "failureDomains": [ "zone-a", "zone-b" ],
+      "etlSqlAlertRoute": "sre-etlsql-page",
+      "dependencyAlertRoute": "sre-synthetic-dependency-ticket"
+    },
+    {
+      "id": "Export",
+      "slo": { "availabilityPercent": 99.50, "maximumLatency": "00:00:20", "evaluationWindow": "00:15:00" },
+      "regions": [ "us-central", "us-east" ],
+      "failureDomains": [ "zone-a", "zone-b" ],
+      "etlSqlAlertRoute": "sre-etlsql-page",
+      "dependencyAlertRoute": "sre-synthetic-dependency-ticket"
+    },
+    {
+      "id": "Notification",
+      "slo": { "availabilityPercent": 99.50, "maximumLatency": "00:00:30", "evaluationWindow": "00:15:00" },
+      "regions": [ "us-central", "us-east" ],
+      "failureDomains": [ "zone-a", "zone-b" ],
+      "etlSqlAlertRoute": "sre-etlsql-page",
+      "dependencyAlertRoute": "sre-synthetic-dependency-ticket"
+    }
+  ]
+}

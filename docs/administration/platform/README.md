@@ -14,6 +14,7 @@
 | [Backup, Monitoring, and Health](backup-and-monitoring.md) | Backing up ETL-SQL state, proving the backup restores, and wiring health and failure signals into your own monitoring. |
 | [Configuration Files](config-file-locations.md) | The published services read `appsettings.json`, environment variables, and encrypted configuration values. Production templates live beside the ser... |
 | [Deployment-profile certification](deployment-profile-certification.md) | Deployment-profile certification composes focused test suites into operator-readable proof for the |
+| [Production Canaries](production-canaries.md) | Hosted SLOs, synthetic isolation, journey coverage, alert attribution, credential rotation, and fault-drill evidence. |
 | [Deployment promotion](deployment-promotion.md) | Deployment promotion starts with a read-only inventory. The preflight separates portable scripts |
 | [Enterprise Machine Enrollment](enterprise-enrollment.md) | Enterprise policy is opt-in. When no machine enrollment exists, ETL-SQL remains in standalone mode: |
 | [Governance Core](governance.md) | Governance Core centralizes three production controls: |

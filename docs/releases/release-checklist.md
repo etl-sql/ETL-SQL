@@ -215,6 +215,14 @@ Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
       PostgreSQL providers. Check `certification.md`'s *Enterprise hosted prerequisites* table — every
       row must read `True`. A prerequisite that never ran is reported unproven by name and fails the
       lane, so a green summary with an unproven row is not a possible state.
+- [ ] **Hosted production canaries:** the plan, provisioning boundary, credential lifecycle, and all
+      external-health/report/job/Gateway/export/notification fault drills pass for the candidate SHA:
+      ```powershell
+      .\scripts\Test-ProductionCanaryCertification.ps1
+      ```
+      Retain `certification-results/production-canaries/<run-id>/` with the release evidence. Review
+      the detailed runs for every declared region/failure domain and reject dirty, stale, missing,
+      cross-tenant, customer-capacity, ambiguous-alert, or failed credential-rotation evidence.
 - [ ] **Deployment transitions and upgrades:** all supported transitions and N→N+1 profile upgrades
       pass:
       ```powershell

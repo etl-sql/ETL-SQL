@@ -573,14 +573,14 @@ make no recovery claim stronger than the workload's checkpoint contract.
 
 ### Platform Phase 6 — Production Canaries
 
-- [ ] Define hosted SLOs and the regions/failure domains each canary must exercise.
-- [ ] Provision synthetic tenants, identities, resources, quotas, and costs that cannot reach customer
+- [x] Define hosted SLOs and the regions/failure domains each canary must exercise.
+- [x] Provision synthetic tenants, identities, resources, quotas, and costs that cannot reach customer
   systems or consume customer capacity.
-- [ ] Implement an external health journey, then report and job journeys, then Gateway, export, and
+- [x] Implement an external health journey, then report and job journeys, then Gateway, export, and
   notification journeys.
-- [ ] Distinguish ETL-SQL failures from synthetic dependency failures in evidence and alert routing.
-- [ ] Automate canary credential rotation and compromise response.
-- [ ] Use fault-injection drills to prove the expected SLO alerts fire without cross-tenant effects.
+- [x] Distinguish ETL-SQL failures from synthetic dependency failures in evidence and alert routing.
+- [x] Automate canary credential rotation and compromise response.
+- [x] Use fault-injection drills to prove the expected SLO alerts fire without cross-tenant effects.
 
 **Exit gate:** Production-like drills detect correctness and latency failures across required failure
 domains without accessing customer data, exhausting customer quota, or producing ambiguous alerts.
