@@ -75,6 +75,23 @@ public record TooltipDefinition
         new() { InlineMarkdown = markdown, InlineVisuals = visuals };
 }
 
+// ── Title & Subtitle Typography Definition ────────────────────────────────
+
+/// <summary>
+/// Structured title or subtitle configuration with typography, color, and alignment options.
+/// </summary>
+public record TitleDefinition : AstNode
+{
+    public Expression? Text { get; init; }
+    public bool IsMarkdown { get; init; }
+    public string? Color { get; init; }
+    public string? Font { get; init; }
+    public string? Size { get; init; }
+    public string? Weight { get; init; }
+    public string? Align { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
 // ── Enumerations ──────────────────────────────────────────────────────────
 
 public enum ReportObjectType
@@ -418,8 +435,10 @@ public record CreateVisualStatement : Statement
     public required VisualType VisualType { get; init; }
     public Expression? Title { get; init; }
     public bool TitleIsMarkdown { get; init; }
+    public TitleDefinition? TitleDefinition { get; init; }
     public Expression? Subtitle { get; init; }
     public bool SubtitleIsMarkdown { get; init; }
+    public TitleDefinition? SubtitleDefinition { get; init; }
     public TooltipDefinition? Tooltip { get; init; }
     public Expression? DefaultValue { get; init; }
     public string? LabelPosition { get; init; }
@@ -463,8 +482,10 @@ public record CreatePageStatement : Statement
     public string? StyleName { get; init; }
     public Expression? Title { get; init; }
     public bool TitleIsMarkdown { get; init; }
+    public TitleDefinition? TitleDefinition { get; init; }
     public Expression? Subtitle { get; init; }
     public bool SubtitleIsMarkdown { get; init; }
+    public TitleDefinition? SubtitleDefinition { get; init; }
     public TooltipDefinition? Tooltip { get; init; }
     public string? Visibility { get; init; }
     /// <summary>Auto-refresh interval in seconds (0 = disabled).</summary>
@@ -520,8 +541,10 @@ public record CreateContainerStatement : Statement
     public string? StyleName { get; init; }
     public Expression? Title { get; init; }
     public bool TitleIsMarkdown { get; init; }
+    public TitleDefinition? TitleDefinition { get; init; }
     public Expression? Subtitle { get; init; }
     public bool SubtitleIsMarkdown { get; init; }
+    public TitleDefinition? SubtitleDefinition { get; init; }
     public TooltipDefinition? Tooltip { get; init; }
     public bool IsCollapsible { get; init; }
     public string? Visibility { get; init; }

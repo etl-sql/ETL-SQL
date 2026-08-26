@@ -19,7 +19,16 @@
 
     // Web mode  (single or multi-report server): window.__IS_WEB__ = true
     // VS Code mode (webview preview):           window.__MANIFEST__ set, no __IS_WEB__
-    const isWebMode = window.__IS_WEB__ || window.location.protocol.startsWith('http');
+    // Offline snapshot (.etlsnap viewer):       window.__ETLSNAP__ = true, manifest inlined
+    //
+    // The offline host is decided before web mode, not after it. A snapshot viewer is a single file
+    // that carries its own manifest and has no server behind it, but it is often opened over http —
+    // off a file share, a static site, an artifact server — and protocol alone would then class it
+    // as web mode and start it polling an API that does not exist. Everything that reads the
+    // manifest (pages, bookmarks, detail popovers) works either way; everything that would reach for
+    // a network is what has to stay off.
+    const isOfflineHost = !!(window.__ETLSNAP__ || window.__OFFLINE__);
+    const isWebMode = !isOfflineHost && (window.__IS_WEB__ || window.location.protocol.startsWith('http'));
     const vscode    = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
     const isInteractive = isWebMode || vscode;
     const safeRequestAnimationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
@@ -822,7 +831,9 @@
         const actions = document.createElement('div');
         actions.className = 'header-actions';
 
-        if (freshnessStatus === 'stale') {
+        // Offline: a snapshot can be stale, and saying so is useful, but the button that asks the
+        // server to refresh it has nothing to ask.
+        if (freshnessStatus === 'stale' && !isOfflineHost) {
             const refreshBtn = document.createElement('button');
             refreshBtn.className = 'header-btn warning';
             refreshBtn.title = 'Request Data Refresh for Stale Report';
@@ -1268,7 +1279,23 @@
 
             const title = document.createElement('span');
             title.className = 'container-title';
-            title.textContent = containerDef.title || containerDef.name;
+            const cTitleText = containerDef.title || containerDef.name;
+            if (containerDef.titleIsMarkdown && containerDef.title) {
+                title.innerHTML = renderInlineMarkdown(cTitleText);
+            } else {
+                title.textContent = cTitleText;
+            }
+            const cStyles = containerDef.styles || {};
+            const ctColor = getStyle(cStyles, 'TITLE_COLOR');
+            const ctSize = getStyle(cStyles, 'TITLE_SIZE');
+            const ctWeight = getStyle(cStyles, 'TITLE_WEIGHT');
+            const ctFont = getStyle(cStyles, 'TITLE_FONT');
+            const ctAlign = getStyle(cStyles, 'TITLE_ALIGN');
+            if (ctColor) title.style.color = ctColor;
+            if (ctSize) title.style.fontSize = ctSize.includes('px') || ctSize.includes('rem') || ctSize.includes('em') || ctSize.includes('%') ? ctSize : (ctSize + 'px');
+            if (ctWeight) title.style.fontWeight = ctWeight;
+            if (ctFont) title.style.fontFamily = ctFont;
+            if (ctAlign) title.style.textAlign = ctAlign.toLowerCase();
             header.appendChild(title);
 
             const chevron = document.createElement('span');
@@ -1362,7 +1389,22 @@
 
         const title = document.createElement('div');
         title.className = 'drawer-title';
-        title.textContent = containerDef.title || containerDef.name;
+        const dTitleText = containerDef.title || containerDef.name;
+        if (containerDef.titleIsMarkdown && containerDef.title) {
+            title.innerHTML = renderInlineMarkdown(dTitleText);
+        } else {
+            title.textContent = dTitleText;
+        }
+        const dtColor = getStyle(styles, 'TITLE_COLOR');
+        const dtSize = getStyle(styles, 'TITLE_SIZE');
+        const dtWeight = getStyle(styles, 'TITLE_WEIGHT');
+        const dtFont = getStyle(styles, 'TITLE_FONT');
+        const dtAlign = getStyle(styles, 'TITLE_ALIGN');
+        if (dtColor) title.style.color = dtColor;
+        if (dtSize) title.style.fontSize = dtSize.includes('px') || dtSize.includes('rem') || dtSize.includes('em') || dtSize.includes('%') ? dtSize : (dtSize + 'px');
+        if (dtWeight) title.style.fontWeight = dtWeight;
+        if (dtFont) title.style.fontFamily = dtFont;
+        if (dtAlign) title.style.textAlign = dtAlign.toLowerCase();
         header.appendChild(title);
 
         const actions = document.createElement('div');
@@ -1498,7 +1540,7 @@
     }
 
     // Filter types that render without requiring rows
-    const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX']);
+    const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'HTML', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX']);
 
     function renderVisual(container, visual, pageTheme, manifest) {
         const card = document.createElement('div');
@@ -1549,15 +1591,62 @@
         }
 
         const title = document.createElement('h3');
-        title.textContent = visual.name;
+        const customTitle = getOption(visual.options, 'TITLE') || getOption(visual.options, 'title');
+        if (customTitle) {
+            if (visual.titleIsMarkdown) {
+                title.innerHTML = renderInlineMarkdown(customTitle);
+            } else {
+                title.textContent = customTitle;
+            }
+        } else {
+            title.textContent = visual.name;
+        }
 
-        // Hide redundant header if chart/card has its own title/label
-        const specificTitle = getOption(visual.options, 'TITLE') || getOption(visual.options, 'mapping:label');
-        if (specificTitle) title.style.display = 'none';
+        const tColor = getStyle(vstyles, 'TITLE_COLOR');
+        const tSize = getStyle(vstyles, 'TITLE_SIZE');
+        const tWeight = getStyle(vstyles, 'TITLE_WEIGHT');
+        const tFont = getStyle(vstyles, 'TITLE_FONT');
+        const tAlign = getStyle(vstyles, 'TITLE_ALIGN');
 
-        card.appendChild(title);
+        if (tColor) title.style.color = tColor;
+        if (tSize) title.style.fontSize = tSize.includes('px') || tSize.includes('rem') || tSize.includes('em') || tSize.includes('%') ? tSize : (tSize + 'px');
+        if (tWeight) title.style.fontWeight = tWeight;
+        if (tFont) title.style.fontFamily = tFont;
+        if (tAlign) title.style.textAlign = tAlign.toLowerCase();
+
+        const customSubtitle = getOption(visual.options, 'SUBTITLE') || getOption(visual.options, 'subtitle');
+        let subtitleEl = null;
+        if (customSubtitle) {
+            subtitleEl = document.createElement('div');
+            subtitleEl.className = 'card-subtitle visual-subtitle';
+            if (visual.subtitleIsMarkdown) {
+                subtitleEl.innerHTML = renderInlineMarkdown(customSubtitle);
+            } else {
+                subtitleEl.textContent = customSubtitle;
+            }
+            const sColor = getStyle(vstyles, 'SUBTITLE_COLOR');
+            const sSize = getStyle(vstyles, 'SUBTITLE_SIZE');
+            const sWeight = getStyle(vstyles, 'SUBTITLE_WEIGHT');
+            const sFont = getStyle(vstyles, 'SUBTITLE_FONT');
+            const sAlign = getStyle(vstyles, 'SUBTITLE_ALIGN') || tAlign;
+
+            if (sColor) subtitleEl.style.color = sColor;
+            if (sSize) subtitleEl.style.fontSize = sSize.includes('px') || sSize.includes('rem') || sSize.includes('em') || sSize.includes('%') ? sSize : (sSize + 'px');
+            if (sWeight) subtitleEl.style.fontWeight = sWeight;
+            if (sFont) subtitleEl.style.fontFamily = sFont;
+            if (sAlign) subtitleEl.style.textAlign = sAlign.toLowerCase();
+        }
 
         const type = (visual.visualType || '').toUpperCase();
+        // Hide outer redundant header if CARD has its own internal card-label or mapping:label
+        const isCardType = type === 'CARD' || type === 'KPI' || Boolean(getOption(visual.options, 'mapping:label'));
+        if (isCardType) title.style.display = 'none';
+
+        card.appendChild(title);
+        if (subtitleEl && !isCardType) card.appendChild(subtitleEl);
+        if (type === 'HTML') {
+            card.id = htmlVisualContainerId(visual.name);
+        }
         if (shouldShowVisualToolbar(type, vstyles)) {
             addVisualToolbar(card);
         }
@@ -1626,6 +1715,7 @@
             case 'SLICER':
             case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
             case 'TEXT':        renderText(card, visual);                         break;
+            case 'HTML':        renderHtmlVisual(card, visual, manifest);         break;
             case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
             case 'RELDATEPICKER': renderRelDatePicker(card, visual, manifest);     break;
             case 'SLIDER':      renderSlider(card, visual, manifest);             break;
@@ -1689,6 +1779,110 @@
         }
 
         container.appendChild(card);
+    }
+
+    const HTML_VISUAL_ELEMENTS = new Set([
+        'DIV', 'SPAN', 'SECTION', 'ARTICLE', 'ASIDE', 'HEADER', 'FOOTER', 'NAV', 'MAIN',
+        'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BR', 'HR', 'PRE', 'CODE', 'BLOCKQUOTE',
+        'EM', 'STRONG', 'I', 'B', 'U', 'S', 'SMALL', 'SUB', 'SUP', 'MARK', 'ABBR', 'TIME',
+        'CITE', 'Q', 'DFN', 'VAR', 'KBD', 'SAMP', 'UL', 'OL', 'LI', 'DL', 'DT', 'DD',
+        'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD', 'CAPTION', 'COLGROUP', 'COL',
+        'IMG', 'FIGURE', 'FIGCAPTION', 'PICTURE', 'SOURCE', 'A', 'BUTTON', 'DETAILS',
+        'SUMMARY', 'DATA', 'METER', 'PROGRESS', 'OUTPUT'
+    ]);
+    const HTML_VISUAL_GLOBAL_ATTRIBUTES = new Set([
+        'class', 'id', 'title', 'lang', 'dir', 'role', 'tabindex', 'hidden'
+    ]);
+    const HTML_VISUAL_ELEMENT_ATTRIBUTES = {
+        A: new Set(['href', 'target', 'rel']),
+        IMG: new Set(['src', 'alt', 'width', 'height', 'loading']),
+        BUTTON: new Set(['type', 'disabled', 'data-action', 'data-param', 'data-value']),
+        TD: new Set(['colspan', 'rowspan', 'scope', 'headers']),
+        TH: new Set(['colspan', 'rowspan', 'scope', 'headers']),
+        COL: new Set(['span']), COLGROUP: new Set(['span']),
+        OL: new Set(['start', 'type', 'reversed']), TIME: new Set(['datetime']),
+        METER: new Set(['min', 'max', 'low', 'high', 'optimum', 'value']),
+        PROGRESS: new Set(['max', 'value']), DATA: new Set(['value']), ABBR: new Set(['title']),
+        BLOCKQUOTE: new Set(['cite']), Q: new Set(['cite']),
+        SOURCE: new Set(['srcset', 'type', 'media']), DETAILS: new Set(['open'])
+    };
+
+    function htmlVisualContainerId(name) {
+        return 'etl-v-' + String(name || '').toLowerCase().replaceAll(' ', '-');
+    }
+
+    function isSafeHtmlVisualUrl(value) {
+        const url = String(value || '').trim();
+        if (/^(https?:|mailto:|tel:|#)/i.test(url)) return true;
+        return /^data:image\/(png|jpeg|gif|webp|svg\+xml)(;|,)/i.test(url)
+            && !/(<|%3c)\s*script\b/i.test(url)
+            && !/\bon[a-z]+\s*=/i.test(url);
+    }
+
+    function copyHtmlVisualNode(source, ownerDocument) {
+        if (source.nodeType === Node.TEXT_NODE) return ownerDocument.createTextNode(source.nodeValue || '');
+        if (source.nodeType !== Node.ELEMENT_NODE || !HTML_VISUAL_ELEMENTS.has(source.tagName)) return null;
+
+        const target = ownerDocument.createElement(source.tagName.toLowerCase());
+        const elementAttributes = HTML_VISUAL_ELEMENT_ATTRIBUTES[source.tagName] || new Set();
+        for (const attribute of source.attributes) {
+            const name = attribute.name.toLowerCase();
+            if (name.startsWith('on') || name === 'style') continue;
+            if (!HTML_VISUAL_GLOBAL_ATTRIBUTES.has(name)
+                && !name.startsWith('aria-')
+                && !name.startsWith('data-etl-')
+                && !elementAttributes.has(name)) continue;
+            if (['href', 'src', 'cite', 'srcset'].includes(name) && !isSafeHtmlVisualUrl(attribute.value)) continue;
+            if (source.tagName === 'BUTTON' && name === 'type' && attribute.value.toLowerCase() !== 'button') continue;
+            if (source.tagName === 'A' && name === 'target' && attribute.value !== '_blank') continue;
+            target.setAttribute(name, attribute.value);
+        }
+
+        if (source.tagName === 'A' && target.getAttribute('target') === '_blank') {
+            target.setAttribute('rel', 'noopener noreferrer');
+        }
+        if (source.tagName === 'IMG' && !target.hasAttribute('alt')) return null;
+        for (const child of source.childNodes) {
+            const copied = copyHtmlVisualNode(child, ownerDocument);
+            if (copied) target.appendChild(copied);
+        }
+        return target;
+    }
+
+    function renderHtmlVisual(container, visual, manifest) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'html-visual-content';
+        const fallback = String(visual.htmlFallback || visual.name || 'HTML visual');
+        wrapper.setAttribute('aria-label', fallback);
+
+        if (visual.htmlCss) {
+            const style = document.createElement('style');
+            style.className = 'html-visual-scoped-style';
+            style.textContent = String(visual.htmlCss);
+            container.appendChild(style);
+        }
+
+        const parsed = new DOMParser().parseFromString(String(visual.htmlContent || ''), 'text/html');
+        for (const child of parsed.body.childNodes) {
+            const copied = copyHtmlVisualNode(child, document);
+            if (copied) wrapper.appendChild(copied);
+        }
+
+        wrapper.addEventListener('click', event => {
+            const trigger = event.target.closest('[data-action]');
+            if (!trigger || !wrapper.contains(trigger)) return;
+            const actionType = String(trigger.dataset.action || '').toUpperCase();
+            const declared = (visual.actions || []).find(action => String(action.type || '').toUpperCase() === actionType);
+            const action = declared ? Object.assign({}, declared) : { type: actionType };
+            if (trigger.dataset.param) action.parameterName = trigger.dataset.param;
+            if (trigger.dataset.value !== undefined) {
+                action.valueSource = 'LITERAL';
+                action.literalValue = trigger.dataset.value;
+            }
+            executeAction(action, [trigger.dataset.value ?? ''], ['VALUE'], visual.name, visual);
+        });
+
+        container.appendChild(wrapper);
     }
 
     // ── Native SVG chart — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──
@@ -3778,11 +3972,46 @@
             }
         }
 
+        const vstyles = visual.styles || {};
+        const tColor = getStyle(vstyles, 'TITLE_COLOR');
+        const tSize = getStyle(vstyles, 'TITLE_SIZE');
+        const tWeight = getStyle(vstyles, 'TITLE_WEIGHT');
+        const tFont = getStyle(vstyles, 'TITLE_FONT');
+        const tAlign = getStyle(vstyles, 'TITLE_ALIGN');
+
+        let titleStyleAttr = '';
+        if (tColor) titleStyleAttr += `color:${escHtml(tColor)};`;
+        if (tSize) titleStyleAttr += `font-size:${escHtml(tSize.includes('px') || tSize.includes('rem') || tSize.includes('em') || tSize.includes('%') ? tSize : (tSize + 'px'))};`;
+        if (tWeight) titleStyleAttr += `font-weight:${escHtml(tWeight)};`;
+        if (tFont) titleStyleAttr += `font-family:${escHtml(tFont)};`;
+
+        let headerRowStyleAttr = '';
+        if (tAlign) {
+            const alignLower = tAlign.toLowerCase();
+            headerRowStyleAttr = `justify-content:${alignLower === 'center' ? 'center' : (alignLower === 'right' ? 'flex-end' : 'flex-start')};`;
+        }
+
+        const sColor = getStyle(vstyles, 'SUBTITLE_COLOR');
+        const sSize = getStyle(vstyles, 'SUBTITLE_SIZE');
+        const sWeight = getStyle(vstyles, 'SUBTITLE_WEIGHT');
+        const sFont = getStyle(vstyles, 'SUBTITLE_FONT');
+        const sAlign = getStyle(vstyles, 'SUBTITLE_ALIGN') || tAlign;
+
+        let subStyleAttr = '';
+        if (sColor) subStyleAttr += `color:${escHtml(sColor)};`;
+        if (sSize) subStyleAttr += `font-size:${escHtml(sSize.includes('px') || sSize.includes('rem') || sSize.includes('em') || sSize.includes('%') ? sSize : (sSize + 'px'))};`;
+        if (sWeight) subStyleAttr += `font-weight:${escHtml(sWeight)};`;
+        if (sFont) subStyleAttr += `font-family:${escHtml(sFont)};`;
+        if (sAlign) subStyleAttr += `text-align:${escHtml(sAlign.toLowerCase())};`;
+
+        const titleInner = visual.titleIsMarkdown ? renderInlineMarkdown(cardTitle) : escHtml(cardTitle);
+        const subInner = visual.subtitleIsMarkdown ? renderInlineMarkdown(subtitleText) : escHtml(subtitleText);
+
         const cardEl = document.createElement('div');
         cardEl.className = 'card-value' + (status ? ` card-status-${status}` : '');
         cardEl.innerHTML =
-            `<div class="card-header-row"><div class="card-label">${escHtml(cardTitle)}</div>${badgeHtml}</div>` +
-            (subtitleText ? `<div class="card-subtitle">${escHtml(subtitleText)}</div>` : '') +
+            `<div class="card-header-row"${headerRowStyleAttr ? ` style="${headerRowStyleAttr}"` : ''}><div class="card-label"${titleStyleAttr ? ` style="${titleStyleAttr}"` : ''}>${titleInner}</div>${badgeHtml}</div>` +
+            (subtitleText ? `<div class="card-subtitle"${subStyleAttr ? ` style="${subStyleAttr}"` : ''}>${subInner}</div>` : '') +
             `<div class="card-number">${escHtml(String(displayValue))}</div>` +
             goalLineHtml + goalPctHtml + deltaHtml + progressHtml;
         const sparkline = Array.isArray(visual.microCharts)
@@ -5336,8 +5565,11 @@
     }
 
     // Offline snapshots set window.__ETLSNAP__; overridden by the snapshot bootstrap when present.
+    // Re-read rather than returning the boot-time `isOfflineHost`, so a host that sets the flag after
+    // the runtime script has been parsed still gets offline behaviour from every later decision.
     function isOfflineSnapshot() {
-        return !!(window.__ETLSNAP__ || (typeof window.__OFFLINE__ !== 'undefined' && window.__OFFLINE__));
+        return isOfflineHost
+            || !!(window.__ETLSNAP__ || (typeof window.__OFFLINE__ !== 'undefined' && window.__OFFLINE__));
     }
 
     /**
@@ -5355,16 +5587,29 @@
      *
      * Returns true when the state was applied, so the caller can commit the page/presentation half.
      */
+    /**
+     * Records parameter values into the snapshot manifest held in memory, without re-rendering.
+     *
+     * Offline there is no server to re-resolve against, so a parameter change moves the control and
+     * leaves the figures where the capture froze them. Separated from the bookmark path because a
+     * bookmark announces itself to the reader and an ordinary control change must not.
+     */
+    function recordParametersOffline(batch) {
+        if (!_lastManifest) return false;
+        _lastManifest.parameters = _lastManifest.parameters || {};
+        for (const [name, value] of Object.entries(batch || {})) {
+            _lastManifest.parameters[name] = value;
+            parameters[name] = value;
+        }
+        return true;
+    }
+
     async function applyParametersOffline(batch) {
         if (!_lastManifest) return false;
         const entries = Object.entries(batch || {});
         if (entries.length === 0) return true;
 
-        _lastManifest.parameters = _lastManifest.parameters || {};
-        for (const [name, value] of entries) {
-            _lastManifest.parameters[name] = value;
-            parameters[name] = value;
-        }
+        if (!recordParametersOffline(batch)) return false;
 
         // Re-render from the snapshot in memory so the controls reflect the bookmarked values.
         renderManifest(_lastManifest);
@@ -5916,6 +6161,17 @@
         }));
 
         console.debug('[ParameterUpdate] Sending:', { params: paramList, isInteraction });
+
+        // Offline snapshot: the manifest in memory is the entire report, so every consumer of this
+        // function is answered from it rather than from an API that is not there. Detail popovers
+        // are the reason this matters — they refresh through here on every open, so without this
+        // branch a popover in a snapshot viewer showed "could not be loaded" and the offline claim
+        // in the tooltip documentation was false. An interaction (`@hover_value`) is transient and
+        // must not be written into the report's parameter state.
+        if (isOfflineSnapshot()) {
+            if (!isInteraction) recordParametersOffline(params);
+            return _lastManifest;
+        }
 
         if (vscode) {
             vscode.postMessage({

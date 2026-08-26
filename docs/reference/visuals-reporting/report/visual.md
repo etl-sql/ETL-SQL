@@ -6,6 +6,9 @@ Visuals are the building blocks of reports. Each visual binds a data source to a
 ```sql
 CREATE VISUAL <name> AS <TYPE> (
   SOURCE   = #temp_table | (inline SELECT) | &dataset,
+  [TITLE   = '...' [MARKDOWN] | TITLE (TEXT = '...', COLOR = '...', SIZE = ..., WEIGHT = ..., ALIGN = ...),]
+  [SUBTITLE = '...' [MARKDOWN] | SUBTITLE (TEXT = '...', COLOR = '...', SIZE = ..., WEIGHT = ..., ALIGN = ...),]
+  [STYLE   = <StyleName> | STYLE (KEY = value, ...),]
   [FETCH   = AUTO | ON_LOAD | ON_RUN,]
   [MAPPINGS (column_alias = col, ...),]
   [OPTIONS  (KEY = value, ...),]
@@ -31,6 +34,20 @@ CREATE VISUAL <name> AS <TYPE> (
   )]
 );
 ```
+
+## Title and Subtitle Styling
+
+Titles and subtitles support simple string assignment, inline markdown, or structured formatting blocks:
+
+- **Simple / Markdown**: `TITLE = 'Sales Summary'` or `TITLE = ('**Sales** Summary')`
+- **Structured Block**: `TITLE (TEXT = 'Sales', COLOR = '#dc2626', SIZE = '18px', WEIGHT = BOLD, ALIGN = CENTER)`
+- **Subtitle Block**: `SUBTITLE (TEXT = 'USD in thousands', COLOR = '#64748b', SIZE = '12px', ALIGN = CENTER)`
+
+### Precedence Cascade
+1. Global theme or card default styles.
+2. Macro / Named style rules (`CREATE STYLE ... TITLE_COLOR = '#0f172a'`).
+3. Micro component block overrides (`TITLE (COLOR = '#dc2626')`).
+4. Inline markdown spans within the text string.
 
 ## Chart Types
 

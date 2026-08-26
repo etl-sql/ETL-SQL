@@ -26,6 +26,7 @@ public class ReportParser : ParserComponent
         VisualSourceExpression? source = null;
         Expression? title = null, subtitle = null;
         bool titleMd = false, subtitleMd = false;
+        TitleDefinition? titleDef = null, subtitleDef = null;
         Expression? defaultValue = null;
         string? styleName = null;
         Expression? placeholder = null;
@@ -63,11 +64,11 @@ public class ReportParser : ParserComponent
             }
             else if (Match(TokenType.TITLE))
             {
-                (title, titleMd) = ParseVisualPropertyWithMd("TITLE");
+                (title, titleMd, titleDef) = ParseVisualPropertyWithMd("TITLE");
             }
             else if (Match(TokenType.SUBTITLE))
             {
-                (subtitle, subtitleMd) = ParseVisualPropertyWithMd("SUBTITLE");
+                (subtitle, subtitleMd, subtitleDef) = ParseVisualPropertyWithMd("SUBTITLE");
             }
             else if (Match(TokenType.TOOLTIP))
             {
@@ -289,8 +290,10 @@ public class ReportParser : ParserComponent
             VisualType = visualType,
             Title = title,
             TitleIsMarkdown = titleMd,
+            TitleDefinition = titleDef,
             Subtitle = subtitle,
             SubtitleIsMarkdown = subtitleMd,
+            SubtitleDefinition = subtitleDef,
             DefaultValue = defaultValue,
             LabelPosition = labelPosition,
             Min = min,
@@ -1408,6 +1411,7 @@ public class ReportParser : ParserComponent
         string? pageStyleName = null;
         Expression? title = null, subtitle = null;
         bool titleMd = false, subtitleMd = false;
+        TitleDefinition? titleDef = null, subtitleDef = null;
         TooltipDefinition? tooltip = null;
         int refreshSecs = 0;
         PageLayoutDefinition? printLayout = null;
@@ -1444,11 +1448,11 @@ public class ReportParser : ParserComponent
             }
             else if (Match(TokenType.TITLE))
             {
-                (title, titleMd) = ParseVisualPropertyWithMd("TITLE");
+                (title, titleMd, titleDef) = ParseVisualPropertyWithMd("TITLE");
             }
             else if (Match(TokenType.SUBTITLE))
             {
-                (subtitle, subtitleMd) = ParseVisualPropertyWithMd("SUBTITLE");
+                (subtitle, subtitleMd, subtitleDef) = ParseVisualPropertyWithMd("SUBTITLE");
             }
             else if (Match(TokenType.TOOLTIP))
             {
@@ -1503,8 +1507,10 @@ public class ReportParser : ParserComponent
             StyleName = pageStyleName,
             Title = title,
             TitleIsMarkdown = titleMd,
+            TitleDefinition = titleDef,
             Subtitle = subtitle,
             SubtitleIsMarkdown = subtitleMd,
+            SubtitleDefinition = subtitleDef,
             Tooltip = tooltip,
             Visibility = visibility,
             RefreshIntervalSeconds = refreshSecs,
@@ -1909,6 +1915,7 @@ public class ReportParser : ParserComponent
         string? containerStyleName = null;
         Expression? title = null, subtitle = null;
         bool titleMd = false, subtitleMd = false;
+        TitleDefinition? titleDef = null, subtitleDef = null;
         TooltipDefinition? tooltip = null;
         string? structure = null;
         var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -1927,11 +1934,11 @@ public class ReportParser : ParserComponent
             }
             else if (Match(TokenType.TITLE))
             {
-                (title, titleMd) = ParseVisualPropertyWithMd("TITLE");
+                (title, titleMd, titleDef) = ParseVisualPropertyWithMd("TITLE");
             }
             else if (Match(TokenType.SUBTITLE))
             {
-                (subtitle, subtitleMd) = ParseVisualPropertyWithMd("SUBTITLE");
+                (subtitle, subtitleMd, subtitleDef) = ParseVisualPropertyWithMd("SUBTITLE");
             }
             else if (Match(TokenType.TOOLTIP))
             {
@@ -1981,8 +1988,10 @@ public class ReportParser : ParserComponent
             StyleName = containerStyleName,
             Title = title,
             TitleIsMarkdown = titleMd,
+            TitleDefinition = titleDef,
             Subtitle = subtitle,
             SubtitleIsMarkdown = subtitleMd,
+            SubtitleDefinition = subtitleDef,
             Tooltip = tooltip,
             IsCollapsible = isCollapsible,
             Visibility = visibility,
@@ -2803,18 +2812,134 @@ public class ReportParser : ParserComponent
         return new VisualSourceExpression { TempTableName = tableRef };
     }
 
-    private (Expression? Value, bool IsMarkdown) ParseVisualPropertyWithMd(string propertyName)
+    private TitleDefinition ParseTitleDefinition(string propertyName)
     {
-        Match(TokenType.EQUALS);
-        bool isMarkdown = false;
+        if (Match(TokenType.EQUALS))
+        {
+            if (ReportCheck(TokenType.LPAREN))
+            {
+                Advance(); // consume '('
+                if (IsTitleBlockStart())
+                {
+                    var def = ParseTitleBlockBody();
+                    Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
+                    return def;
+                }
+                var expr = _parser.ParseExpression();
+                Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
+                return new TitleDefinition { Text = expr, IsMarkdown = true };
+            }
+            var simpleExpr = _parser.ParseExpression();
+            bool simpleMd = false;
+            if (Match(TokenType.MARKDOWN)) simpleMd = true;
+            return new TitleDefinition { Text = simpleExpr, IsMarkdown = simpleMd };
+        }
+
         if (Match(TokenType.LPAREN))
         {
-            isMarkdown = true;
+            if (IsTitleBlockStart())
+            {
+                var def = ParseTitleBlockBody();
+                Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
+                return def;
+            }
             var expr = _parser.ParseExpression();
             Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
-            return (expr, isMarkdown);
+            return new TitleDefinition { Text = expr, IsMarkdown = true };
         }
-        return (_parser.ParseExpression(), false);
+
+        var bareExpr = _parser.ParseExpression();
+        bool bareMd = false;
+        if (Match(TokenType.MARKDOWN)) bareMd = true;
+        return new TitleDefinition { Text = bareExpr, IsMarkdown = bareMd };
+    }
+
+    private bool IsTitleBlockStart()
+    {
+        var val = _parser.Current.Value.ToUpperInvariant();
+        if (val is "TEXT" or "CONTENT" or "VALUE" or "TITLE" or "COLOR" or "TEXT_COLOR" or "FONT"
+            or "FONT_FAMILY" or "SIZE" or "FONT_SIZE" or "WEIGHT" or "FONT_WEIGHT" or "ALIGN"
+            or "TEXT_ALIGN" or "MARKDOWN" or "IS_MARKDOWN" or "FONT_STYLE")
+        {
+            return _parser.Peek.Type == TokenType.EQUALS || _parser.Peek.Type == TokenType.MINUS;
+        }
+        return false;
+    }
+
+    private TitleDefinition ParseTitleBlockBody()
+    {
+        Expression? text = null;
+        bool isMd = false;
+        string? color = null;
+        string? font = null;
+        string? size = null;
+        string? weight = null;
+        string? align = null;
+
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var keyTok = _parser.IsIdentifier(_parser.Current) || LanguageMetadata.IsKeyword(_parser.Current.Value)
+                ? _parser.Advance()
+                : throw new SyntaxException("Expected title property key", _parser.Current.Line, _parser.Current.Column);
+            var key = keyTok.Value.ToUpperInvariant();
+            while (_parser.Current.Type == TokenType.MINUS &&
+                   (_parser.IsIdentifier(_parser.Peek) || LanguageMetadata.IsKeyword(_parser.Peek.Value)))
+            {
+                Advance(); // consume '-'
+                key += "_" + _parser.Advance().Value.ToUpperInvariant();
+            }
+
+            Consume(TokenType.EQUALS, $"Expected '=' after title property '{key}'");
+
+            switch (key)
+            {
+                case "TEXT" or "CONTENT" or "VALUE" or "TITLE":
+                    text = _parser.ParseExpression();
+                    if (Match(TokenType.MARKDOWN)) isMd = true;
+                    break;
+                case "COLOR" or "TEXT_COLOR":
+                    color = _parser.Advance().Value;
+                    break;
+                case "FONT" or "FONT_FAMILY":
+                    font = _parser.Advance().Value;
+                    break;
+                case "SIZE" or "FONT_SIZE":
+                    size = _parser.Advance().Value;
+                    break;
+                case "WEIGHT" or "FONT_WEIGHT":
+                    weight = _parser.Advance().Value;
+                    break;
+                case "ALIGN" or "TEXT_ALIGN":
+                    align = _parser.Advance().Value;
+                    break;
+                case "MARKDOWN" or "IS_MARKDOWN":
+                    var mdVal = _parser.Advance().Value.ToUpperInvariant();
+                    isMd = mdVal is "ON" or "TRUE" or "1" or "YES";
+                    break;
+                default:
+                    _parser.Advance();
+                    break;
+            }
+
+            Match(TokenType.COMMA);
+        }
+
+        return new TitleDefinition
+        {
+            Text = text,
+            IsMarkdown = isMd,
+            Color = color,
+            Font = font,
+            Size = size,
+            Weight = weight,
+            Align = align
+        };
+    }
+
+    private (Expression? Value, bool IsMarkdown, TitleDefinition? Definition) ParseVisualPropertyWithMd(string propertyName)
+    {
+        var def = ParseTitleDefinition(propertyName);
+        return (def.Text, def.IsMarkdown, def);
     }
 
     private Expression? ParseVisualProperty(string propertyName) => ParseVisualPropertyWithMd(propertyName).Value;

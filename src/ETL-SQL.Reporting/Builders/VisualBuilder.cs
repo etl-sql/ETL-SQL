@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -33,8 +33,13 @@ namespace ETL_SQL.Reporting.Builders
                     ctx.VarContext.SetVariable(variableName, pair.Value);
                 }
 
-                (title, titleMd) = await styleBuilder.ResolveMarkdownAsync(vStmt.Title, vStmt.TitleIsMarkdown);
-                (subtitle, subtitleMd) = await styleBuilder.ResolveMarkdownAsync(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
+                var titleExpr = vStmt.TitleDefinition?.Text ?? vStmt.Title;
+                var titleIsMd = vStmt.TitleDefinition?.IsMarkdown ?? vStmt.TitleIsMarkdown;
+                (title, titleMd) = await styleBuilder.ResolveMarkdownAsync(titleExpr, titleIsMd);
+
+                var subtitleExpr = vStmt.SubtitleDefinition?.Text ?? vStmt.Subtitle;
+                var subtitleIsMd = vStmt.SubtitleDefinition?.IsMarkdown ?? vStmt.SubtitleIsMarkdown;
+                (subtitle, subtitleMd) = await styleBuilder.ResolveMarkdownAsync(subtitleExpr, subtitleIsMd);
                 (defVal, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.DefaultValue);
                 (placeholder, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.Placeholder);
             }
@@ -131,6 +136,25 @@ namespace ETL_SQL.Reporting.Builders
 
             // Styles
             var resolvedStyles = styleBuilder.ResolveStyles(vStmt.StyleName, vStmt.Styles);
+
+            // Title & Subtitle block typography overrides
+            if (vStmt.TitleDefinition != null)
+            {
+                if (vStmt.TitleDefinition.Color != null) resolvedStyles["TITLE_COLOR"] = vStmt.TitleDefinition.Color;
+                if (vStmt.TitleDefinition.Size != null) resolvedStyles["TITLE_SIZE"] = vStmt.TitleDefinition.Size;
+                if (vStmt.TitleDefinition.Weight != null) resolvedStyles["TITLE_WEIGHT"] = vStmt.TitleDefinition.Weight;
+                if (vStmt.TitleDefinition.Font != null) resolvedStyles["TITLE_FONT"] = vStmt.TitleDefinition.Font;
+                if (vStmt.TitleDefinition.Align != null) resolvedStyles["TITLE_ALIGN"] = vStmt.TitleDefinition.Align;
+            }
+            if (vStmt.SubtitleDefinition != null)
+            {
+                if (vStmt.SubtitleDefinition.Color != null) resolvedStyles["SUBTITLE_COLOR"] = vStmt.SubtitleDefinition.Color;
+                if (vStmt.SubtitleDefinition.Size != null) resolvedStyles["SUBTITLE_SIZE"] = vStmt.SubtitleDefinition.Size;
+                if (vStmt.SubtitleDefinition.Weight != null) resolvedStyles["SUBTITLE_WEIGHT"] = vStmt.SubtitleDefinition.Weight;
+                if (vStmt.SubtitleDefinition.Font != null) resolvedStyles["SUBTITLE_FONT"] = vStmt.SubtitleDefinition.Font;
+                if (vStmt.SubtitleDefinition.Align != null) resolvedStyles["SUBTITLE_ALIGN"] = vStmt.SubtitleDefinition.Align;
+            }
+
             if (resolvedStyles.Count > 0)
                 vm.Styles = resolvedStyles;
 

@@ -279,6 +279,7 @@ public static class AstSerializer
         WaitForStatement s => $"WAITFOR {s.Type.ToString().ToUpper()} {s.Expression.ToSql()};",
         ExplainStatement s => (s.IsAnalyze ? "EXPLAIN ANALYZE " : "EXPLAIN ") + s.Query.ToSql() + (s.IntoTable != null ? " INTO " + s.IntoTable.ToSql() : ""),
         CreateVisualStatement s => FormatCreateVisual(s),
+        TitleDefinition s => FormatTitleDefinition(s),
         CascadeDefinition s => FormatCascade(s),
         AdvancedChartDefinition s => FormatAdvancedChart(s),
         HtmlTemplateDefinition s => FormatHtmlTemplate(s),
@@ -1375,8 +1376,10 @@ public static class AstSerializer
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"{CreationVerb(s.Mode)} VISUAL {s.Name} AS {s.VisualType.ToString().ToUpper()} (");
-        if (s.Title != null) sb.AppendLine($"    TITLE = {s.Title.ToSql()},");
-        if (s.Subtitle != null) sb.AppendLine($"    SUBTITLE = {s.Subtitle.ToSql()},");
+        var titleClause = FormatTitleClause("TITLE", s.Title, s.TitleIsMarkdown, s.TitleDefinition);
+        if (!string.IsNullOrEmpty(titleClause)) sb.AppendLine($"    {titleClause},");
+        var subtitleClause = FormatTitleClause("SUBTITLE", s.Subtitle, s.SubtitleIsMarkdown, s.SubtitleDefinition);
+        if (!string.IsNullOrEmpty(subtitleClause)) sb.AppendLine($"    {subtitleClause},");
         // COMPAT_BREAK: 0.19 — formatted output for a visual with a TOOLTIP changes.
         // Detail surfaces are formatted here for the same reason pages, containers, and buttons
         // format theirs: omitting the clause silently deletes the author's tooltip on the next
@@ -1574,8 +1577,10 @@ public static class AstSerializer
     private static string FormatCreatePage(CreatePageStatement s)
     {
         var parts = new List<string>();
-        if (s.Title != null) parts.Add($"TITLE = {s.Title.ToSql()}");
-        if (s.Subtitle != null) parts.Add($"SUBTITLE = {s.Subtitle.ToSql()}");
+        var titleClause = FormatTitleClause("TITLE", s.Title, s.TitleIsMarkdown, s.TitleDefinition);
+        if (!string.IsNullOrEmpty(titleClause)) parts.Add(titleClause);
+        var subtitleClause = FormatTitleClause("SUBTITLE", s.Subtitle, s.SubtitleIsMarkdown, s.SubtitleDefinition);
+        if (!string.IsNullOrEmpty(subtitleClause)) parts.Add(subtitleClause);
         if (s.Tooltip != null) parts.Add($"TOOLTIP {FormatTooltip(s.Tooltip)}");
         parts.Add($"STRUCTURE = {Quote(s.Structure)}");
         if (s.SlotMap.Count > 0)
@@ -1619,8 +1624,10 @@ public static class AstSerializer
     private static string FormatCreateContainer(CreateContainerStatement s)
     {
         var parts = new List<string>();
-        if (s.Title != null) parts.Add($"TITLE = {s.Title.ToSql()}");
-        if (s.Subtitle != null) parts.Add($"SUBTITLE = {s.Subtitle.ToSql()}");
+        var titleClause = FormatTitleClause("TITLE", s.Title, s.TitleIsMarkdown, s.TitleDefinition);
+        if (!string.IsNullOrEmpty(titleClause)) parts.Add(titleClause);
+        var subtitleClause = FormatTitleClause("SUBTITLE", s.Subtitle, s.SubtitleIsMarkdown, s.SubtitleDefinition);
+        if (!string.IsNullOrEmpty(subtitleClause)) parts.Add(subtitleClause);
         if (s.Tooltip != null) parts.Add($"TOOLTIP {FormatTooltip(s.Tooltip)}");
         if (s.Visibility != null) parts.Add($"VISIBLE = {s.Visibility}");
         if (s.Icon != null) parts.Add($"ICON = {Quote(s.Icon)}");
@@ -1931,5 +1938,41 @@ public static class AstSerializer
         if (opts.Count > 0) sb.Append($" WITH ({string.Join(", ", opts)})");
         sb.Append(';');
         return sb.ToString();
+    }
+
+    public static string FormatTitleDefinition(TitleDefinition d)
+    {
+        var parts = new List<string>();
+        if (d.Text != null)
+            parts.Add($"TEXT = {d.Text.ToSql()}{(d.IsMarkdown ? " MARKDOWN" : "")}");
+        if (d.Color != null) parts.Add($"COLOR = '{d.Color.Replace("'", "''")}'");
+        if (d.Font != null) parts.Add($"FONT = '{d.Font.Replace("'", "''")}'");
+        if (d.Size != null) parts.Add($"SIZE = '{d.Size.Replace("'", "''")}'");
+        if (d.Weight != null) parts.Add($"WEIGHT = '{d.Weight.Replace("'", "''")}'");
+        if (d.Align != null) parts.Add($"ALIGN = {d.Align.ToUpperInvariant()}");
+        return "TITLE ( " + string.Join(", ", parts) + " )";
+    }
+
+    private static string FormatTitleClause(string propertyName, Expression? expr, bool isMd, TitleDefinition? def)
+    {
+        if (def != null && (def.Color != null || def.Font != null || def.Size != null || def.Weight != null || def.Align != null))
+        {
+            var parts = new List<string>();
+            if (def.Text != null)
+                parts.Add($"TEXT = {def.Text.ToSql()}{(def.IsMarkdown ? " MARKDOWN" : "")}");
+            if (def.Color != null) parts.Add($"COLOR = '{def.Color.Replace("'", "''")}'");
+            if (def.Font != null) parts.Add($"FONT = '{def.Font.Replace("'", "''")}'");
+            if (def.Size != null) parts.Add($"SIZE = '{def.Size.Replace("'", "''")}'");
+            if (def.Weight != null) parts.Add($"WEIGHT = '{def.Weight.Replace("'", "''")}'");
+            if (def.Align != null) parts.Add($"ALIGN = {def.Align.ToUpperInvariant()}");
+            return $"{propertyName} ( {string.Join(", ", parts)} )";
+        }
+        if (expr != null)
+        {
+            if (isMd)
+                return $"{propertyName} = ({expr.ToSql()})";
+            return $"{propertyName} = {expr.ToSql()}";
+        }
+        return string.Empty;
     }
 }

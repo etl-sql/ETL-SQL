@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -106,8 +106,30 @@ namespace ETL_SQL.Reporting
                 foreach (var (name, cStmt) in _ctx.ReportContext.ContainerDefinitions)
                 {
                     var resolvedStyles = _styleBuilder.ResolveStyles(cStmt.StyleName, cStmt.Styles, reportStyles);
-                    var (title, titleMd) = await _styleBuilder.ResolveMarkdownAsync(cStmt.Title, cStmt.TitleIsMarkdown);
-                    var (subtitle, subtitleMd) = await _styleBuilder.ResolveMarkdownAsync(cStmt.Subtitle, cStmt.SubtitleIsMarkdown);
+                    if (cStmt.TitleDefinition != null)
+                    {
+                        if (cStmt.TitleDefinition.Color != null) resolvedStyles["TITLE_COLOR"] = cStmt.TitleDefinition.Color;
+                        if (cStmt.TitleDefinition.Size != null) resolvedStyles["TITLE_SIZE"] = cStmt.TitleDefinition.Size;
+                        if (cStmt.TitleDefinition.Weight != null) resolvedStyles["TITLE_WEIGHT"] = cStmt.TitleDefinition.Weight;
+                        if (cStmt.TitleDefinition.Font != null) resolvedStyles["TITLE_FONT"] = cStmt.TitleDefinition.Font;
+                        if (cStmt.TitleDefinition.Align != null) resolvedStyles["TITLE_ALIGN"] = cStmt.TitleDefinition.Align;
+                    }
+                    if (cStmt.SubtitleDefinition != null)
+                    {
+                        if (cStmt.SubtitleDefinition.Color != null) resolvedStyles["SUBTITLE_COLOR"] = cStmt.SubtitleDefinition.Color;
+                        if (cStmt.SubtitleDefinition.Size != null) resolvedStyles["SUBTITLE_SIZE"] = cStmt.SubtitleDefinition.Size;
+                        if (cStmt.SubtitleDefinition.Weight != null) resolvedStyles["SUBTITLE_WEIGHT"] = cStmt.SubtitleDefinition.Weight;
+                        if (cStmt.SubtitleDefinition.Font != null) resolvedStyles["SUBTITLE_FONT"] = cStmt.SubtitleDefinition.Font;
+                        if (cStmt.SubtitleDefinition.Align != null) resolvedStyles["SUBTITLE_ALIGN"] = cStmt.SubtitleDefinition.Align;
+                    }
+
+                    var titleExpr = cStmt.TitleDefinition?.Text ?? cStmt.Title;
+                    var titleIsMd = cStmt.TitleDefinition?.IsMarkdown ?? cStmt.TitleIsMarkdown;
+                    var (title, titleMd) = await _styleBuilder.ResolveMarkdownAsync(titleExpr, titleIsMd);
+
+                    var subtitleExpr = cStmt.SubtitleDefinition?.Text ?? cStmt.Subtitle;
+                    var subtitleIsMd = cStmt.SubtitleDefinition?.IsMarkdown ?? cStmt.SubtitleIsMarkdown;
+                    var (subtitle, subtitleMd) = await _styleBuilder.ResolveMarkdownAsync(subtitleExpr, subtitleIsMd);
 
                     manifest.Containers.Add(new ContainerManifest
                     {
