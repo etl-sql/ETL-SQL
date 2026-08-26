@@ -76,5 +76,5 @@ CLOSE DOCKER;
 ## Examples
 
 ```sql
-USE DOCKER CONTAINER 'my-postgres' IMAGE 'postgres:16';
+USE DOCKER('postgres:16') AS my_postgres;
 ```

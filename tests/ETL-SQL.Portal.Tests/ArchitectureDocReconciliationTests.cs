@@ -135,7 +135,7 @@ public sealed class ArchitectureDocReconciliationTests
         Assert.NotEmpty(capabilities);
 
         var reference = File.ReadAllText(Path.Combine(
-            RepoRoot(), "docs", "administration", "portal", "portal-config-reference.md"));
+            RepoRoot(), "docs", "administration", "platform", "config", "portal-configuration.md"));
         var missing = capabilities.Where(c => !reference.Contains(c, StringComparison.Ordinal)).ToList();
 
         Assert.True(missing.Count == 0,

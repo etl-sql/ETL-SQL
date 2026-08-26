@@ -7,8 +7,8 @@ Unsupported object/mode pairs are parser errors; they must not parse as a plain 
 ## Syntax
 
 ```sql
-CREATE [OR ALTER | OR REPLACE] [IF NOT EXISTS] object_type name ...;
-DROP object_type [IF EXISTS] name;
+CREATE [OR ALTER | OR REPLACE] [IF NOT EXISTS] <object_type> <name> ...;
+DROP <object_type> [IF EXISTS] <name>;
 ```
 
 ## Examples

@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -100,7 +100,7 @@ public sealed class HaAndSecurityDocReconciliationTests
         Assert.NotEmpty(settings);
 
         var reference = File.ReadAllText(Path.Combine(
-            RepoRoot(), "docs", "administration", "portal", "portal-config-reference.md"));
+            RepoRoot(), "docs", "administration", "platform", "config", "portal-configuration.md"));
         var missing = settings.Where(s => !reference.Contains(s, StringComparison.Ordinal)).ToList();
 
         Assert.True(missing.Count == 0,

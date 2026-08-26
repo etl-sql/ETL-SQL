@@ -1,4 +1,4 @@
-﻿namespace ETL_SQL.Tests.Docs;
+namespace ETL_SQL.Tests.Docs;
 
 /// <summary>
 /// Every engine subsystem is either documented in an architecture page or explicitly recorded as
@@ -110,6 +110,8 @@ public sealed class EngineSubsystemCoverageTests
             "Target-specific SQL translation boundaries."),
         ["ETL-SQL.Core/Reporting"] = new("reporting.md", "ResolvedReportState",
             "Shared versioned resolved-state envelope for author bookmarks and Portal saved views."),
+        ["ETL-SQL.Core/Reliability"] = new("decisions/provider-neutral-fault-certification.md", "ProviderNeutralFaultScenarios",
+            "Provider-neutral fault certification and production canary harnesses."),
     };
 
     [Fact]

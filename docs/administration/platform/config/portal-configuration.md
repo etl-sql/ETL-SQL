@@ -91,11 +91,23 @@ Certified topology profiles:
 | `Portal:Studio:Mode` | enum | `CatalogOnly` | Studio boundary: `Disabled`, `CatalogOnly`, or `SourceControlled`. |
 | `Portal:Studio:RoleCapabilities:<role>` | string array | `[]` | Explicit Studio capabilities granted to a role. Empty mappings deny authoring. |
 
-Studio capability names: `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptRun`, `ScriptSave`, `ReportPublish`, `ScriptIngress`, `SourceCommit`, `SourcePush`.
+Studio capability names: `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptRun`, `ScriptSave`, `ReportPublish`, `ReportApprove`, `ScriptIngress`, `SourceCommit`, `SourcePush`.
 
 - `Mode=Disabled` removes the entry page and all authoring APIs.
 - `Mode=CatalogOnly` permits only explicitly granted catalog read/preview/run/save operations.
 - `Mode=SourceControlled` allows external/source operations only when individual capabilities are also granted.
+
+---
+
+## Topology & High Availability Validation
+
+| Key | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `Topology.ExpectedMode` / `Portal:Topology:ExpectedMode` | string | `SingleNode` | Expected deployment mode (`SingleNode`, `Enterprise`, `SaaS`). |
+| `Topology.MinLivePortalNodes` / `Portal:Topology:MinLivePortalNodes` | integer | `1` | Minimum live Portal nodes required for healthy cluster. |
+| `Topology.MinLiveOrchestratorNodes` / `Portal:Topology:MinLiveOrchestratorNodes` | integer | `1` | Minimum live Orchestrator nodes required for healthy cluster. |
+| `Topology.RequirePostgresForHa` / `Portal:Topology:RequirePostgresForHa` | boolean | `true` | Requires PostgreSQL backend when running in HA topology. |
+| `Topology.RequireSharedKeyRingForHa` / `Portal:Topology:RequireSharedKeyRingForHa` | boolean | `true` | Requires shared Data Protection key ring across nodes in HA topology. |
 
 ---
 
@@ -131,9 +143,9 @@ Studio capability names: `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptR
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| `Portal:LoadBalancer:SessionAffinityEnabled` | `true` | Emits a cookie indicating target node for sticky routing. |
-| `Portal:LoadBalancer:SessionAffinityCookieName` | `ETLSQL_PORTAL_AFFINITY` | Cookie name load balancers use to route requests to the correct node. |
-| `Portal:LoadBalancer:SessionAffinityCookieMinutes` | `480` | Duration of the sticky session cookie. |
+| `LoadBalancer.SessionAffinityEnabled` / `Portal:LoadBalancer:SessionAffinityEnabled` | `true` | Emits a cookie indicating target node for sticky routing. |
+| `LoadBalancer.SessionAffinityCookieName` / `Portal:LoadBalancer:SessionAffinityCookieName` | `ETLSQL_PORTAL_AFFINITY` | Cookie name load balancers use to route requests to the correct node. |
+| `LoadBalancer.SessionAffinityCookieMinutes` / `Portal:LoadBalancer:SessionAffinityCookieMinutes` | `480` | Duration of the sticky session cookie. |
 
 ---
 

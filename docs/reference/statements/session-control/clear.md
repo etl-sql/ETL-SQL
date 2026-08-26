@@ -28,10 +28,6 @@ CLEAR SESSIONS STALE;
 - `CLEAR SESSIONS ALL` requires elevated permissions and should be used carefully in multi-user Orchestrator deployments.
 - See: SCHEDULE, TRANSACTION
 
-References:
-- [Statements](../README.md)
-
-
 ## References
 
 - [Statements](../README.md)
@@ -39,6 +35,6 @@ References:
 ## Examples
 
 ```sql
-CLEAR ALL;
-CLEAR TABLES;
+CLEAR SESSION;
+CLEAR SESSIONS STALE;
 ```

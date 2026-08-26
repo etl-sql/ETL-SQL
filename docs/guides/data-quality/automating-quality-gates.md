@@ -78,13 +78,19 @@ Run nightly batch scripts with automated logging and JSON evidence generation.
 
 ---
 
-## Example 3: Windows Task Scheduler
+## Running Unattended Without Portal
 
-Configure unattended execution via Windows Task Scheduler:
+For one or two jobs, invoke the CLI directly from the operating-system scheduler. Both `ON CRITICAL_FAILURE THROW` and `FAIL_ON_WARN = TRUE` produce a non-zero process exit; SMTP and WEBHOOK connections are optional.
 
+Windows Task Scheduler action:
 - **Program/script**: `C:\Program Files\ETL-SQL\etl-sql.exe`
 - **Arguments**: `run C:\ETL\pipelines\nightly.etlsql --quality-summary --output-json C:\ETL\evidence\nightly.json`
 - **Start in**: `C:\ETL`
+
+Cron entry:
+- `0 2 * * * cd /opt/etl && /usr/local/bin/etl-sql run nightly.etlsql --quality-summary --output-json /var/log/etl/evidence-$(date +\%Y\%m\%d).json >> /var/log/etl/nightly.log 2>&1`
+
+When several jobs need scheduling, historical baselines, durable recovery-notification state, or a shared managed SMTP/WEBHOOK catalog, run the local Orchestrator with its default SQLite store. It does not require Portal. Define source-controlled `CREATE SCHEDULE`/`CREATE JOB` objects, then query `eng.data_quality_status`, `eng.data_quality_failures`, and `eng.job_history` from the same host. Successful runs form historical baselines; failed and running rows do not. A configured `ON FAILURE NOTIFY` uses transition state in that SQLite store to send failure and recovery notifications, but omitting the clause leaves exit codes, history, baselines, and catalog queries fully functional.
 
 ---
 

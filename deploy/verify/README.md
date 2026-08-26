@@ -3,7 +3,7 @@
 Proves a set of ETL-SQL environments are isolated — no two share a database target, artifact root,
 Data Protection key ring, port, service account, or encryption key. Run it after adding an
 environment, changing a service account, or before promoting to production. Full runbook:
-[Departmental_Isolation.md §6](../../docs/architecture/decisions/Departmental_Isolation.md#6-isolation-verification-runbook).
+[Departmental_Isolation.md §6](../../docs/architecture/decisions/departmental-isolation.md#6-isolation-verification-runbook).
 
 | Script | Platform |
 | :--- | :--- |

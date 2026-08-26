@@ -9,7 +9,7 @@ public sealed class DataQualityOperationsDocTests
         AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     private static string Guide() => Regex.Replace(File.ReadAllText(Path.Combine(
-        RepoRoot, "docs", "guides", "feature-guides", "data-quality.md")), @"\s+", " ");
+        RepoRoot, "docs", "guides", "data-quality", "automating-quality-gates.md")), @"\s+", " ");
 
     [Fact]
     public void GuidePinsZeroServiceAndLocalOrchestratorPatterns()

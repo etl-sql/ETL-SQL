@@ -55,7 +55,7 @@ To ensure fast interactive filtering when users adjust slicers or date pickers, 
 
 ```sql
 -- 1. Report Metadata
-SET REPORT TITLE 'Executive Sales Dashboard';
+SET REPORT TITLE = 'Executive Sales Dashboard';
 
 -- 2. Tier 2 Data Preparation
 SELECT Region, Category, SUM(Amount) AS TotalSales, COUNT(*) AS OrderCount
@@ -76,10 +76,11 @@ CREATE VISUAL OrdersTable AS TABLE (
 );
 
 -- 4. Page Layout
-CREATE PAGE Overview (
-  STRUCTURE (
-    RegionalSalesChart (WIDTH = 6, HEIGHT = 400),
-    OrdersTable        (WIDTH = 6, HEIGHT = 400)
+CREATE PAGE Overview AS DASHBOARD (
+  STRUCTURE = 'A B',
+  MAP (
+    'A' = RegionalSalesChart,
+    'B' = OrdersTable
   )
 );
 ```
