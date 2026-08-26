@@ -1,7 +1,8 @@
 /* GENERATED FILE - DO NOT EDIT.
  * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js
- * Edit the canonical source, then run: .\scripts\sync-assets.ps1
+ * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
+
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -3576,7 +3577,8 @@ export function createDesigner(container, opts = {}) {
                 ['FUNNEL','#d946ef'],['TREEMAP','#ec4899'],['HEATMAP','#f43f5e'],['COMBO','#0ea5e9'],
                 ['BOXPLOT','#14b8a6'],['WATERFALL','#10b981'],['BUBBLE','#06b6d4'],['RADAR','#8b5cf6'],
                 ['CANDLESTICK','#f59e0b'],['MAP','#10b981'],['GANTT','#8b5cf6'],['SANKEY','#14b8a6'],
-                ['SUNBURST','#d946ef'],['NETWORK','#6366f1'],['TRELLIS','#64748b'],['MATRIX','#475569']
+                ['SUNBURST','#d946ef'],['NETWORK','#6366f1'],['TRELLIS','#64748b'],['MATRIX','#475569'],
+                ['CUSTOM','#8b5cf6']
             ]
         },
         {
@@ -4141,6 +4143,9 @@ export function createDesigner(container, opts = {}) {
 
             if (opts.snapshotPackage || opts.snapshotMode) {
                 _renderSnapshotCardBody(cardBody, v, opts.snapshotPackage);
+            } else if (v.type === 'CUSTOM') {
+                const width = 360, height = 180, pad = 24;
+                cardBody.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(v.title || v.name)}" style="width:100%;height:100%"><line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" stroke="#cbd5e1"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" stroke="#cbd5e1"/><rect x="60" y="60" width="30" height="96" rx="2" fill="#8b5cf6" opacity="0.85"/><rect x="110" y="40" width="30" height="116" rx="2" fill="#8b5cf6" opacity="0.85"/><rect x="160" y="80" width="30" height="76" rx="2" fill="#8b5cf6" opacity="0.85"/><path d="M 75 80 L 125 50 L 175 90 L 225 30" fill="none" stroke="#06b6d4" stroke-width="2"/><circle cx="75" cy="80" r="3" fill="#06b6d4"/><circle cx="125" cy="50" r="3" fill="#06b6d4"/><circle cx="175" cy="90" r="3" fill="#06b6d4"/><circle cx="225" cy="30" r="3" fill="#06b6d4"/><text x="180" y="20" font-size="10" fill="#7a8798" text-anchor="middle">CUSTOM CHART (GoG Layers)</text></svg>`;
             } else {
                 cardBody.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--portal-muted,#64748b);font-size:11px;">${v.type} Placeholder</div>`;
             }
@@ -4440,6 +4445,25 @@ export function createDesigner(container, opts = {}) {
         const declaredVars = extractDeclaredVariables();
         const varOpts = declaredVars.map(vname => `<option value="${esc(vname)}">${esc(vname)}</option>`).join('');
 
+        const isCustomChart = v.type === 'CUSTOM' || Boolean(v.options?.advanced_chart);
+        const defaultCustomChart = `CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+        x_scale = BAND (CHANNEL = X),
+        y_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+        bars = RECT (
+            Z_INDEX = 1,
+            ENCODINGS (
+                X = category (TYPE = ORDINAL, SCALE = x_scale),
+                Y = value (TYPE = QUANTITATIVE, SCALE = y_scale)
+            )
+        )
+    )
+)`;
+        const chartCode = v.options?.advanced_chart || defaultCustomChart;
+
         propsPanel.innerHTML = `
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Properties</div>
@@ -4467,6 +4491,34 @@ export function createDesigner(container, opts = {}) {
                 <label class="etlsql-dsgn-label">Width<input id="pp-width" class="form-control" placeholder="auto, 300px, 100%" value="${esc(v.options?.WIDTH || v.width || '')}"></label>
                 <label class="etlsql-dsgn-label">Height<input id="pp-height" class="form-control" placeholder="auto, 200px, 100%" value="${esc(v.options?.HEIGHT || v.height || '')}"></label>
             </div>
+            ${isCustomChart ? `
+            <div class="etlsql-dsgn-props-section etlsql-dsgn-chart-editor-section">
+                <div class="etlsql-dsgn-props-hdr">Grammar of Graphics (CHART)</div>
+                <div class="etlsql-dsgn-chart-quick-controls" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+                    <label class="etlsql-dsgn-label">Coordinate
+                        <select id="pp-chart-coord" class="form-control">
+                            <option value="CARTESIAN"${chartCode.includes('CARTESIAN') && !chartCode.includes('TRANSPOSED') ? ' selected' : ''}>CARTESIAN</option>
+                            <option value="TRANSPOSED_CARTESIAN"${chartCode.includes('TRANSPOSED_CARTESIAN') ? ' selected' : ''}>TRANSPOSED</option>
+                            <option value="POLAR"${chartCode.includes('POLAR') ? ' selected' : ''}>POLAR</option>
+                        </select>
+                    </label>
+                    <label class="etlsql-dsgn-label">Primary Mark
+                        <select id="pp-chart-primary-mark" class="form-control">
+                            <option value="RECT"${chartCode.includes('RECT') ? ' selected' : ''}>RECT (Bar)</option>
+                            <option value="LINE"${chartCode.includes('LINE') ? ' selected' : ''}>LINE (Line)</option>
+                            <option value="AREA"${chartCode.includes('AREA') ? ' selected' : ''}>AREA (Area)</option>
+                            <option value="POINT"${chartCode.includes('POINT') ? ' selected' : ''}>POINT (Scatter)</option>
+                            <option value="RULE"${chartCode.includes('RULE') ? ' selected' : ''}>RULE (Span)</option>
+                            <option value="ARC"${chartCode.includes('ARC') ? ' selected' : ''}>ARC (Radial)</option>
+                            <option value="TEXT"${chartCode.includes('TEXT') ? ' selected' : ''}>TEXT (Label)</option>
+                            <option value="TICK"${chartCode.includes('TICK') ? ' selected' : ''}>TICK (Target)</option>
+                        </select>
+                    </label>
+                </div>
+                <label class="etlsql-dsgn-label">CHART Clauses (Layers, Scales, Encodings, Conditions)
+                    <textarea id="pp-chart-code" class="form-control etlsql-code-editor" rows="12" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(chartCode)}</textarea>
+                </label>
+            </div>` : `
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Mappings</div>
                 ${ROLES.map(r => {
@@ -4482,7 +4534,7 @@ export function createDesigner(container, opts = {}) {
                         </div>`;
                 }).join('')}
                 ${datalistHtml}
-            </div>
+            </div>`}
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Actions & Interactions</div>
                 <label class="etlsql-dsgn-label">Target Parameter (@var)
@@ -4514,7 +4566,7 @@ export function createDesigner(container, opts = {}) {
         `;
 
         on('#pp-name',         e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-type',         e => { v.type  = e.target.value; renderCanvas(); renderTree(); renderProps(); });
+        on('#pp-type',         e => { v.type  = e.target.value; if (v.type === 'CUSTOM' && !v.options?.advanced_chart) { if (!v.options) v.options = {}; v.options.advanced_chart = defaultCustomChart; } renderCanvas(); renderTree(); renderProps(); });
         on('#pp-container-id', e => { v.containerId = e.target.value || null; renderTree(); renderCanvas(); renderProps(); });
         if (isTabbedParent) {
             on('#pp-container-section', e => { if(!v.options) v.options = {}; if (e.target.value.trim()) v.options.CONTAINER_SECTION = e.target.value.trim(); else delete v.options.CONTAINER_SECTION; syncScriptFromGridDebounced(); });
@@ -4542,29 +4594,70 @@ export function createDesigner(container, opts = {}) {
         on('#pp-cspan',        e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
         on('#pp-rspan',        e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
 
-        for (const role of ROLES) {
-            const input = propsPanel.querySelector(`[data-role="${role}"]`);
-            if (!input) continue;
-            input.addEventListener('change', ev => {
-                if (!v.mappings) v.mappings = {};
-                if (ev.target.value) v.mappings[role] = ev.target.value;
-                else delete v.mappings[role];
-                renderProps();
-            });
-            input.addEventListener('dragover', e => {
-                e.preventDefault();
-                input.classList.add('drag-over');
-            });
-            input.addEventListener('dragleave', () => input.classList.remove('drag-over'));
-            input.addEventListener('drop', e => {
-                e.preventDefault();
-                input.classList.remove('drag-over');
-                const col = e.dataTransfer.getData('text/plain');
-                if (col) {
-                    input.value = col;
-                    input.dispatchEvent(new Event('change'));
-                }
-            });
+        if (isCustomChart) {
+            const chartInput = propsPanel.querySelector('#pp-chart-code');
+            if (chartInput) {
+                chartInput.addEventListener('input', ev => {
+                    if (!v.options) v.options = {};
+                    v.options.advanced_chart = ev.target.value;
+                    renderCanvas();
+                    syncScriptFromGridDebounced();
+                });
+            }
+            const coordInput = propsPanel.querySelector('#pp-chart-coord');
+            if (coordInput) {
+                coordInput.addEventListener('change', ev => {
+                    if (!v.options) v.options = {};
+                    let cur = v.options.advanced_chart || chartCode;
+                    if (/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i.test(cur)) {
+                        cur = cur.replace(/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i, `COORDINATE (TYPE = ${ev.target.value})`);
+                    }
+                    v.options.advanced_chart = cur;
+                    if (chartInput) chartInput.value = cur;
+                    renderCanvas();
+                    syncScriptFromGridDebounced();
+                });
+            }
+            const markInput = propsPanel.querySelector('#pp-chart-primary-mark');
+            if (markInput) {
+                markInput.addEventListener('change', ev => {
+                    if (!v.options) v.options = {};
+                    let cur = v.options.advanced_chart || chartCode;
+                    const markPattern = /\b(RECT|LINE|AREA|POINT|RULE|ARC|TEXT|TICK)\b/i;
+                    if (markPattern.test(cur)) {
+                        cur = cur.replace(markPattern, ev.target.value);
+                    }
+                    v.options.advanced_chart = cur;
+                    if (chartInput) chartInput.value = cur;
+                    renderCanvas();
+                    syncScriptFromGridDebounced();
+                });
+            }
+        } else {
+            for (const role of ROLES) {
+                const input = propsPanel.querySelector(`[data-role="${role}"]`);
+                if (!input) continue;
+                input.addEventListener('change', ev => {
+                    if (!v.mappings) v.mappings = {};
+                    if (ev.target.value) v.mappings[role] = ev.target.value;
+                    else delete v.mappings[role];
+                    renderProps();
+                });
+                input.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    input.classList.add('drag-over');
+                });
+                input.addEventListener('dragleave', () => input.classList.remove('drag-over'));
+                input.addEventListener('drop', e => {
+                    e.preventDefault();
+                    input.classList.remove('drag-over');
+                    const col = e.dataTransfer.getData('text/plain');
+                    if (col) {
+                        input.value = col;
+                        input.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
         }
         propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
     }
@@ -4706,6 +4799,18 @@ export function createDesigner(container, opts = {}) {
             visual.options.CONTAINER_TYPE = 'BOX';
         } else if (type === 'BUTTON') {
             visual.options.BUTTON_TYPE = 'REFRESH';
+        } else if (type === 'CUSTOM') {
+            visual.options.advanced_chart = `CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        LAYERS (
+            main = RECT (
+                ENCODINGS (
+                    X = category (TYPE = NOMINAL),
+                    Y = value (TYPE = QUANTITATIVE)
+                )
+            )
+        )
+    )`;
         }
         page.visuals.push(visual);
         selVisualId = newId;

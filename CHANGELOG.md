@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added dedicated Report Builder `CHART` editor and lossless `CUSTOM` visual support. Registered `CUSTOM`
+  in the visual type registry with live SVG Grammar-of-Graphics layered preview on canvas cards, and exposed
+  coordinate systems, mark layers, scales, encodings, and conditions in the properties panel with bi-directional
+  syntax synchronization. Updated `DesignerAnalysisService`, `DesignerScriptPatcher`, and
+  `DesignerScriptGenerationService` to preserve author comments, nested trivia, and refinement clauses
+  byte-for-byte during round-trips across embedded and LSP-hosted paths.
+
 - Added lossless Report Builder editing certification tests and UI sandbox transient syntax error resilience.
   `ReportDesignerLosslessFuzzTests` exercises deterministic mutation fuzzing, verifying out-of-scope byte
   preservation across complex CTEs, SQL data-prep statements, variables, and comments, line ending stability

@@ -53,7 +53,7 @@ public sealed class DesignerScriptGenerationService
                 var name = SanitizeName(visual.Name, visual.Id);
                 if (!emitted.Add(name))
                     continue;
-                AppendLine(sb, GenerateElement(visual, visuals, nl), nl);
+                AppendLine(sb, GenerateElement(visual, visuals, nl, isScaffold: true), nl);
                 AppendLine(sb, string.Empty, nl);
             }
 
@@ -121,7 +121,8 @@ public sealed class DesignerScriptGenerationService
     internal static string GenerateElement(
         DesignerAuthoringVisual visual,
         IReadOnlyList<DesignerAuthoringVisual> allVisuals,
-        string nl)
+        string nl,
+        bool isScaffold = false)
     {
         var sb = new StringBuilder();
         var name = SanitizeName(visual.Name, visual.Id);
@@ -174,7 +175,16 @@ public sealed class DesignerScriptGenerationService
             AppendLine(sb, $"    SOURCE = {NormalizeDatasetName(visual.Dataset)},", nl);
 
         if (visual.Options.TryGetValue("advanced_chart", out var advancedChart) && !string.IsNullOrWhiteSpace(advancedChart))
-            AppendLine(sb, $"    {advancedChart.Trim().TrimEnd(',')},", nl);
+        {
+            var chartBlock = advancedChart.Trim().TrimEnd(',');
+            if (!chartBlock.StartsWith("CHART", StringComparison.OrdinalIgnoreCase))
+                chartBlock = $"CHART ({nl}        {chartBlock}{nl}    )";
+            AppendLine(sb, $"    {chartBlock},", nl);
+        }
+        else if (isScaffold && string.Equals(visual.Type, "CUSTOM", StringComparison.OrdinalIgnoreCase))
+        {
+            AppendLine(sb, $"    CHART ({nl}        COORDINATE (TYPE = CARTESIAN),{nl}        LAYERS ({nl}            main = RECT ({nl}                ENCODINGS ({nl}                    X = category (TYPE = NOMINAL),{nl}                    Y = value (TYPE = QUANTITATIVE){nl}                ){nl}            ){nl}        ){nl}    ),", nl);
+        }
 
         var mappings = visual.Mappings
             .Where(mapping => !string.IsNullOrWhiteSpace(mapping.Value))

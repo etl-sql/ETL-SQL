@@ -24,7 +24,7 @@ Authoritative references:
   statement trivia, repeated CRLF/LF edits, and invalid intermediate scripts. Add deterministic
   mutation fuzz/property tests proving that every out-of-scope byte remains unchanged, plus a browser
   story and test proving that transient syntax errors retain the last valid canvas state.
-- [ ] Add a dedicated Report Builder `CHART` editor. Register `CUSTOM`, render a live preview, expose
+- [x] Add a dedicated Report Builder `CHART` editor. Register `CUSTOM`, render a live preview, expose
   its supported layers, encodings, scales, coordinates, conditions, and refinement clauses without
   inventing a second grammar, and keep unedited or unsupported clause text byte-preserved. Cover
   embedded and LSP-hosted round trips, invalid intermediate edits, keyboard/accessibility behavior,

@@ -240,6 +240,59 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     /// <summary>
+    /// Proves that CUSTOM visual cards render dedicated Grammar-of-Graphics controls
+    /// in the properties panel and live SVG GoG layered mark preview on the canvas.
+    /// </summary>
+    [Fact]
+    public async Task Designer_CustomChartVisual_RendersGrammarOfGraphicsControlsAndPreview()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='designer']");
+        await page.WaitForSelectorAsync("#fixtureSel", new PageWaitForSelectorOptions { Timeout = 30_000 });
+
+        // 1. Mount the custom-chart fixture
+        await page.SelectOptionAsync("#fixtureSel", "custom-chart");
+        await page.WaitForTimeoutAsync(300);
+
+        // 2. Visual card on canvas must be rendered with SVG preview
+        var card = page.Locator(".etlsql-dsgn-visual-card");
+        Assert.Equal(1, await card.CountAsync());
+        var svg = card.Locator("svg");
+        Assert.Equal(1, await svg.CountAsync());
+        Assert.Contains("CUSTOM CHART", await card.InnerTextAsync());
+
+        // 3. Click the visual to select and open Properties panel
+        await card.ClickAsync();
+        await page.WaitForTimeoutAsync(200);
+
+        // 4. Grammar of Graphics (CHART) controls must be visible in properties panel
+        var chartSection = page.Locator(".etlsql-dsgn-chart-editor-section");
+        Assert.Equal(1, await chartSection.CountAsync());
+        Assert.True(await chartSection.IsVisibleAsync());
+
+        var coordSelect = page.Locator("#pp-chart-coord");
+        Assert.True(await coordSelect.IsVisibleAsync());
+        Assert.Equal("CARTESIAN", await coordSelect.InputValueAsync());
+
+        var chartCode = page.Locator("#pp-chart-code");
+        Assert.True(await chartCode.IsVisibleAsync());
+        var codeVal = await chartCode.InputValueAsync();
+        Assert.Contains("COORDINATE (TYPE = CARTESIAN)", codeVal);
+        Assert.Contains("bars = RECT", codeVal);
+
+        // 5. Modify coordinate to POLAR
+        await coordSelect.SelectOptionAsync("POLAR");
+        await page.WaitForTimeoutAsync(200);
+        var updatedCode = await chartCode.InputValueAsync();
+        Assert.Contains("COORDINATE (TYPE = POLAR)", updatedCode);
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>
     /// Drives the five <c>vscode-webviews</c> fixtures and asserts each one renders from files the
     /// repository actually tracks.
     ///

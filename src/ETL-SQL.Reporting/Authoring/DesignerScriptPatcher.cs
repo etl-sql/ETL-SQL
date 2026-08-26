@@ -272,9 +272,8 @@ public sealed class DesignerScriptPatcher
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON)\s+[^\s]+(?:\s+AS\s+[^\s(]+)?");
         foreach (var clause in new[] { "TITLE", "SOURCE", "CHART", "MAPPINGS", "OPTIONS", "ACTIONS", "INTERACTIONS", "STYLE", "LAYOUT" })
         {
-            // Advanced authoring is deliberately opaque until the designer has a dedicated CHART
-            // editor. Unrelated edits must preserve all nested trivia byte-for-byte.
-            if (clause == "CHART" && FindClause(original, clause) is not null)
+            // If the desired state does not specify a CHART clause, keep existing CHART trivia intact
+            if (clause == "CHART" && FindClause(original, clause) is not null && FindClause(desired, clause) is null)
                 continue;
             if (clause == "MAPPINGS" && ContainsNativeMicroChartSyntax(original) && !ContainsEquivalentNativeMicroChartSyntax(original, desired))
                 continue;

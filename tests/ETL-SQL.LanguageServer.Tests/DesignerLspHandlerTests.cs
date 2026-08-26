@@ -217,5 +217,33 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.Contains("target = TICK", response.script);
             Assert.Contains("FACET (WRAP = region, COLUMNS = 3)", response.script);
         }
+
+        [Fact]
+        public async Task Generate_CustomVisual_WithAdvancedChartOption_PatchesChartClause()
+        {
+            const string script = """
+                CREATE VISUAL chart AS CUSTOM (
+                  TITLE = 'Before',
+                  SOURCE = #prepared,
+                  CHART (
+                    COORDINATE (TYPE = CARTESIAN),
+                    LAYERS (b = RECT (ENCODINGS (Y = amount (TYPE = QUANTITATIVE))))
+                  )
+                );
+                CREATE PAGE [Overview] AS DASHBOARD (LAYOUT (STRUCTURE = 'A', MAP ('A' = chart)));
+                """;
+            const string state = """
+                {"pages":[{"id":"p","name":"Overview","mode":"Dashboard","visuals":[
+                  {"id":"n","name":"chart","type":"CUSTOM","gridCol":1,"gridRow":1,"gridColSpan":12,"gridRowSpan":6,"title":"After","dataset":"prepared","mappings":{},"options":{"advanced_chart":"CHART (\n    COORDINATE (TYPE = POLAR),\n    LAYERS (a = ARC (ENCODINGS (THETA = amount (TYPE = QUANTITATIVE))))\n  )"}}
+                ]}],"datasets":[]}
+                """;
+
+            var response = await new DesignerLspHandler(NullLogger<DesignerLspHandler>.Instance).Handle(
+                new DesignerGenerateParams { designStateJson = state, script = script }, CancellationToken.None);
+
+            Assert.Contains("TITLE = 'After'", response.script);
+            Assert.Contains("COORDINATE (TYPE = POLAR)", response.script);
+            Assert.Contains("a = ARC", response.script);
+        }
     }
 }

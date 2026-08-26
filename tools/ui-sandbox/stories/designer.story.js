@@ -38,6 +38,45 @@ function blankState() {
   return { pages: [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }], datasets: [] };
 }
 
+function customChartState() {
+  return {
+    pages: [{
+      id: 'p1', name: 'Overview', mode: 'Dashboard',
+      visuals: [
+        {
+          id: 'customGog',
+          name: 'customGog',
+          type: 'CUSTOM',
+          title: 'Layered GoG Chart',
+          gridCol: 1,
+          gridColSpan: 12,
+          gridRow: 1,
+          gridRowSpan: 6,
+          dataset: 'sales',
+          mappings: {},
+          options: {
+            advanced_chart: `CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+        y_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+        bars = RECT (
+            ENCODINGS (
+                X = Date (TYPE = ORDINAL),
+                Y = total (TYPE = QUANTITATIVE, SCALE = y_scale)
+            )
+        )
+    )
+)`
+          }
+        }
+      ]
+    }],
+    datasets: [{ name: 'sales', query: 'SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales' }]
+  };
+}
+
 export default {
   id: 'designer',
   title: 'Report designer',
@@ -47,9 +86,10 @@ export default {
     { id: 'blank', label: 'Blank canvas' },
     { id: 'scm',   label: 'Sales + source control' },
     { id: 'syntax-resilience', label: 'Transient syntax error resilience' },
+    { id: 'custom-chart', label: 'Custom Grammar-of-Graphics Chart' },
   ],
   async mount(stage, fixtureId, ctx) {
-    const ds = fixtureId === 'blank' ? blankState() : sampleState();
+    const ds = fixtureId === 'blank' ? blankState() : (fixtureId === 'custom-chart' ? customChartState() : sampleState());
     const mod = await importFresh(DESIGNER_JS);
     const scm = fixtureId === 'scm';
     const isSyntaxResilience = fixtureId === 'syntax-resilience';

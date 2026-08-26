@@ -425,7 +425,7 @@ public class ReportParser : ParserComponent
 
     private AdvancedChartDefinition ParseAdvancedChartDefinition()
     {
-        var chartStart = _parser.Current;
+        var chartStart = _parser.Previous;
         Consume(TokenType.LPAREN, "Expected '(' after CHART");
         AdvancedChartCoordinate? coordinate = null;
         var scales = new List<AdvancedChartScale>();
@@ -492,7 +492,9 @@ public class ReportParser : ParserComponent
             Line = chartStart.Line,
             Column = chartStart.Column,
             EndLine = chartEnd.EndLine,
-            EndColumn = chartEnd.EndColumn
+            EndColumn = chartEnd.EndColumn,
+            StartOffset = chartStart.Offset,
+            EndOffset = chartEnd.EndOffset
         };
     }
 

@@ -23,7 +23,7 @@ public sealed class DesignerAnalysisService
         {
             var ast = ParseScript(script);
             ValidateAstLimit(ast, maxAstStatements);
-            return new ParseDesignerResponse(ScriptToState(ast), null);
+            return new ParseDesignerResponse(ScriptToState(ast, script), null);
         }
         catch (DesignerAstLimitExceededException)
         {
@@ -105,7 +105,7 @@ public sealed class DesignerAnalysisService
     private static IReadOnlyList<string> SplitLines(string text) =>
         text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
-    private static DesignerStateDto ScriptToState(Script ast)
+    private static DesignerStateDto ScriptToState(Script ast, string? script = null)
     {
         var datasets = ast.Statements.OfType<CreateDatasetStatement>()
             .Select((ds, i) => new DesignerDatasetDto(
@@ -117,7 +117,7 @@ public sealed class DesignerAnalysisService
         var elements = new Dictionary<string, DesignerVisualDto>(StringComparer.OrdinalIgnoreCase);
         int idx = 0;
 
-        var visualsList = ast.Statements.OfType<CreateVisualStatement>().Select(v => (v.Name, Dto: VisualToDto(v, idx++, 1, 1, 12, 4))).ToList();
+        var visualsList = ast.Statements.OfType<CreateVisualStatement>().Select(v => (v.Name, Dto: VisualToDto(v, idx++, 1, 1, 12, 4, script))).ToList();
         var containersList = ast.Statements.OfType<CreateContainerStatement>().Select(c => (c.Name, c.SlotMap, Dto: ContainerToDto(c, idx++))).ToList();
         var buttonsList = ast.Statements.OfType<CreateButtonStatement>().Select(b => (b.Name, Dto: ButtonToDto(b, idx++))).ToList();
 
@@ -246,7 +246,7 @@ public sealed class DesignerAnalysisService
             .ToList();
 
     private static DesignerVisualDto VisualToDto(
-        CreateVisualStatement v, int idx, int col, int row, int colSpan, int rowSpan)
+        CreateVisualStatement v, int idx, int col, int row, int colSpan, int rowSpan, string? script = null)
     {
         var title = v.Title is LiteralExpression lit
             ? lit.Value?.ToString()
@@ -292,7 +292,14 @@ public sealed class DesignerAnalysisService
         }
         if (v.AdvancedChart != null)
         {
-            options["advanced_chart"] = v.AdvancedChart.ToSql();
+            if (script != null && v.AdvancedChart.StartOffset >= 0 && v.AdvancedChart.EndOffset > v.AdvancedChart.StartOffset && v.AdvancedChart.EndOffset <= script.Length)
+            {
+                options["advanced_chart"] = script[v.AdvancedChart.StartOffset..v.AdvancedChart.EndOffset];
+            }
+            else
+            {
+                options["advanced_chart"] = v.AdvancedChart.ToSql();
+            }
         }
 
         return new DesignerVisualDto(
