@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Connectors;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
@@ -74,9 +75,46 @@ namespace ETL_SQL.LSP
     public interface ISetPortalDbPathHandler : IJsonRpcNotificationHandler<SetPortalDbPathParams> { }
 
     /// <summary>
+    /// LSP Request Handler for discovering connector schemas.
+    /// </summary>
+    [Method("etlsql/getConnectorSchemas", Direction.ClientToServer)]
+    public interface IGetConnectorSchemasHandler : IJsonRpcRequestHandler<GetConnectorSchemasParams, GetConnectorSchemasResponse> { }
+
+    /// <summary>
+    /// LSP Request Handler for parsing unformatted connection strings into canonical options.
+    /// </summary>
+    [Method("etlsql/parseConnectionString", Direction.ClientToServer)]
+    public interface IParseConnectionStringHandler : IJsonRpcRequestHandler<ParseConnectionStringParams, ParseConnectionStringResponse> { }
+
+    /// <summary>
+    /// LSP Request Handler for executing layered connection diagnostics.
+    /// </summary>
+    [Method("etlsql/testConnection", Direction.ClientToServer)]
+    public interface ITestConnectionHandler : IJsonRpcRequestHandler<TestConnectionParams, TestConnectionResponse> { }
+
+    /// <summary>
     /// Implementation of specialized ETL-SQL Language Server methods for metadata discovery and configuration.
     /// </summary>
-    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger, IServiceScopeFactory scopeFactory, DatasetStore datasetStore, ETL_SQL.Services.SecurityService security) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler, IEncryptScriptHandler, IGetReportManifestHandler, ISetPortalDbPathHandler
+    public class CustomMethodsHandler(
+        IMetadataManager metadata,
+        ILogger<CustomMethodsHandler> logger,
+        IServiceScopeFactory scopeFactory,
+        DatasetStore datasetStore,
+        ETL_SQL.Services.SecurityService security,
+        IConnectorRegistry connectorRegistry,
+        ETL_SQL.Core.Diagnostics.ConnectionDiagnosticEngine diagnosticEngine) :
+        ISetConnectionsHandler,
+        IGetTablesHandler,
+        IGetColumnsHandler,
+        ISetDebugModeHandler,
+        IGetViewsHandler,
+        IGetTempTablesHandler,
+        IEncryptScriptHandler,
+        IGetReportManifestHandler,
+        ISetPortalDbPathHandler,
+        IGetConnectorSchemasHandler,
+        IParseConnectionStringHandler,
+        ITestConnectionHandler
     {
         /// <summary>Handles toggle debug mode notification.</summary>
         public Task<Unit> Handle(SetDebugModeParams request, CancellationToken cancellationToken)
@@ -225,6 +263,75 @@ namespace ETL_SQL.LSP
             }
 
             return response;
+        }
+
+        /// <summary>Handles requests to discover connector schemas and option descriptors.</summary>
+        public Task<GetConnectorSchemasResponse> Handle(GetConnectorSchemasParams request, CancellationToken cancellationToken)
+        {
+            logger.LogInformation("LSP: etlsql/getConnectorSchemas requested (Type: {Type})", request.type);
+            var schemas = string.IsNullOrWhiteSpace(request.type)
+                ? connectorRegistry.GetAllConnectorSchemas().ToList()
+                : (connectorRegistry.GetConnectorSchema(request.type) is { } s ? new List<ConnectorSchemaDescriptor> { s } : new List<ConnectorSchemaDescriptor>());
+
+            return Task.FromResult(new GetConnectorSchemasResponse { schemas = schemas });
+        }
+
+        /// <summary>Handles requests to parse unformatted connection strings into canonical connector options.</summary>
+        public Task<ParseConnectionStringResponse> Handle(ParseConnectionStringParams request, CancellationToken cancellationToken)
+        {
+            logger.LogInformation("LSP: etlsql/parseConnectionString requested.");
+            var parsed = ConnectionStringParser.Parse(request.connectionString, request.hintProvider);
+            return Task.FromResult(new ParseConnectionStringResponse
+            {
+                detectedProvider = parsed.DetectedProvider,
+                options = parsed.Options,
+                extractedCredential = parsed.ExtractedCredential,
+                suggestedSecretKey = parsed.SuggestedSecretKey
+            });
+        }
+
+        /// <summary>Handles requests to run layered connection diagnostic probes.</summary>
+        public async Task<TestConnectionResponse> Handle(TestConnectionParams request, CancellationToken cancellationToken)
+        {
+            logger.LogInformation("LSP: etlsql/testConnection requested for {Type} (Target: {Target})", request.connectorType, request.target);
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var context = scope.ServiceProvider.GetRequiredService<IExecutionContext>();
+                var report = await diagnosticEngine.DiagnoseTargetAsync(
+                    context,
+                    request.alias ?? "test_connection",
+                    request.connectorType,
+                    request.target ?? string.Empty,
+                    request.options,
+                    request.probeTimeoutSeconds > 0 ? request.probeTimeoutSeconds : 5,
+                    cancellationToken);
+
+                return new TestConnectionResponse
+                {
+                    succeeded = report.Succeeded,
+                    connection = report.Connection,
+                    connectorType = report.ConnectorType,
+                    steps = report.Steps.Select(s => new DiagnosticStepDto
+                    {
+                        layer = s.Layer,
+                        status = s.Status.ToString().ToLowerInvariant(),
+                        detail = s.Detail,
+                        remedy = s.Remedy
+                    }).ToList()
+                };
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "LSP: Error testing connection.");
+                return new TestConnectionResponse
+                {
+                    succeeded = false,
+                    connection = request.alias ?? "test_connection",
+                    connectorType = request.connectorType,
+                    error = SecretRedactor.Redact(ex.Message)
+                };
+            }
         }
     }
 }

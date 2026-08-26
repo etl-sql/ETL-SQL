@@ -66,7 +66,4 @@ See syntax above for connections, tables, indexes, sets, and views.
 - [Statements](../README.md)
 - [DROP](drop.md)
 - [ALTER](alter.md)
-
-References:
-- [Statements](../README.md)
-
+- [Connection Wizard Guide](../../../guides/feature-guides/connection-wizard.md)

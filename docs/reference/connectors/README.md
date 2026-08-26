@@ -13,6 +13,7 @@ Connector reference pages define `CREATE CONNECTION` syntax, options, authentica
 ## Page Standard
 
 Every connector page should include syntax, required options, authentication patterns, mutually exclusive options, security notes, examples, troubleshooting, and references.
+For interactive code-first connection authoring, see the [Connection Wizard Guide](../../guides/feature-guides/connection-wizard.md).
 
 Use [Connector Reference Template](../../templates/connector-reference-template.md) for new connector pages.
 

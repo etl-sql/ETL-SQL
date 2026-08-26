@@ -1,11 +1,14 @@
-﻿using System.Linq;
+using System.Linq;
 using System.Net;
 using System.Text.Json;
 using ETL_SQL.Analysis.Services;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Core.Services;
+using ETL_SQL.Data;
 using ETL_SQL.Orchestrator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -215,6 +218,51 @@ public static class WorkstationEditorApp
             catch (Exception ex)
             {
                 // Connector failures routinely quote the connection string back.
+                return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+        });
+
+        app.MapGet("/api/connectors/schema", (string? type, IConnectorRegistry registry) =>
+        {
+            if (!string.IsNullOrWhiteSpace(type))
+            {
+                var schema = registry.GetConnectorSchema(type);
+                return schema is not null
+                    ? Results.Json(schema, JsonOptions)
+                    : Results.NotFound(new { error = $"Connector type '{type}' not found." });
+            }
+            return Results.Json(registry.GetAllConnectorSchemas(), JsonOptions);
+        });
+
+        app.MapPost("/api/connectors/parse-string", (ParseConnectionStringRequest request) =>
+        {
+            var result = ConnectionStringParser.Parse(request.ConnectionString ?? string.Empty, request.HintProvider);
+            return Results.Json(result, JsonOptions);
+        });
+
+        app.MapPost("/api/connectors/test", async (
+            TestConnectionRequest request,
+            ConnectionDiagnosticEngine diagnosticEngine,
+            IExecutionContext context,
+            CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.ConnectorType))
+                return Results.BadRequest(new { error = "ConnectorType is required for connection testing." });
+
+            try
+            {
+                var report = await diagnosticEngine.DiagnoseTargetAsync(
+                    context,
+                    request.Alias ?? "test_connection",
+                    request.ConnectorType,
+                    request.Target ?? string.Empty,
+                    request.Options,
+                    request.ProbeTimeoutSeconds > 0 ? request.ProbeTimeoutSeconds : 5,
+                    cancellationToken);
+                return Results.Json(report, JsonOptions);
+            }
+            catch (Exception ex)
+            {
                 return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
             }
         });
@@ -482,3 +530,5 @@ public static class WorkstationEditorApp
 }
 
 public sealed record SaveFileRequest(string? Path, string? Content);
+public sealed record ParseConnectionStringRequest(string? ConnectionString, string? HintProvider);
+public sealed record TestConnectionRequest(string? Alias, string? ConnectorType, string? Target, Dictionary<string, string>? Options, int ProbeTimeoutSeconds = 5);

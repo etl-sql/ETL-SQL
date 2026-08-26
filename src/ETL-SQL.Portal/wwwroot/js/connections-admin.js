@@ -1,5 +1,6 @@
 import { bindMarkdownActions, renderMarkdown } from './markdown-renderer.js';
 import { deniedState, failedState, installPortalStateStyles } from './portal-states.js';
+import { createConnectionWizard } from '../designer/connection-wizard.js';
 
 // Canonical "Shared Connections" admin surface (Admin → Connections) over api/admin/connections.
 //
@@ -45,6 +46,7 @@ const PANEL_HTML = `
       </div>
       <div class="admin-action-group">
         <span id="conn-status" class="form-hint"></span>
+        <button class="btn btn-primary btn-sm" id="conn-wizardBtn">Connection Wizard</button>
         <button class="btn btn-outline btn-sm" id="conn-exportBtn">Export</button>
         <button class="btn btn-outline btn-sm" id="conn-importBtn">Import</button>
         <button class="btn btn-outline btn-sm" id="conn-refreshBtn">Refresh</button>
@@ -454,6 +456,54 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
     } catch (err) {
       setStatus(`Export failed: ${err.message}`);
     }
+  });
+
+  $('conn-wizardBtn')?.addEventListener('click', () => {
+    createConnectionWizard({
+      host: document.body,
+      mode: 'admin',
+      fetchSchemas: async () => {
+        const res = await fetch('/api/connectors/schema');
+        const json = await res.json();
+        return json.schemas || [];
+      },
+      fetchSecrets: async () => {
+        try {
+          const res = await fetch('/api/admin/vault/keys');
+          const json = await res.json();
+          return json.keys || [];
+        } catch {
+          return [];
+        }
+      },
+      onTest: async (req) => {
+        const res = await fetch('/api/connectors/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req)
+        });
+        return await res.json();
+      },
+      onParseString: async (rawString, hint) => {
+        const res = await fetch('/api/connectors/parse-string', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ connectionString: rawString, hintProvider: hint })
+        });
+        return await res.json();
+      },
+      onSave: async (entry) => {
+        await connectionsApi.set(entry.alias, {
+          connectorType: entry.connectorType,
+          target: entry.target,
+          options: entry.options,
+          environmentScope: entry.environmentScope,
+          sensitiveFields: []
+        });
+        setStatus(`Saved connection '${entry.alias}'.`);
+        await load();
+      }
+    });
   });
 
   $('conn-importBtn').addEventListener('click', () => { $('conn-importCard').style.display = ''; });

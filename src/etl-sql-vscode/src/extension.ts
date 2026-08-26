@@ -15,6 +15,7 @@ import { ConnectionsProvider, Connection } from './connectionsProvider';
 import { SidebarProvider } from './sidebarProvider';
 import { ReportPreviewPanel } from './reportPreviewPanel';
 import { ReportDesignerPanel } from './reportDesignerPanel';
+import { ConnectionWizardPanel } from './connectionWizardPanel';
 import { VisualFlowPanel } from './visualFlowPanel';
 import * as crypto from 'crypto';
 import { ETLNotebookSerializer } from './notebookSerializer';
@@ -292,6 +293,7 @@ export async function activate(context: vscode.ExtensionContext) {
             connectionsProvider.client = client;
             sidebarProvider.client = client;
             ReportDesignerPanel.setLspClient(client);
+            ConnectionWizardPanel.setLspClient(client);
             VisualFlowPanel.setLspClient(client);
             connectionsProvider.refresh();
             syncConnectionsToLsp();
@@ -333,6 +335,10 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // Register Commands
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.openConnectionWizard', () => {
+        ConnectionWizardPanel.open(context);
+    }));
+
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.exportNotebook', () => {
         exportNotebookToSql();
     }));

@@ -129,6 +129,46 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
     }
 
     /// <summary>
+    /// Runs the layered diagnostic for an explicit target and options specification without requiring
+    /// the connection to be registered in the execution context's active connection catalog.
+    /// </summary>
+    public async Task<DiagnosticReport> DiagnoseTargetAsync(
+        IExecutionContext context,
+        string alias,
+        string connectorType,
+        string? target,
+        IReadOnlyDictionary<string, string>? options,
+        int probeTimeoutSeconds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        ExecutionPolicySnapshot snapshot;
+        try
+        {
+            snapshot = OperationPolicyBoundary.Refresh(context, "<connection-diagnostic>");
+        }
+        catch (SecurityException ex)
+        {
+            return new DiagnosticReport(alias, connectorType, new[]
+            {
+                new DiagnosticStep("POLICY", DiagnosticStatus.Denied, Sanitize(ex.Message),
+                    "Security policy validation failed before running diagnostic probes.")
+            });
+        }
+
+        return await DiagnoseAsync(
+            alias,
+            connectorType,
+            target,
+            options,
+            context.SecurityService,
+            snapshot,
+            probeTimeoutSeconds,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Context-free diagnostic core shared by the <c>TEST CONNECTION</c> statement and the Portal
     /// "Test connection" surface. The caller supplies the connection definition (connector type,
     /// target, options), a <see cref="SecurityService"/> for host validation, and a policy snapshot

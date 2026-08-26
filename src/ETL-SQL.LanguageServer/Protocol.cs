@@ -154,4 +154,54 @@ namespace ETL_SQL.LSP
         public List<ScriptDagEdgeDto> edges { get; set; } = new();
         public string? error { get; set; }
     }
+
+    public class GetConnectorSchemasParams : IRequest<GetConnectorSchemasResponse>
+    {
+        public string? type { get; set; }
+    }
+
+    public class GetConnectorSchemasResponse
+    {
+        public List<ConnectorSchemaDescriptor> schemas { get; set; } = new();
+    }
+
+    public class ParseConnectionStringParams : IRequest<ParseConnectionStringResponse>
+    {
+        public string connectionString { get; set; } = "";
+        public string? hintProvider { get; set; }
+    }
+
+    public class ParseConnectionStringResponse
+    {
+        public string? detectedProvider { get; set; }
+        public Dictionary<string, string> options { get; set; } = new();
+        public string? extractedCredential { get; set; }
+        public string? suggestedSecretKey { get; set; }
+    }
+
+    public class TestConnectionParams : IRequest<TestConnectionResponse>
+    {
+        public string? alias { get; set; }
+        public string connectorType { get; set; } = "";
+        public string? target { get; set; }
+        public Dictionary<string, string>? options { get; set; }
+        public int probeTimeoutSeconds { get; set; } = 5;
+    }
+
+    public class TestConnectionResponse
+    {
+        public bool succeeded { get; set; }
+        public string connection { get; set; } = "";
+        public string connectorType { get; set; } = "";
+        public List<DiagnosticStepDto> steps { get; set; } = new();
+        public string? error { get; set; }
+    }
+
+    public class DiagnosticStepDto
+    {
+        public string layer { get; set; } = "";
+        public string status { get; set; } = "";
+        public string detail { get; set; } = "";
+        public string? remedy { get; set; }
+    }
 }

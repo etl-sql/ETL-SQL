@@ -2003,6 +2003,101 @@ body.vscode-dark .cm-editor .cm-line::selection {
 }
 .etlsql-dsgn-del-btn:hover { background: #fef2f5; }
 
+/* ── Visual Formatting Pickers (Color Swatches, Radius Slider, Typography) ─ */
+.etlsql-dsgn-color-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+    margin-bottom: 6px;
+}
+.etlsql-dsgn-color-picker-row input[type="color"] {
+    width: 32px;
+    height: 28px;
+    padding: 1px 2px;
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: var(--portal-radius-sm, 4px);
+    background: var(--portal-surface, #ffffff);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.etlsql-dsgn-color-picker-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.etlsql-dsgn-swatch-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+.etlsql-dsgn-swatch-chip {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.15);
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.1s ease, border-color 0.1s ease;
+}
+.etlsql-dsgn-swatch-chip:hover {
+    transform: scale(1.15);
+    border-color: var(--portal-accent, #2563eb);
+    z-index: 1;
+}
+
+.etlsql-dsgn-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 3px;
+    margin-bottom: 6px;
+}
+.etlsql-dsgn-slider-row input[type="range"] {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--portal-accent, #2563eb);
+    cursor: pointer;
+}
+.etlsql-dsgn-slider-row input[type="text"] {
+    width: 64px;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.etlsql-dsgn-preset-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+    margin-bottom: 8px;
+}
+.etlsql-dsgn-preset-chip {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: var(--portal-radius-sm, 4px);
+    border: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface-subtle, #f8fafc);
+    color: var(--portal-text-soft, #46556c);
+    cursor: pointer;
+    line-height: 1.2;
+    transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+}
+.etlsql-dsgn-preset-chip:hover {
+    background: var(--portal-accent-soft, #e8f0ff);
+    border-color: var(--portal-accent, #2563eb);
+    color: var(--portal-accent, #2563eb);
+}
+
+.etlsql-dsgn-typography-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
 .etlsql-dsgn-modal-bg {
     position: absolute;
     inset: 0;
@@ -2670,3 +2765,576 @@ body.vscode-dark .cm-editor .cm-line::selection {
     .etlsql-designer.split-screen { grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: auto minmax(280px, 1fr) minmax(250px, 42vh); grid-template-areas: "topbar topbar" "sidebar canvas" "sidebar script"; }
     .etlsql-designer.split-screen .etlsql-designer-props { display: none; }
 }
+
+/* ── Connection Wizard Component Styles ─────────────────────────────────── */
+
+.etlsql-cw-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.etlsql-cw-modal {
+    position: relative;
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: var(--portal-radius, 8px);
+    width: 94vw;
+    max-width: 1140px;
+    height: 88vh;
+    max-height: 850px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+.etlsql-cw-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface, #ffffff);
+}
+
+.etlsql-cw-header-left {
+    display: flex;
+    flex-direction: column;
+}
+
+.etlsql-cw-kicker {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--portal-accent, #2563eb);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.etlsql-cw-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-cw-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.etlsql-cw-close-btn {
+    border: none;
+    background: transparent;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--portal-muted, #7a8798);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.etlsql-cw-close-btn:hover {
+    color: var(--portal-text, #172033);
+    background: var(--portal-surface-subtle, #f8fafc);
+}
+
+.etlsql-cw-body {
+    display: grid;
+    grid-template-columns: 210px 1fr 340px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.etlsql-cw-sidebar {
+    background: var(--portal-surface-subtle, #f8fafc);
+    border-right: 1px solid var(--portal-border, #d9e0ea);
+    padding: 14px 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.etlsql-cw-preset-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.etlsql-cw-preset-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--portal-muted, #7a8798);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.etlsql-cw-cat-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--portal-text, #172033);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.etlsql-cw-cat-btn:hover {
+    background: var(--portal-accent-soft, rgba(37, 99, 235, 0.08));
+}
+
+.etlsql-cw-cat-btn.active {
+    background: var(--portal-accent-soft, rgba(37, 99, 235, 0.12));
+    color: var(--portal-accent, #2563eb);
+    font-weight: 600;
+    border-color: var(--portal-border-soft, #e8edf4);
+}
+
+.etlsql-cw-type-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.etlsql-cw-type-item {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.etlsql-cw-type-item:hover {
+    background: var(--portal-surface, #ffffff);
+    border-color: var(--portal-border-soft, #e8edf4);
+}
+
+.etlsql-cw-type-item.active {
+    background: var(--portal-surface, #ffffff);
+    border-color: var(--portal-accent, #2563eb);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.etlsql-cw-type-name {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-cw-type-desc {
+    font-size: 0.7rem;
+    color: var(--portal-muted, #7a8798);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.etlsql-cw-content {
+    padding: 16px 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.etlsql-cw-meta-row {
+    display: flex;
+    gap: 14px;
+}
+
+.etlsql-cw-form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.etlsql-cw-grid-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.etlsql-cw-options-group {
+    background: var(--portal-surface-subtle, #f8fafc);
+    border: 1px solid var(--portal-border-soft, #e8edf4);
+    border-radius: 6px;
+    padding: 12px 14px;
+}
+
+.etlsql-cw-group-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    margin: 0 0 10px 0;
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-cw-auth-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--portal-border-soft, #e8edf4);
+    overflow-x: auto;
+}
+
+.etlsql-cw-auth-tab {
+    padding: 5px 10px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--portal-muted, #7a8798);
+    font-size: 0.78rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.etlsql-cw-auth-tab:hover {
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-cw-auth-tab.active {
+    color: var(--portal-accent, #2563eb);
+    border-bottom-color: var(--portal-accent, #2563eb);
+    font-weight: 600;
+}
+
+.etlsql-cw-details {
+    border: 1px solid var(--portal-border-soft, #e8edf4);
+    border-radius: 6px;
+    padding: 8px 12px;
+    background: var(--portal-surface-subtle, #f8fafc);
+}
+
+.etlsql-cw-details-summary {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--portal-text-soft, #46556c);
+    cursor: pointer;
+}
+
+.etlsql-cw-diagnostic-card {
+    background: var(--portal-surface-subtle, #f8fafc);
+    border: 1px solid var(--portal-border-soft, #e8edf4);
+    border-radius: 6px;
+    padding: 12px 14px;
+}
+
+.etlsql-cw-diagnostic-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.etlsql-cw-diagnostic-header h4 {
+    margin: 0;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.etlsql-cw-diag-placeholder {
+    padding: 12px 0;
+    font-size: 0.78rem;
+    color: var(--portal-muted, #7a8798);
+}
+
+.etlsql-cw-diag-result {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.etlsql-cw-diag-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-flex;
+    width: fit-content;
+}
+
+.etlsql-cw-diag-badge.badge-ok {
+    background: rgba(16, 185, 129, 0.15);
+    color: #065f46;
+}
+
+.etlsql-cw-diag-badge.badge-fail {
+    background: rgba(239, 68, 68, 0.15);
+    color: #991b1b;
+}
+
+.etlsql-cw-diag-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.etlsql-cw-step-item {
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.etlsql-cw-step-item.step-ok {
+    background: rgba(16, 185, 129, 0.08);
+    color: #065f46;
+}
+
+.etlsql-cw-step-item.step-failed {
+    background: rgba(239, 68, 68, 0.08);
+    color: #991b1b;
+}
+
+.etlsql-cw-step-item.step-denied {
+    background: rgba(245, 158, 11, 0.08);
+    color: #92400e;
+}
+
+.etlsql-cw-step-item.step-skipped {
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-muted, #7a8798);
+}
+
+.etlsql-cw-step-status {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.etlsql-cw-step-layer {
+    font-weight: 700;
+}
+
+.etlsql-cw-step-remedy {
+    width: 100%;
+    font-size: 0.74rem;
+    color: var(--portal-text-soft, #46556c);
+    margin-top: 3px;
+}
+
+.etlsql-cw-preview-pane {
+    background: var(--portal-surface-subtle, #f8fafc);
+    border-left: 1px solid var(--portal-border, #d9e0ea);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.etlsql-cw-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.etlsql-cw-sql-box {
+    background: var(--portal-bg, #0f172a);
+    color: var(--portal-text, #f8fafc);
+    border: 1px solid var(--portal-border, #334155);
+    border-radius: 6px;
+    padding: 12px;
+    font-family: var(--portal-mono, monospace);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    flex: 1;
+    overflow: auto;
+    white-space: pre-wrap;
+    margin: 0;
+}
+
+.etlsql-cw-footer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--portal-border-soft, #e8edf4);
+}
+
+.etlsql-cw-paste-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    padding: 16px;
+}
+
+.etlsql-cw-paste-dialog {
+    background: var(--portal-surface, #ffffff);
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: 8px;
+    padding: 18px;
+    width: 500px;
+    max-width: 100%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.etlsql-cw-paste-dialog h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.etlsql-cw-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.etlsql-cw-info-box {
+    padding: 10px 12px;
+    background: var(--portal-surface, #ffffff);
+    border: 1px solid var(--portal-border-soft, #e8edf4);
+    border-radius: 6px;
+    font-size: 0.78rem;
+}
+
+.etlsql-cw-info-box p {
+    margin: 4px 0 0 0;
+    color: var(--portal-text-soft, #46556c);
+}
+
+.etlsql-cw-empty-hint {
+    font-size: 0.78rem;
+    color: var(--portal-muted, #7a8798);
+    padding: 8px;
+    text-align: center;
+}
+
+@media (max-width: 960px) {
+    .etlsql-cw-body {
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+    }
+    .etlsql-cw-sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    }
+    .etlsql-cw-preview-pane {
+        border-left: none;
+        border-top: 1px solid var(--portal-border, #d9e0ea);
+    }
+}
+
+.etlsql-cw-collision-alert {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-top: 6px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 4px;
+    color: #b45309;
+    font-size: 0.76rem;
+}
+
+.etlsql-cw-security-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    color: #b91c1c;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.etlsql-cw-dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 18px;
+    border: 2px dashed var(--portal-border, #cbd5e1);
+    border-radius: 6px;
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text-soft, #475569);
+    font-size: 0.8125rem;
+    text-align: center;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.etlsql-cw-dropzone.is-dragover {
+    border-color: var(--portal-accent, #2563eb);
+    background: var(--portal-accent-soft, rgba(37, 99, 235, 0.08));
+}
+
+.etlsql-cw-file-browse {
+    color: var(--portal-accent, #2563eb);
+    text-decoration: underline;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.etlsql-cw-staged-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.etlsql-cw-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.etlsql-cw-chip-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--portal-surface, #ffffff);
+    border: 1px solid var(--portal-border-soft, #e8edf4);
+    border-radius: 4px;
+    font-size: 0.74rem;
+    color: var(--portal-text, #172033);
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.etlsql-cw-chip-btn:hover {
+    border-color: var(--portal-accent, #2563eb);
+    background: var(--portal-accent-soft, rgba(37, 99, 235, 0.05));
+}
+
+

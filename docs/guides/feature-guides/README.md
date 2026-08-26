@@ -4,6 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
+| [Connection Wizard Guide](connection-wizard.md) | Interactive, schema-driven connection authoring across VS Code, Report Builder, and Portal Admin. |
 | [Validating Data Quality](data-quality.md) | Schema checks tell you the *shape* of your data is right. They say nothing about whether the values |
 | [Data Stewardship and Impact Analysis](data-stewardship-impact.md) | This guide is for administrators, data stewards, report publishers, and CI/CD owners who need to use ETL-SQL lineage metadata before publishing das... |
 | [Orchestrating Pipelines & DAGs](pipelines-and-dags.md) | ETL-SQL handles pipeline coordination with normal script control flow: `RUN SCRIPT`, `PARALLEL`, `IF`, `TRY...CATCH`, scheduler jobs, and file or d... |

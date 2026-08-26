@@ -8,6 +8,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Observability;
 
 namespace ETL_SQL.Data;
+
 /// <summary>
 /// Metadata about a single database column imported from the connector's catalog system.
 /// Tags are stored as <c>@db_*</c> prefixed entries in the lineage tracker.
@@ -39,7 +40,6 @@ public interface ICatalogMetadataProvider
         string schema, string tableName, CancellationToken ct = default);
 }
 
-
 /// <summary>
 /// Optional interface a catalog provider can implement to fetch view/procedure DDL so
 /// lineage can be traced through database-side objects rather than stopping at the object name.
@@ -51,6 +51,44 @@ public interface IViewDefinitionProvider
 }
 
 /// <summary>
+/// Identifies the data type / UI representation of a connector configuration option.
+/// </summary>
+public enum ConnectorOptionType
+{
+    String,
+    Number,
+    Boolean,
+    SecretReference,
+    FilePath,
+    Enum
+}
+
+/// <summary>
+/// Structured descriptor of a single connector configuration option.
+/// </summary>
+public sealed record ConnectorOptionDescriptor(
+    string Name,
+    ConnectorOptionType Type,
+    bool IsMandatory,
+    string? DefaultValue = null,
+    string Category = "Basic",
+    string? Description = null,
+    IReadOnlyList<string>? AllowedValues = null,
+    string? MutuallyExclusiveGroup = null);
+
+/// <summary>
+/// Full schema descriptor for a connector type, describing its supported options, capabilities, and defaults.
+/// </summary>
+public sealed record ConnectorSchemaDescriptor(
+    string ConnectorType,
+    IReadOnlyList<string> Aliases,
+    string Description,
+    bool IsFileBased,
+    bool IsDataWarehouse,
+    int CommandTimeoutSeconds,
+    IReadOnlyList<ConnectorOptionDescriptor> Options);
+
+/// <summary>
 /// Defines the contract for external database connectors (SQL Server, PostgreSql, etc.).
 /// Each connector provides metadata and data source creation capabilities.
 /// </summary>
@@ -60,7 +98,6 @@ public interface IConnector
     string Name { get; }
     /// <summary>Alternative names or aliases for the connector.</summary>
     IReadOnlyList<string> Aliases { get; }
-    /// <summary>Returns the version of the remote database engine.</summary>
     /// <summary>Returns the version of the remote database engine.</summary>
     Task<string> GetVersionAsync(IExecutionContext context, string connectionString);
     /// <summary>Returns a set of SQL functions supported by this connector.</summary>
@@ -128,8 +165,88 @@ public interface IConnector
     /// Enabled when <c>Lineage:ImportCatalogMetadata = true</c> in appsettings.
     /// </summary>
     ICatalogMetadataProvider? GetCatalogProvider(string connectionString) => null;
-}
 
+    /// <summary>
+    /// Returns structured option descriptors for UI authoring, connection wizards, and LSP metadata.
+    /// Default implementation constructs descriptors from <see cref="GetSupportedOptions"/> and <see cref="GetOptionValues"/>.
+    /// </summary>
+    IReadOnlyList<ConnectorOptionDescriptor> GetOptionDescriptors()
+    {
+        var opts = GetSupportedOptions();
+        var vals = GetOptionValues();
+        var list = new List<ConnectorOptionDescriptor>(opts.Count);
+        foreach (var (key, allowed) in opts)
+        {
+            vals.TryGetValue(key, out var predefined);
+            var isSensitive = ETL_SQL.Core.Governance.SecretResolvableFields.IsCredential(key)
+                || ETL_SQL.Core.Governance.SecretResolvableFields.IsOrganizationDesignated(key);
+            var isFile = IsFileBased && key.Equals("PATH", StringComparison.OrdinalIgnoreCase);
+            var isNumeric = key.EndsWith("_SECONDS", StringComparison.OrdinalIgnoreCase)
+                || key.EndsWith("_PORT", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("PORT", StringComparison.OrdinalIgnoreCase)
+                || key.EndsWith("_TIMEOUT", StringComparison.OrdinalIgnoreCase)
+                || key.EndsWith("_SIZE", StringComparison.OrdinalIgnoreCase)
+                || key.EndsWith("_ROWS", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("SKIP", StringComparison.OrdinalIgnoreCase);
+
+            var type = isSensitive ? ConnectorOptionType.SecretReference
+                : isFile ? ConnectorOptionType.FilePath
+                : (allowed != null && allowed.Length > 0 && Array.TrueForAll(allowed, a => a.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || a.Equals("FALSE", StringComparison.OrdinalIgnoreCase) || a.Equals("ON", StringComparison.OrdinalIgnoreCase) || a.Equals("OFF", StringComparison.OrdinalIgnoreCase))) ? ConnectorOptionType.Boolean
+                : isNumeric ? ConnectorOptionType.Number
+                : (allowed != null && allowed.Length > 0) ? ConnectorOptionType.Enum
+                : ConnectorOptionType.String;
+
+            var category = isSensitive ? "Auth"
+                : (key.Equals("SERVER", StringComparison.OrdinalIgnoreCase) || key.Equals("HOST", StringComparison.OrdinalIgnoreCase) || key.Equals("PORT", StringComparison.OrdinalIgnoreCase) || key.Equals("DATABASE", StringComparison.OrdinalIgnoreCase) || key.Equals("PATH", StringComparison.OrdinalIgnoreCase) || key.Equals("URL", StringComparison.OrdinalIgnoreCase) || key.Equals("DELIMITER", StringComparison.OrdinalIgnoreCase) || key.Equals("HEADER", StringComparison.OrdinalIgnoreCase)) ? "Basic"
+                : (key.Contains("TIMEOUT", StringComparison.OrdinalIgnoreCase) || key.Contains("POOL", StringComparison.OrdinalIgnoreCase) || key.Contains("ENCODING", StringComparison.OrdinalIgnoreCase) || key.Contains("RETRY", StringComparison.OrdinalIgnoreCase)) ? "Tuning"
+                : (key.Contains("SSL", StringComparison.OrdinalIgnoreCase) || key.Contains("CERT", StringComparison.OrdinalIgnoreCase) || key.Contains("ENCRYPT", StringComparison.OrdinalIgnoreCase) || key.Contains("TRUST", StringComparison.OrdinalIgnoreCase) || key.Contains("AUTH", StringComparison.OrdinalIgnoreCase)) ? "Security"
+                : "Advanced";
+
+            var isMandatory = (IsFileBased && key.Equals("PATH", StringComparison.OrdinalIgnoreCase))
+                || (!IsFileBased && (key.Equals("SERVER", StringComparison.OrdinalIgnoreCase) || key.Equals("HOST", StringComparison.OrdinalIgnoreCase) || key.Equals("DATABASE", StringComparison.OrdinalIgnoreCase) || key.Equals("URL", StringComparison.OrdinalIgnoreCase)));
+
+            string? defaultVal = null;
+            if (key.Equals("PORT", StringComparison.OrdinalIgnoreCase) && GetProbeEndpoint(string.Empty) is { } ep && ep.Port > 0)
+                defaultVal = ep.Port.ToString();
+            else if (key.Equals("TIMEOUT_SECONDS", StringComparison.OrdinalIgnoreCase))
+                defaultVal = CommandTimeoutSeconds.ToString();
+            else if (key.Equals("DELIMITER", StringComparison.OrdinalIgnoreCase))
+                defaultVal = ",";
+            else if (key.Equals("HEADER", StringComparison.OrdinalIgnoreCase))
+                defaultVal = "ON";
+
+            string? group = null;
+            if (key.Equals("TRUSTED_CONNECTION", StringComparison.OrdinalIgnoreCase) || key.Equals("KEY_FILE", StringComparison.OrdinalIgnoreCase) || key.Equals("KEYFILE", StringComparison.OrdinalIgnoreCase) || key.Equals("PRIVATE_KEY_FILE", StringComparison.OrdinalIgnoreCase) || isSensitive)
+                group = "Credentials";
+
+            list.Add(new ConnectorOptionDescriptor(
+                Name: key,
+                Type: type,
+                IsMandatory: isMandatory,
+                DefaultValue: defaultVal,
+                Category: category,
+                Description: null,
+                AllowedValues: (allowed != null && allowed.Length > 0) ? allowed : predefined,
+                MutuallyExclusiveGroup: group
+            ));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Returns the complete schema descriptor for this connector.
+    /// </summary>
+    ConnectorSchemaDescriptor GetSchemaDescriptor() =>
+        new(
+            ConnectorType: Name,
+            Aliases: Aliases,
+            Description: GetHelp(),
+            IsFileBased: IsFileBased,
+            IsDataWarehouse: IsDataWarehouse,
+            CommandTimeoutSeconds: CommandTimeoutSeconds,
+            Options: GetOptionDescriptors()
+        );
+}
 
 public interface IConnectorRegistry
 {
@@ -139,6 +256,8 @@ public interface IConnectorRegistry
     HashSet<string> GetAllConnectorKeywords();
     HashSet<string> GetAllConnectorFunctions();
     Dictionary<string, string[]> GetAllConnectorOptionValues();
+    IEnumerable<ConnectorSchemaDescriptor> GetAllConnectorSchemas();
+    ConnectorSchemaDescriptor? GetConnectorSchema(string connectorType);
 }
 
 /// <summary>
@@ -234,5 +353,26 @@ public class ConnectorRegistry : IConnectorRegistry
             }
         }
         return map;
+    }
+
+    public IEnumerable<ConnectorSchemaDescriptor> GetAllConnectorSchemas()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<ConnectorSchemaDescriptor>();
+        foreach (var connector in _connectors.Values)
+        {
+            if (seen.Add(connector.Name))
+            {
+                result.Add(connector.GetSchemaDescriptor());
+            }
+        }
+        return result;
+    }
+
+    public ConnectorSchemaDescriptor? GetConnectorSchema(string connectorType)
+    {
+        if (string.IsNullOrWhiteSpace(connectorType)) return null;
+        var connector = GetConnector(connectorType);
+        return connector?.GetSchemaDescriptor();
     }
 }

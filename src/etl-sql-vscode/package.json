@@ -63,7 +63,8 @@
     "onCommand:etlsql.publishToPortal",
     "onCommand:etlsql.exportNotebook",
     "onCommand:etlsql.generateScriptFromSpec",
-    "onCommand:etlsql.reportIssue"
+    "onCommand:etlsql.reportIssue",
+    "onCommand:etlsql.openConnectionWizard"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -292,6 +293,11 @@
         "command": "etlsql.openReportDesigner",
         "title": "ETL-SQL: Open Report Designer",
         "icon": "$(edit)"
+      },
+      {
+        "command": "etlsql.openConnectionWizard",
+        "title": "ETL-SQL: Connection Wizard",
+        "icon": "$(plug)"
       },
       {
         "command": "etlsql.runScript",
