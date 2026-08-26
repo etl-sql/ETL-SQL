@@ -23,7 +23,12 @@ export function makeMockApi(seedState) {
     if (path.endsWith('/api/designer/generate')) {
       data = { script: generateMockScript(body.designState ?? seedState) };
     } else if (path.endsWith('/api/designer/parse')) {
-      data = { designState: seedState };
+      const scriptText = body.script || '';
+      if (scriptText.includes('SYNTAX_ERROR') || scriptText.includes('>>> INVALID <<<') || body._mockParseError) {
+        data = { error: 'Syntax error: Unexpected token in script', designState: null };
+      } else {
+        data = { designState: seedState };
+      }
     } else if (path.endsWith('/api/designer/analyze')) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
     } else if (path.endsWith('/api/designer/complete')) {

@@ -46,11 +46,13 @@ export default {
     { id: 'sales', label: 'Sales dashboard' },
     { id: 'blank', label: 'Blank canvas' },
     { id: 'scm',   label: 'Sales + source control' },
+    { id: 'syntax-resilience', label: 'Transient syntax error resilience' },
   ],
   async mount(stage, fixtureId, ctx) {
     const ds = fixtureId === 'blank' ? blankState() : sampleState();
     const mod = await importFresh(DESIGNER_JS);
     const scm = fixtureId === 'scm';
+    const isSyntaxResilience = fixtureId === 'syntax-resilience';
     const opts = {
       designState: ds,
       reportName: 'Sandbox Report',
@@ -70,9 +72,15 @@ export default {
       opts.onSaveScript = async (script) => ctx.stat(`saved (mock) · ${script.length} chars`);
     }
     const inst = mod.createDesigner(stage, opts);
-    ctx.stat(scm
-      ? 'Save writes catalog only (stays on page); use the separate Commit button to record in Git (mock).'
-      : 'drag visuals from the left · Script toggle uses the mock parse/generate');
+    stage.__designerInstance = inst;
+    if (isSyntaxResilience) {
+      await inst.applyScriptText('SELECT 1; >>> SYNTAX_ERROR <<<');
+      ctx.stat('Simulating transient syntax error · Canvas cards retained · Diagnostic badge active');
+    } else {
+      ctx.stat(scm
+        ? 'Save writes catalog only (stays on page); use the separate Commit button to record in Git (mock).'
+        : 'drag visuals from the left · Script toggle uses the mock parse/generate');
+    }
     return inst;
   },
 };

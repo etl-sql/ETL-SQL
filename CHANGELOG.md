@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added lossless Report Builder editing certification tests and UI sandbox transient syntax error resilience.
+  `ReportDesignerLosslessFuzzTests` exercises deterministic mutation fuzzing, verifying out-of-scope byte
+  preservation across complex CTEs, SQL data-prep statements, variables, and comments, line ending stability
+  (CRLF/LF), corrupted syntax injection safety, and patcher idempotency. The UI sandbox and browser test suite
+  prove that transient syntax errors in split-screen script editing preserve existing canvas cards while displaying
+  diagnostic warnings.
+
 - Added `etl-sql-report offline <script>`, which turns an existing `.etlsnap` package into a single
   self-contained HTML file that opens with no server and no network. The shared runtime had carried an
   offline branch — bookmarks applying from the manifest's precomputed envelope, detail popovers reading

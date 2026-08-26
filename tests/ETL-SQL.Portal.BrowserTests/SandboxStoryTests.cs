@@ -191,6 +191,55 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     /// <summary>
+    /// Proves that transient syntax errors in split-screen script editing retain the last valid
+    /// canvas state instead of clearing or corrupting the designer canvas, while displaying
+    /// the diagnostic badge. Restoring valid script clears the badge and updates state.
+    /// </summary>
+    [Fact]
+    public async Task Designer_TransientSyntaxError_RetainsCanvasCardsAndDisplaysDiagnosticBadge()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='designer']");
+        await page.WaitForSelectorAsync("#fixtureSel", new PageWaitForSelectorOptions { Timeout = 30_000 });
+
+        // 1. Mount the transient syntax resilience fixture
+        await page.SelectOptionAsync("#fixtureSel", "syntax-resilience");
+        await page.WaitForTimeoutAsync(300);
+
+        // 2. Diagnostic badge must be displayed with syntax warning
+        var badge = page.Locator("#dsgn-diagnostic-badge");
+        Assert.Equal(1, await badge.CountAsync());
+        Assert.True(await badge.IsVisibleAsync());
+        Assert.Contains("Script syntax warning", await badge.InnerTextAsync());
+
+        // 3. Canvas visual cards must remain intact (3 cards from sample state)
+        var cards = page.Locator(".etlsql-dsgn-visual-card");
+        Assert.Equal(3, await cards.CountAsync());
+
+        // 4. Recover by applying a valid script
+        await page.EvaluateAsync("""
+            async () => {
+                const stage = document.querySelector('#stage');
+                if (stage && stage.__designerInstance) {
+                    await stage.__designerInstance.applyScriptText(`
+                        SELECT 'A' AS Date, 'V' AS Vendor, 100 AS total INTO #sales;
+                        CREATE VISUAL salesBar AS BAR ( TITLE = 'Recovered Bar', SOURCE = #sales, MAPPINGS (X = Date, Y = total) );
+                        CREATE PAGE Overview AS DASHBOARD ( LAYOUT ( STRUCTURE = 'A', MAP ('A' = salesBar) ) );
+                    `);
+                }
+            }
+        """);
+        await page.WaitForTimeoutAsync(200);
+
+        // 5. Diagnostic badge must be hidden after recovery
+        Assert.False(await badge.IsVisibleAsync());
+        Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>
     /// Drives the five <c>vscode-webviews</c> fixtures and asserts each one renders from files the
     /// repository actually tracks.
     ///

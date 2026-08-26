@@ -1,4 +1,4 @@
-﻿# ETL-SQL Development TODO List
+# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for all unfinished product and release work. All remaining
 product work is active for the current planning horizon. Work top to bottom unless a dependency or
@@ -19,7 +19,7 @@ Authoritative references:
 [`GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/grammar-of-graphics-spec-ir.md), and
 [`constrained-html-visuals.md`](docs/architecture/decisions/constrained-html-visuals.md).
 
-- [ ] Finish lossless Report Builder editing certification. Surgical patching is already shared by
+- [x] Finish lossless Report Builder editing certification. Surgical patching is already shared by
   the embedded and LSP-hosted paths, and regression tests cover multi-page scripts, chained CTEs,
   statement trivia, repeated CRLF/LF edits, and invalid intermediate scripts. Add deterministic
   mutation fuzz/property tests proving that every out-of-scope byte remains unchanged, plus a browser
