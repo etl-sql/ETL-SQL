@@ -116,7 +116,18 @@ public enum VisualType
     Bubble, Radar, Candlestick,
     Map, Gantt,
     Checkbox, Textbox, Numberbox,
-    Sankey, Sunburst, Network, Trellis, Matrix, Custom
+    Sankey, Sunburst, Network, Trellis, Matrix, Custom, Html
+}
+
+public enum HtmlVisualMode { Single, Repeater }
+
+public record HtmlTemplateDefinition : AstNode
+{
+    public required string Template { get; init; }
+    public string? Css { get; init; }
+    public string? Fallback { get; init; }
+    public HtmlVisualMode Mode { get; init; } = HtmlVisualMode.Single;
+    public override string ToSql() => AstSerializer.Format(this);
 }
 
 public enum PageMode
@@ -436,6 +447,7 @@ public record CreateVisualStatement : Statement
     public RowDetailDefinition? RowDetail { get; init; }
     public CascadeDefinition? Cascade { get; init; }
     public AdvancedChartDefinition? AdvancedChart { get; init; }
+    public HtmlTemplateDefinition? HtmlTemplate { get; init; }
     public override string ToSql() => AstSerializer.Format(this);
 }
 

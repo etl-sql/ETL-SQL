@@ -305,6 +305,8 @@ namespace ETL_SQL.Reporting.Builders
                     if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
                         ApplyTableMappings(vStmt, vm);
                     await BuildMicroChartsAsync(vStmt, vm);
+                    if (vStmt.VisualType == VisualType.Html && vStmt.HtmlTemplate != null)
+                        BuildHtmlVisual(vStmt, vm);
                     if (chartStatement.AdvancedChart is not null || NamedVisualChartLowerer.Supports(chartStatement.VisualType))
                     {
                         vm.ChartSpec = chartStatement.AdvancedChart is not null
@@ -962,6 +964,83 @@ namespace ETL_SQL.Reporting.Builders
                    type == VisualType.Checkbox ||
                    type == VisualType.Textbox ||
                    type == VisualType.Numberbox;
+        }
+
+        private void BuildHtmlVisual(CreateVisualStatement vStmt, VisualManifest vm)
+        {
+            var htmlDef = vStmt.HtmlTemplate!;
+            var evaluator = new HtmlVisual.HtmlTemplateEvaluator();
+            var sanitizer = new HtmlVisual.HtmlSanitizer();
+
+            var templateViolations = sanitizer.ValidateTemplate(htmlDef.Template);
+            if (templateViolations.Count > 0)
+            {
+                vm.Error = "HTML template sanitization failed: " +
+                    string.Join("; ", templateViolations.Select(v => v.Message));
+                return;
+            }
+
+            if (htmlDef.Css != null)
+            {
+                var cssViolations = sanitizer.ValidateCss(htmlDef.Css);
+                if (cssViolations.Count > 0)
+                {
+                    vm.Error = "CSS sanitization failed: " +
+                        string.Join("; ", cssViolations.Select(v => v.Message));
+                    return;
+                }
+            }
+
+            var parameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var v in ctx.VarContext.Variables)
+                parameters[v.Key] = v.Value;
+
+            vm.HtmlMode = htmlDef.Mode.ToString().ToUpperInvariant();
+
+            if (htmlDef.Mode == HtmlVisualMode.Repeater)
+            {
+                var maxRows = 500;
+                if (vm.Options.TryGetValue("MAX_ROWS", out var maxRowsStr) &&
+                    int.TryParse(maxRowsStr, out var parsed))
+                    maxRows = parsed;
+
+                vm.HtmlContent = evaluator.EvaluateRepeater(
+                    htmlDef.Template, vm.RawRows, parameters, maxRows);
+
+                if (htmlDef.Fallback != null)
+                {
+                    var fallbacks = new List<string>();
+                    var count = Math.Min(vm.RawRows.Count, 20);
+                    for (var i = 0; i < count; i++)
+                        fallbacks.Add(evaluator.EvaluateFallback(htmlDef.Fallback, vm.RawRows[i], parameters));
+                    vm.HtmlFallback = string.Join("\n", fallbacks);
+                    if (vm.RawRows.Count > 20)
+                        vm.HtmlFallback += $"\n... and {vm.RawRows.Count - 20} more";
+                }
+                else
+                {
+                    vm.HtmlFallback = $"{vStmt.Name}: {vm.RawRows.Count} items";
+                }
+            }
+            else
+            {
+                var row = vm.RawRows.Count > 0 ? vm.RawRows[0] : null;
+                vm.HtmlContent = evaluator.Evaluate(htmlDef.Template, row, parameters);
+
+                if (htmlDef.Fallback != null)
+                    vm.HtmlFallback = evaluator.EvaluateFallback(htmlDef.Fallback, row, parameters);
+                else if (row != null)
+                    vm.HtmlFallback = $"{vStmt.Name}: " +
+                        string.Join(", ", row.Take(5).Select(kvp => $"{kvp.Key} {kvp.Value}"));
+                else
+                    vm.HtmlFallback = vStmt.Name;
+            }
+
+            if (htmlDef.Css != null)
+            {
+                var containerId = $"etl-v-{vStmt.Name.ToLowerInvariant().Replace(' ', '-')}";
+                vm.HtmlCss = sanitizer.ScopeCss(htmlDef.Css, containerId);
+            }
         }
 
     }

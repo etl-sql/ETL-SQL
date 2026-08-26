@@ -281,6 +281,7 @@ public static class AstSerializer
         CreateVisualStatement s => FormatCreateVisual(s),
         CascadeDefinition s => FormatCascade(s),
         AdvancedChartDefinition s => FormatAdvancedChart(s),
+        HtmlTemplateDefinition s => FormatHtmlTemplate(s),
         CreatePageStatement s => FormatCreatePage(s),
         CreateDatasetStatement s => FormatCreateDataset(s),
         CreateContainerStatement s => FormatCreateContainer(s),
@@ -1403,6 +1404,16 @@ public static class AstSerializer
             sb.AppendLine($"    {FormatCascade(s.Cascade)},");
         if (s.AdvancedChart != null)
             sb.AppendLine(Indent(FormatAdvancedChart(s.AdvancedChart), 4) + ",");
+        if (s.HtmlTemplate != null)
+        {
+            if (s.HtmlTemplate.Mode != HtmlVisualMode.Single)
+                sb.AppendLine($"    MODE = {s.HtmlTemplate.Mode.ToString().ToUpper()},");
+            sb.AppendLine($"    TEMPLATE = {Quote(s.HtmlTemplate.Template)},");
+            if (s.HtmlTemplate.Css != null)
+                sb.AppendLine($"    STYLE ( CSS = {Quote(s.HtmlTemplate.Css)} ),");
+            if (s.HtmlTemplate.Fallback != null)
+                sb.AppendLine($"    FALLBACK = {Quote(s.HtmlTemplate.Fallback)},");
+        }
         if (s.DefaultValue != null && s.VisualType != VisualType.Text)
             sb.AppendLine($"    DEFAULT = {s.DefaultValue.ToSql()},");
         if (s.PrintLayout != null)
@@ -1410,6 +1421,19 @@ public static class AstSerializer
 
         var result = sb.ToString().TrimEnd().TrimEnd(',');
         return result + "\n);";
+    }
+
+    private static string FormatHtmlTemplate(HtmlTemplateDefinition def)
+    {
+        var parts = new List<string>();
+        if (def.Mode != HtmlVisualMode.Single)
+            parts.Add($"MODE = {def.Mode.ToString().ToUpper()}");
+        parts.Add($"TEMPLATE = {Quote(def.Template)}");
+        if (def.Css != null)
+            parts.Add($"STYLE ( CSS = {Quote(def.Css)} )");
+        if (def.Fallback != null)
+            parts.Add($"FALLBACK = {Quote(def.Fallback)}");
+        return string.Join(", ", parts);
     }
 
     private static string FormatCascade(CascadeDefinition cascade)

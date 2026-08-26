@@ -134,7 +134,15 @@ public static class VisualCapabilityMatrix
             new(CapabilityLevel.Native, "native SVG to PDF; email attaches PDF/CSV/Markdown"),
             new(CapabilityLevel.Native, "Spectre matrix"),
             "Row click", false,
-            "Native SVG matrix with semantic table fallbacks")
+            "Native SVG matrix with semantic table fallbacks"),
+        new(
+            VisualType.Html, "HTML", "Template / Bespoke",
+            new(CapabilityLevel.Native, "sanitized HTML with scoped CSS"),
+            new(CapabilityLevel.Native, "sanitized HTML to PDF via headless print path"),
+            new(CapabilityLevel.Native, "semantic fallback text; email attaches PDF"),
+            new(CapabilityLevel.SemanticFallback, "fallback template plain text"),
+            "Click, parameter binding, navigation", false,
+            "Constrained HTML template visual with typed escaped bindings")
     ];
 
     private static VisualCapabilityEntry Chart(VisualType type, string name, string category, string chartKind, string interactions)

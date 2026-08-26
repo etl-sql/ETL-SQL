@@ -49,6 +49,10 @@ public class ReportParser : ParserComponent
         RowDetailDefinition? rowDetail = null;
         CascadeDefinition? cascade = null;
         AdvancedChartDefinition? advancedChart = null;
+        string? htmlTemplate = null;
+        string? htmlCss = null;
+        string? htmlFallback = null;
+        HtmlVisualMode htmlMode = HtmlVisualMode.Single;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -183,6 +187,31 @@ public class ReportParser : ParserComponent
                 Advance();
                 advancedChart = ParseAdvancedChartDefinition();
             }
+            else if (Match(TokenType.TEMPLATE))
+            {
+                Match(TokenType.EQUALS);
+                htmlTemplate = Consume(TokenType.STRING_LITERAL, "Expected template string after TEMPLATE =").Value;
+            }
+            else if (IsCurrentValue("MODE"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                var modeVal = ConsumeReportOptionValue().ToUpperInvariant();
+                htmlMode = modeVal switch
+                {
+                    "SINGLE" => HtmlVisualMode.Single,
+                    "REPEATER" => HtmlVisualMode.Repeater,
+                    _ => throw new SyntaxException(
+                        $"Unknown HTML visual MODE '{modeVal}'. Expected SINGLE or REPEATER.",
+                        _parser.Previous.Line, _parser.Previous.Column)
+                };
+            }
+            else if (IsCurrentValue("FALLBACK"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                htmlFallback = Consume(TokenType.STRING_LITERAL, "Expected fallback string after FALLBACK =").Value;
+            }
             else
             {
                 throw new SyntaxException(
@@ -204,6 +233,37 @@ public class ReportParser : ParserComponent
         if (visualType == VisualType.Custom && (mappings.Count > 0 || typedSeries.Count > 0 || overlays.Count > 0 || formattingRules.Count > 0))
             throw new SyntaxException("CUSTOM visuals use CHART encodings and cannot use MAPPINGS, SERIES, OVERLAYS, or FORMATTING.", startToken.Line, startToken.Column);
 
+        HtmlTemplateDefinition? htmlTemplateDef = null;
+        if (visualType == VisualType.Html)
+        {
+            if (htmlTemplate == null)
+                throw new SyntaxException($"HTML visual '{name}' requires a TEMPLATE clause.", startToken.Line, startToken.Column);
+            if (mappings.Count > 0 || typedSeries.Count > 0 || overlays.Count > 0 || formattingRules.Count > 0)
+                throw new SyntaxException("HTML visuals cannot use MAPPINGS, SERIES, OVERLAYS, or FORMATTING.", startToken.Line, startToken.Column);
+            if (advancedChart != null)
+                throw new SyntaxException("HTML visuals cannot use the CHART clause.", startToken.Line, startToken.Column);
+            if (cascade != null)
+                throw new SyntaxException("HTML visuals cannot use CASCADE.", startToken.Line, startToken.Column);
+            if (htmlMode == HtmlVisualMode.Repeater && source == null)
+                throw new SyntaxException($"HTML visual '{name}' with MODE = REPEATER requires a SOURCE clause.", startToken.Line, startToken.Column);
+
+            styles.TryGetValue("CSS", out htmlCss);
+            if (htmlCss != null) styles.Remove("CSS");
+
+            htmlTemplateDef = new HtmlTemplateDefinition
+            {
+                Template = htmlTemplate,
+                Css = htmlCss,
+                Fallback = htmlFallback,
+                Mode = htmlMode
+            };
+        }
+        else
+        {
+            if (htmlTemplate != null)
+                throw new SyntaxException("TEMPLATE is only valid on HTML visuals.", startToken.Line, startToken.Column);
+        }
+
         if (source == null)
         {
             if (visualType == VisualType.Text
@@ -216,7 +276,8 @@ public class ReportParser : ParserComponent
                 || visualType == VisualType.Checkbox
                 || visualType == VisualType.Textbox
                 || visualType == VisualType.Numberbox
-                || visualType == VisualType.Image)
+                || visualType == VisualType.Image
+                || visualType == VisualType.Html)
                 source = new VisualSourceExpression();
             else
                 throw new SyntaxException($"CREATE VISUAL '{name}' is missing a SOURCE clause.", startToken.Line, startToken.Column);
@@ -256,6 +317,7 @@ public class ReportParser : ParserComponent
             RowDetail = rowDetail,
             Cascade = cascade,
             AdvancedChart = advancedChart,
+            HtmlTemplate = htmlTemplateDef,
             Line = startToken.Line,
             Column = startToken.Column
         };
@@ -2578,6 +2640,7 @@ public class ReportParser : ParserComponent
         if (Match(TokenType.TEXTBOX)) return VisualType.Textbox;
         if (Match(TokenType.NUMBERBOX)) return VisualType.Numberbox;
         if (IsCurrentValue("CUSTOM")) { Advance(); return VisualType.Custom; }
+        if (IsCurrentValue("HTML")) { Advance(); return VisualType.Html; }
 
         // MAP token already exists for container MAP() clauses; match it here only when
         // ParseVisualType() is called (i.e. after AS in CREATE VISUAL ... AS MAP).
@@ -2625,6 +2688,7 @@ public class ReportParser : ParserComponent
                 "TEXTBOX" => VisualType.Textbox,
                 "NUMBERBOX" => VisualType.Numberbox,
                 "CUSTOM" => VisualType.Custom,
+                "HTML" => VisualType.Html,
                 _ => throw new SyntaxException(
                          $"Unknown visual type '{val}'.",
                          _parser.Previous.Line, _parser.Previous.Column)
@@ -2632,7 +2696,7 @@ public class ReportParser : ParserComponent
         }
 
         throw new SyntaxException(
-            $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, GANTT, SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, CHECKBOX, TEXTBOX, NUMBERBOX, CUSTOM) but got '{_parser.Current.Value}'",
+            $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, GANTT, SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, CHECKBOX, TEXTBOX, NUMBERBOX, CUSTOM, HTML) but got '{_parser.Current.Value}'",
             _parser.Current.Line, _parser.Current.Column);
     }
 

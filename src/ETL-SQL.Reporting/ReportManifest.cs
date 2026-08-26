@@ -424,6 +424,22 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("drillState")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public VisualDrillStateManifest? DrillState { get; set; }
+
+        [JsonPropertyName("htmlContent")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? HtmlContent { get; set; }
+
+        [JsonPropertyName("htmlCss")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? HtmlCss { get; set; }
+
+        [JsonPropertyName("htmlFallback")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? HtmlFallback { get; set; }
+
+        [JsonPropertyName("htmlMode")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? HtmlMode { get; set; }
     }
 
     /// <summary>
