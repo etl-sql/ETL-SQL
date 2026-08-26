@@ -12,7 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
+- Added Report Builder preview and lossless editing for constrained `HTML` visuals. Registered `HTML`
+  in the visual type registry with live sanitized preview on canvas cards, and added a dedicated Constrained
+  HTML Component editor in the Properties panel supporting optional `SOURCE`, `MODE` (`SINGLE` / `REPEATER`),
+  `TEMPLATE`, scoped `STYLE` (`CSS`), `FALLBACK`, and declarative `ACTIONS`. Extended `DesignerAnalysisService`,
+  `DesignerScriptPatcher`, and `DesignerScriptGenerationService` to preserve author comments, nested trivia,
+  and formatting byte-for-byte during round-trips across embedded and LSP-hosted paths.
 
 - Added dedicated Report Builder `CHART` editor and lossless `CUSTOM` visual support. Registered `CUSTOM`
   in the visual type registry with live SVG Grammar-of-Graphics layered preview on canvas cards, and exposed

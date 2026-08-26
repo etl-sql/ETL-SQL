@@ -3579,7 +3579,7 @@ export function createDesigner(container, opts = {}) {
         {
             name: 'Data & Content',
             types: [
-                ['TABLE','#64748b'],['CARD','#10b981'],['TEXT','#f59e0b'],['IMAGE','#ec4899']
+                ['TABLE','#64748b'],['CARD','#10b981'],['TEXT','#f59e0b'],['IMAGE','#ec4899'],['HTML','#059669']
             ]
         },
         {
@@ -3966,6 +3966,59 @@ export function createDesigner(container, opts = {}) {
         });
     }
 
+    function _renderHtmlVisualPreview(bodyEl, visual, snapshotPackage) {
+        const tmpl = visual.options?.html_template || '<article class="custom-card"><h3>{{Title}}</h3><p>{{Description}}</p></article>';
+        const css = visual.options?.html_style || '';
+        const mode = visual.options?.html_mode || 'SINGLE';
+        const rows = (snapshotPackage && visual.dataset && snapshotPackage.datasets?.[visual.dataset]?.rows) || [];
+
+        let sampleHtml = '';
+        if (mode === 'REPEATER' && rows.length > 0) {
+            const columns = snapshotPackage.datasets[visual.dataset].columns || [];
+            sampleHtml = rows.slice(0, 5).map(r => {
+                let rowHtml = tmpl;
+                columns.forEach((col, idx) => {
+                    const val = Array.isArray(r) ? r[idx] : r[col];
+                    const reg = new RegExp(`\\{\\{${col}(?:\\s+FORMAT\\s+[^}]+)?\\}\\}`, 'gi');
+                    rowHtml = rowHtml.replace(reg, esc(String(val ?? '')));
+                });
+                return rowHtml;
+            }).join('');
+        } else if (rows.length > 0) {
+            const columns = snapshotPackage?.datasets?.[visual.dataset]?.columns || [];
+            let rowHtml = tmpl;
+            columns.forEach((col, idx) => {
+                const val = Array.isArray(rows[0]) ? rows[0][idx] : rows[0][col];
+                const reg = new RegExp(`\\{\\{${col}(?:\\s+FORMAT\\s+[^}]+)?\\}\\}`, 'gi');
+                rowHtml = rowHtml.replace(reg, esc(String(val ?? '')));
+            });
+            sampleHtml = rowHtml;
+        } else {
+            // Static or placeholder preview
+            sampleHtml = tmpl.replace(/\{\{#IF\s+[^}]+\}\}/gi, '')
+                             .replace(/\{\{\/IF\}\}/gi, '')
+                             .replace(/\{\{([@a-zA-Z0-9_]+)(?:\s+FORMAT\s+[^}]+)?\}\}/g, '$1');
+        }
+
+        // Basic zero-trust sanitization for preview: strip scripts, iframes, and on* handlers
+        sampleHtml = sampleHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                               .replace(/\son\w+="[^"]*"/gi, '')
+                               .replace(/\son\w+='[^']*'/gi, '')
+                               .replace(/<iframe\b[^>]*>.*?<\/iframe>/gi, '');
+
+        const scopeClass = `etlsql-html-scope-${visual.id}`;
+        let scopedCssTag = '';
+        if (css.trim()) {
+            scopedCssTag = `<style>.${scopeClass} { ${css} }</style>`;
+        }
+
+        bodyEl.innerHTML = `
+            <div class="etlsql-html-visual-preview ${scopeClass}" style="width:100%;height:100%;overflow:auto;padding:8px;box-sizing:border-box;font-size:12px;">
+                ${scopedCssTag}
+                <div class="etlsql-html-visual-body">${sampleHtml}</div>
+            </div>`;
+    }
+
     function _renderSnapshotCardBody(bodyEl, visual, snapshotPackage) {
         if (!snapshotPackage || !snapshotPackage.sampleRows) {
             bodyEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--portal-muted,#64748b);font-size:11px;">No snapshot data</div>`;
@@ -4031,6 +4084,11 @@ export function createDesigner(container, opts = {}) {
             rows = rows.filter(r => Array.isArray(r)
                 ? r.some(cell => String(cell).toLowerCase() === filterLower)
                 : String(r).toLowerCase() === filterLower);
+        }
+
+        if (type === 'HTML') {
+            _renderHtmlVisualPreview(bodyEl, visual, snapshotPackage);
+            return;
         }
 
         if (type === 'CARD') {
@@ -4141,6 +4199,8 @@ export function createDesigner(container, opts = {}) {
             } else if (v.type === 'CUSTOM') {
                 const width = 360, height = 180, pad = 24;
                 cardBody.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(v.title || v.name)}" style="width:100%;height:100%"><line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" stroke="#cbd5e1"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" stroke="#cbd5e1"/><rect x="60" y="60" width="30" height="96" rx="2" fill="#8b5cf6" opacity="0.85"/><rect x="110" y="40" width="30" height="116" rx="2" fill="#8b5cf6" opacity="0.85"/><rect x="160" y="80" width="30" height="76" rx="2" fill="#8b5cf6" opacity="0.85"/><path d="M 75 80 L 125 50 L 175 90 L 225 30" fill="none" stroke="#06b6d4" stroke-width="2"/><circle cx="75" cy="80" r="3" fill="#06b6d4"/><circle cx="125" cy="50" r="3" fill="#06b6d4"/><circle cx="175" cy="90" r="3" fill="#06b6d4"/><circle cx="225" cy="30" r="3" fill="#06b6d4"/><text x="180" y="20" font-size="10" fill="#7a8798" text-anchor="middle">CUSTOM CHART (GoG Layers)</text></svg>`;
+            } else if (v.type === 'HTML') {
+                _renderHtmlVisualPreview(cardBody, v, opts.snapshotPackage);
             } else {
                 cardBody.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--portal-muted,#64748b);font-size:11px;">${v.type} Placeholder</div>`;
             }
@@ -4441,6 +4501,7 @@ export function createDesigner(container, opts = {}) {
         const varOpts = declaredVars.map(vname => `<option value="${esc(vname)}">${esc(vname)}</option>`).join('');
 
         const isCustomChart = v.type === 'CUSTOM' || Boolean(v.options?.advanced_chart);
+        const isHtmlVisual = v.type === 'HTML' || Boolean(v.options?.html_template);
         const defaultCustomChart = `CHART (
     COORDINATE (TYPE = CARTESIAN),
     SCALES (
@@ -4458,6 +4519,10 @@ export function createDesigner(container, opts = {}) {
     )
 )`;
         const chartCode = v.options?.advanced_chart || defaultCustomChart;
+        const htmlMode = v.options?.html_mode || 'SINGLE';
+        const htmlTemplate = v.options?.html_template || '<article class="custom-card">\n  <h3>{{Title}}</h3>\n  <p>{{Description}}</p>\n</article>';
+        const htmlStyle = v.options?.html_style || '';
+        const htmlFallback = v.options?.html_fallback || '';
 
         propsPanel.innerHTML = `
             <div class="etlsql-dsgn-props-section">
@@ -4513,6 +4578,27 @@ export function createDesigner(container, opts = {}) {
                 <label class="etlsql-dsgn-label">CHART Clauses (Layers, Scales, Encodings, Conditions)
                     <textarea id="pp-chart-code" class="form-control etlsql-code-editor" rows="12" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(chartCode)}</textarea>
                 </label>
+            </div>` : (isHtmlVisual ? `
+            <div class="etlsql-dsgn-props-section etlsql-dsgn-html-editor-section">
+                <div class="etlsql-dsgn-props-hdr">Constrained HTML Component</div>
+                <label class="etlsql-dsgn-label">Mode
+                    <select id="pp-html-mode" class="form-control">
+                        <option value="SINGLE"${htmlMode === 'SINGLE' ? ' selected' : ''}>SINGLE (First row or static)</option>
+                        <option value="REPEATER"${htmlMode === 'REPEATER' ? ' selected' : ''}>REPEATER (Repeat per row)</option>
+                    </select>
+                </label>
+                <label class="etlsql-dsgn-label" style="margin-top:6px;">HTML Template
+                    <span style="font-size:10px;color:var(--portal-muted,#7a8798);display:block;margin-bottom:2px;">
+                        Substitutions: <code>{{Field}}</code>, <code>{{@Param}}</code>, <code>{{#IF Field = 'val'}}...{{/IF}}</code>
+                    </span>
+                    <textarea id="pp-html-template" class="form-control etlsql-code-editor" rows="8" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlTemplate)}</textarea>
+                </label>
+                <label class="etlsql-dsgn-label" style="margin-top:6px;">Scoped CSS (STYLE)
+                    <textarea id="pp-html-style" class="form-control etlsql-code-editor" rows="4" spellcheck="false" placeholder=".custom-card { padding: 8px; }" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlStyle)}</textarea>
+                </label>
+                <label class="etlsql-dsgn-label" style="margin-top:6px;">Fallback Summary (Terminal/Print)
+                    <input type="text" id="pp-html-fallback" class="form-control" placeholder="e.g., Status: {{Title}} - {{Description}}" value="${esc(htmlFallback)}">
+                </label>
             </div>` : `
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Mappings</div>
@@ -4529,7 +4615,7 @@ export function createDesigner(container, opts = {}) {
                         </div>`;
                 }).join('')}
                 ${datalistHtml}
-            </div>`}
+            </div>`)}
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Actions & Interactions</div>
                 <label class="etlsql-dsgn-label">Target Parameter (@var)
@@ -4561,7 +4647,22 @@ export function createDesigner(container, opts = {}) {
         `;
 
         on('#pp-name',         e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-type',         e => { v.type  = e.target.value; if (v.type === 'CUSTOM' && !v.options?.advanced_chart) { if (!v.options) v.options = {}; v.options.advanced_chart = defaultCustomChart; } renderCanvas(); renderTree(); renderProps(); });
+        on('#pp-type',         e => {
+            v.type  = e.target.value;
+            if (v.type === 'CUSTOM' && !v.options?.advanced_chart) {
+                if (!v.options) v.options = {};
+                v.options.advanced_chart = defaultCustomChart;
+            } else if (v.type === 'HTML' && !v.options?.html_template) {
+                if (!v.options) v.options = {};
+                v.options.html_mode = 'SINGLE';
+                v.options.html_template = `<article class="custom-card">\n  <h3>{{Title}}</h3>\n  <p>{{Description}}</p>\n</article>`;
+                v.options.html_style = `.custom-card {\n  padding: 12px;\n  border: 1px solid var(--portal-border, #e2e8f0);\n  border-radius: 6px;\n}`;
+                v.options.html_fallback = 'Custom HTML: {{Title}} - {{Description}}';
+            }
+            renderCanvas();
+            renderTree();
+            renderProps();
+        });
         on('#pp-container-id', e => { v.containerId = e.target.value || null; renderTree(); renderCanvas(); renderProps(); });
         if (isTabbedParent) {
             on('#pp-container-section', e => { if(!v.options) v.options = {}; if (e.target.value.trim()) v.options.CONTAINER_SECTION = e.target.value.trim(); else delete v.options.CONTAINER_SECTION; syncScriptFromGridDebounced(); });
@@ -4628,6 +4729,32 @@ export function createDesigner(container, opts = {}) {
                     syncScriptFromGridDebounced();
                 });
             }
+        } else if (isHtmlVisual) {
+            on('#pp-html-mode', e => {
+                if (!v.options) v.options = {};
+                v.options.html_mode = e.target.value;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            on('#pp-html-template', e => {
+                if (!v.options) v.options = {};
+                v.options.html_template = e.target.value;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            on('#pp-html-style', e => {
+                if (!v.options) v.options = {};
+                if (e.target.value.trim()) v.options.html_style = e.target.value.trim();
+                else delete v.options.html_style;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            on('#pp-html-fallback', e => {
+                if (!v.options) v.options = {};
+                if (e.target.value.trim()) v.options.html_fallback = e.target.value.trim();
+                else delete v.options.html_fallback;
+                syncScriptFromGridDebounced();
+            });
         } else {
             for (const role of ROLES) {
                 const input = propsPanel.querySelector(`[data-role="${role}"]`);
@@ -4806,6 +4933,18 @@ export function createDesigner(container, opts = {}) {
             )
         )
     )`;
+        } else if (type === 'HTML') {
+            visual.options.html_mode = 'SINGLE';
+            visual.options.html_template = `<article class="custom-card">
+  <h3>{{Title}}</h3>
+  <p>{{Description}}</p>
+</article>`;
+            visual.options.html_style = `.custom-card {
+  padding: 12px;
+  border: 1px solid var(--portal-border, #e2e8f0);
+  border-radius: 6px;
+}`;
+            visual.options.html_fallback = 'Custom HTML Visual: {{Title}} - {{Description}}';
         }
         page.visuals.push(visual);
         selVisualId = newId;

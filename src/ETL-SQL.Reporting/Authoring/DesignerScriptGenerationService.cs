@@ -186,6 +186,23 @@ public sealed class DesignerScriptGenerationService
             AppendLine(sb, $"    CHART ({nl}        COORDINATE (TYPE = CARTESIAN),{nl}        LAYERS ({nl}            main = RECT ({nl}                ENCODINGS ({nl}                    X = category (TYPE = NOMINAL),{nl}                    Y = value (TYPE = QUANTITATIVE){nl}                ){nl}            ){nl}        ){nl}    ),", nl);
         }
 
+        if (string.Equals(visual.Type, "HTML", StringComparison.OrdinalIgnoreCase) || visual.Options.ContainsKey("html_template"))
+        {
+            if (visual.Options.TryGetValue("html_mode", out var htmlMode) && string.Equals(htmlMode, "REPEATER", StringComparison.OrdinalIgnoreCase))
+                AppendLine(sb, "    MODE = REPEATER,", nl);
+
+            var template = visual.Options.TryGetValue("html_template", out var tmpl) && !string.IsNullOrWhiteSpace(tmpl)
+                ? tmpl
+                : "<article class=\"custom-card\"><h3>{{Title}}</h3><p>{{Description}}</p></article>";
+            AppendLine(sb, $"    TEMPLATE = '{EscapeStr(template)}',", nl);
+
+            if (visual.Options.TryGetValue("html_style", out var htmlStyle) && !string.IsNullOrWhiteSpace(htmlStyle))
+                AppendLine(sb, $"    STYLE ( CSS = '{EscapeStr(htmlStyle)}' ),", nl);
+
+            if (visual.Options.TryGetValue("html_fallback", out var fallback) && !string.IsNullOrWhiteSpace(fallback))
+                AppendLine(sb, $"    FALLBACK = '{EscapeStr(fallback)}',", nl);
+        }
+
         var mappings = visual.Mappings
             .Where(mapping => !string.IsNullOrWhiteSpace(mapping.Value))
             .Select(mapping => $"{mapping.Key.ToUpperInvariant()} = {mapping.Value}")
@@ -342,6 +359,10 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "cascade", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "advanced_chart", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "html_template", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "html_mode", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "html_style", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "html_fallback", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("action:", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("interaction:", StringComparison.OrdinalIgnoreCase);
 

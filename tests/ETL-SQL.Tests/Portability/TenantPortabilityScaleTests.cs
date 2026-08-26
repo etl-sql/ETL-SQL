@@ -7,7 +7,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Portability;
 
-public sealed class TenantPortabilityPhase2Tests
+public sealed class TenantPortabilityScaleTests
 {
     [Fact]
     public async Task ConcurrentSnapshotRetriesUntilDatabaseAndArtifactBoundaryIsStable()
@@ -91,7 +91,7 @@ public sealed class TenantPortabilityPhase2Tests
     }
 
     [Fact]
-    public async Task Phase2BundleBindsConsistencyInventoryContentAndDeltaBase()
+    public async Task ScaleBundleBindsConsistencyInventoryContentAndDeltaBase()
     {
         var source = new MovingConsistencySource(stable: true);
         var point = await TenantExportConsistencyCoordinator.CaptureAsync(

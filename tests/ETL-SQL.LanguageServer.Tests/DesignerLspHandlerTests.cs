@@ -245,5 +245,34 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.Contains("COORDINATE (TYPE = POLAR)", response.script);
             Assert.Contains("a = ARC", response.script);
         }
+
+        [Fact]
+        public async Task Generate_HtmlVisual_WithTemplateAndStyleOptions_PatchesHtmlClauses()
+        {
+            const string script = """
+                CREATE VISUAL status AS HTML (
+                  TITLE = 'Before',
+                  SOURCE = #nodes,
+                  MODE = SINGLE,
+                  TEMPLATE = '<div>{{Host}}</div>'
+                );
+                CREATE PAGE [Overview] AS DASHBOARD (LAYOUT (STRUCTURE = 'A', MAP ('A' = status)));
+                """;
+            const string state = """
+                {"pages":[{"id":"p","name":"Overview","mode":"Dashboard","visuals":[
+                  {"id":"n","name":"status","type":"HTML","gridCol":1,"gridRow":1,"gridColSpan":12,"gridRowSpan":6,"title":"Node Cards","dataset":"nodes","mappings":{},"options":{"html_mode":"REPEATER","html_template":"<article><h3>{{Host}}</h3></article>","html_style":".card { margin: 4px; }","html_fallback":"Host: {{Host}}"}}
+                ]}],"datasets":[]}
+                """;
+
+            var response = await new DesignerLspHandler(NullLogger<DesignerLspHandler>.Instance).Handle(
+                new DesignerGenerateParams { designStateJson = state, script = script }, CancellationToken.None);
+
+            Assert.Contains("TITLE = 'Node Cards'", response.script);
+            Assert.Contains("MODE = REPEATER", response.script);
+            Assert.Contains("TEMPLATE = '<article><h3>{{Host}}</h3></article>'", response.script);
+            Assert.Contains("STYLE ( CSS = '.card { margin: 4px; }' )", response.script);
+            Assert.Contains("FALLBACK = 'Host: {{Host}}'", response.script);
+        }
     }
 }
+

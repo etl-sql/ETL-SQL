@@ -77,6 +77,35 @@ function customChartState() {
   };
 }
 
+function customHtmlState() {
+  return {
+    pages: [{
+      id: 'p1', name: 'Overview', mode: 'Dashboard',
+      visuals: [
+        {
+          id: 'customHtml',
+          name: 'customHtml',
+          type: 'HTML',
+          title: 'Cluster Node Cards',
+          gridCol: 1,
+          gridColSpan: 12,
+          gridRow: 1,
+          gridRowSpan: 6,
+          dataset: 'nodes',
+          mappings: {},
+          options: {
+            html_mode: 'REPEATER',
+            html_template: '<article class="node-card"><h3>{{HostName}}</h3><p>CPU: {{CpuPercent}}</p></article>',
+            html_style: '.node-card { padding: 10px; border: 1px solid #e2e8f0; }',
+            html_fallback: 'Node: {{HostName}} (CPU: {{CpuPercent}})'
+          }
+        }
+      ]
+    }],
+    datasets: [{ name: 'nodes', query: 'SELECT HostName, CpuPercent FROM #cluster_nodes' }]
+  };
+}
+
 export default {
   id: 'designer',
   title: 'Report designer',
@@ -87,9 +116,10 @@ export default {
     { id: 'scm',   label: 'Sales + source control' },
     { id: 'syntax-resilience', label: 'Transient syntax error resilience' },
     { id: 'custom-chart', label: 'Custom Grammar-of-Graphics Chart' },
+    { id: 'custom-html',  label: 'Constrained HTML Component' },
   ],
   async mount(stage, fixtureId, ctx) {
-    const ds = fixtureId === 'blank' ? blankState() : (fixtureId === 'custom-chart' ? customChartState() : sampleState());
+    const ds = fixtureId === 'blank' ? blankState() : (fixtureId === 'custom-chart' ? customChartState() : (fixtureId === 'custom-html' ? customHtmlState() : sampleState()));
     const mod = await importFresh(DESIGNER_JS);
     const scm = fixtureId === 'scm';
     const isSyntaxResilience = fixtureId === 'syntax-resilience';

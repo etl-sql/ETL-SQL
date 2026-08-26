@@ -301,6 +301,15 @@ public sealed class DesignerAnalysisService
                 options["advanced_chart"] = v.AdvancedChart.ToSql();
             }
         }
+        if (v.HtmlTemplate != null)
+        {
+            options["html_template"] = v.HtmlTemplate.Template;
+            options["html_mode"] = v.HtmlTemplate.Mode.ToString().ToUpperInvariant();
+            if (v.HtmlTemplate.Css != null)
+                options["html_style"] = v.HtmlTemplate.Css;
+            if (v.HtmlTemplate.Fallback != null)
+                options["html_fallback"] = v.HtmlTemplate.Fallback;
+        }
 
         return new DesignerVisualDto(
             $"v_{v.Name}_{idx}",

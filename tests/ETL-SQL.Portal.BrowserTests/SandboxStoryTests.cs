@@ -293,6 +293,66 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     /// <summary>
+    /// Proves that HTML visual cards render dedicated Constrained HTML Component controls
+    /// in the properties panel and live sanitized preview on the canvas.
+    /// </summary>
+    [Fact]
+    public async Task Designer_ConstrainedHtmlVisual_RendersHtmlComponentControlsAndPreview()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='designer']");
+        await page.WaitForSelectorAsync("#fixtureSel", new PageWaitForSelectorOptions { Timeout = 30_000 });
+
+        // 1. Mount the custom-html fixture
+        await page.SelectOptionAsync("#fixtureSel", "custom-html");
+        await page.WaitForTimeoutAsync(300);
+
+        // 2. Visual card on canvas must be rendered with HTML preview
+        var card = page.Locator(".etlsql-dsgn-visual-card");
+        Assert.Equal(1, await card.CountAsync());
+        var htmlPreview = card.Locator(".etlsql-html-visual-preview");
+        Assert.Equal(1, await htmlPreview.CountAsync());
+        Assert.Contains("CPU: CpuPercent", await card.InnerTextAsync());
+
+        // 3. Click the visual to select and open Properties panel
+        await card.ClickAsync();
+        await page.WaitForTimeoutAsync(200);
+
+        // 4. Constrained HTML Component controls must be visible in properties panel
+        var htmlSection = page.Locator(".etlsql-dsgn-html-editor-section");
+        Assert.Equal(1, await htmlSection.CountAsync());
+        Assert.True(await htmlSection.IsVisibleAsync());
+
+        var modeSelect = page.Locator("#pp-html-mode");
+        Assert.True(await modeSelect.IsVisibleAsync());
+        Assert.Equal("REPEATER", await modeSelect.InputValueAsync());
+
+        var templateInput = page.Locator("#pp-html-template");
+        Assert.True(await templateInput.IsVisibleAsync());
+        var templateVal = await templateInput.InputValueAsync();
+        Assert.Contains("<article class=\"node-card\">", templateVal);
+        Assert.Contains("{{HostName}}", templateVal);
+
+        var styleInput = page.Locator("#pp-html-style");
+        Assert.True(await styleInput.IsVisibleAsync());
+        Assert.Contains(".node-card", await styleInput.InputValueAsync());
+
+        var fallbackInput = page.Locator("#pp-html-fallback");
+        Assert.True(await fallbackInput.IsVisibleAsync());
+        Assert.Contains("Node: {{HostName}}", await fallbackInput.InputValueAsync());
+
+        // 5. Modify mode to SINGLE
+        await modeSelect.SelectOptionAsync("SINGLE");
+        await page.WaitForTimeoutAsync(200);
+        Assert.Equal("SINGLE", await modeSelect.InputValueAsync());
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>
     /// Drives the five <c>vscode-webviews</c> fixtures and asserts each one renders from files the
     /// repository actually tracks.
     ///

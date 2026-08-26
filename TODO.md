@@ -29,7 +29,7 @@ Authoritative references:
   inventing a second grammar, and keep unedited or unsupported clause text byte-preserved. Cover
   embedded and LSP-hosted round trips, invalid intermediate edits, keyboard/accessibility behavior,
   and mutations of scripts containing advanced `CHART` syntax.
-- [ ] Add Report Builder preview and lossless editing for the complete constrained `HTML` visual
+- [x] Add Report Builder preview and lossless editing for the complete constrained `HTML` visual
   clause: optional `SOURCE`, `MODE`, `TEMPLATE`, scoped `STYLE`, `FALLBACK`, and declarative
   `ACTIONS`. Preserve unsupported or temporarily invalid text, use the same sanitizer and budgets as
   the runtime preview, and cover embedded/LSP parity. Design the component editor as a constrained
