@@ -287,8 +287,21 @@ public sealed class HtmlSanitizer
 
         if (string.IsNullOrEmpty(trimmed)) return null;
 
-        // Template substitutions — validated at evaluation time
-        if (trimmed.Contains("{{")) return null;
+        if (trimmed.Contains("{{"))
+        {
+            var beforeSubst = trimmed.Substring(0, trimmed.IndexOf("{{", StringComparison.Ordinal));
+            if (beforeSubst.Length == 0)
+                return new SanitizationViolation(SanitizationCategory.Url,
+                    "URL attributes must start with a static scheme (https:, http:, mailto:, tel:, or #). " +
+                    "Template substitutions cannot control the URL scheme.", 0);
+            var hasStaticScheme = SafeUrlSchemes.Any(s =>
+                beforeSubst.StartsWith(s + ":", StringComparison.OrdinalIgnoreCase)
+                || beforeSubst.StartsWith(s + "://", StringComparison.OrdinalIgnoreCase));
+            if (!hasStaticScheme && !beforeSubst.StartsWith("#"))
+                return new SanitizationViolation(SanitizationCategory.Url,
+                    $"URL prefix '{beforeSubst}' before template substitution is not a safe scheme.", 0);
+            return null;
+        }
 
         if (trimmed.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
             return new SanitizationViolation(SanitizationCategory.Url, "javascript: URLs are rejected.", 0);

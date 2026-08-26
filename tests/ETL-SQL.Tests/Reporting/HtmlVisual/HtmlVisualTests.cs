@@ -437,6 +437,26 @@ public class HtmlSanitizerTests
         Assert.Contains(violations, v => v.Category == SanitizationCategory.Url);
     }
 
+    [Theory]
+    [InlineData("<a href=\"{{Field}}\">link</a>")]
+    [InlineData("<a href=\"{{@param}}\">link</a>")]
+    public void ValidateTemplate_SubstitutionAtUrlSchemePosition_Rejected(string template)
+    {
+        var violations = _sanitizer.ValidateTemplate(template);
+        Assert.NotEmpty(violations);
+        Assert.Contains(violations, v => v.Category == SanitizationCategory.Url);
+    }
+
+    [Theory]
+    [InlineData("<a href=\"https://example.com/{{Id}}\">link</a>")]
+    [InlineData("<a href=\"mailto:{{Email}}\">mail</a>")]
+    [InlineData("<a href=\"#{{Section}}\">jump</a>")]
+    public void ValidateTemplate_SubstitutionAfterSafeScheme_Allowed(string template)
+    {
+        var violations = _sanitizer.ValidateTemplate(template);
+        Assert.Empty(violations);
+    }
+
     [Fact]
     public void ValidateTemplate_DataImageUrl_Allowed()
     {
