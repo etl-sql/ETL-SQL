@@ -63,37 +63,6 @@ Keep entries concise and link to detailed designs rather than copying them here.
 
 ## Foundation and Next Horizon
 
-### Tooling & Authoring — Lossless Visual Report Builder Editing
-
-**Status:** In Progress  
-**Horizon:** Foundation  
-**Authoritative design:** [`docs/guides/tooling/report-builder.md`](docs/guides/tooling/report-builder.md)
-
-An edit to one presentation statement must not alter data-preparation SQL, unrelated presentation
-statements, comments, whitespace, or line endings. This is Gate Zero for expanding the report grammar:
-a visual editor that can overwrite script content breaks ETL-SQL's script-first contract.
-
-**Why now:** The native GoG grammar has shipped, and dedicated `CHART` and constrained `HTML`
-authoring now depend on the same lossless mutation contract.
-
-**Boundaries:** This work preserves source text and usable canvas state; it does not redesign the GoG
-grammar or silently normalize an author's script.
-
-**Dependencies:** Parser span/trivia support, `DesignerScriptPatcher`, and parity between embedded and
-LSP-hosted designer paths.
-
-**Current implementation:** Embedded and LSP-hosted generation share `DesignerScriptPatcher`.
-Regression tests cover multi-page scripts, chained CTEs, statement-body trivia, fifty repeated
-CRLF/LF mutations, advanced `CHART` preservation, and safe handling of invalid intermediate scripts.
-
-**Remaining delivery:** Add deterministic mutation fuzz/property coverage that proves out-of-scope
-byte identity, and browser coverage proving that the designer retains its last valid canvas state
-while the source contains transient syntax errors. Dedicated `CHART` and constrained `HTML` editors
-must extend these same mutation primitives.
-
-**Acceptance evidence:** Regression and fuzz tests prove that presentation-only mutations leave all
-out-of-scope bytes unchanged and that invalid intermediate edits do not reset the canvas.
-
 ### Reporting & Presentation — Native Grammar-of-Graphics Spine
 
 **Status:** Shipped
@@ -253,24 +222,24 @@ manifest and rolls back entirely on failure; strict parser/formatter/lint plus `
 LSP completion, hover, and rename across every bookmark reference; Report Builder parse/edit/patch
 round-trip with a bookmarks panel; a Portal Views menu covering author bookmarks and per-user saved
 views with the full WAI-ARIA menu-button keyboard model; per-user ownership re-checks, revision-drift
-warnings, and identifier-only URLs. One boundary is deliberate and recorded in `TODO.md`: offline
-bookmark replay is implemented and tested against the runtime's `__ETLSNAP__` contract, but no
-self-contained offline HTML snapshot *host* exists yet — that is a separate feature.
+warnings, and identifier-only URLs. `etl-sql-report offline` now produces a self-contained snapshot
+viewer that sets `window.__ETLSNAP__`; browser tests prove bookmark and detail-popover replay with
+network access fenced off.
 
 ### Reporting & Presentation — Constrained HTML Visuals
 
-**Status:** In Progress — not shipped
+**Status:** Shipped in v0.19.0
 
-**Horizon:** Next
+**Horizon:** Delivered
 
 **Authoritative design:** [Constrained HTML Visuals](docs/architecture/decisions/constrained-html-visuals.md)
 
-**Current implementation:** The immutable AST, parser, formatter, escaped template evaluator,
-conditional form, HTML/CSS validator, scoped-CSS projection, initial manifest fields, and focused
-unit tests exist. The surface is not shipped: Analysis/LSP/help/snippets and production samples are
-missing; the shared browser runtime and static exporters do not consume the HTML manifest fields;
-bounded visual embedding is absent; and aggregate budgets, accessibility, refresh, snapshot, and
-cross-surface conformance are not certified.
+**What shipped:** The immutable AST, parser, formatter, Analysis diagnostics, LSP completion/hover/
+rename, escaped typed template evaluator, conditional form, closed HTML/CSS policy, scoped-CSS
+projection, declarative actions, bounded visual embedding, atomic parameter refresh, aggregate
+budgets, focused help, snippet, and production sample. The shared browser runtime renders the same
+manifest in browser and print paths; PDF and unsupported static surfaces preserve the deterministic
+semantic fallback.
 
 `CREATE VISUAL ... AS HTML` is the presentation counterpart to `CREATE VISUAL ... AS CUSTOM`.
 `CUSTOM` gives script authors a renderer-neutral grammar for composing charts. `HTML` gives them a
@@ -307,25 +276,24 @@ updates, navigation, bookmarks, drill, and cross-filtering instead of DOM script
 The security boundary permits sanitized semantic HTML and visual-scoped CSS. It rejects JavaScript,
 `<script>`, inline event handlers, unsafe URL schemes, iframes, objects, embeds, global document
 mutation, external form submission, and arbitrary raw-HTML substitution. Field and parameter values
-are escaped by default with no initial raw-output escape hatch. Allowed links, images, buttons,
-standard controls, and inline SVG must pass an explicit element/attribute/URL policy; generated
-micro-chart SVG remains server-owned. CSS is isolated to the visual while retaining approved report
+are escaped by default with no initial raw-output escape hatch. Allowed links, images, buttons, and
+semantic data elements must pass an explicit element/attribute/URL policy; generated micro-chart SVG
+remains server-owned. CSS is isolated to the visual while retaining approved report
 theme variables, so a component cannot restyle the report shell or neighboring visuals.
 
-Browser, print, and PDF output render the sanitized component. Every HTML visual must also declare or
-resolve a concise semantic summary for email, Markdown, terminal, plain text, screen readers, and any
-surface that cannot preserve the component faithfully. Static output must never silently drop data or
-imply unavailable interaction.
+Browser, print, and browser-backed PDF output render the sanitized component. Every HTML visual must
+also declare or resolve a concise semantic summary for static PDF, email, Markdown, terminal, plain
+text, screen readers, and any surface that cannot preserve the component faithfully. Static output
+must never silently drop data or imply unavailable interaction.
 
 Delivery remains script-first with preview, formatter, lint, LSP, documentation, and lossless Report
-Builder preservation. The active Report Builder increment adds a constrained structured component
-editor backed by the same sanitizer and budgets as runtime preview; it cannot introduce arbitrary DOM
-scripting or raw executable HTML.
+Builder preservation. The constrained structured component editor is backed by the same sanitizer
+and budgets as runtime preview; it cannot introduce arbitrary DOM scripting or raw executable HTML.
 
-**Delivery slices:** Complete Analysis/LSP/help/samples; enforce aggregate component budgets; add
-bounded visual embedding and declarative action parity; render scoped content in browser/print/PDF;
-provide semantic fallbacks; add constrained Report Builder preview/editing; and certify hostile input
-and deterministic cross-surface output.
+**Delivered:** Analysis/LSP/help/samples; aggregate component budgets; bounded visual embedding and
+declarative action parity; scoped browser/print rendering; semantic PDF and unsupported-surface
+fallbacks; constrained Report Builder preview/editing; and hostile-input and deterministic
+cross-surface certification.
 
 **Acceptance evidence:** Hostile markup, URL, CSS, disclosure, and nesting tests; deterministic
 escaping and typed-binding tests; source-free, single-row, and repeated-row fixtures; embedded-visual

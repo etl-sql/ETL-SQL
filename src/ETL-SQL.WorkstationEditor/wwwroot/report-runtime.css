@@ -69,6 +69,10 @@
                   padding: 16px; margin: 0; display: flex; flex-direction: column;
                   flex: 1; min-height: 0; position: relative; }
   .visual-card.fill-height { height: 100%; }
+  .html-visual-content { color: var(--etl-text, inherit); font-family: var(--etl-font-family, inherit); }
+  .html-visual-content:focus-visible,
+  .html-visual-content a:focus-visible,
+  .html-visual-content button:focus-visible { outline: 2px solid var(--etl-accent, #2563eb); outline-offset: 2px; }
   .visual-toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 20; }
   .visual-card.has-visual-toolbar > h3:first-child { padding-right: 40px; }
   .visual-tool-btn {

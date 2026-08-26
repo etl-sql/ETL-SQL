@@ -18,6 +18,7 @@ public static class VisualSemanticFallbackBuilder
         var type = visual.VisualType.ToUpperInvariant();
         return type switch
         {
+            "HTML" => Html(visual),
             "MAP" => RankedRegions(visual),
             "SANKEY" => Transitions(visual),
             "TREEMAP" or "SUNBURST" => Hierarchy(visual),
@@ -25,6 +26,12 @@ public static class VisualSemanticFallbackBuilder
             "PIE" or "DONUT" or "FUNNEL" => Proportions(visual),
             _ => Tabular(visual)
         };
+    }
+
+    private static SemanticFallback Html(VisualManifest visual)
+    {
+        var summary = string.IsNullOrWhiteSpace(visual.HtmlFallback) ? Title(visual) : visual.HtmlFallback!;
+        return new SemanticFallback(SemanticFallbackKind.Summary, Title(visual), []) { Summary = summary };
     }
 
     private static SemanticFallback RankedRegions(VisualManifest visual)

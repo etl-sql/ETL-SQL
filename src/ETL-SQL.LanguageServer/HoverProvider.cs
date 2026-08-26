@@ -85,15 +85,27 @@ namespace ETL_SQL.LSP
             // Author bookmark hover: the identifier under the cursor names a bookmark declared in this
             // script, so show what applying it will actually do — page, typed parameters, and state.
             var bookmark = BookmarkSymbols.Find(state.Script, word);
+            var cursorOffset = Offset(state.Text, (int)request.Position.Line, (int)request.Position.Character);
+            var htmlVisual = HtmlVisualSymbols.ContainingVisual(state.Script, cursorOffset)
+                ?? state.Script.Statements.OfType<CreateVisualStatement>()
+                    .FirstOrDefault(visual => visual.VisualType == VisualType.Html && word is not null
+                        && HtmlVisualSymbols.BindingOffsets(state.Text, visual, word).Any(offset =>
+                            cursorOffset >= offset && cursorOffset <= offset + word.Length));
+            var htmlHelp = word is not null && htmlVisual is not null
+                ? HtmlVisualSymbols.Describe(state.Script, htmlVisual, word)
+                : null;
 
             if (entry == null && functionHelp == null && keywordHelp == null && datasetEntry == null
-                && !hasDeclaration && bookmark == null)
+                && !hasDeclaration && bookmark == null && htmlHelp == null)
                 return Task.FromResult<Hover?>(null);
 
             var md = new List<string>();
 
             if (bookmark != null)
                 md.Add(BookmarkSymbols.Describe(bookmark));
+
+            if (htmlHelp != null)
+                md.Add(htmlHelp);
 
             if (entry != null)
             {
@@ -192,6 +204,17 @@ namespace ETL_SQL.LSP
                 }
             }
             return string.Join("\n", lines);
+        }
+
+        private static int Offset(string text, int line, int character)
+        {
+            var offset = 0;
+            for (var currentLine = 0; currentLine < line && offset < text.Length; currentLine++)
+            {
+                var newline = text.IndexOf('\n', offset);
+                offset = newline < 0 ? text.Length : newline + 1;
+            }
+            return Math.Min(text.Length, offset + character);
         }
 
         public HoverRegistrationOptions GetRegistrationOptions(HoverCapability capability, ClientCapabilities clientCapabilities)

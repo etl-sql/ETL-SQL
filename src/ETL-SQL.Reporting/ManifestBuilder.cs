@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Reporting.Builders;
+using ETL_SQL.Reporting.HtmlVisual;
+using ETL_SQL.Reporting.Semantics;
+using ETL_SQL.Reporting.Semantics.Runtime;
 
 namespace ETL_SQL.Reporting
 {
@@ -81,6 +84,8 @@ namespace ETL_SQL.Reporting
 
             // ── Visuals ──────────────────────────────────────────────────────
             await BuildVisualsAsync(manifest, interactionValues, deferredVisuals);
+            await ResolveHtmlVisualEmbedsAsync(manifest);
+            EnforceHtmlAggregateBudgets(manifest);
             BoundRowDetailVisuals(manifest);
             RefreshTelemetry(manifest);
 
@@ -586,12 +591,258 @@ namespace ETL_SQL.Reporting
             vm.Cascade = newVm.Cascade;
             vm.SemanticFallback = newVm.SemanticFallback;
             vm.MicroCharts = newVm.MicroCharts;
+            vm.HtmlContent = newVm.HtmlContent;
+            vm.HtmlCss = newVm.HtmlCss;
+            vm.HtmlFallback = newVm.HtmlFallback;
+            vm.HtmlMode = newVm.HtmlMode;
+            vm.HtmlCost = newVm.HtmlCost;
+            vm.HtmlEmbeds = newVm.HtmlEmbeds;
             vm.IsHidden = false; // refreshed visuals are always shown regardless of VISIBLE = OFF
+        }
+
+        private async Task ResolveHtmlVisualEmbedsAsync(ReportManifest manifest)
+        {
+            var definitions = _ctx.ReportContext.VisualDefinitions
+                .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+            var manifests = manifest.Visuals
+                .ToDictionary(visual => visual.Name, StringComparer.OrdinalIgnoreCase);
+            var graph = definitions.Values
+                .Where(statement => statement.VisualType == VisualType.Html && statement.HtmlTemplate is not null)
+                .ToDictionary(
+                    statement => statement.Name,
+                    statement => ConstrainedHtmlPolicy.EmbeddedVisuals(statement.HtmlTemplate!.Template),
+                    StringComparer.OrdinalIgnoreCase);
+
+            foreach (var root in graph.Keys)
+            {
+                var error = ValidateHtmlEmbedGraph(root, root, 0, [], graph, definitions);
+                if (error is not null && manifests.TryGetValue(root, out var visual))
+                    FailHtmlVisual(manifest, visual, error);
+            }
+
+            var queryCount = 0;
+            foreach (var visual in manifest.Visuals.Where(visual => visual.HtmlEmbeds is { Count: > 0 }).ToList())
+            {
+                if (visual.Error is not null) continue;
+                await ResolveEmbedsAsync(visual, 0);
+            }
+
+            async Task ResolveEmbedsAsync(VisualManifest owner, int depth)
+            {
+                if (owner.HtmlEmbeds is not { Count: > 0 }) return;
+                if (depth >= ConstrainedHtmlPolicy.MaxEmbedDepth)
+                {
+                    FailHtmlVisual(manifest, owner,
+                        $"RPT3011: HTML visual '{owner.Name}' embed depth exceeds {ConstrainedHtmlPolicy.MaxEmbedDepth}.");
+                    return;
+                }
+
+                foreach (var embed in owner.HtmlEmbeds)
+                {
+                    if (!definitions.TryGetValue(embed.TargetName, out var targetDefinition)
+                        || !manifests.TryGetValue(embed.TargetName, out var targetManifest))
+                    {
+                        FailHtmlVisual(manifest, owner,
+                            $"RPT3010: HTML visual '{owner.Name}' embeds missing visual '{embed.TargetName}'.");
+                        continue;
+                    }
+
+                    if (embed.Parameters is null || embed.Parameters.Count == 0)
+                    {
+                        // A target-name reference lets every host reuse the already-built manifest.
+                        if (targetManifest.Error is not null)
+                            FailHtmlVisual(manifest, owner,
+                                $"RPT3010: Embedded visual '{embed.TargetName}' failed to build: {targetManifest.Error}");
+                        continue;
+                    }
+
+                    queryCount++;
+                    if (queryCount > ConstrainedHtmlPolicy.MaxEmbeddedVisualQueries)
+                    {
+                        FailHtmlVisual(manifest, owner,
+                            $"RPT3029: HTML embedded visual query budget exceeded: {queryCount} > {ConstrainedHtmlPolicy.MaxEmbeddedVisualQueries}.");
+                        continue;
+                    }
+
+                    var parameterBackups = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                    string? disclosureError = null;
+                    foreach (var parameter in embed.Parameters)
+                    {
+                        var name = parameter.Key.StartsWith('@') ? parameter.Key : '@' + parameter.Key;
+                        var metadata = _ctx.VarContext.VariableMetadata.FirstOrDefault(pair =>
+                            pair.Key.TrimStart('@').Equals(name.TrimStart('@'), StringComparison.OrdinalIgnoreCase)).Value;
+                        if (metadata is { IsSecret: true } or { IsSensitive: true })
+                        {
+                            disclosureError = $"RPT3014: HTML visual embedding cannot bind sensitive parameter '{name}'.";
+                            break;
+                        }
+                        if (!_ctx.VarContext.ContainsVariable(name))
+                        {
+                            disclosureError = $"RPT3002: HTML visual embedding references undeclared parameter '{name}'.";
+                            break;
+                        }
+                        parameterBackups[name] = _ctx.VarContext.GetVariable(name);
+                    }
+                    if (disclosureError is not null)
+                    {
+                        FailHtmlVisual(manifest, owner, disclosureError);
+                        continue;
+                    }
+
+                    VisualManifest resolved;
+                    try
+                    {
+                        foreach (var parameter in embed.Parameters)
+                        {
+                            var name = parameter.Key.StartsWith('@') ? parameter.Key : '@' + parameter.Key;
+                            _ctx.VarContext.SetVariable(name, parameter.Value);
+                        }
+                        resolved = await _visualBuilder.BuildAsync(embed.TargetName, targetDefinition);
+                    }
+                    finally
+                    {
+                        foreach (var parameter in parameterBackups)
+                            _ctx.VarContext.SetVariable(parameter.Key, parameter.Value);
+                    }
+                    embed.Visual = resolved;
+                    if (resolved.Error is not null)
+                    {
+                        FailHtmlVisual(manifest, owner,
+                            $"RPT3010: Embedded visual '{embed.TargetName}' failed to build: {resolved.Error}");
+                        continue;
+                    }
+                    await ResolveEmbedsAsync(resolved, depth + 1);
+                }
+
+                if (owner.Error is null)
+                {
+                    var summaries = owner.HtmlEmbeds.Take(20).Select(embed =>
+                    {
+                        var target = embed.Visual;
+                        if (target is null) manifests.TryGetValue(embed.TargetName, out target);
+                        var summary = target?.SemanticFallback?.Summary ?? target?.HtmlFallback ?? target?.Name;
+                        return string.IsNullOrWhiteSpace(summary) ? null : $"{embed.TargetName}: {summary}";
+                    }).Where(summary => summary is not null).Cast<string>().ToList();
+                    if (owner.HtmlEmbeds.Count > summaries.Count)
+                        summaries.Add($"... and {owner.HtmlEmbeds.Count - summaries.Count} more embedded visuals");
+                    if (summaries.Count > 0)
+                    {
+                        owner.HtmlFallback = string.Join("\n", new[] { owner.HtmlFallback }
+                            .Where(summary => !string.IsNullOrWhiteSpace(summary))
+                            .Concat(summaries));
+                        owner.SemanticFallback = VisualSemanticFallbackBuilder.Build(owner);
+                    }
+                }
+            }
+        }
+
+        private static string? ValidateHtmlEmbedGraph(
+            string root,
+            string current,
+            int depth,
+            HashSet<string> path,
+            IReadOnlyDictionary<string, IReadOnlyList<string>> graph,
+            IReadOnlyDictionary<string, CreateVisualStatement> definitions)
+        {
+            if (!path.Add(current))
+                return $"RPT3010: HTML visual embed cycle detected from '{root}' through '{current}'.";
+            if (!graph.TryGetValue(current, out var targets))
+            {
+                path.Remove(current);
+                return null;
+            }
+
+            foreach (var target in targets)
+            {
+                if (!definitions.ContainsKey(target))
+                    return $"RPT3010: HTML visual '{root}' embeds missing visual '{target}'.";
+                if (path.Contains(target))
+                    return $"RPT3010: HTML visual embed cycle detected from '{root}' through '{target}'.";
+                var nextDepth = depth + 1;
+                if (nextDepth > ConstrainedHtmlPolicy.MaxEmbedDepth)
+                    return $"RPT3011: HTML visual '{root}' embed depth exceeds {ConstrainedHtmlPolicy.MaxEmbedDepth}.";
+                var nested = ValidateHtmlEmbedGraph(root, target, nextDepth, path, graph, definitions);
+                if (nested is not null) return nested;
+            }
+            path.Remove(current);
+            return null;
+        }
+
+        private static void EnforceHtmlAggregateBudgets(ReportManifest manifest)
+        {
+            var nodes = 0;
+            var bytes = 0;
+            var work = 0;
+            foreach (var visual in EnumerateRenderedVisuals(manifest))
+            {
+                if (visual.HtmlCost is null) continue;
+                nodes = checked(nodes + visual.HtmlCost.OutputNodes);
+                bytes = checked(bytes + visual.HtmlCost.OutputBytes);
+                work = checked(work + visual.HtmlCost.RenderWork);
+            }
+
+            string? error = null;
+            if (nodes > ConstrainedHtmlPolicy.MaxReportOutputNodes)
+                error = $"RPT3027: HTML report output node budget exceeded: {nodes} > {ConstrainedHtmlPolicy.MaxReportOutputNodes}.";
+            else if (bytes > ConstrainedHtmlPolicy.MaxReportOutputBytes)
+                error = $"RPT3028: HTML report output byte budget exceeded: {bytes} > {ConstrainedHtmlPolicy.MaxReportOutputBytes}.";
+            else if (work > ConstrainedHtmlPolicy.MaxReportRenderWork)
+                error = $"RPT3029: HTML report render-work budget exceeded: {work} > {ConstrainedHtmlPolicy.MaxReportRenderWork}.";
+
+            if (error is null) return;
+            foreach (var visual in manifest.Visuals.Where(visual => visual.VisualType.Equals("HTML", StringComparison.OrdinalIgnoreCase)))
+                FailHtmlVisual(manifest, visual, error);
+        }
+
+        private static IEnumerable<VisualManifest> EnumerateRenderedVisuals(ReportManifest manifest)
+        {
+            var byName = manifest.Visuals.ToDictionary(visual => visual.Name, StringComparer.OrdinalIgnoreCase);
+            foreach (var visual in manifest.Visuals)
+            {
+                yield return visual;
+                foreach (var embedded in EnumerateEmbeds(visual, byName, 0))
+                    yield return embedded;
+            }
+        }
+
+        private static IEnumerable<VisualManifest> EnumerateEmbeds(
+            VisualManifest owner,
+            IReadOnlyDictionary<string, VisualManifest> byName,
+            int depth)
+        {
+            if (depth >= ConstrainedHtmlPolicy.MaxEmbedDepth || owner.HtmlEmbeds is null) yield break;
+            foreach (var embed in owner.HtmlEmbeds)
+            {
+                var target = embed.Visual;
+                if (target is null && !byName.TryGetValue(embed.TargetName, out target)) continue;
+                yield return target;
+                foreach (var nested in EnumerateEmbeds(target, byName, depth + 1))
+                    yield return nested;
+            }
+        }
+
+        private static void FailHtmlVisual(ReportManifest manifest, VisualManifest visual, string error)
+        {
+            visual.Error = error;
+            visual.HtmlContent = null;
+            visual.HtmlCss = null;
+            visual.HtmlEmbeds = null;
+            manifest.Error = "One or more HTML visuals failed to build.";
+            manifest.Messages ??= [];
+            if (!manifest.Messages.Any(message => message.Message.Equals(error, StringComparison.Ordinal)))
+                manifest.Messages.Add(new LogEntryManifest(error, "Red", DateTime.UtcNow));
         }
 
         /// <summary>Builds a detached visual so an interaction transaction can commit it atomically.</summary>
         public Task<VisualManifest> BuildVisualSnapshotAsync(CreateVisualStatement statement) =>
             _visualBuilder.BuildAsync(statement.Name, statement);
+
+        /// <summary>Resolves HTML embeds and aggregate budgets on a detached manifest before commit.</summary>
+        public async Task PrepareHtmlVisualsAsync(ReportManifest manifest)
+        {
+            await ResolveHtmlVisualEmbedsAsync(manifest);
+            EnforceHtmlAggregateBudgets(manifest);
+        }
 
         /// <summary>
         /// Resolves a bookmark parameter expression to a typed value, preserving its declared kind.

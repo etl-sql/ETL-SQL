@@ -1015,28 +1015,77 @@ namespace ETL_SQL.Reporting.Builders
                 }
             }
 
+            foreach (var parameter in Reporting.Semantics.ConstrainedHtmlPolicy.Bindings(htmlDef.Template)
+                .Concat(htmlDef.Fallback is null ? [] : Reporting.Semantics.ConstrainedHtmlPolicy.Bindings(htmlDef.Fallback))
+                .Concat(Reporting.Semantics.ConstrainedHtmlPolicy.EmbeddedParameters(htmlDef.Template))
+                .Where(binding => binding.StartsWith('@'))
+                .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var metadata = ctx.VarContext.VariableMetadata.FirstOrDefault(pair =>
+                    pair.Key.TrimStart('@').Equals(parameter.TrimStart('@'), StringComparison.OrdinalIgnoreCase)).Value;
+                if (metadata is { IsSecret: true } or { IsSensitive: true })
+                {
+                    vm.Error = $"RPT3014: HTML visual '{vStmt.Name}' cannot disclose sensitive parameter '{parameter}'.";
+                    return;
+                }
+            }
+
             var parameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
             foreach (var v in ctx.VarContext.Variables)
                 parameters[v.Key] = v.Value;
+            var formatting = ctx.ReportContext.EffectiveFormatting;
+            string FormatHtmlValue(object? value, string format) => value switch
+            {
+                null => formatting.NullLabel,
+                DateTimeOffset offset => TimeZoneInfo.ConvertTime(offset, formatting.Zone).ToString(format, formatting.Culture),
+                IFormattable formattable => formattable.ToString(format, formatting.Culture) ?? string.Empty,
+                _ => value.ToString() ?? string.Empty
+            };
 
             vm.HtmlMode = htmlDef.Mode.ToString().ToUpperInvariant();
+            var maxRows = HtmlVisual.HtmlVisualBudgets.DefaultMaxRows;
+            if (vm.Options.TryGetValue("MAX_ROWS", out var configuredMaxRows)
+                && int.TryParse(configuredMaxRows, out var parsedMaxRows))
+                maxRows = parsedMaxRows;
+            var authoredCost = HtmlVisual.HtmlVisualBudgets.ValidateAuthored(
+                htmlDef.Template,
+                htmlDef.Css,
+                vm.RawRows.Count,
+                maxRows,
+                htmlDef.Mode == HtmlVisualMode.Repeater);
+            var embedIndex = 0;
+            string RenderEmbed(HtmlVisual.HtmlVisualEmbedRequest request)
+            {
+                foreach (var sourceParameter in request.SourceParameters)
+                {
+                    var metadata = ctx.VarContext.VariableMetadata.FirstOrDefault(pair =>
+                        pair.Key.TrimStart('@').Equals(sourceParameter.TrimStart('@'), StringComparison.OrdinalIgnoreCase)).Value;
+                    if (metadata is { IsSecret: true } or { IsSensitive: true })
+                        throw new HtmlVisual.HtmlTemplateException($"HTML visual embedding cannot disclose sensitive parameter '{sourceParameter}'.");
+                }
+                var id = $"{vStmt.Name}-embed-{embedIndex++}";
+                vm.HtmlEmbeds ??= [];
+                vm.HtmlEmbeds.Add(new HtmlVisualEmbedManifest
+                {
+                    Id = id,
+                    TargetName = request.TargetName,
+                    Parameters = request.Parameters.Count == 0
+                        ? null : new Dictionary<string, string>(request.Parameters, StringComparer.OrdinalIgnoreCase)
+                });
+                return $"<div data-etl-embed-id=\"{id}\"></div>";
+            }
 
             if (htmlDef.Mode == HtmlVisualMode.Repeater)
             {
-                var maxRows = 500;
-                if (vm.Options.TryGetValue("MAX_ROWS", out var maxRowsStr) &&
-                    int.TryParse(maxRowsStr, out var parsed))
-                    maxRows = parsed;
-
                 vm.HtmlContent = evaluator.EvaluateRepeater(
-                    htmlDef.Template, vm.RawRows, parameters, maxRows);
+                    htmlDef.Template, vm.RawRows, parameters, maxRows, FormatHtmlValue, RenderEmbed);
 
                 if (htmlDef.Fallback != null)
                 {
                     var fallbacks = new List<string>();
                     var count = Math.Min(vm.RawRows.Count, 20);
                     for (var i = 0; i < count; i++)
-                        fallbacks.Add(evaluator.EvaluateFallback(htmlDef.Fallback, vm.RawRows[i], parameters));
+                        fallbacks.Add(evaluator.EvaluateFallback(htmlDef.Fallback, vm.RawRows[i], parameters, FormatHtmlValue));
                     vm.HtmlFallback = string.Join("\n", fallbacks);
                     if (vm.RawRows.Count > 20)
                         vm.HtmlFallback += $"\n... and {vm.RawRows.Count - 20} more";
@@ -1049,10 +1098,10 @@ namespace ETL_SQL.Reporting.Builders
             else
             {
                 var row = vm.RawRows.Count > 0 ? vm.RawRows[0] : null;
-                vm.HtmlContent = evaluator.Evaluate(htmlDef.Template, row, parameters);
+                vm.HtmlContent = evaluator.Evaluate(htmlDef.Template, row, parameters, FormatHtmlValue, RenderEmbed);
 
                 if (htmlDef.Fallback != null)
-                    vm.HtmlFallback = evaluator.EvaluateFallback(htmlDef.Fallback, row, parameters);
+                    vm.HtmlFallback = evaluator.EvaluateFallback(htmlDef.Fallback, row, parameters, FormatHtmlValue);
                 else if (row != null)
                     vm.HtmlFallback = $"{vStmt.Name}: " +
                         string.Join(", ", row.Take(5).Select(kvp => $"{kvp.Key} {kvp.Value}"));
@@ -1065,6 +1114,16 @@ namespace ETL_SQL.Reporting.Builders
                 var containerId = $"etl-v-{vStmt.Name.ToLowerInvariant().Replace(' ', '-')}";
                 vm.HtmlCss = sanitizer.ScopeCss(htmlDef.Css, containerId);
             }
+            var resolvedCost = HtmlVisual.HtmlVisualBudgets.ValidateRendered(authoredCost, vm.HtmlContent ?? string.Empty);
+            vm.HtmlCost = new HtmlVisualCostManifest
+            {
+                TemplateBytes = resolvedCost.TemplateBytes,
+                CssBytes = resolvedCost.CssBytes,
+                TemplateNodes = resolvedCost.TemplateNodes,
+                OutputNodes = resolvedCost.OutputNodes,
+                OutputBytes = resolvedCost.OutputBytes,
+                RenderWork = resolvedCost.RenderWork
+            };
         }
 
     }

@@ -295,6 +295,7 @@ namespace ETL_SQL.Reporting
                 case "TABLE": await RenderTableAsync(section, v, tempFiles, cancellationToken); break;
                 case "CARD": await RenderCardAsync(section, v, tempFiles, cancellationToken); break;
                 case "TEXT": RenderText(section, v); break;
+                case "HTML": RenderHtmlFallback(section, v); break;
                 case "IMAGE": await RenderImageAsync(section, v, tempFiles, cancellationToken); break;
 
                 // Filter/input controls: render the selection that was in effect at
@@ -344,6 +345,14 @@ namespace ETL_SQL.Reporting
             var kicker = p.AddFormattedText($"{v.VisualType.ToLowerInvariant()} filter — selected: ", TextFormat.Italic);
             kicker.Color = _greyDark1;
             p.AddFormattedText(display, TextFormat.Bold);
+        }
+
+        private static void RenderHtmlFallback(Section section, VisualManifest visual)
+        {
+            var paragraph = section.AddParagraph(visual.HtmlFallback
+                ?? visual.SemanticFallback?.Summary
+                ?? visual.Name);
+            paragraph.Format.SpaceBefore = Unit.FromPoint(4);
         }
 
         private async Task RenderChartAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)

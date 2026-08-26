@@ -892,6 +892,11 @@ offsets, interval geometry, deterministic position adjustments, continuous color
 targets, fixed Cartesian aspect, and grid/wrap facets. See
 [CHART](reference/visuals-reporting/visuals/chart.md). Data transformations remain in preceding
 ETL-SQL statements rather than hidden inside the visual declaration.
+
+Constrained components use `CREATE VISUAL name AS HTML (...)`. `SOURCE` is optional, `MODE` is
+`SINGLE` or `REPEATER`, `TEMPLATE` contains escaped field and parameter bindings, `STYLE (CSS = ...)`
+is visual-scoped, `FALLBACK` supplies text-only meaning, and `ACTIONS` remains declarative. See
+[HTML](reference/visuals-reporting/visuals/html.md).
 | Section | Option | Description |
 | :--- | :--- | :--- |
 | `SOURCE` | `SOURCE = #dataset / SELECT ...` | Data source definition |

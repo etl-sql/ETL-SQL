@@ -2,6 +2,7 @@
 import scriptEditor from './script-editor.story.js';
 import scriptEditorUnified from './script-editor-unified.story.js';
 import designer from './designer.story.js';
+import constrainedHtmlRuntime from './constrained-html-runtime.story.js';
 import lineageUi from './lineage-ui.story.js';
 import lineageCatalog from './lineage-catalog.story.js';
 import datasetsAdmin from './datasets-admin.story.js';
@@ -71,6 +72,7 @@ const categoryDefaults = {
 
   // Designers & Visuals
   'designer': 'Designers & Visuals',
+  'constrained-html-runtime': 'Designers & Visuals',
   'snapshot-designer': 'Designers & Visuals',
 
   // Script Editors & IDE
@@ -116,6 +118,7 @@ export const rawStories = [
 
   // Designers & Visuals
   designer,
+  constrainedHtmlRuntime,
   snapshotDesigner,
 
   // Script Editors & IDE

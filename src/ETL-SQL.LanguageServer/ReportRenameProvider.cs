@@ -65,6 +65,7 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
 
         if (TryResolveBookmark(state, cursor, out symbol)) return true;
         if (TryResolveBookmarkTarget(state, cursor, out symbol)) return true;
+        if (TryResolveHtmlBinding(state, cursor, out symbol)) return true;
 
         var visual = state.Script.Statements.OfType<CreateVisualStatement>()
             .FirstOrDefault(item => item.AdvancedChart is not null && cursor >= item.StartOffset && cursor <= item.EndOffset);
@@ -155,6 +156,7 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
             // orphans the container slot or inline VISUALS list that renders it.
             offsets = offsets
                 .Concat(Captures(state.Text, 0, $@"(?ix)\bTOOLTIP\s*=\s*(?<name>{escaped})\b", "name"))
+                .Concat(Captures(state.Text, 0, $@"(?ix)\{{\{{\s*VISUAL\s*\(\s*(?<name>{escaped})\b", "name"))
                 .Concat(Captures(state.Text, 0, $@"(?ix)'[^']*'\s*=\s*(?<name>{escaped})\b", "name"))
                 .Concat(TooltipVisualListOffsets(state.Text, word.Value.Name))
                 .Distinct().Order().ToList();
@@ -172,7 +174,11 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
         {
             var offsets = IdentifierOffsets(state.Text, 0, word.Value.Name)
                 .Where(offset => offset > 0 && state.Text[offset - 1] == '@')
-                .ToList();
+                .Concat(state.Script.Statements.OfType<CreateVisualStatement>()
+                    .Where(visual => visual.VisualType == VisualType.Html)
+                    .SelectMany(visual => HtmlVisualSymbols.BindingOffsets(state.Text, visual, "@" + word.Value.Name))
+                    .Select(offset => offset + 1))
+                .Distinct().Order().ToList();
             if (offsets.Contains(word.Value.Start))
             {
                 symbol = new RenameSymbol(word.Value.Name, word.Value.Start, offsets);
@@ -180,6 +186,30 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
             }
         }
 
+        return false;
+    }
+
+    private static bool TryResolveHtmlBinding(DocumentState state, int cursor, out RenameSymbol symbol)
+    {
+        symbol = default!;
+        var word = WordAt(state.Text, cursor);
+        if (word is null) return false;
+        var isParameter = cursor > 0 && state.Text[word.Value.Start - 1] == '@';
+        if (isParameter) return false; // Global parameter rename is handled by TryResolveBookmarkTarget.
+
+        foreach (var visual in state.Script.Statements.OfType<CreateVisualStatement>()
+            .Where(visual => visual.VisualType == VisualType.Html
+                && HtmlVisualSymbols.Columns(state.Script, visual).Contains(word.Value.Name, StringComparer.OrdinalIgnoreCase)))
+        {
+            var start = Math.Max(0, visual.StartOffset);
+            var end = visual.EndOffset > start ? Math.Min(state.Text.Length, visual.EndOffset) : state.Text.Length;
+            var offsets = IdentifierOffsets(state.Text[start..end], start, word.Value.Name)
+                .Concat(HtmlVisualSymbols.BindingOffsets(state.Text, visual, word.Value.Name))
+                .Distinct().Order().ToList();
+            if (!offsets.Contains(word.Value.Start)) continue;
+            symbol = new RenameSymbol(word.Value.Name, word.Value.Start, offsets);
+            return true;
+        }
         return false;
     }
 

@@ -1,11 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
+using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.HtmlVisual;
+using ETL_SQL.Reporting.Renderers;
+using ETL_SQL.Reporting.Semantics.Runtime;
+using ETL_SQL.Tests.Reporting.TerminalSemantics;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting.HtmlVisual;
@@ -366,6 +379,512 @@ public class HtmlTemplateEvaluatorTests
             (val, fmt) => val is decimal d ? d.ToString(fmt) : val?.ToString() ?? "");
         Assert.Equal("14.2%", result);
     }
+
+    [Fact]
+    public void Evaluate_VisualEmbed_ProjectsDeterministicDescriptor()
+    {
+        var row = new Dictionary<string, object?> { ["Region"] = "West" };
+        var parameters = new Dictionary<string, object?> { ["@year"] = 2026m };
+        HtmlVisualEmbedRequest? captured = null;
+
+        var result = _evaluator.Evaluate(
+            "<section>{{VISUAL(RegionalSales, PARAMETERS(@region = Region, @year = @year))}}</section>",
+            row,
+            parameters,
+            renderEmbed: request =>
+            {
+                captured = request;
+                return "<div data-etl-embed-id=\"embed-0\"></div>";
+            });
+
+        Assert.Equal("<section><div data-etl-embed-id=\"embed-0\"></div></section>", result);
+        Assert.NotNull(captured);
+        Assert.Equal("RegionalSales", captured.TargetName);
+        Assert.Equal("West", captured.Parameters["@region"]);
+        Assert.Equal("2026", captured.Parameters["@year"]);
+        Assert.Contains("@year", captured.SourceParameters);
+    }
+
+    [Theory]
+    [InlineData("{{VISUAL()}}")]
+    [InlineData("{{VISUAL(Target, PARAMETERS(@p))}}")]
+    [InlineData("{{VISUAL(Target, PARAMETERS(@p = javascript:bad))}}")]
+    public void Evaluate_VisualEmbed_MalformedSyntaxFailsClosed(string template)
+    {
+        Assert.Throws<HtmlTemplateException>(() =>
+            _evaluator.Evaluate(template, null, null, renderEmbed: _ => string.Empty));
+    }
+}
+
+public class HtmlVisualManifestTests
+{
+    [Fact]
+    public async System.Threading.Tasks.Task Manifest_ResolvesDeclaredVisualEmbedAndAccountsForCost()
+    {
+        var manifest = await BuildAsync("""
+            SELECT 42 AS Value INTO #metric;
+            CREATE VISUAL Metric AS CARD (SOURCE = #metric);
+            CREATE VISUAL Host AS HTML (
+              TEMPLATE = '<section>{{VISUAL(Metric)}}</section>',
+              FALLBACK = 'Metric summary'
+            );
+            """);
+
+        var host = Assert.Single(manifest.Visuals, visual => visual.Name == "Host");
+        var embed = Assert.Single(host.HtmlEmbeds!);
+        Assert.Equal("Metric", embed.TargetName);
+        Assert.Null(embed.Visual);
+        Assert.Contains($"data-etl-embed-id=\"{embed.Id}\"", host.HtmlContent);
+        Assert.NotNull(host.HtmlCost);
+        Assert.Null(host.Error);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Manifest_ParameterizedEmbedBuildsDetachedTargetWithBoundValue()
+    {
+        var manifest = await BuildAsync("""
+            DECLARE @region VARCHAR(20) INPUT = 'All';
+            CREATE VISUAL Metric AS CARD (SOURCE = (SELECT @region AS Region));
+            CREATE VISUAL Host AS HTML (
+              TEMPLATE = '<section>{{VISUAL(Metric, PARAMETERS(@region = ''West''))}}</section>',
+              FALLBACK = 'Regional metric'
+            );
+            """);
+
+        var embed = Assert.Single(manifest.Visuals.Single(visual => visual.Name == "Host").HtmlEmbeds!);
+        Assert.NotNull(embed.Visual);
+        Assert.Equal("West", embed.Visual.Rows[0][0]);
+        Assert.Equal("All", manifest.Parameters["@region"]);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Manifest_EmbedCycleFailsClosedWithoutRenderedMarkup()
+    {
+        var manifest = await BuildAsync("""
+            CREATE VISUAL A AS HTML (TEMPLATE = '<div>{{VISUAL(B)}}</div>');
+            CREATE VISUAL B AS HTML (TEMPLATE = '<div>{{VISUAL(A)}}</div>');
+            """);
+
+        Assert.All(manifest.Visuals, visual =>
+        {
+            Assert.Contains("RPT3010", visual.Error);
+            Assert.Null(visual.HtmlContent);
+        });
+        Assert.NotNull(manifest.Error);
+    }
+
+    [Fact]
+    public void SourceFreeParameterBindingParticipatesInAtomicRefreshDependencyGraph()
+    {
+        var sql = "DECLARE @region VARCHAR(20) = 'All'; CREATE VISUAL Host AS HTML (TEMPLATE = '<p>{{@region}}</p>');";
+        var statement = Parse(sql).Statements.OfType<CreateVisualStatement>().Single();
+
+        Assert.True(ReportInteractionRefresher.DependsOnVariable(statement, "@region"));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task SourceFreeParameterRefreshPublishesOneCompleteHtmlManifest()
+    {
+        const string sql = "DECLARE @region VARCHAR(20) INPUT = 'All'; CREATE VISUAL Host AS HTML (TEMPLATE = '<p>{{@region}}</p>', FALLBACK = 'Region {{@region}}');";
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.RedirectOutput = true;
+        evaluator.DisplayExecuteTree = false;
+        await evaluator.Evaluate(Parse(sql));
+        var manifest = await new ManifestBuilder(evaluator, maxVisualParallelism: 1).BuildAsync("refresh.rptsql");
+
+        var refreshed = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(
+            evaluator,
+            manifest,
+            [("@region", "West")]);
+
+        Assert.Equal(1, refreshed);
+        var visual = Assert.Single(manifest.Visuals);
+        Assert.Equal("<p>West</p>", visual.HtmlContent);
+        Assert.Equal("Region West", visual.HtmlFallback);
+        Assert.Equal("West", manifest.Parameters["@region"]);
+        Assert.NotNull(visual.HtmlCost);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Manifest_HtmlOutputIsByteDeterministic()
+    {
+        const string sql = "CREATE VISUAL Host AS HTML (TEMPLATE = '<p>Stable</p>', FALLBACK = 'Stable');";
+
+        var first = await BuildAsync(sql);
+        var second = await BuildAsync(sql);
+
+        Assert.Equal(first.Visuals.Single().HtmlContent, second.Visuals.Single().HtmlContent);
+        Assert.Equal(first.Visuals.Single().HtmlCss, second.Visuals.Single().HtmlCss);
+        var firstCost = first.Visuals.Single().HtmlCost!;
+        var secondCost = second.Visuals.Single().HtmlCost!;
+        Assert.Equal(
+            (firstCost.TemplateBytes, firstCost.CssBytes, firstCost.TemplateNodes, firstCost.OutputNodes, firstCost.OutputBytes, firstCost.RenderWork),
+            (secondCost.TemplateBytes, secondCost.CssBytes, secondCost.TemplateNodes, secondCost.OutputNodes, secondCost.OutputBytes, secondCost.RenderWork));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Manifest_AppliesTypedFormattingToHtmlAndFallback()
+    {
+        var manifest = await BuildAsync("""
+            SELECT 0.123 AS Ratio INTO #metric;
+            CREATE VISUAL Host AS HTML (
+              SOURCE = #metric,
+              TEMPLATE = '<p>{{Ratio FORMAT ''0.0%''}}</p>',
+              FALLBACK = 'Ratio {{Ratio FORMAT ''0.0%''}}'
+            );
+            """);
+
+        var visual = Assert.Single(manifest.Visuals);
+        Assert.Equal("<p>12.3%</p>", visual.HtmlContent);
+        Assert.Equal("Ratio 12.3%", visual.HtmlFallback);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Manifest_RejectsAggregateOutputNodeBudget()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        var manifest = new ReportManifest
+        {
+            Visuals = Enumerable.Range(1, 6).Select(index => new VisualManifest
+            {
+                Name = $"H{index}",
+                VisualType = "HTML",
+                HtmlContent = "<span>x</span>",
+                HtmlCost = new HtmlVisualCostManifest
+                {
+                    OutputNodes = 10_000,
+                    OutputBytes = 100_000,
+                    RenderWork = 10_000
+                }
+            }).ToList()
+        };
+
+        await new ManifestBuilder(evaluator).PrepareHtmlVisualsAsync(manifest);
+
+        Assert.All(manifest.Visuals, visual => Assert.Contains("RPT3027", visual.Error));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Manifest_RejectsEmbeddedQueryBudget()
+    {
+        var embeds = string.Concat(Enumerable.Range(0, 101)
+            .Select(index => $"{{{{VISUAL(Metric, PARAMETERS(@region = 'R{index}'))}}}}"));
+        var sqlEmbeds = embeds.Replace("'", "''", StringComparison.Ordinal);
+        var manifest = await BuildAsync($"""
+            DECLARE @region VARCHAR(20) INPUT = 'All';
+            CREATE VISUAL Metric AS CARD (SOURCE = (SELECT @region AS Region));
+            CREATE VISUAL Host AS HTML (TEMPLATE = '<div>{sqlEmbeds}</div>');
+            """);
+
+        Assert.Contains("RPT3029", manifest.Visuals.Single(visual => visual.Name == "Host").Error);
+    }
+
+    private static async System.Threading.Tasks.Task<ReportManifest> BuildAsync(string sql)
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.RedirectOutput = true;
+        evaluator.DisplayExecuteTree = false;
+        var script = Parse(sql);
+        Assert.Empty(script.Diagnostics);
+        await evaluator.Evaluate(script);
+        return await new ManifestBuilder(evaluator, maxVisualParallelism: 1).BuildAsync("html-visual-test.rptsql");
+    }
+
+    private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+}
+
+public class HtmlVisualBudgetTests
+{
+    [Fact]
+    public void ValidateAuthored_TemplateByteBudget_FailsClosedWithDiagnosticCode()
+    {
+        var template = new string('x', HtmlVisualBudgets.MaxTemplateBytes + 1);
+
+        var ex = Assert.Throws<HtmlVisualBudgetException>(() =>
+            HtmlVisualBudgets.ValidateAuthored(template, null, 0, HtmlVisualBudgets.DefaultMaxRows, false));
+
+        Assert.Equal("RPT3020", ex.Code);
+        Assert.Equal(HtmlVisualBudgets.MaxTemplateBytes + 1, ex.Actual);
+    }
+
+    [Fact]
+    public void ValidateAuthored_RepeaterRowBudget_FailsInsteadOfTruncating()
+    {
+        var ex = Assert.Throws<HtmlVisualBudgetException>(() =>
+            HtmlVisualBudgets.ValidateAuthored("<p>{{Value}}</p>", null, 6, 5, true));
+
+        Assert.Equal("RPT3023", ex.Code);
+    }
+
+    [Fact]
+    public void ValidateAuthored_OutputNodeBudget_AccountsForEveryRepeatedRow()
+    {
+        var template = string.Concat(Enumerable.Repeat("<span>x</span>", 101));
+
+        var ex = Assert.Throws<HtmlVisualBudgetException>(() =>
+            HtmlVisualBudgets.ValidateAuthored(template, null, 100, 100, true));
+
+        Assert.Equal("RPT3024", ex.Code);
+        Assert.Equal(10_100, ex.Actual);
+    }
+
+    [Fact]
+    public void ValidateRendered_OutputByteBudget_UsesUtf8Bytes()
+    {
+        var authored = HtmlVisualBudgets.ValidateAuthored("<p>x</p>", null, 0, 500, false);
+        var output = new string('\u00e9', (HtmlVisualBudgets.MaxOutputBytes / 2) + 1);
+
+        var ex = Assert.Throws<HtmlVisualBudgetException>(() =>
+            HtmlVisualBudgets.ValidateRendered(authored, output));
+
+        Assert.Equal("RPT3025", ex.Code);
+    }
+
+    [Fact]
+    public void ValidateRendered_PublishesDeterministicCost()
+    {
+        var authored = HtmlVisualBudgets.ValidateAuthored("<p>x</p>", ".x { color: red; }", 0, 500, false);
+
+        var first = HtmlVisualBudgets.ValidateRendered(authored, "<p>x</p>");
+        var second = HtmlVisualBudgets.ValidateRendered(authored, "<p>x</p>");
+
+        Assert.Equal(first, second);
+        Assert.Equal(1, first.OutputNodes);
+        Assert.True(first.RenderWork > 0);
+    }
+}
+
+public class HtmlVisualStaticFallbackTests
+{
+    [Fact]
+    public void SemanticFallback_UsesResolvedPlainTextWithoutInteractionClaims()
+    {
+        var visual = new VisualManifest
+        {
+            Name = "NodeStatus",
+            VisualType = "HTML",
+            HtmlFallback = "Node db-01: critical"
+        };
+
+        var fallback = VisualSemanticFallbackBuilder.Build(visual);
+
+        Assert.Equal("Node db-01: critical", fallback.Summary);
+        Assert.Empty(fallback.Items);
+        Assert.DoesNotContain("click", fallback.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Markdown_UsesFencedSemanticFallbackAndNeverEmitsAuthoredMarkup()
+    {
+        var visual = new VisualManifest
+        {
+            Name = "NodeStatus",
+            VisualType = "HTML",
+            HtmlContent = "<button type=\"button\">Restart</button><script>alert(1)</script>",
+            HtmlFallback = "Node db-01: critical"
+        };
+        visual.SemanticFallback = VisualSemanticFallbackBuilder.Build(visual);
+
+        var markdown = new MarkdownRenderer().Render(new ReportManifest { Visuals = [visual] });
+
+        Assert.Contains("```text\nNode db-01: critical\n```", markdown.Replace("\r\n", "\n"));
+        Assert.DoesNotContain("<button", markdown);
+        Assert.DoesNotContain("<script", markdown);
+    }
+
+    [Fact]
+    public void StaticPdf_UsesSemanticFallbackAndProducesValidPdf()
+    {
+        var visual = new VisualManifest
+        {
+            Name = "NodeStatus",
+            VisualType = "HTML",
+            HtmlContent = "<script>alert('never')</script><button type=\"button\">Restart</button>",
+            HtmlFallback = "Node db-01: critical"
+        };
+        visual.SemanticFallback = VisualSemanticFallbackBuilder.Build(visual);
+
+        var bytes = new PdfExporter().Export(new ReportManifest { Title = "HTML fallback", Visuals = [visual] });
+
+        Assert.True(bytes.Length > 100);
+        Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));
+    }
+
+    [Fact]
+    public void SnapshotSerialization_PreservesOnlyTheDeterministicManifestContract()
+    {
+        var manifest = new ReportManifest
+        {
+            Visuals =
+            [
+                new VisualManifest
+                {
+                    Name = "Status",
+                    VisualType = "HTML",
+                    HtmlContent = "<p>Healthy</p>",
+                    HtmlCss = "#etl-v-status p { color: var(--etl-success); }",
+                    HtmlFallback = "Status: healthy",
+                    HtmlEmbeds = [new HtmlVisualEmbedManifest { Id = "Status-embed-0", TargetName = "Metric" }]
+                }
+            ]
+        };
+
+        var json = JsonSerializer.Serialize(manifest);
+
+        Assert.Contains("\\u003Cp\\u003EHealthy\\u003C/p\\u003E", json);
+        Assert.Contains("Status-embed-0", json);
+        Assert.Contains("Status: healthy", json);
+    }
+
+    [Fact]
+    public void Terminal_UsesSemanticFallbackWithoutAuthoredMarkupOrInteractionClaims()
+    {
+        var visual = new VisualManifest
+        {
+            Name = "Status",
+            VisualType = "HTML",
+            HtmlContent = "<button>Restart</button><script>alert(1)</script>",
+            HtmlFallback = "Status: healthy"
+        };
+        visual.SemanticFallback = VisualSemanticFallbackBuilder.Build(visual);
+
+        var snapshot = TerminalSnapshotHarness.CaptureSnapshot(TerminalRenderer.RenderVisual(visual), 80).NormalizedText;
+
+        Assert.Contains("Status: healthy", snapshot);
+        Assert.DoesNotContain("Restart", snapshot);
+        Assert.DoesNotContain("click", snapshot, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+public class HtmlVisualAnalysisTests
+{
+    [Fact]
+    public async System.Threading.Tasks.Task Lint_ReportsUnknownFieldAndParameterWithStableCodes()
+    {
+        var script = Parse("""
+            DECLARE @known VARCHAR(20) = 'ok';
+            CREATE VISUAL Status AS HTML (
+              SOURCE = (SELECT Name FROM #nodes),
+              TEMPLATE = '<p>{{Missing}} {{@unknown}} {{@known}}</p>'
+            );
+            """);
+
+        var results = await new HtmlVisualAuthoringRule().AnalyzeAsync(script, new DefaultLintContext());
+
+        Assert.Contains(results, result => result.Code == "RPT3001" && result.Message.Contains("Missing"));
+        Assert.Contains(results, result => result.Code == "RPT3002" && result.Message.Contains("@unknown"));
+        Assert.DoesNotContain(results, result => result.Message.Contains("@known"));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Lint_UsesSharedSanitizerPolicy()
+    {
+        var script = Parse("""
+            CREATE VISUAL Unsafe AS HTML (
+              TEMPLATE = '<img src="javascript:alert(1)" onerror="steal()">'
+            );
+            """);
+
+        var results = (await new HtmlVisualAuthoringRule().AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+        Assert.Contains(results, result => result.Code == "RPT3012" && result.Message.Contains("onerror"));
+        Assert.Contains(results, result => result.Code == "RPT3012" && result.Message.Contains("allowed"));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Lint_RejectsMissingEmbedCycleAndExcessDepth()
+    {
+        var script = Parse("""
+            CREATE VISUAL A AS HTML (TEMPLATE = '<div>{{VISUAL(B)}} {{VISUAL(Missing)}}</div>');
+            CREATE VISUAL B AS HTML (TEMPLATE = '<div>{{VISUAL(C)}}</div>');
+            CREATE VISUAL C AS HTML (TEMPLATE = '<div>{{VISUAL(A)}}</div>');
+            CREATE VISUAL D AS HTML (TEMPLATE = '<div>{{VISUAL(E)}}</div>');
+            CREATE VISUAL E AS HTML (TEMPLATE = '<div>{{VISUAL(F)}}</div>');
+            CREATE VISUAL F AS HTML (TEMPLATE = '<div>{{VISUAL(G)}}</div>');
+            CREATE VISUAL G AS CARD (SOURCE = (SELECT Value FROM #metrics));
+            """);
+
+        var results = (await new HtmlVisualAuthoringRule().AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+        Assert.Contains(results, result => result.Code == "RPT3010" && result.Message.Contains("Missing"));
+        Assert.Contains(results, result => result.Code == "RPT3010" && result.Message.Contains("cycle"));
+        Assert.Contains(results, result => result.Code == "RPT3011");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task LinterFactory_DiscoversHtmlVisualRule()
+    {
+        var script = Parse("CREATE VISUAL Unsafe AS HTML (TEMPLATE = '<script>x</script>');");
+
+        var results = await LinterFactory.CreateWithAllRules().AnalyzeAsync(script, new DefaultLintContext());
+
+        Assert.Contains(results, result => result.RuleName == "HtmlVisualAuthoring" && result.Code == "RPT3012");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Lint_RejectsMalformedEmbedAndSensitiveDisclosure()
+    {
+        var script = Parse("""
+            DECLARE @token SENSITIVE = 'ENC:value';
+            CREATE VISUAL Unsafe AS HTML (
+              TEMPLATE = '<p>{{@token}}</p><div>{{VISUAL(Target, PARAMETERS(@token = @token}}</div>'
+            );
+            CREATE VISUAL Target AS CARD (SOURCE = (SELECT Value FROM #metrics));
+            """);
+
+        var results = (await new HtmlVisualAuthoringRule().AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+        Assert.Contains(results, result => result.Code == "RPT3010" && result.Message.Contains("Invalid VISUAL"));
+        Assert.Contains(results, result => result.Code == "RPT3014" && result.Message.Contains("@token"));
+    }
+
+    private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+}
+
+public class HtmlVisualDocumentationTests
+{
+    [Fact]
+    public void FocusedHelpExamples_AreAcceptedByParser()
+    {
+        var root = FindRepoRoot();
+        var markdown = File.ReadAllText(Path.Combine(root, "docs", "reference", "visuals-reporting", "visuals", "html.md"));
+        var examples = markdown[(markdown.IndexOf("## Examples", StringComparison.Ordinal))..];
+        var blocks = Regex.Matches(examples, "```sql\\s*(?<sql>[\\s\\S]*?)```")
+            .Select(match => match.Groups["sql"].Value).ToList();
+
+        Assert.Equal(2, blocks.Count);
+        foreach (var sql in blocks)
+        {
+            var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+            Assert.Empty(script.Diagnostics);
+        }
+    }
+
+    [Fact]
+    public void ProductionSample_ParsesEveryHtmlClause()
+    {
+        var root = FindRepoRoot();
+        var path = Path.Combine(root, "samples", "08_Reporting", "constrained_html_components.rptsql");
+        var sql = File.ReadAllText(path);
+
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+
+        Assert.Empty(script.Diagnostics);
+        var visuals = script.Statements.OfType<CreateVisualStatement>().Where(visual => visual.VisualType == VisualType.Html).ToList();
+        Assert.Equal(2, visuals.Count);
+        Assert.Contains(visuals, visual => visual.Source.TempTableName is null);
+        Assert.Contains(visuals, visual => visual.HtmlTemplate?.Mode == HtmlVisualMode.Repeater
+            && visual.HtmlTemplate.Css is not null && visual.HtmlTemplate.Fallback is not null
+            && visual.Actions.Count > 0);
+    }
+
+    private static string FindRepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "ETL-SQL.slnx")))
+            directory = directory.Parent;
+        return directory?.FullName ?? throw new DirectoryNotFoundException("Could not locate ETL-SQL.slnx.");
+    }
 }
 
 public class HtmlSanitizerTests
@@ -423,6 +942,14 @@ public class HtmlSanitizerTests
         Assert.Contains(violations, v => v.Category == SanitizationCategory.Attribute);
     }
 
+    [Fact]
+    public void ValidateTemplate_RuntimeReservedAttributes_Rejected()
+    {
+        var violations = _sanitizer.ValidateTemplate("<div data-etl-embed-id=\"forged\"></div>");
+
+        Assert.Contains(violations, v => v.Category == SanitizationCategory.Attribute);
+    }
+
     // ── JavaScript URL injection (T-3) ───────────────────────────────────
 
     [Theory]
@@ -462,6 +989,35 @@ public class HtmlSanitizerTests
     {
         var violations = _sanitizer.ValidateTemplate("<img src=\"data:image/png;base64,abc\" alt=\"icon\">");
         Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void ValidateTemplate_DataImageMimePrefixConfusion_Rejected()
+    {
+        var violations = _sanitizer.ValidateTemplate("<img src=\"data:image/png-script,abc\" alt=\"icon\">");
+
+        Assert.Contains(violations, v => v.Category == SanitizationCategory.Url);
+    }
+
+    [Theory]
+    [InlineData("<script>alert(1)</script>")]
+    [InlineData("<svg onload='alert(1)'></svg>")]
+    [InlineData("<foreignObject><p>x</p></foreignObject>")]
+    public void ValidateTemplate_DataSvgScriptPayload_Rejected(string svg)
+    {
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(svg));
+        var violations = _sanitizer.ValidateTemplate($"<img src=\"data:image/svg+xml;base64,{encoded}\" alt=\"icon\">");
+
+        Assert.NotEmpty(violations);
+    }
+
+    [Theory]
+    [InlineData("<script")]
+    [InlineData("<!-- hidden -->")]
+    [InlineData("<!doctype html>")]
+    public void ValidateTemplate_MalformedOrDocumentMarkup_Rejected(string template)
+    {
+        Assert.NotEmpty(_sanitizer.ValidateTemplate(template));
     }
 
     // ── Iframe/embed escape (T-5) ────────────────────────────────────────
@@ -568,6 +1124,15 @@ public class HtmlSanitizerTests
         Assert.Empty(violations);
     }
 
+    [Theory]
+    [InlineData(".x { background: u/**/rl(https://evil.invalid/pixel); }")]
+    [InlineData(".x { color: j\\61vascript:alert(1); }")]
+    [InlineData("@supports (display:grid) { .x { display:grid; } }")]
+    public void ValidateCss_ObfuscatedOrUnapprovedSyntax_Rejected(string css)
+    {
+        Assert.NotEmpty(_sanitizer.ValidateCss(css));
+    }
+
     // ── CSS scoping ──────────────────────────────────────────────────────
 
     [Fact]
@@ -576,6 +1141,20 @@ public class HtmlSanitizerTests
         var css = ".card { padding: 1rem; }";
         var scoped = _sanitizer.ScopeCss(css, "etl-v-myvisual");
         Assert.Contains("#etl-v-myvisual .card", scoped);
+    }
+
+    [Fact]
+    public void ScopeCss_RecursesThroughMediaAndNamespacesKeyframes()
+    {
+        var css = "@media (max-width: 600px) { .card, .metric { display: grid; } } " +
+            "@keyframes pulse { from { opacity: 0; } to { opacity: 1; } } .card { animation: pulse 1s; }";
+
+        var scoped = _sanitizer.ScopeCss(css, "etl-v-test");
+
+        Assert.Contains("@media (max-width: 600px) { #etl-v-test .card, #etl-v-test .metric", scoped);
+        Assert.Contains("@keyframes etl-v-test-pulse", scoped);
+        Assert.Contains("animation: etl-v-test-pulse 1s", scoped);
+        Assert.DoesNotContain("#etl-v-test from", scoped);
     }
 
     // ── HTML encoding ────────────────────────────────────────────────────

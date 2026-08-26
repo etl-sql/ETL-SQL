@@ -75,7 +75,7 @@ public sealed class DetailSurfacePerformanceTests(DetailSurfaceHarnessFixture fi
         timer.Stop();
 
         Record("transient open", timer.Elapsed.TotalMilliseconds, TransientOpenBudgetMs);
-        Assert.True(timer.Elapsed.TotalMilliseconds < TransientOpenBudgetMs,
+        Assert.True(timer.Elapsed.TotalMilliseconds < TransientOpenBudgetMs, // flaky-time-bound-ok: performance budget assertion
             $"transient open took {timer.Elapsed.TotalMilliseconds:0.0} ms, budget {TransientOpenBudgetMs} ms");
     }
 
@@ -96,7 +96,7 @@ public sealed class DetailSurfacePerformanceTests(DetailSurfaceHarnessFixture fi
         timer.Stop();
 
         Record("refresh complete", timer.Elapsed.TotalMilliseconds, RefreshCompleteBudgetMs);
-        Assert.True(timer.Elapsed.TotalMilliseconds < RefreshCompleteBudgetMs,
+        Assert.True(timer.Elapsed.TotalMilliseconds < RefreshCompleteBudgetMs, // flaky-time-bound-ok: performance budget assertion
             $"refresh took {timer.Elapsed.TotalMilliseconds:0.0} ms, budget {RefreshCompleteBudgetMs} ms");
     }
 
@@ -125,7 +125,7 @@ public sealed class DetailSurfacePerformanceTests(DetailSurfaceHarnessFixture fi
             """);
 
         Record("reposition", elapsed, RepositionBudgetMs);
-        Assert.True(elapsed < RepositionBudgetMs,
+        Assert.True(elapsed < RepositionBudgetMs, // flaky-time-bound-ok: performance budget assertion
             $"reposition took {elapsed:0.0} ms, budget {RepositionBudgetMs} ms");
 
         // The surface must still be the one that was already open, not a rebuilt one.
@@ -151,7 +151,7 @@ public sealed class DetailSurfacePerformanceTests(DetailSurfaceHarnessFixture fi
         timer.Stop();
 
         Record("dismiss + cleanup", timer.Elapsed.TotalMilliseconds, DismissBudgetMs);
-        Assert.True(timer.Elapsed.TotalMilliseconds < DismissBudgetMs,
+        Assert.True(timer.Elapsed.TotalMilliseconds < DismissBudgetMs, // flaky-time-bound-ok: performance budget assertion
             $"dismissal took {timer.Elapsed.TotalMilliseconds:0.0} ms, budget {DismissBudgetMs} ms");
     }
 

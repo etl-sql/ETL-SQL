@@ -1,7 +1,8 @@
 /* GENERATED FILE - DO NOT EDIT.
  * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/feedback.js
- * Edit the canonical source, then run: .\scripts\sync-assets.ps1
+ * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
+
 /*
  * ETL-SQL shared feedback system.
  * Loaded as a classic script so Portal, ReportPlayer, Workstation, and editor webviews can share

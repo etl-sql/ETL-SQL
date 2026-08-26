@@ -26,6 +26,14 @@ public sealed class HtmlTemplateEvaluator
         @"^(?<name>@?\w+)(?:\s+FORMAT\s+'(?<fmt>[^']*)')?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex VisualEmbedPattern = new(
+        @"^VISUAL\s*\(\s*(?<target>[A-Za-z_][A-Za-z0-9_]*)(?:\s*,\s*PARAMETERS\s*\((?<parameters>.*)\)\s*)?\)$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex VisualEmbedParameterPattern = new(
+        @"\G\s*(?<target>@[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<value>@?[A-Za-z_][A-Za-z0-9_]*|'(?:''|[^'])*'|-?\d+(?:\.\d+)?)\s*(?:,|$)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     /// <summary>
     /// Evaluates a template against a single row of data and a set of parameters.
     /// </summary>
@@ -38,9 +46,10 @@ public sealed class HtmlTemplateEvaluator
         string template,
         IReadOnlyDictionary<string, object?>? row,
         IReadOnlyDictionary<string, object?>? parameters,
-        Func<object?, string, string>? formatValue = null)
+        Func<object?, string, string>? formatValue = null,
+        Func<HtmlVisualEmbedRequest, string>? renderEmbed = null)
     {
-        var result = EvaluateBlock(template, row, parameters, formatValue, depth: 0);
+        var result = EvaluateBlock(template, row, parameters, formatValue, renderEmbed, depth: 0);
         return result;
     }
 
@@ -52,12 +61,13 @@ public sealed class HtmlTemplateEvaluator
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
         IReadOnlyDictionary<string, object?>? parameters,
         int maxRows,
-        Func<object?, string, string>? formatValue = null)
+        Func<object?, string, string>? formatValue = null,
+        Func<HtmlVisualEmbedRequest, string>? renderEmbed = null)
     {
         var sb = new StringBuilder();
         var count = Math.Min(rows.Count, maxRows);
         for (var i = 0; i < count; i++)
-            sb.Append(Evaluate(template, rows[i], parameters, formatValue));
+            sb.Append(Evaluate(template, rows[i], parameters, formatValue, renderEmbed));
         return sb.ToString();
     }
 
@@ -68,7 +78,8 @@ public sealed class HtmlTemplateEvaluator
     public string EvaluateFallback(
         string fallbackTemplate,
         IReadOnlyDictionary<string, object?>? row,
-        IReadOnlyDictionary<string, object?>? parameters)
+        IReadOnlyDictionary<string, object?>? parameters,
+        Func<object?, string, string>? formatValue = null)
     {
         return SubstitutionPattern.Replace(fallbackTemplate, match =>
         {
@@ -78,7 +89,9 @@ public sealed class HtmlTemplateEvaluator
 
             var name = parsed.Groups["name"].Value;
             var value = ResolveValue(name, row, parameters);
-            return value?.ToString() ?? "";
+            return parsed.Groups["fmt"].Success && formatValue is not null
+                ? formatValue(value, parsed.Groups["fmt"].Value)
+                : value?.ToString() ?? "";
         });
     }
 
@@ -87,6 +100,7 @@ public sealed class HtmlTemplateEvaluator
         IReadOnlyDictionary<string, object?>? row,
         IReadOnlyDictionary<string, object?>? parameters,
         Func<object?, string, string>? formatValue,
+        Func<HtmlVisualEmbedRequest, string>? renderEmbed,
         int depth)
     {
         if (depth > MaxConditionalDepth)
@@ -122,7 +136,7 @@ public sealed class HtmlTemplateEvaluator
                 pos = endPos;
 
                 if (EvaluateCondition(body, row, parameters))
-                    sb.Append(EvaluateBlock(innerContent, row, parameters, formatValue, depth + 1));
+                    sb.Append(EvaluateBlock(innerContent, row, parameters, formatValue, renderEmbed, depth + 1));
             }
             else if (body.Equals("/IF", StringComparison.OrdinalIgnoreCase))
             {
@@ -130,6 +144,15 @@ public sealed class HtmlTemplateEvaluator
             }
             else
             {
+                if (body.StartsWith("VISUAL", StringComparison.OrdinalIgnoreCase))
+                {
+                    var request = ParseVisualEmbed(body, row, parameters);
+                    if (renderEmbed is null)
+                        throw new HtmlTemplateException("VISUAL(...) requires a report manifest embedding resolver.");
+                    sb.Append(renderEmbed(request));
+                    pos = closeIdx + 2;
+                    continue;
+                }
                 var parsed = FieldFormatPattern.Match(body);
                 if (parsed.Success)
                 {
@@ -152,6 +175,41 @@ public sealed class HtmlTemplateEvaluator
         }
 
         return sb.ToString();
+    }
+
+    private static HtmlVisualEmbedRequest ParseVisualEmbed(
+        string body,
+        IReadOnlyDictionary<string, object?>? row,
+        IReadOnlyDictionary<string, object?>? parameters)
+    {
+        var match = VisualEmbedPattern.Match(body);
+        if (!match.Success)
+            throw new HtmlTemplateException($"Invalid VISUAL helper syntax: {{{{{body}}}}}");
+
+        var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var sourceParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var bindings = match.Groups["parameters"].Value;
+        var position = 0;
+        while (position < bindings.Length)
+        {
+            var binding = VisualEmbedParameterPattern.Match(bindings, position);
+            if (!binding.Success)
+                throw new HtmlTemplateException($"Invalid VISUAL PARAMETERS binding near '{bindings[position..]}'.");
+            var valueExpression = binding.Groups["value"].Value;
+            object? value;
+            if (valueExpression.StartsWith("'", StringComparison.Ordinal))
+                value = valueExpression[1..^1].Replace("''", "'", StringComparison.Ordinal);
+            else if (decimal.TryParse(valueExpression, NumberStyles.Number, CultureInfo.InvariantCulture, out var number))
+                value = number;
+            else
+            {
+                value = ResolveValue(valueExpression, row, parameters);
+                if (valueExpression.StartsWith('@')) sourceParameters.Add(valueExpression);
+            }
+            resolved[binding.Groups["target"].Value] = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+            position = binding.Index + binding.Length;
+        }
+        return new HtmlVisualEmbedRequest(match.Groups["target"].Value, resolved, sourceParameters);
     }
 
     private static (string content, int endPos) ExtractConditionalBlock(string template, int startPos, string endTag)
@@ -308,3 +366,8 @@ public sealed class HtmlTemplateException : Exception
 {
     public HtmlTemplateException(string message) : base(message) { }
 }
+
+public sealed record HtmlVisualEmbedRequest(
+    string TargetName,
+    IReadOnlyDictionary<string, string> Parameters,
+    IReadOnlySet<string> SourceParameters);

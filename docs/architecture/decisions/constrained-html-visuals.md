@@ -296,6 +296,7 @@ is rejected.
 
 **Global attributes** (allowed on all permitted elements):
 `class`, `id`, `title`, `lang`, `dir`, `role`, `aria-*`, `data-etl-*`, `tabindex`, `hidden`.
+The renderer-owned `data-etl-embed-id` attribute is reserved and rejected in authored markup.
 
 **Element-specific attributes:**
 

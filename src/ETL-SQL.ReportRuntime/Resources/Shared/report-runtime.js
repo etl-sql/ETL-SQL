@@ -1537,7 +1537,7 @@
     // Filter types that render without requiring rows
     const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'HTML', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX']);
 
-    function renderVisual(container, visual, pageTheme, manifest) {
+    function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
         const card = document.createElement('div');
         card.className = 'visual-card';
         card.setAttribute('data-name', visual.name);
@@ -1678,7 +1678,7 @@
                     const parent = card.parentElement;
                     if (!parent) return;
                     card.remove();
-                    renderVisual(parent, visual, pageTheme, manifest);
+                    renderVisual(parent, visual, pageTheme, manifest, embedDepth);
                     const rendered = parent.lastElementChild;
                     if (nextSibling && rendered) parent.insertBefore(rendered, nextSibling);
                 })
@@ -1710,7 +1710,7 @@
             case 'SLICER':
             case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
             case 'TEXT':        renderText(card, visual);                         break;
-            case 'HTML':        renderHtmlVisual(card, visual, manifest);         break;
+            case 'HTML':        renderHtmlVisual(card, visual, manifest, embedDepth); break;
             case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
             case 'RELDATEPICKER': renderRelDatePicker(card, visual, manifest);     break;
             case 'SLIDER':      renderSlider(card, visual, manifest);             break;
@@ -1808,10 +1808,19 @@
 
     function isSafeHtmlVisualUrl(value) {
         const url = String(value || '').trim();
+        if (/[\u0000-\u001f\u007f]/.test(url)) return false;
         if (/^(https?:|mailto:|tel:|#)/i.test(url)) return true;
-        return /^data:image\/(png|jpeg|gif|webp|svg\+xml)(;|,)/i.test(url)
-            && !/(<|%3c)\s*script\b/i.test(url)
-            && !/\bon[a-z]+\s*=/i.test(url);
+        if (/^data:image\/(png|jpeg|gif|webp)(;|,)/i.test(url)) return true;
+        if (!/^data:image\/svg\+xml(?:;charset=[^;,]+)?(?:;base64)?,/i.test(url)) return false;
+        try {
+            const comma = url.indexOf(',');
+            const header = url.slice(0, comma);
+            const payload = url.slice(comma + 1);
+            const svg = /;base64/i.test(header) ? atob(payload) : decodeURIComponent(payload);
+            return !/<\s*(?:script|foreignObject)\b|\bon[a-z]+\s*=|(?:href|src)\s*=\s*['"]?\s*javascript:/i.test(svg);
+        } catch {
+            return false;
+        }
     }
 
     function copyHtmlVisualNode(source, ownerDocument) {
@@ -1844,7 +1853,7 @@
         return target;
     }
 
-    function renderHtmlVisual(container, visual, manifest) {
+    function renderHtmlVisual(container, visual, manifest, embedDepth) {
         const wrapper = document.createElement('div');
         wrapper.className = 'html-visual-content';
         const fallback = String(visual.htmlFallback || visual.name || 'HTML visual');
@@ -1867,8 +1876,11 @@
             const trigger = event.target.closest('[data-action]');
             if (!trigger || !wrapper.contains(trigger)) return;
             const actionType = String(trigger.dataset.action || '').toUpperCase();
-            const declared = (visual.actions || []).find(action => String(action.type || '').toUpperCase() === actionType);
-            const action = declared ? Object.assign({}, declared) : { type: actionType };
+            const declared = (visual.actions || []).find(action =>
+                String(action.type || '').toUpperCase() === actionType
+                && String(action.trigger || '').toUpperCase() === 'ON_CLICK');
+            if (!declared) return;
+            const action = Object.assign({}, declared);
             if (trigger.dataset.param) action.parameterName = trigger.dataset.param;
             if (trigger.dataset.value !== undefined) {
                 action.valueSource = 'LITERAL';
@@ -1878,6 +1890,36 @@
         });
 
         container.appendChild(wrapper);
+
+        const byName = new Map((manifest.visuals || [])
+            .map(candidate => [String(candidate.name || '').toLowerCase(), candidate]));
+        const embeds = new Map((visual.htmlEmbeds || [])
+            .map(embed => [String(embed.id || ''), embed]));
+        const renderedEmbedIds = new Set();
+        wrapper.querySelectorAll('[data-etl-embed-id]').forEach(slot => {
+            const embedId = String(slot.getAttribute('data-etl-embed-id') || '');
+            const descriptor = embeds.get(embedId);
+            if (!descriptor) {
+                slot.replaceChildren(errorEl('Embedded visual descriptor is unavailable.'));
+                return;
+            }
+            if (renderedEmbedIds.has(embedId)) {
+                slot.replaceChildren(errorEl('Duplicate embedded visual slot was rejected.'));
+                return;
+            }
+            renderedEmbedIds.add(embedId);
+            if (embedDepth >= 2) {
+                slot.replaceChildren(errorEl('Embedded visual depth exceeds the supported limit.'));
+                return;
+            }
+            const target = descriptor.visual
+                || byName.get(String(descriptor.targetName || '').toLowerCase());
+            if (!target) {
+                slot.replaceChildren(errorEl(`Embedded visual not found: ${descriptor.targetName || ''}`));
+                return;
+            }
+            renderVisual(slot, target, null, manifest, embedDepth + 1);
+        });
     }
 
     // ── Native SVG chart — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──

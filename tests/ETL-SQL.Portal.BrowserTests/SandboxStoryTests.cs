@@ -315,7 +315,8 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Equal(1, await card.CountAsync());
         var htmlPreview = card.Locator(".etlsql-html-visual-preview");
         Assert.Equal(1, await htmlPreview.CountAsync());
-        Assert.Contains("CPU: CpuPercent", await card.InnerTextAsync());
+        Assert.Contains("CPU: CpuPercent", await htmlPreview.EvaluateAsync<string>(
+            "element => element.shadowRoot?.textContent || ''"));
 
         // 3. Click the visual to select and open Properties panel
         await card.ClickAsync();
@@ -349,6 +350,49 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.WaitForTimeoutAsync(200);
         Assert.Equal("SINGLE", await modeSelect.InputValueAsync());
 
+        // 6. Hostile authored markup fails closed in the live preview and cannot execute.
+        await page.EvaluateAsync("() => window.__designerHtmlScriptExecuted = false");
+        await templateInput.FillAsync(
+            "<article>safe</article><img src='x' onerror='window.__designerHtmlScriptExecuted=true'>");
+        await templateInput.PressAsync("Tab");
+        await page.Locator(".etlsql-html-preview-error").WaitForAsync();
+        Assert.False(await page.EvaluateAsync<bool>("() => window.__designerHtmlScriptExecuted"));
+        Assert.Equal(0, await htmlPreview.Locator("img").CountAsync());
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ConstrainedHtmlRuntime_SanitizesEmbedsActsAndPrintsAccessibly()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='constrained-html-runtime']");
+        var frame = page.FrameLocator("iframe[title='Constrained HTML runtime fixture']");
+        await frame.Locator(".html-visual-content").WaitForAsync();
+
+        Assert.Equal("Cluster status: 3 healthy nodes",
+            await frame.Locator(".html-visual-content").GetAttributeAsync("aria-label"));
+        Assert.Equal(0, await frame.Locator(".html-visual-content script").CountAsync());
+        Assert.Equal(0, await frame.Locator(".html-visual-content img").CountAsync());
+        Assert.Contains("42", await frame.Locator("[data-etl-embed-id]").InnerTextAsync());
+        Assert.Contains("#etl-v-statuspanel", await frame.Locator(".html-visual-scoped-style").TextContentAsync());
+
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Undeclared refresh" }).ClickAsync();
+        await page.WaitForTimeoutAsync(100);
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>(
+            "() => window.__htmlVisualActionRequests.length"));
+
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Show West" }).ClickAsync();
+        await page.WaitForTimeoutAsync(100);
+        var requests = await frame.Locator("body").EvaluateAsync<int>(
+            "() => window.__htmlVisualActionRequests.length");
+        Assert.Equal(1, requests);
+
+        await page.EmulateMediaAsync(new() { Media = Media.Print });
+        Assert.True(await frame.Locator(".html-visual-content").IsVisibleAsync());
         Assert.Empty(session.PageErrors);
     }
 

@@ -12,6 +12,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Shipped constrained `HTML` report visuals across authoring and output surfaces. Analysis and LSP
+  now validate and understand escaped typed bindings, scoped CSS, declarative actions, and bounded
+  `VISUAL(...)` embeds. Source-free, single-row, and repeater components publish atomically under
+  explicit row/node/byte/query/render budgets. Browser and print use the sanitized shared runtime;
+  PDF, Markdown, terminal, email, plain text, snapshots, screen readers, and unsupported hosts retain
+  a deterministic semantic fallback. Hostile markup, URLs, SVG, CSS, disclosure, cycles, JavaScript,
+  refresh consistency, aggregate limits, and cross-surface behavior are covered by focused tests and
+  real-browser tests.
+
 - Added Report Builder preview and lossless editing for constrained `HTML` visuals. Registered `HTML`
   in the visual type registry with live sanitized preview on canvas cards, and added a dedicated Constrained
   HTML Component editor in the Properties panel supporting optional `SOURCE`, `MODE` (`SINGLE` / `REPEATER`),

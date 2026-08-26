@@ -5,50 +5,11 @@ product work is active for the current planning horizon. Work top to bottom unle
 release-blocking defect changes the order. Once an item is verified, record its notable outcome in
 `CHANGELOG.md` and check it completed.
 
-The only unfinished `ROADMAP.md` initiatives are represented here:
-
-- **Lossless Visual Report Builder Editing** — section 1.
+Unfinished `ROADMAP.md` initiatives and release gates are represented below.
 
 ---
 
-## 1. Report Builder and Authoring
-
-Authoritative references:
-[`report-builder.md`](docs/guides/tooling/report-builder.md),
-[`GrammarOfGraphicsSpecIR.md`](docs/architecture/decisions/grammar-of-graphics-spec-ir.md), and
-[`constrained-html-visuals.md`](docs/architecture/decisions/constrained-html-visuals.md).
-
-- [x] Finish lossless Report Builder editing certification. Surgical patching is already shared by
-  the embedded and LSP-hosted paths, and regression tests cover multi-page scripts, chained CTEs,
-  statement trivia, repeated CRLF/LF edits, and invalid intermediate scripts. Add deterministic
-  mutation fuzz/property tests proving that every out-of-scope byte remains unchanged, plus a browser
-  story and test proving that transient syntax errors retain the last valid canvas state.
-- [x] Add a dedicated Report Builder `CHART` editor. Register `CUSTOM`, render a live preview, expose
-  its supported layers, encodings, scales, coordinates, conditions, and refinement clauses without
-  inventing a second grammar, and keep unedited or unsupported clause text byte-preserved. Cover
-  embedded and LSP-hosted round trips, invalid intermediate edits, keyboard/accessibility behavior,
-  and mutations of scripts containing advanced `CHART` syntax.
-- [x] Add Report Builder preview and lossless editing for the complete constrained `HTML` visual
-  clause: optional `SOURCE`, `MODE`, `TEMPLATE`, scoped `STYLE`, `FALLBACK`, and declarative
-  `ACTIONS`. Preserve unsupported or temporarily invalid text, use the same sanitizer and budgets as
-  the runtime preview, and cover embedded/LSP parity. Design the component editor as a constrained
-  structured authoring surface; it must not introduce arbitrary DOM scripting or raw executable
-  HTML.
-
-## 2. Browser and Offline Preview Foundations
-
-- [x] Make the VS Code webview UI sandbox work from a clean checkout. The story fetches the ignored
-  `src/etl-sql-vscode/ui/dist/index.html`, while `tools/ui-sandbox/serve.ps1` neither builds that
-  bundle nor provides a self-contained fixture. Add a deterministic build/setup step or remove the
-  generated-bundle dependency, then cover the results, preview, preview-sink, designer, and
-  visual-flow fixtures with a clean-tree browser test.
-- [x] Ship and exercise a real offline `.etlsnap` viewer/bootstrap before claiming offline bookmark
-  or detail-popover replay. The shared runtime implements and tests the `window.__ETLSNAP__` branch,
-  but no product host sets that flag today. Wire package loading to the runtime, prove bookmark and
-  tooltip/detail replay without network access, and reconcile the offline claims in the Report-SQL,
-  bookmark, tooltip, reporting-architecture, and report-CLI documentation.
-
-## 3. Native Graphics Completion
+## 1. Native Graphics Completion
 
 These items are active in the current planning horizon. Native charts continue to use bounded **compact**,
 **standard**, and **wide** layout tiers. `ChartSpec.InteractionSpec` remains the canonical semantic
@@ -79,45 +40,7 @@ Formatting precedence remains deterministic and cannot depend implicitly on the 
 `Reporting:DefaultLocale` -> invariant culture; visual `OPTIONS (NULL_LABEL = ...)` ->
 `SET REPORT NULL_LABEL` -> `Reporting:DefaultNullLabel` -> `-`.
 
-## 4. Reporting — Constrained HTML Visuals
-
-Authoritative direction:
-[`ROADMAP.md`](ROADMAP.md#reporting--presentation--constrained-html-visuals) and
-[`constrained-html-visuals.md`](docs/architecture/decisions/constrained-html-visuals.md). Parser,
-immutable AST, formatter, escaped evaluator, conditional form, sanitizer, scoped CSS, initial
-manifest projection, and focused unit tests exist. The complete surface is shipped in v0.19.0.
-
-- [x] Complete the `CREATE VISUAL <name> AS HTML (...)` language authoring surface. Add Analysis
-  diagnostics, LSP completion/hover/rename, syntax-index registration, focused help, snippet,
-  parser-tested documentation examples, and production samples for the implemented `SOURCE`,
-  `MODE = SINGLE | REPEATER`, `TEMPLATE`, `STYLE (CSS = ...)`, `FALLBACK`, and `ACTIONS` clauses.
-- [x] Complete source-free, parameter-driven, single-row, and repeated-row components with explicit
-  row, node, byte, output, and aggregate render-work budgets. Parameter refresh must publish one
-  consistent manifest without observable partial template state; the current builder only caps
-  repeater rows.
-- [x] Add bounded `VISUAL(...)` embedding for declared report visuals. Resolve references statically,
-  reuse existing visual manifests and declarative actions, and reject missing targets, cycles,
-  recursive/nested expansion, secret disclosure, and aggregate query/render budget overruns.
-- [x] Render sanitized HTML visuals in the shared browser runtime, print, and PDF paths without
-  executing author code. Reuse Report-SQL parameter, navigation, bookmark, drill, and cross-filter
-  actions instead of DOM scripting, and preserve theme and formatting precedence across hosts.
-- [x] Require or deterministically resolve a concise semantic summary for email, Markdown, terminal,
-  plain text, screen readers, and unsupported surfaces. Static output must preserve analytical
-  meaning and must not imply unavailable interaction.
-- [x] Finish hostile security and cross-surface certification. Existing unit tests cover core markup,
-  URL, CSS, escaping, conditional, optional-source parser, and repeater behavior. Add disclosure and
-  malformed-parser cases, embedded-visual cycle/budget tests, action and refresh parity,
-  accessibility, snapshot and browser/print/PDF/email/Markdown/terminal conformance, deterministic
-  output, payload/render budgets, and proof that script-authored JavaScript cannot execute on any
-  host.
-
-**Exit gate:** Authors can build source-free or data-bound bespoke presentation components with
-sanitized HTML, isolated CSS, typed escaped bindings, declarative actions, and bounded embedded
-visuals; transformations remain SQL; browser and static surfaces consume one deterministic contract;
-unsupported surfaces expose an accessible semantic fallback; and hostile input fails closed without
-executing author code.
-
-## 5. Reporting Authoring & Design System Enhancements
+## 2. Reporting Authoring & Design System Enhancements
 
 - [ ] Add `TRANSFORM` recipe snippets and authoring scaffolding. Expose built-in algorithms
   (`ROLLING_AGGREGATE`, `PERIOD_COMPARISON`, `SHARE_OF_TOTAL`, `TOP_N_OTHERS`, `FILL_DATES`, `PIVOT`,
@@ -138,7 +61,7 @@ executing author code.
 - [ ] Complete `{{SPARKLINE(...)}}` and `{{PROGRESS_BAR(...)}}` template macro helpers in `HTML` visuals.
   Evaluate inline SVG sparkline and progress indicators directly within template substitution strings.
 
-## 6. Hybrid Connectivity & Gateway Enhancements
+## 3. Hybrid Connectivity & Gateway Enhancements
 
 Authoritative references:
 [`secure-outbound-gateway.md`](docs/administration/platform/secure-outbound-gateway.md),

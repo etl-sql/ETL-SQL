@@ -50,7 +50,8 @@ public static class VisualCapabilityMatrix
     private static readonly HashSet<VisualType> TerminalSemanticFallbacks =
     [
         VisualType.Treemap, VisualType.Image, VisualType.Radar,
-        VisualType.Map, VisualType.Sankey, VisualType.Sunburst, VisualType.Network
+        VisualType.Map, VisualType.Sankey, VisualType.Sunburst, VisualType.Network,
+        VisualType.Html
     ];
 
     private static readonly Lazy<IReadOnlyList<VisualCapabilityEntry>> Entries = new(BuildMatrix);
@@ -137,12 +138,12 @@ public static class VisualCapabilityMatrix
             "Native SVG matrix with semantic table fallbacks"),
         new(
             VisualType.Html, "HTML", "Template / Bespoke",
-            new(CapabilityLevel.Unsupported, "runtime rendering not implemented"),
-            new(CapabilityLevel.Unsupported, "static export not implemented"),
-            new(CapabilityLevel.Unsupported, "PDF and email export not implemented"),
-            new(CapabilityLevel.Unsupported, "terminal fallback not wired"),
-            "Not implemented", false,
-            "Parser, formatter, evaluator, sanitizer, and initial manifest projection only")
+            new(CapabilityLevel.Native, "sanitized DOM with scoped CSS"),
+            new(CapabilityLevel.SemanticFallback, "plain-text semantic summary"),
+            new(CapabilityLevel.Native, "browser PDF/print; semantic fallback for static PDF and email attachments"),
+            new(CapabilityLevel.SemanticFallback, "concise Spectre summary"),
+            "Declarative report actions", false,
+            "No author JavaScript; embedded visuals are statically bounded")
     ];
 
     private static VisualCapabilityEntry Chart(VisualType type, string name, string category, string chartKind, string interactions)

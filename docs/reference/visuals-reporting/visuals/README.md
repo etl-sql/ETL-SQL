@@ -18,6 +18,7 @@
 | [gauge](gauge.md) | Type: GAUGE, GAUGE_STYLE (arc | needle | bar) |
 | [HBAR](hbar.md) | Renders a horizontal category-based bar chart. Use `HBAR` when category labels are long, rankings matter, or readers need to compare values across ... |
 | [heatmap](heatmap.md) | Type: HEATMAP |
+| [HTML](html.md) | Sanitized semantic HTML, scoped CSS, escaped bindings, declarative actions, and portable fallbacks. |
 | [image](image.md) | Type: IMAGE |
 | [index](index.md) | Visuals are the building blocks of reports. Each visual binds a data source to a chart or control. |
 | [line](line.md) | Type: LINE / AREA |

@@ -75,6 +75,12 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Demonstrates inherited encodings, `DATUM`/`VALUE`, stacks, offsets, ribbons, rules, `TICK`, deterministic jitter/nudge, continuous color ranges, wrapped facets, fixed aspect, and conditions.
 - Adds titles, tooltip/detail bindings, and highlight interactions while retaining terminal, PDF/email, Markdown, plain-text, and screen-reader fallbacks from the same resolved plan.
 
+### [08_Reporting/constrained_html_components.rptsql](../../../samples/08_Reporting/constrained_html_components.rptsql)
+**Purpose**: Production example for bespoke non-chart presentation components.
+- Demonstrates source-free parameter binding plus repeated source rows.
+- Uses escaped substitutions, a typed conditional, scoped theme CSS, and explicit text fallbacks.
+- Routes a component button through `SET_PARAMETER` without inline JavaScript or DOM event handlers.
+
 ### [quality-loop/customer_quality.etlsql](../../../samples/quality-loop/customer_quality.etlsql)
 **Purpose**: Copy-pasteable one-person quality workflow.
 - Pairs a checked-in workspace policy with stewardship tags, `@expect` rules, quarantine routing, and `ASSERT JOB`.

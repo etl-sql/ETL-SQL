@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Constrained HTML runtime</title>
+  <link rel="stylesheet" href="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.css">
+</head>
+<body>
+  <main id="root"></main>
+  <script>
+    window.__htmlVisualScriptExecuted = false;
+    window.__htmlVisualActionRequests = [];
+    window.fetch = async (url, options) => {
+      window.__htmlVisualActionRequests.push({ url: String(url), body: String(options?.body || '') });
+      return { ok: true, json: async () => window.__MANIFEST__ };
+    };
+    window.__MANIFEST__ = {
+      title: 'Constrained HTML runtime',
+      parameters: {},
+      pages: [{ name: 'Main', structure: 'A', mode: 'DASHBOARD', slotMap: { A: 'StatusPanel' } }],
+      visuals: [
+        {
+          name: 'StatusPanel',
+          visualType: 'HTML',
+          columns: [],
+          rows: [],
+          htmlContent: '<article class="status-panel"><h2>Cluster status</h2><p>&lt;img src=x onerror=alert(1)&gt;</p><button type="button" data-action="REFRESH_REPORT">Undeclared refresh</button><button type="button" data-action="SET_PARAMETER" data-param="@region" data-value="West">Show West</button><div data-etl-embed-id="StatusPanel-embed-0"></div><scr' + 'ipt>window.__htmlVisualScriptExecuted=true</scr' + 'ipt></article>',
+          htmlCss: '#etl-v-statuspanel .status-panel { border: 2px solid var(--etl-accent); padding: 1rem; }',
+          htmlFallback: 'Cluster status: 3 healthy nodes',
+          htmlMode: 'SINGLE',
+          actions: [{ type: 'SET_PARAMETER', trigger: 'ON_CLICK', parameterName: '@region', valueSource: 'LITERAL', literalValue: 'West' }],
+          htmlEmbeds: [{ id: 'StatusPanel-embed-0', targetName: 'EmbeddedMetric' }]
+        },
+        {
+          name: 'EmbeddedMetric',
+          visualType: 'CARD',
+          columns: ['Value'],
+          rows: [['42']],
+          options: { 'mapping:value': 'Value', TITLE: 'Embedded metric' }
+        }
+      ]
+    };
+  </script>
+  <script src="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js"></script>
+</body>
+</html>

@@ -440,6 +440,44 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("htmlMode")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? HtmlMode { get; set; }
+
+        [JsonPropertyName("htmlCost")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public HtmlVisualCostManifest? HtmlCost { get; set; }
+
+        [JsonPropertyName("htmlEmbeds")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<HtmlVisualEmbedManifest>? HtmlEmbeds { get; set; }
+    }
+
+    public sealed class HtmlVisualEmbedManifest
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+        [JsonPropertyName("targetName")]
+        public string TargetName { get; set; } = string.Empty;
+        [JsonPropertyName("parameters")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Parameters { get; set; }
+        [JsonPropertyName("visual")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public VisualManifest? Visual { get; set; }
+    }
+
+    public sealed class HtmlVisualCostManifest
+    {
+        [JsonPropertyName("templateBytes")]
+        public int TemplateBytes { get; set; }
+        [JsonPropertyName("cssBytes")]
+        public int CssBytes { get; set; }
+        [JsonPropertyName("templateNodes")]
+        public int TemplateNodes { get; set; }
+        [JsonPropertyName("outputNodes")]
+        public int OutputNodes { get; set; }
+        [JsonPropertyName("outputBytes")]
+        public int OutputBytes { get; set; }
+        [JsonPropertyName("renderWork")]
+        public int RenderWork { get; set; }
     }
 
     /// <summary>

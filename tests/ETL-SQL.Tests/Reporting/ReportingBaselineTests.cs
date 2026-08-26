@@ -79,10 +79,10 @@ public class ReportingBaselineTests
         Assert.Equal(CapabilityLevel.SemanticFallback, VisualCapabilityMatrix.Get(VisualType.Map).Terminal.Level);
         Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Gantt).Terminal.Level);
         Assert.Equal(CapabilityLevel.Unsupported, VisualCapabilityMatrix.Get(VisualType.Slicer).StaticExport.Level);
-        Assert.Equal(CapabilityLevel.Unsupported, VisualCapabilityMatrix.Get(VisualType.Html).Browser.Level);
-        Assert.Equal(CapabilityLevel.Unsupported, VisualCapabilityMatrix.Get(VisualType.Html).StaticExport.Level);
-        Assert.Equal(CapabilityLevel.Unsupported, VisualCapabilityMatrix.Get(VisualType.Html).PdfEmailExport.Level);
-        Assert.Equal(CapabilityLevel.Unsupported, VisualCapabilityMatrix.Get(VisualType.Html).Terminal.Level);
+        Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Html).Browser.Level);
+        Assert.Equal(CapabilityLevel.SemanticFallback, VisualCapabilityMatrix.Get(VisualType.Html).StaticExport.Level);
+        Assert.Equal(CapabilityLevel.Native, VisualCapabilityMatrix.Get(VisualType.Html).PdfEmailExport.Level);
+        Assert.Equal(CapabilityLevel.SemanticFallback, VisualCapabilityMatrix.Get(VisualType.Html).Terminal.Level);
     }
 
     [Fact]

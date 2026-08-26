@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using ETL_SQL.Reporting.Semantics;
 
 namespace ETL_SQL.Reporting.HtmlVisual;
 
@@ -131,81 +132,17 @@ public sealed class HtmlSanitizer
     /// </summary>
     public IReadOnlyList<SanitizationViolation> ValidateTemplate(string template)
     {
-        var violations = new List<SanitizationViolation>();
-
-        foreach (Match tagMatch in HtmlTagPattern.Matches(template))
-        {
-            var tagName = tagMatch.Groups["tag"].Value;
-            var isClosing = tagMatch.Groups["closing"].Success;
-            var attrsText = tagMatch.Groups["attrs"].Value;
-
-            if (isClosing) continue;
-
-            if (!AllowedElements.Contains(tagName))
-            {
-                var reason = ExplicitlyRejectedElements.Contains(tagName)
-                    ? $"Element <{tagName}> is explicitly rejected for security."
-                    : $"Element <{tagName}> is not in the HTML visual allowlist.";
-                violations.Add(new SanitizationViolation(SanitizationCategory.Element, reason, tagMatch.Index));
-                continue;
-            }
-
-            foreach (Match attrMatch in AttributePattern.Matches(attrsText))
-            {
-                var attrName = attrMatch.Groups["name"].Value;
-                var attrValue = attrMatch.Groups["dval"].Success ? attrMatch.Groups["dval"].Value
-                    : attrMatch.Groups["sval"].Success ? attrMatch.Groups["sval"].Value
-                    : attrMatch.Groups["uval"].Success ? attrMatch.Groups["uval"].Value
-                    : null;
-
-                if (EventHandlerPattern.IsMatch(attrName))
-                {
-                    violations.Add(new SanitizationViolation(
-                        SanitizationCategory.Attribute,
-                        $"Event handler attribute '{attrName}' is rejected.",
-                        tagMatch.Index));
-                    continue;
-                }
-
-                if (string.Equals(attrName, "style", StringComparison.OrdinalIgnoreCase))
-                {
-                    violations.Add(new SanitizationViolation(
-                        SanitizationCategory.Attribute,
-                        "Inline 'style' attribute is rejected. Use STYLE(CSS=...) instead.",
-                        tagMatch.Index));
-                    continue;
-                }
-
-                if (!IsAttributeAllowed(tagName, attrName))
-                {
-                    violations.Add(new SanitizationViolation(
-                        SanitizationCategory.Attribute,
-                        $"Attribute '{attrName}' is not allowed on <{tagName}>.",
-                        tagMatch.Index));
-                    continue;
-                }
-
-                if (UrlAttributes.Contains(attrName) && attrValue != null)
-                {
-                    var urlViolation = ValidateUrl(attrValue, attrName, tagName);
-                    if (urlViolation != null)
-                        violations.Add(urlViolation with { Position = tagMatch.Index });
-                }
-
-                if (string.Equals(tagName, "button", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(attrName, "type", StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(attrValue, "button", StringComparison.OrdinalIgnoreCase))
-                {
-                    violations.Add(new SanitizationViolation(
-                        SanitizationCategory.Attribute,
-                        $"Button type='{attrValue}' is rejected. Only type='button' is allowed.",
-                        tagMatch.Index));
-                }
-            }
-        }
-
-        return violations;
+        return ConstrainedHtmlPolicy.ValidateTemplate(template)
+            .Select(violation => new SanitizationViolation(
+                Enum.TryParse<SanitizationCategory>(violation.Category, ignoreCase: true, out var category)
+                    ? category : SanitizationCategory.Element,
+                violation.Message,
+                violation.Position))
+            .ToList();
     }
+
+    /// <summary>Counts element nodes in the authored template before row expansion.</summary>
+    public int CountElementNodes(string template) => ConstrainedHtmlPolicy.CountElementNodes(template);
 
     /// <summary>
     /// Validates CSS content against the CSS security policy.
@@ -213,41 +150,9 @@ public sealed class HtmlSanitizer
     /// </summary>
     public IReadOnlyList<SanitizationViolation> ValidateCss(string css)
     {
-        var violations = new List<SanitizationViolation>();
-
-        foreach (Match match in CssUnsafePatterns.Matches(css))
-        {
-            violations.Add(new SanitizationViolation(
-                SanitizationCategory.Css,
-                $"CSS pattern '{match.Value}' is rejected.",
-                match.Index));
-        }
-
-        foreach (Match match in CssExternalUrl.Matches(css))
-        {
-            violations.Add(new SanitizationViolation(
-                SanitizationCategory.Css,
-                "CSS url() with external host is rejected.",
-                match.Index));
-        }
-
-        foreach (Match match in CssUnsafeDataUrl.Matches(css))
-        {
-            violations.Add(new SanitizationViolation(
-                SanitizationCategory.Css,
-                "CSS url() with non-image data: URI is rejected.",
-                match.Index));
-        }
-
-        foreach (Match match in CssUnsafeVarPattern.Matches(css))
-        {
-            violations.Add(new SanitizationViolation(
-                SanitizationCategory.Css,
-                "CSS var() must reference --etl-* tokens only.",
-                match.Index));
-        }
-
-        return violations;
+        return ConstrainedHtmlPolicy.ValidateCss(css)
+            .Select(violation => new SanitizationViolation(SanitizationCategory.Css, violation.Message, violation.Position))
+            .ToList();
     }
 
     /// <summary>
@@ -255,16 +160,7 @@ public sealed class HtmlSanitizer
     /// </summary>
     public string ScopeCss(string css, string visualContainerId)
     {
-        var scopePrefix = $"#{visualContainerId}";
-        return Regex.Replace(css, @"([^{}@]+)\{", match =>
-        {
-            var selector = match.Groups[1].Value.Trim();
-            if (selector.StartsWith("@")) return match.Value;
-            var selectors = selector.Split(',')
-                .Select(s => $"{scopePrefix} {s.Trim()}")
-                .ToArray();
-            return string.Join(", ", selectors) + " {";
-        });
+        return ConstrainedHtmlPolicy.ScopeCss(css, visualContainerId);
     }
 
     // ── Private helpers ──────────────────────────────────────────────────

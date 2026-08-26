@@ -173,6 +173,7 @@ namespace ETL_SQL.Reporting.Renderers
                 "CARD" => RenderCard(visual),
                 "TABLE" => RenderTable(visual),
                 "TEXT" => RenderText(visual),
+                "HTML" => RenderSemanticFallback(visual),
                 "GAUGE" => RenderGauge(visual),
                 "BOXPLOT" => RenderBoxPlot(visual),
                 "WATERFALL" => RenderWaterfall(visual),

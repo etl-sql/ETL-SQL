@@ -82,11 +82,14 @@ namespace ETL_SQL.LSP
             var snippetItems = GetSnippetCompletions(scriptBefore, prefix, line, startCol, col);
             var chartItems = GetAdvancedChartCompletions(scriptBefore, prefix, line, startCol, col);
             var bookmarkItems = GetBookmarkCompletions(state.Script, scriptBefore, prefix, line, startCol, col);
+            var htmlItems = GetHtmlVisualCompletions(state.Script, scriptBefore, prefix, line, startCol, col);
 
             // Where a bookmark identifier is the only thing that can legally appear, offering the
             // generic word list alongside it would just be noise — the declared bookmarks are the
             // complete set of valid answers.
             if (bookmarkItems.Count > 0) return new CompletionList(bookmarkItems);
+            if (htmlItems.Count > 0 && (HtmlVisualSymbols.IsTemplateBindingContext(scriptBefore) || HtmlVisualSymbols.IsCssContext(scriptBefore)))
+                return new CompletionList(htmlItems);
 
             var items = suggestions.Select(s =>
             {
@@ -109,8 +112,54 @@ namespace ETL_SQL.LSP
                 };
             }).ToList();
 
-            return new CompletionList(snippetItems.Concat(chartItems).Concat(items).Concat(datasetItems)
+            return new CompletionList(snippetItems.Concat(chartItems).Concat(htmlItems).Concat(items).Concat(datasetItems)
                 .GroupBy(item => item.Label, StringComparer.OrdinalIgnoreCase).Select(group => group.First()).ToList());
+        }
+
+        private static List<CompletionItem> GetHtmlVisualCompletions(
+            Script script, string scriptBefore, string prefix, int line, int startCol, int col)
+        {
+            IEnumerable<(string Label, CompletionItemKind Kind, string Detail)> symbols;
+            var cssContext = HtmlVisualSymbols.IsCssContext(scriptBefore);
+            if (cssContext)
+            {
+                symbols = HtmlVisualSymbols.ThemeTokens.Select(token => (token, CompletionItemKind.Variable, "Approved report theme token"));
+            }
+            else if (HtmlVisualSymbols.IsTemplateBindingContext(scriptBefore)
+                && HtmlVisualSymbols.ActiveVisual(script, scriptBefore) is { } visual)
+            {
+                symbols = HtmlVisualSymbols.Columns(script, visual)
+                    .Select(name => (name, CompletionItemKind.Field, "Escaped HTML source field"))
+                    .Concat(HtmlVisualSymbols.Parameters(script)
+                        .Select(parameter => ("@" + parameter.VariableName.TrimStart('@'), CompletionItemKind.Variable,
+                            $"Escaped HTML parameter ({parameter.DataType})")));
+            }
+            else if (Regex.IsMatch(scriptBefore, @"(?is)\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?VISUAL\s+\w+\s+AS\s+\w*$"))
+            {
+                symbols = [("HTML", CompletionItemKind.EnumMember, "Constrained semantic HTML visual")];
+            }
+            else return [];
+
+            return symbols.Where(symbol => cssContext || string.IsNullOrEmpty(prefix)
+                    || symbol.Label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(symbol => new CompletionItem
+                {
+                    Label = symbol.Label,
+                    Kind = symbol.Kind,
+                    Detail = symbol.Detail,
+                    Documentation = new MarkupContent
+                    {
+                        Kind = MarkupKind.Markdown,
+                        Value = "Constrained HTML values are escaped and cannot execute author JavaScript."
+                    },
+                    SortText = "0001_" + symbol.Label,
+                    InsertText = symbol.Label,
+                    TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit
+                    {
+                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
+                        NewText = symbol.Label
+                    })
+                }).ToList();
         }
 
         /// <summary>

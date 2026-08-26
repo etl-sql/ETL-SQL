@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Reporting.Semantics;
 
 namespace ETL_SQL.Reporting
 {
@@ -176,11 +177,18 @@ namespace ETL_SQL.Reporting
                     refreshed.Add(definition.Name);
                 }
 
+                var stagedManifest = Clone(manifest);
                 foreach (var pair in stagedVisuals)
                 {
-                    var index = manifest.Visuals.FindIndex(v => v.Name.Equals(pair.Key, StringComparison.OrdinalIgnoreCase));
-                    if (index >= 0) manifest.Visuals[index] = pair.Value;
+                    var index = stagedManifest.Visuals.FindIndex(v => v.Name.Equals(pair.Key, StringComparison.OrdinalIgnoreCase));
+                    if (index >= 0) stagedManifest.Visuals[index] = pair.Value;
                 }
+                await builder.PrepareHtmlVisualsAsync(stagedManifest);
+                var failedHtml = stagedManifest.Visuals.FirstOrDefault(visual =>
+                    visual.VisualType.Equals("HTML", StringComparison.OrdinalIgnoreCase) && visual.Error is not null);
+                if (failedHtml is not null) throw new InvalidOperationException(failedHtml.Error);
+
+                manifest.Visuals = stagedManifest.Visuals;
                 foreach (var visual in manifest.Visuals.Where(visual => visual.HighlightRows != null))
                 {
                     builder.ClearHighlightRows(visual);
@@ -246,6 +254,16 @@ namespace ETL_SQL.Reporting
         {
             if (!variableName.StartsWith("@")) variableName = "@" + variableName;
 
+            if (visual.HtmlTemplate is not null)
+            {
+                var bindings = ConstrainedHtmlPolicy.Bindings(visual.HtmlTemplate.Template)
+                    .Concat(visual.HtmlTemplate.Fallback is null
+                        ? [] : ConstrainedHtmlPolicy.Bindings(visual.HtmlTemplate.Fallback))
+                    .Concat(ConstrainedHtmlPolicy.EmbeddedParameters(visual.HtmlTemplate.Template));
+                if (bindings.Any(binding => binding.Equals(variableName, StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
+
             if (visual.Source.IsInlineSelect && visual.Source.InlineSelect != null)
             {
                 var usedParams = ParameterScanner.Scan(visual.Source.InlineSelect);
@@ -254,5 +272,9 @@ namespace ETL_SQL.Reporting
 
             return visual.Source.TempTableName?.Contains(variableName, StringComparison.OrdinalIgnoreCase) ?? false;
         }
+
+        private static ReportManifest Clone(ReportManifest manifest) =>
+            JsonSerializer.Deserialize<ReportManifest>(JsonSerializer.Serialize(manifest))
+            ?? throw new InvalidOperationException("Unable to stage report manifest refresh.");
     }
 }

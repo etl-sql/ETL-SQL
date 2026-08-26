@@ -214,6 +214,16 @@ namespace ETL_SQL.Reporting
                         break;
                     }
 
+                case "HTML":
+                    {
+                        var fallback = v.HtmlFallback ?? v.SemanticFallback?.Summary ?? v.Name;
+                        sb.AppendLine("```text");
+                        sb.AppendLine(fallback.Replace("```", "` ` `", StringComparison.Ordinal));
+                        sb.AppendLine("```");
+                        sb.AppendLine();
+                        break;
+                    }
+
                 default:
                     {
                         var svgStr = _svg.Render(v);

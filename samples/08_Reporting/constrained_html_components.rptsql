@@ -1,0 +1,38 @@
+-- Constrained HTML components: source-free parameters, repeated rows, scoped CSS,
+-- deterministic semantic fallbacks, and declarative actions. No author script executes.
+
+SET REPORT TITLE = 'Service Health Components';
+
+DECLARE @environment VARCHAR(20) = 'Production';
+DECLARE @selected_service VARCHAR(40) = '';
+
+SELECT 'Orders API' AS ServiceName, 'Healthy' AS Status, 99.98 AS Availability INTO #service_health
+UNION ALL SELECT 'Billing Worker', 'Warning', 98.72
+UNION ALL SELECT 'Primary Database', 'Critical', 96.10;
+
+CREATE VISUAL EnvironmentMetric AS CARD (
+  SOURCE = (SELECT @environment AS Environment)
+);
+
+CREATE VISUAL EnvironmentBanner AS HTML (
+  TEMPLATE = '<section class="environment"><small>Environment</small><strong>{{@environment}}</strong>{{VISUAL(EnvironmentMetric, PARAMETERS(@environment = @environment))}}</section>',
+  STYLE (CSS = '.environment { display: grid; gap: 0.25rem; color: var(--etl-text); background: var(--etl-surface); }'),
+  FALLBACK = 'Environment: {{@environment}}'
+);
+
+CREATE VISUAL ServiceHealth AS HTML (
+  SOURCE = #service_health,
+  MODE = REPEATER,
+  TEMPLATE = '<article class="service"><strong>{{ServiceName}}</strong><span>{{Availability FORMAT ''0.00''}}%</span>{{#IF Status = ''Critical''}}<mark>Critical</mark>{{/IF}}<button type="button" data-action="SET_PARAMETER" data-param="@selected_service" data-value="{{ServiceName}}">Select service</button></article>',
+  STYLE (CSS = '.service { display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem; border-bottom: 1px solid var(--etl-border); padding: 0.75rem; }'),
+  FALLBACK = '{{ServiceName}}: {{Status}}, availability {{Availability}} percent',
+  OPTIONS (MAX_ROWS = 100),
+  ACTIONS (ON_CLICK = SET_PARAMETER(@selected_service, ServiceName))
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'banner banner health health',
+    MAP ('banner' = EnvironmentBanner, 'health' = ServiceHealth)
+  )
+);
