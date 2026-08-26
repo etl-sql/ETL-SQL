@@ -73,8 +73,8 @@ An edit to one presentation statement must not alter data-preparation SQL, unrel
 statements, comments, whitespace, or line endings. This is Gate Zero for expanding the report grammar:
 a visual editor that can overwrite script content breaks ETL-SQL's script-first contract.
 
-**Why now:** GoG will add nested presentation syntax. Its authoring and mutation contracts must be
-safe before that grammar broadens.
+**Why now:** The native GoG grammar has shipped, and dedicated `CHART` and constrained `HTML`
+authoring now depend on the same lossless mutation contract.
 
 **Boundaries:** This work preserves source text and usable canvas state; it does not redesign the GoG
 grammar or silently normalize an author's script.
@@ -82,9 +82,14 @@ grammar or silently normalize an author's script.
 **Dependencies:** Parser span/trivia support, `DesignerScriptPatcher`, and parity between embedded and
 LSP-hosted designer paths.
 
-**Delivery slices:** Route the LSP host through surgical patching; add multi-page and CTE coverage;
-exercise repeated CRLF/LF mutations; preserve statement-body trivia; and retain canvas state during
-transient syntax errors. GoG syntax work must extend these same mutation primitives.
+**Current implementation:** Embedded and LSP-hosted generation share `DesignerScriptPatcher`.
+Regression tests cover multi-page scripts, chained CTEs, statement-body trivia, fifty repeated
+CRLF/LF mutations, advanced `CHART` preservation, and safe handling of invalid intermediate scripts.
+
+**Remaining delivery:** Add deterministic mutation fuzz/property coverage that proves out-of-scope
+byte identity, and browser coverage proving that the designer retains its last valid canvas state
+while the source contains transient syntax errors. Dedicated `CHART` and constrained `HTML` editors
+must extend these same mutation primitives.
 
 **Acceptance evidence:** Regression and fuzz tests prove that presentation-only mutations leave all
 out-of-scope bytes unchanged and that invalid intermediate edits do not reset the canvas.
@@ -254,14 +259,18 @@ self-contained offline HTML snapshot *host* exists yet — that is a separate fe
 
 ### Reporting & Presentation — Constrained HTML Visuals
 
-**Status:** Accepted direction — implementation not started
+**Status:** In Progress — not shipped
 
-**Horizon:** Unscheduled
+**Horizon:** Next
 
-**Authoritative design:** The product direction below is accepted. A dedicated threat model and ADR
-must define the exact grammar, sanitizer, template evaluator, interaction projection, and portable
-fallback contract before parser implementation. The earlier HTML examples in
-`MicroChartsAndHtmlEmbedding.md` are design input, not parser contracts.
+**Authoritative design:** [Constrained HTML Visuals](docs/architecture/decisions/constrained-html-visuals.md)
+
+**Current implementation:** The immutable AST, parser, formatter, escaped template evaluator,
+conditional form, HTML/CSS validator, scoped-CSS projection, initial manifest fields, and focused
+unit tests exist. The surface is not shipped: Analysis/LSP/help/snippets and production samples are
+missing; the shared browser runtime and static exporters do not consume the HTML manifest fields;
+bounded visual embedding is absent; and aggregate budgets, accessibility, refresh, snapshot, and
+cross-surface conformance are not certified.
 
 `CREATE VISUAL ... AS HTML` is the presentation counterpart to `CREATE VISUAL ... AS CUSTOM`.
 `CUSTOM` gives script authors a renderer-neutral grammar for composing charts. `HTML` gives them a
@@ -308,14 +317,15 @@ resolve a concise semantic summary for email, Markdown, terminal, plain text, sc
 surface that cannot preserve the component faithfully. Static output must never silently drop data or
 imply unavailable interaction.
 
-The first delivery is script-first with preview, formatter, lint, LSP, documentation, and lossless
-Report Builder preservation. A dedicated WYSIWYG HTML editor is deferred, matching the accepted
-`CUSTOM` authoring boundary.
+Delivery remains script-first with preview, formatter, lint, LSP, documentation, and lossless Report
+Builder preservation. The active Report Builder increment adds a constrained structured component
+editor backed by the same sanitizer and budgets as runtime preview; it cannot introduce arbitrary DOM
+scripting or raw executable HTML.
 
-**Delivery slices:** Threat model and ADR; parser/immutable AST/formatter; typed template and
-sanitization contracts; optional-source `SINGLE` and `REPEATER` rendering; visual embedding and
-declarative actions; scoped styling and theme tokens; browser/print/PDF plus semantic fallbacks; LSP,
-preview, documentation, samples, capability inventory, and lossless designer round trips.
+**Delivery slices:** Complete Analysis/LSP/help/samples; enforce aggregate component budgets; add
+bounded visual embedding and declarative action parity; render scoped content in browser/print/PDF;
+provide semantic fallbacks; add constrained Report Builder preview/editing; and certify hostile input
+and deterministic cross-surface output.
 
 **Acceptance evidence:** Hostile markup, URL, CSS, disclosure, and nesting tests; deterministic
 escaping and typed-binding tests; source-free, single-row, and repeated-row fixtures; embedded-visual
@@ -357,9 +367,9 @@ fixture: transient open 50.9 ms, refresh completion 65.3 ms, reposition 26.8 ms,
 
 ### Platform — Native Object Storage for Shared Artifacts
 
-**Status:** Accepted  
-**Horizon:** Launch Gate — Shared SaaS  
-**Authoritative design:** Provider contract not yet decided; build on the existing artifact-storage abstraction
+**Status:** Shipped
+**Horizon:** Delivered
+**Authoritative design:** [Object-Native Artifact Storage Contract](docs/architecture/decisions/object-native-artifact-storage.md)
 
 Shared SaaS needs horizontally scalable artifact storage without assuming SMB or POSIX atomic rename.
 
@@ -371,11 +381,11 @@ continues to use database-backed leases and fencing.
 **Dependencies:** Immutable or content-addressed object naming, conditional-write/version semantics,
 an authoritative commit record, and garbage collection for abandoned staging objects.
 
-**Delivery slices:** Provider-neutral contract and fault model; one object-store provider; second-provider
-conformance; integration with large-content portability and Shared-source isolation.
-
-**Acceptance evidence:** Provider contract certification covers concurrent writers, stale fences,
-partial writes, lost responses, retries, storage outages, reconciliation, and garbage collection.
+**Delivered:** `IObjectStore` and `ObjectNativeArtifactStorage` publish immutable content through
+conditional commit records and monotonic fencing. S3 and Azure Blob implementations pass the shared
+hostile provider contract for concurrent writers, stale fences, partial writes, lost responses,
+retries, outages, reconciliation, and garbage collection. Snapshot consumers and large-content
+tenant portability use the object-native adapter without assuming filesystem rename semantics.
 
 ### Identity — Workload Identity and M2M Hardening
 
@@ -482,26 +492,25 @@ access, cross-tenant effects, or ambiguous dependency attribution.
 
 ### Governance & Gateway — Verified Viewer Context Propagation
 
-**Status:** Exploring  
-**Horizon:** Later  
-**Authoritative design:** Threat-model ADR required before connector work
+**Status:** Shipped
+**Horizon:** Delivered
+**Authoritative design:** [Verified Viewer Context](docs/architecture/decisions/verified-viewer-context.md)
 
-Interactive Gateway queries may need verified viewer attributes for downstream row filtering while
+Interactive Gateway queries can carry verified viewer attributes for downstream row filtering while
 the database connection continues to use a service credential. This asserted application context is
 not equivalent to OAuth on-behalf-of delegation or Kerberos constrained delegation.
 
-**Why now:** The business requirement is important, but the assurance model must be separated before
-connector-specific behavior is promised.
+**Outcome:** The assurance model is separated explicitly from delegated authentication. Gateway
+resources opt in, signed envelopes are tenant/resource/operation/credential-bound and replay
+protected, and PostgreSQL receives allowlisted values through parameterized transaction-local
+session settings.
 
 **Boundaries:** The first stage cannot claim that the database authenticated the viewer. PostgreSQL
 role changes are not derived directly from OIDC roles/groups. Context is parameterized,
 transaction-scoped, cleared before pool reuse, resource-allowlisted, tenant-bound, and fail-closed.
 
-**Dependencies:** Cryptographic Portal-to-Gateway identity, an ADR separating asserted context,
-OAuth delegation, and Kerberos delegation, plus connector session-cleanup contracts.
-
-**Delivery slices:** Threat model and neutral envelope; one asserted-context connector; pool-cleanup
-certification; additional connectors; separately designed delegated-authentication tracks if justified.
-
-**Acceptance evidence:** Forgery, replay, cross-tenant/resource, reserved-key, injection, transaction
-lifetime, and pool-reuse tests; audit records both viewer and executing credential.
+**Delivered:** The neutral envelope, signing and verification path, resource policy, audit attribution,
+PostgreSQL application, and connector cleanup contract are implemented. Forgery, replay,
+cross-tenant/resource, reserved-key, injection, transaction-lifetime, and pool-reuse tests cover the
+boundary. Additional connectors and true delegated-authentication mechanisms remain separate
+initiatives and are not implied by this shipped outcome.

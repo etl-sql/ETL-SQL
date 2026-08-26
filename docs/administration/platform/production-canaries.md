@@ -123,5 +123,5 @@ not substitute for current fleet observations.
 ## References
 
 - [Deployment-profile certification](deployment-profile-certification.md)
-- [Operational readiness](operational-readiness.md)
+- [Portal production readiness](../portal/production-readiness.md)
 - [Provider-neutral fault certification](../../architecture/decisions/provider-neutral-fault-certification.md)

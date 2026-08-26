@@ -137,12 +137,12 @@ public static class VisualCapabilityMatrix
             "Native SVG matrix with semantic table fallbacks"),
         new(
             VisualType.Html, "HTML", "Template / Bespoke",
-            new(CapabilityLevel.Native, "sanitized HTML with scoped CSS"),
-            new(CapabilityLevel.Native, "sanitized HTML to PDF via headless print path"),
-            new(CapabilityLevel.Native, "semantic fallback text; email attaches PDF"),
-            new(CapabilityLevel.SemanticFallback, "fallback template plain text"),
-            "Click, parameter binding, navigation", false,
-            "Constrained HTML template visual with typed escaped bindings")
+            new(CapabilityLevel.Unsupported, "runtime rendering not implemented"),
+            new(CapabilityLevel.Unsupported, "static export not implemented"),
+            new(CapabilityLevel.Unsupported, "PDF and email export not implemented"),
+            new(CapabilityLevel.Unsupported, "terminal fallback not wired"),
+            "Not implemented", false,
+            "Parser, formatter, evaluator, sanitizer, and initial manifest projection only")
     ];
 
     private static VisualCapabilityEntry Chart(VisualType type, string name, string category, string chartKind, string interactions)

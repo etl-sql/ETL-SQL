@@ -144,6 +144,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Named visuals now reject unsupported `MAPPINGS` roles with a valid-role diagnostic instead of
+  silently lowering a wrong chart. Catalog-wide tests cover every named chart type, including the
+  original `BAR (CATEGORY, VALUE)` failure.
+- Corrected the roadmap and capability inventory after auditing partial constrained-HTML work. The
+  accepted ADR, parser, formatter, evaluator, sanitizer, and initial manifest projection exist, but
+  browser/static rendering and the remaining authoring and certification surfaces are still open.
+- Reconciled the object-native artifact-storage roadmap entry with its shipped provider-neutral
+  contract, S3/Azure certification, shared snapshot consumers, and tenant-portability integration.
+- Corrected the `CUSTOM` learning path to describe the shipped resolved cross-filter key, restored
+  strict documentation-audit coverage for the constrained-HTML and lean-worker decisions, and fixed
+  the production-canary reference to the live Portal readiness guide.
 - `CUSTOM` charts now cross-filter on the column they are keyed on. A layered chart has no `MAPPINGS`
   clause, so the browser's `mapping:*` lookup always missed and fell through to `visual.columns[0]` —
   every `CUSTOM` chart filtered on whatever column its source query happened to list first. The

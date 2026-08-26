@@ -11,6 +11,7 @@
 | [Portal and Orchestrator Capacity Planning](capacity-planning.md) | Use this guide to turn an expected user base and job schedule into a starter server plan for |
 | [Portal and Orchestrator Capacity Testing](capacity-testing.md) | Use `scripts/test-service-capacity.mjs` to measure Portal-user and Orchestrator-job capacity against |
 | [Concurrent PostgreSQL and Failure Soak Certification (v0.15.0 Phase 6) — Design](concurrent-postgres-failure-soak.md) | **Status:** Implementation in progress; Slice A topology harness is implemented. |
+| [Constrained HTML Visuals](constrained-html-visuals.md) | Accepted grammar, security, isolation, interaction, budget, and fallback contract for constrained HTML visuals. |
 | [Column & Job Data-Quality Rules — Design Specification](data-quality-rules.md) | Extend the engine's verification surface from **schema** (`EXPECT SCHEMA … ON DRIFT WARN`) and |
 | [Departmental Isolation Topology](departmental-isolation.md) | This document defines how to run **multiple isolated ETL-SQL environments** — for example |
 | [Disaster Recovery Objectives](disaster-recovery-objectives.md) | This guide defines supported RPO/RTO targets, recovery-set contents, restore-drill expectations, and |
@@ -37,6 +38,7 @@
 | [Architecture Decision Evaluation: GANTT Native PlotPlan Composition](gantt-native-composition-evaluation.md) | Accepted and implemented in Phase 8 (Batch 4: Flow & Timeline). |
 | [Architecture Decision Record: Native Grammar-of-Graphics Contract and Pluggable Backends](grammar-of-graphics-spec-ir.md) | **Status:** Accepted. The ChartSpec / typed chart data / PlotPlan contract every reporting backend resolves against. |
 | [Architecture Decision Record: Micro-Charts, Sparklines & HTML Template Embedding](micro-charts-and-html-embedding.md) | **Status:** Accepted. Sparkline and progress micro-charts inside CARD and TABLE cells. |
+| [Measured lean worker profile decision](measured-lean-worker-profile.md) | Accepted decision not to publish a dedicated worker artifact after measurement and trimming experiments. |
 | [Architecture Decision & Migration Ledger: Standard Visual Catalog Migration](standard-visual-migration-ledger.md) | Implemented; Phase 8 complete. Per-visual record of the standard catalog's migration onto PlotPlan. |
 | [Verified Viewer Context for Gateway PostgreSQL Resources](verified-viewer-context.md) | Separates asserted application context from delegated authentication and defines the signed envelope and PostgreSQL installation contract. |
 | [Provider-Neutral Fault Certification](provider-neutral-fault-certification.md) | Provider-neutral fault certification scenarios and observations across local, Docker, and cloud adapters. |

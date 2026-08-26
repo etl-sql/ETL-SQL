@@ -292,9 +292,8 @@ CREATE VISUAL Custom AS CUSTOM (
             Assert.Equal("dark", custom.Theme.Name);
             Assert.Contains(custom.Theme.Tokens, token =>
                 token.Name.Equals("COLOR", StringComparison.OrdinalIgnoreCase) && token.Value == "#112233");
-            // Both paths now build tokens from the same resolved styles and options. The only names
-            // named visuals still carry that CUSTOM does not are the mapping:* cross-filter hints, which
-            // CUSTOM has no MAPPINGS clause to produce — tracked separately in TODO.md.
+            // Both paths now build tokens from the same resolved styles and options. Named visuals
+            // retain mapping:* provenance tokens from MAPPINGS; CUSTOM has no MAPPINGS clause.
             var onlyOnNamed = named.Theme.Tokens.Select(token => token.Name)
                 .Except(custom.Theme.Tokens.Select(token => token.Name), StringComparer.OrdinalIgnoreCase);
             Assert.All(onlyOnNamed, name => Assert.StartsWith("mapping:", name, StringComparison.OrdinalIgnoreCase));
