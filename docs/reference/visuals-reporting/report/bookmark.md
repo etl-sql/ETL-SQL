@@ -95,8 +95,10 @@ Saved views are private: another person's view can never be opened from its link
 republished after a view was saved, the reader is warned that parts of it may no longer apply — the
 view still opens, with the parts that no longer exist dropped.
 
-Offline snapshots replay bookmarks too. The saved figures cannot change without a server, so applying a
-bookmark there restores the page, layout state, and filter selections, and says so.
+Offline snapshots replay bookmarks too. Export one with `etl-sql-report offline <script>`, which
+writes a single HTML file that opens with no server. The saved figures cannot change without one, so
+applying a bookmark there restores the page, layout state, and filter selections, and says so.
+Personal saved views are Portal-only and are not part of a snapshot.
 
 ## Examples
 

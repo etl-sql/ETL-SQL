@@ -14,7 +14,16 @@
 
     // Web mode  (single or multi-report server): window.__IS_WEB__ = true
     // VS Code mode (webview preview):           window.__MANIFEST__ set, no __IS_WEB__
-    const isWebMode = window.__IS_WEB__ || window.location.protocol.startsWith('http');
+    // Offline snapshot (.etlsnap viewer):       window.__ETLSNAP__ = true, manifest inlined
+    //
+    // The offline host is decided before web mode, not after it. A snapshot viewer is a single file
+    // that carries its own manifest and has no server behind it, but it is often opened over http —
+    // off a file share, a static site, an artifact server — and protocol alone would then class it
+    // as web mode and start it polling an API that does not exist. Everything that reads the
+    // manifest (pages, bookmarks, detail popovers) works either way; everything that would reach for
+    // a network is what has to stay off.
+    const isOfflineHost = !!(window.__ETLSNAP__ || window.__OFFLINE__);
+    const isWebMode = !isOfflineHost && (window.__IS_WEB__ || window.location.protocol.startsWith('http'));
     const vscode    = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
     const isInteractive = isWebMode || vscode;
     const safeRequestAnimationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
@@ -817,7 +826,9 @@
         const actions = document.createElement('div');
         actions.className = 'header-actions';
 
-        if (freshnessStatus === 'stale') {
+        // Offline: a snapshot can be stale, and saying so is useful, but the button that asks the
+        // server to refresh it has nothing to ask.
+        if (freshnessStatus === 'stale' && !isOfflineHost) {
             const refreshBtn = document.createElement('button');
             refreshBtn.className = 'header-btn warning';
             refreshBtn.title = 'Request Data Refresh for Stale Report';
@@ -5331,8 +5342,11 @@
     }
 
     // Offline snapshots set window.__ETLSNAP__; overridden by the snapshot bootstrap when present.
+    // Re-read rather than returning the boot-time `isOfflineHost`, so a host that sets the flag after
+    // the runtime script has been parsed still gets offline behaviour from every later decision.
     function isOfflineSnapshot() {
-        return !!(window.__ETLSNAP__ || (typeof window.__OFFLINE__ !== 'undefined' && window.__OFFLINE__));
+        return isOfflineHost
+            || !!(window.__ETLSNAP__ || (typeof window.__OFFLINE__ !== 'undefined' && window.__OFFLINE__));
     }
 
     /**
@@ -5350,16 +5364,29 @@
      *
      * Returns true when the state was applied, so the caller can commit the page/presentation half.
      */
+    /**
+     * Records parameter values into the snapshot manifest held in memory, without re-rendering.
+     *
+     * Offline there is no server to re-resolve against, so a parameter change moves the control and
+     * leaves the figures where the capture froze them. Separated from the bookmark path because a
+     * bookmark announces itself to the reader and an ordinary control change must not.
+     */
+    function recordParametersOffline(batch) {
+        if (!_lastManifest) return false;
+        _lastManifest.parameters = _lastManifest.parameters || {};
+        for (const [name, value] of Object.entries(batch || {})) {
+            _lastManifest.parameters[name] = value;
+            parameters[name] = value;
+        }
+        return true;
+    }
+
     async function applyParametersOffline(batch) {
         if (!_lastManifest) return false;
         const entries = Object.entries(batch || {});
         if (entries.length === 0) return true;
 
-        _lastManifest.parameters = _lastManifest.parameters || {};
-        for (const [name, value] of entries) {
-            _lastManifest.parameters[name] = value;
-            parameters[name] = value;
-        }
+        if (!recordParametersOffline(batch)) return false;
 
         // Re-render from the snapshot in memory so the controls reflect the bookmarked values.
         renderManifest(_lastManifest);
@@ -5911,6 +5938,17 @@
         }));
 
         console.debug('[ParameterUpdate] Sending:', { params: paramList, isInteraction });
+
+        // Offline snapshot: the manifest in memory is the entire report, so every consumer of this
+        // function is answered from it rather than from an API that is not there. Detail popovers
+        // are the reason this matters — they refresh through here on every open, so without this
+        // branch a popover in a snapshot viewer showed "could not be loaded" and the offline claim
+        // in the tooltip documentation was false. An interaction (`@hover_value`) is transient and
+        // must not be written into the report's parameter state.
+        if (isOfflineSnapshot()) {
+            if (!isInteraction) recordParametersOffline(params);
+            return _lastManifest;
+        }
 
         if (vscode) {
             vscode.postMessage({

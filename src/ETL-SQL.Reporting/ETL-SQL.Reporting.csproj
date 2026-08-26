@@ -25,6 +25,19 @@
     <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\maps\*.geojson">
       <LogicalName>maps.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+
+    <!-- Browser runtime, inlined verbatim into the self-contained offline snapshot viewer
+         (OfflineSnapshotViewer). Embedded rather than read from disk so the exporter works from a
+         published CLI, where no wwwroot exists. -->
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.js">
+      <LogicalName>runtime.report-runtime.js</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.css">
+      <LogicalName>runtime.report-runtime.css</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\feedback.js">
+      <LogicalName>runtime.feedback.js</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

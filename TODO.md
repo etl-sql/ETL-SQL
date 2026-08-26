@@ -1,9 +1,9 @@
-# ETL-SQL Development TODO List
+﻿# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for all unfinished product and release work. All remaining
 product work is active for the current planning horizon. Work top to bottom unless a dependency or
 release-blocking defect changes the order. Once an item is verified, record its notable outcome in
-`CHANGELOG.md` and remove it from this file and, when applicable, `ROADMAP.md`.
+`CHANGELOG.md` and check it completed.
 
 The only unfinished `ROADMAP.md` initiatives are represented here:
 
@@ -38,12 +38,12 @@ Authoritative references:
 
 ## 2. Browser and Offline Preview Foundations
 
-- [ ] Make the VS Code webview UI sandbox work from a clean checkout. The story fetches the ignored
+- [x] Make the VS Code webview UI sandbox work from a clean checkout. The story fetches the ignored
   `src/etl-sql-vscode/ui/dist/index.html`, while `tools/ui-sandbox/serve.ps1` neither builds that
   bundle nor provides a self-contained fixture. Add a deterministic build/setup step or remove the
   generated-bundle dependency, then cover the results, preview, preview-sink, designer, and
   visual-flow fixtures with a clean-tree browser test.
-- [ ] Ship and exercise a real offline `.etlsnap` viewer/bootstrap before claiming offline bookmark
+- [x] Ship and exercise a real offline `.etlsnap` viewer/bootstrap before claiming offline bookmark
   or detail-popover replay. The shared runtime implements and tests the `window.__ETLSNAP__` branch,
   but no product host sets that flag today. Wire package loading to the runtime, prove bookmark and
   tooltip/detail replay without network access, and reconcile the offline claims in the Report-SQL,

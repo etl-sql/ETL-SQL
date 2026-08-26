@@ -145,6 +145,12 @@ Author bookmarks serialize into `layout.json` in the `.etlsnap` package. Offline
 bookmarks through the same atomic contract without Portal access. Personal saved views are not
 included in offline snapshots.
 
+The reader-facing host is `etl-sql-report offline`, which decrypts the package and writes a
+self-contained HTML viewer that sets `window.__ETLSNAP__`. One consequence is worth recording: a
+file opened from disk has an opaque origin, so `history.replaceState` throws and the identifier-only
+`#bookmark=` hash is not written. The state still applies atomically; only the shareable-link
+convenience is unavailable, and the failure is swallowed rather than aborting the application.
+
 ## URL Privacy
 
 - `#bookmark=WestCoastDetail` — identifier only

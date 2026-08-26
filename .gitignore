@@ -220,6 +220,9 @@ samples/output/*.enc
 /release-validation-*.log
 *.etlstate
 .etlsnap/
+# Self-contained snapshot viewers from `etl-sql-report offline`; they carry report data in the
+# clear and are rebuilt from the .etlsnap package on demand.
+*.offline.html
 
 smoke-parity/
 

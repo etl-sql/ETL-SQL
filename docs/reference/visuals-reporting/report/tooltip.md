@@ -51,7 +51,9 @@ PDF, print, Markdown, email, terminal, and plain text cannot be hovered, so they
 
 - Transient text is reproduced in place: `Detail: <text>`.
 - A popover becomes `Interactive detail available in browser: <visuals>.`
-- Offline snapshots replay through the same runtime, so detail behaves exactly as it does online.
+- Offline snapshots replay through the same runtime. A popover opens and resolves its content from
+  the captured manifest instead of re-querying, so what a reader sees is the detail as it stood when
+  the snapshot was taken.
 
 ## Examples
 

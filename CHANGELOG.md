@@ -14,6 +14,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added `etl-sql-report offline <script>`, which turns an existing `.etlsnap` package into a single
+  self-contained HTML file that opens with no server and no network. The shared runtime had carried an
+  offline branch — bookmarks applying from the manifest's precomputed envelope, detail popovers reading
+  captured rows — since author bookmarks shipped, but nothing set `window.__ETLSNAP__`, so none of it
+  was reachable by a reader. The exporter inlines the runtime, its stylesheet, and the manifest, and
+  declares a `default-src 'none'` Content-Security-Policy so the file cannot quietly depend on being
+  online. Reads the package rather than re-evaluating the script, so the page shows the figures the
+  package captured.
+
 - Added one golden lane covering both visual catalogs. Fixtures are discovered from
   `tests/fixtures/reporting/conformance`, so adding a chart means adding a `.rptsql` file and blessing
   it rather than editing C#, and each fixture reports as its own test result instead of folding into a
@@ -144,6 +153,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Fixed the offline snapshot branch treating a viewer served over http as web mode, which started
+  auto-refresh polling against an API that is not there, and fixed detail popovers refreshing through
+  the parameter API on open — offline, every popover rendered "could not be loaded", which made the
+  tooltip documentation's offline claim false. `window.__ETLSNAP__` now suppresses web mode regardless
+  of protocol, and parameter reads resolve from the manifest already in memory.
+- Fixed the UI sandbox's VS Code results fixture depending on `src/etl-sql-vscode/ui/dist/`, a
+  gitignored build output. The story rendered the real bundle for whoever had built it and a stub for
+  everyone else, and silently — the fallback looked like a working panel. The built-in fixture is now
+  the deterministic path and covers the panel's status, message, progress-tree, results, and
+  performance surfaces; the real bundle stays available behind `?vscodeDist=1`.
 - Named visuals now reject unsupported `MAPPINGS` roles with a valid-role diagnostic instead of
   silently lowering a wrong chart. Catalog-wide tests cover every named chart type, including the
   original `BAR (CATEGORY, VALUE)` failure.

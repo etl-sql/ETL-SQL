@@ -74,6 +74,36 @@ The snapshot is stored alongside the script as `<script>.etlsnap`. The ReportPla
 snapshot stale if the script file has been modified since the snapshot was built, or if the TTL
 (default 24 h) has elapsed.
 
+## `etl-sql-report offline`
+
+Turns an existing snapshot package into a single self-contained HTML file that opens with no server
+and no network:
+
+```sh
+etl-sql-report offline report.rptsql
+etl-sql-report offline report.rptsql --output out/sales-2026-08.html
+etl-sql-report offline .etlsnap/ab/cd/report.etlsnap
+```
+
+Defaults to `<script>.offline.html`. The command **reads the `.etlsnap`** rather than re-evaluating
+the script, so the page shows exactly the figures the package captured; run
+`etl-sql-report refresh` first if the snapshot is older than you want. Decryption happens here, on
+the machine entitled to it — the exported file carries the manifest in the clear, so treat it with
+the same care as the report's data.
+
+The runtime, its stylesheet, and the report manifest are inlined into the file. It declares a
+`default-src 'none'` Content-Security-Policy, so the viewer cannot quietly depend on being online:
+
+| Works offline | Does not |
+|---|---|
+| Page navigation, layout, themes, and formatting | Live data refresh |
+| Author bookmarks — page, presentation state, and filter selections replay | Personal saved views (Portal-only) |
+| Detail popovers and tooltips, resolved from the captured manifest | `LIVE` cascading slicers and re-queried visuals |
+| Drill state already captured, CSV and spreadsheet export of captured rows | `RUN_SCRIPT` and refresh actions |
+
+Figures are frozen at capture time. Applying a bookmark says so once, rather than showing
+bookmarked filter positions over numbers that cannot move.
+
 ## `etl-sql-report serve`
 
 Starts the web dashboard at `http://localhost:5200`:

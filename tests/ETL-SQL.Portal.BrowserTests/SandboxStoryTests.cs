@@ -190,6 +190,133 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Empty(session.PageErrors);
     }
 
+    /// <summary>
+    /// Drives the five <c>vscode-webviews</c> fixtures and asserts each one renders from files the
+    /// repository actually tracks.
+    ///
+    /// <para>The results fixture used to fetch <c>src/etl-sql-vscode/ui/dist/index.html</c> — a Vite
+    /// build output, gitignored — and fall back to a stub when the fetch 404'd. That made the story
+    /// render one thing for whoever had built the UI and another thing for everyone else, and it is
+    /// exactly the kind of difference nobody notices, because the fallback looks like a working
+    /// panel. Asserting "mounts cleanly" would not have caught it; asserting that every byte the
+    /// story loads is committed does.</para>
+    ///
+    /// <para>Each fixture is also checked for having rendered something recognisable inside its
+    /// frame, because an iframe that loaded nothing still satisfies the shell-level mount check in
+    /// <see cref="EveryStoryAndFixture_MountsWithoutThrowing"/>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("results", "#tables table, #progress .node")]
+    [InlineData("preview", ".visual-card")]
+    [InlineData("preview-sink", ".visual-card")]
+    [InlineData("designer", "#designerRoot *")]
+    [InlineData("visual-flow", ".etlsql-dag-card")]
+    public async Task VsCodeWebviewFixtures_RenderFromTrackedSourcesOnly(string fixtureId, string frameSelector)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        var requested = new List<string>();
+        page.Request += (_, request) => { lock (requested) requested.Add(request.Url); };
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='vscode-webviews']");
+        await page.SelectOptionAsync("#fixtureSel", fixtureId);
+
+        // The frames stream (the results replay) or render asynchronously (the preview fetches a
+        // sample snapshot), so wait on the content rather than on a fixed delay.
+        var frame = page.FrameLocator("iframe.vscode-webview-frame");
+        await frame.Locator(frameSelector).First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Attached,
+            Timeout = 30_000
+        });
+
+        Assert.Empty(session.PageErrors);
+
+        // The browser asks for /favicon.ico on its own; the sandbox declares none, and that 404 says
+        // nothing about whether the story's own dependencies are present.
+        var failed = session.FailedRequests
+            .Where(r => !r.Contains("/favicon.ico", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.True(failed.Count == 0,
+            $"fixture '{fixtureId}' made requests that failed:\n  {string.Join("\n  ", failed)}");
+
+        List<string> paths;
+        lock (requested)
+            paths = [.. requested.Where(u => u.StartsWith(baseUrl, StringComparison.Ordinal))
+                                 .Select(ToRepoRelativePath)
+                                 .Where(p => p is not null)
+                                 .Select(p => p!)
+                                 .Distinct(StringComparer.OrdinalIgnoreCase)];
+
+        Assert.NotEmpty(paths);
+
+        var root = RepoRoot();
+        var missing = paths.Where(p => !File.Exists(Path.Combine(root, p.Replace('/', Path.DirectorySeparatorChar))))
+                           .ToList();
+        Assert.True(missing.Count == 0,
+            $"fixture '{fixtureId}' requested files that do not exist:\n  {string.Join("\n  ", missing)}");
+
+        var ignored = GitIgnoredPaths(root, paths);
+        Assert.True(ignored.Count == 0,
+            $"fixture '{fixtureId}' depends on generated files the repository does not track, so it "
+            + $"renders differently on a clean checkout:\n  {string.Join("\n  ", ignored)}");
+    }
+
+    /// <summary>
+    /// Maps a request URL back to a repository-relative path, or null for anything not served out of
+    /// the tree (<c>/maps/*</c> is remapped onto the shared runtime directory, exactly as the host in
+    /// <see cref="InitializeAsync"/> and <c>serve.ps1</c> do).
+    /// </summary>
+    private static string? ToRepoRelativePath(string url)
+    {
+        var rel = Uri.UnescapeDataString(new Uri(url).AbsolutePath).TrimStart('/');
+        if (rel.Length == 0) return null;
+        if (rel.Equals("favicon.ico", StringComparison.OrdinalIgnoreCase)) return null;
+        if (rel.StartsWith("maps/", StringComparison.OrdinalIgnoreCase))
+            rel = "src/ETL-SQL.ReportRuntime/Resources/Shared/" + rel;
+        return rel;
+    }
+
+    /// <summary>
+    /// Returns the subset of <paramref name="paths"/> that <c>.gitignore</c> excludes.
+    ///
+    /// <para>Existence is not the question — the file exists on the machine that built it. The
+    /// question is whether a fresh clone would have it, and <c>git check-ignore</c> is the only thing
+    /// that answers that without re-implementing ignore-rule precedence.</para>
+    /// </summary>
+    private static List<string> GitIgnoredPaths(string root, IReadOnlyList<string> paths)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("git")
+        {
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("check-ignore");
+        psi.ArgumentList.Add("--stdin");
+
+        using var proc = System.Diagnostics.Process.Start(psi)
+            ?? throw new InvalidOperationException(
+                "git is required to prove the sandbox runs from a clean checkout.");
+
+        foreach (var path in paths) proc.StandardInput.WriteLine(path);
+        proc.StandardInput.Close();
+
+        var output = proc.StandardOutput.ReadToEnd();
+        proc.WaitForExit();
+
+        // 0 = some paths are ignored, 1 = none are. Anything else means git itself failed, and a
+        // silently empty result would turn this assertion into a no-op.
+        if (proc.ExitCode > 1)
+            throw new InvalidOperationException($"git check-ignore failed: {proc.StandardError.ReadToEnd()}");
+
+        return [.. output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)];
+    }
+
     // A narrow-viewport assertion was tried here and removed. The sandbox stage is
     // `overflow: auto`, so a component wider than it scrolls inside its own container -- which is
     // the correct pattern, not a defect, and the check flagged six components for doing the right

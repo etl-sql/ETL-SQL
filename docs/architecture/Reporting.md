@@ -801,7 +801,12 @@ because unknown references are dropped during reconciliation and the reader stil
   parameter values as authored source text. A **null** list means "this client does not edit bookmarks"
   and preserves what the script holds; an **empty** list is an explicit "none" and removes them.
 - **Offline:** in an offline snapshot (`window.__ETLSNAP__`) a bookmark applies from the manifest's
-  precomputed envelope with no server. Frozen rows cannot change, and the reader is told so.
+  precomputed envelope with no server. Frozen rows cannot change, and the reader is told so. The host
+  that sets the flag is `OfflineSnapshotViewer`, reached through `etl-sql-report offline`: it inlines
+  the runtime, its stylesheet, and the manifest into one file under a `default-src 'none'` CSP. The
+  flag also *suppresses* web mode, so a viewer served over http from a file share still never polls
+  an API, and parameter reads — including the refresh a detail popover performs when it opens —
+  resolve from the manifest already in memory.
 
 See the [Author Bookmarks ADR](decisions/author-bookmarks.md) for the accepted contract.
 

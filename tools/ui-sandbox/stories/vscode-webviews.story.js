@@ -105,6 +105,17 @@ const RESULTS_TRACE = [
   }},
 ];
 
+// The results panel's own fixture, written out in full rather than fetched from
+// `src/etl-sql-vscode/ui/dist/`.
+//
+// That directory is a Vite build output and is gitignored, so on a clean checkout the fetch 404s.
+// The story used to fall back to a stub on that 404 — which meant the fixture silently rendered
+// something different depending on whether the person running it happened to have built the UI,
+// and the browser lane recorded a failed request for a file the repository does not contain.
+// This fixture is the deterministic one: it consumes the same message protocol the extension host
+// speaks (`src/etl-sql-vscode/ui/src/mock_protocol.ts`) and covers the panel's four surfaces —
+// status, messages, the pipeline progress tree, result grids, and the performance footer.
+// The real React bundle is still available to anyone who has built it, behind `?vscodeDist=1`.
 function selfContainedResultsHtml() {
   return `<!DOCTYPE html>
 <html>
@@ -120,9 +131,21 @@ function selfContainedResultsHtml() {
     .message { font-family: monospace; font-size: 11px; padding: 2px 0; }
     .msg-sys { color: #569cd6; }
     .msg-info { color: #4ec9b0; }
+    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #7a7a7a; margin: 14px 0 4px; }
+    #progress { font-family: monospace; font-size: 11px; }
+    .node { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; }
+    .node-name { flex: 1; }
+    .node-metric { color: #808080; }
+    .st-Running { color: #eab308; }
+    .st-Completed { color: #22c55e; }
+    .st-Waiting { color: #777777; }
+    .st-Failed { color: #f87171; }
+    .parallel > .node-name { color: #c586c0; }
     table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
     th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #333333; }
     th { background: #252526; color: #aaaaaa; }
+    #perf { margin-top: 14px; border-top: 1px solid #333333; padding-top: 8px; font-size: 11px; color: #9a9a9a; display: none; }
+    #perf b { color: #d4d4d4; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -130,15 +153,45 @@ function selfContainedResultsHtml() {
     <div class="header">ETL-SQL Execution Results</div>
     <div id="status" class="status">Initializing...</div>
     <div id="messages"></div>
+    <div class="section-title">Pipeline</div>
+    <div id="progress"></div>
     <div id="tables"></div>
+    <div id="perf"></div>
   </div>
   <script>
+    function renderNodes(nodes, depth, into) {
+      for (const n of nodes || []) {
+        const row = document.createElement('div');
+        row.className = 'node' + (n.isParallelBlock ? ' parallel' : '');
+        row.style.paddingLeft = (depth * 14) + 'px';
+        const name = document.createElement('span');
+        name.className = 'node-name';
+        name.textContent = n.name;
+        const status = document.createElement('span');
+        status.className = 'st-' + (n.status || 'Waiting');
+        status.textContent = n.status || 'Waiting';
+        const metric = document.createElement('span');
+        metric.className = 'node-metric';
+        metric.textContent = (n.rowsProcessed || 0).toLocaleString() + ' rows · ' + (n.durationMs || 0) + ' ms';
+        row.append(name, status, metric);
+        into.appendChild(row);
+        renderNodes(n.children, depth + 1, into);
+      }
+    }
+
     window.addEventListener('message', e => {
       const msg = e.data;
       if (!msg) return;
-      if (msg.type === 'status') {
+      if (msg.type === 'clear') {
+        document.getElementById('messages').replaceChildren();
+        document.getElementById('progress').replaceChildren();
+        document.getElementById('tables').replaceChildren();
+        const perf = document.getElementById('perf');
+        perf.replaceChildren();
+        perf.style.display = 'none';
+      } else if (msg.type === 'status' || msg.type === 'done') {
         const el = document.getElementById('status');
-        if (el) el.textContent = 'Status: ' + msg.status;
+        if (el) el.textContent = 'Status: ' + (msg.type === 'done' ? 'exit ' + msg.exitCode : msg.status);
       } else if (msg.type === 'message') {
         const mDiv = document.getElementById('messages');
         if (mDiv) {
@@ -147,6 +200,10 @@ function selfContainedResultsHtml() {
           row.textContent = msg.text;
           mDiv.appendChild(row);
         }
+      } else if (msg.type === 'progress') {
+        // The host re-sends the whole tree on every tick, so the panel replaces it wholesale.
+        const pDiv = document.getElementById('progress');
+        if (pDiv) { pDiv.replaceChildren(); renderNodes(msg.data, 0, pDiv); }
       } else if (msg.type === 'results') {
         const tDiv = document.getElementById('tables');
         if (tDiv && msg.columns && msg.rows) {
@@ -161,6 +218,27 @@ function selfContainedResultsHtml() {
           });
           tDiv.appendChild(tbl);
         }
+      } else if (msg.type === 'performance') {
+        const m = msg.metrics || {};
+        const perf = document.getElementById('perf');
+        if (perf) {
+          perf.textContent = '';
+          const parts = [
+            ['Elapsed', (m.executionMs || 0) + ' ms'],
+            ['Rows', (m.rowsProcessed || 0).toLocaleString()],
+            ['Peak memory', (m.memoryMb || 0) + ' MB'],
+            ['Statements', String((m.statements || []).length)],
+          ];
+          for (const [label, value] of parts) {
+            const span = document.createElement('span');
+            span.style.marginRight = '18px';
+            const b = document.createElement('b');
+            b.textContent = value;
+            span.append(label + ': ', b);
+            perf.appendChild(span);
+          }
+          perf.style.display = 'block';
+        }
       }
     });
     try { window.parent.postMessage({ __fromWebview: { type: 'ready' } }, '*'); } catch (e) {}
@@ -169,23 +247,36 @@ function selfContainedResultsHtml() {
 </html>`;
 }
 
+/// Opt-in only: `?vscodeDist=1` swaps in the real Vite bundle for anyone who has built it.
+function wantsBuiltVsCodeBundle() {
+  try {
+    return new URLSearchParams(window.location.search).get('vscodeDist') === '1';
+  } catch { return false; }
+}
+
 function renderResults(stage, ctx) {
   let timer = null;
   let started = false;
   let onParentMessage = null;
-  const iframe = makeFrame('');  // srcdoc set below once html is fetched
+  const iframe = makeFrame(selfContainedResultsHtml());
 
-  fetch('/src/etl-sql-vscode/ui/dist/index.html')
-    .then(r => {
-      if (!r.ok) throw new Error('Dist index.html not found: ' + r.status);
-      return r.text();
-    })
-    .then(html => {
-      iframe.srcdoc = html.replace('<head>', `<head>${vscodeShim()}<script>window.VIEW_TYPE='results';</script>`);
-    })
-    .catch(() => {
-      iframe.srcdoc = selfContainedResultsHtml();
-    });
+  if (wantsBuiltVsCodeBundle()) {
+    fetch('/src/etl-sql-vscode/ui/dist/index.html')
+      .then(r => {
+        if (!r.ok) throw new Error('Dist index.html not found: ' + r.status);
+        return r.text();
+      })
+      .then(html => {
+        // Swapping documents mid-replay: stop the stream aimed at the fixture, then let the
+        // bundle's own `ready` handshake restart it against the document that replaced it.
+        if (timer) { clearInterval(timer); timer = null; }
+        started = false;
+        iframe.srcdoc = html.replace('<head>', `<head>${vscodeShim()}<script>window.VIEW_TYPE='results';</script>`);
+      })
+      .catch(e => {
+        console.warn('?vscodeDist=1 requested but the bundle is not built; using the built-in fixture.', e.message);
+      });
+  }
   stage.replaceChildren(iframe);
 
   function startReplay() {
@@ -212,7 +303,8 @@ function renderResults(stage, ctx) {
   window.addEventListener('message', onParentMessage);
   iframe.addEventListener('load', () => setTimeout(startReplay, 600), { once: true });
 
-  ctx.stat('results panel · live mock run — pipeline + 2 result sets + performance');
+  ctx.stat('results panel · live mock run — pipeline + 2 result sets + performance'
+    + (wantsBuiltVsCodeBundle() ? ' · built UI bundle' : ''));
   return {
     dispose() {
       if (timer) clearInterval(timer);

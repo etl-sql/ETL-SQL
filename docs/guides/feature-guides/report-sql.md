@@ -41,6 +41,12 @@ Report-SQL extends ETL-SQL with native statements for building interactive dashb
 
 A `.rptsql` file is a standard ETL-SQL script containing Report-SQL layout declarations. After evaluation, the engine builds a `ReportManifest` and creates a snapshot package (`.etlsnap`) containing layout definitions and high-performance Arrow IPC files for browser rendering.
 
+`etl-sql-report offline <script>` turns that package into a single self-contained HTML file for
+readers who cannot reach a server. Pages, bookmarks, and detail popovers replay from the captured
+manifest; the figures are frozen at capture time and the page says so when a bookmark is applied.
+See [Report CLI](../../reference/visuals-reporting/report-cli.md#etl-sql-report-offline) for what
+does and does not work without a server.
+
 ## The Three-Tier Logic Model
 
 To ensure fast interactive filtering when users adjust slicers or date pickers, author scripts following the three-tier logic separation:

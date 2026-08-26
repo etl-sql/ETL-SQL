@@ -34,6 +34,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             {
                 "build" => await BuildCommand(args),
                 "refresh" => await RefreshCommand(args),
+                "offline" => await OfflineCommand(args),
                 "serve" => await ServeCommand(args),
                 "print" => await PrintCommand(args),
                 _ => UnknownCommand(args[0])
@@ -156,6 +157,73 @@ namespace ETL_SQL.ReportBuilder.CLI
 
             Console.WriteLine($"Snapshot refreshed: {snapshotPath}");
             Console.WriteLine($"Datasets: {manifest.Datasets.Count}");
+            return 0;
+        }
+
+        // ── offline ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Writes a self-contained offline viewer from an existing snapshot package.
+        ///
+        /// <para>This reads the <c>.etlsnap</c> rather than re-evaluating the script, and that is the
+        /// point: the package is what gets archived, attached to an email, or handed to someone who
+        /// cannot reach the source systems, and until now nothing could open one outside a host that
+        /// had the engine behind it. Re-evaluating here would produce a page whose figures did not
+        /// match the package it claims to be a view of.</para>
+        /// </summary>
+        private static async Task<int> OfflineCommand(string[] args)
+        {
+            string? inputPath = null;
+            string? outputPath = null;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                switch (args[i].ToLowerInvariant())
+                {
+                    case "--output":
+                    case "-o":
+                        outputPath = i + 1 < args.Length ? args[++i] : null;
+                        break;
+                    default:
+                        if (!args[i].StartsWith("-")) inputPath = args[i];
+                        break;
+                }
+            }
+
+            if (inputPath == null) { Console.Error.WriteLine("error: no script or snapshot path specified."); PrintUsage(); return 1; }
+
+            // Either end of the pair is a reasonable thing to point at: the script the author knows,
+            // or the package an operator was handed on its own.
+            var isPackage = inputPath.EndsWith(".etlsnap", StringComparison.OrdinalIgnoreCase);
+            var snapshotPath = isPackage ? Path.GetFullPath(inputPath) : SnapshotStore.DefaultPath(inputPath);
+
+            if (!isPackage && !File.Exists(inputPath))
+            {
+                Console.Error.WriteLine($"error: script file not found: {inputPath}");
+                return 1;
+            }
+
+            var manifest = await new SnapshotStore().LoadAsync(snapshotPath);
+            if (manifest == null)
+            {
+                Console.Error.WriteLine($"error: no snapshot found at {snapshotPath}");
+                if (!isPackage)
+                    Console.Error.WriteLine($"       build one first:  etl-sql-report refresh {inputPath}");
+                return 2;
+            }
+
+            outputPath ??= Path.ChangeExtension(Path.GetFullPath(inputPath), null) + ".offline.html";
+
+            var capturedAt = File.Exists(snapshotPath)
+                ? new DateTimeOffset(File.GetLastWriteTimeUtc(snapshotPath), TimeSpan.Zero)
+                : DateTimeOffset.UtcNow;
+
+            await File.WriteAllTextAsync(outputPath, OfflineSnapshotViewer.Build(manifest, capturedAt));
+
+            var bytes = new FileInfo(outputPath).Length;
+            Console.WriteLine($"Snapshot read from: {snapshotPath}");
+            Console.WriteLine($"Offline viewer:     {outputPath}  ({bytes / 1024:N0} KB, self-contained)");
+            Console.WriteLine($"Visuals: {manifest.Visuals.Count}  Pages: {manifest.Pages.Count}  Bookmarks: {manifest.Bookmarks?.Count ?? 0}");
             return 0;
         }
 
@@ -527,13 +595,15 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("Usage:");
             Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf] [--parameter @p=v] [--run-page PageName]");
             Console.WriteLine("  etl-sql-report refresh <script.rptsql>");
+            Console.WriteLine("  etl-sql-report offline <script.rptsql | snapshot.etlsnap> [--output <file.html>]");
             Console.WriteLine("  etl-sql-report serve   <script.rptsql> [--port <n>] [--no-browser]");
             Console.WriteLine("  etl-sql-report serve   --manifest reports.json [--port <n>]");
             Console.WriteLine("  etl-sql-report serve   --dir <path> [--open <file.rptsql>] [--port <n>]");
             Console.WriteLine("  etl-sql-report print   <script.rptsql> [--parameter @p=v]");
             Console.WriteLine();
             Console.WriteLine("Options:");
-            Console.WriteLine("  --output, -o      Output file path (defaults to <script>.report.md|json|pdf).");
+            Console.WriteLine("  --output, -o      Output file path (defaults to <script>.report.md|json|pdf,");
+            Console.WriteLine("                    or <script>.offline.html for the offline viewer).");
             Console.WriteLine("  --format, -f      Output format: md (default), json, or pdf.");
             Console.WriteLine("  --mock            Run evaluation in dry-run mock mode using stubbed connection data.");
             Console.WriteLine("  --json            Output build results/diagnostics in structured JSON format.");

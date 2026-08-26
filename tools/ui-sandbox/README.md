@@ -18,6 +18,11 @@ Serves the repo root over loopback and opens
 `http://localhost:8099/tools/ui-sandbox/index.html`. Ctrl+C to stop.
 Port in use? `-Port 8100`. Don't auto-open? `-NoOpen`.
 
+Nothing here needs a build step: every story renders from files the repository tracks, so a clean
+checkout gets the same result as a working tree that has built everything. `SandboxStoryTests`
+asserts that property rather than trusting it — see
+[Clean checkout](#clean-checkout-no-build-step) below.
+
 ## Explorer & Navigation Features
 
 - **Live Search & Filter**: Instant filtering by keyword across title, subtitle, route, and category with search highlighting.
@@ -99,3 +104,21 @@ so `mockApi.js` answers the `/api/designer/*` endpoints (`parse`, `generate`, `a
 that mirror `DesignerController`'s shapes. Treat run/preview **data** as fixtures, not real
 execution — everything else (layout, completion, save/commit flow, preview rendering) behaves
 exactly as in the portal.
+
+## Clean checkout (no build step)
+
+Every story imports sources that are committed to the repository. There is deliberately no
+"run this first" step: a story that depended on a generated artefact would render one thing for
+whoever happened to have built it and something else for everyone else, and the difference would
+only be visible to a person clicking through.
+
+`SandboxStoryTests.VsCodeWebviewFixtures_RenderFromTrackedSourcesOnly` enforces this for the
+`vscode-webviews` story — the one that used to reach for a build output. It drives all five
+fixtures (`results`, `preview`, `preview-sink`, `designer`, `visual-flow`) and fails if any of them
+requests a path the repository does not track.
+
+The one build output still reachable is the VS Code UI's Vite bundle
+(`src/etl-sql-vscode/ui/dist/`), and it is **opt-in**: append `?vscodeDist=1` to the sandbox URL to
+render the results panel from the real React bundle instead of the built-in fixture. Without the
+flag — and therefore in the browser lane and on a clean checkout — the story uses its own fixture,
+which speaks the same message protocol the extension host does.
