@@ -8,7 +8,6 @@ release-blocking defect changes the order. Once an item is verified, record its 
 The only unfinished `ROADMAP.md` initiatives are represented here:
 
 - **Lossless Visual Report Builder Editing** — section 1.
-- **Constrained HTML Visuals** — sections 1 and 4.
 
 ---
 
@@ -86,26 +85,26 @@ Authoritative direction:
 [`ROADMAP.md`](ROADMAP.md#reporting--presentation--constrained-html-visuals) and
 [`constrained-html-visuals.md`](docs/architecture/decisions/constrained-html-visuals.md). Parser,
 immutable AST, formatter, escaped evaluator, conditional form, sanitizer, scoped CSS, initial
-manifest projection, and focused unit tests exist. The visual is not yet a shipped surface.
+manifest projection, and focused unit tests exist. The complete surface is shipped in v0.19.0.
 
-- [ ] Complete the `CREATE VISUAL <name> AS HTML (...)` language authoring surface. Add Analysis
+- [x] Complete the `CREATE VISUAL <name> AS HTML (...)` language authoring surface. Add Analysis
   diagnostics, LSP completion/hover/rename, syntax-index registration, focused help, snippet,
   parser-tested documentation examples, and production samples for the implemented `SOURCE`,
   `MODE = SINGLE | REPEATER`, `TEMPLATE`, `STYLE (CSS = ...)`, `FALLBACK`, and `ACTIONS` clauses.
-- [ ] Complete source-free, parameter-driven, single-row, and repeated-row components with explicit
+- [x] Complete source-free, parameter-driven, single-row, and repeated-row components with explicit
   row, node, byte, output, and aggregate render-work budgets. Parameter refresh must publish one
   consistent manifest without observable partial template state; the current builder only caps
   repeater rows.
-- [ ] Add bounded `VISUAL(...)` embedding for declared report visuals. Resolve references statically,
+- [x] Add bounded `VISUAL(...)` embedding for declared report visuals. Resolve references statically,
   reuse existing visual manifests and declarative actions, and reject missing targets, cycles,
   recursive/nested expansion, secret disclosure, and aggregate query/render budget overruns.
-- [ ] Render sanitized HTML visuals in the shared browser runtime, print, and PDF paths without
+- [x] Render sanitized HTML visuals in the shared browser runtime, print, and PDF paths without
   executing author code. Reuse Report-SQL parameter, navigation, bookmark, drill, and cross-filter
   actions instead of DOM scripting, and preserve theme and formatting precedence across hosts.
-- [ ] Require or deterministically resolve a concise semantic summary for email, Markdown, terminal,
+- [x] Require or deterministically resolve a concise semantic summary for email, Markdown, terminal,
   plain text, screen readers, and unsupported surfaces. Static output must preserve analytical
   meaning and must not imply unavailable interaction.
-- [ ] Finish hostile security and cross-surface certification. Existing unit tests cover core markup,
+- [x] Finish hostile security and cross-surface certification. Existing unit tests cover core markup,
   URL, CSS, escaping, conditional, optional-source parser, and repeater behavior. Add disclosure and
   malformed-parser cases, embedded-visual cycle/budget tests, action and refresh parity,
   accessibility, snapshot and browser/print/PDF/email/Markdown/terminal conformance, deterministic
@@ -117,6 +116,27 @@ sanitized HTML, isolated CSS, typed escaped bindings, declarative actions, and b
 visuals; transformations remain SQL; browser and static surfaces consume one deterministic contract;
 unsupported surfaces expose an accessible semantic fallback; and hostile input fails closed without
 executing author code.
+
+## 5. Reporting Authoring & Design System Enhancements
+
+- [ ] Add `TRANSFORM` recipe snippets and authoring scaffolding. Expose built-in algorithms
+  (`ROLLING_AGGREGATE`, `PERIOD_COMPARISON`, `SHARE_OF_TOTAL`, `TOP_N_OTHERS`, `FILL_DATES`, `PIVOT`,
+  `INTERPOLATE`, `NORMALIZE`, `DEDUPLICATE`) via LSP trigger snippets (e.g., `$transform-mom`,
+  `$transform-rolling`) and Report Builder data-prep helpers to streamline common analytical metrics.
+- [ ] Add first-class `BULLET` visual type. Register `BULLET` in parser, AST, serializer, Report Builder
+  palette, and SVG renderer with semantic mappings (`ACTUAL`, `TARGET`, `MIN`, `MAX`, `RANGES`) so authors
+  can create bullet / target-vs-actual visuals without hand-crafting multi-layer `CUSTOM` GoG definitions.
+- [ ] Implement standard Design Tokens (CSS variables) for report runtime and `HTML` visuals. Inject
+  `--etl-surface-card`, `--etl-text-primary`, `--etl-text-muted`, `--etl-border`, `--etl-accent`,
+  `--etl-success`, `--etl-danger`, and `--etl-radius-*` from resolved page/theme styles into the root DOM,
+  enabling `HTML` visual scoped styles to automatically adapt across light, dark, and custom themes.
+- [ ] Add `PALETTE = (...)` sequence support to `CREATE STYLE`. Parse and propagate color sequences from
+  `CREATE STYLE` to multi-series charts, visuals, and theme tokens when assigned at the visual, container,
+  or page level (`STYLE = StyleName`).
+- [ ] Add visual formatting pickers in Report Builder. Provide interactive color swatch pickers,
+  border-radius sliders, and typography controls in the Properties panel alongside direct text editing.
+- [ ] Complete `{{SPARKLINE(...)}}` and `{{PROGRESS_BAR(...)}}` template macro helpers in `HTML` visuals.
+  Evaluate inline SVG sparkline and progress indicators directly within template substitution strings.
 
 ## v0.19.0 Release Evidence Gates
 
