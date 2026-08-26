@@ -406,15 +406,18 @@ revocation and rotation journeys, approval bypass tests, and attributed audit ev
 
 ### Execution — Measured Lean Worker Profile
 
-**Status:** Exploring  
-**Horizon:** Later  
-**Authoritative design:** Not yet decided
+**Status:** Complete — closed without a product artifact
+
+**Horizon:** v0.19.0
+
+**Authoritative design:** [Measured lean worker profile decision](docs/architecture/decisions/measured-lean-worker-profile.md)
 
 Ephemeral execution workers may benefit from a smaller dependency boundary, faster cold starts, and
 lower working set than the unified executable.
 
-**Why now:** This is an optimization track to pursue only after measurements identify meaningful cost
-or isolation gains.
+**Outcome:** Matched publish and container measurements found only a 1.05% published-size reduction,
+with slower cold start, higher startup working set, and slower sandbox lifetime. The trim experiment
+failed its startup reflection contract. The dedicated boundary and artifact were rejected.
 
 **Boundaries:** Feature flags alone do not remove assemblies. Trimming must not break reflection, DI,
 dynamic connector discovery, or deployment-profile behavior.
@@ -422,11 +425,11 @@ dynamic connector discovery, or deployment-profile behavior.
 **Dependencies:** Baselines for startup working set, cold-start latency, artifact size, loaded
 assemblies, connector closure, sandbox lifetime, and cost sensitivity.
 
-**Delivery slices:** Measurement report; explicit engine-only entry project and connector/profile
-manifest; trimming experiment; opt-in certified worker artifact if justified.
+**Delivery evidence:** Reproducible measurement harness and reports; non-shipping engine-only fixture
+with an explicit connector/profile manifest; rejected trimming evidence; recorded no-publish decision.
 
-**Acceptance evidence:** Reproducible before/after measurements and connector, governance,
-cancellation, sandbox, and deployment-profile certification.
+**Acceptance evidence:** Reproducible before/after measurements closed the initiative without a
+product implementation. Full artifact certification remains mandatory if the decision is reopened.
 
 ### SaaS Reliability — Provider-Neutral Fault Certification
 

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "profile": "engine-worker-full-connectors",
+  "commands": [ "run", "runner", "profile-probe" ],
+  "connectorGroups": [ "core", "cloud", "databases", "files", "messaging", "remote" ],
+  "features": {
+    "interactiveUi": false,
+    "gatewayAdministration": false,
+    "scheduler": false,
+    "reportAuthoring": false,
+    "scriptExecution": true,
+    "namedCheckpointResume": true,
+    "governance": true
+  }
+}

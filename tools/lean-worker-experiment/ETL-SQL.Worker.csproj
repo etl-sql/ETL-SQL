@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ETL_SQL.Worker</RootNamespace>
+    <AssemblyName>etl-sql-worker</AssemblyName>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64</RuntimeIdentifiers>
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <PublishTrimmed Condition="'$(ETLSQLWorkerTrimmed)' == 'true'">true</PublishTrimmed>
+    <TrimMode Condition="'$(ETLSQLWorkerTrimmed)' == 'true'">partial</TrimMode>
+    <SuppressTrimAnalysisWarnings Condition="'$(ETLSQLWorkerTrimmed)' == 'true'">true</SuppressTrimAnalysisWarnings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\src\appsettings.json" Link="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="worker-profile.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Infrastructure.Logging\ETL-SQL.Infrastructure.Logging.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
+  </ItemGroup>
+
+  <!-- The handler table is discovered by reflection. Keep its assemblies rooted in the opt-in
+       trimming experiment; certification decides whether a trimmed artifact may ship. -->
+  <ItemGroup Condition="'$(ETLSQLWorkerTrimmed)' == 'true'">
+    <TrimmerRootAssembly Include="ETL-SQL.Engine" />
+    <TrimmerRootAssembly Include="ETL-SQL.ReportBuilder" />
+  </ItemGroup>
+
+</Project>

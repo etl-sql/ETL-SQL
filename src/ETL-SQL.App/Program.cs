@@ -4,6 +4,8 @@ using System.CommandLine.Invocation;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
@@ -59,6 +61,30 @@ namespace ETL_SQL
                 ServiceProvider = await Task.Run(() => DependencyInjectionSetup.BuildServiceProvider());
                 if (!isDoctorJson)
                     await Console.Error.WriteLineAsync("[DI_READY] Dependency injection logic completed.");
+
+                // Internal measurement surface for scripts/Measure-LeanWorkerProfile.ps1. It runs
+                // after the real composition root so loaded-assembly and working-set evidence is
+                // representative, but it is intentionally absent from the public command tree.
+                if (args.Length == 1 && string.Equals(args[0], "profile-probe", StringComparison.Ordinal))
+                {
+                    _ = ServiceProvider.GetRequiredService<ETL_SQL.Engine.Evaluator>();
+                    var process = Process.GetCurrentProcess();
+                    process.Refresh();
+                    var assemblies = AppDomain.CurrentDomain.GetAssemblies()
+                        .Select(assembly => assembly.GetName().Name)
+                        .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .Order(StringComparer.Ordinal)
+                        .ToArray();
+                    Console.WriteLine(JsonSerializer.Serialize(new
+                    {
+                        profile = "unified-cli",
+                        workingSetBytes = process.WorkingSet64,
+                        peakWorkingSetBytes = process.PeakWorkingSet64,
+                        loadedAssemblyCount = assemblies.Length,
+                        loadedAssemblies = assemblies
+                    }));
+                    return 0;
+                }
 
                 if (args.Length > 0 && string.Equals(args[0], "runner", StringComparison.OrdinalIgnoreCase))
                     return await WarmJobRunner.RunAsync(ServiceProvider);

@@ -587,18 +587,24 @@ domains without accessing customer data, exhausting customer quota, or producing
 
 ### Platform Phase 7 — Measured Lean Worker Profile (Optimization Last)
 
-- [ ] Measure startup working set, cold-start latency, published size, loaded assemblies, engine-only
+- [x] Measure startup working set, cold-start latency, published size, loaded assemblies, engine-only
   dependency closure, sandbox lifetime, and cost sensitivity before selecting an implementation.
-- [ ] Decide whether the evidence justifies a dedicated engine-only entry project and explicit
+- [x] Decide whether the evidence justifies a dedicated engine-only entry project and explicit
   connector/profile manifest; record the decision.
-- [ ] If justified, build the dedicated worker boundary before attempting trimming.
-- [ ] Run an opt-in trimming experiment and preserve reflection, DI, connector discovery,
-  cancellation, governance, and deployment-profile behavior.
-- [ ] Publish a lean worker artifact only if reproducible measurements show material benefit and the
-  full certification matrix passes.
+- [x] Apply the dedicated-boundary condition: the measured threshold was not met, so retain only the
+  non-shipping experiment fixture and do not add a product entry project.
+- [x] Run an opt-in trimming experiment; require preserved reflection, DI, connector discovery,
+  cancellation, governance, and deployment-profile behavior for promotion. The startup reflection
+  contract failed, so the experiment was rejected.
+- [x] Apply the publication gate. Measurements showed no material benefit and the trim experiment
+  regressed startup, so no lean worker artifact was published and no artifact certification was
+  claimed.
 
 **Exit gate:** A measured decision either closes the initiative without implementation or produces a
 certified worker artifact with demonstrated cost/footprint improvement and no functional regression.
+
+**Decision:** Closed without a product implementation. See
+[`measured-lean-worker-profile.md`](docs/architecture/decisions/measured-lean-worker-profile.md).
 
 ## v0.19.0 Release Evidence Gates
 
