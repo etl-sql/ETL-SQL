@@ -138,6 +138,30 @@ executing author code.
 - [ ] Complete `{{SPARKLINE(...)}}` and `{{PROGRESS_BAR(...)}}` template macro helpers in `HTML` visuals.
   Evaluate inline SVG sparkline and progress indicators directly within template substitution strings.
 
+## 6. Hybrid Connectivity & Gateway Enhancements
+
+Authoritative references:
+[`secure-outbound-gateway.md`](docs/administration/platform/secure-outbound-gateway.md),
+[`saas-tenant-isolation.md`](docs/architecture/saas-tenant-isolation.md#11-secure-outbound-data-gateway), and
+[`verified-viewer-context.md`](docs/architecture/decisions/verified-viewer-context.md).
+
+- [ ] Add unified Gateway resource discovery and binding in Portal Admin UI. In `Admin → Connections`
+  and `Admin → Data Gateways`, provide an interactive picker populated from live active Gateway clusters
+  and their published approved resources (`IGatewaySession.PublishedResources`). Eliminate manual string
+  entry for Gateway ID and Resource ID when configuring `SHARED:alias` bindings, and display online
+  status, connector type, and allowed operation classes in the connection editor.
+- [ ] Extend Verified Viewer Context propagation to additional RDBMS connectors. Add session-context
+  parameterization and deterministic pool cleanup for SQL Server (`SESSION_CONTEXT`), MySQL (user session
+  variables), and Oracle (`SYS_CONTEXT`). Maintain parity with the PostgreSQL implementation: HMAC-signed
+  envelopes, tenant/resource binding validation, resource-level opt-in, parameterization, and fail-closed
+  cleanup before connection reuse.
+- [ ] Implement Ambiguous Write outcome alerting and Portal operations triage. When network disconnection
+  or process termination causes an in-flight mutating operation to enter an ambiguous state in the outcome
+  ledger, surface a high-priority alert on the Portal operations dashboard. Provide a dedicated triage
+  view displaying operation ID, tenant, gateway, resource, correlation ID, and execution timestamp with
+  administrative reconciliation actions (acknowledge, mark resolved, or discard) while maintaining the
+  fail-closed ambiguous-write safety invariant.
+
 ## v0.19.0 Release Evidence Gates
 
 Target Release: **v0.19.0**
