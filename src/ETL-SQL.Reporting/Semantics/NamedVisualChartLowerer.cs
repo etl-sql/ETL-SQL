@@ -87,7 +87,13 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         foreach (var mapping in statement.Mappings)
         {
             var channel = MapChannel(statement.VisualType, mapping.Role);
-            if (channel is null) continue;
+            if (channel is null)
+            {
+                var valid = ValidRolesFor(statement.VisualType);
+                throw new InvalidOperationException(
+                    $"Unknown MAPPINGS role '{mapping.Role}' for {statement.VisualType} visual. " +
+                    $"Valid roles: {string.Join(", ", valid)}.");
+            }
             yield return new FieldBinding(
                 channel.Value,
                 mapping.Column,
@@ -285,6 +291,37 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         "LABEL" when type == VisualType.Bubble => FieldChannel.Text,
         "TOOLTIP" => FieldChannel.Tooltip,
         _ => null
+    };
+
+    public static IReadOnlyList<string> ValidRolesFor(VisualType type) => type switch
+    {
+        VisualType.Bar or VisualType.HorizontalBar or VisualType.Line or VisualType.Scatter
+            => ["X", "Y", "Y2", "SERIES", "COLOR", "SIZE", "TOOLTIP"],
+        VisualType.Bubble
+            => ["X", "Y", "Y2", "SERIES", "COLOR", "SIZE", "LABEL", "TOOLTIP"],
+        VisualType.Pie or VisualType.Donut
+            => ["LABEL", "CATEGORY", "VALUE", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.Funnel
+            => ["NAME", "LABEL", "CATEGORY", "VALUE", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.Gauge
+            => ["VALUE", "LABEL", "MIN", "MAX", "GOAL", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.HeatMap
+            => ["X", "Y", "VALUE", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.Waterfall
+            => ["NAME", "X", "VALUE", "Y", "TOTAL", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.BoxPlot
+            => ["X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.Candlestick
+            => ["X", "OPEN", "HIGH", "LOW", "CLOSE", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.Gantt
+            => ["X", "START", "X2", "END", "Y", "LABEL", "PROGRESS", "MILESTONE", "DEPENDS_ON", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.Trellis
+            => ["X", "Y", "Y2", "FACET", "SERIES", "COLOR", "SIZE", "TOOLTIP"],
+        VisualType.Radar
+            => ["X", "Y", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.Combo
+            => ["X", "Y", "Y2", "SERIES", "COLOR", "TOOLTIP"],
+        _ => ["X", "Y", "Y2", "SERIES", "COLOR", "SIZE", "TOOLTIP"]
     };
 
     private static DataSemanticKind InferSemanticKind(
