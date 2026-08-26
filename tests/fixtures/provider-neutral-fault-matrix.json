@@ -1,0 +1,30 @@
+{
+  "schema": "etl-sql.provider-neutral-fault-matrix/v1",
+  "profiles": [
+    {
+      "profile": "Solo",
+      "provider": "local-filesystem-sqlite",
+      "adapter": "local"
+    },
+    {
+      "profile": "Team",
+      "provider": "single-node-filesystem-sqlite",
+      "adapter": "local"
+    },
+    {
+      "profile": "Enterprise",
+      "provider": "shared-postgresql-object-storage",
+      "adapter": "docker"
+    },
+    {
+      "profile": "SaaS",
+      "provider": "managed-dedicated-cloud",
+      "adapter": "cloud"
+    },
+    {
+      "profile": "SharedSaaS",
+      "provider": "shared-multitenant-cloud",
+      "adapter": "cloud"
+    }
+  ]
+}

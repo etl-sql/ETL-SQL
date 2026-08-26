@@ -5,6 +5,12 @@ Solo, Team, Enterprise, and SaaS contracts and their supported transitions. It d
 focused suites. It records exactly which command supplied each claim and fails the selected lane when
 any required phase fails or is skipped.
 
+Each profile lane also runs its row from the provider-neutral fault matrix. The nested fault gate
+repeats process/worker loss, lease/fencing races, database and storage failures, network partition,
+duplicate delivery, clock skew, and disk exhaustion. A profile fails when any repetition permits
+split-brain mutation, stale authority reuse, silent loss, a duplicate committed result, or a recovery
+claim beyond the workload's explicit checkpoint contract.
+
 ## Run a profile lane
 
 Run from the repository root with PowerShell 7 or later:
@@ -97,6 +103,8 @@ Each run creates a timestamped directory below
 - `scenario-evidence/*.json` — concrete artifact hashes, import counts, continuity counts, negative
   isolation results, and rollback outcomes emitted by transition, upgrade, and Managed Dedicated
   onboarding tests.
+- `provider-neutral-faults/<run>/` — the profile's repeated fault-matrix summary, detailed per-scenario
+  evidence, and complete test log.
 
 Evidence is commit-bound. A dirty run remains useful while developing, but it is not current release
 evidence: `releaseEligible` remains false even when every phase passes. Release claims require a
@@ -123,3 +131,4 @@ Fix the focused failure, rerun the same lane, and retain only evidence that matc
 - [Deployment profile transitions](profile-transitions.md)
 - [Deployment promotion](deployment-promotion.md)
 - [Release checklist](../../releases/release-checklist.md)
+- [Provider-neutral fault certification](../../architecture/decisions/provider-neutral-fault-certification.md)

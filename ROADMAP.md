@@ -433,9 +433,9 @@ product implementation. Full artifact certification remains mandatory if the dec
 
 ### SaaS Reliability — Provider-Neutral Fault Certification
 
-**Status:** Accepted  
+**Status:** Complete
 **Horizon:** Launch Gate — Hosted production  
-**Authoritative design:** Not yet decided
+**Authoritative design:** [Provider-neutral fault certification](docs/architecture/decisions/provider-neutral-fault-certification.md)
 
 Hosted operation must prove safe behavior through process loss, lease races, database and storage
 outages, network partitions, duplicate delivery, clock skew, and disk exhaustion.

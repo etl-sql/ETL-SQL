@@ -50,6 +50,15 @@ function New-Phase {
     $phase
 }
 
+function New-FaultPhase {
+    param([string]$ProfileName)
+    [ordered]@{
+        name = "Provider-neutral fault matrix"
+        faultProfile = $ProfileName
+        proof = "Repeated provider-neutral faults prove fencing, visible outcomes, exactly-once committed results, and checkpoint-bounded recovery for this profile."
+    }
+}
+
 # The eight Enterprise prerequisites a hosted (SaaS) deployment builds on, per the Progressive SaaS
 # Phase A gate in TODO.md. The Enterprise profile lane must prove all of them in one run against one
 # commit: a hosted claim assembled by correlating three lanes by hand is an inferred claim, which is
@@ -73,6 +82,7 @@ function Get-ProfilePhases {
                 New-Phase "Solo contract and local policy" $CoreTests "FullyQualifiedName~DeploymentProfileContractTests|FullyQualifiedName~WorkspacePolicyDocumentTests" "Portable profile contract and source-controlled policy load locally."
                 New-Phase "Solo quality gate and evidence" $CoreTests "FullyQualifiedName~QualityRunReporterTests|FullyQualifiedName~AssertJobRuntimeTests|FullyQualifiedName~WorkspacePolicyRequiredTagsRuleTests|FullyQualifiedName~WorkstationAutomation" "Local metadata and quality failures return non-zero gate semantics with versioned evidence."
                 New-Phase "Solo schema stewardship" $CoreTests "FullyQualifiedName~PiiSchemaScannerTests|FullyQualifiedName~StewardshipScoringTests" "Schema-only PII/stewardship works without Portal or remote services."
+                New-FaultPhase "Solo"
             )
         }
         "Team" {
@@ -82,6 +92,7 @@ function Get-ProfilePhases {
                 New-Phase "Team Portal configuration" $PortalTests "FullyQualifiedName~ConfigurationRoundTripTests|FullyQualifiedName~ConfigurationPromotionValidationTests" "Optional single-node Portal configuration converges and collisions fail safely."
                 New-Phase "Team scheduling and flight recorder" $PortalTests "FullyQualifiedName~JobSchedulingIntegrationTests|FullyQualifiedName~OperationsTriageTests" "The single-node Team providers schedule jobs and expose bounded operator triage without a profile-specific runtime."
                 New-Phase "Team common implementation boundary" $CoreTests "FullyQualifiedName~TeamProfileImplementationBoundaryTests|FullyQualifiedName~StatementMetricsPayloadTests" "Team uses the common parser, evaluator, connectors, catalog, UI, checkpoint, promotion, and statement-metrics implementations through single-node provider configuration."
+                New-FaultPhase "Team"
             )
         }
         "Enterprise" {
@@ -98,6 +109,7 @@ function Get-ProfilePhases {
                 New-Phase "Enterprise engine backup and restore" $CoreTests "FullyQualifiedName~BackupRestoreServiceTests" "Engine-side backup and restore round-trips durable state and validates before claiming success." "backup-and-restore"
                 New-Phase "Enterprise upgrade lifecycle" $CoreTests "FullyQualifiedName~DeploymentProfileUpgradeLifecycleTests.Enterprise" "The Enterprise profile executes backup/export, scheduler fencing, cutover proof, and a scheduler-safe rollback point across N to N+1." "upgrade-and-promotion-evidence"
                 New-Phase "Enterprise configuration promotion" $PortalTests "FullyQualifiedName~ConfigurationPromotionTests|FullyQualifiedName~ConfigurationPromotionValidationTests" "Target bindings and catalog ownership survive promotion, and collisions fail before mutation." "upgrade-and-promotion-evidence"
+                New-FaultPhase "Enterprise"
             )
         }
         "SaaS" {
@@ -105,6 +117,7 @@ function Get-ProfilePhases {
                 New-Phase "SaaS tenant onboarding and isolation" $CoreTests "FullyQualifiedName~SaasTenantOnboardingTests" "Host-fixed tenant boundaries isolate stores, artifacts, keys, caches, queues, namespaces, and limits."
                 New-Phase "SaaS import safety" $CoreTests "FullyQualifiedName~OrchestratorPromotionPackageTests|FullyQualifiedName~DeploymentPromotionPreflightTests" "Portable state imports idempotently without resolved secret material."
                 New-Phase "SaaS Portal runtime isolation" $PortalTests "FullyQualifiedName~SaasTenantRuntimeIsolationTests|FullyQualifiedName~ConfigurationPromotionValidationTests|FullyQualifiedName~ConfigurationExportSecretExclusionTests" "Host-fixed Portal databases, audit outboxes, and security caches reject cross-tenant state while bootstrap validation excludes secrets."
+                New-FaultPhase "SaaS"
             )
         }
         "SharedSaaS" {
@@ -117,6 +130,7 @@ function Get-ProfilePhases {
                 New-Phase "Shared quota, telemetry, and metering isolation" $PortalTests "FullyQualifiedName~TenantExecutionQuotaTests|FullyQualifiedName~TenantMeteringLedgerTests|FullyQualifiedName~TenantUsageStoreTests|FullyQualifiedName~SharedTenantMeteringIntegrationTests" "Noisy-neighbor admission and tenant-attributed telemetry remain bounded and partitioned."
                 New-Phase "Shared support and restore isolation" $PortalTests "FullyQualifiedName~SupportAccessApprovalServiceTests|FullyQualifiedName~SupportBundleTests|FullyQualifiedName~SharedBackupAndRecoveryTests|FullyQualifiedName~SharedBackupSurfaceInventoryTests" "Support access is approved and audited, while backup/restore inventories retain every shared tenant surface."
                 New-Phase "Shared identity boundary" $PortalTests "FullyQualifiedName~SharedTenantHttpBoundaryTests|FullyQualifiedName~SharedTenantCredentialBindingTests|FullyQualifiedName~SharedOidcAuthTests|FullyQualifiedName~SharedIdentityPartitionStoreTests" "Only verified credentials derive tenant context and shared identity state remains partitioned."
+                New-FaultPhase "SharedSaaS"
             )
         }
     }
@@ -345,7 +359,11 @@ if ($Explain) {
     Write-Host "Deployment-profile certification plan ($laneKind):" -ForegroundColor Cyan
     foreach ($phase in $phases) {
         Write-Host ("[{0}] {1}" -f $phase.lane, $phase.name) -ForegroundColor White
-        Write-Host ("  dotnet test {0} --filter {1}" -f $phase.project, $phase.filter) -ForegroundColor DarkGray
+        if ($phase.faultProfile) {
+            Write-Host ("  ./scripts/Test-ProviderNeutralFaultCertification.ps1 -Profile {0}" -f $phase.faultProfile) -ForegroundColor DarkGray
+        } else {
+            Write-Host ("  dotnet test {0} --filter {1}" -f $phase.project, $phase.filter) -ForegroundColor DarkGray
+        }
         Write-Host ("  {0}" -f $phase.proof)
     }
     exit 0
@@ -382,10 +400,23 @@ try {
             $started = [DateTimeOffset]::UtcNow
             $logName = (($phase.lane + "-" + $phase.name) -replace '[^A-Za-z0-9._-]', '-').ToLowerInvariant() + ".log"
             $logPath = Join-Path $runRoot $logName
-            $arguments = @("test", $phase.project, "--configuration", $Configuration, "--filter", $phase.filter, "--logger", "console;verbosity=normal")
-            if ($NoBuild) { $arguments += @("--no-build", "--no-restore") }
             Write-Host ("[{0}] {1}" -f $phase.lane, $phase.name) -ForegroundColor Cyan
-            $output = & dotnet @arguments 2>&1
+            if ($phase.faultProfile) {
+                $faultOutputRoot = Join-Path $runRoot "provider-neutral-faults"
+                $arguments = @(
+                    "-NoProfile", "-File", (Join-Path $ScriptRoot "Test-ProviderNeutralFaultCertification.ps1"),
+                    "-Profile", $phase.faultProfile,
+                    "-Configuration", $Configuration,
+                    "-OutputRoot", $faultOutputRoot)
+                if ($NoBuild) { $arguments += "-NoBuild" }
+                $output = & pwsh @arguments 2>&1
+                $commandText = "pwsh " + ($arguments -join " ")
+            } else {
+                $arguments = @("test", $phase.project, "--configuration", $Configuration, "--filter", $phase.filter, "--logger", "console;verbosity=normal")
+                if ($NoBuild) { $arguments += @("--no-build", "--no-restore") }
+                $output = & dotnet @arguments 2>&1
+                $commandText = "dotnet " + ($arguments -join " ")
+            }
             $exitCode = $LASTEXITCODE
             $output | Set-Content -LiteralPath $logPath -Encoding utf8
             $results.Add([ordered]@{
@@ -393,7 +424,7 @@ try {
                 phase = $phase.name
                 prerequisite = $phase.prerequisite
                 proof = $phase.proof
-                command = "dotnet " + ($arguments -join " ")
+                command = $commandText
                 startedUtc = $started.ToString("O")
                 completedUtc = ([DateTimeOffset]::UtcNow).ToString("O")
                 exitCode = $exitCode

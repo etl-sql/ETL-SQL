@@ -215,6 +215,11 @@ Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
       PostgreSQL providers. Check `certification.md`'s *Enterprise hosted prerequisites* table — every
       row must read `True`. A prerequisite that never ran is reported unproven by name and fails the
       lane, so a green summary with an unproven row is not a possible state.
+      Each profile lane invokes its provider-neutral fault row and retains the nested repeated-run
+      evidence. To review the fault matrix independently, run:
+      ```powershell
+      .\scripts\Test-ProviderNeutralFaultCertification.ps1 -Profile All
+      ```
 - [ ] **Hosted production canaries:** the plan, provisioning boundary, credential lifecycle, and all
       external-health/report/job/Gateway/export/notification fault drills pass for the candidate SHA:
       ```powershell
@@ -470,6 +475,7 @@ Stop the bleeding, then fix forward.
 | Bump version | `scripts/Set-Version.ps1 -Version x.y.z` | All locations except CHANGELOG + WiX manifest |
 | Local validation gate | `scripts/Test-PreRelease.ps1` (`test-pre-release.sh`) | Required local component; full release run includes SLT, Docker integration, and Standard scale; never use `-Quick` as release evidence |
 | Deployment certification | `scripts/Test-DeploymentProfileCertification.ps1` | Every release: `-Profile All` and `-Transition All`, both with `-ReleaseVersion x.y.z` |
+| Provider-neutral fault certification | `scripts/Test-ProviderNeutralFaultCertification.ps1` | Included by every profile lane; use `-Profile All` for an independent complete matrix |
 | Enterprise certification | `scripts/Test-EnterpriseHardeningCertification.ps1` | Every release on Windows and Linux; retain both artifacts |
 | Scale certification | `scripts/Test-ScaleCertification.ps1` | Smoke + Standard every release; Stress/Provider conditional; Huge periodic/claim-driven |
 | Billion-row certification | `scripts/Test-BillionRowCertification.ps1` + `Test-BillionRowEvidence.ps1` | Controlled host; changed certified paths or billion-row claims |
