@@ -19,15 +19,6 @@
 │          gap                                                                                     │
 │ Delta                                                                                            │
 │          gap                                                                                     │
-│ Gamma (grouped fractional bars)                                                                  │
-│ Alpha                                                                                            │
-│          gap                                                                                     │
-│ Beta                                                                                             │
-│          gap                                                                                     │
-│ Gamma                                                                                            │
-│   Gamma  ▶████████████████████████████████████████████████████████ 140                           │
-│ Delta                                                                                            │
-│          gap                                                                                     │
 │ Delta (grouped fractional bars)                                                                  │
 │ Alpha                                                                                            │
 │          gap                                                                                     │
@@ -37,7 +28,16 @@
 │          gap                                                                                     │
 │ Delta                                                                                            │
 │   Delta  ▶████████████████████████████████████████████████████████ 210                           │
-│ ● Alpha (#5470c6)  ◆ Beta (#91cc75)  ▲ Gamma (#fac858)  ■ Delta (#ee6666)                        │
+│ Gamma (grouped fractional bars)                                                                  │
+│ Alpha                                                                                            │
+│          gap                                                                                     │
+│ Beta                                                                                             │
+│          gap                                                                                     │
+│ Gamma                                                                                            │
+│   Gamma  ▶████████████████████████████████████████████████████████ 140                           │
+│ Delta                                                                                            │
+│          gap                                                                                     │
+│ ● Alpha (#5470c6)  ◆ Beta (#91cc75)  ▲ Delta (#fac858)  ■ Gamma (#ee6666)                        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 

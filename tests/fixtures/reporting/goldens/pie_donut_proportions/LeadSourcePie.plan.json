@@ -127,14 +127,14 @@
   ],
   "series": [
     {
-      "key": "Search",
-      "label": "Search",
+      "key": "Direct",
+      "label": "Direct",
       "order": 0,
       "color": "#5470c6"
     },
     {
-      "key": "Direct",
-      "label": "Direct",
+      "key": "Organic Social",
+      "label": "Organic Social",
       "order": 1,
       "color": "#91cc75"
     },
@@ -145,19 +145,19 @@
       "color": "#fac858"
     },
     {
-      "key": "Organic Social",
-      "label": "Organic Social",
+      "key": "Search",
+      "label": "Search",
       "order": 3,
       "color": "#ee6666"
     }
   ],
   "palette": [
     {
-      "seriesKey": "Search",
+      "seriesKey": "Direct",
       "color": "#5470c6"
     },
     {
-      "seriesKey": "Direct",
+      "seriesKey": "Organic Social",
       "color": "#91cc75"
     },
     {
@@ -165,20 +165,20 @@
       "color": "#fac858"
     },
     {
-      "seriesKey": "Organic Social",
+      "seriesKey": "Search",
       "color": "#ee6666"
     }
   ],
   "legend": [
     {
-      "seriesKey": "Search",
-      "label": "Search",
+      "seriesKey": "Direct",
+      "label": "Direct",
       "order": 0,
       "color": "#5470c6"
     },
     {
-      "seriesKey": "Direct",
-      "label": "Direct",
+      "seriesKey": "Organic Social",
+      "label": "Organic Social",
       "order": 1,
       "color": "#91cc75"
     },
@@ -189,8 +189,8 @@
       "color": "#fac858"
     },
     {
-      "seriesKey": "Organic Social",
-      "label": "Organic Social",
+      "seriesKey": "Search",
+      "label": "Search",
       "order": 3,
       "color": "#ee6666"
     }
@@ -200,7 +200,7 @@
       "id": "primary",
       "mark": "arc",
       "zIndex": 0,
-      "seriesKey": "Search",
+      "seriesKey": "Direct",
       "data": [
         {
           "rowIndex": 0,
@@ -322,28 +322,28 @@
         "value": "4500",
         "order": 0,
         "detail": "43.3% of total",
-        "group": "Search"
+        "group": "Direct"
       },
       {
         "label": "Direct",
         "value": "2800",
         "order": 1,
         "detail": "26.9% of total",
-        "group": "Search"
+        "group": "Direct"
       },
       {
         "label": "Referral",
         "value": "1900",
         "order": 2,
         "detail": "18.3% of total",
-        "group": "Search"
+        "group": "Direct"
       },
       {
         "label": "Organic Social",
         "value": "1200",
         "order": 3,
         "detail": "11.5% of total",
-        "group": "Search"
+        "group": "Direct"
       }
     ],
     "summary": "Lead Source Proportions (Pie): 4 ordered semantic values."

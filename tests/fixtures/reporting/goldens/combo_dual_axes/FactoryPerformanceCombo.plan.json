@@ -181,40 +181,40 @@
   ],
   "series": [
     {
-      "key": "UnitsProduced",
-      "label": "UnitsProduced",
-      "order": 0,
-      "color": "#2563EB"
-    },
-    {
       "key": "QualityPassRate",
       "label": "QualityPassRate",
-      "order": 1,
+      "order": 0,
       "color": "#E11D48"
+    },
+    {
+      "key": "UnitsProduced",
+      "label": "UnitsProduced",
+      "order": 1,
+      "color": "#2563EB"
     }
   ],
   "palette": [
     {
-      "seriesKey": "UnitsProduced",
-      "color": "#2563EB"
-    },
-    {
       "seriesKey": "QualityPassRate",
       "color": "#E11D48"
+    },
+    {
+      "seriesKey": "UnitsProduced",
+      "color": "#2563EB"
     }
   ],
   "legend": [
     {
-      "seriesKey": "UnitsProduced",
-      "label": "UnitsProduced",
-      "order": 0,
-      "color": "#2563EB"
-    },
-    {
       "seriesKey": "QualityPassRate",
       "label": "QualityPassRate",
-      "order": 1,
+      "order": 0,
       "color": "#E11D48"
+    },
+    {
+      "seriesKey": "UnitsProduced",
+      "label": "UnitsProduced",
+      "order": 1,
+      "color": "#2563EB"
     }
   ],
   "layers": [

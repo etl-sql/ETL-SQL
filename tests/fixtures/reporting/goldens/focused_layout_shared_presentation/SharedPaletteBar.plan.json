@@ -199,14 +199,14 @@
       "color": "#91cc75"
     },
     {
-      "key": "Gamma",
-      "label": "Gamma",
+      "key": "Delta",
+      "label": "Delta",
       "order": 2,
       "color": "#fac858"
     },
     {
-      "key": "Delta",
-      "label": "Delta",
+      "key": "Gamma",
+      "label": "Gamma",
       "order": 3,
       "color": "#ee6666"
     }
@@ -221,11 +221,11 @@
       "color": "#91cc75"
     },
     {
-      "seriesKey": "Gamma",
+      "seriesKey": "Delta",
       "color": "#fac858"
     },
     {
-      "seriesKey": "Delta",
+      "seriesKey": "Gamma",
       "color": "#ee6666"
     }
   ],
@@ -243,14 +243,14 @@
       "color": "#91cc75"
     },
     {
-      "seriesKey": "Gamma",
-      "label": "Gamma",
+      "seriesKey": "Delta",
+      "label": "Delta",
       "order": 2,
       "color": "#fac858"
     },
     {
-      "seriesKey": "Delta",
-      "label": "Delta",
+      "seriesKey": "Gamma",
+      "label": "Gamma",
       "order": 3,
       "color": "#ee6666"
     }
@@ -516,134 +516,6 @@
       "id": "primary-02",
       "mark": "rect",
       "zIndex": 2,
-      "seriesKey": "Gamma",
-      "data": [
-        {
-          "rowIndex": 0,
-          "channels": [
-            {
-              "channel": "x",
-              "value": {
-                "kind": "text",
-                "text": "Alpha"
-              },
-              "displayValue": "Alpha"
-            },
-            {
-              "channel": "y",
-              "value": {
-                "kind": "null"
-              }
-            },
-            {
-              "channel": "color",
-              "value": {
-                "kind": "null"
-              }
-            }
-          ],
-          "isGap": true,
-          "encodings": []
-        },
-        {
-          "rowIndex": 1,
-          "channels": [
-            {
-              "channel": "x",
-              "value": {
-                "kind": "text",
-                "text": "Beta"
-              },
-              "displayValue": "Beta"
-            },
-            {
-              "channel": "y",
-              "value": {
-                "kind": "null"
-              }
-            },
-            {
-              "channel": "color",
-              "value": {
-                "kind": "null"
-              }
-            }
-          ],
-          "isGap": true,
-          "encodings": []
-        },
-        {
-          "rowIndex": 2,
-          "channels": [
-            {
-              "channel": "x",
-              "value": {
-                "kind": "text",
-                "text": "Gamma"
-              },
-              "displayValue": "Gamma"
-            },
-            {
-              "channel": "y",
-              "value": {
-                "kind": "decimal",
-                "decimal": 140
-              },
-              "displayValue": "140"
-            },
-            {
-              "channel": "color",
-              "value": {
-                "kind": "text",
-                "text": "Gamma"
-              },
-              "displayValue": "Gamma"
-            }
-          ],
-          "isGap": false,
-          "tooltip": "X: Gamma, Y: 140, Color: Gamma",
-          "encodings": []
-        },
-        {
-          "rowIndex": 3,
-          "channels": [
-            {
-              "channel": "x",
-              "value": {
-                "kind": "text",
-                "text": "Delta"
-              },
-              "displayValue": "Delta"
-            },
-            {
-              "channel": "y",
-              "value": {
-                "kind": "null"
-              }
-            },
-            {
-              "channel": "color",
-              "value": {
-                "kind": "null"
-              }
-            }
-          ],
-          "isGap": true,
-          "encodings": []
-        }
-      ],
-      "style": [],
-      "extentAxis": "y",
-      "extentAnchor": "end",
-      "stack": "none",
-      "bandSize": 0.75,
-      "tickThickness": 0.15,
-      "tickOrientation": "auto"
-    },
-    {
-      "id": "primary-03",
-      "mark": "rect",
-      "zIndex": 3,
       "seriesKey": "Delta",
       "data": [
         {
@@ -767,6 +639,134 @@
       "bandSize": 0.75,
       "tickThickness": 0.15,
       "tickOrientation": "auto"
+    },
+    {
+      "id": "primary-03",
+      "mark": "rect",
+      "zIndex": 3,
+      "seriesKey": "Gamma",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Alpha"
+              },
+              "displayValue": "Alpha"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Beta"
+              },
+              "displayValue": "Beta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 140
+              },
+              "displayValue": "140"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Gamma"
+              },
+              "displayValue": "Gamma"
+            }
+          ],
+          "isGap": false,
+          "tooltip": "X: Gamma, Y: 140, Color: Gamma",
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Delta"
+              },
+              "displayValue": "Delta"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
     }
   ],
   "nulls": {
@@ -844,54 +844,54 @@
         "value": "gap",
         "order": 200000,
         "detail": "null gap",
-        "group": "Gamma"
+        "group": "Delta"
       },
       {
         "label": "Beta",
         "value": "gap",
         "order": 200001,
         "detail": "null gap",
-        "group": "Gamma"
+        "group": "Delta"
       },
       {
         "label": "Gamma",
-        "value": "140",
+        "value": "gap",
         "order": 200002,
-        "group": "Gamma"
-      },
-      {
-        "label": "Delta",
-        "value": "gap",
-        "order": 200003,
-        "detail": "null gap",
-        "group": "Gamma"
-      },
-      {
-        "label": "Alpha",
-        "value": "gap",
-        "order": 300000,
-        "detail": "null gap",
-        "group": "Delta"
-      },
-      {
-        "label": "Beta",
-        "value": "gap",
-        "order": 300001,
-        "detail": "null gap",
-        "group": "Delta"
-      },
-      {
-        "label": "Gamma",
-        "value": "gap",
-        "order": 300002,
         "detail": "null gap",
         "group": "Delta"
       },
       {
         "label": "Delta",
         "value": "210",
-        "order": 300003,
+        "order": 200003,
         "group": "Delta"
+      },
+      {
+        "label": "Alpha",
+        "value": "gap",
+        "order": 300000,
+        "detail": "null gap",
+        "group": "Gamma"
+      },
+      {
+        "label": "Beta",
+        "value": "gap",
+        "order": 300001,
+        "detail": "null gap",
+        "group": "Gamma"
+      },
+      {
+        "label": "Gamma",
+        "value": "140",
+        "order": 300002,
+        "group": "Gamma"
+      },
+      {
+        "label": "Delta",
+        "value": "gap",
+        "order": 300003,
+        "detail": "null gap",
+        "group": "Gamma"
       }
     ],
     "summary": "Plan-Backed Categories: 16 ordered semantic values."

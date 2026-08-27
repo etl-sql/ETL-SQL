@@ -61,54 +61,54 @@
       "value": "gap",
       "order": 200000,
       "detail": "null gap",
-      "group": "Gamma"
+      "group": "Delta"
     },
     {
       "label": "Beta",
       "value": "gap",
       "order": 200001,
       "detail": "null gap",
-      "group": "Gamma"
+      "group": "Delta"
     },
     {
       "label": "Gamma",
-      "value": "140",
+      "value": "gap",
       "order": 200002,
-      "group": "Gamma"
-    },
-    {
-      "label": "Delta",
-      "value": "gap",
-      "order": 200003,
-      "detail": "null gap",
-      "group": "Gamma"
-    },
-    {
-      "label": "Alpha",
-      "value": "gap",
-      "order": 300000,
-      "detail": "null gap",
-      "group": "Delta"
-    },
-    {
-      "label": "Beta",
-      "value": "gap",
-      "order": 300001,
-      "detail": "null gap",
-      "group": "Delta"
-    },
-    {
-      "label": "Gamma",
-      "value": "gap",
-      "order": 300002,
       "detail": "null gap",
       "group": "Delta"
     },
     {
       "label": "Delta",
       "value": "210",
-      "order": 300003,
+      "order": 200003,
       "group": "Delta"
+    },
+    {
+      "label": "Alpha",
+      "value": "gap",
+      "order": 300000,
+      "detail": "null gap",
+      "group": "Gamma"
+    },
+    {
+      "label": "Beta",
+      "value": "gap",
+      "order": 300001,
+      "detail": "null gap",
+      "group": "Gamma"
+    },
+    {
+      "label": "Gamma",
+      "value": "140",
+      "order": 300002,
+      "group": "Gamma"
+    },
+    {
+      "label": "Delta",
+      "value": "gap",
+      "order": 300003,
+      "detail": "null gap",
+      "group": "Gamma"
     }
   ],
   "summary": "Plan-Backed Categories: 4 rows, 4 ordered layers, 4 series, 1 facet panels, 4 gaps, 0 skipped rows."

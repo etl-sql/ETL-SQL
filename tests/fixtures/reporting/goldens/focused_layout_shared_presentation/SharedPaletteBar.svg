@@ -14,8 +14,8 @@
 <g clip-path='url(#SharedPaletteBar-plot-clip)'>
 <rect x='76.25' y='147.143' width='23.375' height='142.857' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
 <rect x='230.625' y='75.714' width='23.375' height='214.286' fill='#91cc75' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>180</title></rect>
-<rect x='385' y='123.333' width='23.375' height='166.667' fill='#fac858' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>140</title></rect>
-<rect x='539.375' y='40' width='23.375' height='250' fill='#ee6666' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>210</title></rect>
+<rect x='515' y='40' width='23.375' height='250' fill='#fac858' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>210</title></rect>
+<rect x='409.375' y='123.333' width='23.375' height='166.667' fill='#ee6666' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>140</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Alpha</text>
 <text class='plot-axis-label' data-axis-index='1' x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Beta</text>
@@ -36,7 +36,7 @@
 <rect x='125' y='330' width='9' height='9' fill='#91cc75'/>
 <text x='138' y='338' font-size='9' fill='#444'>Beta</text>
 <rect x='190' y='330' width='9' height='9' fill='#fac858'/>
-<text x='203' y='338' font-size='9' fill='#444'>Gamma</text>
+<text x='203' y='338' font-size='9' fill='#444'>Delta</text>
 <rect x='255' y='330' width='9' height='9' fill='#ee6666'/>
-<text x='268' y='338' font-size='9' fill='#444'>Delta</text>
+<text x='268' y='338' font-size='9' fill='#444'>Gamma</text>
 </svg>

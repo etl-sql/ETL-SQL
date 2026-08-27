@@ -1507,6 +1507,17 @@ export function createConnectionWizard(options = {}) {
         const violation = getSecurityViolation();
         const nameCollision = getNameCollision();
         const isAliasMissing = !state.alias || !state.alias.trim();
+        let securityAlert = modalOverlay.querySelector('.etlsql-cw-security-alert');
+        if (violation) {
+            if (!securityAlert) {
+                securityAlert = document.createElement('div');
+                securityAlert.className = 'etlsql-cw-security-alert';
+                modalOverlay.querySelector('.etlsql-cw-meta-row')?.insertAdjacentElement('afterend', securityAlert);
+            }
+            securityAlert.textContent = violation;
+        } else {
+            securityAlert?.remove();
+        }
         const submitBtn = modalOverlay.querySelector('#etlsql-cw-submit-btn');
         if (submitBtn) {
             submitBtn.disabled = Boolean(violation || nameCollision || isAliasMissing);

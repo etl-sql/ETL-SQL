@@ -12,6 +12,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added the code-first Connection Wizard across Report Builder, Portal Admin, Workstation Editor,
+  VS Code, and LSP. Connector metadata drives SQL/file forms, diagnostics, shared references,
+  staged workspace files, Gateway routing, secret handling, and canonical script generation. Live
+  zero-trust path feedback and real-browser coverage now gate success/failure diagnostics, SQL and
+  file output, name collisions, shared bindings, and light/dark rendering.
+
+- Added nine `TRANSFORM` recipe snippets and matching Report Builder data-preparation helpers for
+  rolling aggregates, period comparisons, share of total, top-N grouping, date filling, pivots,
+  interpolation, normalization, and deduplication. Report Builder formatting controls now include
+  color swatches, radius controls, and typography pickers alongside direct values.
+
 - Added the report Design Token contract and `CREATE STYLE PALETTE = (...)` sequences. Page,
   container, and visual styles now resolve into scoped `--etl-*` variables with deterministic
   inheritance, safe CSS serialization, stable series-color assignment, explicit-color precedence,

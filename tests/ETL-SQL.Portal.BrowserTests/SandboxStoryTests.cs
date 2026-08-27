@@ -363,6 +363,94 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task ConnectionWizard_CanonicalComponent_CoversSqlFilesDiagnosticsSecurityAndThemes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.EvaluateAsync(
+            """
+            async () => {
+              document.body.innerHTML = '<div id="canonical-connection-wizard"></div>';
+              const { createConnectionWizard } = await import('/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/connection-wizard.js');
+              createConnectionWizard({
+                host: document.getElementById('canonical-connection-wizard'),
+                schemas: [
+                  {
+                    connectorType: 'MSSQL', description: 'SQL Server', isFileBased: false,
+                    options: [
+                      { name: 'SERVER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'sql.test' },
+                      { name: 'DATABASE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'warehouse' },
+                      { name: 'PASSWORD', type: 3, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' }
+                    ]
+                  },
+                  {
+                    connectorType: 'FLATFILE', description: 'Delimited file', isFileBased: true,
+                    options: [
+                      { name: 'PATH', type: 4, isMandatory: true, category: 'Basic', defaultValue: 'uploads/default.csv' },
+                      { name: 'HEADER', type: 2, category: 'Basic', defaultValue: 'ON' }
+                    ]
+                  }
+                ],
+                secrets: ['WAREHOUSE_PASSWORD'],
+                gateways: [{ id: 'gateway-a', name: 'gateway-a', status: 'Active', region: 'On-Premises' }],
+                stagedFiles: [{ name: 'sales.csv', path: 'uploads/sales.csv' }],
+                existingNames: ['existing_connection'],
+                onTest: async req => req.target.startsWith('fail')
+                  ? { succeeded: false, error: 'Provider rejected the endpoint.', steps: [{ layer: 'TCP', status: 'failed', detail: 'Connection refused.' }] }
+                  : { succeeded: true, steps: [
+                      { layer: 'POLICY', status: 'ok', detail: 'Allowed.' },
+                      { layer: 'DNS', status: 'ok', detail: 'Resolved.' },
+                      { layer: 'TCP', status: 'ok', detail: 'Connected.' },
+                      { layer: 'AUTH', status: 'ok', detail: 'Authenticated.' }
+                    ] }
+              });
+            }
+            """);
+
+        await page.Locator("#etlsql-cw-alias-input").FillAsync("warehouse_reader");
+        await page.Locator("#etlsql-cw-secret-key").FillAsync("WAREHOUSE_PASSWORD");
+        await page.Locator("#etlsql-cw-gateway-select").SelectOptionAsync("gateway-a");
+
+        var sql = await page.Locator(".etlsql-cw-sql-box").InnerTextAsync();
+        Assert.Contains("CREATE CONNECTION warehouse_reader AS MSSQL", sql);
+        Assert.Contains("PASSWORD = SECRET:WAREHOUSE_PASSWORD", sql);
+        Assert.Contains("GATEWAY = 'gateway-a'", sql);
+
+        await page.Locator("#etlsql-cw-test-btn").ClickAsync();
+        await page.Locator(".etlsql-cw-diag-badge.badge-ok").WaitForAsync();
+        Assert.Equal(4, await page.Locator(".etlsql-cw-step-item").CountAsync());
+
+        await page.Locator("#etlsql-cw-opt-server").FillAsync("fail.internal");
+        await page.Locator("#etlsql-cw-test-btn").ClickAsync();
+        await page.Locator(".etlsql-cw-diag-badge.badge-fail").WaitForAsync();
+        Assert.Contains("Provider rejected", await page.Locator(".etlsql-cw-diag-result").InnerTextAsync());
+
+        await page.Locator("button[data-cat='files']").ClickAsync();
+        await page.Locator("button[data-type='FLATFILE']").ClickAsync();
+        await page.Locator("button[data-filepath='uploads/sales.csv']").ClickAsync();
+        sql = await page.Locator(".etlsql-cw-sql-box").InnerTextAsync();
+        Assert.Contains("FLATFILE", sql);
+        Assert.Contains("PATH = 'uploads/sales.csv'", sql);
+
+        await page.Locator("#etlsql-cw-opt-path").FillAsync("../secrets.sql");
+        await page.Locator(".etlsql-cw-security-alert").WaitForAsync();
+        Assert.True(await page.Locator("#etlsql-cw-submit-btn").IsDisabledAsync());
+
+        foreach (var theme in new[] { "light", "dark" })
+        {
+            await page.EvaluateAsync("theme => document.documentElement.dataset.theme = theme", theme);
+            var colors = await page.Locator(".etlsql-cw-modal").EvaluateAsync<string[]>(
+                "el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]");
+            Assert.All(colors, color => Assert.DoesNotContain("rgba(0, 0, 0, 0)", color));
+        }
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task ConstrainedHtmlRuntime_SanitizesEmbedsActsAndPrintsAccessibly()
     {
         await using var session = await fixture.NewSessionAsync();

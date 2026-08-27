@@ -3,10 +3,10 @@
 <desc id='LeadSourcePie-desc'>Lead Source Proportions (Pie): 4 rows, 1 ordered layers, 4 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Lead Source Proportions (Pie)</text>
-<path d='M 245.5 183 L 245.5 41.5 A 141.5 141.5 0 0 1 303.573 312.034 Z' fill='#5470c6' stroke='white' stroke-width='2' data-row-index='0'><title>Search: 4500</title></path>
-<path d='M 245.5 183 L 303.573 312.034 A 141.5 141.5 0 0 1 110.407 225.097 Z' fill='#91cc75' stroke='white' stroke-width='2' data-row-index='1'><title>Direct: 2800</title></path>
+<path d='M 245.5 183 L 245.5 41.5 A 141.5 141.5 0 0 1 303.573 312.034 Z' fill='#ee6666' stroke='white' stroke-width='2' data-row-index='0'><title>Search: 4500</title></path>
+<path d='M 245.5 183 L 303.573 312.034 A 141.5 141.5 0 0 1 110.407 225.097 Z' fill='#5470c6' stroke='white' stroke-width='2' data-row-index='1'><title>Direct: 2800</title></path>
 <path d='M 245.5 183 L 110.407 225.097 A 141.5 141.5 0 0 1 151.668 77.086 Z' fill='#fac858' stroke='white' stroke-width='2' data-row-index='2'><title>Referral: 1900</title></path>
-<path d='M 245.5 183 L 151.668 77.086 A 141.5 141.5 0 0 1 245.5 41.5 Z' fill='#ee6666' stroke='white' stroke-width='2' data-row-index='3'><title>Organic Social: 1200</title></path>
+<path d='M 245.5 183 L 151.668 77.086 A 141.5 141.5 0 0 1 245.5 41.5 Z' fill='#91cc75' stroke='white' stroke-width='2' data-row-index='3'><title>Organic Social: 1200</title></path>
 <path class='plot-arc-label-leader' d='M 194.614 48.825 L 191.423 40.41 L 87 40.41' fill='none' stroke='#9ca3af' stroke-width='1'/>
 <text class='plot-arc-label' x='84' y='43.41' text-anchor='end' font-size='9' fill='#333'>Organic Social: 12%</text>
 <path class='plot-arc-label-leader' d='M 107.271 144.466 L 98.601 142.049 L 87 142.049' fill='none' stroke='#9ca3af' stroke-width='1'/>
@@ -16,11 +16,11 @@
 <path class='plot-arc-label-leader' d='M 385.804 152.882 L 394.603 150.993 L 404 150.993' fill='none' stroke='#9ca3af' stroke-width='1'/>
 <text class='plot-arc-label' x='407' y='153.993' text-anchor='start' font-size='9' fill='#333'>Search: 43%</text>
 <rect x='495' y='32' width='9' height='9' fill='#5470c6'/>
-<text x='508' y='40' font-size='9' fill='#444'>Search</text>
+<text x='508' y='40' font-size='9' fill='#444'>Direct</text>
 <rect x='495' y='48' width='9' height='9' fill='#91cc75'/>
-<text x='508' y='56' font-size='9' fill='#444'>Direct</text>
+<text x='508' y='56' font-size='9' fill='#444'>Organic Social</text>
 <rect x='495' y='64' width='9' height='9' fill='#fac858'/>
 <text x='508' y='72' font-size='9' fill='#444'>Referral</text>
 <rect x='495' y='80' width='9' height='9' fill='#ee6666'/>
-<text x='508' y='88' font-size='9' fill='#444'>Organic Social</text>
+<text x='508' y='88' font-size='9' fill='#444'>Search</text>
 </svg>

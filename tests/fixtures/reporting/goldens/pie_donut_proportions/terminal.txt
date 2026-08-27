@@ -6,7 +6,7 @@
 │ Direct             ██████████████ 26.9% (2800)                                                   │
 │ Referral           █████████▌ 18.3% (1900)                                                       │
 │ Organic Social     ██████ 11.5% (1200)                                                           │
-│ ● Search (#5470c6)  ◆ Direct (#91cc75)  ▲ Referral (#fac858)  ■ Organic Social (#ee6666)         │
+│ ● Direct (#5470c6)  ◆ Organic Social (#91cc75)  ▲ Referral (#fac858)  ■ Search (#ee6666)         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 
@@ -18,5 +18,5 @@
 │ Direct             ██████████████ 26.9% (2800)                                                   │
 │ Referral           █████████▌ 18.3% (1900)                                                       │
 │ Organic Social     ██████ 11.5% (1200)                                                           │
-│ ● Search (#5470c6)  ◆ Direct (#91cc75)  ▲ Referral (#fac858)  ■ Organic Social (#ee6666)         │
+│ ● Direct (#5470c6)  ◆ Organic Social (#91cc75)  ▲ Referral (#fac858)  ■ Search (#ee6666)         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
