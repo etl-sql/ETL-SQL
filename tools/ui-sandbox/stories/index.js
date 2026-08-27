@@ -27,6 +27,8 @@ import orchestratorCheckpointResume from './orchestrator-checkpoint-resume.story
 import orchestratorAcl from './orchestrator-acl.story.js';
 import orchestratorAdmin from './orchestrator-admin.story.js';
 import controlPlaneDashboard from './control-plane-dashboard.story.js';
+import nativeChartLayout from './native-chart-layout.story.js';
+import connectionWizard from './connection-wizard.story.js';
 
 export const categoryOrder = [
   'Admin & Fleet',
@@ -74,11 +76,13 @@ const categoryDefaults = {
   'designer': 'Designers & Visuals',
   'constrained-html-runtime': 'Designers & Visuals',
   'snapshot-designer': 'Designers & Visuals',
+  'native-chart-layout': 'Designers & Visuals',
 
   // Script Editors & IDE
   'script-editor': 'Script Editors & IDE',
   'script-editor-unified': 'Script Editors & IDE',
   'vscode-webviews': 'Script Editors & IDE',
+  'connection-wizard': 'Script Editors & IDE',
 
   // Portal Shell & Views
   'portal-responsive-shell': 'Portal Shell & Views',
@@ -120,11 +124,13 @@ export const rawStories = [
   designer,
   constrainedHtmlRuntime,
   snapshotDesigner,
+  nativeChartLayout,
 
   // Script Editors & IDE
   scriptEditor,
   scriptEditorUnified,
   vscodeWebviews,
+  connectionWizard,
 
   // Portal Shell & Views
   portalResponsiveShell,

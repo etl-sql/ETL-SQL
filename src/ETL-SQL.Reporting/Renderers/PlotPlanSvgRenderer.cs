@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -1452,18 +1453,48 @@ internal sealed class PlotPlanSvgRenderer
         return (decimal)((Math.Log10((double)value) - minLog) / (maxLog - minLog));
     }
 
-    private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel) => datum.Channels.FirstOrDefault(item => item.Channel == channel)?.Value;
+    private static readonly SearchValues<char> SvgEscapeChars = SearchValues.Create("&<>'\"");
+
+    private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel)
+    {
+        var channels = datum.Channels;
+        for (var i = 0; i < channels.Length; i++)
+        {
+            if (channels[i].Channel == channel)
+                return channels[i].Value;
+        }
+        return null;
+    }
+
     private static string? DisplayChannel(ResolvedDatum datum, FieldChannel channel)
     {
-        var value = datum.Channels.FirstOrDefault(item => item.Channel == channel);
-        return value is null ? null : value.DisplayValue ?? PlotPlanResolver.Display(value.Value);
+        var channels = datum.Channels;
+        for (var i = 0; i < channels.Length; i++)
+        {
+            if (channels[i].Channel == channel)
+                return channels[i].DisplayValue ?? PlotPlanResolver.Display(channels[i].Value);
+        }
+        return null;
     }
-    private static ChartValue? Encoding(ResolvedDatum datum, ConditionalEncodingChannel channel) => datum.Encodings.IsDefault
-        ? null : datum.Encodings.FirstOrDefault(item => item.Channel == channel)?.Value;
+
+    private static ChartValue? Encoding(ResolvedDatum datum, ConditionalEncodingChannel channel)
+    {
+        if (datum.Encodings.IsDefault) return null;
+        var encodings = datum.Encodings;
+        for (var i = 0; i < encodings.Length; i++)
+        {
+            if (encodings[i].Channel == channel)
+                return encodings[i].Value;
+        }
+        return null;
+    }
+
     private static string? EncodingText(ResolvedDatum datum, ConditionalEncodingChannel channel) => Encoding(datum, channel) is { } value
         ? PlotPlanResolver.Display(value) : null;
+
     private static decimal? EncodingNumber(ResolvedDatum datum, ConditionalEncodingChannel channel) => Encoding(datum, channel) is { } value
         ? PlotPlanResolver.Number(value) : null;
+
     private static string FormatDataLabel(decimal value, string? format, decimal? percentageBase = null)
     {
         if (string.IsNullOrWhiteSpace(format)) return N(value);
@@ -1479,22 +1510,62 @@ internal sealed class PlotPlanSvgRenderer
         }
         return N(value);
     }
+
     private static bool IsEnabled(ImmutableArray<StyleToken> tokens, string name)
     {
-        var value = tokens.FirstOrDefault(token => token.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
-        return value is not null && !value.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
-            !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0";
+        if (tokens.IsDefault) return false;
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            if (tokens[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                var value = tokens[i].Value;
+                return value is not null && !value.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
+                    !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0";
+            }
+        }
+        return false;
     }
+
     private static string? Style(PlotPlan plan, string name)
-        => plan.Style.FirstOrDefault(token => token.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
+    {
+        var tokens = plan.Style;
+        if (tokens.IsDefault) return null;
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            if (tokens[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return tokens[i].Value;
+        }
+        return null;
+    }
+
     private static string? DataFormat(PlotPlan plan) => Style(plan, "DATA_LABELS:FORMAT") ?? Style(plan, "FORMAT");
+
     private static string? LayerStyle(ResolvedMarkLayer layer, string name)
-        => layer.Style.FirstOrDefault(token => token.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
+    {
+        var tokens = layer.Style;
+        if (tokens.IsDefault) return null;
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            if (tokens[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return tokens[i].Value;
+        }
+        return null;
+    }
+
     private static string ResolveDatumColor(PlotPlan plan, ResolvedDatum datum, string fallback)
     {
         if (EncodingText(datum, ConditionalEncodingChannel.Color) is { } conditional)
             return SafePaint(conditional, fallback);
-        var scale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Color && item.ColorRange is not null);
+        ResolvedScale? scale = null;
+        var scales = plan.Scales;
+        for (var i = 0; i < scales.Length; i++)
+        {
+            if (scales[i].Channel == FieldChannel.Color && scales[i].ColorRange is not null)
+            {
+                scale = scales[i];
+                break;
+            }
+        }
         if (scale?.ColorRange is not { } range) return fallback;
         var raw = Channel(datum, FieldChannel.Color);
         var value = raw is null ? null : PlotPlanResolver.Number(raw);
@@ -1518,20 +1589,40 @@ internal sealed class PlotPlanSvgRenderer
         return Math.Clamp(Ratio(midpoint, minimum, maximum, scale.Kind), 0m, 1m);
     }
 
+    private static int ParseHexByte(ReadOnlySpan<char> span) =>
+        int.Parse(span, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
     private static string InterpolateColor(string low, string high, decimal ratio)
     {
         ratio = Math.Clamp(ratio, 0m, 1m);
-        static int Component(string color, int offset) => int.Parse(color.AsSpan(offset, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        if (low.Length != 7 || high.Length != 7 || low[0] != '#' || high[0] != '#') return high;
+        var rLow = ParseHexByte(low.AsSpan(1, 2));
+        var gLow = ParseHexByte(low.AsSpan(3, 2));
+        var bLow = ParseHexByte(low.AsSpan(5, 2));
+
+        var rHigh = ParseHexByte(high.AsSpan(1, 2));
+        var gHigh = ParseHexByte(high.AsSpan(3, 2));
+        var bHigh = ParseHexByte(high.AsSpan(5, 2));
+
         static int Mix(int first, int second, decimal amount) =>
             (int)Math.Round(first + (second - first) * amount, MidpointRounding.AwayFromZero);
-        return $"#{Mix(Component(low, 1), Component(high, 1), ratio):X2}{Mix(Component(low, 3), Component(high, 3), ratio):X2}{Mix(Component(low, 5), Component(high, 5), ratio):X2}";
+
+        return $"#{Mix(rLow, rHigh, ratio):X2}{Mix(gLow, gHigh, ratio):X2}{Mix(bLow, bHigh, ratio):X2}";
     }
 
     private static string SafePaint(string? candidate, string fallback)
     {
         if (string.IsNullOrWhiteSpace(candidate)) return fallback;
         var value = candidate.Trim();
-        if (value.Length is 4 or 7 && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit)) return value;
+        if (value.Length is 4 or 7 && value[0] == '#')
+        {
+            var isHex = true;
+            for (var i = 1; i < value.Length; i++)
+            {
+                if (!Uri.IsHexDigit(value[i])) { isHex = false; break; }
+            }
+            if (isHex) return value;
+        }
         return value.ToLowerInvariant() switch
         {
             "white" or "black" or "transparent" => value.ToLowerInvariant(),
@@ -1546,21 +1637,35 @@ internal sealed class PlotPlanSvgRenderer
             _ => fallback
         };
     }
+
     private static string InterpolatePaint(string from, string to, decimal ratio)
     {
-        static int Component(string value, int offset) => Convert.ToInt32(value.Substring(offset, 2), 16);
         if (from.Length != 7 || to.Length != 7 || from[0] != '#' || to[0] != '#') return to;
         ratio = Math.Clamp(ratio, 0m, 1m);
-        var red = (int)Math.Round(Component(from, 1) + (Component(to, 1) - Component(from, 1)) * ratio);
-        var green = (int)Math.Round(Component(from, 3) + (Component(to, 3) - Component(from, 3)) * ratio);
-        var blue = (int)Math.Round(Component(from, 5) + (Component(to, 5) - Component(from, 5)) * ratio);
+        var rFrom = ParseHexByte(from.AsSpan(1, 2));
+        var gFrom = ParseHexByte(from.AsSpan(3, 2));
+        var bFrom = ParseHexByte(from.AsSpan(5, 2));
+
+        var rTo = ParseHexByte(to.AsSpan(1, 2));
+        var gTo = ParseHexByte(to.AsSpan(3, 2));
+        var bTo = ParseHexByte(to.AsSpan(5, 2));
+
+        var red = (int)Math.Round(rFrom + (rTo - rFrom) * ratio);
+        var green = (int)Math.Round(gFrom + (gTo - gFrom) * ratio);
+        var blue = (int)Math.Round(bFrom + (bTo - bFrom) * ratio);
         return $"#{red:X2}{green:X2}{blue:X2}";
     }
+
     private static string DefaultColor(int index) => new[] { "#5470c6", "#91cc75", "#fac858", "#ee6666", "#73c0de", "#3ba272", "#fc8452" }[Math.Abs(index) % 7];
     private static (decimal X, decimal Y) PointCoordinates(decimal cx, decimal cy, decimal radius, double angle) =>
         (cx + radius * (decimal)Math.Cos(angle), cy + radius * (decimal)Math.Sin(angle));
     private static string Point(decimal cx, decimal cy, decimal radius, double angle) => $"{N(cx + radius * (decimal)Math.Cos(angle))} {N(cy + radius * (decimal)Math.Sin(angle))}";
     private static string N(decimal value) => value.ToString("0.###", CultureInfo.InvariantCulture);
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length] + "…";
-    private static string Esc(string value) => value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("'", "&apos;").Replace("\"", "&quot;");
+    private static string Esc(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.AsSpan().IndexOfAny(SvgEscapeChars) < 0)
+            return value;
+        return value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("'", "&apos;").Replace("\"", "&quot;");
+    }
 }

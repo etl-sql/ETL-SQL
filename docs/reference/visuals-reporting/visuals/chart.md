@@ -36,6 +36,7 @@ CREATE VISUAL name AS CUSTOM (
                    NUDGE(X = number, Y = number, UNIT = DATA | BAND | EM),
         ENCODINGS (
           X | X2 | X_START | X_END | X_OFFSET | Y | Y2 | Y_START | Y_END | Y_OFFSET |
+          LOW | Q1 | MEDIAN | Q3 | HIGH | OPEN | CLOSE |
           COLOR | SIZE | SHAPE | THETA | RADIUS | TEXT | TOOLTIP | DETAIL = field | DATUM(scalar) | VALUE(scalar) (
             TYPE = QUANTITATIVE | TEMPORAL | NOMINAL | ORDINAL,
             SCALE = scale_name,
@@ -73,6 +74,7 @@ CREATE VISUAL name AS CUSTOM (
 - **Placement** — `STACK` accumulates quantitative Y/Y2 values for Cartesian and transposed Cartesian layouts; polar/radial stacking is rejected until it has portable geometry. Offset channels dodge categories, `BAND_SIZE` controls relative thickness, and `Z_INDEX` controls paint order. `JITTER` uses a stable key and deterministic hash; `NUDGE` is resolved after domains without changing raw values.
 - **Intervals** — Paired `Y_START`/`Y_END` creates an AREA ribbon, a vertical RULE span, or a ranged RECT such as a qualitative band or a floating variance bar; `X_START`/`X_END` supplies the symmetric horizontal range, which on a RECT with a continuous X scale is an explicit-bin histogram. Both endpoints are required, must share a quantitative or temporal `TYPE`, and both take part in scale-domain resolution. A ranged RECT owns its extent on that axis, so it rejects `Y`/`Y2` alongside `Y_START`/`Y_END` and `X`/`X2` alongside `X_START`/`X_END`; `STACK` computes its own endpoints and is unaffected. Endpoint calculations stay in SQL.
 - **TICK** — Draws a short category-local quantitative observation or target. It requires nominal/ordinal X and quantitative Y. `ORIENTATION = AUTO` resolves to a horizontal segment across the category band; `HORIZONTAL` and `VERTICAL` make that choice explicit. TICK is distinct from plot-spanning/ranged `RULE`; its `BAND_SIZE` is relative to the category band and `THICKNESS` is bounded to `(0, 1]` em.
+- **Statistical and financial rectangles** — A `RECT` with `X`, `LOW`, `Q1`, `MEDIAN`, `Q3`, and `HIGH` renders a box-plot glyph. A `RECT` with `X`, `OPEN`, `CLOSE`, `LOW`, and `HIGH` renders a candlestick glyph. These channels are quantitative and share the primary Y scale. Keep derived summaries in SQL. Add ordinary layers to the same `CUSTOM` chart for combinations such as box plot plus mean `TICK` or candlestick plus volume on `Y2`.
 - **FACET** — Creates a row/column grid or a mutually exclusive one-dimensional `WRAP`. Wrap uses stable first-seen row-major ordering, 1–12 columns, at most 100 panels, render-work limits, and minimum panel dimensions.
 - **RESOLVE** — Selects shared or per-panel X, Y/Y2, and color scales. Independent resolution requires `FACET`.
 - **Visible transformations** — Aggregation, filtering, calculation, lookup, windowing, and statistical preparation belong in preceding ETL-SQL/`#temp` statements, not in `CHART`.
@@ -116,8 +118,43 @@ CREATE VISUAL RevenueAndMargin AS CUSTOM (
 );
 ```
 
+```sql
+CREATE VISUAL PriceAndVolume AS CUSTOM (
+  SOURCE = #daily_market,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      days = BAND (CHANNEL = X, ORDER = SOURCE),
+      price = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF),
+      volume = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+      volume_bars = RECT (
+        Z_INDEX = 0,
+        BAND_SIZE = 0.35,
+        ENCODINGS (
+          X = TradingDay (TYPE = ORDINAL, SCALE = days),
+          Y2 = Volume (TYPE = QUANTITATIVE, SCALE = volume, AXIS = SECONDARY)
+        )
+      ),
+      candles = RECT (
+        Z_INDEX = 1,
+        ENCODINGS (
+          X = TradingDay (TYPE = ORDINAL, SCALE = days),
+          OPEN = OpenPrice (TYPE = QUANTITATIVE, SCALE = price),
+          CLOSE = ClosePrice (TYPE = QUANTITATIVE, SCALE = price),
+          LOW = LowPrice (TYPE = QUANTITATIVE, SCALE = price),
+          HIGH = HighPrice (TYPE = QUANTITATIVE, SCALE = price)
+        )
+      )
+    )
+  )
+);
+```
+
 ## References
 
 - [Report-SQL Guide](../../../guides/feature-guides/report-sql.md)
 - [Native Advanced Chart Authoring Decision](../../../architecture/decisions/native-advanced-chart-authoring.md)
 - [Script Composition Standards](../../../architecture/standards/script-composition-standards.md)
+- [Statistical and Financial CUSTOM Sample](../../../../samples/08_Reporting/custom_statistical_financial_layers.rptsql)

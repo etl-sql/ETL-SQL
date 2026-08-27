@@ -68,6 +68,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'refresh':
                     vscode.commands.executeCommand('etlsql.refreshConnections');
                     break;
+                case 'openConnectionWizard':
+                    vscode.commands.executeCommand('etlsql.openConnectionWizard');
+                    break;
                 case 'insertText':
                     this._insertTextAtActiveEditor(message.text);
                     break;

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
-const [studio, designerHost, api, controller, designer, css, program, ...navPages] = await Promise.all([
+const [studio, designerHost, api, controller, designer, css, program, portalHeader, indexPage, adminPage] = await Promise.all([
   read('src/ETL-SQL.Portal/wwwroot/studio.html'),
   read('src/ETL-SQL.Portal/wwwroot/designer.html'),
   read('src/ETL-SQL.Portal/wwwroot/js/api.js'),
@@ -11,7 +11,9 @@ const [studio, designerHost, api, controller, designer, css, program, ...navPage
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js'),
   read('src/ETL-SQL.Portal/wwwroot/css/portal.css'),
   read('src/ETL-SQL.Portal/Program.cs'),
-  ...['index.html', 'admin.html', 'docs.html', 'orchestrator.html'].map(name => read(`src/ETL-SQL.Portal/wwwroot/${name}`))
+  read('src/ETL-SQL.Portal/wwwroot/js/portal-header.js'),
+  read('src/ETL-SQL.Portal/wwwroot/index.html'),
+  read('src/ETL-SQL.Portal/wwwroot/admin.html')
 ]);
 
 const moduleSource = [...studio.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].at(-1)?.[1] || '';
@@ -39,12 +41,12 @@ assert.match(designerHost, /studioSession\.capabilities\.includes\('SourceCommit
 assert.match(css, /\.studio-report-grid/);
 assert.match(css, /\.studio-mode-rail/);
 assert.match(program, /isStudioEntry/);
-for (const page of navPages) {
-  assert.match(page, /id="studioNav" style="display:none"/);
-  assert.match(page, /studioApi\.session\(\)/);
-}
-assert.match(navPages[1], /studioSession\?\.mode === 'CatalogOnly'/);
-assert.match(navPages[1], /Open in Studio/);
-assert.match(navPages[1], /exposesExternalSource/);
+assert.match(portalHeader, /studioNav/);
+assert.match(portalHeader, /display:none/);
+assert.match(indexPage, /studioApi\.session\(\)/);
+assert.match(adminPage, /studioApi\.session\(\)/);
+assert.match(adminPage, /studioSession\?\.mode === 'CatalogOnly'/);
+assert.match(adminPage, /Open in Studio/);
+assert.match(adminPage, /exposesExternalSource/);
 
 console.log('Portal catalog-scoped Studio, equal Code/Design modes, and disabled-authoring fencing contract passed.');

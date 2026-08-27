@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -1207,8 +1207,16 @@ public sealed class PlotPlanResolver
         _ => ""
     };
 
-    private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel) =>
-        datum.Channels.FirstOrDefault(item => item.Channel == channel)?.Value;
+    private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel)
+    {
+        var channels = datum.Channels;
+        for (var i = 0; i < channels.Length; i++)
+        {
+            if (channels[i].Channel == channel)
+                return channels[i].Value;
+        }
+        return null;
+    }
 
     private static string? ValueKey(ChartValue value) => value.Kind == ChartValueKind.Null ? null : Display(value);
 }

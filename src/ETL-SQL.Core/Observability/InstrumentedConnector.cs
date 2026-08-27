@@ -19,6 +19,8 @@ internal sealed class InstrumentedConnector(IConnector inner) : IConnector, ICon
     public Dictionary<string, string[]> GetSupportedOptions() => inner.GetSupportedOptions();
     public Dictionary<string, string[]> GetOptionValues() => inner.GetOptionValues();
     public string GetHelp() => inner.GetHelp();
+    public IReadOnlyList<ConnectorOptionDescriptor> GetOptionDescriptors() => inner.GetOptionDescriptors();
+    public ConnectorSchemaDescriptor GetSchemaDescriptor() => inner.GetSchemaDescriptor();
     public string BuildConnectionString(Dictionary<string, string> properties) => inner.BuildConnectionString(properties);
     public string? GetHost(string connectionString, Dictionary<string, string>? options = null) =>
         inner.GetHost(connectionString, options);

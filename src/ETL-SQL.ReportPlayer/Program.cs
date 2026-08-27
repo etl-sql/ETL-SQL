@@ -193,7 +193,7 @@ if (multiMode)
             }
         }
 
-        return Results.Json(await svc.GetManifestAsync(), noCache);
+        return BrowserManifest(await svc.GetManifestAsync());
     });
 
     app.MapPost("/reports/{name}/api/parameter",
@@ -204,7 +204,7 @@ if (multiMode)
         var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.Name))
             return Results.BadRequest("name is required");
-        return Results.Json(await svc.SetParameterAsync(body.Name, body.Value ?? ""), noCache);
+        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? ""));
     });
 
     app.MapPost("/reports/{name}/api/parameters",
@@ -217,7 +217,20 @@ if (multiMode)
         var updates = (body.Params ?? new List<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
-        return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName), noCache);
+        return BrowserManifest(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName));
+    });
+
+    app.MapPost("/reports/{name}/api/layout",
+        async (string name, HttpContext ctx, DashboardServiceFactory fac) =>
+    {
+        var svc = fac.GetService(name);
+        if (svc == null) return Results.NotFound();
+        var body = await JsonSerializer.DeserializeAsync<NativeChartLayoutRequest>(ctx.Request.Body, webOptions);
+        if (body == null || string.IsNullOrWhiteSpace(body.VisualName)
+            || !Enum.TryParse<NativeChartLayoutTier>(body.Tier, true, out var tier))
+            return Results.BadRequest("visualName and a COMPACT, STANDARD, or WIDE tier are required");
+        var manifest = await svc.ResolveVisualLayoutAsync(body.VisualName, tier);
+        return manifest is null ? Results.NotFound() : BrowserManifest(manifest);
     });
 
     app.MapPost("/reports/{name}/api/bookmark",
@@ -228,7 +241,7 @@ if (multiMode)
         var body = await JsonSerializer.DeserializeAsync<BookmarkApplyRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.BookmarkName))
             return Results.BadRequest("bookmarkName is required");
-        return Results.Json(await svc.ApplyBookmarkAsync(body.BookmarkName), noCache);
+        return BrowserManifest(await svc.ApplyBookmarkAsync(body.BookmarkName));
     });
 
     app.MapPost("/reports/{name}/api/run-script",
@@ -252,7 +265,7 @@ if (multiMode)
         var manifest = body.Direction?.ToUpperInvariant() == "UP"
             ? await svc.DrillUpAsync(body.VisualName, body.TargetDepth)
             : await svc.DrillInAsync(body.VisualName, body.ClickedValue ?? "");
-        return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
+        return manifest is null ? Results.NotFound() : BrowserManifest(manifest);
     });
 
     app.MapPost("/reports/{name}/api/refresh-visuals",
@@ -264,7 +277,7 @@ if (multiMode)
         if (body == null || body.Visuals == null || body.Visuals.Count == 0)
             return Results.BadRequest("visuals is required");
         var manifest = await svc.RefreshVisualsAsync(body.Visuals);
-        return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
+        return manifest is null ? Results.NotFound() : BrowserManifest(manifest);
     });
 
     app.MapGet("/reports/{name}/api/refresh", async (string name, DashboardServiceFactory fac) =>
@@ -308,7 +321,7 @@ else
                 await svc.SetParameterAsync(q.Key, q.Value.ToString());
             }
         }
-        return Results.Json(await svc.GetManifestAsync(), noCache);
+        return BrowserManifest(await svc.GetManifestAsync());
     });
 
     app.MapPost("/api/parameter", async (HttpContext ctx, DashboardService svc) =>
@@ -316,7 +329,7 @@ else
         var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.Name))
             return Results.BadRequest("name is required");
-        return Results.Json(await svc.SetParameterAsync(body.Name, body.Value ?? ""), noCache);
+        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? ""));
     });
 
     app.MapPost("/api/parameters", async (HttpContext ctx, DashboardService svc) =>
@@ -326,7 +339,17 @@ else
         var updates = (body.Params ?? new List<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
-        return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName), noCache);
+        return BrowserManifest(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName));
+    });
+
+    app.MapPost("/api/layout", async (HttpContext ctx, DashboardService svc) =>
+    {
+        var body = await JsonSerializer.DeserializeAsync<NativeChartLayoutRequest>(ctx.Request.Body, webOptions);
+        if (body == null || string.IsNullOrWhiteSpace(body.VisualName)
+            || !Enum.TryParse<NativeChartLayoutTier>(body.Tier, true, out var tier))
+            return Results.BadRequest("visualName and a COMPACT, STANDARD, or WIDE tier are required");
+        var manifest = await svc.ResolveVisualLayoutAsync(body.VisualName, tier);
+        return manifest is null ? Results.NotFound() : BrowserManifest(manifest);
     });
 
     app.MapPost("/api/bookmark", async (HttpContext ctx, DashboardService svc) =>
@@ -334,7 +357,7 @@ else
         var body = await JsonSerializer.DeserializeAsync<BookmarkApplyRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.BookmarkName))
             return Results.BadRequest("bookmarkName is required");
-        return Results.Json(await svc.ApplyBookmarkAsync(body.BookmarkName), noCache);
+        return BrowserManifest(await svc.ApplyBookmarkAsync(body.BookmarkName));
     });
 
     app.MapPost("/api/drill", async (HttpContext ctx, DashboardService svc) =>
@@ -344,7 +367,7 @@ else
         var manifest = body.Direction?.ToUpperInvariant() == "UP"
             ? await svc.DrillUpAsync(body.VisualName, body.TargetDepth)
             : await svc.DrillInAsync(body.VisualName, body.ClickedValue ?? "");
-        return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
+        return manifest is null ? Results.NotFound() : BrowserManifest(manifest);
     });
 
     app.MapPost("/api/refresh-visuals", async (HttpContext ctx, DashboardService svc) =>
@@ -353,7 +376,7 @@ else
         if (body == null || body.Visuals == null || body.Visuals.Count == 0)
             return Results.BadRequest("visuals is required");
         var manifest = await svc.RefreshVisualsAsync(body.Visuals);
-        return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
+        return manifest is null ? Results.NotFound() : BrowserManifest(manifest);
     });
 
     app.MapGet("/", async (DashboardService svc) =>
@@ -701,6 +724,9 @@ static string GetCatalogHtml(IReadOnlyList<ReportEntry> reports)
 static string ReportPlayerFooter() =>
     "<footer>Powered by ETL-SQL ReportPlayer &middot; <a href=\"/third-party-notices\" target=\"_blank\" rel=\"noopener\">Third-party notices</a></footer>\n";
 
+static IResult BrowserManifest(ReportManifest manifest) =>
+    Results.Content(BrowserDeliveryProjection.Serialize(manifest), "application/json");
+
 static string? FindRepoFile(string fileName)
 {
     foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
@@ -755,4 +781,10 @@ public class RefreshVisualsRequest
 public class BookmarkApplyRequest
 {
     public string? BookmarkName { get; set; }
+}
+
+public class NativeChartLayoutRequest
+{
+    public string? VisualName { get; set; }
+    public string? Tier { get; set; }
 }

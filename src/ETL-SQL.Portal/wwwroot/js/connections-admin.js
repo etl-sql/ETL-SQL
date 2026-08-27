@@ -465,7 +465,7 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
       fetchSchemas: async () => {
         const res = await fetch('/api/connectors/schema');
         const json = await res.json();
-        return json.schemas || [];
+        return Array.isArray(json) ? json : (json.schemas || []);
       },
       fetchSecrets: async () => {
         try {

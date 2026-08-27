@@ -497,6 +497,10 @@ SET @normal = 'still-visible';
             Assert.Contains(result, item => item.Label == "JITTER");
             Assert.Contains(result, item => item.Label == "DIVERGING");
             Assert.Contains(result, item => item.Label == "ASPECT_RATIO");
+            Assert.Contains(result, item => item.Label == "Q1");
+            Assert.Contains(result, item => item.Label == "MEDIAN");
+            Assert.Contains(result, item => item.Label == "OPEN");
+            Assert.Contains(result, item => item.Label == "CLOSE");
         }
 
         private class MockConfiguration : Microsoft.Extensions.Configuration.IConfiguration

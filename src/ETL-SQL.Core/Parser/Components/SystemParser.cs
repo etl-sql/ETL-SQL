@@ -376,8 +376,11 @@ public class SystemParser : ParserComponent
                 return new UsePasswordStatement(prompt: true) { Line = startToken.Line, Column = startToken.Column };
             }
 
-            Consume(TokenType.EQUALS, "Expected '=' after USE PASSWORD");
-            var password = Consume(TokenType.STRING_LITERAL, "Expected password string").Value;
+            if (Match(TokenType.EQUALS))
+            {
+                // Allow optional '='
+            }
+            var password = Consume(TokenType.STRING_LITERAL, "Expected password string after USE PASSWORD").Value;
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new UsePasswordStatement(password) { Line = startToken.Line, Column = startToken.Column };
         }

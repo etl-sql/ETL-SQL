@@ -1,0 +1,31 @@
+{
+  "kind": "rankedTable",
+  "heading": "Box plot plus mean tick",
+  "items": [
+    {
+      "label": "Mon",
+      "value": "11",
+      "order": 0,
+      "group": "MeanValue"
+    },
+    {
+      "label": "Tue",
+      "value": "12",
+      "order": 1,
+      "group": "MeanValue"
+    },
+    {
+      "label": "Mon",
+      "value": "11.5",
+      "order": 100000,
+      "group": "MeanValue"
+    },
+    {
+      "label": "Tue",
+      "value": "12.4",
+      "order": 100001,
+      "group": "MeanValue"
+    }
+  ],
+  "summary": "Box plot plus mean tick: 2 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

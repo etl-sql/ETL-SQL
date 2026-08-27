@@ -102,6 +102,7 @@ namespace ETL_SQL.LSP
                         Engine.Functions.FuzzyFunctions.Register(functionRegistry);
 
                         services.AddSingleton<IConnectorRegistry>(registry);
+                        services.AddSingleton<Core.Diagnostics.ConnectionDiagnosticEngine>();
                         var helpRegistry = new Core.Metadata.LanguageHelpRegistry();
                         Engine.Services.LanguageHelpService.Initialize(helpRegistry);
                         services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
@@ -140,6 +141,7 @@ namespace ETL_SQL.LSP
                         services.AddTransient<IReportContext, Engine.Services.ReportRegistry>();
                         services.AddTransient<Engine.Services.EvaluatorComponentRegistry>();
                         services.AddTransient<Engine.Evaluator>();
+                        services.AddTransient<IExecutionContext>(sp => sp.GetRequiredService<Engine.Evaluator>());
 
                         // Handlers
                         var handlerAssemblies = new[]

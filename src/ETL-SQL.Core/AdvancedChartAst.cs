@@ -4,7 +4,13 @@ namespace ETL_SQL.Core;
 
 public enum AdvancedChartMarkKind { Rect, Line, Area, Point, Rule, Arc, Text, Tick }
 public enum AdvancedChartDataKind { Quantitative, Temporal, Nominal, Ordinal }
-public enum AdvancedChartChannel { X, X2, XStart, XEnd, XOffset, Y, Y2, YStart, YEnd, YOffset, Color, Size, Shape, Theta, Radius, Text, Tooltip, Detail }
+public enum AdvancedChartChannel
+{
+    X, X2, XStart, XEnd, XOffset,
+    Y, Y2, YStart, YEnd, YOffset,
+    Low, Q1, Median, Q3, High, Open, Close,
+    Color, Size, Shape, Theta, Radius, Text, Tooltip, Detail
+}
 public enum AdvancedChartAxisRole { None, Primary, Secondary }
 public enum AdvancedChartSortDirection { Source, Ascending, Descending }
 public enum AdvancedChartScaleKind { Linear, Logarithmic, Time, Band, Point, Ordinal, Identity }
@@ -24,7 +30,9 @@ public static class AdvancedChartScaleInference
         AdvancedChartMarkKind mark) => channel switch
         {
             AdvancedChartChannel.X or AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd or
-            AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd => dataKind switch
+            AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
+            AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
+            AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close => dataKind switch
             {
                 AdvancedChartDataKind.Quantitative => AdvancedChartScaleKind.Linear,
                 AdvancedChartDataKind.Temporal => AdvancedChartScaleKind.Time,

@@ -1,0 +1,72 @@
+-- Native statistical and financial channels in composable CUSTOM charts.
+
+SET REPORT TITLE = 'CUSTOM Statistical and Financial Layers';
+
+SELECT 'Mon' AS Day, 10 AS OpenValue, 13 AS CloseValue, 8 AS LowValue, 15 AS HighValue,
+       1000 AS Volume, 9 AS Q1Value, 11 AS MedianValue, 14 AS Q3Value, 11.5 AS MeanValue
+INTO #market
+UNION ALL SELECT 'Tue', 13, 11, 9, 16, 1400, 10, 12, 15, 12.4
+UNION ALL SELECT 'Wed', 11, 17, 10, 18, 1800, 11, 14, 17, 14.2;
+
+CREATE VISUAL PriceAndVolume AS CUSTOM (
+  SOURCE = #market,
+  TITLE = 'Candlestick plus volume',
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      days = BAND (CHANNEL = X, ORDER = SOURCE),
+      price = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF),
+      volume_scale = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+      volume = RECT (
+        Z_INDEX = 0,
+        BAND_SIZE = 0.35,
+        ENCODINGS (
+          X = Day (TYPE = ORDINAL, SCALE = days),
+          Y2 = Volume (TYPE = QUANTITATIVE, SCALE = volume_scale, AXIS = SECONDARY)
+        )
+      ),
+      candles = RECT (
+        Z_INDEX = 1,
+        ENCODINGS (
+          X = Day (TYPE = ORDINAL, SCALE = days),
+          OPEN = OpenValue (TYPE = QUANTITATIVE, SCALE = price),
+          CLOSE = CloseValue (TYPE = QUANTITATIVE, SCALE = price),
+          LOW = LowValue (TYPE = QUANTITATIVE, SCALE = price),
+          HIGH = HighValue (TYPE = QUANTITATIVE, SCALE = price)
+        )
+      )
+    )
+  )
+);
+
+CREATE VISUAL DistributionAndMean AS CUSTOM (
+  SOURCE = #market,
+  TITLE = 'Box plot plus mean tick',
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    ENCODINGS (X = Day (TYPE = ORDINAL)),
+    LAYERS (
+      boxes = RECT (
+        ENCODINGS (
+          LOW = LowValue (TYPE = QUANTITATIVE),
+          Q1 = Q1Value (TYPE = QUANTITATIVE),
+          MEDIAN = MedianValue (TYPE = QUANTITATIVE),
+          Q3 = Q3Value (TYPE = QUANTITATIVE),
+          HIGH = HighValue (TYPE = QUANTITATIVE)
+        )
+      ),
+      mean = TICK (
+        Z_INDEX = 1,
+        THICKNESS = 0.3,
+        ENCODINGS (Y = MeanValue (TYPE = QUANTITATIVE))
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (
+  STRUCTURE = 'A B',
+  MAP ('A' = PriceAndVolume, 'B' = DistributionAndMean)
+);

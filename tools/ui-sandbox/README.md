@@ -34,7 +34,7 @@ asserts that property rather than trusting it — see
 
 ## Stories
 
-The sandbox currently hosts 28 stories categorized by domain:
+The sandbox currently hosts 29 stories categorized by domain:
 
 ### Admin & Fleet Management
 | Story | ID | Component / UI Surface |
@@ -80,6 +80,8 @@ The sandbox currently hosts 28 stories categorized by domain:
 |---|---|---|
 | **Report Designer** | `designer` | Portal-based layout designer canvas (`createDesigner()`) |
 | **Snapshot Designer** | `snapshot-designer` | Snapshot-backed layout designing using `.etlsnap` package data |
+| **Native Chart Layout** | `native-chart-layout` | Chart visual layouts |
+| **Constrained HTML Runtime** | `constrained-html-runtime` | Sandboxed HTML component preview |
 
 ### Script Editors & IDE
 | Story | ID | Component / UI Surface |
@@ -87,6 +89,7 @@ The sandbox currently hosts 28 stories categorized by domain:
 | **Script Editor** | `script-editor` | Monaco/CodeMirror based query editor |
 | **Unified Script Editor** | `script-editor-unified` | Stateful editor host with ETL and Report-SQL fixtures |
 | **VS Code Webviews** | `vscode-webviews` | VS Code extension frames (Results panel, Report preview, Report designer) |
+| **Connection Wizard** | `connection-wizard` | Code-first connector configuration, diagnostic test harness & SQL generation |
 
 ### Portal Shell & Views
 | Story | ID | Component / UI Surface |

@@ -87,6 +87,9 @@ public sealed class PortalDesignerSchemaServiceTests
         public HashSet<string> GetAllConnectorKeywords() => [];
         public HashSet<string> GetAllConnectorFunctions() => [];
         public Dictionary<string, string[]> GetAllConnectorOptionValues() => [];
+        public IEnumerable<ConnectorSchemaDescriptor> GetAllConnectorSchemas() => [connector.GetSchemaDescriptor()];
+        public ConnectorSchemaDescriptor? GetConnectorSchema(string connectorType) =>
+            string.Equals(connectorType, connector.Name, StringComparison.OrdinalIgnoreCase) ? connector.GetSchemaDescriptor() : null;
     }
 
     private sealed class FakeConnector(FakeDataSource dataSource) : IConnector

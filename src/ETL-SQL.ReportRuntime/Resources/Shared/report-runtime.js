@@ -172,6 +172,9 @@
     const _uiStates = {};          // Keyed by object name; persists across re-renders (e.g. collapsed: true)
     let _lastManifest = null;
     let _maximizedVisualCard = null;
+    let _nativeLayoutObservers = [];
+    const _nativeLayoutTimers = new Map();
+    const _nativeLayoutRequests = new Map();
     let _exportReadyGeneration = 0;
     let _exportReadyPromise = Promise.resolve();
     let _exportReadyResolve = null;
@@ -561,6 +564,10 @@
         // Cancel any running per-page auto-refresh timers before rebuilding.
         _refreshTimers.forEach(id => clearInterval(id));
         _refreshTimers = [];
+        _nativeLayoutObservers.forEach(observer => observer.disconnect());
+        _nativeLayoutObservers = [];
+        _nativeLayoutTimers.forEach(id => clearTimeout(id));
+        _nativeLayoutTimers.clear();
 
         const root = document.getElementById('root');
         if (!root) {
@@ -2621,7 +2628,9 @@
             return;
         }
         wrapper.appendChild(document.importNode(svg, true));
+        if (visual.layout?.tier) wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
         container.appendChild(wrapper);
+        observeNativeLayout(wrapper, visual);
 
         const clickActions = actionsFor(visual, 'ON_CLICK');
         const interaction = resolveInteraction(visual);
@@ -2663,6 +2672,67 @@
             event.preventDefault();
             showCtxMenu(event.clientX, event.clientY, visual, activeRow);
         });
+    }
+
+    function nativeLayoutTier(layout, containerWidth) {
+        const width = Number(containerWidth);
+        if (!layout || !Number.isFinite(width) || width <= 0) return null;
+        const compactMax = Number(layout.compactMaxWidth);
+        const standardMax = Number(layout.standardMaxWidth);
+        if (!Number.isFinite(compactMax) || !Number.isFinite(standardMax)) return null;
+        if (width <= compactMax) return 'COMPACT';
+        if (width <= standardMax) return 'STANDARD';
+        return 'WIDE';
+    }
+
+    function observeNativeLayout(wrapper, visual) {
+        if (!visual.layout || !isWebMode || vscode || isOfflineSnapshot()
+            || typeof ResizeObserver !== 'function') return;
+
+        const visualName = String(visual.name || '');
+        if (!visualName) return;
+        const observer = new ResizeObserver(entries => {
+            const width = entries[entries.length - 1]?.contentRect?.width;
+            const tier = nativeLayoutTier(visual.layout, width);
+            if (!tier || tier === String(visual.layout.tier || '').toUpperCase()) return;
+
+            const pending = _nativeLayoutRequests.get(visualName);
+            if (pending?.tier === tier) return;
+            const oldTimer = _nativeLayoutTimers.get(visualName);
+            if (oldTimer) clearTimeout(oldTimer);
+            _nativeLayoutTimers.set(visualName, setTimeout(() => {
+                _nativeLayoutTimers.delete(visualName);
+                requestNativeLayout(visualName, tier);
+            }, 180));
+        });
+        observer.observe(wrapper);
+        _nativeLayoutObservers.push(observer);
+    }
+
+    async function requestNativeLayout(visualName, tier) {
+        const previous = _nativeLayoutRequests.get(visualName);
+        if (previous?.tier === tier) return;
+        if (previous) previous.controller.abort();
+
+        const controller = new AbortController();
+        _nativeLayoutRequests.set(visualName, { tier, controller });
+        try {
+            const response = await fetch(apiBase + '/layout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ visualName, tier }),
+                signal: controller.signal
+            });
+            if (!response.ok) return;
+            const manifest = await response.json();
+            if (_nativeLayoutRequests.get(visualName)?.controller !== controller) return;
+            renderManifest(manifest);
+        } catch (error) {
+            if (error?.name !== 'AbortError') console.warn('Native chart layout refresh failed:', error);
+        } finally {
+            if (_nativeLayoutRequests.get(visualName)?.controller === controller)
+                _nativeLayoutRequests.delete(visualName);
+        }
     }
 
     // Draws the current selection over the unselected universe. Which treatment applies is a server
@@ -6424,6 +6494,6 @@
     // Test escape hatch: exposes pure functions for automated testing.
     // Harmless in production (just sets a window property that nothing reads).
     if (typeof window !== 'undefined') {
-        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot };
+        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, nativeLayoutTier, observeNativeLayout, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot };
     }
 })();

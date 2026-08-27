@@ -20,6 +20,109 @@ namespace ETL_SQL.Tests.Reporting.AdvancedAuthoring;
 public sealed class AdvancedChartProductionTests
 {
     [Fact]
+    public void StatisticalAndFinancialRectLayers_RenderAlongsideOrdinaryCustomLayers()
+    {
+        const string sql = """
+            CREATE VISUAL NativeFinance AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  dates = BAND (CHANNEL = X, ORDER = SOURCE),
+                  price = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF),
+                  volume = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = ON)
+                ),
+                LAYERS (
+                  candles = RECT (
+                    Z_INDEX = 1,
+                    ENCODINGS (
+                      X = Day (TYPE = ORDINAL, SCALE = dates),
+                      OPEN = OpenValue (TYPE = QUANTITATIVE, SCALE = price),
+                      CLOSE = CloseValue (TYPE = QUANTITATIVE, SCALE = price),
+                      LOW = LowValue (TYPE = QUANTITATIVE, SCALE = price),
+                      HIGH = HighValue (TYPE = QUANTITATIVE, SCALE = price)
+                    )
+                  ),
+                  volume_bars = RECT (
+                    Z_INDEX = 0,
+                    BAND_SIZE = 0.35,
+                    ENCODINGS (
+                      X = Day (TYPE = ORDINAL, SCALE = dates),
+                      Y2 = Volume (TYPE = QUANTITATIVE, SCALE = volume, AXIS = SECONDARY)
+                    ),
+                    STYLE (COLOR = '#94a3b8')
+                  )
+                )
+              )
+            );
+            """;
+        var parsed = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(parsed.Diagnostics);
+        var statement = Assert.Single(parsed.Statements.OfType<CreateVisualStatement>());
+        var manifest = new VisualManifest
+        {
+            Name = "NativeFinance",
+            Columns = ["Day", "OpenValue", "CloseValue", "LowValue", "HighValue", "Volume"],
+            Rows = [["Mon", "10", "13", "8", "15", "1000"], ["Tue", "13", "11", "9", "16", "1400"]]
+        };
+
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, new VisualChartDataBuilder().Build(spec, manifest));
+        var svg = new SvgChartRenderer().Render(plan);
+
+        Assert.Equal("price", spec.Layers[0].Bindings.Single(binding => binding.Channel == FieldChannel.Open).ScaleId);
+        Assert.Contains("class='plot-candlestick'", svg);
+        Assert.Contains("data-extent-axis='y'", svg);
+        Assert.Contains("O 10, H 15, L 8, C 13", svg);
+    }
+
+    [Fact]
+    public void BoxPlotChannels_RenderWithAnIndependentMeanTickLayer()
+    {
+        const string sql = """
+            CREATE VISUAL NativeDistribution AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                ENCODINGS (X = GroupName (TYPE = NOMINAL)),
+                LAYERS (
+                  boxes = RECT (ENCODINGS (
+                    LOW = LowValue (TYPE = QUANTITATIVE),
+                    Q1 = FirstQuartile (TYPE = QUANTITATIVE),
+                    MEDIAN = MedianValue (TYPE = QUANTITATIVE),
+                    Q3 = ThirdQuartile (TYPE = QUANTITATIVE),
+                    HIGH = HighValue (TYPE = QUANTITATIVE)
+                  )),
+                  mean = TICK (
+                    Z_INDEX = 1,
+                    THICKNESS = 0.3,
+                    ENCODINGS (Y = MeanValue (TYPE = QUANTITATIVE))
+                  )
+                )
+              )
+            );
+            """;
+        var parsed = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(parsed.Diagnostics);
+        var statement = Assert.Single(parsed.Statements.OfType<CreateVisualStatement>());
+        var manifest = new VisualManifest
+        {
+            Name = "NativeDistribution",
+            Columns = ["GroupName", "LowValue", "FirstQuartile", "MedianValue", "ThirdQuartile", "HighValue", "MeanValue"],
+            Rows = [["A", "1", "3", "5", "7", "9", "5.4"]]
+        };
+
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, new VisualChartDataBuilder().Build(spec, manifest));
+        var svg = new SvgChartRenderer().Render(plan);
+
+        Assert.Contains("class='plot-boxplot'", svg);
+        Assert.Contains("class='plot-tick'", svg);
+        var domain = plan.Scales.Single(scale => scale.Channel == FieldChannel.Y).Domain.Select(PlotPlanResolver.Number).ToArray();
+        Assert.True(domain[0] <= 1m && domain[^1] >= 9m);
+    }
+
+    [Fact]
     public void GlobalEncodings_DatumValueAndInference_LowerToExplicitLayerBindings()
     {
         const string sql = """

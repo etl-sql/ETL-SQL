@@ -53,6 +53,13 @@ internal static class AdvancedChartEnumBridge
         AdvancedChartChannel.YStart => FieldChannel.YStart,
         AdvancedChartChannel.YEnd => FieldChannel.YEnd,
         AdvancedChartChannel.YOffset => FieldChannel.YOffset,
+        AdvancedChartChannel.Low => FieldChannel.Low,
+        AdvancedChartChannel.Q1 => FieldChannel.Q1,
+        AdvancedChartChannel.Median => FieldChannel.Median,
+        AdvancedChartChannel.Q3 => FieldChannel.Q3,
+        AdvancedChartChannel.High => FieldChannel.High,
+        AdvancedChartChannel.Open => FieldChannel.Open,
+        AdvancedChartChannel.Close => FieldChannel.Close,
         AdvancedChartChannel.Color => FieldChannel.Color,
         AdvancedChartChannel.Size => FieldChannel.Size,
         AdvancedChartChannel.Shape => FieldChannel.Shape,
@@ -81,6 +88,13 @@ internal static class AdvancedChartEnumBridge
         FieldChannel.YStart => AdvancedChartChannel.YStart,
         FieldChannel.YEnd => AdvancedChartChannel.YEnd,
         FieldChannel.YOffset => AdvancedChartChannel.YOffset,
+        FieldChannel.Low => AdvancedChartChannel.Low,
+        FieldChannel.Q1 => AdvancedChartChannel.Q1,
+        FieldChannel.Median => AdvancedChartChannel.Median,
+        FieldChannel.Q3 => AdvancedChartChannel.Q3,
+        FieldChannel.High => AdvancedChartChannel.High,
+        FieldChannel.Open => AdvancedChartChannel.Open,
+        FieldChannel.Close => AdvancedChartChannel.Close,
         FieldChannel.Color => AdvancedChartChannel.Color,
         FieldChannel.Size => AdvancedChartChannel.Size,
         FieldChannel.Shape => AdvancedChartChannel.Shape,
@@ -89,8 +103,7 @@ internal static class AdvancedChartEnumBridge
         FieldChannel.Text => AdvancedChartChannel.Text,
         FieldChannel.Tooltip => AdvancedChartChannel.Tooltip,
         FieldChannel.Detail => AdvancedChartChannel.Detail,
-        FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
-            FieldChannel.Open or FieldChannel.Close or FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap => null,
+        FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap => null,
         _ => throw Unmapped(value)
     };
 

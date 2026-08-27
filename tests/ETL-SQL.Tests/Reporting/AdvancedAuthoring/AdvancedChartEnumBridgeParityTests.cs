@@ -45,10 +45,9 @@ public sealed class AdvancedChartEnumBridgeParityTests
     }
 
     /// <summary>
-    /// <see cref="FieldChannel"/> is deliberately the wider family: it also carries the statistical and
-    /// financial channels used by named presets and the facet channels. Those have no CUSTOM grammar
-    /// counterpart yet, so the reverse bridge returns null rather than throwing — and this test pins the
-    /// exact set, so widening the grammar without widening the bridge fails here.
+    /// <see cref="FieldChannel"/> is deliberately the wider family because facet channels are synthesized
+    /// by lowering instead of authored as encodings. The reverse bridge returns null for exactly those
+    /// members, so widening either family without widening the bridge fails here.
     /// </summary>
     [Fact]
     public void ContractChannelsWithoutGrammarCounterpartsAreExactlyTheKnownSet()
@@ -58,10 +57,7 @@ public sealed class AdvancedChartEnumBridgeParityTests
             .ToList();
 
         Assert.Equal(
-            [
-                FieldChannel.Low, FieldChannel.Q1, FieldChannel.Median, FieldChannel.Q3, FieldChannel.High,
-                FieldChannel.Open, FieldChannel.Close, FieldChannel.Row, FieldChannel.Column, FieldChannel.Wrap
-            ],
+            [FieldChannel.Row, FieldChannel.Column, FieldChannel.Wrap],
             unmapped);
 
         foreach (var channel in Enum.GetValues<FieldChannel>().Except(unmapped))

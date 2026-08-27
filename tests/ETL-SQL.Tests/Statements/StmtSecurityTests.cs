@@ -1,4 +1,4 @@
-﻿using System.Threading.Tasks;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Core;
@@ -118,6 +118,18 @@ namespace ETL_SQL.Tests.Statements.Statements
 
             Assert.Equal("USE PASSWORD = '********';", stmt.ToSql(true));
             Assert.Equal("USE PASSWORD = 'my_pass';", stmt.ToSql(false));
+        }
+
+        [Fact]
+        public void TestUsePassword_Parse_WithAndWithoutEquals()
+        {
+            var scriptWithEquals = TestHelpers.Parse("USE PASSWORD = 'pass1';");
+            var stmtWithEquals = Assert.IsType<UsePasswordStatement>(Assert.Single(scriptWithEquals.Statements));
+            Assert.Equal("pass1", stmtWithEquals.Password);
+
+            var scriptWithoutEquals = TestHelpers.Parse("USE PASSWORD 'pass2';");
+            var stmtWithoutEquals = Assert.IsType<UsePasswordStatement>(Assert.Single(scriptWithoutEquals.Statements));
+            Assert.Equal("pass2", stmtWithoutEquals.Password);
         }
 
         [Fact]

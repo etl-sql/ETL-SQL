@@ -255,6 +255,11 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? NativeSvg { get; set; }
 
+        /// <summary>Bounded responsive layout metadata consumed by the browser ResizeObserver.</summary>
+        [JsonPropertyName("layout")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public NativeChartLayoutManifest? Layout { get; set; }
+
         /// <summary>Validated engine-resolved custom map path; never serialized to clients.</summary>
         [JsonIgnore]
         public string? ResolvedMapFile { get; set; }
@@ -448,6 +453,25 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("htmlEmbeds")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<HtmlVisualEmbedManifest>? HtmlEmbeds { get; set; }
+    }
+
+    /// <summary>The compact browser contract for a server-resolved native chart layout.</summary>
+    public sealed class NativeChartLayoutManifest
+    {
+        [JsonPropertyName("tier")]
+        public string Tier { get; set; } = "STANDARD";
+
+        [JsonPropertyName("compactMaxWidth")]
+        public decimal CompactMaxWidth { get; set; }
+
+        [JsonPropertyName("standardMaxWidth")]
+        public decimal StandardMaxWidth { get; set; }
+
+        [JsonPropertyName("width")]
+        public decimal Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public decimal Height { get; set; }
     }
 
     public sealed class HtmlVisualEmbedManifest

@@ -28,6 +28,11 @@ public class UsePasswordStatementHandler : IStatementHandler
             context.ScriptPassword = stmt.Password;
         }
 
+        if (!string.IsNullOrEmpty(context.ScriptPassword))
+        {
+            ETL_SQL.Core.Common.SecretRedactor.RegisterRuntimeSecret(context.ScriptPassword);
+        }
+
         if (context.IsVerbose)
         {
             var masked = stmt.ToSql(true);

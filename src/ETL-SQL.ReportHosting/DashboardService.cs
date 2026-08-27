@@ -39,6 +39,8 @@ namespace ETL_SQL.ReportHosting
         private readonly string? _keyScope;
         private readonly string _storageRunId = $"report-{Guid.NewGuid():N}";
         private readonly SemaphoreSlim _lock = new(1, 1);
+        private readonly NativeChartLayoutProfile _layoutProfile;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<NativeChartLayoutCacheKey, NativeChartLayoutCacheEntry> _layoutCache = new();
 
         private IServiceScope? _currentScope;
         private ReportManifest? _manifest;
@@ -49,7 +51,7 @@ namespace ETL_SQL.ReportHosting
 
         public string ScriptDirectory => Path.GetDirectoryName(_scriptPath) ?? Directory.GetCurrentDirectory();
 
-        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null, int? datasetOwningReportId = null, string? datasetAtRestKey = null, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null, string? keyScope = null)
+        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null, int? datasetOwningReportId = null, string? datasetAtRestKey = null, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null, string? keyScope = null, NativeChartLayoutProfile? layoutProfile = null)
         {
             _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
@@ -58,6 +60,7 @@ namespace ETL_SQL.ReportHosting
             _datasetOwningReportId = datasetOwningReportId;
             _datasetAtRestKey = datasetAtRestKey;
             _executionIdentity = executionIdentity;
+            _layoutProfile = layoutProfile ?? NativeChartLayoutProfile.Default;
             _keyScope = string.IsNullOrWhiteSpace(keyScope)
                 ? null
                 : ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(keyScope).Value;
@@ -93,14 +96,65 @@ namespace ETL_SQL.ReportHosting
         /// <summary>Returns the cached manifest, building it on first call.</summary>
         public async Task<ReportManifest> GetManifestAsync()
         {
-            if (_manifest != null) return _manifest;
+            if (_manifest != null)
+            {
+                StampDefaultLayouts(_manifest);
+                return _manifest;
+            }
             return await RebuildAsync();
+        }
+
+        /// <summary>
+        /// Re-resolves one native visual for a bounded layout tier without querying its data source.
+        /// The returned manifest is a delivery clone; the session's canonical manifest stays at its
+        /// standard layout, and its parameter, selection, highlight, and drill state are preserved.
+        /// </summary>
+        public async Task<ReportManifest?> ResolveVisualLayoutAsync(string visualName, NativeChartLayoutTier tier)
+        {
+            if (string.IsNullOrWhiteSpace(visualName)) return null;
+            if (_manifest == null) await GetManifestAsync();
+            if (_manifest == null) return null;
+
+            await _lock.WaitAsync();
+            try
+            {
+                var source = _manifest.Visuals.FirstOrDefault(visual =>
+                    visual.Name.Equals(visualName.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (source == null || !NativeChartLayoutResolver.Supports(source)) return null;
+
+                var key = new NativeChartLayoutCacheKey(_scriptPath, source.Name, tier, _manifest.BuiltAt.Ticks);
+                if (!_layoutCache.TryGetValue(key, out var entry))
+                {
+                    var working = CloneManifest(_manifest);
+                    var visual = working.Visuals.First(item => item.Name.Equals(source.Name, StringComparison.OrdinalIgnoreCase));
+                    visual.ResolvedMapFile = source.ResolvedMapFile;
+                    NativeChartLayoutResolver.Resolve(visual, tier, _layoutProfile);
+                    entry = new NativeChartLayoutCacheEntry(
+                        visual.NativeSvg,
+                        visual.PlotPlan,
+                        visual.Interaction,
+                        visual.Layout!);
+                    _layoutCache[key] = entry;
+                    TrimLayoutCache(_manifest.Visuals.Count);
+                }
+
+                var result = CloneManifest(_manifest);
+                var target = result.Visuals.First(item => item.Name.Equals(source.Name, StringComparison.OrdinalIgnoreCase));
+                target.NativeSvg = entry.NativeSvg;
+                target.PlotPlan = entry.PlotPlan;
+                target.Interaction = entry.Interaction;
+                target.Layout = entry.Layout;
+                return result;
+            }
+            finally { _lock.Release(); }
         }
 
         /// <summary>Current parameter values (set by slicer interactions).</summary>
         public IReadOnlyDictionary<string, string> Parameters => _parameters;
 
         public ILineageTracker? CurrentLineageTracker => _evaluator?.LineageTracker;
+
+        internal int NativeLayoutCacheEntryCount => _layoutCache.Count;
 
         private bool IsPaginatedPage(string pageName) =>
             _manifest?.Pages.Any(p =>
@@ -528,12 +582,14 @@ namespace ETL_SQL.ReportHosting
                     _evaluator = evaluator;
                     _manifest = await failBuilder.BuildAsync(_scriptPath);
                     _manifest.Error = ex.Message;
+                    StampDefaultLayouts(_manifest);
                     return _manifest;
                 }
 
                 var builder = new ManifestBuilder(evaluator);
                 _evaluator = evaluator;
                 _manifest = await builder.BuildAsync(_scriptPath, runPages: _runPages);
+                StampDefaultLayouts(_manifest);
 
                 return _manifest;
             }
@@ -622,6 +678,33 @@ namespace ETL_SQL.ReportHosting
             if (_manifest == null) return true;
             return new SnapshotStore().IsStale(_manifest, _scriptPath, ttl);
         }
+
+        private void StampDefaultLayouts(ReportManifest manifest)
+        {
+            foreach (var visual in manifest.Visuals.Where(item => item.Layout is null))
+                NativeChartLayoutResolver.StampDefault(visual, _layoutProfile);
+        }
+
+        private void TrimLayoutCache(int visualCount)
+        {
+            var limit = Math.Max(3, visualCount * 6);
+            if (_layoutCache.Count <= limit) return;
+            var currentTicks = _manifest?.BuiltAt.Ticks;
+            foreach (var key in _layoutCache.Keys.Where(item => item.ManifestTicks != currentTicks))
+                _layoutCache.TryRemove(key, out _);
+        }
+
+        private readonly record struct NativeChartLayoutCacheKey(
+            string Report,
+            string Visual,
+            NativeChartLayoutTier Tier,
+            long ManifestTicks);
+
+        private sealed record NativeChartLayoutCacheEntry(
+            string? NativeSvg,
+            ETL_SQL.Reporting.Semantics.PlotPlan? PlotPlan,
+            InteractionManifest? Interaction,
+            NativeChartLayoutManifest Layout);
 
     }
 }

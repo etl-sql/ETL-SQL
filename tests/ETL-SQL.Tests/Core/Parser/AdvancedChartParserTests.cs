@@ -46,6 +46,39 @@ public sealed class AdvancedChartParserTests
         Assert.Equal(formatted, reparsed.ToSql());
     }
 
+    [Fact]
+    public void CustomChart_ParsesAndFormatsStatisticalAndFinancialChannels()
+    {
+        const string sql = """
+            CREATE VISUAL Distribution AS CUSTOM (
+              SOURCE = #summary,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                LAYERS (shape = RECT (ENCODINGS (
+                  X = Bucket (TYPE = NOMINAL),
+                  LOW = LowValue (TYPE = QUANTITATIVE),
+                  Q1 = FirstQuartile (TYPE = QUANTITATIVE),
+                  MEDIAN = MedianValue (TYPE = QUANTITATIVE),
+                  Q3 = ThirdQuartile (TYPE = QUANTITATIVE),
+                  HIGH = HighValue (TYPE = QUANTITATIVE)
+                )))
+              )
+            );
+            """;
+
+        var statement = ParseVisual(sql);
+        var channels = statement.AdvancedChart!.Layers[0].Encodings.Select(encoding => encoding.Channel).ToArray();
+
+        Assert.Equal(
+            [AdvancedChartChannel.X, AdvancedChartChannel.Low, AdvancedChartChannel.Q1,
+                AdvancedChartChannel.Median, AdvancedChartChannel.Q3, AdvancedChartChannel.High],
+            channels);
+        var formatted = statement.ToSql();
+        Assert.Contains("LOW = LowValue", formatted);
+        Assert.Contains("MEDIAN = MedianValue", formatted);
+        Assert.Empty(Parse(formatted).Diagnostics);
+    }
+
     [Theory]
     [InlineData("CREATE VISUAL Broken AS CUSTOM (SOURCE = #data);")]
     [InlineData("CREATE VISUAL Broken AS BAR (SOURCE = #data, CHART (COORDINATE (TYPE = CARTESIAN), SCALES (x = BAND (CHANNEL = X)), LAYERS (bars = RECT (ENCODINGS (X = Name (TYPE = NOMINAL, SCALE = x))))));")]

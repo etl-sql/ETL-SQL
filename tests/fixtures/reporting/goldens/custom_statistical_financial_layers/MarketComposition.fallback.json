@@ -1,0 +1,31 @@
+{
+  "kind": "rankedTable",
+  "heading": "Candlestick plus volume",
+  "items": [
+    {
+      "label": "Mon",
+      "value": "1000",
+      "order": 0,
+      "group": "MarketComposition"
+    },
+    {
+      "label": "Tue",
+      "value": "1400",
+      "order": 1,
+      "group": "MarketComposition"
+    },
+    {
+      "label": "Mon",
+      "value": "13",
+      "order": 100000,
+      "group": "MarketComposition"
+    },
+    {
+      "label": "Tue",
+      "value": "11",
+      "order": 100001,
+      "group": "MarketComposition"
+    }
+  ],
+  "summary": "Candlestick plus volume: 2 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

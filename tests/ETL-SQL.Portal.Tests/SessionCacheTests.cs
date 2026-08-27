@@ -90,6 +90,21 @@ public sealed class SessionCacheTests : IDisposable
         Assert.Same(beta, cache.GetOrCreate(1, 7, script, keyScope: "tenant-beta"));
     }
 
+    [Fact]
+    public void GetOrCreate_AcrossHaNodes_RemainsNodeLocalAndStickyWithinEachNode()
+    {
+        using var nodeA = NewCache();
+        using var nodeB = NewCache();
+        var script = Path.Combine(_tempDir, "a.rptsql");
+
+        var sessionA = nodeA.GetOrCreate(1, 7, script, keyScope: "tenant-alpha");
+        var sessionB = nodeB.GetOrCreate(1, 7, script, keyScope: "tenant-alpha");
+
+        Assert.NotSame(sessionA, sessionB);
+        Assert.Same(sessionA, nodeA.GetOrCreate(1, 7, script, keyScope: "tenant-alpha"));
+        Assert.Same(sessionB, nodeB.GetOrCreate(1, 7, script, keyScope: "tenant-alpha"));
+    }
+
     /// <summary>
     /// Regression for the construction race: concurrent GetOrCreate calls for the same key
     /// must all observe a single winning session rather than each keeping its own.

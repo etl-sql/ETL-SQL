@@ -494,6 +494,11 @@
       ],
       "view/title": [
         {
+          "command": "etlsql.openConnectionWizard",
+          "when": "view == etlsql-sidebar",
+          "group": "navigation@0"
+        },
+        {
           "command": "etlsql.refreshConnections",
           "when": "view == etlsql-sidebar",
           "group": "navigation@1"

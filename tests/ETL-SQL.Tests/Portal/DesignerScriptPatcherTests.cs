@@ -437,6 +437,58 @@ public class DesignerScriptPatcherTests
         Assert.Equal(invalid, patched);
     }
 
+    [Fact]
+    public void PatchesVisualFormattingStyleOptions_WhenPropertiesPanelUpdated()
+    {
+        const string original = """
+            SELECT 'Apples' AS category, 100 AS amount INTO #data;
+
+            CREATE VISUAL v_bar AS BAR (
+                TITLE = 'Sales',
+                SOURCE = #data,
+                MAPPINGS (X = category, Y = amount)
+            );
+
+            CREATE PAGE [Dashboard] AS DASHBOARD (
+                LAYOUT (
+                    STRUCTURE = 'A',
+                    MAP (
+                        'A' = v_bar
+                    )
+                )
+            );
+            """;
+
+        var visualOptions = new Dictionary<string, string>
+        {
+            ["BACKGROUND"] = "#f8fafc",
+            ["COLOR"] = "#0f172a",
+            ["BORDER"] = "1px solid #e2e8f0",
+            ["BORDER_RADIUS"] = "10px",
+            ["SHADOW"] = "ON",
+            ["FONT"] = "Inter, sans-serif",
+            ["FONT_SIZE"] = "14px",
+            ["FONT_WEIGHT"] = "600",
+            ["OPACITY"] = "0.95"
+        };
+
+        var state = State(Page("p1", "Dashboard", Visual(
+            "v1", "v_bar", "BAR", 1, 1, 12, 4, "Sales", options: visualOptions)));
+
+        var patched = _patcher.Patch(original, state);
+
+        Assert.Contains("STYLE (", patched, StringComparison.Ordinal);
+        Assert.Contains("BACKGROUND = '#f8fafc'", patched, StringComparison.Ordinal);
+        Assert.Contains("COLOR = '#0f172a'", patched, StringComparison.Ordinal);
+        Assert.Contains("BORDER = '1px solid #e2e8f0'", patched, StringComparison.Ordinal);
+        Assert.Contains("BORDER_RADIUS = '10px'", patched, StringComparison.Ordinal);
+        Assert.Contains("SHADOW = ON", patched, StringComparison.Ordinal);
+        Assert.Contains("FONT = 'Inter, sans-serif'", patched, StringComparison.Ordinal);
+        Assert.Contains("FONT_SIZE = '14px'", patched, StringComparison.Ordinal);
+        Assert.Contains("FONT_WEIGHT = '600'", patched, StringComparison.Ordinal);
+        Assert.Contains("OPACITY = '0.95'", patched, StringComparison.Ordinal);
+    }
+
     private static DesignerStateDto State(params DesignerPageDto[] pages) =>
         new(pages.ToList(), []);
 

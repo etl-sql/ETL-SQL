@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
 
 namespace ETL_SQL.Reporting.Renderers;
@@ -23,14 +24,14 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
     /// <summary>Vertical space the title band reserves above the plot area.</summary>
     private const double TitleBand = 38;
 
-    public string? Render(VisualManifest visual) => visual.VisualType.ToUpperInvariant() switch
+    public string? Render(VisualManifest visual, PlotBounds? bounds = null) => visual.VisualType.ToUpperInvariant() switch
     {
-        "TREEMAP" => Treemap(visual, FocusedLayoutInputs.From(visual, TreemapKeys(visual))),
-        "SUNBURST" => Sunburst(visual),
-        "SANKEY" => Sankey(visual),
-        "NETWORK" => Network(visual),
-        "MAP" => Map(visual, FocusedLayoutInputs.From(visual)),
-        "MATRIX" => Matrix(visual, FocusedLayoutInputs.From(visual)),
+        "TREEMAP" => Treemap(visual, FocusedLayoutInputs.From(visual, TreemapKeys(visual), bounds)),
+        "SUNBURST" => Sunburst(visual, bounds),
+        "SANKEY" => Sankey(visual, bounds),
+        "NETWORK" => Network(visual, bounds),
+        "MAP" => Map(visual, FocusedLayoutInputs.From(visual, bounds: bounds)),
+        "MATRIX" => Matrix(visual, FocusedLayoutInputs.From(visual, bounds: bounds)),
         _ => null
     };
 
@@ -151,7 +152,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     // ── SUNBURST ───────────────────────────────────────────────────────────────
 
-    private static string Sunburst(VisualManifest v)
+    private static string Sunburst(VisualManifest v, PlotBounds? bounds)
     {
         var explicitLabel = Index(v, "label", "name", fallback: -1);
         var parent = Index(v, "parent", fallback: -1);
@@ -175,7 +176,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
             .Where(part => part.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var inputs = FocusedLayoutInputs.From(v, roots);
+        var inputs = FocusedLayoutInputs.From(v, roots, bounds);
 
         var maxDepth = Math.Max(1, paths.Select(p => p.Parts.Length).DefaultIfEmpty(1).Max());
         var total = paths.Sum(p => p.Value); if (total <= 0) total = Math.Max(1, paths.Count);
@@ -202,12 +203,12 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     // ── SANKEY ─────────────────────────────────────────────────────────────────
 
-    private static string Sankey(VisualManifest v)
+    private static string Sankey(VisualManifest v, PlotBounds? bounds)
     {
         var source = Index(v, "source", "from", fallback: 0); var target = Index(v, "target", "to", fallback: 1); var value = Index(v, "value", fallback: 2);
         var links = v.Rows.Select((r, i) => (Source: Cell(r, source, ""), Target: Cell(r, target, ""), Value: Math.Max(.1, Number(r, value)), Row: i)).Where(e => e.Source.Length > 0 && e.Target.Length > 0).ToList();
         var names = links.SelectMany(e => new[] { e.Source, e.Target }).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var inputs = FocusedLayoutInputs.From(v, names);
+        var inputs = FocusedLayoutInputs.From(v, names, bounds);
         var ranks = names.ToDictionary(n => n, _ => 0, StringComparer.OrdinalIgnoreCase);
         for (var pass = 0; pass < names.Count; pass++) foreach (var edge in links) if (!edge.Source.Equals(edge.Target, StringComparison.OrdinalIgnoreCase)) ranks[edge.Target] = Math.Max(ranks[edge.Target], Math.Min(names.Count - 1, ranks[edge.Source] + 1));
         var maxRank = Math.Max(1, ranks.Values.DefaultIfEmpty().Max());
@@ -225,12 +226,12 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     // ── NETWORK ────────────────────────────────────────────────────────────────
 
-    private static string Network(VisualManifest v)
+    private static string Network(VisualManifest v, PlotBounds? bounds)
     {
         var source = Index(v, "from", "source", fallback: 0); var target = Index(v, "to", "target", fallback: 1); var weight = Index(v, "value", "weight", fallback: -1);
         var links = v.Rows.Select((r, i) => (A: Cell(r, source, ""), B: Cell(r, target, ""), W: Math.Max(.1, Number(r, weight, 1)), Row: i)).Where(e => e.A.Length > 0 && e.B.Length > 0).ToList();
         var names = links.SelectMany(e => new[] { e.A, e.B }).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-        var inputs = FocusedLayoutInputs.From(v, names);
+        var inputs = FocusedLayoutInputs.From(v, names, bounds);
         var cx = inputs.Width / 2;
         var cy = (TitleBand + inputs.Height) / 2;
         var radius = Math.Min(inputs.Width, inputs.Height - TitleBand) * .38;

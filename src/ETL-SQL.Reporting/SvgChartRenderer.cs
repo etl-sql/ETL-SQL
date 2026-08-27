@@ -28,6 +28,9 @@ namespace ETL_SQL.Reporting
 
         public string Render(PlotPlan plan) => _plotPlan.Render(plan);
 
+        public string? RenderFocused(VisualManifest visual, PlotBounds bounds) =>
+            _specialized.Render(visual, bounds);
+
         public string? Render(VisualManifest v) => v.PlotPlan is not null
             ? _plotPlan.Render(v.PlotPlan)
             : v.VisualType.ToUpperInvariant() switch

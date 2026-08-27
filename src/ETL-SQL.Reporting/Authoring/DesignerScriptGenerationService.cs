@@ -239,6 +239,26 @@ public sealed class DesignerScriptGenerationService
             styleOptions.Add($"WIDTH = '{EscapeStr(width)}'");
         if (visual.Options.TryGetValue("HEIGHT", out var height) && !string.IsNullOrWhiteSpace(height))
             styleOptions.Add($"HEIGHT = '{EscapeStr(height)}'");
+        if (visual.Options.TryGetValue("BACKGROUND", out var bg) && !string.IsNullOrWhiteSpace(bg))
+            styleOptions.Add($"BACKGROUND = '{EscapeStr(bg)}'");
+        if (visual.Options.TryGetValue("COLOR", out var color) && !string.IsNullOrWhiteSpace(color))
+            styleOptions.Add($"COLOR = '{EscapeStr(color)}'");
+        if (visual.Options.TryGetValue("BORDER", out var border) && !string.IsNullOrWhiteSpace(border))
+            styleOptions.Add($"BORDER = '{EscapeStr(border)}'");
+        if (visual.Options.TryGetValue("BORDER_RADIUS", out var radius) && !string.IsNullOrWhiteSpace(radius))
+            styleOptions.Add($"BORDER_RADIUS = '{EscapeStr(radius)}'");
+        if (visual.Options.TryGetValue("SHADOW", out var shadow) && !string.IsNullOrWhiteSpace(shadow))
+            styleOptions.Add(string.Equals(shadow, "ON", StringComparison.OrdinalIgnoreCase) || string.Equals(shadow, "OFF", StringComparison.OrdinalIgnoreCase)
+                ? $"SHADOW = {shadow.ToUpperInvariant()}"
+                : $"SHADOW = '{EscapeStr(shadow)}'");
+        if (visual.Options.TryGetValue("FONT", out var font) && !string.IsNullOrWhiteSpace(font))
+            styleOptions.Add($"FONT = '{EscapeStr(font)}'");
+        if (visual.Options.TryGetValue("FONT_SIZE", out var fontSize) && !string.IsNullOrWhiteSpace(fontSize))
+            styleOptions.Add($"FONT_SIZE = '{EscapeStr(fontSize)}'");
+        if (visual.Options.TryGetValue("FONT_WEIGHT", out var fontWeight) && !string.IsNullOrWhiteSpace(fontWeight))
+            styleOptions.Add($"FONT_WEIGHT = '{EscapeStr(fontWeight)}'");
+        if (visual.Options.TryGetValue("OPACITY", out var opacity) && !string.IsNullOrWhiteSpace(opacity))
+            styleOptions.Add($"OPACITY = '{EscapeStr(opacity)}'");
         if (styleOptions.Count > 0)
             AppendLine(sb, $"    STYLE ({string.Join(", ", styleOptions)}),", nl);
 
@@ -354,6 +374,15 @@ public sealed class DesignerScriptGenerationService
     private static bool IsReservedOption(string key) =>
         string.Equals(key, "WIDTH", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "HEIGHT", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "BACKGROUND", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "COLOR", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "BORDER", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "BORDER_RADIUS", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "SHADOW", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "FONT", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "FONT_SIZE", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "FONT_WEIGHT", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "OPACITY", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "CONTAINER_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)

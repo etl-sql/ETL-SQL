@@ -51,7 +51,17 @@ namespace ETL_SQL.Connectors
         {
             var builder = new SqlConnectionStringBuilder();
 
-            if (props.TryGetValue("SERVER", out var server)) builder.DataSource = server;
+            if (props.TryGetValue("SERVER", out var server))
+            {
+                if (props.TryGetValue("PORT", out var port) && !string.IsNullOrWhiteSpace(port) && !server.Contains(','))
+                {
+                    builder.DataSource = $"{server},{port}";
+                }
+                else
+                {
+                    builder.DataSource = server;
+                }
+            }
             if (props.TryGetValue("DATABASE", out var db)) builder.InitialCatalog = db;
 
             bool trusted = props.ContainsKey("TRUSTED_CONNECTION") &&

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Common;
@@ -15,6 +16,7 @@ using ETL_SQL.Services;
 namespace ETL_SQL.Core.Diagnostics;
 
 /// <summary>Outcome of a single diagnostic layer.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DiagnosticStatus
 {
     /// <summary>The layer completed successfully.</summary>
@@ -326,6 +328,8 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
             IReadOnlyList<DiagnosticStep> authSteps;
             try
             {
+                using var authCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                authCts.CancelAfter(timeout);
                 authSteps = await authProbe.DiagnoseAuthenticationAsync(
                     new ConnectionDiagnosticAuthContext(
                         alias,
@@ -333,7 +337,7 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
                         effectiveTarget,
                         opts,
                         probeTimeoutSeconds),
-                    cancellationToken).ConfigureAwait(false);
+                    authCts.Token).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

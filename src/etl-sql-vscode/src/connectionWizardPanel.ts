@@ -71,7 +71,9 @@ export class ConnectionWizardPanel {
                     let schemas: unknown[] = [];
                     if (ConnectionWizardPanel._lspClient) {
                         const res = await ConnectionWizardPanel._lspClient.sendRequest('etlsql/getConnectorSchemas', {});
-                        if (res && typeof res === 'object' && 'schemas' in res) {
+                        if (Array.isArray(res)) {
+                            schemas = res;
+                        } else if (res && typeof res === 'object' && 'schemas' in res) {
                             schemas = (res as { schemas: unknown[] }).schemas || [];
                         }
                     }
@@ -289,7 +291,7 @@ export class ConnectionWizardPanel {
             existingNames,
             fetchSchemas: async () => {
                 const res = await callHost('fetchSchemas');
-                return res.schemas || [];
+                return Array.isArray(res) ? res : (res.schemas || []);
             },
             onTest: async (req) => {
                 const res = await callHost('testConnection', { req });

@@ -1,4 +1,4 @@
-# ETL-SQL Development TODO List
+﻿# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for all unfinished product and release work. All remaining
 product work is active for the current planning horizon. Work top to bottom unless a dependency or
@@ -117,6 +117,13 @@ Authoritative references:
   reference pages. Add automated Playwright / `SandboxStoryTests` browser test coverage verifying schema rendering,
   diagnostic probe success/failure states, code generation accuracy for SQL and file connectors, and light/dark theme
   parity.
+
+## Bugs
+
+### Workstation Editor
+- [ ] **Mouse select not working on single line**  I can click the left mouse button and drag multiple lines and it selects them but 
+      if I just wanted to for example I had a line SELECT 1; SELECT 2; SELECT 3;  and I want to just drag to highlight SELECT 2; to just
+      run that command I cannot do it I can only run the whole line.
 
 ## v0.19.0 Release Evidence Gates
 

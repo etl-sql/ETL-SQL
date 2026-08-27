@@ -31,6 +31,7 @@ namespace ETL_SQL.Connectors.SqlServer
             "MSSQL Connector: Connects to Microsoft SQL Server.\n" +
             "Options:\n" +
             "  SERVER: The target server.\n" +
+            "  PORT: The port number (default 1433).\n" +
             "  DATABASE: The target database.\n" +
             "  USER/PASS: Standard credentials.\n" +
             "  TRUSTED_CONNECTION: Set to TRUE for Windows Auth.\n" +
@@ -47,6 +48,7 @@ namespace ETL_SQL.Connectors.SqlServer
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "SERVER", Array.Empty<string>() },
+            { "PORT", Array.Empty<string>() },
             { "DATABASE", Array.Empty<string>() },
             { "USER", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() },

@@ -117,6 +117,20 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains(".missing-chart-payload", css);
         }
 
+        [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public void ReportBuilder_ExposesStatisticalAndFinancialCustomRecipes()
+        {
+            var root = FindRepoRoot();
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "designer.js"));
+
+            Assert.Contains("Composition recipe", js);
+            Assert.Contains("Box plot + mean tick", js);
+            Assert.Contains("Candlestick + volume", js);
+            Assert.Contains("Q1 = q1 (TYPE = QUANTITATIVE)", js);
+            Assert.Contains("OPEN = open (TYPE = QUANTITATIVE, SCALE = price)", js);
+        }
+
         private static string FindRepoRoot([CallerFilePath] string sourceFilePath = "")
         {
             foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory(), Path.GetDirectoryName(sourceFilePath) ?? "" })

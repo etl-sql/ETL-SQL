@@ -282,7 +282,7 @@ try {
   }
 
   const portalIndex = await fs.readFile(path.resolve('src/ETL-SQL.Portal/wwwroot/index.html'), 'utf8');
-  for (const expectedText of ['#governance/stewardship', '#governance/audit', "allowAudit: isAdmin", "mode === 'lineage' ? 'history' : mode"]) {
+  for (const expectedText of ['#governance/overview', '#governance/lineage', 'createGovernancePortal', 'showGovernanceCatalog']) {
     if (!portalIndex.includes(expectedText)) {
       throw new Error(`Portal governance routing missing: ${expectedText}`);
     }

@@ -189,6 +189,29 @@ namespace ETL_SQL.Tests.Statements
             Assert.Equal("SKIPPED", network["Status"]);
         }
 
+        [Fact]
+        public async Task DiagnoseTargetAsync_SerializesDiagnosticStatusAsString()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var context = (IExecutionContext)evaluator;
+            var registry = ETL_SQL.Program.ServiceProvider.GetRequiredService<IConnectorRegistry>();
+            var engine = new ConnectionDiagnosticEngine(registry);
+
+            var report = await engine.DiagnoseTargetAsync(
+                context,
+                "mock_target",
+                "MOCKDB",
+                string.Empty,
+                new Dictionary<string, string>(),
+                1);
+
+            Assert.True(report.Succeeded);
+            var json = System.Text.Json.JsonSerializer.Serialize(report);
+            Assert.Contains("\"Status\":\"Ok\"", json);
+            Assert.Contains("\"Status\":\"Skipped\"", json);
+            Assert.DoesNotContain("\"Status\":0", json);
+        }
+
         private sealed class AuthProbeConnector : IConnector, IConnectionDiagnosticAuthProbe
         {
             public string Name => "AUTHMOCK";
@@ -223,6 +246,9 @@ namespace ETL_SQL.Tests.Statements
             public HashSet<string> GetAllConnectorKeywords() => [];
             public HashSet<string> GetAllConnectorFunctions() => [];
             public Dictionary<string, string[]> GetAllConnectorOptionValues() => [];
+            public IEnumerable<ConnectorSchemaDescriptor> GetAllConnectorSchemas() => [connector.GetSchemaDescriptor()];
+            public ConnectorSchemaDescriptor? GetConnectorSchema(string connectorType) =>
+                string.Equals(connectorType, connector.Name, System.StringComparison.OrdinalIgnoreCase) ? connector.GetSchemaDescriptor() : null;
         }
     }
 }

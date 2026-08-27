@@ -1248,8 +1248,49 @@ export async function createScriptEditor(container, opts = {}) {
             hoverTip.className = 'etlsql-editor-hover';
             hoverTip.innerHTML = markdownToTooltipHtml(data.markdown);
             document.body.appendChild(hoverTip);
-            const left = Math.min(window.innerWidth - 24, evt.clientX + 14);
-            const top = Math.min(window.innerHeight - 24, evt.clientY + 18);
+
+            // Intelligent collision avoidance: if CodeMirror's lint diagnostic tooltip is open,
+            // stack hover documentation neatly below (or above) it instead of overlapping.
+            const lintTooltip = view?.dom?.querySelector('.cm-tooltip-lint, .cm-tooltip-hover, .cm-tooltip');
+            if (lintTooltip && lintTooltip.isConnected) {
+                const lintRect = lintTooltip.getBoundingClientRect();
+                if (lintRect.width > 0 && lintRect.height > 0) {
+                    const tipWidth = hoverTip.offsetWidth || 340;
+                    const tipHeight = hoverTip.offsetHeight || 180;
+                    const spaceBelow = window.innerHeight - lintRect.bottom;
+                    const spaceAbove = lintRect.top;
+
+                    let left = Math.max(12, Math.min(window.innerWidth - tipWidth - 16, lintRect.left));
+                    let top;
+
+                    if (spaceBelow >= tipHeight + 12 || spaceBelow >= spaceAbove) {
+                        top = Math.min(window.innerHeight - tipHeight - 12, lintRect.bottom + 6);
+                    } else if (spaceAbove >= tipHeight + 12) {
+                        top = Math.max(12, lintRect.top - tipHeight - 6);
+                    } else {
+                        left = Math.min(window.innerWidth - tipWidth - 16, lintRect.right + 10);
+                        top = Math.max(12, Math.min(window.innerHeight - tipHeight - 16, lintRect.top));
+                    }
+
+                    hoverTip.style.left = `${left}px`;
+                    hoverTip.style.top = `${top}px`;
+                    return;
+                }
+            }
+
+            // Normal cursor positioning with viewport bounds protection
+            const tipWidth = hoverTip.offsetWidth || 340;
+            const tipHeight = hoverTip.offsetHeight || 180;
+            let left = evt.clientX + 14;
+            let top = evt.clientY + 18;
+
+            if (left + tipWidth > window.innerWidth - 16) {
+                left = Math.max(12, evt.clientX - tipWidth - 14);
+            }
+            if (top + tipHeight > window.innerHeight - 16) {
+                top = Math.max(12, evt.clientY - tipHeight - 14);
+            }
+
             hoverTip.style.left = `${left}px`;
             hoverTip.style.top = `${top}px`;
         } catch (err) {
@@ -1497,13 +1538,22 @@ export async function createScriptEditor(container, opts = {}) {
     };
 }
 
+export function redactSecrets(text) {
+    if (!text || typeof text !== 'string') return text;
+    return text
+        .replace(/\b(USE\s+PASSWORD|PASSWORD|PWD|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCESS_KEY|ACCESSKEY|ACCOUNT_KEY|ACCOUNTKEY|SAS_TOKEN|PASSPHRASE|KEY_FILE)\s*=\s*(['"]?)[^'"\s,;)]*\2/gi, '$1 = $2********$2')
+        .replace(/\bUSE\s+PASSWORD\s+(?!PROMPT\b)(['"])[^'"\s;]+\1/gi, 'USE PASSWORD $1********$1')
+        .replace(/\b(ENC|DPAPI-M|DPAPI|MACHINE|SECRET|CAPABILITY|SHARED):[A-Za-z0-9+/=_:.\-]+/gi, '$1:********')
+        .replace(/\bBearer\s+[A-Za-z0-9._~+/=\-]+/gi, 'Bearer ********');
+}
+
 function normalizeRunTrace(result, script) {
     if (Array.isArray(result?.trace)) return result.trace;
     const isSuccess = result?.success !== false;
     const rows = Array.isArray(result?.rows) ? result.rows : [];
     const columns = Array.isArray(result?.columns) ? result.columns : [];
     const elapsedMs = Number.isFinite(result?.elapsedMs) ? result.elapsedMs : 0;
-    const message = result?.message || (rows.length ? `Returned ${rows.length} rows.` : 'No rows returned.');
+    const message = redactSecrets(result?.message || (rows.length ? `Returned ${rows.length} rows.` : 'No rows returned.'));
 
     const trace = [
         { type: 'clear', resetHistory: true },
@@ -1513,13 +1563,15 @@ function normalizeRunTrace(result, script) {
 
     if (Array.isArray(result?.messages)) {
         result.messages.forEach(m => {
-            trace.push({ type: 'message', level: 'info', text: typeof m === 'string' ? m : (m.text || m.message || '') });
+            const raw = typeof m === 'string' ? m : (m.text || m.message || '');
+            trace.push({ type: 'message', level: 'info', text: redactSecrets(raw) });
         });
     }
 
     if (Array.isArray(result?.diagnostics)) {
         result.diagnostics.forEach(d => {
-            trace.push({ type: 'message', level: d.severity?.toLowerCase() === 'error' ? 'error' : 'warn', text: `[${d.code || 'Error'}] Line ${d.line || 0}: ${d.message}` });
+            const rawMsg = redactSecrets(d.message || '');
+            trace.push({ type: 'message', level: d.severity?.toLowerCase() === 'error' ? 'error' : 'warn', text: `[${d.code || 'Error'}] Line ${d.line || 0}: ${rawMsg}` });
         });
     }
 
@@ -1536,7 +1588,7 @@ function normalizeRunTrace(result, script) {
 
     if (isSuccess) {
         trace.push({ type: 'message', level: rows.length ? 'info' : 'warn', text: message });
-        trace.push({ type: 'message', level: 'sys', text: String(script || '').trim().replace(/\s+/g, ' ').slice(0, 180) });
+        trace.push({ type: 'message', level: 'sys', text: redactSecrets(String(script || '').trim().replace(/\s+/g, ' ')).slice(0, 180) });
         trace.push({ type: 'results', columns, rows });
         trace.push({ type: 'performance', metrics: {
             executionMs: elapsedMs,
@@ -2145,6 +2197,7 @@ const _TOOLBAR_ICONS = {
     commit: '<circle cx="4" cy="8" r="1.75"/><circle cx="12" cy="4" r="1.75"/><circle cx="12" cy="12" r="1.75"/><path d="M5.75 8h1.5c1.8 0 2.6-1.2 3.1-2.5"/><path d="M5.75 8h1.5c1.8 0 2.6 1.2 3.1 2.5"/>',
     format: '<path d="M2 3.5h12"/><path d="M2 7.5h8"/><path d="M2 11.5h12"/><path d="M2 15.5h6"/>',
     formatSettings: '<path d="M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/><path d="M8 1v2m0 10v2m-6-7h2m10 0h2m-2.1-4.9-1.4 1.4m-7 7-1.4 1.4m0-9.8 1.4 1.4m7 7 1.4 1.4"/>',
+    connection: '<path d="M4 2.5a3.5 3.5 0 0 0 7 0v2H4z"/><path d="M6 6.5v4a1.5 1.5 0 0 0 3 0v-4"/><path d="M7.5 12v2"/>',
 };
 
 function toolbarIcon(name) {
@@ -2191,6 +2244,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 ${hasSidebar ? toolbarButton({ attr: 'data-toggle-sidebar', icon: 'sidebar', title: 'Toggle sidebar' }) : ''}
                 ${toolbarButton({ attr: 'data-toggle-theme', icon: 'theme', title: 'Toggle dark/light mode' })}
                 ${toolbarButton({ attr: 'data-command-palette', icon: 'commands', title: 'Command palette', key: 'Ctrl+Shift+P' })}
+                ${toolbarButton({ attr: 'data-connection-wizard', icon: 'connection', title: 'New connection wizard' })}
                 ${opts.editor?.completeUrl ? toolbarButton({ attr: 'data-suggest', icon: 'suggest', title: 'Suggest completions', key: 'Ctrl+Space' }) : ''}
                 ${opts.dagUrl ? toolbarButton({ attr: 'data-flow', icon: 'flow', title: 'Preview script flow' }) : ''}
                 ${opts.previewApiUrl ? toolbarButton({ attr: 'data-preview', icon: 'preview', title: 'Preview report' }) : ''}
@@ -2217,7 +2271,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     <div class="etlsql-sidebar-section" data-sidebar-files>Loading workspace…</div>` : ''}
 
                     ${showSchema ? `
-                    <div class="etlsql-sidebar-section-header"><span>Schema explorer</span></div>
+                    <div class="etlsql-sidebar-section-header">
+                        <span>Schema explorer</span>
+                        <button type="button" class="etlsql-sidebar-action" data-open-connection-wizard>+ Connection</button>
+                    </div>
                     <div class="etlsql-sidebar-section" data-sidebar-schema>Loading connections…</div>` : ''}
 
                     ${showSession ? `
@@ -3168,6 +3225,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             { id: 'run', label: 'ETL-SQL: Run Script', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('script') },
             { id: 'run-selected', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('selection') },
             { id: 'cancel-run', label: 'ETL-SQL: Cancel Running Script', enabled: root.classList.contains('is-running'), action: cancelRun },
+            { id: 'new-connection', label: 'ETL-SQL: New Connection Wizard...', enabled: true, action: openConnectionWizard },
             { id: 'flow', label: 'ETL-SQL: Preview Script Flow', enabled: Boolean(opts.dagUrl), action: openFlow },
             { id: 'preview', label: 'ETL-SQL: Preview Report', enabled: Boolean(opts.previewApiUrl), action: openPreview },
             { id: 'suggest', label: 'ETL-SQL: Trigger Suggestions (Ctrl-Space / Ctrl-.)', enabled: Boolean(editor.hasCompletion && editor.triggerCompletion), action: () => editor.triggerCompletion() },
@@ -3177,6 +3235,79 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             { id: 'format', label: 'ETL-SQL: Format Document', enabled: Boolean(opts.onFormat), action: () => opts.onFormat?.(editor.getValue()) },
             { id: 'close', label: 'ETL-SQL: Close Editor', enabled: Boolean(opts.onClose), action: () => opts.onClose?.() },
         ].filter(c => c.enabled);
+    }
+
+    async function openConnectionWizard() {
+        try {
+            const { createConnectionWizard } = await import('./connection-wizard.js');
+            const fetcher = opts.authFetch ?? fetch;
+            const apiBase = metadataApiBase();
+            const scriptText = editor.getValue();
+            const existingNames = [];
+            for (const m of scriptText.matchAll(/\bCREATE\s+CONNECTION\s+([a-zA-Z0-9_#]+)/gi)) { if (m[1]) existingNames.push(m[1]); }
+            for (const m of scriptText.matchAll(/\bCREATE\s+DATASET\s+([a-zA-Z0-9_#]+)/gi)) { if (m[1]) existingNames.push(m[1]); }
+
+            createConnectionWizard({
+                host: document.body,
+                mode: 'script',
+                existingNames,
+                fetchSchemas: async () => {
+                    try {
+                        const res = await fetcher(`${apiBase}/api/connectors/schema`);
+                        if (res.ok) {
+                            const d = await res.json();
+                            return Array.isArray(d) ? d : (d.schemas || []);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch schemas', e);
+                    }
+                    return [];
+                },
+                onTest: async (req) => {
+                    const res = await fetcher(`${apiBase}/api/connectors/test`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(req)
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                    return await res.json();
+                },
+                onParseString: async (rawString, hint) => {
+                    const res = await fetcher(`${apiBase}/api/connectors/parse-string`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ connectionString: rawString, hintProvider: hint })
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                    return await res.json();
+                },
+                onInsert: (sql) => {
+                    insertConnectionSql(sql);
+                }
+            });
+        } catch (err) {
+            _feedback?.notify?.('Failed to open Connection Wizard: ' + err.message, { title: 'Wizard Error', tone: 'error' });
+        }
+    }
+
+    function insertConnectionSql(sql) {
+        const current = editor.getValue();
+        if (!current.trim()) {
+            editor.setValue(sql + '\n\n');
+        } else {
+            const matches = [...current.matchAll(/CREATE\s+CONNECTION\s+[\s\S]*?(?:;|\n\);?)/gi)];
+            if (matches.length > 0) {
+                const last = matches[matches.length - 1];
+                const pos = last.index + last[0].length;
+                const updated = current.slice(0, pos) + '\n\n' + sql + current.slice(pos);
+                editor.setValue(updated);
+            } else {
+                editor.setValue(sql + '\n\n' + current);
+            }
+        }
+        editor.analyze?.();
+        scheduleSidebarRefresh();
+        _feedback?.notify?.('Connection inserted into script.', { title: 'Connection Created', tone: 'success' });
     }
 
     function renderPalette() {
@@ -3354,6 +3485,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     }
 
     container.querySelector('[data-command-palette]')?.addEventListener('click', openPalette);
+    container.querySelector('[data-connection-wizard]')?.addEventListener('click', openConnectionWizard);
+    container.querySelector('[data-open-connection-wizard]')?.addEventListener('click', openConnectionWizard);
     container.querySelector('[data-suggest]')?.addEventListener('click', () => editor.triggerCompletion?.());
     container.querySelector('[data-run]')?.addEventListener('click', () => run('script'));
     container.querySelector('[data-run-selected]')?.addEventListener('click', () => run('selection'));
@@ -3448,6 +3581,81 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
  * @param {Function}    [opts.onCancel]             Called on back/cancel.
  * @returns {{ dispose: Function }}
  */
+export const DATA_PREP_RECIPES = [
+    {
+        id: 'rolling_aggregate',
+        label: 'Rolling Aggregate (Moving Average)',
+        algorithm: 'ROLLING_AGGREGATE',
+        description: 'Smooths noisy trends or computes moving averages and cumulative aggregates.',
+        targetSuffix: 'rolling',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING ROLLING_AGGREGATE (\n  VALUE_COL = 'Value',\n  ORDER_COL = 'Date',\n  WINDOW_SIZE = 7,\n  AGGREGATE = 'AVG',\n  ROLLING_COL = 'Value_Rolling'\n);`
+    },
+    {
+        id: 'period_comparison',
+        label: 'Period Comparison (MoM / YoY Growth)',
+        algorithm: 'PERIOD_COMPARISON',
+        description: 'Calculates period-over-period difference and growth percentages on time-series.',
+        targetSuffix: 'mom',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING PERIOD_COMPARISON (\n  DATE_COL = 'MonthStart',\n  VALUE_COL = 'Revenue',\n  PERIOD = 'MONTH',\n  DIFF_COL = 'Revenue_Diff',\n  PCT_COL = 'Revenue_Pct'\n);`
+    },
+    {
+        id: 'share_of_total',
+        label: 'Share of Total (%)',
+        algorithm: 'SHARE_OF_TOTAL',
+        description: 'Computes percentage contribution of numeric values relative to group or total.',
+        targetSuffix: 'share',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING SHARE_OF_TOTAL (\n  VALUE_COL = 'Amount',\n  BY_GROUP = 'Category',\n  SHARE_COL = 'Amount_Share'\n);`
+    },
+    {
+        id: 'top_n_others',
+        label: 'Top N + Others Bucket',
+        algorithm: 'TOP_N_OTHERS',
+        description: 'Ranks top N categories and aggregates remaining low-volume categories into Others.',
+        targetSuffix: 'top5',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING TOP_N_OTHERS (\n  N = 5,\n  VALUE_COL = 'Amount',\n  CATEGORY_COL = 'Category',\n  OTHERS_LABEL = 'Others',\n  AGGREGATE = 'SUM'\n);`
+    },
+    {
+        id: 'fill_dates',
+        label: 'Fill Missing Dates',
+        algorithm: 'FILL_DATES',
+        description: 'Fills missing calendar dates in daily time-series with default/zero values.',
+        targetSuffix: 'filled',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING FILL_DATES (\n  DATE_COL = 'OrderDate',\n  GAPS_FILL = 0\n);`
+    },
+    {
+        id: 'pivot',
+        label: 'Pivot Cross-Tabulation',
+        algorithm: 'PIVOT',
+        description: 'Rotates category rows into columns to construct cross-tabulation matrix summaries.',
+        targetSuffix: 'pivot',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING PIVOT (\n  ROW_FIELDS = 'Region',\n  PIVOT_FIELD = 'Quarter',\n  VALUE_FIELD = 'SalesAmount',\n  AGGREGATE = 'SUM'\n);`
+    },
+    {
+        id: 'interpolate',
+        label: 'Interpolate Missing Values',
+        algorithm: 'INTERPOLATE',
+        description: 'Fills missing numeric null values via linear or forward/backward progression.',
+        targetSuffix: 'interpolated',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING INTERPOLATE (\n  VALUE_COL = 'Reading',\n  ORDER_COL = 'Timestamp',\n  METHOD = 'LINEAR'\n);`
+    },
+    {
+        id: 'normalize',
+        label: 'Normalize (Min-Max / Z-Score)',
+        algorithm: 'NORMALIZE',
+        description: 'Scales numeric columns to standard ranges [0, 1] or standardized Z-scores.',
+        targetSuffix: 'normalized',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING NORMALIZE (\n  VALUE_COL = 'Score',\n  METHOD = 'MIN_MAX'\n);`
+    },
+    {
+        id: 'deduplicate',
+        label: 'Deduplicate Rows',
+        algorithm: 'DEDUPLICATE',
+        description: 'Removes duplicate rows based on key columns with deterministic sorting.',
+        targetSuffix: 'deduped',
+        template: (target, source) => `TRANSFORM #${target}\nFROM #${source}\nUSING DEDUPLICATE (\n  KEY_COLS = 'Id',\n  ORDER_BY = 'UpdatedUtc DESC',\n  KEEP = 'FIRST'\n);`
+    }
+];
+
 export function createDesigner(container, opts = {}) {
 
     // ── State ────────────────────────────────────────────────────────────────
@@ -3801,7 +4009,11 @@ export function createDesigner(container, opts = {}) {
     sidebarHtml += `
         <div class="etlsql-dsgn-section">
             <div class="etlsql-dsgn-section-hdr">
-                Datasets <button class="etlsql-dsgn-section-action" id="dsgn-add-ds" type="button">+ Add</button>
+                Datasets
+                <span>
+                    <button class="etlsql-dsgn-section-action" id="dsgn-add-recipe" type="button" title="Add analytical data-prep recipe">+ Recipe</button>
+                    <button class="etlsql-dsgn-section-action" id="dsgn-add-ds" type="button">+ Add</button>
+                </span>
             </div>
             <div id="dsgn-ds-list"></div>
         </div>
@@ -3896,6 +4108,38 @@ export function createDesigner(container, opts = {}) {
         </div>
     `;
     root.appendChild(saveModal);
+
+    // Data-prep recipe modal
+    const dataPrepModal = document.createElement('div');
+    dataPrepModal.className = 'etlsql-dsgn-modal-bg';
+    dataPrepModal.id = 'etlsql-dataprep-modal';
+    dataPrepModal.innerHTML = `
+        <div class="etlsql-dsgn-modal-card" style="max-width:560px">
+            <div class="etlsql-dsgn-modal-hdr">Add Data-Prep Recipe</div>
+            <label class="etlsql-dsgn-label">Analytical Recipe
+                <select id="dsgn-dp-recipe" class="form-control">
+                    ${DATA_PREP_RECIPES.map(r => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('')}
+                </select>
+            </label>
+            <div id="dsgn-dp-desc" style="font-size:12px;color:var(--portal-text-soft,#64748b);margin:4px 0 8px 0;"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                <label class="etlsql-dsgn-label">Source Table / Dataset
+                    <input id="dsgn-dp-source" class="form-control" placeholder="source_data" />
+                </label>
+                <label class="etlsql-dsgn-label">Target Dataset Name
+                    <input id="dsgn-dp-target" class="form-control" placeholder="target_dataset" />
+                </label>
+            </div>
+            <label class="etlsql-dsgn-label">Generated SQL Preview
+                <textarea id="dsgn-dp-sql" class="form-control" rows="6" readonly style="font-family:monospace;font-size:12px;background:var(--portal-surface-subtle,#f8fafc);resize:vertical;"></textarea>
+            </label>
+            <div class="etlsql-dsgn-modal-actions">
+                <button class="btn btn-sm" id="dsgn-dp-cancel" type="button">Cancel</button>
+                <button class="btn btn-sm btn-primary" id="dsgn-dp-ok" type="button">Add Dataset</button>
+            </div>
+        </div>
+    `;
+    root.appendChild(dataPrepModal);
 
     // ── Render ────────────────────────────────────────────────────────────────
 
@@ -4256,7 +4500,16 @@ export function createDesigner(container, opts = {}) {
             return;
         }
 
-        // Dependency-free SVG preview; production manifests use the same native SVG surface.
+        // Server-rendered native GoG SVG preview when available
+        const visualSvgs = snapshotPackage.visualSvgs;
+        const svgKey = byVisual || (dsName && visualSvgs?.[dsName] ? dsName : null) || visual.name || visual.id;
+        const compiledSvg = visualSvgs && svgKey ? visualSvgs[svgKey] : null;
+        if (compiledSvg && !activeSnapshotFilter) {
+            bodyEl.innerHTML = compiledSvg;
+            return;
+        }
+
+        // Dependency-free SVG preview fallback; production manifests use the same native SVG surface.
         const sample = rows[0] || [];
         const catIdx = (Array.isArray(sample) && sample.length >= 3) ? 1 : 0;
         const valIdx = (Array.isArray(sample) && sample.length >= 2) ? sample.length - 1 : 0;
@@ -4301,6 +4554,21 @@ export function createDesigner(container, opts = {}) {
             card.style.gridRow    = `${v.gridRow || 1} / span ${isFolded ? 1 : (v.gridRowSpan || 4)}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
             card.style.zIndex     = isContainer ? '1' : '2';
+
+            if (v.options?.BACKGROUND) card.style.background = v.options.BACKGROUND;
+            if (v.options?.COLOR) card.style.color = v.options.COLOR;
+            if (v.options?.BORDER) card.style.border = v.options.BORDER;
+            if (v.options?.BORDER_RADIUS) card.style.borderRadius = v.options.BORDER_RADIUS;
+            if (v.options?.SHADOW) {
+                const s = v.options.SHADOW.trim().toUpperCase();
+                if (s === 'ON') card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                else if (s === 'OFF') card.style.boxShadow = 'none';
+                else card.style.boxShadow = v.options.SHADOW;
+            }
+            if (v.options?.FONT) card.style.fontFamily = v.options.FONT;
+            if (v.options?.FONT_SIZE) card.style.fontSize = v.options.FONT_SIZE;
+            if (v.options?.FONT_WEIGHT) card.style.fontWeight = v.options.FONT_WEIGHT;
+            if (v.options?.OPACITY) card.style.opacity = v.options.OPACITY;
 
             let badgeExtra = '';
             if (opts.snapshotPackage) {
@@ -4451,6 +4719,371 @@ export function createDesigner(container, opts = {}) {
         return Array.from(vars).sort();
     }
 
+    function toHexColor(val, fallback) {
+        if (!val || typeof val !== 'string') return fallback;
+        const s = val.trim();
+        const match = s.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+        if (match) {
+            if (match[1].length === 3) {
+                return '#' + match[1].split('').map(c => c + c).join('');
+            }
+            return s;
+        }
+        return fallback;
+    }
+
+    function parseNumericRadius(val, fallback) {
+        if (!val) return fallback;
+        const num = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
+        return isNaN(num) ? fallback : Math.min(32, Math.max(0, num));
+    }
+
+    function parseNumericOpacity(val, fallback) {
+        if (!val) return fallback;
+        const floatVal = parseFloat(String(val));
+        if (isNaN(floatVal)) return fallback;
+        if (floatVal <= 1) return Math.round(floatVal * 100);
+        return Math.min(100, Math.max(0, Math.round(floatVal)));
+    }
+
+    function renderFormattingSectionHtml(v) {
+        const bg = v.options?.BACKGROUND || '';
+        const color = v.options?.COLOR || '';
+        const border = v.options?.BORDER || '';
+        const radius = v.options?.BORDER_RADIUS || '';
+        const font = v.options?.FONT || '';
+        const fontSize = v.options?.FONT_SIZE || '';
+        const fontWeight = v.options?.FONT_WEIGHT || '';
+        const shadow = v.options?.SHADOW || '';
+        const opacity = v.options?.OPACITY || '';
+
+        return `
+            <div class="etlsql-dsgn-props-section etlsql-dsgn-formatting-section">
+                <div class="etlsql-dsgn-props-hdr">Formatting & Style</div>
+                
+                <label class="etlsql-dsgn-label">Background Color
+                    <div class="etlsql-dsgn-color-picker-row">
+                        <input type="color" id="pp-fmt-bg-picker" value="${toHexColor(bg, '#ffffff')}">
+                        <input type="text" id="pp-fmt-bg-text" class="form-control" placeholder="#ffffff, transparent" value="${esc(bg)}">
+                    </div>
+                    <div class="etlsql-dsgn-swatch-row" data-target-input="#pp-fmt-bg-text" data-target-picker="#pp-fmt-bg-picker">
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#ffffff" title="White" data-color="#ffffff"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#f8fafc" title="Slate Light" data-color="#f8fafc"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#0f172a" title="Dark Slate" data-color="#0f172a"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#2563eb" title="Blue Accent" data-color="#2563eb"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#10b981" title="Emerald Green" data-color="#10b981"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#f59e0b" title="Amber" data-color="#f59e0b"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#ef4444" title="Ruby Red" data-color="#ef4444"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 4px)" title="Transparent" data-color="transparent"></button>
+                    </div>
+                </label>
+
+                <label class="etlsql-dsgn-label">Text Color
+                    <div class="etlsql-dsgn-color-picker-row">
+                        <input type="color" id="pp-fmt-color-picker" value="${toHexColor(color, '#0f172a')}">
+                        <input type="text" id="pp-fmt-color-text" class="form-control" placeholder="#0f172a" value="${esc(color)}">
+                    </div>
+                    <div class="etlsql-dsgn-swatch-row" data-target-input="#pp-fmt-color-text" data-target-picker="#pp-fmt-color-picker">
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#0f172a" title="Dark Slate" data-color="#0f172a"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#475569" title="Muted Slate" data-color="#475569"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#ffffff" title="White" data-color="#ffffff"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#2563eb" title="Blue Accent" data-color="#2563eb"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#10b981" title="Green" data-color="#10b981"></button>
+                        <button type="button" class="etlsql-dsgn-swatch-chip" style="background:#ef4444" title="Red" data-color="#ef4444"></button>
+                    </div>
+                </label>
+
+                <label class="etlsql-dsgn-label">Border
+                    <input type="text" id="pp-fmt-border-text" class="form-control" placeholder="1px solid #e2e8f0, none" value="${esc(border)}">
+                    <div class="etlsql-dsgn-preset-chips" data-target-input="#pp-fmt-border-text">
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="none">None</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="1px solid #e2e8f0">1px Subtle</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="1px solid #94a3b8">1px Muted</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="2px solid #2563eb">2px Accent</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="1px dashed #cbd5e1">Dashed</button>
+                    </div>
+                </label>
+
+                <label class="etlsql-dsgn-label">Border Radius
+                    <div class="etlsql-dsgn-slider-row">
+                        <input type="range" id="pp-fmt-radius-slider" min="0" max="32" step="1" value="${parseNumericRadius(radius, 8)}">
+                        <input type="text" id="pp-fmt-radius-text" class="form-control" placeholder="8px" value="${esc(radius)}">
+                    </div>
+                    <div class="etlsql-dsgn-preset-chips" data-target-input="#pp-fmt-radius-text" data-target-slider="#pp-fmt-radius-slider">
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="0px">0px</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="4px">4px</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="8px">8px</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="12px">12px</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="16px">16px</button>
+                        <button type="button" class="etlsql-dsgn-preset-chip" data-val="9999px">Pill</button>
+                    </div>
+                </label>
+
+                <div class="etlsql-dsgn-typography-grid">
+                    <label class="etlsql-dsgn-label">Font Family
+                        <select id="pp-fmt-font-select" class="form-control">
+                            <option value="">Default</option>
+                            <option value="Inter, sans-serif"${font.includes('Inter') ? ' selected' : ''}>Inter</option>
+                            <option value="Segoe UI, sans-serif"${font.includes('Segoe') ? ' selected' : ''}>Segoe UI</option>
+                            <option value="Roboto, sans-serif"${font.includes('Roboto') ? ' selected' : ''}>Roboto</option>
+                            <option value="ui-monospace, Consolas, monospace"${font.includes('monospace') ? ' selected' : ''}>Monospace</option>
+                            <option value="Georgia, serif"${font.includes('Georgia') ? ' selected' : ''}>Georgia</option>
+                        </select>
+                    </label>
+                    <label class="etlsql-dsgn-label">Font Size
+                        <select id="pp-fmt-size-select" class="form-control">
+                            <option value="">Default</option>
+                            <option value="11px"${fontSize === '11px' ? ' selected' : ''}>11px (XS)</option>
+                            <option value="12px"${fontSize === '12px' ? ' selected' : ''}>12px (Small)</option>
+                            <option value="13px"${fontSize === '13px' ? ' selected' : ''}>13px (Compact)</option>
+                            <option value="14px"${fontSize === '14px' ? ' selected' : ''}>14px (Body)</option>
+                            <option value="16px"${fontSize === '16px' ? ' selected' : ''}>16px (Medium)</option>
+                            <option value="18px"${fontSize === '18px' ? ' selected' : ''}>18px (Large)</option>
+                            <option value="20px"${fontSize === '20px' ? ' selected' : ''}>20px (XL)</option>
+                            <option value="24px"${fontSize === '24px' ? ' selected' : ''}>24px (Title)</option>
+                            <option value="32px"${fontSize === '32px' ? ' selected' : ''}>32px (KPI)</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="etlsql-dsgn-typography-grid">
+                    <label class="etlsql-dsgn-label">Font Weight
+                        <select id="pp-fmt-weight-select" class="form-control">
+                            <option value="">Default</option>
+                            <option value="400"${fontWeight === '400' || fontWeight.toUpperCase() === 'NORMAL' ? ' selected' : ''}>400</option>
+                            <option value="500"${fontWeight === '500' ? ' selected' : ''}>500</option>
+                            <option value="600"${fontWeight === '600' || fontWeight.toUpperCase() === 'SEMIBOLD' ? ' selected' : ''}>600</option>
+                            <option value="700"${fontWeight === '700' || fontWeight.toUpperCase() === 'BOLD' ? ' selected' : ''}>700</option>
+                        </select>
+                    </label>
+                    <label class="etlsql-dsgn-label">Card Shadow
+                        <select id="pp-fmt-shadow-select" class="form-control">
+                            <option value="">Default</option>
+                            <option value="OFF"${shadow.toUpperCase() === 'OFF' ? ' selected' : ''}>Flat (OFF)</option>
+                            <option value="ON"${shadow.toUpperCase() === 'ON' ? ' selected' : ''}>Elevated (ON)</option>
+                            <option value="0 4px 12px rgba(0,0,0,0.1)"${shadow.includes('12px') ? ' selected' : ''}>Medium</option>
+                            <option value="0 8px 24px rgba(0,0,0,0.15)"${shadow.includes('24px') ? ' selected' : ''}>Heavy</option>
+                        </select>
+                    </label>
+                </div>
+
+                <label class="etlsql-dsgn-label">Card Opacity
+                    <div class="etlsql-dsgn-slider-row">
+                        <input type="range" id="pp-fmt-opacity-slider" min="10" max="100" step="5" value="${parseNumericOpacity(opacity, 100)}">
+                        <input type="text" id="pp-fmt-opacity-text" class="form-control" placeholder="1" value="${esc(opacity)}">
+                    </div>
+                </label>
+            </div>
+        `;
+    }
+
+    function bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced) {
+        const ensureOptions = () => { if (!v.options) v.options = {}; };
+
+        const bgPicker = propsPanel.querySelector('#pp-fmt-bg-picker');
+        const bgText = propsPanel.querySelector('#pp-fmt-bg-text');
+        if (bgPicker && bgText) {
+            bgPicker.addEventListener('input', e => {
+                ensureOptions();
+                bgText.value = e.target.value;
+                v.options.BACKGROUND = e.target.value;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            bgText.addEventListener('input', e => {
+                ensureOptions();
+                const val = e.target.value.trim();
+                if (val) {
+                    v.options.BACKGROUND = val;
+                    const hex = toHexColor(val, null);
+                    if (hex) bgPicker.value = hex;
+                } else {
+                    delete v.options.BACKGROUND;
+                }
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+        }
+
+        const colorPicker = propsPanel.querySelector('#pp-fmt-color-picker');
+        const colorText = propsPanel.querySelector('#pp-fmt-color-text');
+        if (colorPicker && colorText) {
+            colorPicker.addEventListener('input', e => {
+                ensureOptions();
+                colorText.value = e.target.value;
+                v.options.COLOR = e.target.value;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            colorText.addEventListener('input', e => {
+                ensureOptions();
+                const val = e.target.value.trim();
+                if (val) {
+                    v.options.COLOR = val;
+                    const hex = toHexColor(val, null);
+                    if (hex) colorPicker.value = hex;
+                } else {
+                    delete v.options.COLOR;
+                }
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+        }
+
+        propsPanel.querySelectorAll('.etlsql-dsgn-swatch-row').forEach(row => {
+            const inputSel = row.dataset.targetInput;
+            const pickerSel = row.dataset.targetPicker;
+            const inputEl = propsPanel.querySelector(inputSel);
+            const pickerEl = propsPanel.querySelector(pickerSel);
+            row.querySelectorAll('.etlsql-dsgn-swatch-chip').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const colorVal = btn.dataset.color;
+                    if (!colorVal) return;
+                    ensureOptions();
+                    if (inputEl) inputEl.value = colorVal;
+                    const hex = toHexColor(colorVal, null);
+                    if (pickerEl && hex) pickerEl.value = hex;
+                    if (inputSel.includes('bg')) {
+                        v.options.BACKGROUND = colorVal;
+                    } else if (inputSel.includes('color')) {
+                        v.options.COLOR = colorVal;
+                    }
+                    renderCanvas();
+                    syncScriptFromGridDebounced();
+                });
+            });
+        });
+
+        const borderText = propsPanel.querySelector('#pp-fmt-border-text');
+        if (borderText) {
+            borderText.addEventListener('input', e => {
+                ensureOptions();
+                const val = e.target.value.trim();
+                if (val) v.options.BORDER = val;
+                else delete v.options.BORDER;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            propsPanel.querySelectorAll('.etlsql-dsgn-preset-chips[data-target-input="#pp-fmt-border-text"] .etlsql-dsgn-preset-chip').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const val = btn.dataset.val;
+                    ensureOptions();
+                    borderText.value = val;
+                    if (val && val !== 'none') v.options.BORDER = val;
+                    else if (val === 'none') v.options.BORDER = 'none';
+                    else delete v.options.BORDER;
+                    renderCanvas();
+                    syncScriptFromGridDebounced();
+                });
+            });
+        }
+
+        const radiusSlider = propsPanel.querySelector('#pp-fmt-radius-slider');
+        const radiusText = propsPanel.querySelector('#pp-fmt-radius-text');
+        if (radiusSlider && radiusText) {
+            radiusSlider.addEventListener('input', e => {
+                ensureOptions();
+                const val = `${e.target.value}px`;
+                radiusText.value = val;
+                v.options.BORDER_RADIUS = val;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            radiusText.addEventListener('input', e => {
+                ensureOptions();
+                const val = e.target.value.trim();
+                if (val) {
+                    v.options.BORDER_RADIUS = val;
+                    radiusSlider.value = parseNumericRadius(val, 8);
+                } else {
+                    delete v.options.BORDER_RADIUS;
+                }
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            propsPanel.querySelectorAll('.etlsql-dsgn-preset-chips[data-target-input="#pp-fmt-radius-text"] .etlsql-dsgn-preset-chip').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const val = btn.dataset.val;
+                    ensureOptions();
+                    radiusText.value = val;
+                    radiusSlider.value = parseNumericRadius(val, 8);
+                    v.options.BORDER_RADIUS = val;
+                    renderCanvas();
+                    syncScriptFromGridDebounced();
+                });
+            });
+        }
+
+        const fontSelect = propsPanel.querySelector('#pp-fmt-font-select');
+        if (fontSelect) {
+            fontSelect.addEventListener('change', e => {
+                ensureOptions();
+                if (e.target.value) v.options.FONT = e.target.value;
+                else delete v.options.FONT;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+        }
+
+        const sizeSelect = propsPanel.querySelector('#pp-fmt-size-select');
+        if (sizeSelect) {
+            sizeSelect.addEventListener('change', e => {
+                ensureOptions();
+                if (e.target.value) v.options.FONT_SIZE = e.target.value;
+                else delete v.options.FONT_SIZE;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+        }
+
+        const weightSelect = propsPanel.querySelector('#pp-fmt-weight-select');
+        if (weightSelect) {
+            weightSelect.addEventListener('change', e => {
+                ensureOptions();
+                if (e.target.value) v.options.FONT_WEIGHT = e.target.value;
+                else delete v.options.FONT_WEIGHT;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+        }
+
+        const shadowSelect = propsPanel.querySelector('#pp-fmt-shadow-select');
+        if (shadowSelect) {
+            shadowSelect.addEventListener('change', e => {
+                ensureOptions();
+                if (e.target.value) v.options.SHADOW = e.target.value;
+                else delete v.options.SHADOW;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+        }
+
+        const opacitySlider = propsPanel.querySelector('#pp-fmt-opacity-slider');
+        const opacityText = propsPanel.querySelector('#pp-fmt-opacity-text');
+        if (opacitySlider && opacityText) {
+            opacitySlider.addEventListener('input', e => {
+                ensureOptions();
+                const pct = parseInt(e.target.value, 10);
+                const val = pct === 100 ? '1' : (pct / 100).toFixed(2).replace(/\.?0+$/, '');
+                opacityText.value = val;
+                v.options.OPACITY = val;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+            opacityText.addEventListener('input', e => {
+                ensureOptions();
+                const val = e.target.value.trim();
+                if (val) {
+                    v.options.OPACITY = val;
+                    opacitySlider.value = parseNumericOpacity(val, 100);
+                } else {
+                    delete v.options.OPACITY;
+                }
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            });
+        }
+    }
+
     function renderProps() {
         propsPanel.innerHTML = '';
         const v = selVisualId ? findVis(selVisualId) : null;
@@ -4538,6 +5171,7 @@ export function createDesigner(container, opts = {}) {
                     </label>
                     <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
                 </div>
+                ${renderFormattingSectionHtml(v)}
                 <div class="etlsql-dsgn-props-section">
                     <div class="etlsql-dsgn-props-hdr">Grid Position</div>
                     <div class="etlsql-dsgn-grid4">
@@ -4556,6 +5190,7 @@ export function createDesigner(container, opts = {}) {
             on('#pp-row',   e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
             on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
             on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+            bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
             propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
             return;
         }
@@ -4574,6 +5209,7 @@ export function createDesigner(container, opts = {}) {
                     </label>
                     <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
                 </div>
+                ${renderFormattingSectionHtml(v)}
                 <div class="etlsql-dsgn-props-section">
                     <div class="etlsql-dsgn-props-hdr">Grid Position</div>
                     <div class="etlsql-dsgn-grid4">
@@ -4592,6 +5228,7 @@ export function createDesigner(container, opts = {}) {
             on('#pp-row',   e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
             on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
             on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+            bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
             propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
             return;
         }
@@ -4655,6 +5292,54 @@ export function createDesigner(container, opts = {}) {
         )
     )
 )`;
+        const boxPlotMeanRecipe = `CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    ENCODINGS (X = category (TYPE = NOMINAL)),
+    LAYERS (
+        boxes = RECT (
+            ENCODINGS (
+                LOW = low (TYPE = QUANTITATIVE),
+                Q1 = q1 (TYPE = QUANTITATIVE),
+                MEDIAN = median (TYPE = QUANTITATIVE),
+                Q3 = q3 (TYPE = QUANTITATIVE),
+                HIGH = high (TYPE = QUANTITATIVE)
+            )
+        ),
+        mean = TICK (
+            Z_INDEX = 1,
+            THICKNESS = 0.3,
+            ENCODINGS (Y = mean (TYPE = QUANTITATIVE))
+        )
+    )
+)`;
+        const candlestickVolumeRecipe = `CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+        categories = BAND (CHANNEL = X, ORDER = SOURCE),
+        price = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF),
+        volume_scale = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+        volume = RECT (
+            Z_INDEX = 0,
+            BAND_SIZE = 0.35,
+            ENCODINGS (
+                X = category (TYPE = ORDINAL, SCALE = categories),
+                Y2 = volume (TYPE = QUANTITATIVE, SCALE = volume_scale, AXIS = SECONDARY)
+            )
+        ),
+        candles = RECT (
+            Z_INDEX = 1,
+            ENCODINGS (
+                X = category (TYPE = ORDINAL, SCALE = categories),
+                OPEN = open (TYPE = QUANTITATIVE, SCALE = price),
+                CLOSE = close (TYPE = QUANTITATIVE, SCALE = price),
+                LOW = low (TYPE = QUANTITATIVE, SCALE = price),
+                HIGH = high (TYPE = QUANTITATIVE, SCALE = price)
+            )
+        )
+    )
+)`;
         const chartCode = v.options?.advanced_chart || defaultCustomChart;
         const htmlMode = v.options?.html_mode || 'SINGLE';
         const htmlTemplate = v.options?.html_template || '<article class="custom-card">\n  <h3>{{Title}}</h3>\n  <p>{{Description}}</p>\n</article>';
@@ -4709,6 +5394,13 @@ export function createDesigner(container, opts = {}) {
                             <option value="ARC"${chartCode.includes('ARC') ? ' selected' : ''}>ARC (Radial)</option>
                             <option value="TEXT"${chartCode.includes('TEXT') ? ' selected' : ''}>TEXT (Label)</option>
                             <option value="TICK"${chartCode.includes('TICK') ? ' selected' : ''}>TICK (Target)</option>
+                        </select>
+                    </label>
+                    <label class="etlsql-dsgn-label" style="grid-column:1 / -1;">Composition recipe
+                        <select id="pp-chart-recipe" class="form-control">
+                            <option value="">Keep current chart</option>
+                            <option value="boxplot-mean"${/\bQ1\s*=/.test(chartCode) ? ' selected' : ''}>Box plot + mean tick</option>
+                            <option value="candlestick-volume"${/\bOPEN\s*=/.test(chartCode) ? ' selected' : ''}>Candlestick + volume</option>
                         </select>
                     </label>
                 </div>
@@ -4771,6 +5463,7 @@ export function createDesigner(container, opts = {}) {
                     <input type="text" id="pp-interaction-on-select" class="form-control" placeholder="e.g., HIGHLIGHT" value="${esc(v.options?.['interaction:ON_SELECT'] || '')}">
                 </label>
             </div>
+            ${renderFormattingSectionHtml(v)}
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Grid Position</div>
                 <div class="etlsql-dsgn-grid4">
@@ -4866,6 +5559,22 @@ export function createDesigner(container, opts = {}) {
                     syncScriptFromGridDebounced();
                 });
             }
+            const recipeInput = propsPanel.querySelector('#pp-chart-recipe');
+            if (recipeInput) {
+                recipeInput.addEventListener('change', ev => {
+                    const recipes = {
+                        'boxplot-mean': boxPlotMeanRecipe,
+                        'candlestick-volume': candlestickVolumeRecipe
+                    };
+                    const replacement = recipes[ev.target.value];
+                    if (!replacement) return;
+                    if (!v.options) v.options = {};
+                    v.options.advanced_chart = replacement;
+                    if (chartInput) chartInput.value = replacement;
+                    renderCanvas();
+                    syncScriptFromGridDebounced();
+                });
+            }
         } else if (isHtmlVisual) {
             on('#pp-html-mode', e => {
                 if (!v.options) v.options = {};
@@ -4918,6 +5627,7 @@ export function createDesigner(container, opts = {}) {
                 });
             }
         }
+        bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
         propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
     }
 
@@ -5104,6 +5814,39 @@ export function createDesigner(container, opts = {}) {
         state.datasets.push({ id: 'ds_' + uid(), name: name.trim(), query: 'SELECT 1 AS Placeholder' });
         renderDatasets();
         renderProps();
+    }
+
+    function openDataPrepModal() {
+        const recipeSelect = dataPrepModal.querySelector('#dsgn-dp-recipe');
+        const descEl = dataPrepModal.querySelector('#dsgn-dp-desc');
+        const sourceInput = dataPrepModal.querySelector('#dsgn-dp-source');
+        const targetInput = dataPrepModal.querySelector('#dsgn-dp-target');
+        const sqlPreview = dataPrepModal.querySelector('#dsgn-dp-sql');
+
+        const defaultSource = (state.datasets && state.datasets.length > 0)
+            ? state.datasets[0].name.replace(/^[#&]/, '')
+            : 'source_data';
+        sourceInput.value = defaultSource;
+
+        function updatePreview() {
+            const recipeId = recipeSelect.value;
+            const recipe = DATA_PREP_RECIPES.find(r => r.id === recipeId) || DATA_PREP_RECIPES[0];
+            descEl.textContent = recipe.description;
+            const src = sourceInput.value.trim() || 'source_data';
+            if (!targetInput.dataset.userEdited) {
+                targetInput.value = `${src}_${recipe.targetSuffix}`;
+            }
+            const tgt = targetInput.value.trim() || `${src}_${recipe.targetSuffix}`;
+            sqlPreview.value = recipe.template(tgt, src);
+        }
+
+        targetInput.dataset.userEdited = '';
+        targetInput.oninput = () => { targetInput.dataset.userEdited = 'true'; updatePreview(); };
+        sourceInput.oninput = () => { updatePreview(); };
+        recipeSelect.onchange = () => { targetInput.dataset.userEdited = ''; updatePreview(); };
+
+        updatePreview();
+        dataPrepModal.style.display = 'flex';
     }
 
     // ── Author bookmarks ─────────────────────────────────────────────────────
@@ -6089,6 +6832,7 @@ export function createDesigner(container, opts = {}) {
         if (item) selectVisual(item.dataset.vid);
     });
 
+    sidebar.querySelector('#dsgn-add-recipe')?.addEventListener('click', openDataPrepModal);
     sidebar.querySelector('#dsgn-add-ds').addEventListener('click', addDataset);
     sidebar.querySelector('#dsgn-ds-list').addEventListener('click', e => {
         const del = e.target.closest('[data-dsid]');
@@ -6108,6 +6852,26 @@ export function createDesigner(container, opts = {}) {
         if (makeDefault) { toggleBookmarkDefault(makeDefault.dataset.bmdefault); return; }
         const del = e.target.closest('[data-bmid]');
         if (del) removeBookmark(del.dataset.bmid);
+    });
+
+    dataPrepModal.querySelector('#dsgn-dp-cancel').addEventListener('click', () => { dataPrepModal.style.display = 'none'; });
+    dataPrepModal.querySelector('#dsgn-dp-ok').addEventListener('click', () => {
+        const targetInput = dataPrepModal.querySelector('#dsgn-dp-target');
+        const sqlPreview = dataPrepModal.querySelector('#dsgn-dp-sql');
+        const name = (targetInput.value || '').trim();
+        if (!name) {
+            _feedback?.notify?.('Enter a target dataset name.', { title: 'Target name required', tone: 'warning' });
+            return;
+        }
+        state.datasets.push({
+            id: 'ds_' + uid(),
+            name: name,
+            query: sqlPreview.value
+        });
+        dataPrepModal.style.display = 'none';
+        renderDatasets();
+        renderProps();
+        _feedback?.notify?.(`Added data-prep dataset #${name}.`, { title: 'Dataset added', tone: 'success', auditAction: 'designer.dataset.add' });
     });
 
     saveModal.querySelector('#dsgn-modal-cancel').addEventListener('click', () => { saveModal.style.display = 'none'; });

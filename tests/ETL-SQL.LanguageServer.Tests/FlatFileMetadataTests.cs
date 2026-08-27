@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Core.Services;
+using ETL_SQL.Data;
 using ETL_SQL.LSP;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -58,13 +59,17 @@ namespace ETL_SQL.LanguageServer.Tests
             services.AddLogging();
             var provider = services.BuildServiceProvider();
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+            var registry = new ConnectorRegistry();
+            var diag = new ETL_SQL.Core.Diagnostics.ConnectionDiagnosticEngine(registry);
 
             return new CustomMethodsHandler(
                 metadata,
                 loggerFactory.CreateLogger<CustomMethodsHandler>(),
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()),
-                new ETL_SQL.Services.SecurityService(ETL_SQL.Common.NullLogger.Instance));
+                new ETL_SQL.Services.SecurityService(ETL_SQL.Common.NullLogger.Instance),
+                registry,
+                diag);
         }
 
         /// <summary>

@@ -8,7 +8,13 @@
  *   - Script Mode (default): Emits code-first `CREATE CONNECTION ...` syntax for scripts and report definitions.
  *   - Admin Mode: Emits catalog records for Portal Shared Connections (`/api/admin/connections`).
  *
- * Phase 3 Features:
+ * Features:
+ *   - Zero-Trust credential management (Vault SECRET:key, $ENV{...}, client ENC:... encryption, TRUSTED_CONNECTION, KEY_FILE)
+ *   - High-grade client-side AES-GCM (v2) password encryption matching C# CryptoUtils
+ *   - Layered reachability diagnostic runner (Policy, DNS, TCP, Auth) located in right pane (no scrolling)
+ *   - Comprehensive connector catalog support (Relational, Warehouses, FlatFiles, Cloud, Remote, Messaging)
+ *   - Connector search & category filters (All, Relational/DW, Flat Files, Cloud & Remote, Shared Catalog)
+ *   - Connection string & URI decomposition with automatic credential isolation and passphrase encryption prompt
  *   - Portal Staged Files dropzone & workspace-relative file picker
  *   - Data Gateway cluster routing selector (`GATEWAY = 'cluster_alias'`)
  *   - Zero-Trust security path boundary validation (guards against traversal and system directories)
@@ -28,6 +34,78 @@ function _h(str) {
 
 function _attr(str) {
     return _h(str).replace(/'/g, '&#39;');
+}
+
+/**
+ * Encrypts a plaintext password with a client passphrase using PBKDF2 + AES-GCM (version 2 format),
+ * byte-for-byte compatible with C# CryptoUtils.Decrypt.
+ */
+export async function encryptClientPassword(plainText, passphrase) {
+    if (!plainText || !passphrase) return null;
+    try {
+        if (!window.crypto?.subtle) {
+            console.warn('Web Crypto API not available in this environment.');
+            return null;
+        }
+
+        const enc = new TextEncoder();
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        const nonce = window.crypto.getRandomValues(new Uint8Array(12));
+
+        const keyMaterial = await window.crypto.subtle.importKey(
+            'raw',
+            enc.encode(passphrase),
+            'PBKDF2',
+            false,
+            ['deriveKey']
+        );
+
+        const derivedKey = await window.crypto.subtle.deriveKey(
+            {
+                name: 'PBKDF2',
+                salt: salt,
+                iterations: 600000,
+                hash: 'SHA-256'
+            },
+            keyMaterial,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt']
+        );
+
+        const cipherBuffer = await window.crypto.subtle.encrypt(
+            {
+                name: 'AES-GCM',
+                iv: nonce,
+                tagLength: 128
+            },
+            derivedKey,
+            enc.encode(plainText)
+        );
+
+        const cipherBytes = new Uint8Array(cipherBuffer);
+        const tag = cipherBytes.slice(cipherBytes.length - 16);
+        const ciphertext = cipherBytes.slice(0, cipherBytes.length - 16);
+
+        // V2 layout: 1 byte version (2) + 16 byte salt + 12 byte nonce + 16 byte tag + ciphertext
+        const totalLength = 1 + 16 + 12 + 16 + ciphertext.length;
+        const result = new Uint8Array(totalLength);
+        result[0] = 2; // CURRENT_VERSION = 2
+        result.set(salt, 1);
+        result.set(nonce, 1 + 16);
+        result.set(tag, 1 + 16 + 12);
+        result.set(ciphertext, 1 + 16 + 12 + 16);
+
+        let binary = '';
+        const chunk = 8192;
+        for (let i = 0; i < result.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, result.subarray(i, i + chunk));
+        }
+        return 'ENC:' + btoa(binary);
+    } catch (e) {
+        console.error('Client encryption failed:', e);
+        return null;
+    }
 }
 
 /**
@@ -55,6 +133,13 @@ export function validatePathSecurity(pathStr) {
     }
 
     return null;
+}
+
+function statusToStr(st) {
+    if (typeof st === 'number') {
+        return st === 0 ? 'ok' : st === 1 ? 'failed' : st === 2 ? 'skipped' : 'denied';
+    }
+    return String(st || 'unknown').toLowerCase();
 }
 
 /**
@@ -105,7 +190,7 @@ export function createConnectionWizard(options = {}) {
         connectorType: initialConnector,
         isSharedReference: false,
         sharedAlias: '',
-        alias: initialConnector === 'FLATFILE' ? 'sales_data' : 'sales_dw',
+        alias: '',
         environmentScope: 'All',
         gatewayCluster: '',
         values: {},
@@ -114,6 +199,7 @@ export function createConnectionWizard(options = {}) {
         envVarName: '',
         rawPassword: '',
         encPassphrase: '',
+        encryptedCipher: '',
         keyFilePath: '',
         existingNames: Array.isArray(existingNames) ? existingNames : [],
         schemas: options.schemas || [],
@@ -123,10 +209,11 @@ export function createConnectionWizard(options = {}) {
         stagedFiles: options.stagedFiles || [],
         diagnosticResult: null,
         isTesting: false,
-        testingStep: null,
-        isParsing: false,
         pasteModalOpen: false,
-        isDraggingFile: false,
+        passphraseModalOpen: false,
+        pendingExtractedPassword: '',
+        pendingSecretKey: '',
+        typeFilter: '',
         activeTab: 'basic'
     };
 
@@ -172,6 +259,65 @@ export function createConnectionWizard(options = {}) {
             ]
         },
         {
+            connectorType: 'MYSQL',
+            aliases: ['MARIADB'],
+            description: 'MySQL and MariaDB databases.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'SERVER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'localhost' },
+                { name: 'PORT', type: 1, isMandatory: false, category: 'Basic', defaultValue: '3306' },
+                { name: 'DATABASE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'mysql' },
+                { name: 'USER', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'root' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '30' }
+            ]
+        },
+        {
+            connectorType: 'SQLITE',
+            aliases: [],
+            description: 'SQLite local or memory database.',
+            isFileBased: true,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'PATH', type: 4, isMandatory: true, category: 'Basic', defaultValue: 'data/local.db' }
+            ]
+        },
+        {
+            connectorType: 'SNOWFLAKE',
+            aliases: [],
+            description: 'Snowflake Cloud Data Platform.',
+            isFileBased: false,
+            isDataWarehouse: true,
+            commandTimeoutSeconds: 1800,
+            options: [
+                { name: 'ACCOUNT', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'xy12345.us-east-1' },
+                { name: 'DATABASE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'ANALYTICS' },
+                { name: 'SCHEMA', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'PUBLIC' },
+                { name: 'WAREHOUSE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'COMPUTE_WH' },
+                { name: 'USER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'etl_user' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'ROLE', type: 0, isMandatory: false, category: 'Tuning', defaultValue: 'ACCOUNTADMIN' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '1800' }
+            ]
+        },
+        {
+            connectorType: 'BIGQUERY',
+            aliases: [],
+            description: 'Google Cloud BigQuery warehouse.',
+            isFileBased: false,
+            isDataWarehouse: true,
+            commandTimeoutSeconds: 1800,
+            options: [
+                { name: 'PROJECT_ID', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'my-gcp-project' },
+                { name: 'DATASET', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'analytics_ds' },
+                { name: 'CREDENTIAL_FILE', type: 4, isMandatory: false, category: 'Auth', defaultValue: 'secrets/sa-key.json' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '1800' }
+            ]
+        },
+        {
             connectorType: 'FLATFILE',
             aliases: ['CSV'],
             description: 'Delimited text files (CSV, TSV, custom separator).',
@@ -199,6 +345,71 @@ export function createConnectionWizard(options = {}) {
             ]
         },
         {
+            connectorType: 'EXCEL',
+            aliases: ['XLSX', 'XLS'],
+            description: 'Microsoft Excel spreadsheets (.xlsx, .xls).',
+            isFileBased: true,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'PATH', type: 4, isMandatory: true, category: 'Basic', defaultValue: 'data/reports.xlsx' },
+                { name: 'SHEET', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'Sheet1' },
+                { name: 'HEADER', type: 2, isMandatory: false, category: 'Basic', defaultValue: 'ON' }
+            ]
+        },
+        {
+            connectorType: 'JSON',
+            aliases: [],
+            description: 'JSON records or array data files.',
+            isFileBased: true,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'PATH', type: 4, isMandatory: true, category: 'Basic', defaultValue: 'data/feed.json' }
+            ]
+        },
+        {
+            connectorType: 'REST',
+            aliases: ['HTTP'],
+            description: 'REST API endpoints with JSON/XML payload mapping.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'URL', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'https://api.example.com/v1/data' },
+                { name: 'METHOD', type: 5, isMandatory: false, category: 'Basic', allowedValues: ['GET', 'POST', 'PUT', 'DELETE'], defaultValue: 'GET' },
+                { name: 'AUTH_HEADER', type: 3, isMandatory: false, category: 'Auth' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '30' }
+            ]
+        },
+        {
+            connectorType: 'S3',
+            aliases: ['AWS_S3'],
+            description: 'Amazon AWS S3 Object Storage.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 60,
+            options: [
+                { name: 'BUCKET', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'my-corp-data-lake' },
+                { name: 'REGION', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'us-east-1' },
+                { name: 'ACCESS_KEY', type: 0, isMandatory: false, category: 'Auth' },
+                { name: 'SECRET_KEY', type: 3, isMandatory: false, category: 'Auth' }
+            ]
+        },
+        {
+            connectorType: 'AZUREBLOB',
+            aliases: ['AZURE_BLOB'],
+            description: 'Microsoft Azure Blob and Data Lake Gen2 storage.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 60,
+            options: [
+                { name: 'CONTAINER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'exports' },
+                { name: 'ACCOUNT_NAME', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'mystorageacc' },
+                { name: 'ACCOUNT_KEY', type: 3, isMandatory: false, category: 'Auth' }
+            ]
+        },
+        {
             connectorType: 'SFTP',
             aliases: [],
             description: 'Secure File Transfer Protocol (SFTP) remote file access.',
@@ -212,6 +423,19 @@ export function createConnectionWizard(options = {}) {
                 { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
                 { name: 'KEY_FILE', type: 4, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
                 { name: 'PASSPHRASE', type: 3, isMandatory: false, category: 'Auth' }
+            ]
+        },
+        {
+            connectorType: 'KAFKA',
+            aliases: [],
+            description: 'Apache Kafka event streams and topics.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'BOOTSTRAP_SERVERS', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'localhost:9092' },
+                { name: 'TOPIC', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'events_stream' },
+                { name: 'GROUP_ID', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'etl_consumer' }
             ]
         }
     ];
@@ -240,11 +464,12 @@ export function createConnectionWizard(options = {}) {
         fetchGateways ? fetchGateways() : Promise.resolve(null),
         fetchStagedFiles ? fetchStagedFiles() : Promise.resolve(null)
     ]).then(([schemas, shared, secrets, gateways, stagedFiles]) => {
-        if (schemas && schemas.length > 0) state.schemas = schemas;
-        if (shared) state.sharedConnections = shared;
-        if (secrets) state.secrets = secrets;
-        if (gateways) state.gateways = gateways;
-        if (stagedFiles) state.stagedFiles = stagedFiles;
+        if (Array.isArray(schemas) && schemas.length > 0) state.schemas = schemas;
+        else if (schemas && Array.isArray(schemas.schemas) && schemas.schemas.length > 0) state.schemas = schemas.schemas;
+        if (shared) state.sharedConnections = Array.isArray(shared) ? shared : (shared.connections || []);
+        if (secrets) state.secrets = Array.isArray(secrets) ? secrets : (secrets.secrets || []);
+        if (gateways) state.gateways = Array.isArray(gateways) ? gateways : (gateways.gateways || []);
+        if (stagedFiles) state.stagedFiles = Array.isArray(stagedFiles) ? stagedFiles : (stagedFiles.files || []);
         initFieldValues();
         render();
     }).catch(err => {
@@ -313,7 +538,7 @@ export function createConnectionWizard(options = {}) {
     }
 
     function generateSql() {
-        const alias = (state.alias || 'unnamed_conn').trim();
+        const alias = (state.alias || '').trim() || '<alias>';
         if (state.isSharedReference) {
             const sharedRef = state.sharedAlias || 'catalog_alias';
             return `CREATE CONNECTION ${alias} AS ${state.connectorType}('SHARED:${sharedRef}');`;
@@ -352,8 +577,12 @@ export function createConnectionWizard(options = {}) {
             optionsList.push(`  PASSWORD = SECRET:${state.secretKey.trim()}`);
         } else if (state.authType === 'env' && state.envVarName.trim()) {
             optionsList.push(`  PASSWORD = $ENV{${state.envVarName.trim()}}`);
-        } else if (state.authType === 'enc' && state.rawPassword) {
-            optionsList.push(`  PASSWORD = ENC:/* Encrypted Password */`);
+        } else if (state.authType === 'enc') {
+            if (state.encryptedCipher) {
+                optionsList.push(`  PASSWORD = '${state.encryptedCipher}'`);
+            } else if (state.rawPassword) {
+                optionsList.push(`  PASSWORD = ENC:/* Encrypted Password */`);
+            }
         } else if (state.authType === 'trusted') {
             optionsList.push(`  TRUSTED_CONNECTION = TRUE`);
         } else if (state.authType === 'keyfile' && state.keyFilePath.trim()) {
@@ -364,7 +593,12 @@ export function createConnectionWizard(options = {}) {
             return `CREATE CONNECTION ${alias} AS ${type}();`;
         }
 
-        return `CREATE CONNECTION ${alias} AS ${type}(\n${optionsList.join(',\n')}\n);`;
+        const createStmt = `CREATE CONNECTION ${alias} AS ${type}(\n${optionsList.join(',\n')}\n);`;
+        if (state.authType === 'enc' && state.encPassphrase && state.encPassphrase.trim()) {
+            return `USE PASSWORD = '${state.encPassphrase.trim().replace(/'/g, "''")}';\n${createStmt}`;
+        }
+
+        return createStmt;
     }
 
     async function runDiagnostic() {
@@ -388,6 +622,8 @@ export function createConnectionWizard(options = {}) {
             req.options.PASSWORD = `SECRET:${state.secretKey}`;
         } else if (state.authType === 'env' && state.envVarName) {
             req.options.PASSWORD = `$ENV{${state.envVarName}}`;
+        } else if (state.authType === 'enc') {
+            req.options.PASSWORD = state.rawPassword || state.encryptedCipher || '';
         } else if (state.authType === 'trusted') {
             req.options.TRUSTED_CONNECTION = 'ON';
         }
@@ -441,6 +677,9 @@ export function createConnectionWizard(options = {}) {
                         <h2 class="etlsql-cw-title">Connection Wizard</h2>
                     </div>
                     <div class="etlsql-cw-header-actions">
+                        <button type="button" class="btn btn-outline btn-sm" id="etlsql-cw-header-test-btn" ${state.isTesting ? 'disabled' : ''} title="Run reachability diagnostic test immediately">
+                            ${state.isTesting ? '<span class="spinner"></span> Testing…' : '⚡ Test Reachability'}
+                        </button>
                         <button type="button" class="btn btn-outline btn-sm" id="etlsql-cw-paste-btn" title="Paste raw connection string or URI">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-2px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                             Paste String
@@ -454,6 +693,9 @@ export function createConnectionWizard(options = {}) {
                     <div class="etlsql-cw-sidebar">
                         <div class="etlsql-cw-preset-group">
                             <div class="etlsql-cw-preset-label">CATEGORY</div>
+                            <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'all' && !state.isSharedReference ? 'active' : ''}" data-cat="all">
+                                🌐 All Connectors (${state.schemas.length})
+                            </button>
                             <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'database' && !state.isSharedReference ? 'active' : ''}" data-cat="database">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
                                 Relational / DW
@@ -472,22 +714,27 @@ export function createConnectionWizard(options = {}) {
                             </button>
                         </div>
 
-                        <div class="etlsql-cw-preset-group">
+                        <div class="etlsql-cw-preset-group" style="flex:1;min-height:0;display:flex;flex-direction:column;">
                             <div class="etlsql-cw-preset-label">CONNECTOR</div>
-                            <div class="etlsql-cw-type-list">
+                            <input type="text" id="etlsql-cw-type-filter" class="form-control etlsql-cw-search-input" placeholder="Search connectors…" value="${_attr(state.typeFilter || '')}" autocomplete="off" />
+                            <div class="etlsql-cw-type-list" style="flex:1;overflow-y:auto;">
                                 ${renderConnectorTypeList()}
                             </div>
                         </div>
                     </div>
 
-                    <!-- Center: Configuration Form & Diagnostic Panel -->
+                    <!-- Center: Configuration Form -->
                     <div class="etlsql-cw-content">
                         <!-- Top Metadata / Alias Row -->
                         <div class="etlsql-cw-meta-row">
                             <div class="form-group flex-1">
-                                <label for="etlsql-cw-alias-input">Connection Alias</label>
-                                <input type="text" id="etlsql-cw-alias-input" class="form-control ${nameCollision ? 'is-invalid' : ''}" value="${_attr(state.alias)}" placeholder="e.g. sales_dw" spellcheck="false" autocomplete="off" />
-                                <span class="form-hint">Used as script reference identifier: <code>${_h(state.alias || 'name')}</code></span>
+                                <label for="etlsql-cw-alias-input">
+                                    Connection Alias
+                                    <span class="etlsql-cw-required-tag" ${state.alias && state.alias.trim() ? 'style="display:none;"' : ''}>* (Required)</span>
+                                </label>
+                                <input type="text" id="etlsql-cw-alias-input" class="form-control ${(!state.alias || !state.alias.trim()) ? 'etlsql-cw-alias-missing' : ''} ${nameCollision ? 'is-invalid' : ''}" value="${_attr(state.alias)}" placeholder="Enter connection alias (e.g. sales_dw, analytics_db)…" spellcheck="false" autocomplete="off" autofocus />
+                                <span class="form-hint etlsql-cw-missing-hint" ${state.alias && state.alias.trim() ? 'style="display:none;"' : ''}>⚠️ Connection alias is required to generate script reference.</span>
+                                <span class="form-hint etlsql-cw-valid-hint" ${(!state.alias || !state.alias.trim()) ? 'style="display:none;"' : ''}>Used as script reference identifier: <code>${_h(state.alias || '')}</code></span>
                                 ${nameCollision ? `
                                     <div class="etlsql-cw-collision-alert">
                                         <span>⚠️ ${_h(nameCollision)}</span>
@@ -516,29 +763,30 @@ export function createConnectionWizard(options = {}) {
                         ` : ''}
 
                         ${state.isSharedReference ? renderSharedReferenceForm() : renderStandardConnectorForm(schema)}
-
-                        <!-- Diagnostic Test Panel -->
-                        <div class="etlsql-cw-diagnostic-card">
-                            <div class="etlsql-cw-diagnostic-header">
-                                <div>
-                                    <h4>Connection Diagnostics</h4>
-                                    <span class="form-hint">Zero-trust reachability verification (Policy, DNS, TCP, Auth)</span>
-                                </div>
-                                <button type="button" class="btn btn-outline btn-sm" id="etlsql-cw-test-btn" ${state.isTesting ? 'disabled' : ''}>
-                                    ${state.isTesting ? '<span class="spinner"></span> Testing…' : 'Test Connection'}
-                                </button>
-                            </div>
-                            ${renderDiagnosticReport()}
-                        </div>
                     </div>
 
-                    <!-- Right / Bottom: Live SQL Preview Drawer -->
+                    <!-- Right Column: Live SQL Preview + Diagnostics Card (NO SCROLLING) -->
                     <div class="etlsql-cw-preview-pane">
                         <div class="etlsql-cw-preview-header">
                             <span class="etlsql-cw-preset-label">CODE-FIRST SQL PREVIEW</span>
                             <button type="button" class="btn btn-sm btn-outline" id="etlsql-cw-copy-sql">Copy SQL</button>
                         </div>
                         <pre class="etlsql-cw-sql-box"><code>${_h(sql)}</code></pre>
+
+                        <!-- Diagnostic Test Panel in Right Sidebar -->
+                        <div class="etlsql-cw-diagnostic-card">
+                            <div class="etlsql-cw-diagnostic-header">
+                                <div>
+                                    <h4>Reachability Diagnostics</h4>
+                                    <span class="form-hint" style="font-size:11px;">Zero-trust probe (Policy, DNS, TCP, Auth)</span>
+                                </div>
+                                <button type="button" class="btn btn-outline btn-sm" id="etlsql-cw-test-btn" ${state.isTesting ? 'disabled' : ''}>
+                                    ${state.isTesting ? '<span class="spinner"></span> Testing…' : '⚡ Test Connection'}
+                                </button>
+                            </div>
+                            ${renderDiagnosticReport()}
+                        </div>
+
                         <div class="etlsql-cw-footer-actions">
                             <button type="button" class="btn btn-outline" id="etlsql-cw-cancel-btn">Cancel</button>
                             <button type="button" class="btn btn-primary" id="etlsql-cw-submit-btn" ${securityViolation ? 'disabled title="Resolve security violation before saving"' : ''}>
@@ -550,6 +798,9 @@ export function createConnectionWizard(options = {}) {
 
                 <!-- Paste Connection String Modal Overlay -->
                 ${renderPasteModal()}
+
+                <!-- Passphrase Encryption Prompt Modal -->
+                ${renderPassphraseModal()}
             </div>
         `;
 
@@ -567,14 +818,29 @@ export function createConnectionWizard(options = {}) {
         }
 
         const filtered = state.schemas.filter(s => {
-            if (state.selectedCategory === 'database') return !s.isFileBased && s.connectorType !== 'SFTP';
-            if (state.selectedCategory === 'files') return s.isFileBased;
-            if (state.selectedCategory === 'remote') return s.connectorType === 'SFTP' || s.connectorType === 'REST' || s.connectorType === 'S3' || s.connectorType === 'AZUREBLOB';
+            const type = (s.connectorType || '').toUpperCase();
+            if (state.typeFilter) {
+                const q = state.typeFilter.trim().toLowerCase();
+                const matchName = type.toLowerCase().includes(q);
+                const matchDesc = (s.description || '').toLowerCase().includes(q);
+                const matchAlias = (s.aliases || []).some(a => a.toLowerCase().includes(q));
+                if (!matchName && !matchDesc && !matchAlias) return false;
+            }
+            if (state.selectedCategory === 'all') return true;
+            if (state.selectedCategory === 'database') {
+                return !s.isFileBased && ['MSSQL', 'SQLSERVER', 'POSTGRES', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLITE', 'ORACLE', 'SNOWFLAKE', 'BIGQUERY', 'DUCKDB', 'ODBC', 'MONGODB', 'NEO4J', 'MOCKDB'].includes(type);
+            }
+            if (state.selectedCategory === 'files') {
+                return s.isFileBased || ['FLATFILE', 'CSV', 'PARQUET', 'EXCEL', 'JSON', 'XML', 'AVRO', 'DIRECTORY'].includes(type);
+            }
+            if (state.selectedCategory === 'remote') {
+                return ['SFTP', 'FTP', 'FTP_CONN', 'REST', 'S3', 'AZUREBLOB', 'GCS', 'SHAREPOINT', 'KAFKA', 'WEBHOOK', 'SMTP', 'ACTIVEDIRECTORY', 'PORTAL', 'ORCHESTRATOR'].includes(type) || (!s.isFileBased && !['MSSQL', 'SQLSERVER', 'POSTGRES', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLITE', 'ORACLE', 'SNOWFLAKE', 'BIGQUERY', 'DUCKDB', 'ODBC', 'MONGODB', 'NEO4J', 'MOCKDB'].includes(type));
+            }
             return true;
         });
 
         if (filtered.length === 0) {
-            return `<div class="etlsql-cw-empty-hint">No connectors registered</div>`;
+            return `<div class="etlsql-cw-empty-hint">No connectors match filter</div>`;
         }
 
         return filtered.map(s => `
@@ -600,78 +866,70 @@ export function createConnectionWizard(options = {}) {
                             </option>
                         `).join('')}
                     </select>
-                    <span class="form-hint">References a centralized connection managed in Portal Admin.</span>
                 </div>
             </div>
         `;
     }
 
     function renderStandardConnectorForm(schema) {
-        if (!schema) return '';
+        if (!schema) return `<div class="etlsql-cw-empty-hint">Select a connector type</div>`;
 
-        const basicOptions = schema.options.filter(o => o.category === 'Basic');
-        const tuningOptions = schema.options.filter(o => o.category === 'Tuning');
-        const securityOptions = schema.options.filter(o => o.category === 'Security');
-        const hasAuth = schema.options.some(o => o.category === 'Auth' || o.name === 'PASSWORD' || o.name === 'USER');
-        const isFile = schema.isFileBased;
+        const basicOptions = (schema.options || []).filter(o => o.category === 'Basic' && o.mutuallyExclusiveGroup !== 'Credentials');
+        const securityOptions = (schema.options || []).filter(o => o.category === 'Security');
+        const tuningOptions = (schema.options || []).filter(o => o.category === 'Tuning');
+        const authOptions = (schema.options || []).filter(o => o.category === 'Auth' || o.mutuallyExclusiveGroup === 'Credentials');
 
         return `
+            <!-- Basic Configuration -->
             <div class="etlsql-cw-form-section">
-                <!-- Dropzone / Staged file picker for file connectors -->
-                ${isFile ? renderFileDropzone() : ''}
+                <h3>${_h(schema.connectorType)} Configuration</h3>
 
-                <!-- Basic Options Grid -->
+                <!-- Dropzone / Staged file picker for file connectors -->
+                ${schema.isFileBased ? renderFileDropzone() : ''}
+
+                <!-- Data Gateway Cluster Routing -->
+                ${renderGatewayRoutingSelector()}
+
                 <div class="etlsql-cw-grid-2col">
                     ${basicOptions.map(opt => renderOptionField(opt)).join('')}
                 </div>
-
-                <!-- Authentication Section -->
-                ${hasAuth ? renderAuthSection(schema) : ''}
-
-                <!-- Gateway Routing Section (if gateways exist or in admin mode) -->
-                ${renderGatewayRoutingSection()}
-
-                <!-- Security & SSL Options -->
-                ${securityOptions.length > 0 ? `
-                    <div class="etlsql-cw-options-group">
-                        <h4 class="etlsql-cw-group-title">Security & Encryption</h4>
-                        <div class="etlsql-cw-grid-2col">
-                            ${securityOptions.map(opt => renderOptionField(opt)).join('')}
-                        </div>
-                    </div>
-                ` : ''}
-
-                <!-- Tuning / Advanced Options -->
-                ${tuningOptions.length > 0 ? `
-                    <details class="etlsql-cw-details">
-                        <summary class="etlsql-cw-details-summary">Advanced & Connection Pooling</summary>
-                        <div class="etlsql-cw-grid-2col" style="margin-top:12px;">
-                            ${tuningOptions.map(opt => renderOptionField(opt)).join('')}
-                        </div>
-                    </details>
-                ` : ''}
             </div>
+
+            <!-- Zero-Trust Authentication Section -->
+            ${authOptions.length > 0 ? renderAuthSection(schema, authOptions) : ''}
+
+            <!-- Advanced / Tuning Section (Collapsible) -->
+            ${(securityOptions.length > 0 || tuningOptions.length > 0) ? `
+                <details class="etlsql-cw-details">
+                    <summary class="etlsql-cw-details-summary">Advanced Settings (Security & Tuning)</summary>
+                    <div class="etlsql-cw-grid-2col" style="margin-top: 12px;">
+                        ${securityOptions.map(opt => renderOptionField(opt)).join('')}
+                        ${tuningOptions.map(opt => renderOptionField(opt)).join('')}
+                    </div>
+                </details>
+            ` : ''}
         `;
     }
 
     function renderFileDropzone() {
         const staged = state.stagedFiles || [];
         return `
-            <div class="etlsql-cw-options-group etlsql-cw-file-section">
-                <h4 class="etlsql-cw-group-title">Staged Files & Dropzone</h4>
-                <div class="etlsql-cw-dropzone ${state.isDraggingFile ? 'is-dragover' : ''}" id="etlsql-cw-file-dropzone">
+            <div class="etlsql-cw-dropzone-container">
+                <div class="etlsql-cw-dropzone" id="etlsql-cw-file-dropzone">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                    <span>Drag & drop flat files here, or <label class="etlsql-cw-file-browse">browse<input type="file" id="etlsql-cw-file-input" style="display:none" /></label></span>
-                    <span class="form-hint">Files are staged to workspace-relative path <code>data/filename</code></span>
+                    <span>Drag & drop workspace data file here, or</span>
+                    <label class="btn btn-xs btn-outline etlsql-cw-browse-btn">
+                        Browse Files
+                        <input type="file" id="etlsql-cw-file-input" style="display:none;" />
+                    </label>
                 </div>
-
                 ${staged.length > 0 ? `
-                    <div class="etlsql-cw-staged-list">
+                    <div class="etlsql-cw-staged-chips">
                         <span class="form-hint">Workspace Staged Files:</span>
-                        <div class="etlsql-cw-chips-row">
-                            ${staged.map(f => `
-                                <button type="button" class="etlsql-cw-chip-btn" data-filepath="${_attr(f.path || f.name)}">
-                                    📁 ${_h(f.name || f.path)}
+                        <div class="etlsql-cw-chips-list">
+                            ${staged.slice(0, 5).map(f => `
+                                <button type="button" class="etlsql-cw-chip" data-filepath="${_attr(f.path || f.name)}">
+                                    📄 ${_h(f.name)}
                                 </button>
                             `).join('')}
                         </div>
@@ -681,40 +939,41 @@ export function createConnectionWizard(options = {}) {
         `;
     }
 
-    function renderGatewayRoutingSection() {
+    function renderGatewayRoutingSelector() {
         const gateways = state.gateways || [];
+        if (gateways.length === 0) return '';
+
         return `
-            <div class="etlsql-cw-options-group">
-                <h4 class="etlsql-cw-group-title">Data Gateway Routing (Hybrid Connectivity)</h4>
-                <div class="form-group">
-                    <label for="etlsql-cw-gateway-select">Gateway Cluster</label>
-                    <select id="etlsql-cw-gateway-select" class="form-control">
-                        <option value="">Direct / Cloud Egress (No Gateway)</option>
-                        ${gateways.map(gw => `
-                            <option value="${_attr(gw.id)}" ${state.gatewayCluster === gw.id ? 'selected' : ''}>
-                                ${gw.name || gw.id} [${gw.region || 'On-Prem'}] (${gw.status || 'Active'})
-                            </option>
-                        `).join('')}
-                    </select>
-                    <span class="form-hint">Routes connection traffic securely through an on-premises Gateway daemon cluster: <code>GATEWAY = 'cluster_id'</code></span>
-                </div>
+            <div class="form-group">
+                <label for="etlsql-cw-gateway-select">Hybrid Data Gateway Routing</label>
+                <select id="etlsql-cw-gateway-select" class="form-control">
+                    <option value="">Direct Cloud Egress (No Gateway)</option>
+                    ${gateways.map(gw => `
+                        <option value="${_attr(gw.name || gw.id)}" ${state.gatewayCluster === (gw.name || gw.id) ? 'selected' : ''}>
+                            ⚡ ${gw.name || gw.id} (${gw.region || 'On-Premises'} - ${gw.status || 'Active'})
+                        </option>
+                    `).join('')}
+                </select>
+                <span class="form-hint">Routes egress queries through enrolled on-premises gateway daemon.</span>
             </div>
         `;
     }
 
     function renderOptionField(opt) {
         const val = state.values[opt.name] ?? opt.defaultValue ?? '';
-        const id = `etlsql-opt-${opt.name.toLowerCase()}`;
+        const id = `etlsql-cw-opt-${opt.name.toLowerCase()}`;
 
         if (opt.type === 2) { // Boolean
-            const isChecked = val === 'ON' || val === 'TRUE' || val === true || val === '1';
+            const isChecked = val === 'ON' || val === 'TRUE' || val === true;
             return `
-                <div class="form-group form-check">
-                    <label class="etlsql-cw-checkbox-label">
+                <div class="form-group etlsql-cw-form-group-check">
+                    <label class="etlsql-cw-checkbox-card ${isChecked ? 'is-checked' : ''}" for="${id}">
                         <input type="checkbox" id="${id}" data-opt="${_attr(opt.name)}" ${isChecked ? 'checked' : ''} />
-                        <span>${_h(opt.name)}</span>
+                        <div class="etlsql-cw-checkbox-text">
+                            <span class="etlsql-cw-checkbox-title">${_h(opt.name)}</span>
+                            ${opt.description ? `<span class="etlsql-cw-checkbox-desc">${_h(opt.description)}</span>` : ''}
+                        </div>
                     </label>
-                    ${opt.description ? `<span class="form-hint">${_h(opt.description)}</span>` : ''}
                 </div>
             `;
         }
@@ -722,10 +981,10 @@ export function createConnectionWizard(options = {}) {
         if (opt.type === 5 && opt.allowedValues && opt.allowedValues.length > 0) { // Enum
             return `
                 <div class="form-group">
-                    <label for="${id}">${_h(opt.name)} ${opt.isMandatory ? '<span class="req">*</span>' : ''}</label>
+                    <label for="${id}">${_h(opt.name)} ${opt.isMandatory ? '<span class="required">*</span>' : ''}</label>
                     <select id="${id}" data-opt="${_attr(opt.name)}" class="form-control">
-                        ${opt.allowedValues.map(v => `
-                            <option value="${_attr(v)}" ${String(val).toUpperCase() === v.toUpperCase() ? 'selected' : ''}>${_h(v)}</option>
+                        ${opt.allowedValues.map(av => `
+                            <option value="${_attr(av)}" ${av.toUpperCase() === String(val).toUpperCase() ? 'selected' : ''}>${_h(av)}</option>
                         `).join('')}
                     </select>
                 </div>
@@ -734,26 +993,40 @@ export function createConnectionWizard(options = {}) {
 
         return `
             <div class="form-group">
-                <label for="${id}">${_h(opt.name)} ${opt.isMandatory ? '<span class="req">*</span>' : ''}</label>
+                <label for="${id}">${_h(opt.name)} ${opt.isMandatory ? '<span class="required">*</span>' : ''}</label>
                 <input type="${opt.type === 1 ? 'number' : 'text'}" id="${id}" data-opt="${_attr(opt.name)}" class="form-control" value="${_attr(val)}" placeholder="${_attr(opt.defaultValue || '')}" spellcheck="false" autocomplete="off" />
                 ${opt.description ? `<span class="form-hint">${_h(opt.description)}</span>` : ''}
             </div>
         `;
     }
 
-    function renderAuthSection(schema) {
-        const hasTrusted = schema.options.some(o => o.name === 'TRUSTED_CONNECTION');
-        const hasKeyFile = schema.options.some(o => o.name === 'KEY_FILE');
+    function renderAuthSection(schema, authOptions) {
+        const hasTrusted = authOptions.some(o => o.name === 'TRUSTED_CONNECTION');
+        const hasKeyFile = authOptions.some(o => o.name === 'KEY_FILE');
 
         return `
-            <div class="etlsql-cw-options-group">
-                <h4 class="etlsql-cw-group-title">Authentication & Credentials</h4>
+            <div class="etlsql-cw-form-section">
+                <h3>Zero-Trust Authentication</h3>
                 <div class="etlsql-cw-auth-tabs">
-                    <button type="button" class="etlsql-cw-auth-tab ${state.authType === 'secret' ? 'active' : ''}" data-authtype="secret">Vault Secret (SECRET:)</button>
-                    <button type="button" class="etlsql-cw-auth-tab ${state.authType === 'env' ? 'active' : ''}" data-authtype="env">Environment ($ENV{})</button>
-                    <button type="button" class="etlsql-cw-auth-tab ${state.authType === 'enc' ? 'active' : ''}" data-authtype="enc">Client Encrypted</button>
-                    ${hasTrusted ? `<button type="button" class="etlsql-cw-auth-tab ${state.authType === 'trusted' ? 'active' : ''}" data-authtype="trusted">Windows / SSPI</button>` : ''}
-                    ${hasKeyFile ? `<button type="button" class="etlsql-cw-auth-tab ${state.authType === 'keyfile' ? 'active' : ''}" data-authtype="keyfile">Key File</button>` : ''}
+                    <button type="button" class="etlsql-cw-auth-tab ${state.authType === 'secret' ? 'active' : ''}" data-authtype="secret">
+                        🔒 Vault Secret
+                    </button>
+                    <button type="button" class="etlsql-cw-auth-tab ${state.authType === 'env' ? 'active' : ''}" data-authtype="env">
+                        🌐 Env Var
+                    </button>
+                    <button type="button" class="etlsql-cw-auth-tab ${state.authType === 'enc' ? 'active' : ''}" data-authtype="enc">
+                        🔑 Client Encrypted
+                    </button>
+                    ${hasTrusted ? `
+                        <button type="button" class="etlsql-cw-auth-tab ${state.authType === 'trusted' ? 'active' : ''}" data-authtype="trusted">
+                            🪟 Windows Auth
+                        </button>
+                    ` : ''}
+                    ${hasKeyFile ? `
+                        <button type="button" class="etlsql-cw-auth-tab ${state.authType === 'keyfile' ? 'active' : ''}" data-authtype="keyfile">
+                            📄 Key File
+                        </button>
+                    ` : ''}
                 </div>
 
                 <div class="etlsql-cw-auth-body">
@@ -765,27 +1038,35 @@ export function createConnectionWizard(options = {}) {
 
     function renderAuthInputs() {
         if (state.authType === 'secret') {
+            const secrets = state.secrets || [];
             return `
                 <div class="form-group">
-                    <label for="etlsql-cw-secret-key">Secret Key Identifier</label>
-                    <div class="etlsql-cw-input-btn-row">
-                        <input type="text" id="etlsql-cw-secret-key" class="form-control" value="${_attr(state.secretKey)}" placeholder="e.g. SQL_READER_PW" list="etlsql-cw-secrets-list" spellcheck="false" autocomplete="off" />
-                        <datalist id="etlsql-cw-secrets-list">
-                            ${state.secrets.map(s => `<option value="${_attr(s)}"></option>`).join('')}
-                        </datalist>
+                    <label for="etlsql-cw-secret-key">Vault Secret Name (<code>SECRET:name</code>)</label>
+                    <div class="etlsql-cw-input-with-list">
+                        <input type="text" id="etlsql-cw-secret-key" class="form-control" value="${_attr(state.secretKey)}" placeholder="e.g. MSSQL_DW_PASSWORD" spellcheck="false" autocomplete="off" />
+                        ${secrets.length > 0 ? `
+                            <div class="etlsql-cw-secret-hints">
+                                <span class="form-hint">Discovered Secrets:</span>
+                                ${secrets.slice(0, 4).map(s => `
+                                    <button type="button" class="etlsql-cw-chip" onclick="document.getElementById('etlsql-cw-secret-key').value='${_attr(s)}'; document.getElementById('etlsql-cw-secret-key').dispatchEvent(new Event('input'));">
+                                        ${_h(s)}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                     </div>
-                    <span class="form-hint">Resolved via zero-trust secrets vault at runtime: <code>PASSWORD = SECRET:${_h(state.secretKey || 'KEY')}</code></span>
                 </div>
+                <span class="form-hint">Secret value resolves securely at runtime from Azure KeyVault, AWS Secrets Manager, HashiCorp Vault, or encrypted local storage.</span>
             `;
         }
 
         if (state.authType === 'env') {
             return `
                 <div class="form-group">
-                    <label for="etlsql-cw-env-key">Environment Variable Name</label>
+                    <label for="etlsql-cw-env-key">Environment Variable Name (<code>$ENV{name}</code>)</label>
                     <input type="text" id="etlsql-cw-env-key" class="form-control" value="${_attr(state.envVarName)}" placeholder="e.g. DB_PASSWORD" spellcheck="false" autocomplete="off" />
-                    <span class="form-hint">Read from process environment on execution: <code>PASSWORD = $ENV{${_h(state.envVarName || 'VAR')}}</code></span>
                 </div>
+                <span class="form-hint">Resolved from host process environment variables at execution time.</span>
             `;
         }
 
@@ -794,14 +1075,18 @@ export function createConnectionWizard(options = {}) {
                 <div class="etlsql-cw-grid-2col">
                     <div class="form-group">
                         <label for="etlsql-cw-raw-pw">Password</label>
-                        <input type="password" id="etlsql-cw-raw-pw" class="form-control" value="${_attr(state.rawPassword)}" placeholder="••••••••" autocomplete="new-password" />
+                        <input type="password" id="etlsql-cw-raw-pw" class="form-control" value="${_attr(state.rawPassword)}" placeholder="Password" autocomplete="new-password" />
                     </div>
                     <div class="form-group">
                         <label for="etlsql-cw-enc-passphrase">Client Passphrase (to encrypt)</label>
                         <input type="password" id="etlsql-cw-enc-passphrase" class="form-control" value="${_attr(state.encPassphrase)}" placeholder="Passphrase" autocomplete="new-password" />
                     </div>
                 </div>
-                <span class="form-hint">Password is encrypted with your client passphrase before being placed in script text.</span>
+                ${state.encryptedCipher ? `
+                    <div style="font-size:11px;color:var(--portal-success,#10b981);margin-top:4px;word-break:break-all;">
+                        ✓ Encrypted with AES-256 (v2): <code>${_h(state.encryptedCipher.substring(0, 32))}...</code>
+                    </div>
+                ` : '<span class="form-hint">Password is encrypted with your client passphrase (PBKDF2 + AES-GCM) before being placed in script text.</span>'}
             `;
         }
 
@@ -830,7 +1115,7 @@ export function createConnectionWizard(options = {}) {
         if (!state.diagnosticResult) {
             return `
                 <div class="etlsql-cw-diag-placeholder">
-                    <span>Click <strong>Test Connection</strong> to run a live 4-layer diagnostic probe.</span>
+                    <span>Click <strong>Test Connection</strong> to run live reachability verification.</span>
                 </div>
             `;
         }
@@ -840,18 +1125,21 @@ export function createConnectionWizard(options = {}) {
         return `
             <div class="etlsql-cw-diag-result ${succeeded ? 'success' : 'failed'}">
                 <div class="etlsql-cw-diag-badge ${succeeded ? 'badge-ok' : 'badge-fail'}">
-                    ${succeeded ? '✓ REACHABLE & AUTHORIZED' : '✗ REACHABILITY PROBE FAILED'}
+                    ${succeeded ? '✓ REACHABLE & AUTHORIZED' : '✗ PROBE FAILED'}
                 </div>
                 ${error ? `<div class="etlsql-cw-diag-err">${_h(error)}</div>` : ''}
                 <div class="etlsql-cw-diag-steps">
-                    ${steps.map(s => `
-                        <div class="etlsql-cw-step-item step-${s.status}">
-                            <span class="etlsql-cw-step-status">${s.status.toUpperCase()}</span>
-                            <span class="etlsql-cw-step-layer">[${_h(s.layer)}]</span>
-                            <span class="etlsql-cw-step-detail">${_h(s.detail)}</span>
-                            ${s.remedy ? `<div class="etlsql-cw-step-remedy">💡 <strong>Remedy:</strong> ${_h(s.remedy)}</div>` : ''}
-                        </div>
-                    `).join('')}
+                    ${steps.map(s => {
+                        const status = statusToStr(s.status);
+                        return `
+                            <div class="etlsql-cw-step-item step-${status}">
+                                <span class="etlsql-cw-step-status">${status.toUpperCase()}</span>
+                                <span class="etlsql-cw-step-layer">[${_h(s.layer)}]</span>
+                                <span class="etlsql-cw-step-detail">${_h(s.detail)}</span>
+                                ${s.remedy ? `<div class="etlsql-cw-step-remedy">💡 <strong>Remedy:</strong> ${_h(s.remedy)}</div>` : ''}
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
             </div>
         `;
@@ -869,6 +1157,28 @@ export function createConnectionWizard(options = {}) {
                     <div class="etlsql-cw-dialog-actions">
                         <button type="button" class="btn btn-outline" id="etlsql-cw-paste-cancel">Cancel</button>
                         <button type="button" class="btn btn-primary" id="etlsql-cw-paste-apply">Parse & Apply</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPassphraseModal() {
+        if (!state.passphraseModalOpen) return '';
+
+        return `
+            <div class="etlsql-cw-paste-overlay">
+                <div class="etlsql-cw-paste-dialog">
+                    <div class="etlsql-cw-kicker">ZERO-TRUST CREDENTIAL DETECTED</div>
+                    <h3>Encrypt Connection Password</h3>
+                    <p class="form-hint">A password was detected in the connection string. Enter a client passphrase to encrypt it with zero-trust AES-256 (<code>ENC:...</code>), or configure a Vault Secret.</p>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="etlsql-cw-paste-passphrase">Client Passphrase</label>
+                        <input type="password" id="etlsql-cw-paste-passphrase" class="form-control" placeholder="Enter passphrase to encrypt" autocomplete="new-password" autofocus />
+                    </div>
+                    <div class="etlsql-cw-dialog-actions">
+                        <button type="button" class="btn btn-outline" id="etlsql-cw-passphrase-skip">Use Vault Secret (${_h(state.pendingSecretKey || 'SECRET:KEY')})</button>
+                        <button type="button" class="btn btn-primary" id="etlsql-cw-passphrase-encrypt">Encrypt & Apply</button>
                     </div>
                 </div>
             </div>
@@ -896,9 +1206,11 @@ export function createConnectionWizard(options = {}) {
                     state.isSharedReference = false;
                     state.selectedCategory = cat;
                     const firstInCat = state.schemas.find(s => {
-                        if (cat === 'database') return !s.isFileBased && s.connectorType !== 'SFTP';
-                        if (cat === 'files') return s.isFileBased;
-                        if (cat === 'remote') return s.connectorType === 'SFTP';
+                        const type = (s.connectorType || '').toUpperCase();
+                        if (cat === 'all') return true;
+                        if (cat === 'database') return !s.isFileBased && ['MSSQL', 'SQLSERVER', 'POSTGRES', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLITE', 'ORACLE', 'SNOWFLAKE', 'BIGQUERY', 'DUCKDB', 'ODBC', 'MONGODB', 'NEO4J', 'MOCKDB'].includes(type);
+                        if (cat === 'files') return s.isFileBased || ['FLATFILE', 'CSV', 'PARQUET', 'EXCEL', 'JSON', 'XML', 'AVRO', 'DIRECTORY'].includes(type);
+                        if (cat === 'remote') return ['SFTP', 'FTP', 'FTP_CONN', 'REST', 'S3', 'AZUREBLOB', 'GCS', 'SHAREPOINT', 'KAFKA', 'WEBHOOK', 'SMTP', 'ACTIVEDIRECTORY', 'PORTAL', 'ORCHESTRATOR'].includes(type);
                         return true;
                     });
                     if (firstInCat) {
@@ -911,18 +1223,20 @@ export function createConnectionWizard(options = {}) {
             });
         });
 
-        // Connector type selection
-        modalOverlay.querySelectorAll('.etlsql-cw-type-item').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const type = btn.dataset.type;
-                if (type && type !== state.connectorType) {
-                    state.connectorType = type;
-                    state.values = {};
-                    initFieldValues();
-                    render();
+        // Connector search filter input
+        const typeFilterInput = modalOverlay.querySelector('#etlsql-cw-type-filter');
+        if (typeFilterInput) {
+            typeFilterInput.addEventListener('input', e => {
+                state.typeFilter = e.target.value;
+                const typeList = modalOverlay.querySelector('.etlsql-cw-type-list');
+                if (typeList) {
+                    typeList.innerHTML = renderConnectorTypeList();
+                    bindTypeListEvents();
                 }
             });
-        });
+        }
+
+        bindTypeListEvents();
 
         // Alias change
         modalOverlay.querySelector('#etlsql-cw-alias-input')?.addEventListener('input', e => {
@@ -992,6 +1306,10 @@ export function createConnectionWizard(options = {}) {
             if (input.type === 'checkbox') {
                 input.addEventListener('change', e => {
                     state.values[optName] = e.target.checked ? 'ON' : 'OFF';
+                    const card = input.closest('.etlsql-cw-checkbox-card');
+                    if (card) {
+                        card.classList.toggle('is-checked', e.target.checked);
+                    }
                     updateSqlBox();
                 });
             } else {
@@ -1020,12 +1338,18 @@ export function createConnectionWizard(options = {}) {
             state.envVarName = e.target.value;
             updateSqlBox();
         });
-        modalOverlay.querySelector('#etlsql-cw-raw-pw')?.addEventListener('input', e => {
+        modalOverlay.querySelector('#etlsql-cw-raw-pw')?.addEventListener('input', async e => {
             state.rawPassword = e.target.value;
+            if (state.authType === 'enc' && state.encPassphrase) {
+                state.encryptedCipher = await encryptClientPassword(state.rawPassword, state.encPassphrase);
+            }
             updateSqlBox();
         });
-        modalOverlay.querySelector('#etlsql-cw-enc-passphrase')?.addEventListener('input', e => {
+        modalOverlay.querySelector('#etlsql-cw-enc-passphrase')?.addEventListener('input', async e => {
             state.encPassphrase = e.target.value;
+            if (state.authType === 'enc' && state.rawPassword) {
+                state.encryptedCipher = await encryptClientPassword(state.rawPassword, state.encPassphrase);
+            }
             updateSqlBox();
         });
         modalOverlay.querySelector('#etlsql-cw-key-path')?.addEventListener('input', e => {
@@ -1034,10 +1358,9 @@ export function createConnectionWizard(options = {}) {
             checkAndAlertValidation();
         });
 
-        // Test Connection Button
-        modalOverlay.querySelector('#etlsql-cw-test-btn')?.addEventListener('click', () => {
-            runDiagnostic();
-        });
+        // Test Connection Button (Both in Header and in Right Pane)
+        modalOverlay.querySelector('#etlsql-cw-test-btn')?.addEventListener('click', runDiagnostic);
+        modalOverlay.querySelector('#etlsql-cw-header-test-btn')?.addEventListener('click', runDiagnostic);
 
         // Copy SQL Button
         modalOverlay.querySelector('#etlsql-cw-copy-sql')?.addEventListener('click', () => {
@@ -1084,13 +1407,46 @@ export function createConnectionWizard(options = {}) {
                 for (const [k, v] of Object.entries(parsed.options || {})) {
                     state.values[k] = v;
                 }
+
                 if (parsed.extractedCredential) {
-                    state.authType = 'secret';
-                    state.secretKey = parsed.suggestedSecretKey || `${state.connectorType}_PW`;
+                    state.rawPassword = parsed.extractedCredential;
+                    state.pendingExtractedPassword = parsed.extractedCredential;
+                    state.pendingSecretKey = parsed.suggestedSecretKey || `${state.connectorType}_PW`;
+                    state.pasteModalOpen = false;
+                    state.passphraseModalOpen = true;
+                    render();
+                    return;
                 }
             }
 
             state.pasteModalOpen = false;
+            render();
+        });
+
+        // Passphrase Prompt Dialog Buttons
+        modalOverlay.querySelector('#etlsql-cw-passphrase-encrypt')?.addEventListener('click', async () => {
+            const passInput = modalOverlay.querySelector('#etlsql-cw-paste-passphrase');
+            const pass = (passInput?.value || '').trim();
+            if (!pass) {
+                if (passInput) {
+                    passInput.focus();
+                    passInput.classList.add('is-invalid');
+                }
+                return;
+            }
+            state.encPassphrase = pass;
+            if (state.rawPassword) {
+                state.encryptedCipher = await encryptClientPassword(state.rawPassword, pass);
+            }
+            state.authType = 'enc';
+            state.passphraseModalOpen = false;
+            render();
+        });
+
+        modalOverlay.querySelector('#etlsql-cw-passphrase-skip')?.addEventListener('click', () => {
+            state.authType = 'secret';
+            state.secretKey = state.pendingSecretKey || `${state.connectorType}_PW`;
+            state.passphraseModalOpen = false;
             render();
         });
 
@@ -1128,12 +1484,46 @@ export function createConnectionWizard(options = {}) {
         });
     }
 
+    function bindTypeListEvents() {
+        modalOverlay.querySelectorAll('.etlsql-cw-type-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const type = btn.dataset.type;
+                if (type && type !== state.connectorType) {
+                    state.connectorType = type;
+                    state.values = {};
+                    initFieldValues();
+                    render();
+                }
+            });
+        });
+    }
+
     function checkAndAlertValidation() {
         const violation = getSecurityViolation();
-        const collision = getNameCollision();
+        const nameCollision = getNameCollision();
+        const isAliasMissing = !state.alias || !state.alias.trim();
         const submitBtn = modalOverlay.querySelector('#etlsql-cw-submit-btn');
         if (submitBtn) {
-            submitBtn.disabled = Boolean(violation);
+            submitBtn.disabled = Boolean(violation || nameCollision || isAliasMissing);
+        }
+
+        const aliasInput = modalOverlay.querySelector('#etlsql-cw-alias-input');
+        if (aliasInput) {
+            aliasInput.classList.toggle('etlsql-cw-alias-missing', isAliasMissing);
+        }
+        const missingHint = modalOverlay.querySelector('.etlsql-cw-missing-hint');
+        if (missingHint) {
+            missingHint.style.display = isAliasMissing ? '' : 'none';
+        }
+        const validHint = modalOverlay.querySelector('.etlsql-cw-valid-hint');
+        if (validHint) {
+            validHint.style.display = isAliasMissing ? 'none' : '';
+            const code = validHint.querySelector('code');
+            if (code) code.textContent = (state.alias || '').trim();
+        }
+        const reqTag = modalOverlay.querySelector('.etlsql-cw-required-tag');
+        if (reqTag) {
+            reqTag.style.display = isAliasMissing ? '' : 'none';
         }
     }
 
@@ -1152,7 +1542,7 @@ export function createConnectionWizard(options = {}) {
     function parseConnectionStringFallback(raw, hint) {
         const options = {};
         let extractedCredential = null;
-        let detected = hint;
+        let detected = hint || 'MSSQL';
 
         const pairs = raw.split(';');
         for (const pair of pairs) {
@@ -1163,11 +1553,19 @@ export function createConnectionWizard(options = {}) {
                 if (k === 'PASSWORD' || k === 'PWD') {
                     extractedCredential = v;
                 } else if (k === 'DATA_SOURCE' || k === 'SERVER') {
-                    options['SERVER'] = v;
+                    if (v.includes(',')) {
+                        const parts = v.split(',');
+                        options['SERVER'] = parts[0].trim();
+                        if (parts.length > 1) options['PORT'] = parts[1].trim();
+                    } else {
+                        options['SERVER'] = v;
+                    }
                 } else if (k === 'INITIAL_CATALOG' || k === 'DATABASE') {
                     options['DATABASE'] = v;
                 } else if (k === 'USER_ID' || k === 'UID' || k === 'USER') {
                     options['USER'] = v;
+                } else if (k === 'TRUSTSERVERCERTIFICATE' || k === 'TRUST_SERVER_CERTIFICATE') {
+                    options['TRUST_SERVER_CERTIFICATE'] = v.toUpperCase() === 'TRUE' ? 'ON' : 'OFF';
                 } else {
                     options[k] = v;
                 }
@@ -1178,7 +1576,7 @@ export function createConnectionWizard(options = {}) {
             detectedProvider: detected,
             options,
             extractedCredential,
-            suggestedSecretKey: extractedCredential ? `${detected}_PW` : null
+            suggestedSecretKey: extractedCredential ? `${detected}_${(options.DATABASE || 'DB').toUpperCase()}_PW` : null
         };
     }
 

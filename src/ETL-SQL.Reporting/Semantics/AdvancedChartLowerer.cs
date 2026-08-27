@@ -123,7 +123,9 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
     private static FieldChannel BaseScaleChannel(FieldChannel channel) => channel switch
     {
         FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd => FieldChannel.X,
-        FieldChannel.YStart or FieldChannel.YEnd => FieldChannel.Y,
+        FieldChannel.YStart or FieldChannel.YEnd or
+        FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
+        FieldChannel.Open or FieldChannel.Close => FieldChannel.Y,
         _ => channel
     };
 

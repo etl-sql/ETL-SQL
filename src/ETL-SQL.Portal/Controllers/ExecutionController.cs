@@ -452,6 +452,28 @@ public class ExecutionController(
         return this.BrowserManifest(manifest);
     }
 
+    // ── 2.3a  POST /api/reports/{id}/layout ─────────────────────────────────
+
+    [HttpPost("reports/{id:int}/layout")]
+    public async Task<IActionResult> ResolveNativeChartLayout(int id, [FromBody] NativeChartLayoutRequest req)
+    {
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (perm is null) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.VisualName)
+            || !Enum.TryParse<NativeChartLayoutTier>(req.Tier, true, out var tier))
+            return BadRequest(new { error = "visualName and a COMPACT, STANDARD, or WIDE tier are required" });
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var manifest = await svc.ResolveVisualLayoutAsync(req.VisualName, tier);
+        return manifest is null ? NotFound() : this.BrowserManifest(manifest);
+    }
+
     // ── 2.3b  POST /api/reports/{id}/bookmark ────────────────────────────────
 
     /// <summary>

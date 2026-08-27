@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Database, Search, RefreshCw, Layers, Variable, Hash } from 'lucide-react';
+import { Database, Search, RefreshCw, Layers, Variable, Hash, Plus } from 'lucide-react';
 import type { ProtocolMessage, Connection, Variable as ScriptVar } from '../types';
 import { extractVariables } from '../utils/variable_utils';
 import { MetadataItem } from './MetadataItem';
@@ -64,13 +64,22 @@ export const SidebarExplorer: React.FC<SidebarExplorerProps> = ({ messages, post
           <h2 className="text-[12px] font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <Database size={13} className="text-[var(--muted)]" /> Metadata
           </h2>
-          <button 
-            onClick={() => postMessage({ type: 'refresh' })}
-            className="p-1 text-[var(--muted)] hover:text-[var(--text-primary)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
-            title="Refresh Connections"
-          >
-            <RefreshCw size={14} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => postMessage({ type: 'openConnectionWizard' })}
+              className="p-1 text-[var(--muted)] hover:text-[var(--text-primary)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))] rounded"
+              title="New Connection Wizard..."
+            >
+              <Plus size={14} />
+            </button>
+            <button 
+              onClick={() => postMessage({ type: 'refresh' })}
+              className="p-1 text-[var(--muted)] hover:text-[var(--text-primary)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))] rounded"
+              title="Refresh Connections"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
         </div>
         
         <div className="relative group">

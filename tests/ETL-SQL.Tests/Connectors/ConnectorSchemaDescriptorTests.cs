@@ -48,10 +48,31 @@ public class ConnectorSchemaDescriptorTests
         Assert.Contains("READONLY", intentOpt.AllowedValues!);
         Assert.Contains("READWRITE", intentOpt.AllowedValues!);
 
+        var portOpt = schema.Options.FirstOrDefault(o => o.Name == "PORT");
+        Assert.NotNull(portOpt);
+
         var timeoutOpt = schema.Options.FirstOrDefault(o => o.Name == "TIMEOUT_SECONDS");
         Assert.NotNull(timeoutOpt);
         Assert.Equal(ConnectorOptionType.Number, timeoutOpt.Type);
         Assert.Equal("Tuning", timeoutOpt.Category);
+    }
+
+    [Fact]
+    public void SqlServerConnector_BuildConnectionString_IncludesPort()
+    {
+        var connector = new SqlServerConnector();
+        var cs = connector.BuildConnectionString(new System.Collections.Generic.Dictionary<string, string>
+        {
+            { "SERVER", "localhost" },
+            { "PORT", "1433" },
+            { "DATABASE", "master" },
+            { "USER", "sa" },
+            { "PASSWORD", "secret" }
+        });
+
+        Assert.Contains("Data Source=localhost,1433", cs);
+        Assert.Contains("Initial Catalog=master", cs);
+        Assert.Contains("User ID=sa", cs);
     }
 
     [Fact]

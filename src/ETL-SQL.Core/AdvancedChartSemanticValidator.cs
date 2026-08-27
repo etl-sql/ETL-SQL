@@ -62,7 +62,9 @@ public static class AdvancedChartSemanticValidator
     /// <summary>True when a scale declared for <paramref name="scale"/> may carry a <paramref name="binding"/> channel.</summary>
     public static bool CompatibleScaleChannel(AdvancedChartChannel scale, AdvancedChartChannel binding) => scale == binding ||
         scale == AdvancedChartChannel.X && binding is AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd ||
-        scale == AdvancedChartChannel.Y && binding is AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd;
+        scale == AdvancedChartChannel.Y && binding is AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
+            AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
+            AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close;
 
     /// <summary>The scale identifier the lowerer synthesizes for an un-declared binding.</summary>
     public static string InferredScaleId(AdvancedChartCoordinateKind coordinate, AdvancedChartAxisRole axis, AdvancedChartChannel channel) =>
@@ -72,7 +74,9 @@ public static class AdvancedChartSemanticValidator
     public static AdvancedChartChannel BaseScaleChannel(AdvancedChartChannel channel) => channel switch
     {
         AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd => AdvancedChartChannel.X,
-        AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd => AdvancedChartChannel.Y,
+        AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
+        AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
+        AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close => AdvancedChartChannel.Y,
         _ => channel
     };
 
@@ -284,6 +288,7 @@ public static class AdvancedChartSemanticValidator
         switch (layer.Mark)
         {
             case AdvancedChartMarkKind.Rect:
+                ValidateStatisticalRect(results, layer, effective, channels, layerNode);
                 // A ranged rectangle owns its own extent on an axis, so the author supplies both
                 // endpoints and nothing else that would also claim that axis.
                 ValidateIntervalPair(results, layer, effective, AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd, "X_START/X_END", layerNode);
@@ -329,6 +334,57 @@ public static class AdvancedChartSemanticValidator
         if (chart.Coordinate.Kind == AdvancedChartCoordinateKind.Polar && layer.Mark != AdvancedChartMarkKind.Arc)
             Add(results, layerNode, "The native POLAR slice supports ARC layers only.");
     }
+
+    private static void ValidateStatisticalRect(
+        List<Diagnostic> results,
+        AdvancedChartLayer layer,
+        IReadOnlyList<AdvancedChartEncoding> effective,
+        HashSet<AdvancedChartChannel> channels,
+        AstNode layerNode)
+    {
+        var boxChannels = new[]
+        {
+            AdvancedChartChannel.Low, AdvancedChartChannel.Q1, AdvancedChartChannel.Median,
+            AdvancedChartChannel.Q3, AdvancedChartChannel.High
+        };
+        var candleChannels = new[]
+        {
+            AdvancedChartChannel.Open, AdvancedChartChannel.Close,
+            AdvancedChartChannel.Low, AdvancedChartChannel.High
+        };
+        var hasQuartile = channels.Contains(AdvancedChartChannel.Q1) ||
+            channels.Contains(AdvancedChartChannel.Median) || channels.Contains(AdvancedChartChannel.Q3);
+        var hasFinancial = channels.Contains(AdvancedChartChannel.Open) || channels.Contains(AdvancedChartChannel.Close);
+        if (!hasQuartile && !hasFinancial) return;
+
+        if (hasQuartile && hasFinancial)
+        {
+            Add(results, layerNode, $"RECT layer '{layer.Name}' cannot mix box-plot and candlestick channels.");
+            return;
+        }
+
+        var required = hasQuartile ? boxChannels : candleChannels;
+        var shape = hasQuartile ? "box plot" : "candlestick";
+        var missing = required.Where(channel => !channels.Contains(channel)).ToArray();
+        if (missing.Length > 0)
+            Add(results, layerNode, $"RECT layer '{layer.Name}' {shape} requires {string.Join(", ", required.Select(Upper))}; missing {string.Join(", ", missing.Select(Upper))}.");
+        if (!channels.Contains(AdvancedChartChannel.X))
+            Add(results, layerNode, $"RECT layer '{layer.Name}' {shape} requires an X category encoding.");
+        foreach (var encoding in effective.Where(encoding => required.Contains(encoding.Channel)))
+            if (encoding.DataKind != AdvancedChartDataKind.Quantitative)
+                Add(results, Anchor(encoding, layerNode), $"RECT layer '{layer.Name}' {shape} channel {Upper(encoding.Channel)} requires QUANTITATIVE TYPE.");
+    }
+
+    private static string Upper(AdvancedChartChannel channel) => channel switch
+    {
+        AdvancedChartChannel.XStart => "X_START",
+        AdvancedChartChannel.XEnd => "X_END",
+        AdvancedChartChannel.XOffset => "X_OFFSET",
+        AdvancedChartChannel.YStart => "Y_START",
+        AdvancedChartChannel.YEnd => "Y_END",
+        AdvancedChartChannel.YOffset => "Y_OFFSET",
+        _ => channel.ToString().ToUpperInvariant()
+    };
 
     private static void ValidateIntervalPair(
         List<Diagnostic> results,
@@ -454,7 +510,9 @@ public static class AdvancedChartSemanticValidator
 
     private static bool IsPositional(AdvancedChartChannel channel) => channel is
         AdvancedChartChannel.X or AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd or
-        AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd;
+        AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
+        AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
+        AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close;
 
     private static bool IsConstant(Expression expression) => expression is LiteralExpression or VariableExpression;
 

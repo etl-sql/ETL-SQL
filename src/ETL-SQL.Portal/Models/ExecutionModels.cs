@@ -32,3 +32,5 @@ public record DrillRequest(string VisualName, string Direction, string? ClickedV
 public record RefreshVisualsRequest(List<string> Visuals);
 
 public record BookmarkApplyRequest(string BookmarkName);
+
+public record NativeChartLayoutRequest(string VisualName, string Tier);

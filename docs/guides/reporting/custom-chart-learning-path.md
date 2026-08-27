@@ -10,7 +10,7 @@ Run the companion sample to see every step rendered:
 etl-sql run samples/08_Reporting/custom_chart_learning_path.rptsql
 ```
 
-> **When to use CUSTOM vs. named visuals.** As of v0.19.0 a `CUSTOM` chart inherits `CREATE STYLE` themes, resolved report formatting (`TIME_ZONE`, `LOCALE`, `NULL_LABEL`), and cross-filter interaction from its resolved encodings. It does not appear in the Report Builder. Reach for `CUSTOM` only when you need something a named visual cannot express: multiple heterogeneous layers, qualitative background bands, conditional mark styling, dual-axis compositions beyond `COMBO`, or specialized marks like `TICK` and `RULE`. If a named visual already covers your shape, use it.
+> **When to use CUSTOM vs. named visuals.** As of v0.19.0 a `CUSTOM` chart inherits `CREATE STYLE` themes, resolved report formatting (`TIME_ZONE`, `LOCALE`, `NULL_LABEL`), and cross-filter interaction from its resolved encodings. Report Builder exposes the raw `CHART` editor and composition recipes for box plot plus mean and candlestick plus volume. Reach for `CUSTOM` when you need multiple heterogeneous layers, qualitative background bands, conditional mark styling, dual-axis compositions beyond `COMBO`, or specialized marks like `TICK` and `RULE`. If a named visual already covers your shape, use it.
 
 ---
 
@@ -270,6 +270,11 @@ This is the crossing point. The reader has watched one chart grow from a simple 
 | `TICK` | Step 4 | Category-local target marker |
 
 ## Advanced Composition Patterns
+
+Statistical and financial summaries are also available as native channels in `CUSTOM`: `LOW`, `Q1`,
+`MEDIAN`, `Q3`, `HIGH`, `OPEN`, and `CLOSE`. See the runnable
+[statistical and financial layer sample](../../../samples/08_Reporting/custom_statistical_financial_layers.rptsql)
+for candlestick plus volume and box plot plus mean tick compositions.
 
 ### 1. Dual-Axis Zero Baseline Synchronization
 

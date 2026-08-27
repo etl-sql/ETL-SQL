@@ -1,0 +1,71 @@
+SET REPORT TITLE = 'CUSTOM Statistical and Financial Layers';
+
+SELECT 'Mon' AS Day, 10 AS OpenValue, 13 AS CloseValue, 8 AS LowValue, 15 AS HighValue,
+       1000 AS Volume, 9 AS Q1Value, 11 AS MedianValue, 14 AS Q3Value, 11.5 AS MeanValue
+INTO #market
+UNION ALL
+SELECT 'Tue', 13, 11, 9, 16, 1400, 10, 12, 15, 12.4;
+
+CREATE VISUAL MarketComposition AS CUSTOM (
+  SOURCE = #market,
+  TITLE = 'Candlestick plus volume',
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      dates = BAND (CHANNEL = X, ORDER = SOURCE),
+      price = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF),
+      volume = LINEAR (CHANNEL = Y2, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+      volume_bars = RECT (
+        Z_INDEX = 0,
+        BAND_SIZE = 0.35,
+        ENCODINGS (
+          X = Day (TYPE = ORDINAL, SCALE = dates),
+          Y2 = Volume (TYPE = QUANTITATIVE, SCALE = volume, AXIS = SECONDARY)
+        ),
+        STYLE (COLOR = '#94a3b8')
+      ),
+      candles = RECT (
+        Z_INDEX = 1,
+        ENCODINGS (
+          X = Day (TYPE = ORDINAL, SCALE = dates),
+          OPEN = OpenValue (TYPE = QUANTITATIVE, SCALE = price),
+          CLOSE = CloseValue (TYPE = QUANTITATIVE, SCALE = price),
+          LOW = LowValue (TYPE = QUANTITATIVE, SCALE = price),
+          HIGH = HighValue (TYPE = QUANTITATIVE, SCALE = price)
+        )
+      )
+    )
+  )
+);
+
+CREATE VISUAL DistributionComposition AS CUSTOM (
+  SOURCE = #market,
+  TITLE = 'Box plot plus mean tick',
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    ENCODINGS (X = Day (TYPE = ORDINAL)),
+    LAYERS (
+      boxes = RECT (
+        ENCODINGS (
+          LOW = LowValue (TYPE = QUANTITATIVE),
+          Q1 = Q1Value (TYPE = QUANTITATIVE),
+          MEDIAN = MedianValue (TYPE = QUANTITATIVE),
+          Q3 = Q3Value (TYPE = QUANTITATIVE),
+          HIGH = HighValue (TYPE = QUANTITATIVE)
+        )
+      ),
+      mean = TICK (
+        Z_INDEX = 1,
+        THICKNESS = 0.3,
+        ENCODINGS (Y = MeanValue (TYPE = QUANTITATIVE))
+      )
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (
+  STRUCTURE = 'A B',
+  MAP ('A' = MarketComposition, 'B' = DistributionComposition)
+);

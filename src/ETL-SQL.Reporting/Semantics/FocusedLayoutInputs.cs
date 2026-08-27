@@ -17,8 +17,8 @@ namespace ETL_SQL.Reporting.Semantics.Runtime;
 /// the same tokens and the same palette rule <c>PlotPlanResolver</c> uses, so a focused visual and a
 /// plan-backed visual on one page agree.
 ///
-/// Sizing is an explicit authored input (<c>OPTIONS (WIDTH = n, HEIGHT = n)</c>), never derived from
-/// a viewport. Responsive tiers are a separate, later feature with their own backend inputs.
+/// Sizing is either an explicit authored input (<c>OPTIONS (WIDTH = n, HEIGHT = n)</c>) or one of the
+/// backend's bounded responsive tier inputs. Arbitrary viewport dimensions never enter this module.
 /// </summary>
 public sealed record FocusedLayoutInputs(
     string Title,
@@ -85,7 +85,10 @@ public sealed record FocusedLayoutInputs(
     }
 
     /// <summary>Resolves the shared inputs for a visual, seeding the palette from its own series keys.</summary>
-    public static FocusedLayoutInputs From(VisualManifest visual, IEnumerable<string>? seriesKeys = null)
+    public static FocusedLayoutInputs From(
+        VisualManifest visual,
+        IEnumerable<string>? seriesKeys = null,
+        PlotBounds? bounds = null)
     {
         var theme = ChartStyleTokens.Theme(visual);
         var keys = (seriesKeys ?? []).Where(key => !string.IsNullOrWhiteSpace(key))
@@ -100,7 +103,7 @@ public sealed record FocusedLayoutInputs(
             title,
             Describe(visual, title),
             theme,
-            ResolveBounds(visual),
+            bounds ?? ResolveBounds(visual),
             palette,
             FocusedInteractionInputs.From(visual));
     }

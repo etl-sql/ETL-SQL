@@ -243,6 +243,44 @@ public sealed class DesignerSnapshotServiceTests : IDisposable
         return report;
     }
 
+    [Fact]
+    public async Task LoadForDesigner_PopulatesVisualSvgs_WhenVisualHasNativeSvg()
+    {
+        await using var db = await NewDbAsync();
+        var services = NewServices(db);
+        var manifest = new ReportManifest
+        {
+            Source = "snapshot.rptsql",
+            Title = "Snapshot Report",
+            Visuals =
+            {
+                new VisualManifest
+                {
+                    Name = "ChartVisual",
+                    VisualType = "BAR",
+                    NativeSvg = "<svg viewBox=\"0 0 600 350\"><rect x=\"10\" y=\"10\" width=\"100\" height=\"100\"/></svg>",
+                    Columns = ["Category", "Value"],
+                    Rows = [new List<string?> { "A", "10" }]
+                }
+            }
+        };
+
+        var report = await CreateReportSnapshotAsync(
+            db,
+            services,
+            "chart-svg.etlsnap",
+            new DateTime(2026, 7, 22, 14, 0, 0, DateTimeKind.Utc),
+            manifest);
+
+        var result = await services.Service.LoadForDesignerAsync(report.Id, User());
+
+        Assert.Equal(DesignerSnapshotService.SnapshotOutcome.Ok, result.Outcome);
+        Assert.NotNull(result.Package);
+        Assert.NotNull(result.Package!.VisualSvgs);
+        Assert.True(result.Package.VisualSvgs.ContainsKey("ChartVisual"));
+        Assert.Contains("<svg", result.Package.VisualSvgs["ChartVisual"], StringComparison.Ordinal);
+    }
+
     private static ReportManifest CreateManifest(string visualName, int rowCount) => new()
     {
         Source = "snapshot.rptsql",

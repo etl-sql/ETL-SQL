@@ -15,7 +15,8 @@ public sealed record DesignerSnapshotPackage(
     DateTime BuiltAt,
     IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<string?>>> SampleRows,
     IReadOnlyDictionary<string, IReadOnlyList<string>> Columns,
-    DesignerSnapshotMetadata Metadata);
+    DesignerSnapshotMetadata Metadata,
+    IReadOnlyDictionary<string, string>? VisualSvgs = null);
 
 /// <summary>Badged on the canvas so a designer can see what they are looking at.</summary>
 public sealed record DesignerSnapshotMetadata(bool IsSampled, bool RlsEnforced, int TotalRows, int ReturnedRows);
@@ -85,8 +86,10 @@ public sealed class DesignerSnapshotService(
 
         var sampleRows = new Dictionary<string, IReadOnlyList<IReadOnlyList<string?>>>(StringComparer.OrdinalIgnoreCase);
         var columns = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var visualSvgs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var totalRows = 0;
         var returnedRows = 0;
+        var svgRenderer = new SvgChartRenderer();
 
         for (var i = 0; i < manifest.Visuals.Count; i++)
         {
@@ -96,6 +99,13 @@ public sealed class DesignerSnapshotService(
             // links them, so the visual is the only identity both sides share. The canvas resolves a
             // visual's own name before falling back to its dataset.
             var key = string.IsNullOrWhiteSpace(visual.Name) ? $"visual{i}" : visual.Name;
+
+            var svg = visual.NativeSvg ?? svgRenderer.Render(visual);
+            if (!string.IsNullOrWhiteSpace(svg))
+            {
+                visualSvgs[key] = svg;
+            }
+
             if (sampleRows.ContainsKey(key)) continue;
 
             var visualRows = await snapshotPackages.LoadRowsAsync(
@@ -118,7 +128,7 @@ public sealed class DesignerSnapshotService(
             if (cols is { Count: > 0 }) columns[key] = cols;
         }
 
-        if (sampleRows.Count == 0) return new Result(SnapshotOutcome.NoSnapshot, null);
+        if (sampleRows.Count == 0 && visualSvgs.Count == 0) return new Result(SnapshotOutcome.NoSnapshot, null);
 
         return new Result(SnapshotOutcome.Ok, new DesignerSnapshotPackage(
             report.Name,
@@ -132,6 +142,7 @@ public sealed class DesignerSnapshotService(
                 // filtered for you".
                 RlsEnforced: false,
                 TotalRows: totalRows,
-                ReturnedRows: returnedRows)));
+                ReturnedRows: returnedRows),
+            visualSvgs));
     }
 }

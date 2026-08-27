@@ -15,4 +15,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ETL-SQL.Tests, PublicKey=$(AssemblyPublicKey)" />
+    <InternalsVisibleTo Include="ETL-SQL.Portal.Tests, PublicKey=$(AssemblyPublicKey)" />
+  </ItemGroup>
+
 </Project>

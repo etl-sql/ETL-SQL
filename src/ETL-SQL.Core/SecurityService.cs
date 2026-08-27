@@ -52,7 +52,7 @@ public partial class SecurityService
     private static partial Regex PasswordOptionRegex();
     [GeneratedRegex(@"(['""])ENC:[A-Za-z0-9+/=]*\1")]
     private static partial Regex EncRegex();
-    [GeneratedRegex(@"\bUSE\s+PASSWORD\s*=\s*(['""]).*?\1\s*;?", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    [GeneratedRegex(@"\bUSE\s+PASSWORD\s*(?:=\s*)?(['""]).*?\1\s*;?", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex LiteralUsePasswordRegex();
     [GeneratedRegex(@"\bSET\s+([A-Z_]+)\s*(?:=\s*)?(ON|OFF)\b", RegexOptions.IgnoreCase)]
     private static partial Regex SettingOnOffRegex();
