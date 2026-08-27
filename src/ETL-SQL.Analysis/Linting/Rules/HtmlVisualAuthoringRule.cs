@@ -38,6 +38,8 @@ public sealed class HtmlVisualAuthoringRule : ILintRule
                 results.Add(Error(visual, "RPT3012", violation.Message));
             foreach (var violation in ConstrainedHtmlPolicy.ValidateEmbedSyntax(definition.Template))
                 results.Add(Error(visual, "RPT3010", violation.Message));
+            foreach (var violation in ConstrainedHtmlPolicy.ValidateMicroChartSyntax(definition.Template))
+                results.Add(Error(visual, "RPT3015", violation.Message));
 
             ValidateAuthoredBudgets(visual, definition, results);
             ValidateFallback(visual, definition.Fallback, results);
@@ -47,6 +49,7 @@ public sealed class HtmlVisualAuthoringRule : ILintRule
                 .Concat(definition.Fallback is null ? [] : ConstrainedHtmlPolicy.Bindings(definition.Fallback))
                 .Concat(ConstrainedHtmlPolicy.EmbeddedParameters(definition.Template))
                 .Concat(ConstrainedHtmlPolicy.EmbeddedFields(definition.Template))
+                .Concat(ConstrainedHtmlPolicy.MicroChartFields(definition.Template))
                 .Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (binding.StartsWith('@'))

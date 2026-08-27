@@ -467,6 +467,11 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Equal(0, await frame.Locator(".html-visual-content img").CountAsync());
         Assert.Contains("42", await frame.Locator("[data-etl-embed-id]").InnerTextAsync());
         Assert.Contains("#etl-v-statuspanel", await frame.Locator(".html-visual-scoped-style").TextContentAsync());
+        Assert.Equal(2, await frame.Locator(".html-inline-microchart svg").CountAsync());
+        Assert.Equal("Service trend", await frame.Locator("[data-etl-microchart-id='StatusPanel-micro-0']")
+            .GetAttributeAsync("aria-label"));
+        Assert.Equal(0, await frame.Locator("[data-etl-microchart-id='forged'] svg").CountAsync());
+        Assert.Contains("Error", await frame.Locator("[data-etl-microchart-id='forged']").InnerTextAsync());
 
         await frame.GetByRole(AriaRole.Button, new() { Name = "Undeclared refresh" }).ClickAsync();
         await page.WaitForTimeoutAsync(100);

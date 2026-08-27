@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -24,6 +25,7 @@ public static class ConstrainedHtmlPolicy
     public const int MaxReportOutputBytes = 8 * 1024 * 1024;
     public const int MaxReportRenderWork = 100_000;
     public const int MaxEmbeddedVisualQueries = 100;
+    public const int MaxMicroChartPoints = 1_000;
     public const int MaxConditionalDepth = 4;
     public const int MaxEmbedDepth = 2;
 
@@ -78,6 +80,9 @@ public static class ConstrainedHtmlPolicy
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ParameterPattern = new(@"@[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
     private static readonly Regex EmbedValuePattern = new(@"=\s*(?<value>@?[A-Za-z_][A-Za-z0-9_]*)", RegexOptions.Compiled);
+    private static readonly Regex MicroChartStartPattern = new(@"^\s*(?:SPARKLINE|PROGRESS_BAR)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex IdentifierPattern = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+    private static readonly Regex HexColorPattern = new(@"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$", RegexOptions.Compiled);
 
     public static IReadOnlyList<ConstrainedHtmlViolation> ValidateTemplate(string template)
     {
@@ -167,6 +172,153 @@ public static class ConstrainedHtmlPolicy
         .Select(match => new ConstrainedHtmlViolation("Embed", "Invalid VISUAL(...) helper syntax.", match.Index))
         .ToList();
 
+    public static IReadOnlyList<ConstrainedHtmlViolation> ValidateMicroChartSyntax(string template) => TemplateExpressionPattern.Matches(template)
+        .Where(match => MicroChartStartPattern.IsMatch(match.Groups["body"].Value))
+        .Select(match => TryParseMicroChart(match.Groups["body"].Value, out _, out var error)
+            ? null
+            : new ConstrainedHtmlViolation("MicroChart", error ?? "Invalid HTML micro-chart helper syntax.", match.Index))
+        .Where(violation => violation is not null)
+        .Cast<ConstrainedHtmlViolation>()
+        .ToList();
+
+    public static IReadOnlyList<string> MicroChartFields(string template) => TemplateExpressionPattern.Matches(template)
+        .Select(match => TryParseMicroChart(match.Groups["body"].Value, out var expression, out _) ? expression?.Field : null)
+        .Where(field => field is not null)
+        .Cast<string>()
+        .ToList();
+
+    public static bool TryParseMicroChart(string body, out HtmlMicroChartExpression? expression, out string? error)
+    {
+        expression = null;
+        error = null;
+        var trimmed = body.Trim();
+        var open = trimmed.IndexOf('(');
+        if (open <= 0 || !trimmed.EndsWith(')'))
+        {
+            error = "Invalid HTML micro-chart helper syntax.";
+            return false;
+        }
+
+        var helper = trimmed[..open].Trim().ToUpperInvariant();
+        if (helper is not ("SPARKLINE" or "PROGRESS_BAR")) return false;
+        var arguments = SplitArguments(trimmed[(open + 1)..^1]);
+        if (arguments is null || arguments.Count == 0 || !IdentifierPattern.IsMatch(arguments[0]))
+        {
+            error = $"{helper}(...) requires a source field as its first argument.";
+            return false;
+        }
+
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var argument in arguments.Skip(1))
+        {
+            var equals = argument.IndexOf('=');
+            if (equals <= 0 || equals == argument.Length - 1)
+            {
+                error = $"Invalid {helper}(...) option '{argument}'. Use NAME=value.";
+                return false;
+            }
+            var name = argument[..equals].Trim().ToUpperInvariant();
+            var value = Unquote(argument[(equals + 1)..].Trim());
+            if (!options.TryAdd(name, value))
+            {
+                error = $"Duplicate {helper}(...) option '{name}'.";
+                return false;
+            }
+        }
+
+        var allowed = helper == "SPARKLINE"
+            ? new HashSet<string>(["TYPE", "COLOR", "WIDTH", "HEIGHT"], StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(["MIN", "MAX", "COLOR", "HEIGHT"], StringComparer.OrdinalIgnoreCase);
+        var unknown = options.Keys.FirstOrDefault(option => !allowed.Contains(option));
+        if (unknown is not null)
+        {
+            error = $"Unsupported {helper}(...) option '{unknown}'.";
+            return false;
+        }
+
+        var type = options.GetValueOrDefault("TYPE", "LINE").ToUpperInvariant();
+        if (helper == "SPARKLINE" && type is not ("LINE" or "AREA" or "BAR"))
+        {
+            error = "SPARKLINE TYPE must be LINE, AREA, or BAR.";
+            return false;
+        }
+        var color = options.GetValueOrDefault("COLOR");
+        if (color is not null && !HexColorPattern.IsMatch(color))
+        {
+            error = $"{helper} COLOR must be a 3- or 6-digit hexadecimal color.";
+            return false;
+        }
+        if (!TryDimension(options, "HEIGHT", helper == "SPARKLINE" ? 42 : 24, 8, 300, out var height, out error)) return false;
+        if (!TryDimension(options, "WIDTH", 160, 16, 1000, out var width, out error)) return false;
+        if (!TryDecimal(options, "MIN", 0m, out var minimum, out error)) return false;
+        if (!TryDecimal(options, "MAX", 100m, out var maximum, out error)) return false;
+        if (helper == "PROGRESS_BAR" && maximum <= minimum)
+        {
+            error = "PROGRESS_BAR MAX must be greater than MIN.";
+            return false;
+        }
+
+        expression = new HtmlMicroChartExpression(helper, arguments[0], type, color, width, height, minimum, maximum);
+        return true;
+    }
+
+    private static List<string>? SplitArguments(string value)
+    {
+        var result = new List<string>();
+        var start = 0;
+        var quote = '\0';
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (quote != '\0')
+            {
+                if (character == quote) quote = '\0';
+                continue;
+            }
+            if (character is '\'' or '"') quote = character;
+            else if (character == ',')
+            {
+                result.Add(value[start..index].Trim());
+                start = index + 1;
+            }
+        }
+        if (quote != '\0') return null;
+        result.Add(value[start..].Trim());
+        return result.Any(string.IsNullOrWhiteSpace) ? null : result;
+    }
+
+    private static string Unquote(string value) => value.Length >= 2 && value[0] == value[^1] && value[0] is '\'' or '"'
+        ? value[1..^1]
+        : value;
+
+    private static bool TryDimension(IReadOnlyDictionary<string, string> options, string name, int fallback,
+        int minimum, int maximum, out int value, out string? error)
+    {
+        value = fallback;
+        error = null;
+        if (!options.TryGetValue(name, out var raw)) return true;
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) || value < minimum || value > maximum)
+        {
+            error = $"{name} must be an integer from {minimum} through {maximum}.";
+            return false;
+        }
+        return true;
+    }
+
+    private static bool TryDecimal(IReadOnlyDictionary<string, string> options, string name, decimal fallback,
+        out decimal value, out string? error)
+    {
+        value = fallback;
+        error = null;
+        if (!options.TryGetValue(name, out var raw)) return true;
+        if (!decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out value))
+        {
+            error = $"{name} must be a decimal number.";
+            return false;
+        }
+        return true;
+    }
+
     public static string ScopeCss(string css, string containerId)
     {
         var keyframes = Regex.Matches(css, @"@keyframes\s+(?<name>[A-Za-z_][A-Za-z0-9_-]*)", RegexOptions.IgnoreCase)
@@ -250,6 +402,7 @@ public static class ConstrainedHtmlPolicy
         GlobalAttributes.Contains(attribute) || attribute.StartsWith("aria-", StringComparison.OrdinalIgnoreCase)
         || attribute.StartsWith("data-etl-", StringComparison.OrdinalIgnoreCase)
             && !attribute.Equals("data-etl-embed-id", StringComparison.OrdinalIgnoreCase)
+            && !attribute.Equals("data-etl-microchart-id", StringComparison.OrdinalIgnoreCase)
         || ElementAttributes.TryGetValue(element, out var attributes) && attributes.Contains(attribute);
 
     private static string? ValidateUrl(string value)
@@ -297,3 +450,13 @@ public static class ConstrainedHtmlPolicy
 }
 
 public sealed record ConstrainedHtmlViolation(string Category, string Message, int Position);
+
+public sealed record HtmlMicroChartExpression(
+    string Helper,
+    string Field,
+    string Type,
+    string? Color,
+    int Width,
+    int Height,
+    decimal Minimum,
+    decimal Maximum);

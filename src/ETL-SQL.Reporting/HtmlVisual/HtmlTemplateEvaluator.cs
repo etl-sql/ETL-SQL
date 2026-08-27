@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using ETL_SQL.Reporting.Semantics;
 
 namespace ETL_SQL.Reporting.HtmlVisual;
 
@@ -47,9 +48,10 @@ public sealed class HtmlTemplateEvaluator
         IReadOnlyDictionary<string, object?>? row,
         IReadOnlyDictionary<string, object?>? parameters,
         Func<object?, string, string>? formatValue = null,
-        Func<HtmlVisualEmbedRequest, string>? renderEmbed = null)
+        Func<HtmlVisualEmbedRequest, string>? renderEmbed = null,
+        Func<HtmlMicroChartRequest, string>? renderMicroChart = null)
     {
-        var result = EvaluateBlock(template, row, parameters, formatValue, renderEmbed, depth: 0);
+        var result = EvaluateBlock(template, row, parameters, formatValue, renderEmbed, renderMicroChart, depth: 0);
         return result;
     }
 
@@ -62,12 +64,13 @@ public sealed class HtmlTemplateEvaluator
         IReadOnlyDictionary<string, object?>? parameters,
         int maxRows,
         Func<object?, string, string>? formatValue = null,
-        Func<HtmlVisualEmbedRequest, string>? renderEmbed = null)
+        Func<HtmlVisualEmbedRequest, string>? renderEmbed = null,
+        Func<HtmlMicroChartRequest, string>? renderMicroChart = null)
     {
         var sb = new StringBuilder();
         var count = Math.Min(rows.Count, maxRows);
         for (var i = 0; i < count; i++)
-            sb.Append(Evaluate(template, rows[i], parameters, formatValue, renderEmbed));
+            sb.Append(Evaluate(template, rows[i], parameters, formatValue, renderEmbed, renderMicroChart));
         return sb.ToString();
     }
 
@@ -101,6 +104,7 @@ public sealed class HtmlTemplateEvaluator
         IReadOnlyDictionary<string, object?>? parameters,
         Func<object?, string, string>? formatValue,
         Func<HtmlVisualEmbedRequest, string>? renderEmbed,
+        Func<HtmlMicroChartRequest, string>? renderMicroChart,
         int depth)
     {
         if (depth > MaxConditionalDepth)
@@ -136,7 +140,7 @@ public sealed class HtmlTemplateEvaluator
                 pos = endPos;
 
                 if (EvaluateCondition(body, row, parameters))
-                    sb.Append(EvaluateBlock(innerContent, row, parameters, formatValue, renderEmbed, depth + 1));
+                    sb.Append(EvaluateBlock(innerContent, row, parameters, formatValue, renderEmbed, renderMicroChart, depth + 1));
             }
             else if (body.Equals("/IF", StringComparison.OrdinalIgnoreCase))
             {
@@ -150,6 +154,17 @@ public sealed class HtmlTemplateEvaluator
                     if (renderEmbed is null)
                         throw new HtmlTemplateException("VISUAL(...) requires a report manifest embedding resolver.");
                     sb.Append(renderEmbed(request));
+                    pos = closeIdx + 2;
+                    continue;
+                }
+                if (body.StartsWith("SPARKLINE", StringComparison.OrdinalIgnoreCase)
+                    || body.StartsWith("PROGRESS_BAR", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!ConstrainedHtmlPolicy.TryParseMicroChart(body, out var expression, out var error) || expression is null)
+                        throw new HtmlTemplateException(error ?? $"Invalid HTML micro-chart helper syntax: {{{{{body}}}}}");
+                    if (renderMicroChart is null)
+                        throw new HtmlTemplateException($"{expression.Helper}(...) requires a micro-chart renderer.");
+                    sb.Append(renderMicroChart(new HtmlMicroChartRequest(expression, ResolveValue(expression.Field, row, parameters))));
                     pos = closeIdx + 2;
                     continue;
                 }
@@ -371,3 +386,5 @@ public sealed record HtmlVisualEmbedRequest(
     string TargetName,
     IReadOnlyDictionary<string, string> Parameters,
     IReadOnlySet<string> SourceParameters);
+
+public sealed record HtmlMicroChartRequest(HtmlMicroChartExpression Expression, object? Value);

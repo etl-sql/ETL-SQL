@@ -91,9 +91,12 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("function findMicroChart", js);
             Assert.Contains("micro.accessibleLabel", js);
             Assert.Contains("sparkline.accessibleLabel", js);
+            Assert.Contains("micro.role === 'html.inline'", js);
+            Assert.Contains("data-etl-microchart-id", js);
             Assert.DoesNotContain("function buildSparklineSvg", js);
             Assert.Contains(".card-sparkline svg", css);
             Assert.Contains("td[role=\"img\"] svg", css);
+            Assert.Contains(".html-inline-microchart svg", css);
         }
 
         /// <summary>

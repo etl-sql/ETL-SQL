@@ -24,12 +24,24 @@
           visualType: 'HTML',
           columns: [],
           rows: [],
-          htmlContent: '<article class="status-panel"><h2>Cluster status</h2><p>&lt;img src=x onerror=alert(1)&gt;</p><button type="button" data-action="REFRESH_REPORT">Undeclared refresh</button><button type="button" data-action="SET_PARAMETER" data-param="@region" data-value="West">Show West</button><div data-etl-embed-id="StatusPanel-embed-0"></div><scr' + 'ipt>window.__htmlVisualScriptExecuted=true</scr' + 'ipt></article>',
+          htmlContent: '<article class="status-panel"><h2>Cluster status</h2><p>&lt;img src=x onerror=alert(1)&gt;</p><span data-etl-microchart-id="StatusPanel-micro-0"></span><span data-etl-microchart-id="StatusPanel-micro-1"></span><span data-etl-microchart-id="forged"></span><button type="button" data-action="REFRESH_REPORT">Undeclared refresh</button><button type="button" data-action="SET_PARAMETER" data-param="@region" data-value="West">Show West</button><div data-etl-embed-id="StatusPanel-embed-0"></div><scr' + 'ipt>window.__htmlVisualScriptExecuted=true</scr' + 'ipt></article>',
           htmlCss: '#etl-v-statuspanel .status-panel { border: 2px solid var(--etl-accent); padding: 1rem; }',
           htmlFallback: 'Cluster status: 3 healthy nodes',
           htmlMode: 'SINGLE',
           actions: [{ type: 'SET_PARAMETER', trigger: 'ON_CLICK', parameterName: '@region', valueSource: 'LITERAL', literalValue: 'West' }],
-          htmlEmbeds: [{ id: 'StatusPanel-embed-0', targetName: 'EmbeddedMetric' }]
+          htmlEmbeds: [{ id: 'StatusPanel-embed-0', targetName: 'EmbeddedMetric' }],
+          microCharts: [
+            {
+              id: 'StatusPanel-micro-0', kind: 'sparkline', role: 'html.inline',
+              plainText: 'Trend: first 1, last 5, range 1–5', accessibleLabel: 'Service trend',
+              svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 42"><path d="M0 36 L50 20 L100 28 L160 4" fill="none" stroke="#5470c6" stroke-width="3"/></svg>'
+            },
+            {
+              id: 'StatusPanel-micro-1', kind: 'progress', role: 'html.inline',
+              plainText: 'Progress: 75 of 100 (75%)', accessibleLabel: 'Service progress 75 percent',
+              svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 24"><rect width="160" height="24" fill="#e5e7eb"/><rect width="120" height="24" fill="#3ba272"/></svg>'
+            }
+          ]
         },
         {
           name: 'EmbeddedMetric',

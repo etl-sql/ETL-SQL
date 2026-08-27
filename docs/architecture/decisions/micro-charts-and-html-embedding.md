@@ -236,7 +236,9 @@ moves into Core, and the browser does not independently recompute geometry.
 Each published `MicroChartManifest` contains the resolved `PlotPlan`, native SVG, an accessible label,
 and a concise plain-text fallback. Browser, PDF, Markdown/email-image, and terminal adapters consume
 those fields. Table manifests associate a plan with its original row and column; card manifests use the
-`card.sparkline` role. Colors are restricted to safe hexadecimal paint values before SVG generation.
+`card.sparkline` role; HTML helpers use `html.inline` and a renderer-owned slot ID. Colors are restricted
+to safe hexadecimal paint values before SVG generation. `BG_CHART(...)` remains a future extension;
+the shipped HTML helper surface is `SPARKLINE(...)` and `PROGRESS_BAR(...)`.
 
 The server-side renderer emits declarative SVG paths:
 ```xml

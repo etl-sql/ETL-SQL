@@ -2402,6 +2402,24 @@
             }
             renderVisual(slot, target, null, manifest, embedDepth + 1);
         });
+
+        const microCharts = new Map((visual.microCharts || [])
+            .filter(micro => micro.role === 'html.inline')
+            .map(micro => [String(micro.id || ''), micro]));
+        const renderedMicroChartIds = new Set();
+        wrapper.querySelectorAll('[data-etl-microchart-id]').forEach(slot => {
+            const microChartId = String(slot.getAttribute('data-etl-microchart-id') || '');
+            const microChart = microCharts.get(microChartId);
+            if (!microChart || renderedMicroChartIds.has(microChartId)) {
+                slot.replaceChildren(errorEl('Inline micro-chart descriptor is unavailable.'));
+                return;
+            }
+            renderedMicroChartIds.add(microChartId);
+            slot.classList.add('html-inline-microchart');
+            slot.setAttribute('role', 'img');
+            slot.setAttribute('aria-label', microChart.accessibleLabel || microChart.plainText || 'Indicator');
+            slot.innerHTML = String(microChart.svg || '');
+        });
     }
 
     // ── Native SVG chart — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──

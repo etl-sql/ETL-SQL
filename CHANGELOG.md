@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added `SPARKLINE(...)` and `PROGRESS_BAR(...)` helpers to constrained `HTML` visual templates.
+  Helpers validate source fields and bounded options during analysis, compile through the shared
+  server-side chart plan into native SVG, render in single and repeater components without browser
+  geometry code, and append deterministic semantic text for terminal, Markdown, and other
+  non-graphical output.
+
 - Added the code-first Connection Wizard across Report Builder, Portal Admin, Workstation Editor,
   VS Code, and LSP. Connector metadata drives SQL/file forms, diagnostics, shared references,
   staged workspace files, Gateway routing, secret handling, and canonical script generation. Live

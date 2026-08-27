@@ -9,12 +9,7 @@ Unfinished `ROADMAP.md` initiatives and release gates are represented below.
 
 ---
 
-## 1. Reporting Authoring & Design System Enhancements
-
-- [ ] Complete `{{SPARKLINE(...)}}` and `{{PROGRESS_BAR(...)}}` template macro helpers in `HTML` visuals.
-  Evaluate inline SVG sparkline and progress indicators directly within template substitution strings.
-
-## 2. Hybrid Connectivity & Gateway Enhancements
+## 1. Hybrid Connectivity & Gateway Enhancements
 
 Authoritative references:
 [`secure-outbound-gateway.md`](docs/administration/platform/secure-outbound-gateway.md),

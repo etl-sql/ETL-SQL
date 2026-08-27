@@ -4282,7 +4282,7 @@ export function createDesigner(container, opts = {}) {
             hasAlt ||= name === 'alt';
             const allowed = HTML_PREVIEW_GLOBAL_ATTRIBUTES.has(name)
                 || name.startsWith('aria-')
-                || (name.startsWith('data-etl-') && name !== 'data-etl-embed-id')
+                || (name.startsWith('data-etl-') && name !== 'data-etl-embed-id' && name !== 'data-etl-microchart-id')
                 || elementAttributes.has(name);
             if (!allowed || name.startsWith('on') || name === 'style') {
                 violations.push(`Attribute '${name}' is not allowed on <${source.tagName.toLowerCase()}>.`);
@@ -5452,7 +5452,7 @@ export function createDesigner(container, opts = {}) {
                 </label>
                 <label class="etlsql-dsgn-label" style="margin-top:6px;">HTML Template
                     <span style="font-size:10px;color:var(--portal-muted,#7a8798);display:block;margin-bottom:2px;">
-                        Substitutions: <code>{{Field}}</code>, <code>{{@Param}}</code>, <code>{{#IF Field = 'val'}}...{{/IF}}</code>
+                        Substitutions: <code>{{Field}}</code>, <code>{{@Param}}</code>, <code>{{#IF ...}}</code>, <code>{{SPARKLINE(...)}}</code>, <code>{{PROGRESS_BAR(...)}}</code>
                     </span>
                     <textarea id="pp-html-template" class="form-control etlsql-code-editor" rows="8" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlTemplate)}</textarea>
                 </label>

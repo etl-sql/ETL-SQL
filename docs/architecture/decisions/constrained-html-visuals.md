@@ -296,7 +296,7 @@ is rejected.
 
 **Global attributes** (allowed on all permitted elements):
 `class`, `id`, `title`, `lang`, `dir`, `role`, `aria-*`, `data-etl-*`, `tabindex`, `hidden`.
-The renderer-owned `data-etl-embed-id` attribute is reserved and rejected in authored markup.
+The renderer-owned `data-etl-embed-id` and `data-etl-microchart-id` attributes are reserved and rejected in authored markup.
 
 **Element-specific attributes:**
 
@@ -466,6 +466,10 @@ FALLBACK = 'Node {{HostName}}: CPU {{CpuPercent}}, Status {{Status}}'
 In REPEATER mode, the fallback renders as a newline-separated list capped at 20 rows, with a
 trailing `"... and N more"` summary when truncated.
 
+Server-resolved `SPARKLINE(...)` and `PROGRESS_BAR(...)` helpers append their deterministic plain-text
+summary to the fallback. This keeps terminal, Markdown, email text, and assistive output aligned with
+the indicator shown in graphical surfaces.
+
 ### 8.2 Auto-Generated Fallback
 
 When no `FALLBACK` is supplied, the renderer generates one:
@@ -559,6 +563,7 @@ The parser enforces these constraints at parse time:
 | Unknown parameter | `RPT3002` | Template references an undeclared parameter. |
 | Embed cycle | `RPT3010` | Embedded visual reference creates a cycle. |
 | Embed depth | `RPT3011` | Embedded visual nesting exceeds maximum depth. |
+| Invalid micro-chart helper | `RPT3015` | Helper syntax, option, dimension, color, or progress range is invalid. |
 | Budget exceeded | `RPT3020–3029` | Various budget overruns. |
 
 ---

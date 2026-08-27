@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using ETL_SQL.Reporting.Semantics;
 
@@ -43,12 +45,15 @@ public static class HtmlVisualBudgets
         return new HtmlVisualCost(templateBytes, cssBytes, templateNodes, outputNodes, 0, outputNodes);
     }
 
-    public static HtmlVisualCost ValidateRendered(HtmlVisualCost authored, string html)
+    public static HtmlVisualCost ValidateRendered(HtmlVisualCost authored, string html, IEnumerable<string>? trustedFragments = null)
     {
-        var outputNodes = ConstrainedHtmlPolicy.CountElementNodes(html);
+        var fragments = trustedFragments?.ToList() ?? [];
+        var outputNodes = checked(ConstrainedHtmlPolicy.CountElementNodes(html)
+            + fragments.Sum(ConstrainedHtmlPolicy.CountElementNodes));
         if (outputNodes > MaxOutputNodes)
             throw Exceeded("RPT3024", "output node", outputNodes, MaxOutputNodes);
-        var outputBytes = Encoding.UTF8.GetByteCount(html);
+        var outputBytes = checked(Encoding.UTF8.GetByteCount(html)
+            + fragments.Sum(Encoding.UTF8.GetByteCount));
         if (outputBytes > MaxOutputBytes)
             throw Exceeded("RPT3025", "output byte", outputBytes, MaxOutputBytes);
 

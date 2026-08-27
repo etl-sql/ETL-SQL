@@ -414,6 +414,42 @@ public class HtmlTemplateEvaluatorTests
         Assert.Throws<HtmlTemplateException>(() =>
             _evaluator.Evaluate(template, null, null, renderEmbed: _ => string.Empty));
     }
+
+    [Fact]
+    public void Evaluate_MicroChartHelper_ResolvesTypedRequestWithoutEmittingAuthorMarkup()
+    {
+        var row = new Dictionary<string, object?> { ["Trend"] = "[1,3,2]" };
+        HtmlMicroChartRequest? captured = null;
+
+        var result = _evaluator.Evaluate(
+            "<div>{{SPARKLINE(Trend, TYPE=\"AREA\", COLOR=\"#123abc\", WIDTH=200, HEIGHT=40)}}</div>",
+            row,
+            null,
+            renderMicroChart: request =>
+            {
+                captured = request;
+                return "<span data-etl-microchart-id=\"chart-0\"></span>";
+            });
+
+        Assert.Equal("<div><span data-etl-microchart-id=\"chart-0\"></span></div>", result);
+        Assert.NotNull(captured);
+        Assert.Equal("Trend", captured.Expression.Field);
+        Assert.Equal("AREA", captured.Expression.Type);
+        Assert.Equal("#123abc", captured.Expression.Color);
+        Assert.Equal(200, captured.Expression.Width);
+        Assert.Equal("[1,3,2]", captured.Value);
+    }
+
+    [Theory]
+    [InlineData("{{SPARKLINE(Trend, TYPE=PIE)}}")]
+    [InlineData("{{SPARKLINE(Trend, COLOR=javascript)}}")]
+    [InlineData("{{PROGRESS_BAR(Value, MIN=10, MAX=10)}}")]
+    [InlineData("{{PROGRESS_BAR(Value, WIDTH=200)}}")]
+    public void Evaluate_MicroChartHelper_InvalidOptionsFailClosed(string template)
+    {
+        Assert.Throws<HtmlTemplateException>(() =>
+            _evaluator.Evaluate(template, new Dictionary<string, object?>(), null, renderMicroChart: _ => string.Empty));
+    }
 }
 
 public class HtmlVisualManifestTests
@@ -540,6 +576,68 @@ public class HtmlVisualManifestTests
     }
 
     [Fact]
+    public async System.Threading.Tasks.Task Manifest_CompilesInlineMicroChartsToServerResolvedSvgAndSemanticText()
+    {
+        var manifest = await BuildAsync("""
+            SELECT '[1,3,2,5]' AS Trend, 75 AS Completion INTO #metric;
+            CREATE VISUAL Host AS HTML (
+              SOURCE = #metric,
+              TEMPLATE = '<div>{{SPARKLINE(Trend, TYPE="AREA", COLOR="#123abc", WIDTH=200, HEIGHT=40)}}{{PROGRESS_BAR(Completion, MIN=0, MAX=100, COLOR="#0a0", HEIGHT=18)}}</div>',
+              FALLBACK = 'Service indicators'
+            );
+            """);
+
+        var visual = Assert.Single(manifest.Visuals);
+        Assert.Null(visual.Error);
+        Assert.Equal(2, visual.MicroCharts?.Count);
+        Assert.All(visual.MicroCharts!, chart =>
+        {
+            Assert.Equal("html.inline", chart.Role);
+            Assert.StartsWith("<svg", chart.Svg);
+            Assert.NotNull(chart.PlotPlan);
+            Assert.Contains($"data-etl-microchart-id=\"{chart.Id}\"", visual.HtmlContent);
+        });
+        Assert.Contains("Trend: first 1, last 5, range 1–5", visual.HtmlFallback);
+        Assert.Contains("Progress: 75 of 100 (75%)", visual.HtmlFallback);
+        Assert.NotNull(visual.HtmlCost);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Manifest_RepeaterCompilesOneInlineMicroChartPerRowWithUniqueIds()
+    {
+        var manifest = await BuildAsync("""
+            CREATE TABLE #metrics (Completion INT);
+            INSERT INTO #metrics VALUES (20), (80);
+            CREATE VISUAL Host AS HTML (
+              SOURCE = #metrics,
+              MODE = REPEATER,
+              TEMPLATE = '<p>{{PROGRESS_BAR(Completion)}}</p>'
+            );
+            """);
+
+        var visual = Assert.Single(manifest.Visuals);
+        Assert.Equal(2, visual.MicroCharts?.Count);
+        Assert.Equal(2, visual.MicroCharts!.Select(chart => chart.Id).Distinct().Count());
+        Assert.All(visual.MicroCharts, chart => Assert.Equal("html.inline", chart.Role));
+    }
+
+    [Theory]
+    [InlineData("not-json", "JSON numeric array")]
+    [InlineData("[1,true,3]", "only numbers or nulls")]
+    public async System.Threading.Tasks.Task Manifest_InvalidSparklineDataFailsClosed(string trend, string expected)
+    {
+        var sql = $"SELECT '{trend}' AS Trend INTO #metric; "
+            + "CREATE VISUAL Host AS HTML (SOURCE = #metric, TEMPLATE = '<div>{{SPARKLINE(Trend)}}</div>');";
+        var manifest = await BuildAsync(sql);
+
+        var visual = Assert.Single(manifest.Visuals);
+        Assert.Contains("RPT3015", visual.Error);
+        Assert.Contains(expected, visual.Error);
+        Assert.Null(visual.HtmlContent);
+        Assert.Null(visual.MicroCharts);
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task Manifest_RejectsAggregateOutputNodeBudget()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -651,6 +749,17 @@ public class HtmlVisualBudgetTests
         Assert.Equal(first, second);
         Assert.Equal(1, first.OutputNodes);
         Assert.True(first.RenderWork > 0);
+    }
+
+    [Fact]
+    public void ValidateRendered_AccountsForTrustedMicroChartSvg()
+    {
+        var authored = HtmlVisualBudgets.ValidateAuthored("<p>x</p>", null, 0, 500, false);
+
+        var cost = HtmlVisualBudgets.ValidateRendered(authored, "<p>x</p>", ["<svg><path></path></svg>"]);
+
+        Assert.Equal(3, cost.OutputNodes);
+        Assert.True(cost.OutputBytes > Encoding.UTF8.GetByteCount("<p>x</p>"));
     }
 }
 
@@ -838,6 +947,32 @@ public class HtmlVisualAnalysisTests
         Assert.Contains(results, result => result.Code == "RPT3014" && result.Message.Contains("@token"));
     }
 
+    [Fact]
+    public async System.Threading.Tasks.Task Lint_ValidatesMicroChartSyntaxAndSourceFields()
+    {
+        var script = Parse("""
+            CREATE VISUAL Indicators AS HTML (
+              SOURCE = (SELECT Trend FROM #metrics),
+              TEMPLATE = '<div>{{SPARKLINE(Missing)}} {{PROGRESS_BAR(Trend, MIN=10, MAX=5)}}</div>'
+            );
+            """);
+
+        var results = (await new HtmlVisualAuthoringRule().AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+        Assert.Contains(results, result => result.Code == "RPT3001" && result.Message.Contains("Missing"));
+        Assert.Contains(results, result => result.Code == "RPT3015" && result.Message.Contains("greater than MIN"));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Lint_MalformedMicroChartUsesStableDiagnostic()
+    {
+        var script = Parse("CREATE VISUAL Indicators AS HTML (TEMPLATE = '<div>{{SPARKLINE}}</div>');");
+
+        var results = await new HtmlVisualAuthoringRule().AnalyzeAsync(script, new DefaultLintContext());
+
+        Assert.Contains(results, result => result.Code == "RPT3015");
+    }
+
     private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize(), sql).Parse();
 }
 
@@ -945,9 +1080,10 @@ public class HtmlSanitizerTests
     [Fact]
     public void ValidateTemplate_RuntimeReservedAttributes_Rejected()
     {
-        var violations = _sanitizer.ValidateTemplate("<div data-etl-embed-id=\"forged\"></div>");
+        var violations = _sanitizer.ValidateTemplate(
+            "<div data-etl-embed-id=\"forged\"></div><span data-etl-microchart-id=\"forged\"></span>");
 
-        Assert.Contains(violations, v => v.Category == SanitizationCategory.Attribute);
+        Assert.Equal(2, violations.Count(v => v.Category == SanitizationCategory.Attribute));
     }
 
     // ── JavaScript URL injection (T-3) ───────────────────────────────────

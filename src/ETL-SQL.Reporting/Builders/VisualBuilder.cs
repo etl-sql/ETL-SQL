@@ -1220,6 +1220,9 @@ namespace ETL_SQL.Reporting.Builders
                 maxRows,
                 htmlDef.Mode == HtmlVisualMode.Repeater);
             var embedIndex = 0;
+            var microChartIndex = 0;
+            var microChartFallbacks = new List<string>();
+            var inlineMicroCharts = new List<MicroChartManifest>();
             string RenderEmbed(HtmlVisual.HtmlVisualEmbedRequest request)
             {
                 foreach (var sourceParameter in request.SourceParameters)
@@ -1240,11 +1243,39 @@ namespace ETL_SQL.Reporting.Builders
                 });
                 return $"<div data-etl-embed-id=\"{id}\"></div>";
             }
+            string RenderMicroChart(HtmlVisual.HtmlMicroChartRequest request)
+            {
+                var expression = request.Expression;
+                var id = $"{vStmt.Name}-micro-{microChartIndex++}";
+                var factory = new MicroChartPlanFactory();
+                MicroChartSemanticBundle bundle;
+                string kind;
+                if (expression.Helper == "SPARKLINE")
+                {
+                    var values = ParseHtmlSparklineValues(request.Value, expression.Field);
+                    bundle = factory.CreateSparkline(id, values, expression.Type, expression.Color,
+                        width: expression.Width, height: expression.Height);
+                    kind = "sparkline";
+                }
+                else
+                {
+                    if (!decimal.TryParse(Convert.ToString(request.Value, CultureInfo.InvariantCulture),
+                        NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
+                        throw new HtmlVisual.HtmlTemplateException(
+                            $"RPT3015: PROGRESS_BAR field '{expression.Field}' must resolve to a decimal value.");
+                    bundle = factory.CreateProgress(id, value, expression.Minimum, expression.Maximum,
+                        expression.Color, expression.Width, expression.Height);
+                    kind = "progress";
+                }
+                inlineMicroCharts.Add(factory.ToManifest(bundle, kind, "html.inline"));
+                microChartFallbacks.Add(bundle.PlainText);
+                return $"<span data-etl-microchart-id=\"{id}\"></span>";
+            }
 
             if (htmlDef.Mode == HtmlVisualMode.Repeater)
             {
                 vm.HtmlContent = evaluator.EvaluateRepeater(
-                    htmlDef.Template, vm.RawRows, parameters, maxRows, FormatHtmlValue, RenderEmbed);
+                    htmlDef.Template, vm.RawRows, parameters, maxRows, FormatHtmlValue, RenderEmbed, RenderMicroChart);
 
                 if (htmlDef.Fallback != null)
                 {
@@ -1264,7 +1295,7 @@ namespace ETL_SQL.Reporting.Builders
             else
             {
                 var row = vm.RawRows.Count > 0 ? vm.RawRows[0] : null;
-                vm.HtmlContent = evaluator.Evaluate(htmlDef.Template, row, parameters, FormatHtmlValue, RenderEmbed);
+                vm.HtmlContent = evaluator.Evaluate(htmlDef.Template, row, parameters, FormatHtmlValue, RenderEmbed, RenderMicroChart);
 
                 if (htmlDef.Fallback != null)
                     vm.HtmlFallback = evaluator.EvaluateFallback(htmlDef.Fallback, row, parameters, FormatHtmlValue);
@@ -1275,12 +1306,25 @@ namespace ETL_SQL.Reporting.Builders
                     vm.HtmlFallback = vStmt.Name;
             }
 
+            if (microChartFallbacks.Count > 0)
+            {
+                var chartSummary = string.Join("; ", microChartFallbacks.Take(20));
+                if (microChartFallbacks.Count > 20)
+                    chartSummary += $"; ... and {microChartFallbacks.Count - 20} more indicators";
+                vm.HtmlFallback = string.IsNullOrWhiteSpace(vm.HtmlFallback)
+                    ? chartSummary
+                    : $"{vm.HtmlFallback}\n{chartSummary}";
+            }
+
             if (htmlDef.Css != null)
             {
                 var containerId = $"etl-v-{vStmt.Name.ToLowerInvariant().Replace(' ', '-')}";
                 vm.HtmlCss = sanitizer.ScopeCss(htmlDef.Css, containerId);
             }
-            var resolvedCost = HtmlVisual.HtmlVisualBudgets.ValidateRendered(authoredCost, vm.HtmlContent ?? string.Empty);
+            var resolvedCost = HtmlVisual.HtmlVisualBudgets.ValidateRendered(
+                authoredCost,
+                vm.HtmlContent ?? string.Empty,
+                inlineMicroCharts.Select(chart => chart.Svg));
             vm.HtmlCost = new HtmlVisualCostManifest
             {
                 TemplateBytes = resolvedCost.TemplateBytes,
@@ -1290,6 +1334,42 @@ namespace ETL_SQL.Reporting.Builders
                 OutputBytes = resolvedCost.OutputBytes,
                 RenderWork = resolvedCost.RenderWork
             };
+            if (inlineMicroCharts.Count > 0)
+            {
+                vm.MicroCharts ??= [];
+                vm.MicroCharts.AddRange(inlineMicroCharts);
+            }
+        }
+
+        private static List<decimal?> ParseHtmlSparklineValues(object? source, string field)
+        {
+            var raw = Convert.ToString(source, CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(raw)) return [];
+            try
+            {
+                using var document = JsonDocument.Parse(raw);
+                if (document.RootElement.ValueKind != JsonValueKind.Array)
+                    throw new HtmlVisual.HtmlTemplateException(
+                        $"RPT3015: SPARKLINE field '{field}' must contain a JSON numeric array.");
+                var items = document.RootElement.EnumerateArray().ToList();
+                if (items.Count > ConstrainedHtmlPolicy.MaxMicroChartPoints)
+                    throw new HtmlVisual.HtmlTemplateException(
+                        $"RPT3015: SPARKLINE field '{field}' exceeds the {ConstrainedHtmlPolicy.MaxMicroChartPoints}-point limit.");
+                return items.Select(item => item.ValueKind switch
+                {
+                    JsonValueKind.Null => (decimal?)null,
+                    JsonValueKind.Number when item.TryGetDecimal(out var number) => number,
+                    JsonValueKind.String when decimal.TryParse(item.GetString(), NumberStyles.Any,
+                        CultureInfo.InvariantCulture, out var number) => number,
+                    _ => throw new HtmlVisual.HtmlTemplateException(
+                        $"RPT3015: SPARKLINE field '{field}' must contain only numbers or nulls.")
+                }).ToList();
+            }
+            catch (JsonException)
+            {
+                throw new HtmlVisual.HtmlTemplateException(
+                    $"RPT3015: SPARKLINE field '{field}' must contain a JSON numeric array.");
+            }
         }
 
     }

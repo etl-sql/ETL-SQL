@@ -1,6 +1,6 @@
 # Micro-Charts and KPI Cards
 
-Report-SQL supports native in-cell micro-charts (sparklines, spark-bars, and progress bars) inside `TABLE` visuals and standalone `CARD` components. These micro-visuals render as clean, lightweight vector SVG in web browsers and PDF exports without requiring server-side browser engines.
+Report-SQL supports native micro-charts in `TABLE`, `CARD`, and constrained `HTML` visuals. These indicators compile into lightweight vector SVG on the server and retain plain-text semantics for non-graphical output.
 
 ---
 
@@ -13,6 +13,8 @@ Report-SQL supports native in-cell micro-charts (sparklines, spark-bars, and pro
 | **Card Sparkline** | `CARD` | `SPARKLINE = #trend (X = colX, Y = colY, TYPE = LINE \| AREA \| BAR)` |
 | **Table Sparkline** | `TABLE` | `SPARKLINE(col1, col2, col3, ...) LINE \| AREA \| BAR AS 'Header'` |
 | **Progress Bar** | `TABLE` | `colName PROGRESS_BAR (MIN = n, MAX = n, COLOR = '#hex') AS 'Header'` |
+| **HTML Sparkline** | `HTML` | `{{SPARKLINE(jsonArrayField, TYPE="LINE\|AREA\|BAR", COLOR="#hex", WIDTH=n, HEIGHT=n)}}` |
+| **HTML Progress** | `HTML` | `{{PROGRESS_BAR(valueField, MIN=n, MAX=n, COLOR="#hex", HEIGHT=n)}}` |
 
 ---
 
@@ -149,6 +151,8 @@ CREATE PAGE Main AS DASHBOARD (
 
 - **Narrow progress bar ranges**: If `Attainment` is `0.85` and `MAX` is omitted (defaulting to 100 instead of 1.0), the progress bar will only appear 0.85% filled. Ensure `MIN` and `MAX` match the scale of your numeric data.
 - **Null values in wide sparklines**: Null values in column lists (e.g. `SPARKLINE(Q1, Q2, Q3, Q4)`) render as gaps in the sparkline. Use `COALESCE(Q3, 0)` in your source query if gaps should be treated as zero.
+- **HTML sparkline input**: An `HTML` sparkline field must contain a JSON numeric array such as `[12,18,null,21]`. Null entries render as gaps.
+- **HTML helper safety**: Helper colors accept only 3- or 6-digit hexadecimal values. Invalid types, dimensions, ranges, and source fields fail analysis with `RPT3015` or the standard unknown-field diagnostic.
 
 ---
 
@@ -157,3 +161,4 @@ CREATE PAGE Main AS DASHBOARD (
 - [Authoring Dashboards](authoring-dashboards.md) — 3-tier architecture and page layout.
 - [CARD Visual Reference](../../reference/visuals-reporting/visuals/card.md) — Properties and formatting options.
 - [TABLE Visual Reference](../../reference/visuals-reporting/visuals/table.md) — Summary rows, column formatting, and sorting.
+- [HTML Visual Reference](../../reference/visuals-reporting/visuals/html.md) — Constrained templates, helper bounds, and fallback behavior.

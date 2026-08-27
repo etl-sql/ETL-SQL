@@ -122,6 +122,8 @@ body.theme-dark, body.vscode-dark, .theme-dark {
   .html-visual-content:focus-visible,
   .html-visual-content a:focus-visible,
   .html-visual-content button:focus-visible { outline: 2px solid var(--etl-accent, #2563eb); outline-offset: 2px; }
+  .html-inline-microchart { display:inline-block; max-width:100%; line-height:0; vertical-align:middle; }
+  .html-inline-microchart svg { display:block; max-width:100%; height:auto; }
   .visual-toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 20; }
   .visual-card.has-visual-toolbar > h3:first-child { padding-right: 40px; }
   .visual-tool-btn {
