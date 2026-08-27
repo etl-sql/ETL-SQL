@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
@@ -410,6 +411,7 @@ public record CreateStyleStatement : Statement
 {
     public required string Name { get; init; }
     public Dictionary<string, string> Styles { get; init; } = new();
+    public ImmutableArray<string> Palette { get; init; } = ImmutableArray<string>.Empty;
     public string? StyleName { get; init; }
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     public override string ToSql() => AstSerializer.Format(this);
@@ -424,6 +426,7 @@ public record CreateButtonStatement : Statement
     public List<VisualOption> Options { get; init; } = new();
     public List<VisualAction> Actions { get; init; } = new();
     public Dictionary<string, string> Styles { get; init; } = new();
+    public ImmutableArray<string> Palette { get; init; } = ImmutableArray<string>.Empty;
     public string? StyleName { get; init; }
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     public override string ToSql() => AstSerializer.Format(this);
@@ -458,6 +461,7 @@ public record CreateVisualStatement : Statement
     public List<TableSummaryItem> Summaries { get; init; } = new();
     public TableSummaryOptions? SummaryOptions { get; init; }
     public Dictionary<string, string> Styles { get; init; } = new();
+    public ImmutableArray<string> Palette { get; init; } = ImmutableArray<string>.Empty;
     public VisualFetchMode FetchMode { get; init; } = VisualFetchMode.Auto;
     /// <summary>Name of a CREATE STYLE to inherit. Merged before inline Styles (inline wins).</summary>
     public string? StyleName { get; init; }
@@ -479,6 +483,7 @@ public record CreatePageStatement : Statement
     public required string Structure { get; init; }
     public Dictionary<string, string> SlotMap { get; init; } = new();
     public Dictionary<string, string> Styles { get; init; } = new();
+    public ImmutableArray<string> Palette { get; init; } = ImmutableArray<string>.Empty;
     public string? StyleName { get; init; }
     public Expression? Title { get; init; }
     public bool TitleIsMarkdown { get; init; }
@@ -538,6 +543,7 @@ public record CreateContainerStatement : Statement
     public string? Structure { get; init; }
     public Dictionary<string, string> SlotMap { get; init; } = new();
     public Dictionary<string, string> Styles { get; init; } = new();
+    public ImmutableArray<string> Palette { get; init; } = ImmutableArray<string>.Empty;
     public string? StyleName { get; init; }
     public Expression? Title { get; init; }
     public bool TitleIsMarkdown { get; init; }

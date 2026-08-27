@@ -396,6 +396,53 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task DesignTokenRuntime_CascadesSafelyAcrossCustomLayerAndMaximizedScopes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='design-tokens']");
+        var frame = page.FrameLocator("iframe[title='Design tokens runtime fixture']");
+
+        var inheritedCard = frame.Locator("#etl-v-inheritedcard");
+        var inheritedPanel = inheritedCard.Locator(".token-panel");
+        await inheritedPanel.WaitForAsync();
+
+        Assert.Equal("#38bdf8", await CssVariableAsync(inheritedCard, "--etl-accent"));
+        Assert.Equal("#94a3b8", await CssVariableAsync(inheritedCard, "--etl-border"));
+        Assert.Equal("12px", await CssVariableAsync(inheritedCard, "--etl-radius-md"));
+        Assert.Equal("solid", await inheritedPanel.EvaluateAsync<string>("element => getComputedStyle(element).borderStyle"));
+        Assert.Equal("rgb(148, 163, 184)", await inheritedPanel.EvaluateAsync<string>("element => getComputedStyle(element).borderColor"));
+
+        var layer = frame.Locator(".container-layer[data-name='LayerContainer']");
+        var layerCard = frame.Locator("#etl-v-layercard");
+        Assert.Equal("#10b981", await CssVariableAsync(layer, "--etl-accent"));
+        Assert.Equal("#059669", await CssVariableAsync(layerCard, "--etl-border"));
+        Assert.Equal("rgb(5, 150, 105)", await layerCard.Locator(".token-panel")
+            .EvaluateAsync<string>("element => getComputedStyle(element).borderColor"));
+
+        var overrideCard = frame.Locator("#etl-v-overridecard");
+        Assert.Equal("", await InlineCssVariableAsync(overrideCard, "--etl-unknown"));
+        Assert.Equal("", await InlineCssVariableAsync(overrideCard, "--portal-private"));
+
+        await inheritedCard.Locator(":scope > .visual-toolbar .visual-tool-btn").ClickAsync();
+        Assert.Equal("12px", await CssVariableAsync(inheritedCard, "--etl-radius-md"));
+        Assert.Equal("#94a3b8", await CssVariableAsync(inheritedCard, "--etl-border"));
+        await inheritedCard.Locator(":scope > .visual-toolbar .visual-tool-btn").ClickAsync();
+        Assert.Equal("12px", await CssVariableAsync(inheritedCard, "--etl-radius-md"));
+        Assert.Equal("#94a3b8", await CssVariableAsync(inheritedCard, "--etl-border"));
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static Task<string> CssVariableAsync(ILocator locator, string name) =>
+        locator.EvaluateAsync<string>("(element, token) => getComputedStyle(element).getPropertyValue(token).trim()", name);
+
+    private static Task<string> InlineCssVariableAsync(ILocator locator, string name) =>
+        locator.EvaluateAsync<string>("(element, token) => element.style.getPropertyValue(token).trim()", name);
+
     /// <summary>
     /// Drives the five <c>vscode-webviews</c> fixtures and asserts each one renders from files the
     /// repository actually tracks.

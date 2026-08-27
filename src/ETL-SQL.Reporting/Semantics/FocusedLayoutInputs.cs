@@ -93,6 +93,7 @@ public sealed record FocusedLayoutInputs(
         var theme = ChartStyleTokens.Theme(visual);
         var keys = (seriesKeys ?? []).Where(key => !string.IsNullOrWhiteSpace(key))
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
             .ToImmutableArray();
         var palette = keys
             .Select((key, index) => new PaletteAssignment(key, ChartPalette.Resolve(theme.Tokens, key, index)))

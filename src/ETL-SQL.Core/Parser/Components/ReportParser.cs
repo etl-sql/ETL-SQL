@@ -54,6 +54,7 @@ public class ReportParser : ParserComponent
         string? htmlCss = null;
         string? htmlFallback = null;
         HtmlVisualMode htmlMode = HtmlVisualMode.Single;
+        var palette = ImmutableArray<string>.Empty;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -110,7 +111,7 @@ public class ReportParser : ParserComponent
             }
             else if (Match(TokenType.STYLE))
             {
-                ParseStyleClause(styles, ref styleName);
+                ParseStyleClause(styles, ref styleName, ref palette);
             }
             else if (Match(TokenType.SERIES))
             {
@@ -312,6 +313,7 @@ public class ReportParser : ParserComponent
             Summaries = summaries,
             SummaryOptions = summaryOptions,
             Styles = styles,
+            Palette = palette,
             FetchMode = fetchMode,
             StyleName = styleName,
             Tooltip = tooltip,
@@ -1447,6 +1449,7 @@ public class ReportParser : ParserComponent
         var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pageStyles = new Dictionary<string, string>();
         string? pageStyleName = null;
+        var pagePalette = ImmutableArray<string>.Empty;
         Expression? title = null, subtitle = null;
         bool titleMd = false, subtitleMd = false;
         TitleDefinition? titleDef = null, subtitleDef = null;
@@ -1476,7 +1479,7 @@ public class ReportParser : ParserComponent
             }
             else if (Match(TokenType.STYLE))
             {
-                ParseStyleClause(pageStyles, ref pageStyleName);
+                ParseStyleClause(pageStyles, ref pageStyleName, ref pagePalette);
             }
             else if (IsCurrentValue("GAP"))
             {
@@ -1542,6 +1545,7 @@ public class ReportParser : ParserComponent
             Structure = structure,
             SlotMap = slotMap,
             Styles = pageStyles,
+            Palette = pagePalette,
             StyleName = pageStyleName,
             Title = title,
             TitleIsMarkdown = titleMd,
@@ -1834,13 +1838,15 @@ public class ReportParser : ParserComponent
         Consume(TokenType.AS, "Expected AS after style name");
         Consume(TokenType.LPAREN, "Expected '(' after AS");
         var styles = new Dictionary<string, string>();
-        ParseStyleBody(styles);
+        var palette = ImmutableArray<string>.Empty;
+        ParseStyleBody(styles, ref palette);
         Consume(TokenType.RPAREN, "Expected ')' to close CREATE STYLE");
         Match(TokenType.SEMICOLON);
         return new CreateStyleStatement
         {
             Name = name,
             Styles = styles,
+            Palette = palette,
             Mode = mode,
             Line = startToken.Line,
             Column = startToken.Column
@@ -1851,13 +1857,15 @@ public class ReportParser : ParserComponent
     {
         var styles = new Dictionary<string, string>();
         string? styleName = null;
-        ParseStyleClause(styles, ref styleName);
+        var palette = ImmutableArray<string>.Empty;
+        ParseStyleClause(styles, ref styleName, ref palette);
         Match(TokenType.SEMICOLON);
 
         return new CreateStyleStatement
         {
             Name = "GLOBAL",
             Styles = styles,
+            Palette = palette,
             StyleName = styleName,
             Mode = ObjectCreationMode.Create,
             Line = startToken.Line,
@@ -1958,6 +1966,7 @@ public class ReportParser : ParserComponent
         string? structure = null;
         var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var styles = new Dictionary<string, string>();
+        var containerPalette = ImmutableArray<string>.Empty;
         bool isCollapsible = containerType == "DRAWER";
         bool isPinnable = true;
         string? visibility = "ON";
@@ -1968,7 +1977,7 @@ public class ReportParser : ParserComponent
         {
             if (Match(TokenType.STYLE))
             {
-                ParseStyleClause(styles, ref containerStyleName);
+                ParseStyleClause(styles, ref containerStyleName, ref containerPalette);
             }
             else if (Match(TokenType.TITLE))
             {
@@ -2023,6 +2032,7 @@ public class ReportParser : ParserComponent
             Structure = structure,
             SlotMap = slotMap,
             Styles = styles,
+            Palette = containerPalette,
             StyleName = containerStyleName,
             Title = title,
             TitleIsMarkdown = titleMd,
@@ -2220,6 +2230,7 @@ public class ReportParser : ParserComponent
         var options = new List<VisualOption>();
         var actions = new List<VisualAction>();
         var styles = new Dictionary<string, string>();
+        var palette = ImmutableArray<string>.Empty;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -2246,7 +2257,7 @@ public class ReportParser : ParserComponent
             }
             else if (Match(TokenType.STYLE))
             {
-                ParseStyleClause(styles, ref styleName);
+                ParseStyleClause(styles, ref styleName, ref palette);
             }
             else
             {
@@ -2269,6 +2280,7 @@ public class ReportParser : ParserComponent
             Options = options,
             Actions = actions,
             Styles = styles,
+            Palette = palette,
             StyleName = styleName,
             Mode = mode,
             Line = startToken.Line,
@@ -3951,19 +3963,66 @@ public class ReportParser : ParserComponent
         });
     }
 
-    private void ParseStyleClause(Dictionary<string, string> styles, ref string? styleName)
+    private void ParseStyleClause(Dictionary<string, string> styles, ref string? styleName, ref ImmutableArray<string> palette)
     {
         if (Match(TokenType.EQUALS))
             styleName = ConsumeIdentifier("Expected style name after STYLE =").Value;
         else
         {
             Consume(TokenType.LPAREN, "Expected '(' or '=' after STYLE");
-            ParseStyleBody(styles);
+            ParseStyleBody(styles, ref palette);
             Consume(TokenType.RPAREN, "Expected ')' to close STYLE");
         }
     }
 
-    private void ParseStyleBody(Dictionary<string, string> styles)
+    private void ParseStyleClause(Dictionary<string, string> styles, ref string? styleName)
+    {
+        var dummyPalette = ImmutableArray<string>.Empty;
+        ParseStyleClause(styles, ref styleName, ref dummyPalette);
+    }
+
+    private ImmutableArray<string> ParsePaletteSequence()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after PALETTE");
+        if (ReportCheck(TokenType.RPAREN))
+        {
+            throw new SyntaxException("PALETTE sequence cannot be empty", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        var paletteItems = new List<string>();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            if (_parser.Current.Type is TokenType.STRING_LITERAL or TokenType.STRING)
+            {
+                paletteItems.Add(_parser.Advance().Value);
+            }
+            else if (_parser.Current.Type is TokenType.IDENTIFIER or TokenType.VARIABLE || LanguageMetadata.IsKeyword(_parser.Current.Value))
+            {
+                paletteItems.Add(_parser.Advance().Value);
+            }
+            else
+            {
+                throw new SyntaxException($"Expected color string in PALETTE sequence, got '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+            }
+
+            if (!Match(TokenType.COMMA))
+            {
+                if (!ReportCheck(TokenType.RPAREN))
+                {
+                    throw new SyntaxException("Expected ',' or ')' in PALETTE sequence", _parser.Current.Line, _parser.Current.Column);
+                }
+            }
+            else if (ReportCheck(TokenType.RPAREN))
+            {
+                // Trailing comma before ')'
+                break;
+            }
+        }
+        Consume(TokenType.RPAREN, "Expected ')' to close PALETTE sequence");
+        return paletteItems.ToImmutableArray();
+    }
+
+    private void ParseStyleBody(Dictionary<string, string> styles, ref ImmutableArray<string> palette)
     {
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -3972,19 +4031,33 @@ public class ReportParser : ParserComponent
                 ? _parser.Advance()
                 : throw new SyntaxException("Expected style key", _parser.Current.Line, _parser.Current.Column);
             var key = keyTok.Value;
-            // Consume hyphenated segments: BACKGROUND - COLOR → "BACKGROUND-COLOR"
-            while (_parser.Current.Type == TokenType.MINUS &&
-                   (_parser.IsIdentifier(_parser.Peek) || LanguageMetadata.IsKeyword(_parser.Peek.Value)))
+            // Consume hyphenated or colon segments: BACKGROUND - COLOR → "BACKGROUND-COLOR", COLOR : Domestic → "COLOR:Domestic"
+            while ((_parser.Current.Type == TokenType.MINUS || _parser.Current.Type == TokenType.COLON) &&
+                   (_parser.IsIdentifier(_parser.Peek) || LanguageMetadata.IsKeyword(_parser.Peek.Value) || _parser.Peek.Type == TokenType.STRING_LITERAL))
             {
-                Advance(); // consume '-'
-                key += "-" + _parser.Advance().Value;
+                var sep = _parser.Advance().Value; // '-' or ':'
+                key += sep + _parser.Advance().Value;
             }
             Consume(TokenType.EQUALS, $"Expected '=' after style key '{key}'");
-            string val;
-            val = _parser.Current.Value;
-            Advance();
-            styles[key] = val;
+
+            if (key.Equals("PALETTE", StringComparison.OrdinalIgnoreCase))
+            {
+                palette = ParsePaletteSequence();
+            }
+            else
+            {
+                string val;
+                val = _parser.Current.Value;
+                Advance();
+                styles[key] = val;
+            }
             Match(TokenType.COMMA);
         }
+    }
+
+    private void ParseStyleBody(Dictionary<string, string> styles)
+    {
+        var dummyPalette = ImmutableArray<string>.Empty;
+        ParseStyleBody(styles, ref dummyPalette);
     }
 }

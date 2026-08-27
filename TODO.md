@@ -1,4 +1,4 @@
-﻿# ETL-SQL Development TODO List
+# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for all unfinished product and release work. All remaining
 product work is active for the current planning horizon. Work top to bottom unless a dependency or
@@ -46,17 +46,20 @@ Formatting precedence remains deterministic and cannot depend implicitly on the 
   (`ROLLING_AGGREGATE`, `PERIOD_COMPARISON`, `SHARE_OF_TOTAL`, `TOP_N_OTHERS`, `FILL_DATES`, `PIVOT`,
   `INTERPOLATE`, `NORMALIZE`, `DEDUPLICATE`) via LSP trigger snippets (e.g., `$transform-mom`,
   `$transform-rolling`) and Report Builder data-prep helpers to streamline common analytical metrics.
-- [ ] Implement standard Design Tokens (CSS variables) for report runtime and `HTML` visuals. Inject
+- [x] Define and implement the standard report Design Token contract for report runtime and `HTML`
+  visuals. Resolve page, container, and visual styles into scoped `--etl-*` CSS variables, including
   `--etl-surface-card`, `--etl-text-primary`, `--etl-text-muted`, `--etl-border`, `--etl-accent`,
-  `--etl-success`, `--etl-danger`, and `--etl-radius-*` from resolved page/theme styles into the root DOM,
-  enabling `HTML` visual scoped styles to automatically adapt across light, dark, and custom themes.
-- [ ] Add `PALETTE = (...)` sequence support to `CREATE STYLE`. Parse and propagate color sequences from
-  `CREATE STYLE` to multi-series charts, visuals, and theme tokens when assigned at the visual, container,
-  or page level (`STYLE = StyleName`).
+  `--etl-success`, `--etl-danger`, and `--etl-radius-*`. Use deterministic page -> container -> visual
+  inheritance, safe CSS-value serialization, and built-in fallbacks so authored content renders
+  consistently across light, dark, custom, embedded, and exported report hosts. Keep host-specific
+  variables such as `--portal-*` outside the public report authoring contract.
+- [x] Add `PALETTE = (...)` sequence support to `CREATE STYLE` after the Design Token contract is in
+  place. Resolve palettes through page, container, and visual `STYLE` assignments; a more-specific
+  palette replaces its inherited sequence, while explicit series colors take precedence. Assign colors
+  to stable series identities deterministically, cycle predictably when needed, expose resolved series
+  colors through report tokens, and validate usable contrast against the resolved background.
 - [x] Add visual formatting pickers in Report Builder. Provide interactive color swatch pickers,
   border-radius sliders, and typography controls in the Properties panel alongside direct text editing.
-- [ ] Complete `{{SPARKLINE(...)}}` and `{{PROGRESS_BAR(...)}}` template macro helpers in `HTML` visuals.
-  Evaluate inline SVG sparkline and progress indicators directly within template substitution strings.
 
 ## 3. Hybrid Connectivity & Gateway Enhancements
 
@@ -65,22 +68,30 @@ Authoritative references:
 [`saas-tenant-isolation.md`](docs/architecture/saas-tenant-isolation.md#11-secure-outbound-data-gateway), and
 [`verified-viewer-context.md`](docs/architecture/decisions/verified-viewer-context.md).
 
-- [ ] Add unified Gateway resource discovery and binding in Portal Admin UI. In `Admin → Connections`
-  and `Admin → Data Gateways`, provide an interactive picker populated from live active Gateway clusters
-  and their published approved resources (`IGatewaySession.PublishedResources`). Eliminate manual string
-  entry for Gateway ID and Resource ID when configuring `SHARED:alias` bindings, and display online
-  status, connector type, and allowed operation classes in the connection editor.
-- [ ] Extend Verified Viewer Context propagation to additional RDBMS connectors. Add session-context
-  parameterization and deterministic pool cleanup for SQL Server (`SESSION_CONTEXT`), MySQL (user session
-  variables), and Oracle (`SYS_CONTEXT`). Maintain parity with the PostgreSQL implementation: HMAC-signed
-  envelopes, tenant/resource binding validation, resource-level opt-in, parameterization, and fail-closed
-  cleanup before connection reuse.
+- [ ] Complete approved Gateway resource discovery and binding in the canonical Portal connection
+  wizard. Extend the existing active-cluster selector with resources published by the selected live
+  Gateway session (`IGatewaySession.PublishedResources`), and use the same resource-aware picker in
+  `Admin → Connections` and `Admin → Data Gateways`. Replace manual Gateway and Resource ID entry for
+  `SHARED:alias` bindings. Display only approved non-secret metadata: resource identity, connector type,
+  allowed operation classes, approval state, online state, and last-seen time. Revalidate tenant grants,
+  resource approval, and operation authority on the server when saving and again when executing; never
+  expose physical endpoints or credential details through discovery metadata.
+- [ ] Certify Verified Viewer Context propagation for SQL Server as a connector-specific capability.
+  Add parameterized `SESSION_CONTEXT` setup using the existing HMAC-signed envelope, tenant/resource
+  binding validation, and resource-level opt-in contract. Keep the service credential as the database
+  identity and prohibit viewer claims from selecting database roles. Prove fail-closed cleanup before
+  pooled connection reuse after success, provider failure, cancellation, timeout, and broken-connection
+  paths. Do not advertise SQL Server support until the connector certification tests pass.
 - [ ] Implement Ambiguous Write outcome alerting and Portal operations triage. When network disconnection
   or process termination causes an in-flight mutating operation to enter an ambiguous state in the outcome
-  ledger, surface a high-priority alert on the Portal operations dashboard. Provide a dedicated triage
-  view displaying operation ID, tenant, gateway, resource, correlation ID, and execution timestamp with
-  administrative reconciliation actions (acknowledge, mark resolved, or discard) while maintaining the
-  fail-closed ambiguous-write safety invariant.
+  ledger, surface a deduplicated high-priority alert on the Portal operations dashboard and block unsafe
+  automatic retry. Provide a dedicated triage view displaying operation ID, tenant, gateway, resource,
+  correlation ID, execution timestamp, current owner, and immutable event history. Authorized operators
+  may acknowledge and assign the case, attach evidence and notes, or record an externally verified outcome
+  (`confirmed committed`, `confirmed not applied`, `compensated`, or `superseded`). Closing or dismissing
+  an alert must never delete the ledger record, erase uncertainty without evidence, or weaken the
+  fail-closed ambiguous-write safety invariant. Treat this workflow as a prerequisite for production
+  Gateway write operations.
 
 ## 4. Code-First Connection Wizard & Schema-Driven Authoring
 

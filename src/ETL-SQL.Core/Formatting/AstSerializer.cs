@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -1397,8 +1398,8 @@ public static class AstSerializer
             sb.AppendLine($"    OPTIONS ( {string.Join(", ", s.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
         if (s.StyleName != null)
             sb.AppendLine($"    STYLE = {s.StyleName},");
-        else if (s.Styles.Count > 0)
-            sb.AppendLine($"    STYLE ( {string.Join(", ", s.Styles.Select(st => $"{st.Key} = '{st.Value.Replace("'", "''")}'"))} ),");
+        if (s.Styles.Count > 0 || !s.Palette.IsDefaultOrEmpty)
+            sb.AppendLine($"    STYLE ( {FormatStyleAssignments(s.Styles, s.Palette)} ),");
         foreach (var axis in s.AxisOptions)
             sb.AppendLine($"    {axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
         if (s.Actions.Count > 0)
@@ -1591,8 +1592,8 @@ public static class AstSerializer
             parts.Add("MAP (" + string.Join(", ", s.SlotMap.Select(kv => $"{Quote(kv.Key)} = {kv.Value}")) + ")");
         if (s.StyleName != null)
             parts.Add($"STYLE = {s.StyleName}");
-        else if (s.Styles.Count > 0)
-            parts.Add("STYLE (" + FormatStringAssignments(s.Styles) + ")");
+        if (s.Styles.Count > 0 || !s.Palette.IsDefaultOrEmpty)
+            parts.Add("STYLE (" + FormatStyleAssignments(s.Styles, s.Palette) + ")");
         if (s.Visibility != null) parts.Add($"VISIBLE = {s.Visibility}");
         if (s.RefreshIntervalSeconds > 0) parts.Add($"REFRESH = {s.RefreshIntervalSeconds}");
         if (s.PrintLayout != null) parts.Add(FormatPageLayoutDefinition(s.PrintLayout));
@@ -1637,8 +1638,8 @@ public static class AstSerializer
         if (s.Icon != null) parts.Add($"ICON = {Quote(s.Icon)}");
         if (s.StyleName != null)
             parts.Add($"STYLE = {s.StyleName}");
-        else if (s.Styles.Count > 0)
-            parts.Add("STYLE (" + FormatStringAssignments(s.Styles) + ")");
+        if (s.Styles.Count > 0 || !s.Palette.IsDefaultOrEmpty)
+            parts.Add("STYLE (" + FormatStyleAssignments(s.Styles, s.Palette) + ")");
         if (s.Structure != null || s.SlotMap.Count > 0 || !s.IsPinnable)
         {
             var layout = new List<string>();
@@ -1692,8 +1693,8 @@ public static class AstSerializer
         if (s.Actions.Count > 0) parts.Add("ACTIONS (" + FormatActions(s.Actions) + ")");
         if (s.StyleName != null)
             parts.Add($"STYLE = {s.StyleName}");
-        else if (s.Styles.Count > 0)
-            parts.Add("STYLE (" + FormatStringAssignments(s.Styles) + ")");
+        if (s.Styles.Count > 0 || !s.Palette.IsDefaultOrEmpty)
+            parts.Add("STYLE (" + FormatStyleAssignments(s.Styles, s.Palette) + ")");
 
         return $"{CreationVerb(s.Mode)} BUTTON {s.Name} AS ({string.Join(", ", parts)});";
     }
@@ -1723,7 +1724,7 @@ public static class AstSerializer
     {
         if (s.StyleName != null)
             return $"STYLE = {s.StyleName};";
-        return $"{CreationVerb(s.Mode)} STYLE {s.Name} AS ({FormatStringAssignments(s.Styles)});";
+        return $"{CreationVerb(s.Mode)} STYLE {s.Name} AS ({FormatStyleAssignments(s.Styles, s.Palette)});";
     }
 
     private static string FormatTooltip(TooltipDefinition tooltip)
@@ -1767,6 +1768,20 @@ public static class AstSerializer
         var props = string.Join(", ", s.Properties.Select(p => $"{p.Key} = '{p.Value.Replace("'", "''")}'"));
         var modeStr = CreationVerb(s.Mode);
         return $"{modeStr} THEME {s.Name} AS ({props});";
+    }
+
+    private static string FormatStyleAssignments(IReadOnlyDictionary<string, string> values, ImmutableArray<string> palette)
+    {
+        var parts = new List<string>();
+        if (!palette.IsDefaultOrEmpty)
+        {
+            parts.Add($"PALETTE = ({string.Join(", ", palette.Select(Quote))})");
+        }
+        foreach (var kv in values)
+        {
+            parts.Add($"{kv.Key} = {Quote(kv.Value)}");
+        }
+        return string.Join(", ", parts);
     }
 
     private static string FormatStringAssignments(IReadOnlyDictionary<string, string> values) =>

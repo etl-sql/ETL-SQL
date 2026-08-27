@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -18,6 +19,78 @@ namespace ETL_SQL.Reporting.Builders
             return styles;
         }
 
+        public Dictionary<string, string> ResolveDesignTokens(
+            IReadOnlyDictionary<string, string>? styles,
+            bool isPageOrReportLevel = false,
+            IReadOnlyList<string>? palette = null,
+            IReadOnlyDictionary<string, string>? seriesAssignments = null)
+        {
+            if (styles != null && styles.TryGetValue("THEME", out var themeName) && !string.IsNullOrWhiteSpace(themeName))
+            {
+                Dictionary<string, string>? baseTokens = themeName.Trim().ToUpperInvariant() switch
+                {
+                    "LIGHT" => new Dictionary<string, string>(
+                        ETL_SQL.Reporting.Contracts.DesignTokens.LightTokens,
+                        StringComparer.OrdinalIgnoreCase),
+                    "DARK" => new Dictionary<string, string>(
+                        ETL_SQL.Reporting.Contracts.DesignTokens.DarkTokens,
+                        StringComparer.OrdinalIgnoreCase),
+                    _ => null
+                };
+
+                if (ctx.ReportContext.ThemeDefinitions.TryGetValue(themeName, out var themeDef))
+                    baseTokens = ETL_SQL.Reporting.Semantics.DesignTokenResolver.ResolveScopedTokens(
+                        themeDef.Properties, isPageOrReportLevel, palette, seriesAssignments);
+
+                if (baseTokens != null)
+                {
+                    foreach (var (key, value) in ETL_SQL.Reporting.Semantics.DesignTokenResolver.ResolveScopedTokens(
+                                 styles, isPageOrReportLevel, palette, seriesAssignments))
+                        baseTokens[key] = value;
+
+                    return baseTokens;
+                }
+            }
+            return ETL_SQL.Reporting.Semantics.DesignTokenResolver.ResolveScopedTokens(styles, isPageOrReportLevel, palette, seriesAssignments);
+        }
+
+        public ImmutableArray<string> ResolvePalette(
+            string? styleName,
+            ImmutableArray<string> inlinePalette,
+            ImmutableArray<string> inheritedPalette = default)
+        {
+            if (!inlinePalette.IsDefaultOrEmpty)
+                return inlinePalette;
+
+            if (!string.IsNullOrEmpty(styleName))
+            {
+                var namedPalette = ResolveNamedStylePalette(styleName, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                if (!namedPalette.IsDefaultOrEmpty)
+                    return namedPalette;
+            }
+
+            if (!inheritedPalette.IsDefaultOrEmpty)
+                return inheritedPalette;
+
+            return ImmutableArray<string>.Empty;
+        }
+
+        private ImmutableArray<string> ResolveNamedStylePalette(string styleName, HashSet<string> visited)
+        {
+            if (!visited.Add(styleName) ||
+                !ctx.ReportContext.StyleDefinitions.TryGetValue(styleName, out var namedStyle))
+            {
+                return ImmutableArray<string>.Empty;
+            }
+
+            if (!namedStyle.Palette.IsDefaultOrEmpty)
+                return namedStyle.Palette;
+
+            if (!string.IsNullOrEmpty(namedStyle.StyleName))
+                return ResolveNamedStylePalette(namedStyle.StyleName, visited);
+
+            return ImmutableArray<string>.Empty;
+        }
         public Dictionary<string, string> ResolveStyles(string? styleName, Dictionary<string, string> inlineStyles)
             => ResolveStyles(styleName, inlineStyles, null);
 

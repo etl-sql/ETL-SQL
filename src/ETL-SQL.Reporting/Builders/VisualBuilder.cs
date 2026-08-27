@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Reporting.Contracts;
 using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
 
@@ -15,7 +17,7 @@ namespace ETL_SQL.Reporting.Builders
 {
     public class VisualBuilder(IExecutionContext ctx, StyleBuilder styleBuilder)
     {
-        public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false, VisualDrillState? drillState = null)
+        public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false, VisualDrillState? drillState = null, ImmutableArray<string> inheritedPalette = default, IReadOnlyDictionary<string, string>? inheritedStyles = null)
         {
             var expressionBackups = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
             string? title;
@@ -51,12 +53,13 @@ namespace ETL_SQL.Reporting.Builders
             }
 
             return await BuildResolvedAsync(name, vStmt, interactionValues, skipDeferredVisuals, drillState,
-                title, titleMd, subtitle, subtitleMd, defVal, placeholder);
+                title, titleMd, subtitle, subtitleMd, defVal, placeholder, inheritedPalette, inheritedStyles);
         }
 
         private async Task<VisualManifest> BuildResolvedAsync(string name, CreateVisualStatement vStmt,
             Dictionary<string, string>? interactionValues, bool skipDeferredVisuals, VisualDrillState? drillState,
-            string? title, bool titleMd, string? subtitle, bool subtitleMd, string? defVal, string? placeholder)
+            string? title, bool titleMd, string? subtitle, bool subtitleMd, string? defVal, string? placeholder,
+            ImmutableArray<string> inheritedPalette = default, IReadOnlyDictionary<string, string>? inheritedStyles = null)
         {
 
             var vm = new VisualManifest
@@ -158,6 +161,135 @@ namespace ETL_SQL.Reporting.Builders
 
             if (resolvedStyles.Count > 0)
                 vm.Styles = resolvedStyles;
+
+            var resolvedPalette = styleBuilder.ResolvePalette(vStmt.StyleName, vStmt.Palette, inheritedPalette);
+
+            // Effective background resolution across visual and inherited styles
+            var isDark = string.Equals(resolvedStyles.GetValueOrDefault("THEME"), "DARK", StringComparison.OrdinalIgnoreCase) ||
+                         (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var ith) && string.Equals(ith, "DARK", StringComparison.OrdinalIgnoreCase));
+
+            string? inhBg = null;
+            if (inheritedStyles != null)
+            {
+                if (!inheritedStyles.TryGetValue("BACKGROUND", out inhBg) &&
+                    !inheritedStyles.TryGetValue("BACKGROUND_COLOR", out inhBg))
+                {
+                    inheritedStyles.TryGetValue("BG", out inhBg);
+                }
+            }
+
+            var bgCandidate = resolvedStyles.GetValueOrDefault("BACKGROUND")
+                ?? resolvedStyles.GetValueOrDefault("BACKGROUND_COLOR")
+                ?? resolvedStyles.GetValueOrDefault("BG")
+                ?? inhBg
+                ?? (isDark ? "#1e1e1e" : "#ffffff");
+
+            var effectiveBg = ColorContrast.TryParseHexColor(bgCandidate, out _, out _, out _, out _)
+                ? bgCandidate
+                : (isDark ? "#1e1e1e" : "#ffffff");
+
+            var validPalette = new List<string>();
+            if (!resolvedPalette.IsDefaultOrEmpty)
+            {
+                foreach (var color in resolvedPalette)
+                {
+                    if (!ColorContrast.TryParseHexColor(color, out _, out _, out _, out _) || !DesignTokens.IsSafeCssValue(color))
+                    {
+                        vm.Diagnostics ??= new List<VisualDiagnosticManifest>();
+                        vm.Diagnostics.Add(new VisualDiagnosticManifest
+                        {
+                            Code = "PALETTE_COLOR_INVALID",
+                            Message = $"Palette color '{color}' is not a valid hex color.",
+                            Line = vStmt.Line
+                        });
+                    }
+                    else
+                    {
+                        var eval = ColorContrast.Evaluate(color, effectiveBg, minRatio: 3.0);
+                        if (!eval.Passed)
+                        {
+                            vm.Diagnostics ??= new List<VisualDiagnosticManifest>();
+                            vm.Diagnostics.Add(new VisualDiagnosticManifest
+                            {
+                                Code = "PALETTE_CONTRAST_LOW",
+                                Message = $"Palette color '{color}' has insufficient contrast ({eval.Ratio:F2}:1) against background '{effectiveBg}'.",
+                                Line = vStmt.Line
+                            });
+                        }
+                        else
+                        {
+                            validPalette.Add(color);
+                        }
+                    }
+                }
+            }
+
+            if (validPalette.Count > 0)
+                vm.Palette = validPalette;
+            else
+                vm.Palette = null;
+
+            // Collect series assignments for --etl-series-* tokens
+            var seriesAssignments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (k, v) in resolvedStyles)
+            {
+                if (k.StartsWith("COLOR:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var sName = k.Substring("COLOR:".Length).Trim();
+                    if (!string.IsNullOrEmpty(sName))
+                    {
+                        if (!ColorContrast.TryParseHexColor(v, out _, out _, out _, out _) || !DesignTokens.IsSafeCssValue(v))
+                        {
+                            vm.Diagnostics ??= new List<VisualDiagnosticManifest>();
+                            vm.Diagnostics.Add(new VisualDiagnosticManifest
+                            {
+                                Code = "COLOR_INVALID",
+                                Message = $"Explicit series color '{v}' for series '{sName}' is not a valid hex color.",
+                                Line = vStmt.Line
+                            });
+                        }
+                        else
+                        {
+                            var eval = ColorContrast.Evaluate(v, effectiveBg, minRatio: 3.0);
+                            if (!eval.Passed)
+                            {
+                                vm.Diagnostics ??= new List<VisualDiagnosticManifest>();
+                                vm.Diagnostics.Add(new VisualDiagnosticManifest
+                                {
+                                    Code = "SERIES_CONTRAST_LOW",
+                                    Message = $"Explicit series color '{v}' for series '{sName}' has insufficient contrast ({eval.Ratio:F2}:1) against background '{effectiveBg}'.",
+                                    Line = vStmt.Line
+                                });
+                            }
+                            else
+                            {
+                                seriesAssignments[sName] = v;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (vStmt.TypedSeries is { Count: > 0 })
+            {
+                var mappedSeries = vStmt.TypedSeries.Select(s => s.Column).Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+                for (var i = 0; i < mappedSeries.Count; i++)
+                {
+                    var sName = mappedSeries[i];
+                    if (!seriesAssignments.ContainsKey(sName))
+                    {
+                        var color = ChartPalette.Resolve(ChartStyleTokens.Build(vm), sName, i);
+                        if (ColorContrast.TryParseHexColor(color, out _, out _, out _, out _))
+                        {
+                            seriesAssignments[sName] = color;
+                        }
+                    }
+                }
+            }
+
+            var visualTokens = styleBuilder.ResolveDesignTokens(resolvedStyles, isPageOrReportLevel: false, vm.Palette, seriesAssignments);
+            if (visualTokens.Count > 0)
+                vm.DesignTokens = visualTokens;
 
             // Extract from styles if missing
             vm.Styles ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -345,6 +477,33 @@ namespace ETL_SQL.Reporting.Builders
                         }
                         vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData, geography: vm.GeographicGeometry);
+                    }
+                    if (vm.PlotPlan?.Series is { Length: > 0 } planSeries &&
+                        (vm.ChartSpec?.Bindings.Any(b => b.Channel == FieldChannel.Color) == true ||
+                         (vStmt.TypedSeries != null && vStmt.TypedSeries.Count > 0) ||
+                         resolvedStyles.Keys.Any(k => k.StartsWith("COLOR:", StringComparison.OrdinalIgnoreCase))))
+                    {
+                        var additionalSeriesTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var s in planSeries)
+                        {
+                            if (!string.IsNullOrWhiteSpace(s.Key) && !string.IsNullOrWhiteSpace(s.Color) && DesignTokens.IsSafeCssValue(s.Color))
+                            {
+                                additionalSeriesTokens[s.Key] = s.Color;
+                            }
+                        }
+                        if (additionalSeriesTokens.Count > 0)
+                        {
+                            var resolvedSeriesTokens = DesignTokenResolver.ResolveScopedTokens(
+                                vm.Styles, isPageOrReportLevel: false, vm.Palette, additionalSeriesTokens);
+                            if (resolvedSeriesTokens.Count > 0)
+                            {
+                                vm.DesignTokens ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                                foreach (var (tk, tv) in resolvedSeriesTokens)
+                                {
+                                    vm.DesignTokens[tk] = tv;
+                                }
+                            }
+                        }
                     }
                     // One resolved interaction contract per visual: from the plan when the visual has
                     // one, from the authored clauses when it does not (TABLE, SLICER, focused layouts).

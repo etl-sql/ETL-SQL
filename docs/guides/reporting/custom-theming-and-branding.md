@@ -33,13 +33,57 @@ Styling cascades from global defaults down to individual visual properties:
 └───────────────────────────┬────────────────────────────┘
                             │ (overridden by)
 ┌───────────────────────────▼────────────────────────────┐
-│ Page Theme Override (CREATE PAGE ... STYLE (THEME=...))│
+│ Page Style Override (CREATE PAGE ... STYLE (...))      │
+└───────────────────────────┬────────────────────────────┘
+                            │ (overridden by)
+┌───────────────────────────▼────────────────────────────┐
+│ Container Override (CREATE CONTAINER ... STYLE (...))  │
 └───────────────────────────┬────────────────────────────┘
                             │ (overridden by)
 ┌───────────────────────────▼────────────────────────────┐
 │ Visual Style Override (CREATE VISUAL ... STYLE (...))  │
 └────────────────────────────────────────────────────────┘
 ```
+
+Scoped `--etl-*` CSS variables are projected at every layer:
+
+- `--etl-surface-card` & `--etl-surface` — Card surface background color.
+- `--etl-bg` — Page and report canvas background.
+- `--etl-text-primary` & `--etl-text-muted` — Primary and muted typography colors.
+- `--etl-border` & `--etl-shadow` — Border color and elevation shadow.
+- `--etl-accent`, `--etl-success`, `--etl-warning`, `--etl-danger`, `--etl-info` — Status and interactive colors.
+- `--etl-color-1`, `--etl-color-2`, ... & `--etl-palette-1`, ... — Resolved categorical palette colors.
+- `--etl-series-<name>` — Resolved explicit series colors (from `COLOR:<series>`).
+- `--etl-radius-sm`, `--etl-radius-md`, `--etl-radius-lg` — Component corner radii.
+- `--etl-font-family` & `--etl-font-mono` — Typography font stacks.
+
+---
+
+## Categorical Palettes and Series Styling
+
+Author custom categorical color sequences with `PALETTE = ('#color1', '#color2', ...)` on `CREATE STYLE`, `CREATE PAGE`, `CREATE CONTAINER`, or `CREATE VISUAL`.
+
+A more-specific palette replaces the entire inherited sequence rather than appending or merging.
+
+```sql
+CREATE STYLE Brand AS (
+  PALETTE       = ('#2563eb', '#16a34a', '#f59e0b'),
+  BACKGROUND    = '#ffffff',
+  BORDER_RADIUS = '8px'
+);
+
+CREATE VISUAL SalesChart AS BAR (
+  SOURCE   = #sales,
+  MAPPINGS (X = Category, Y = Revenue),
+  STYLE    = Brand,
+  STYLE    (COLOR:Domestic = '#1d4ed8') -- Explicit series override takes precedence
+);
+```
+
+- **Palette Sequence Replacement**: Page → Container → Visual. More-specific scopes replace inherited sequences entirely.
+- **Series Assignment**: Assigned deterministically to stable series identities. When series count exceeds palette count, colors cycle predictably.
+- **Explicit Series Precedence**: Declaring `COLOR:<series-name> = '<color>'` takes immediate precedence over palette sequence colors.
+- **Public Design Tokens**: Exposes `--etl-color-1`, `--etl-color-2`, ..., `--etl-palette-1`, ..., and `--etl-series-<name>` CSS variables. Reject `--portal-*` or host-private variables.
 
 ---
 

@@ -69,6 +69,410 @@
         return null;
     }
 
+    // ── Design Tokens Contract ─────────────────────────────────────────────
+
+    const DESIGN_TOKENS = {
+        SURFACE_CARD: '--etl-surface-card',
+        SURFACE: '--etl-surface',
+        BG: '--etl-bg',
+        TEXT_PRIMARY: '--etl-text-primary',
+        TEXT_MUTED: '--etl-text-muted',
+        TEXT: '--etl-text',
+        TEXT_SECONDARY: '--etl-text-secondary',
+        BORDER: '--etl-border',
+        SHADOW: '--etl-shadow',
+        ACCENT: '--etl-accent',
+        SUCCESS: '--etl-success',
+        WARNING: '--etl-warning',
+        DANGER: '--etl-danger',
+        INFO: '--etl-info',
+        RADIUS_SM: '--etl-radius-sm',
+        RADIUS_MD: '--etl-radius-md',
+        RADIUS_LG: '--etl-radius-lg',
+        RADIUS: '--etl-radius',
+        FONT_FAMILY: '--etl-font-family',
+        FONT_MONO: '--etl-font-mono'
+    };
+
+    const ALLOWED_TOKEN_NAMES = new Set(Object.values(DESIGN_TOKENS));
+
+    const UNSAFE_CSS_PATTERN = /@import|@font-face|expression\s*\(|-moz-binding|behavior\s*:|javascript\s*:|vbscript\s*:|data\s*:|url\s*\(|var\s*\(\s*--(?!etl-)|[;{}\\\u0000\r\n\f\v<>/*]/i;
+
+    const BORDER_STYLES = new Set(['none', 'hidden', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset']);
+    const BORDER_WIDTHS = new Set(['thin', 'medium', 'thick']);
+
+    const DYNAMIC_TOKEN_PATTERN = /^--etl-(?:color-\d+|palette-\d+|series-[a-z0-9_-]+|color-series-[a-z0-9_-]+)$/i;
+
+    function isAllowedTokenName(name) {
+        if (!name || typeof name !== 'string') return false;
+        const trimmed = name.trim().toLowerCase();
+        if (ALLOWED_TOKEN_NAMES.has(trimmed)) return true;
+        return DYNAMIC_TOKEN_PATTERN.test(trimmed);
+    }
+
+    function isSafeCssValue(value) {
+        if (value == null) return false;
+        const str = String(value).trim();
+        if (str.length === 0 || str.length > 256) return false;
+        if (UNSAFE_CSS_PATTERN.test(str)) return false;
+        return true;
+    }
+
+    const COLOR_FUNC_REGEX = /\b(?:rgb|rgba|hsl|hsla)\s*\([^)]+\)/i;
+    const HEX_COLOR_REGEX = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
+
+    function extractBorderColor(value) {
+        if (value == null) return null;
+        const trimmed = String(value).trim().replace(/^['"]|['"]$/g, '').trim();
+        if (trimmed.toLowerCase() === 'none' || trimmed === '0' || trimmed.toLowerCase() === 'hidden') {
+            return 'transparent';
+        }
+
+        const funcMatch = COLOR_FUNC_REGEX.exec(trimmed);
+        if (funcMatch && isSafeCssValue(funcMatch[0])) return funcMatch[0];
+
+        const hexMatch = HEX_COLOR_REGEX.exec(trimmed);
+        if (hexMatch && isSafeCssValue(hexMatch[0])) return hexMatch[0];
+
+        const parts = trimmed.split(/\s+/).filter(Boolean);
+        if (parts.length === 1) {
+            return isSafeCssValue(trimmed) ? trimmed : null;
+        }
+
+        for (const part of parts) {
+            if (!BORDER_STYLES.has(part.toLowerCase()) &&
+                !BORDER_WIDTHS.has(part.toLowerCase()) &&
+                !/^\s*(\d+(?:\.\d+)?)\s*(px|em|rem|pt|%)?\s*$/i.test(part)) {
+                if (isSafeCssValue(part)) return part;
+            }
+        }
+        return isSafeCssValue(trimmed) ? trimmed : null;
+    }
+
+    function resolveDesignTokens(styles, isPageOrReportLevel = false) {
+        const tokens = {};
+        if (!styles || typeof styles !== 'object') return tokens;
+
+        if (Array.isArray(styles.palette)) {
+            styles.palette.forEach((color, i) => {
+                const c = String(color).trim();
+                if (isSafeCssValue(c)) {
+                    tokens[`--etl-color-${i + 1}`] = c;
+                    tokens[`--etl-palette-${i + 1}`] = c;
+                }
+            });
+        }
+
+        for (const rawKey in styles) {
+            const rawValue = styles[rawKey];
+            if (rawValue == null) continue;
+            const key = String(rawKey).trim();
+            const value = String(rawValue).trim();
+            if (!key || !value) continue;
+
+            if (key.toLowerCase().startsWith('--etl-')) {
+                const normKey = key.toLowerCase();
+                if (isAllowedTokenName(normKey) && isSafeCssValue(value)) {
+                    tokens[normKey] = value;
+                }
+                continue;
+            }
+
+            if (key.toUpperCase().startsWith('COLOR:')) {
+                const seriesName = key.substring(6).trim();
+                if (seriesName && isSafeCssValue(value)) {
+                    const sanitized = seriesName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                    const seriesToken = `--etl-series-${sanitized}`;
+                    if (isAllowedTokenName(seriesToken)) {
+                        tokens[seriesToken] = value;
+                    }
+                }
+                continue;
+            }
+
+            const upperKey = key.toUpperCase();
+            switch (upperKey) {
+                case 'BACKGROUND':
+                case 'BACKGROUND_COLOR':
+                case 'BACKGROUND-COLOR':
+                case 'SURFACE_CARD':
+                case 'SURFACE-CARD':
+                case 'ETL_SURFACE_CARD':
+                case 'ETL-SURFACE-CARD':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.SURFACE_CARD] = value;
+                        tokens[DESIGN_TOKENS.SURFACE] = value;
+                        if (isPageOrReportLevel) tokens[DESIGN_TOKENS.BG] = value;
+                    }
+                    break;
+                case 'BG':
+                case 'BG_COLOR':
+                case 'PAGE_BACKGROUND':
+                case 'REPORT_BACKGROUND':
+                case 'ETL_BG':
+                case 'ETL-BG':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.BG] = value;
+                    }
+                    break;
+                case 'COLOR':
+                case 'FONT_COLOR':
+                case 'FONT-COLOR':
+                case 'TEXT_COLOR':
+                case 'TEXT-COLOR':
+                case 'TEXT_PRIMARY':
+                case 'TEXT-PRIMARY':
+                case 'ETL_TEXT_PRIMARY':
+                case 'ETL-TEXT-PRIMARY':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.TEXT_PRIMARY] = value;
+                        tokens[DESIGN_TOKENS.TEXT] = value;
+                    }
+                    break;
+                case 'MUTED_COLOR':
+                case 'MUTED-COLOR':
+                case 'TEXT_MUTED':
+                case 'TEXT-MUTED':
+                case 'SECONDARY_COLOR':
+                case 'SUBTITLE_COLOR':
+                case 'ETL_TEXT_MUTED':
+                case 'ETL-TEXT-MUTED':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.TEXT_MUTED] = value;
+                        tokens[DESIGN_TOKENS.TEXT_SECONDARY] = value;
+                    }
+                    break;
+                case 'BORDER':
+                case 'BORDER_COLOR':
+                case 'BORDER-COLOR':
+                case 'ETL_BORDER':
+                case 'ETL-BORDER':
+                    const borderColor = extractBorderColor(value);
+                    if (borderColor && isSafeCssValue(borderColor)) {
+                        tokens[DESIGN_TOKENS.BORDER] = borderColor;
+                    }
+                    break;
+                case 'ACCENT':
+                case 'ACCENT_COLOR':
+                case 'ACCENT-COLOR':
+                case 'PRIMARY':
+                case 'PRIMARY_COLOR':
+                case 'BRAND_PRIMARY':
+                case 'ETL_ACCENT':
+                case 'ETL-ACCENT':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.ACCENT] = value;
+                    }
+                    break;
+                case 'SUCCESS':
+                case 'SUCCESS_COLOR':
+                case 'SUCCESS-COLOR':
+                case 'ETL_SUCCESS':
+                case 'ETL-SUCCESS':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.SUCCESS] = value;
+                    }
+                    break;
+                case 'WARNING':
+                case 'WARNING_COLOR':
+                case 'WARNING-COLOR':
+                case 'ETL_WARNING':
+                case 'ETL-WARNING':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.WARNING] = value;
+                    }
+                    break;
+                case 'DANGER':
+                case 'DANGER_COLOR':
+                case 'DANGER-COLOR':
+                case 'ERROR_COLOR':
+                case 'ETL_DANGER':
+                case 'ETL-DANGER':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.DANGER] = value;
+                    }
+                    break;
+                case 'INFO':
+                case 'INFO_COLOR':
+                case 'INFO-COLOR':
+                case 'ETL_INFO':
+                case 'ETL-INFO':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.INFO] = value;
+                    }
+                    break;
+                case 'BORDER_RADIUS':
+                case 'BORDER-RADIUS':
+                case 'RADIUS':
+                case 'ETL_RADIUS':
+                case 'ETL-RADIUS':
+                case 'ETL_RADIUS_MD':
+                case 'ETL-RADIUS-MD':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.RADIUS_MD] = value;
+                        tokens[DESIGN_TOKENS.RADIUS] = value;
+                        const match = /^\s*(\d+(?:\.\d+)?)\s*px\s*$/i.exec(value);
+                        if (match) {
+                            const px = parseFloat(match[1]);
+                            tokens[DESIGN_TOKENS.RADIUS_SM] = `${Math.max(0, Math.round(px * 0.5))}px`;
+                            tokens[DESIGN_TOKENS.RADIUS_LG] = `${Math.round(px * 1.5)}px`;
+                        }
+                    }
+                    break;
+                case 'RADIUS_SM':
+                case 'RADIUS-SM':
+                case 'BORDER_RADIUS_SM':
+                case 'ETL_RADIUS_SM':
+                case 'ETL-RADIUS-SM':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.RADIUS_SM] = value;
+                    }
+                    break;
+                case 'RADIUS_MD':
+                case 'RADIUS-MD':
+                case 'BORDER_RADIUS_MD':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.RADIUS_MD] = value;
+                        tokens[DESIGN_TOKENS.RADIUS] = value;
+                    }
+                    break;
+                case 'RADIUS_LG':
+                case 'RADIUS-LG':
+                case 'BORDER_RADIUS_LG':
+                case 'ETL_RADIUS_LG':
+                case 'ETL-RADIUS-LG':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.RADIUS_LG] = value;
+                    }
+                    break;
+                case 'SHADOW':
+                case 'BOX_SHADOW':
+                case 'BOX-SHADOW':
+                case 'ETL_SHADOW':
+                case 'ETL-SHADOW':
+                    const shadowVal = isOn(value) ? '0 6px 18px rgba(15, 23, 42, 0.16)' :
+                                      (isOff(value) || value.toUpperCase() === 'NONE') ? 'none' : value;
+                    if (isSafeCssValue(shadowVal)) {
+                        tokens[DESIGN_TOKENS.SHADOW] = shadowVal;
+                    }
+                    break;
+                case 'FONT':
+                case 'FONT_FAMILY':
+                case 'FONT-FAMILY':
+                case 'ETL_FONT_FAMILY':
+                case 'ETL-FONT-FAMILY':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.FONT_FAMILY] = value;
+                    }
+                    break;
+                case 'FONT_MONO':
+                case 'FONT-MONO':
+                case 'ETL_FONT_MONO':
+                case 'ETL-FONT-MONO':
+                    if (isSafeCssValue(value)) {
+                        tokens[DESIGN_TOKENS.FONT_MONO] = value;
+                    }
+                    break;
+            }
+        }
+
+        return tokens;
+    }
+
+    function isDarkColor(colorStr) {
+        if (!colorStr || typeof colorStr !== 'string') return false;
+        const s = colorStr.trim().toLowerCase();
+        if (s.startsWith('#')) {
+            let hex = s.substring(1);
+            if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+            if (hex.length >= 6) {
+                const r = parseInt(hex.substring(0, 2), 16);
+                const g = parseInt(hex.substring(2, 4), 16);
+                const b = parseInt(hex.substring(4, 6), 16);
+                const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                return lum < 0.5;
+            }
+        }
+        if (s.startsWith('rgb')) {
+            const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(s);
+            if (m) {
+                const r = parseInt(m[1], 10);
+                const g = parseInt(m[2], 10);
+                const b = parseInt(m[3], 10);
+                const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                return lum < 0.5;
+            }
+        }
+        return s.includes('dark') || s === 'black' || s.includes('midnight') || s.includes('charcoal');
+    }
+
+    function isCustomThemeDark(themeDef) {
+        if (!themeDef) return false;
+        const name = (themeDef.name || '').toLowerCase();
+        if (name.includes('dark')) return true;
+        if (themeDef.designTokens) {
+            const bg = themeDef.designTokens[DESIGN_TOKENS.BG] || themeDef.designTokens[DESIGN_TOKENS.SURFACE_CARD];
+            if (bg && isDarkColor(bg)) return true;
+        }
+        if (themeDef.config && themeDef.config.backgroundColor) {
+            if (isDarkColor(themeDef.config.backgroundColor)) return true;
+        }
+        return false;
+    }
+
+    function clearDynamicTokens(element) {
+        if (!element || !element.style) return;
+        const toRemove = [];
+        for (let i = 0; i < element.style.length; i++) {
+            const prop = element.style[i];
+            if (DYNAMIC_TOKEN_PATTERN.test(prop)) {
+                toRemove.push(prop);
+            }
+        }
+        for (const prop of toRemove) {
+            element.style.removeProperty(prop);
+        }
+    }
+
+    function applyDesignTokens(element, itemOrTokens, isPageOrReportLevel = false, manifest = null) {
+        if (!element || !element.style) return;
+        if (!itemOrTokens) return;
+
+        clearDynamicTokens(element);
+
+        // If item specifies a custom theme and manifest is provided, project custom theme tokens first
+        if (manifest && manifest.customThemes && itemOrTokens.styles) {
+            const themeName = getStyle(itemOrTokens.styles, 'THEME');
+            if (themeName) {
+                const customTheme = manifest.customThemes.find(t => t.name && t.name.toLowerCase() === themeName.toLowerCase());
+                if (customTheme && customTheme.designTokens) {
+                    applyDesignTokens(element, customTheme.designTokens, isPageOrReportLevel);
+                }
+            }
+        }
+
+        let tokenDict = null;
+        if (itemOrTokens.designTokens) {
+            tokenDict = itemOrTokens.designTokens;
+        } else if (itemOrTokens.styles) {
+            tokenDict = resolveDesignTokens(itemOrTokens.styles, isPageOrReportLevel);
+        } else {
+            tokenDict = resolveDesignTokens(itemOrTokens, isPageOrReportLevel);
+        }
+
+        if (!tokenDict || typeof tokenDict !== 'object') return;
+
+        for (const token in tokenDict) {
+            const val = tokenDict[token];
+            if (val == null) continue;
+            const normToken = String(token).toLowerCase();
+            const normVal = String(val).trim();
+            if (isAllowedTokenName(normToken) && isSafeCssValue(normVal)) {
+                element.style.setProperty(normToken, normVal);
+            }
+        }
+    }
+
     function getDefaultTheme(manifest) {
         if (manifest && manifest.theme) return manifest.theme;
         if (document.body.classList.contains('vscode-dark')) return 'dark';
@@ -79,11 +483,12 @@
     function updateBodyTheme(manifest, activePageName) {
         if (!manifest) return;
         let activeTheme = null;
+        let activePage = null;
         if (manifest.pages && activePageName) {
-            const page = manifest.pages.find(p => p.name === activePageName);
-            if (page) {
+            activePage = manifest.pages.find(p => p.name === activePageName) || null;
+            if (activePage) {
                 const reportStyles = manifest.styles || {};
-                const pageStyles = page.styles || {};
+                const pageStyles = activePage.styles || {};
                 activeTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || null;
             }
         }
@@ -99,11 +504,24 @@
             } catch { /* cross-origin fallback */ }
         }
 
-        if (activeTheme && activeTheme.toLowerCase() === 'dark') {
+        const customTheme = (manifest.customThemes || []).find(t => t.name && activeTheme && t.name.toLowerCase() === activeTheme.toLowerCase());
+        const isCustomDark = customTheme && isCustomThemeDark(customTheme);
+        const isDark = (activeTheme && activeTheme.toLowerCase() === 'dark') || isCustomDark;
+
+        if (isDark) {
             document.body.classList.add('theme-dark');
         } else {
             document.body.classList.remove('theme-dark');
         }
+
+        // Page navigation can change the effective theme. Clear tokens written for the prior
+        // page, then rebuild the body scope in cascade order for the active page.
+        for (const token of ALLOWED_TOKEN_NAMES) document.body.style.removeProperty(token);
+        applyDesignTokens(document.body, manifest, true);
+        if (customTheme && customTheme.designTokens)
+            applyDesignTokens(document.body, customTheme.designTokens, true);
+        if (activePage)
+            applyDesignTokens(document.body, activePage, true, manifest);
     }
 
     function getParam(params, name) {
@@ -1093,6 +1511,32 @@
         // any CSS transform/contain on ancestor elements in the portal layout.
         card._maxOriginalParent = card.parentElement;
         card._maxNextSibling    = card.nextSibling;
+
+        // Capture inherited design tokens before teleporting outside container/page DOM hierarchy
+        const computed = typeof getComputedStyle === 'function' ? getComputedStyle(card) : null;
+        card._maxOrigTokens = {};
+        const tokenProps = new Set(ALLOWED_TOKEN_NAMES);
+        for (let i = 0; i < card.style.length; i++) {
+            const p = card.style[i];
+            if (isAllowedTokenName(p)) tokenProps.add(p);
+        }
+        if (computed) {
+            for (let i = 0; i < computed.length; i++) {
+                const p = computed[i];
+                if (isAllowedTokenName(p)) tokenProps.add(p);
+            }
+        }
+        for (const token of tokenProps) {
+            const inlineVal = card.style.getPropertyValue(token);
+            if (inlineVal) {
+                card._maxOrigTokens[token] = inlineVal;
+            }
+            const effVal = inlineVal || (computed ? computed.getPropertyValue(token) : '');
+            if (effVal) {
+                card.style.setProperty(token, effVal.trim());
+            }
+        }
+
         document.body.appendChild(card);
         card.classList.add('visual-maximized');
         // Override any transparent/glass inline background so maximized card is fully opaque.
@@ -1122,6 +1566,26 @@
             card._maxOriginalParent = null;
             card._maxNextSibling    = null;
         }
+
+        // Restore original design tokens
+        const currentTokenProps = [];
+        for (let i = 0; i < card.style.length; i++) {
+            const p = card.style[i];
+            if (isAllowedTokenName(p)) currentTokenProps.push(p);
+        }
+        for (const p of currentTokenProps) {
+            if (card._maxOrigTokens && card._maxOrigTokens[p] !== undefined) {
+                card.style.setProperty(p, card._maxOrigTokens[p]);
+            } else {
+                card.style.removeProperty(p);
+            }
+        }
+        if (card._maxOrigTokens) {
+            for (const [token, val] of Object.entries(card._maxOrigTokens)) {
+                card.style.setProperty(token, val);
+            }
+        }
+        card._maxOrigTokens = null;
 
         // Reset inline dimensions on chart container divs to let layout reflow correctly
         card.querySelectorAll('.chart-wrapper > div').forEach(el => {
@@ -1157,6 +1621,7 @@
         if (page.name) div.id = 'page-' + page.name.toLowerCase();
         div.dataset.pageName = page.name || '';
         div.dataset.pageMode = (page.mode || 'DASHBOARD').toUpperCase();
+        applyDesignTokens(div, page, true, manifest);
 
         const content = document.createElement('div');
         content.className = 'page-grid';
@@ -1184,6 +1649,7 @@
         pageDef.physicalPages.forEach(pPage => {
             const sheet = document.createElement('div');
             sheet.className = 'physical-page-sheet';
+            applyDesignTokens(sheet, pageDef, true, manifest);
             
             const layout = pPage.layout || {};
             const width = layout.customWidth || (layout.orientation === 'Landscape' ? 11.0 : 8.5);
@@ -1245,6 +1711,7 @@
         // LAYER: stack children as absolutely-positioned overlapping panels
         if (isLayer) {
             div.setAttribute('data-name', containerDef.name);
+            applyDesignTokens(div, containerDef, false, manifest);
             const height = (containerDef.styles || {})['HEIGHT'] || (containerDef.styles || {})['height'];
             if (height) div.style.height = height;
             const slotMap = containerDef.slotMap || {};
@@ -1267,6 +1734,7 @@
             return;
         }
         div.setAttribute('data-name', containerDef.name);
+        applyDesignTokens(div, containerDef, false, manifest);
 
         const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
         if (tag) div.setAttribute('data-tag', tag);
@@ -1385,6 +1853,7 @@
         const drawer = document.createElement('div');
         drawer.className = 'collapsible-drawer';
         drawer.setAttribute('data-name', containerDef.name);
+        applyDesignTokens(drawer, containerDef, false, manifest);
         const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
         if (tag) drawer.setAttribute('data-tag', tag);
 
@@ -1553,6 +2022,7 @@
         const card = document.createElement('div');
         card.className = 'visual-card';
         card.setAttribute('data-name', visual.name);
+        applyDesignTokens(card, visual, false, manifest);
         card.setAttribute('data-visual-name', visual.name); // Compatibility
 
         const tag = getOption(visual.options, 'TAG');
@@ -5006,6 +5476,7 @@
     function renderButton(container, btn) {
         const styles = btn.styles || {};
         const btnEl = document.createElement('button');
+        applyDesignTokens(btnEl, btn.styles, false);
         btnEl.className = 'report-btn';
         btnEl.textContent = btn.title || btn.name;
         btnEl.setAttribute('data-name', btn.name);
@@ -6499,6 +6970,6 @@
     // Test escape hatch: exposes pure functions for automated testing.
     // Harmless in production (just sets a window property that nothing reads).
     if (typeof window !== 'undefined') {
-        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, nativeLayoutTier, observeNativeLayout, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot };
+        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, nativeLayoutTier, observeNativeLayout, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot, resolveDesignTokens, applyDesignTokens, isSafeCssValue, isAllowedTokenName, DESIGN_TOKENS };
     }
 })();

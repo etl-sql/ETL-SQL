@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Design Tokens Runtime</title>
+  <link rel="stylesheet" href="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.css">
+  <style>
+    .token-demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .token-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: var(--etl-radius-sm, 4px);
+      font-size: 12px;
+      font-family: var(--etl-font-mono, monospace);
+      background: var(--etl-surface, #f1f5f9);
+      color: var(--etl-text-primary, #0f172a);
+      border: 1px solid var(--etl-border, #cbd5e1);
+    }
+    .token-badge-success {
+      background: var(--etl-success, #16a34a);
+      color: #ffffff;
+      border-radius: var(--etl-radius-sm, 4px);
+      padding: 2px 8px;
+      font-weight: 600;
+    }
+    .token-badge-danger {
+      background: var(--etl-danger, #dc2626);
+      color: #ffffff;
+      border-radius: var(--etl-radius-sm, 4px);
+      padding: 2px 8px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main id="root"></main>
+  <script>
+    window.__MANIFEST__ = {
+      title: 'Design Token Contract Demonstration',
+      parameters: {},
+      designTokens: {
+        '--etl-accent': '#6366f1',
+        '--etl-font-family': 'system-ui, -apple-system, sans-serif'
+      },
+      styles: {
+        'ACCENT': '#6366f1',
+        'FONT_FAMILY': 'system-ui, -apple-system, sans-serif'
+      },
+      customThemes: [
+        {
+          name: 'corporate_dark',
+          config: { backgroundColor: '#0f172a' },
+          designTokens: {
+            '--etl-bg': '#0f172a',
+            '--etl-surface': '#1e293b',
+            '--etl-surface-card': '#1e293b',
+            '--etl-text-primary': '#f8fafc',
+            '--etl-text-muted': '#94a3b8',
+            '--etl-border': '#334155',
+            '--etl-accent': '#38bdf8'
+          }
+        }
+      ],
+      pages: [
+        {
+          name: 'Main',
+          structure: 'A / B',
+          mode: 'DASHBOARD',
+          slotMap: { A: 'CustomContainer', B: 'LayerContainer' },
+          designTokens: {
+            '--etl-radius-md': '12px'
+          },
+          styles: {
+            'THEME': 'corporate_dark',
+            'BORDER_RADIUS': '12px'
+          }
+        }
+      ],
+      containers: [
+        {
+          name: 'CustomContainer',
+          title: 'Inherited Container Scope',
+          structure: 'A B',
+          slotMap: { A: 'InheritedCard', B: 'OverrideCard' },
+          designTokens: {
+            '--etl-surface-card': '#f8fafc',
+            '--etl-border': '#94a3b8'
+          },
+          styles: {
+            'BACKGROUND': '#f8fafc',
+            'BORDER': '1px solid #94a3b8'
+          }
+        },
+        {
+          name: 'LayerContainer',
+          title: 'Layer Container Scope',
+          containerType: 'LAYER',
+          structure: 'A',
+          slotMap: { A: 'LayerCard' },
+          designTokens: {
+            '--etl-accent': '#10b981',
+            '--etl-border': '#059669'
+          },
+          styles: {
+            'ACCENT': '#10b981',
+            'BORDER': '1px solid #059669',
+            'HEIGHT': '200px'
+          }
+        }
+      ],
+      visuals: [
+        {
+          name: 'InheritedCard',
+          visualType: 'HTML',
+          columns: [],
+          rows: [],
+          htmlContent: `
+            <article class="token-panel">
+              <h3>Inherited Token Visual</h3>
+              <p>Inherits container surface, page radius, and custom-page accent.</p>
+              <div class="token-demo-grid">
+                <span class="token-chip">Accent: <b style="color:var(--etl-accent);">Active</b></span>
+                <span class="token-chip">Radius: <b style="border-radius:var(--etl-radius-sm);">var(--etl-radius-md)</b></span>
+              </div>
+              <div style="margin-top: 12px; display:flex; gap:8px;">
+                <span class="token-badge-success">Operational</span>
+                <span class="token-badge-danger">Degraded (0)</span>
+              </div>
+              <div data-etl-embed-id="InheritedCard-embed-0" style="margin-top:16px;"></div>
+            </article>
+          `,
+          htmlCss: '#etl-v-inheritedcard .token-panel { background: var(--etl-surface-card); color: var(--etl-text-primary); border: 1px solid var(--etl-border); border-radius: var(--etl-radius-md); padding: 16px; } #etl-v-inheritedcard .token-panel h3 { margin-top: 0; color: var(--etl-accent); } #etl-v-inheritedcard .token-panel p { color: var(--etl-text-muted); }',
+          htmlFallback: 'Inherited token card fallback',
+          htmlMode: 'SINGLE',
+          htmlEmbeds: [{ id: 'InheritedCard-embed-0', targetName: 'ChildMetric' }]
+        },
+        {
+          name: 'OverrideCard',
+          visualType: 'HTML',
+          columns: [],
+          rows: [],
+          designTokens: {
+            '--etl-surface-card': '#fef2f2',
+            '--etl-accent': '#dc2626',
+            '--etl-border': '#ef4444',
+            '--etl-unknown': '#ffffff',
+            '--portal-private': '#ffffff'
+          },
+          styles: {
+            'BACKGROUND': '#fef2f2',
+            'ACCENT': '#dc2626',
+            'BORDER': '2px solid #ef4444'
+          },
+          htmlContent: `
+            <article class="token-panel">
+              <h3>Scoped Override Visual</h3>
+              <p>Overrides surface, border, and accent locally while preserving inherited radius and font.</p>
+              <div class="token-demo-grid">
+                <span class="token-chip">Scoped Accent: <b style="color:var(--etl-accent);">#dc2626</b></span>
+                <span class="token-chip">Inherited Radius: <b>12px</b></span>
+              </div>
+            </article>
+          `,
+          htmlCss: '#etl-v-overridecard .token-panel { background: var(--etl-surface-card); color: var(--etl-text-primary); border: 2px solid var(--etl-border); border-radius: var(--etl-radius-md); padding: 16px; } #etl-v-overridecard .token-panel h3 { margin-top: 0; color: var(--etl-accent); } #etl-v-overridecard .token-panel p { color: var(--etl-text-muted); }',
+          htmlFallback: 'Override card fallback',
+          htmlMode: 'SINGLE'
+        },
+        {
+          name: 'LayerCard',
+          visualType: 'HTML',
+          columns: [],
+          rows: [],
+          htmlContent: `
+            <article class="token-panel">
+              <h3>Layer Container Token Visual</h3>
+              <p>Inherits layer container accent (#10b981) and border (#059669).</p>
+            </article>
+          `,
+          htmlCss: '#etl-v-layercard .token-panel { background: var(--etl-surface-card); color: var(--etl-text-primary); border: 1px solid var(--etl-border); border-radius: var(--etl-radius-md); padding: 16px; } #etl-v-layercard .token-panel h3 { margin-top: 0; color: var(--etl-accent); } #etl-v-layercard .token-panel p { color: var(--etl-text-muted); }',
+          htmlFallback: 'Layer card fallback',
+          htmlMode: 'SINGLE'
+        },
+        {
+          name: 'ChildMetric',
+          visualType: 'CARD',
+          columns: ['Value'],
+          rows: [['99.98%']],
+          options: { 'mapping:value': 'Value', TITLE: 'Embedded Metric (Inherited Tokens)' }
+        }
+      ]
+    };
+  </script>
+  <script src="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js"></script>
+</body>
+</html>

@@ -54,5 +54,42 @@ The effective manifest should reflect this order, with later layers winning:
 
 Named styles are resolved by C# from `IExecutionContext.ReportContext.StyleDefinitions`. Host runtimes receive the resolved style dictionary on each manifest object.
 
+## Design Tokens and Color Palettes
+
+All standard report visuals and authored HTML visuals consume scoped `--etl-*` CSS variables projected at report, page, container, and visual levels:
+
+| Token | Description | Fallback / Derivation |
+| :--- | :--- | :--- |
+| `--etl-surface-card` | Primary card / component background fill | `#ffffff` (light) / `#252526` (dark) |
+| `--etl-surface` | Secondary / general surface fill | `#ffffff` (light) / `#252526` (dark) |
+| `--etl-bg` | Page and report canvas background | `#f5f5f5` (light) / `#1e1e1e` (dark) |
+| `--etl-text-primary` | Primary readable text color | `#0f172a` (light) / `#f8fafc` (dark) |
+| `--etl-text-muted` | Subtitles, captions, and muted text | `#64748b` (light) / `#94a3b8` (dark) |
+| `--etl-border` | Component border color | `#e2e8f0` (light) / `#334155` (dark) |
+| `--etl-shadow` | Card drop shadow / elevation | `0 1px 3px rgba(0,0,0,0.1)` / `0 4px 6px -1px rgba(0,0,0,0.3)` |
+| `--etl-accent` | Brand and interactive accent color | `#2563eb` (light) / `#3b82f6` (dark) |
+| `--etl-success` | Success / healthy status color | `#16a34a` (light) / `#22c55e` (dark) |
+| `--etl-warning` | Warning / attention status color | `#eab308` (light) / `#f59e0b` (dark) |
+| `--etl-danger` | Danger / critical error color | `#dc2626` (light) / `#ef4444` (dark) |
+| `--etl-info` | Informational status color | `#0284c7` (light) / `#38bdf8` (dark) |
+| `--etl-color-1`, `--etl-color-2`, ... | Categorical palette mark color sequence | Derived from `PALETTE` |
+| `--etl-palette-1`, `--etl-palette-2`, ... | Explicit palette color aliases | Derived from `PALETTE` |
+| `--etl-series-<name>` | Specific series color override | Derived from `COLOR:<series>` |
+| `--etl-radius-sm` | Small border radius (tags, badges) | `4px` |
+| `--etl-radius-md` | Standard border radius (cards, inputs) | `8px` |
+| `--etl-radius-lg` | Large border radius (modals, dialogs) | `12px` |
+| `--etl-font-family` | Primary typography font stack | `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` |
+| `--etl-font-mono` | Monospace typography font stack | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` |
+
+- **Token Allowlist**: Only `--etl-*` public tokens are permitted. Host-private custom properties such as `--portal-*` are strictly excluded from the report contract.
+- **Safe CSS Serialization**: Token values containing semicolons (`;`), braces (`{}`), backslashes (`\`), control characters, `url(...)`, `expression(...)`, `@import`, or non-`--etl-*` variables are rejected.
+
 ## References
 - [User Manual](../../guides/onboarding/getting-started.md)
+
+
+### Palette & Series Contract Extensions
+- **Palette Contrast Threshold**: Minimum 3.0:1 contrast ratio against the effective inherited background. Alpha-channel colors (`#RGBA`, `#RRGGBBAA`) are composited before calculation.
+- **Stable Series Assignment**: Categorical series identities sorted alphabetically (case-insensitive) to assign deterministic palette indexes.
+- **Series Tokens**: All resolved series map to `--etl-series-<sanitized>` with collision suffixes `-2`, `-3`.
+- **Lifecycle Cleanliness**: Stale dynamic tokens (`--etl-color-*`, `--etl-palette-*`, `--etl-series-*`) are removed on scope/theme changes, and restored cleanly after visual maximize/restore.

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using ETL_SQL.Reporting.Semantics;
@@ -81,6 +81,14 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
+
+        [JsonPropertyName("designTokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? DesignTokens { get; set; }
+
+        [JsonPropertyName("palette")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? Palette { get; set; }
 
         [JsonPropertyName("navigation")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -402,6 +410,14 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
+
+        [JsonPropertyName("designTokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? DesignTokens { get; set; }
+
+        [JsonPropertyName("palette")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? Palette { get; set; }
 
         [JsonPropertyName("seriesDefs")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -868,6 +884,14 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
 
+        [JsonPropertyName("designTokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? DesignTokens { get; set; }
+
+        [JsonPropertyName("palette")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? Palette { get; set; }
+
         [JsonPropertyName("printLayout")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PageLayoutDefinitionManifest? PrintLayout { get; set; }
@@ -1038,6 +1062,14 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
 
+        [JsonPropertyName("designTokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? DesignTokens { get; set; }
+
+        [JsonPropertyName("palette")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? Palette { get; set; }
+
         [JsonPropertyName("tooltip")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TooltipManifest? Tooltip { get; set; }
@@ -1192,6 +1224,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
+
+        [JsonPropertyName("designTokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? DesignTokens { get; set; }
     }
 
     /// <summary>A custom report theme registered via CREATE THEME.</summary>
@@ -1203,6 +1239,9 @@ namespace ETL_SQL.Reporting
         /// <summary>Raw native theme JSON object.</summary>
         [JsonPropertyName("config")]
         public System.Text.Json.JsonElement Config { get; set; }
+
+        [JsonPropertyName("designTokens")]
+        public Dictionary<string, string>? DesignTokens { get; set; }
     }
 
     public class TelemetryManifest

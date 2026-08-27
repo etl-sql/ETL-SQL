@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added the report Design Token contract and `CREATE STYLE PALETTE = (...)` sequences. Page,
+  container, and visual styles now resolve into scoped `--etl-*` variables with deterministic
+  inheritance, safe CSS serialization, stable series-color assignment, explicit-color precedence,
+  contrast validation, and shared browser/export rendering behavior.
+
 - Completed native graphics across bounded responsive layout, deterministic smart-label placement,
   statistical/financial `CUSTOM` channels, and geographic `CUSTOM` composition. Geographic charts
   declare projection and map authority, resolve file-backed GeoJSON through the execution-context

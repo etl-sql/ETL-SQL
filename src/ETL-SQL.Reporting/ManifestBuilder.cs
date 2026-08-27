@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -7,6 +8,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Reporting.Builders;
+using ETL_SQL.Reporting.Contracts;
 using ETL_SQL.Reporting.HtmlVisual;
 using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
@@ -69,8 +71,17 @@ namespace ETL_SQL.Reporting
             };
             RefreshTelemetry(manifest);
             var reportStyles = _styleBuilder.ResolveReportStyles();
-            if (reportStyles.Count > 0)
-                manifest.Styles = reportStyles;
+            var reportPalette = _styleBuilder.ResolvePalette(null, ImmutableArray<string>.Empty);
+            if (!reportPalette.IsDefaultOrEmpty)
+                manifest.Palette = reportPalette.ToList();
+
+            if (reportStyles.Count > 0 || !reportPalette.IsDefaultOrEmpty)
+            {
+                if (reportStyles.Count > 0) manifest.Styles = reportStyles;
+                var reportTokens = _styleBuilder.ResolveDesignTokens(reportStyles, isPageOrReportLevel: true, manifest.Palette);
+                if (reportTokens.Count > 0)
+                    manifest.DesignTokens = reportTokens;
+            }
 
             // Seed common interaction variables if they don't exist, to prevent expression evaluation errors during manifest generation
             var interactionVars = new[] { "@hover_value", "@click_value", "@selected_value", "@drill_value", "@param_value" };
@@ -83,7 +94,7 @@ namespace ETL_SQL.Reporting
             var deferredVisuals = DetermineDeferredVisuals(runPages);
 
             // ── Visuals ──────────────────────────────────────────────────────
-            await BuildVisualsAsync(manifest, interactionValues, deferredVisuals);
+            await BuildVisualsAsync(manifest, interactionValues, deferredVisuals, reportPalette);
             await ResolveHtmlVisualEmbedsAsync(manifest);
             EnforceHtmlAggregateBudgets(manifest);
             BoundRowDetailVisuals(manifest);
@@ -92,7 +103,7 @@ namespace ETL_SQL.Reporting
             // ── Pages ────────────────────────────────────────────────────────
             foreach (var (name, pStmt) in _ctx.ReportContext.PageDefinitions)
             {
-                manifest.Pages.Add(await _pageBuilder.BuildAsync(name, pStmt, _ctx, reportStyles));
+                manifest.Pages.Add(await _pageBuilder.BuildAsync(name, pStmt, _ctx, reportStyles, reportPalette));
             }
 
             var compiler = new PhysicalPageCompiler();
@@ -111,6 +122,7 @@ namespace ETL_SQL.Reporting
                 foreach (var (name, cStmt) in _ctx.ReportContext.ContainerDefinitions)
                 {
                     var resolvedStyles = _styleBuilder.ResolveStyles(cStmt.StyleName, cStmt.Styles, reportStyles);
+                    var scopedTokenStyles = _styleBuilder.ResolveStyles(cStmt.StyleName, cStmt.Styles);
                     if (cStmt.TitleDefinition != null)
                     {
                         if (cStmt.TitleDefinition.Color != null) resolvedStyles["TITLE_COLOR"] = cStmt.TitleDefinition.Color;
@@ -121,7 +133,11 @@ namespace ETL_SQL.Reporting
                     }
                     if (cStmt.SubtitleDefinition != null)
                     {
-                        if (cStmt.SubtitleDefinition.Color != null) resolvedStyles["SUBTITLE_COLOR"] = cStmt.SubtitleDefinition.Color;
+                        if (cStmt.SubtitleDefinition.Color != null)
+                        {
+                            resolvedStyles["SUBTITLE_COLOR"] = cStmt.SubtitleDefinition.Color;
+                            scopedTokenStyles["SUBTITLE_COLOR"] = cStmt.SubtitleDefinition.Color;
+                        }
                         if (cStmt.SubtitleDefinition.Size != null) resolvedStyles["SUBTITLE_SIZE"] = cStmt.SubtitleDefinition.Size;
                         if (cStmt.SubtitleDefinition.Weight != null) resolvedStyles["SUBTITLE_WEIGHT"] = cStmt.SubtitleDefinition.Weight;
                         if (cStmt.SubtitleDefinition.Font != null) resolvedStyles["SUBTITLE_FONT"] = cStmt.SubtitleDefinition.Font;
@@ -135,6 +151,36 @@ namespace ETL_SQL.Reporting
                     var subtitleExpr = cStmt.SubtitleDefinition?.Text ?? cStmt.Subtitle;
                     var subtitleIsMd = cStmt.SubtitleDefinition?.IsMarkdown ?? cStmt.SubtitleIsMarkdown;
                     var (subtitle, subtitleMd) = await _styleBuilder.ResolveMarkdownAsync(subtitleExpr, subtitleIsMd);
+
+                    var inhPalette = ResolveContainerInheritedPalette(name, reportPalette);
+                    var resolvedContainerPalette = _styleBuilder.ResolvePalette(cStmt.StyleName, cStmt.Palette, inhPalette);
+
+                    var isDarkCont = string.Equals(resolvedStyles.GetValueOrDefault("THEME"), "DARK", StringComparison.OrdinalIgnoreCase);
+                    var bgCandidateCont = resolvedStyles.GetValueOrDefault("BACKGROUND")
+                        ?? resolvedStyles.GetValueOrDefault("BACKGROUND_COLOR")
+                        ?? resolvedStyles.GetValueOrDefault("BG")
+                        ?? (isDarkCont ? "#1e1e1e" : "#ffffff");
+
+                    var effectiveBgCont = ColorContrast.TryParseHexColor(bgCandidateCont, out _, out _, out _, out _)
+                        ? bgCandidateCont
+                        : (isDarkCont ? "#1e1e1e" : "#ffffff");
+
+                    var validContainerPalette = new List<string>();
+                    if (!resolvedContainerPalette.IsDefaultOrEmpty)
+                    {
+                        foreach (var color in resolvedContainerPalette)
+                        {
+                            if (ColorContrast.TryParseHexColor(color, out _, out _, out _, out _) && DesignTokens.IsSafeCssValue(color))
+                            {
+                                var eval = ColorContrast.Evaluate(color, effectiveBgCont, minRatio: 3.0);
+                                if (eval.Passed)
+                                {
+                                    validContainerPalette.Add(color);
+                                }
+                            }
+                        }
+                    }
+                    var containerPaletteList = validContainerPalette.Count > 0 ? validContainerPalette : null;
 
                     manifest.Containers.Add(new ContainerManifest
                     {
@@ -151,8 +197,9 @@ namespace ETL_SQL.Reporting
                         Icon = cStmt.Icon,
                         IsPinnable = cStmt.IsPinnable,
                         IsHidden = ResolveVisibility(cStmt.Visibility),
-                        Styles = resolvedStyles.Count > 0 ? resolvedStyles : null
-
+                        Styles = resolvedStyles.Count > 0 ? resolvedStyles : null,
+                        Palette = containerPaletteList,
+                        DesignTokens = _styleBuilder.ResolveDesignTokens(scopedTokenStyles, isPageOrReportLevel: false, palette: containerPaletteList) is { Count: > 0 } cTokens ? cTokens : null
                     });
                 }
             }
@@ -300,10 +347,12 @@ namespace ETL_SQL.Reporting
                 {
                     var themeJson = ThemeBuilder.BuildNativeTheme(themeStmt.Properties);
                     using var doc = JsonDocument.Parse(themeJson.ToJsonString());
+                    var themeTokens = ETL_SQL.Reporting.Semantics.DesignTokenResolver.ResolveScopedTokens(themeStmt.Properties, isPageOrReportLevel: true);
                     manifest.CustomThemes.Add(new ThemeManifest
                     {
                         Name = themeName,
-                        Config = doc.RootElement.Clone()
+                        Config = doc.RootElement.Clone(),
+                        DesignTokens = themeTokens.Count > 0 ? themeTokens : null
                     });
                 }
             }
@@ -329,7 +378,8 @@ namespace ETL_SQL.Reporting
         private async Task BuildVisualsAsync(
             ReportManifest manifest,
             Dictionary<string, string>? interactionValues,
-            HashSet<string> deferredVisuals)
+            HashSet<string> deferredVisuals,
+            ImmutableArray<string> reportPalette)
         {
             var visuals = _ctx.ReportContext.VisualDefinitions
                 .Select((entry, index) => new VisualBuildInput(index, entry.Key, entry.Value))
@@ -343,10 +393,16 @@ namespace ETL_SQL.Reporting
             if (cascadeGraph.OrderedNodes.Count > 0)
                 manifest.CascadeGraph = cascadeGraph.ToManifest();
 
+            var (visualContexts, conflicts) = ResolveVisualInheritedContexts(reportPalette);
+
             if (!CanBuildVisualsInParallel(visuals.Count, interactionValues))
             {
                 foreach (var visual in visuals)
-                    await BuildVisualSequentialAsync(manifest, visual, interactionValues, deferredVisuals);
+                {
+                    var (inhPalette, inhStyles) = visualContexts.GetValueOrDefault(visual.Name, (reportPalette, _styleBuilder.ResolveReportStyles()));
+                    await BuildVisualSequentialAsync(manifest, visual, interactionValues, deferredVisuals, inhPalette, inhStyles);
+                }
+                AttachConflicts(manifest, conflicts);
                 return;
             }
 
@@ -354,18 +410,28 @@ namespace ETL_SQL.Reporting
             if (ReferenceEquals(firstFork, _ctx))
             {
                 foreach (var visual in visuals)
-                    await BuildVisualSequentialAsync(manifest, visual, interactionValues, deferredVisuals);
+                {
+                    var (inhPalette, inhStyles) = visualContexts.GetValueOrDefault(visual.Name, (reportPalette, _styleBuilder.ResolveReportStyles()));
+                    await BuildVisualSequentialAsync(manifest, visual, interactionValues, deferredVisuals, inhPalette, inhStyles);
+                }
+                AttachConflicts(manifest, conflicts);
                 return;
             }
 
             using var throttler = new SemaphoreSlim(_maxVisualParallelism);
             var tasks = visuals
-                .Select(visual => BuildVisualInForkAsync(
-                    visual,
-                    interactionValues,
-                    deferredVisuals.Contains(visual.Name),
-                    throttler,
-                    visual.Index == 0 ? firstFork : null))
+                .Select(visual =>
+                {
+                    var (inhPalette, inhStyles) = visualContexts.GetValueOrDefault(visual.Name, (reportPalette, _styleBuilder.ResolveReportStyles()));
+                    return BuildVisualInForkAsync(
+                        visual,
+                        interactionValues,
+                        deferredVisuals.Contains(visual.Name),
+                        throttler,
+                        visual.Index == 0 ? firstFork : null,
+                        inhPalette,
+                        inhStyles);
+                })
                 .ToArray();
 
             var results = await Task.WhenAll(tasks);
@@ -384,17 +450,226 @@ namespace ETL_SQL.Reporting
                     manifest.Error = "One or more visuals failed to build.";
                 }
             }
+
+            AttachConflicts(manifest, conflicts);
         }
 
+        private static void AttachConflicts(ReportManifest manifest, List<string> conflicts)
+        {
+            if (conflicts.Count == 0) return;
+            foreach (var conflict in conflicts)
+            {
+                manifest.Messages ??= new();
+                manifest.Messages.Add(new LogEntryManifest(conflict, "warning", DateTime.UtcNow));
+                foreach (var vm in manifest.Visuals)
+                {
+                    if (conflict.Contains($"Visual '{vm.Name}'"))
+                    {
+                        vm.Diagnostics ??= new List<VisualDiagnosticManifest>();
+                        vm.Diagnostics.Add(new VisualDiagnosticManifest
+                        {
+                            Code = "PALETTE_INHERITANCE_CONFLICT",
+                            Message = conflict
+                        });
+                    }
+                }
+            }
+        }
+
+        private ImmutableArray<string> ResolveContainerInheritedPalette(string containerName, ImmutableArray<string> reportPalette)
+        {
+            foreach (var (_, page) in _ctx.ReportContext.PageDefinitions)
+            {
+                var pagePalette = _styleBuilder.ResolvePalette(page.StyleName, page.Palette, reportPalette);
+                if (page.SlotMap.Values.Any(v => v.Equals(containerName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return pagePalette;
+                }
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var target in page.SlotMap.Values)
+                {
+                    if (_ctx.ReportContext.ContainerDefinitions.TryGetValue(target, out var parentContainer))
+                    {
+                        var found = FindParentContainerPalette(parentContainer, containerName, pagePalette, seen);
+                        if (found.HasValue) return found.Value;
+                    }
+                }
+            }
+            return reportPalette;
+        }
+
+        private ImmutableArray<string>? FindParentContainerPalette(
+            CreateContainerStatement parentContainer,
+            string targetName,
+            ImmutableArray<string> currentPalette,
+            HashSet<string> seen)
+        {
+            if (!seen.Add(parentContainer.Name)) return null;
+            var containerPalette = _styleBuilder.ResolvePalette(parentContainer.StyleName, parentContainer.Palette, currentPalette);
+            if (parentContainer.SlotMap.Values.Any(v => v.Equals(targetName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return containerPalette;
+            }
+            foreach (var child in parentContainer.SlotMap.Values)
+            {
+                if (_ctx.ReportContext.ContainerDefinitions.TryGetValue(child, out var subContainer))
+                {
+                    var found = FindParentContainerPalette(subContainer, targetName, containerPalette, seen);
+                    if (found.HasValue) return found;
+                }
+            }
+            return null;
+        }
+
+        private (Dictionary<string, (ImmutableArray<string> Palette, IReadOnlyDictionary<string, string> Styles)> Contexts, List<string> Conflicts)
+            ResolveVisualInheritedContexts(ImmutableArray<string> reportPalette)
+        {
+            var reportStyles = _styleBuilder.ResolveReportStyles();
+            var contexts = new Dictionary<string, (ImmutableArray<string> Palette, IReadOnlyDictionary<string, string> Styles)>(StringComparer.OrdinalIgnoreCase);
+            var pageOrigins = new Dictionary<string, (string PageName, ImmutableArray<string> Palette)>(StringComparer.OrdinalIgnoreCase);
+            var conflicts = new List<string>();
+
+            foreach (var (pageName, page) in _ctx.ReportContext.PageDefinitions)
+            {
+                var pagePalette = _styleBuilder.ResolvePalette(page.StyleName, page.Palette, reportPalette);
+                var pageStyles = _styleBuilder.ResolveStyles(page.StyleName, page.Styles, reportStyles);
+
+                var seenContainers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var target in page.SlotMap.Values)
+                {
+                    PropagateVisualContext(target, pageName, pagePalette, pageStyles, contexts, pageOrigins, conflicts, seenContainers);
+                }
+            }
+
+            return (contexts, conflicts);
+        }
+
+        private void PropagateVisualContext(
+            string objectName,
+            string pageName,
+            ImmutableArray<string> currentPalette,
+            IReadOnlyDictionary<string, string> currentStyles,
+            Dictionary<string, (ImmutableArray<string> Palette, IReadOnlyDictionary<string, string> Styles)> contexts,
+            Dictionary<string, (string PageName, ImmutableArray<string> Palette)> pageOrigins,
+            List<string> conflicts,
+            HashSet<string> seenContainers)
+        {
+            if (_ctx.ReportContext.VisualDefinitions.TryGetValue(objectName, out var vStmt))
+            {
+                var hasExplicitPalette = !vStmt.Palette.IsDefaultOrEmpty ||
+                    (!string.IsNullOrEmpty(vStmt.StyleName) && _ctx.ReportContext.StyleDefinitions.TryGetValue(vStmt.StyleName, out var sDef) && (!sDef.Palette.IsDefaultOrEmpty || !string.IsNullOrEmpty(sDef.StyleName)));
+
+                if (!hasExplicitPalette && pageOrigins.TryGetValue(objectName, out var prior))
+                {
+                    if (prior.PageName != pageName && !PalettesEqual(prior.Palette, currentPalette))
+                    {
+                        conflicts.Add($"Visual '{objectName}' is referenced on multiple pages with conflicting inherited palettes ('{prior.PageName}' and '{pageName}'). Define a dedicated visual or assign an explicit STYLE on the visual.");
+                    }
+                }
+                else
+                {
+                    pageOrigins[objectName] = (pageName, currentPalette);
+                }
+
+                if (!contexts.ContainsKey(objectName))
+                {
+                    contexts[objectName] = (currentPalette, currentStyles);
+                }
+                return;
+            }
+
+            if (!_ctx.ReportContext.ContainerDefinitions.TryGetValue(objectName, out var container) || !seenContainers.Add(objectName))
+                return;
+
+            var containerPalette = _styleBuilder.ResolvePalette(container.StyleName, container.Palette, currentPalette);
+            var containerStyles = _styleBuilder.ResolveStyles(container.StyleName, container.Styles, currentStyles);
+
+            foreach (var child in container.SlotMap.Values)
+            {
+                PropagateVisualContext(child, pageName, containerPalette, containerStyles, contexts, pageOrigins, conflicts, seenContainers);
+            }
+        }
+
+        private static bool PalettesEqual(ImmutableArray<string> p1, ImmutableArray<string> p2)
+        {
+            if (p1.IsDefaultOrEmpty && p2.IsDefaultOrEmpty) return true;
+            if (p1.IsDefaultOrEmpty || p2.IsDefaultOrEmpty) return false;
+            if (p1.Length != p2.Length) return false;
+            for (var i = 0; i < p1.Length; i++)
+            {
+                if (!string.Equals(p1[i], p2[i], StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
+        }
+
+        private (ImmutableArray<string> Palette, IReadOnlyDictionary<string, string> Styles) ResolveVisualInheritance(string visualName)
+        {
+            var reportStyles = _styleBuilder.ResolveReportStyles();
+            var reportPalette = _styleBuilder.ResolvePalette(null, ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
+            foreach (var (_, page) in _ctx.ReportContext.PageDefinitions)
+            {
+                var pagePalette = _styleBuilder.ResolvePalette(page.StyleName, page.Palette, reportPalette);
+                var pageStyles = _styleBuilder.ResolveStyles(page.StyleName, page.Styles, reportStyles);
+
+                if (page.SlotMap.Values.Any(v => v.Equals(visualName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return (pagePalette, pageStyles);
+                }
+
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var target in page.SlotMap.Values)
+                {
+                    if (_ctx.ReportContext.ContainerDefinitions.TryGetValue(target, out var container))
+                    {
+                        var res = SearchContainerForVisual(container, visualName, pagePalette, pageStyles, seen);
+                        if (res != null) return res.Value;
+                    }
+                }
+            }
+
+            return (reportPalette, reportStyles);
+        }
+
+        private (ImmutableArray<string> Palette, IReadOnlyDictionary<string, string> Styles)? SearchContainerForVisual(
+            CreateContainerStatement container,
+            string visualName,
+            ImmutableArray<string> parentPalette,
+            IReadOnlyDictionary<string, string> parentStyles,
+            HashSet<string> seen)
+        {
+            if (!seen.Add(container.Name)) return null;
+
+            var containerPalette = _styleBuilder.ResolvePalette(container.StyleName, container.Palette, parentPalette);
+            var containerStyles = _styleBuilder.ResolveStyles(container.StyleName, container.Styles, parentStyles);
+
+            if (container.SlotMap.Values.Any(v => v.Equals(visualName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return (containerPalette, containerStyles);
+            }
+
+            foreach (var child in container.SlotMap.Values)
+            {
+                if (_ctx.ReportContext.ContainerDefinitions.TryGetValue(child, out var subContainer))
+                {
+                    var res = SearchContainerForVisual(subContainer, visualName, containerPalette, containerStyles, seen);
+                    if (res != null) return res;
+                }
+            }
+
+            return null;
+        }
         private async Task BuildVisualSequentialAsync(
             ReportManifest manifest,
             VisualBuildInput input,
             Dictionary<string, string>? interactionValues,
-            HashSet<string> deferredVisuals)
+            HashSet<string> deferredVisuals,
+            ImmutableArray<string> inheritedPalette,
+            IReadOnlyDictionary<string, string>? inheritedStyles = null)
         {
             try
             {
-                manifest.Visuals.Add(await _visualBuilder.BuildAsync(input.Name, input.Statement, interactionValues, deferredVisuals.Contains(input.Name)));
+                manifest.Visuals.Add(await _visualBuilder.BuildAsync(input.Name, input.Statement, interactionValues, deferredVisuals.Contains(input.Name), inheritedPalette: inheritedPalette, inheritedStyles: inheritedStyles));
             }
             catch (Exception ex)
             {
@@ -409,7 +684,9 @@ namespace ETL_SQL.Reporting
             Dictionary<string, string>? interactionValues,
             bool skipDeferredVisuals,
             SemaphoreSlim throttler,
-            IExecutionContext? visualContext)
+            IExecutionContext? visualContext,
+            ImmutableArray<string> inheritedPalette,
+            IReadOnlyDictionary<string, string>? inheritedStyles = null)
         {
             await throttler.WaitAsync();
             try
@@ -420,7 +697,7 @@ namespace ETL_SQL.Reporting
 
                 var styleBuilder = new StyleBuilder(visualContext);
                 var visualBuilder = new VisualBuilder(visualContext, styleBuilder);
-                var visual = await visualBuilder.BuildAsync(input.Name, input.Statement, interactionValues, skipDeferredVisuals);
+                var visual = await visualBuilder.BuildAsync(input.Name, input.Statement, interactionValues, skipDeferredVisuals, inheritedPalette: inheritedPalette, inheritedStyles: inheritedStyles);
                 return new VisualBuildResult(input.Index, visual, null, visualContext);
             }
             catch (Exception ex)
@@ -568,7 +845,8 @@ namespace ETL_SQL.Reporting
         public async Task RefreshVisualAsync(CreateVisualStatement vStmt, VisualManifest vm, Dictionary<string, string>? interactionValues = null, VisualDrillState? drillState = null)
         {
             // Refresh logic is now shared via VisualBuilder
-            var newVm = await _visualBuilder.BuildAsync(vm.Name, vStmt, interactionValues, drillState: drillState);
+            var (inhPalette, inhStyles) = ResolveVisualInheritance(vm.Name);
+            var newVm = await _visualBuilder.BuildAsync(vm.Name, vStmt, interactionValues, drillState: drillState, inheritedPalette: inhPalette, inheritedStyles: inhStyles);
             vm.Rows = newVm.Rows;
             vm.Columns = newVm.Columns;
             vm.Error = newVm.Error;
@@ -582,6 +860,8 @@ namespace ETL_SQL.Reporting
             vm.Interactions = newVm.Interactions;
             vm.Interaction = newVm.Interaction;
             vm.Styles = newVm.Styles;
+            vm.DesignTokens = newVm.DesignTokens;
+            vm.Palette = newVm.Palette;
             vm.SeriesDefs = newVm.SeriesDefs;
             vm.FormattingRules = newVm.FormattingRules;
             vm.RowStyles = newVm.RowStyles;

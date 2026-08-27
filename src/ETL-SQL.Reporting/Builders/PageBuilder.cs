@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -12,7 +13,8 @@ namespace ETL_SQL.Reporting.Builders
             string name,
             CreatePageStatement pStmt,
             IExecutionContext? ctx,
-            IReadOnlyDictionary<string, string>? inheritedStyles)
+            IReadOnlyDictionary<string, string>? inheritedStyles,
+            ImmutableArray<string> inheritedPalette = default)
         {
             var titleExpr = pStmt.TitleDefinition?.Text ?? pStmt.Title;
             var titleIsMd = pStmt.TitleDefinition?.IsMarkdown ?? pStmt.TitleIsMarkdown;
@@ -89,6 +91,14 @@ namespace ETL_SQL.Reporting.Builders
 
             if (resolvedStyles.Count > 0)
                 pm.Styles = resolvedStyles;
+
+            var resolvedPalette = styleBuilder.ResolvePalette(pStmt.StyleName, pStmt.Palette, inheritedPalette);
+            if (!resolvedPalette.IsDefaultOrEmpty)
+                pm.Palette = resolvedPalette.ToList();
+
+            var pageTokens = styleBuilder.ResolveDesignTokens(resolvedStyles, isPageOrReportLevel: true, pm.Palette);
+            if (pageTokens.Count > 0)
+                pm.DesignTokens = pageTokens;
 
             return pm;
         }

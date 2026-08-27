@@ -41,20 +41,31 @@ internal static class ChartStyleTokens
             fields.IsDefault ? [] : fields);
     }
 
-    /// <summary>Styles first, then options, with options winning a name collision; ordered for stable hashes.</summary>
-    public static ImmutableArray<StyleToken> Build(VisualManifest manifest) =>
-        (manifest.Styles ?? new Dictionary<string, string>())
+    /// <summary>Styles first, then options, then palette tokens, with options winning a name collision; ordered for stable hashes.</summary>
+    public static ImmutableArray<StyleToken> Build(VisualManifest manifest)
+    {
+        var styleTokens = (manifest.Styles ?? new Dictionary<string, string>())
             .Where(pair => !IsExcluded(pair.Key))
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(pair => new StyleToken(pair.Key, pair.Value))
-            .Concat(manifest.Options
-                .Where(pair => !IsExcluded(pair.Key))
-                .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(pair => new StyleToken(pair.Key, pair.Value)))
+            .Select(pair => new StyleToken(pair.Key, pair.Value));
+
+        var optionTokens = manifest.Options
+            .Where(pair => !IsExcluded(pair.Key))
+            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(pair => new StyleToken(pair.Key, pair.Value));
+
+        var paletteTokens = manifest.Palette is { Count: > 0 }
+            ? manifest.Palette.Select((color, i) => new StyleToken($"PALETTE:{i}", color))
+            : Enumerable.Empty<StyleToken>();
+
+        return styleTokens
+            .Concat(optionTokens)
+            .Concat(paletteTokens)
             .GroupBy(token => token.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.Last())
             .OrderBy(token => token.Name, StringComparer.OrdinalIgnoreCase)
             .ToImmutableArray();
+    }
 
     private static bool IsExcluded(string name) =>
         Excluded.Any(excluded => name.Equals(excluded, StringComparison.OrdinalIgnoreCase));

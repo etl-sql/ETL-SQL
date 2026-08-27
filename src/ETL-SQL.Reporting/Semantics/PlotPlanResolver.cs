@@ -22,7 +22,13 @@ public sealed class PlotPlanResolver
         var formatter = new ChartValueFormatter(spec.Formatting);
         var categories = ResolveCategories(spec, columns);
         var seriesKeys = ResolveSeries(spec, columns, categories);
-        var series = seriesKeys.Select((key, index) => new ResolvedSeries(key, key, index, ResolveColor(spec, key, index))).ToImmutableArray();
+        var distinctSortedSeries = seriesKeys.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+        var series = seriesKeys.Select((key, _) =>
+        {
+            var identityIndex = distinctSortedSeries.IndexOf(key);
+            if (identityIndex < 0) identityIndex = 0;
+            return new ResolvedSeries(key, key, identityIndex, ResolveColor(spec, key, identityIndex));
+        }).OrderBy(s => s.Order).ThenBy(s => s.Key, StringComparer.Ordinal).ToImmutableArray();
         var palette = series.Select(item => new PaletteAssignment(item.Key, item.Color)).ToImmutableArray();
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
         var layers = ResolveStacking(ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray());
