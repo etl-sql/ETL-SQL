@@ -30,6 +30,7 @@ import orchestratorAdmin from './orchestrator-admin.story.js';
 import controlPlaneDashboard from './control-plane-dashboard.story.js';
 import nativeChartLayout from './native-chart-layout.story.js';
 import connectionWizard from './connection-wizard.story.js';
+import studio from './studio.story.js';
 
 export const categoryOrder = [
   'Admin & Fleet',
@@ -81,6 +82,7 @@ const categoryDefaults = {
   'native-chart-layout': 'Designers & Visuals',
 
   // Script Editors & IDE
+  'studio': 'Script Editors & IDE',
   'script-editor': 'Script Editors & IDE',
   'script-editor-unified': 'Script Editors & IDE',
   'vscode-webviews': 'Script Editors & IDE',
@@ -130,6 +132,7 @@ export const rawStories = [
   nativeChartLayout,
 
   // Script Editors & IDE
+  studio,
   scriptEditor,
   scriptEditorUnified,
   vscodeWebviews,

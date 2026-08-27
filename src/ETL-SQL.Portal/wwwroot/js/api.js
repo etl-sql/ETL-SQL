@@ -458,6 +458,7 @@ export const connectionsApi = {
 export const gatewaysApi = {
     list:   () => apiJson('/api/admin/gateways'),
     get:    (gatewayId) => apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}`),
+    getResources: (gatewayId) => apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}/resources`),
     enroll: (gatewayId, expirationMinutes = 60) =>
         apiJson('/api/admin/gateways/enroll', { method: 'POST', body: { gatewayId, expirationMinutes } }),
     revoke: (gatewayId) =>

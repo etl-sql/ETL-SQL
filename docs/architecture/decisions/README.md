@@ -42,3 +42,4 @@
 | [Architecture Decision & Migration Ledger: Standard Visual Catalog Migration](standard-visual-migration-ledger.md) | Implemented; Phase 8 complete. Per-visual record of the standard catalog's migration onto PlotPlan. |
 | [Verified Viewer Context for Gateway PostgreSQL Resources](verified-viewer-context.md) | Separates asserted application context from delegated authentication and defines the signed envelope and PostgreSQL installation contract. |
 | [Provider-Neutral Fault Certification](provider-neutral-fault-certification.md) | Provider-neutral fault certification scenarios and observations across local, Docker, and cloud adapters. |
+| [ETL-SQL Studio (Report Studio, Script Editor, and Pipeline Studio Architecture)](etl-sql-studio.md) | Flagship visual authoring environment combining Report Studio (WYSIWYG dashboard builder), Script Editor, and Pipeline Studio with live data snapshots. |

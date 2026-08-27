@@ -19,7 +19,7 @@ namespace ETL_SQL.Portal.Tests;
 public sealed class ArchitectureDocReconciliationTests
 {
     private static string PortalDoc() =>
-        File.ReadAllText(Path.Combine(RepoRoot(), "docs", "architecture", "Portal.md"));
+        File.ReadAllText(Path.Combine(RepoRoot(), "docs", "architecture", "portal.md"));
 
     [Fact]
     public void EverySeededIdentityRole_IsDocumented()
@@ -40,7 +40,7 @@ public sealed class ArchitectureDocReconciliationTests
         var undocumented = seeded.Where(role => !doc.Contains($"`{role}`", StringComparison.Ordinal)).ToList();
 
         Assert.True(undocumented.Count == 0,
-            $"Program.cs seeds {seeded.Count} roles; these are absent from docs/architecture/Portal.md:\n  "
+            $"Program.cs seeds {seeded.Count} roles; these are absent from docs/architecture/portal.md:\n  "
             + string.Join("\n  ", undocumented)
             + "\n\nA reader who trusts the document will grant the wrong access.");
     }
@@ -60,7 +60,7 @@ public sealed class ArchitectureDocReconciliationTests
         var missing = entities.Where(e => !doc.Contains(e, StringComparison.Ordinal)).ToList();
 
         Assert.True(missing.Count == 0,
-            $"{missing.Count} persisted entities are absent from docs/architecture/Portal.md:\n  "
+            $"{missing.Count} persisted entities are absent from docs/architecture/portal.md:\n  "
             + string.Join("\n  ", missing)
             + "\n\nThe data model section is the map people use before reading the schema.");
     }
@@ -82,7 +82,7 @@ public sealed class ArchitectureDocReconciliationTests
         var missing = policies.Where(p => !doc.Contains(p, StringComparison.Ordinal)).ToList();
 
         Assert.True(missing.Count == 0,
-            $"These authorization policies are not mentioned in docs/architecture/Portal.md:\n  "
+            $"These authorization policies are not mentioned in docs/architecture/portal.md:\n  "
             + string.Join("\n  ", missing));
     }
 

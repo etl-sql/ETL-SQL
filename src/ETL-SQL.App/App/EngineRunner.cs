@@ -94,6 +94,11 @@ namespace ETL_SQL.App
                 return await ServeReport(ctx, logger);
             }
 
+            if (ctx.Command == "studio")
+            {
+                return await RunStudio(ctx, logger);
+            }
+
             if (ctx.Command == "session-clear")
             {
                 if (string.IsNullOrEmpty(ctx.SessionId))
@@ -1911,6 +1916,73 @@ CREATE PAGE Main AS DASHBOARD (
 
             throw new InvalidOperationException(
                 "Could not locate ETL-SQL-Player. Run from the solution root directory.");
+        }
+
+        private static async Task<int> RunStudio(CliContext ctx, ILogger logger)
+        {
+            var (exe, prefixArgs) = FindWorkstationEditor();
+            var psi = new ProcessStartInfo(exe) { UseShellExecute = false };
+            foreach (var arg in prefixArgs) psi.ArgumentList.Add(arg);
+            psi.ArgumentList.Add("--studio");
+            if (ctx.ScriptFile != null)
+                psi.ArgumentList.Add(ctx.ScriptFile.FullName);
+            if (ctx.ServePort.HasValue)
+            {
+                psi.ArgumentList.Add("--port");
+                psi.ArgumentList.Add(ctx.ServePort.Value.ToString());
+            }
+            if (!ctx.ServeNoBrowser)
+                psi.ArgumentList.Add("--open");
+
+            logger.WriteLine("Starting ETL-SQL Studio...", ConsoleColor.Cyan);
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                logger.WriteLine("Failed to start the ETL-SQL Studio process.", ConsoleColor.Red);
+                return 1;
+            }
+
+            Console.CancelKeyPress += (_, e) =>
+            {
+                e.Cancel = true;
+                if (!proc.HasExited) proc.Kill(entireProcessTree: true);
+            };
+
+            await proc.WaitForExitAsync();
+            return proc.ExitCode;
+        }
+
+        private static (string exe, string[] prefixArgs) FindWorkstationEditor()
+        {
+            var exeName = OperatingSystem.IsWindows() ? "ETL-SQL-Editor.exe" : "ETL-SQL-Editor";
+            var fallbackName = OperatingSystem.IsWindows() ? "ETL-SQL.WorkstationEditor.exe" : "ETL-SQL.WorkstationEditor";
+
+            var exeDir = Path.GetDirectoryName(Environment.ProcessPath ?? "") ?? ".";
+            var siblingExe = Path.Combine(exeDir, exeName);
+            if (File.Exists(siblingExe))
+                return (siblingExe, Array.Empty<string>());
+
+            var fallbackSiblingExe = Path.Combine(exeDir, fallbackName);
+            if (File.Exists(fallbackSiblingExe))
+                return (fallbackSiblingExe, Array.Empty<string>());
+
+            var dir = Directory.GetCurrentDirectory();
+            while (true)
+            {
+                if (Directory.GetFiles(dir, "*.slnx").Length > 0 || Directory.GetFiles(dir, "*.sln").Length > 0)
+                {
+                    var projectPath = Path.Combine(dir, "src", "ETL-SQL.WorkstationEditor");
+                    if (Directory.Exists(projectPath))
+                        return ("dotnet", new[] { "run", "--project", projectPath, "--" });
+                }
+                var parent = Path.GetDirectoryName(dir);
+                if (parent == null || parent == dir) break;
+                dir = parent;
+            }
+
+            throw new InvalidOperationException(
+                "Could not locate ETL-SQL-Editor / Studio host. Run from the solution root directory.");
         }
     }
 }

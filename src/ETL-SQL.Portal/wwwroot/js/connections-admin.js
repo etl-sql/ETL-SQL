@@ -236,7 +236,7 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
           <tbody>
             ${connections.map((c) => `
               <tr data-alias="${escAttr(c.alias)}">
-                <td><code>${esc(c.alias)}</code></td>
+                <td><code>${esc(c.alias)}</code>${c.gateway ? ` <span class="chip chip-active" style="font-size: 0.7rem; padding: 2px 5px;" title="Gateway: ${esc(c.gateway.gatewayId)} / Resource: ${esc(c.gateway.resourceId)}">⚡ ${esc(c.gateway.gatewayId)}</span>` : ''}</td>
                 <td>${esc(c.connectorType)}</td>
                 <td>${esc(c.environmentScope || '—')}</td>
                 <td class="conn-row-status">${statusChip(c)}</td>
@@ -282,6 +282,7 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
     $('conn-detailBody').innerHTML = `
       <div class="form-hint">${esc(detail.summary.connectorType)}${detail.summary.environmentScope ? ` · ${esc(detail.summary.environmentScope)}` : ''}
         · created ${esc(formatDate(detail.summary.createdAtUtc))} · updated ${esc(formatDate(detail.summary.updatedAtUtc))}</div>
+      ${detail.gateway ? `<p><strong>Gateway Binding:</strong> <code>${esc(detail.gateway.gatewayId)}</code> → <code>${esc(detail.gateway.resourceId)}</code> <span class="chip chip-active" style="font-size: 0.72rem;">Gateway Bound</span></p>` : ''}
       ${detail.target ? `<p><strong>Target:</strong> <code>${esc(detail.target)}</code></p>` : ''}
       ${sensitiveFields.length ? `<p><strong>Sensitive fields:</strong> ${sensitiveFields.map((f) => `<code>${esc(f)}</code>`).join(' ')}</p>` : ''}
       ${options.length ? `
@@ -467,11 +468,24 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
         const json = await res.json();
         return Array.isArray(json) ? json : (json.schemas || []);
       },
+      fetchGateways: async () => {
+        try {
+          const json = await fetch('/api/connectors/gateways').then(r => r.json());
+          return Array.isArray(json) ? json : (json.gateways || []);
+        } catch {
+          return [];
+        }
+      },
+      fetchGatewayResources: async (gwId) => {
+        const res = await fetch(`/api/connectors/gateways/${encodeURIComponent(gwId)}/resources`);
+        if (!res.ok) throw new Error('Gateway resource discovery failed.');
+        const json = await res.json();
+        return Array.isArray(json) ? json : (json.resources || []);
+      },
       fetchSecrets: async () => {
         try {
-          const res = await fetch('/api/admin/vault/keys');
-          const json = await res.json();
-          return json.keys || [];
+          const list = await (window.secretsApi ? window.secretsApi.list() : fetch('/api/admin/secrets').then(r => r.json()));
+          return Array.isArray(list) ? list.map(s => s.name || s) : [];
         } catch {
           return [];
         }
@@ -497,6 +511,7 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
           connectorType: entry.connectorType,
           target: entry.target,
           options: entry.options,
+          gateway: entry.gateway,
           environmentScope: entry.environmentScope,
           sensitiveFields: []
         });

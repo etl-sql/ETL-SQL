@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ETL_SQL.Core.Governance;
 
 /// <summary>
@@ -14,7 +16,15 @@ namespace ETL_SQL.Core.Governance;
 /// <para>The IDs are opaque to the cloud side. They are compared, logged, and routed on; they are
 /// never parsed into an address.</para>
 /// </summary>
-public sealed record GatewayResourceBinding(string GatewayId, string ResourceId);
+public sealed record GatewayResourceBinding(string GatewayId, string ResourceId)
+{
+    /// <summary>
+    /// Server-derived catalog alias used only to revalidate the persisted use grant at execution.
+    /// It is never accepted from, or returned to, a client as part of the Gateway binding.
+    /// </summary>
+    [JsonIgnore]
+    public string? CatalogAlias { get; init; }
+}
 
 /// <summary>
 /// Write-side validation for Gateway-bound catalog entries. Used by every surface that can store a

@@ -1,4 +1,4 @@
-﻿# Architecture: ETL-SQL Portal
+# Architecture: ETL-SQL Portal
 
 The Portal (`ETL-SQL-Portal`) is an ASP.NET Core 10 web application that exposes report execution, snapshot management, subscriptions, and user/group administration through a REST API and a static HTML/JS front-end. It sits at **Tier 5** of the dependency hierarchy, above the shared report hosting/runtime services it calls for execution.
 
@@ -531,6 +531,7 @@ Entries hold `SECRET:name` references, never credential values; detail responses
 | :--- | :--- | :--- | :--- |
 | POST | `/api/admin/gateways/enroll` | Admin | Issue one-time enrollment token for a Gateway instance |
 | GET | `/api/admin/gateways/{gatewayId}` | Admin | Inspect Gateway enrollment state, timestamps, and workload key thumbprint |
+| GET | `/api/admin/gateways/{gatewayId}/resources` | Admin | List published approved non-secret resource metadata from active gateway session |
 | POST | `/api/admin/gateways/{gatewayId}/revoke` | Admin | Revoke Gateway enrollment token and unregister active session |
 
 ### Gateways — Enrollment Bootstrap
@@ -628,6 +629,7 @@ by the administration guides rather than restated here.
 | `/api/designer/lease` | `ScriptSave` + report Author | Atomic five-minute edit-session acquire/renew and owner-only release. Lease metadata does not advance the report content version; shared-tenancy requests additionally match the report creator's stored tenant to the signed tenant claim. |
 | `/api/docs` | Any | Embedded documentation, served from the `docs/` copied into the image |
 | `/api/fleet` | FleetReader | Read-only cross-environment status; visibility, never authority |
+| `/api/connectors` | Authenticated | Connector schemas, connection string parsing, layered zero-trust diagnostic probes, and tenant-scoped Gateway resource discovery |
 | `/api/platform/support-bundle` | Anonymous (capability-bound) | Capability-only Managed Dedicated support surface |
 | `/api/platform/shared-tenants` | Anonymous (management key + signed policy) | Platform-only Shared tenant lifecycle management |
 

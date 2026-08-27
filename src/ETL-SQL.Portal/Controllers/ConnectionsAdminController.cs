@@ -31,7 +31,8 @@ public class ConnectionsAdminController(
         string? Target,
         Dictionary<string, string>? Options,
         string? EnvironmentScope,
-        List<string>? SensitiveFields = null);
+        List<string>? SensitiveFields = null,
+        GatewayResourceBinding? Gateway = null);
 
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -59,7 +60,8 @@ public class ConnectionsAdminController(
             new Dictionary<string, string>(request?.Options ?? [], StringComparer.OrdinalIgnoreCase),
             request?.EnvironmentScope,
             Disabled: false,
-            request?.SensitiveFields);
+            request?.SensitiveFields,
+            request?.Gateway);
 
         try
         {
@@ -70,7 +72,7 @@ public class ConnectionsAdminController(
             await catalog.SaveAsync(ct);
             return NoContent();
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             return BadRequest(new { error = ex.Message });
         }

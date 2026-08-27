@@ -451,6 +451,296 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task ConnectionWizard_DiscoversAndBindsApprovedGatewayResources()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.EvaluateAsync(
+            """
+            async () => {
+              document.body.innerHTML = '<div id="canonical-connection-wizard"></div>';
+              const { createConnectionWizard } = await import('/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/connection-wizard.js');
+              window.__savedEntry = null;
+              createConnectionWizard({
+                host: document.getElementById('canonical-connection-wizard'),
+                mode: 'admin',
+                schemas: [
+                  {
+                    connectorType: 'MSSQL', description: 'SQL Server', isFileBased: false,
+                    options: [
+                      { name: 'SERVER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'sql.test' },
+                      { name: 'DATABASE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'warehouse' }
+                    ]
+                  },
+                  {
+                    connectorType: 'POSTGRES', description: 'PostgreSQL', isFileBased: false,
+                    options: [
+                      { name: 'HOST', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'pg.test' }
+                    ]
+                  }
+                ],
+                gateways: [{ id: 'corp-gw', name: 'corp-gw', status: 'Online', region: 'On-Premises' }],
+                fetchGatewayResources: async (gwId) => [
+                  {
+                    resourceId: 'finance-dw',
+                    connectorType: 'MSSQL',
+                    allowedOperations: 'Read, Write',
+                    state: 'Approved',
+                    isOnline: true,
+                    lastSeenUtc: '2026-08-27T12:00:00Z'
+                  },
+                  {
+                    resourceId: 'audit-pg',
+                    connectorType: 'POSTGRES',
+                    allowedOperations: 'Read',
+                    state: 'Approved',
+                    isOnline: true,
+                    lastSeenUtc: '2026-08-27T12:05:00Z'
+                  }
+                ],
+                onSave: async (entry) => {
+                  window.__savedEntry = entry;
+                }
+              });
+            }
+            """);
+
+        await page.Locator("#etlsql-cw-alias-input").FillAsync("corp_finance_conn");
+        await page.Locator("#etlsql-cw-gateway-select").SelectOptionAsync("corp-gw");
+
+        // Verify resource picker appeared with approved resources
+        var resourceCard = page.Locator(".etlsql-cw-resource-card[data-resource-id='finance-dw']");
+        await resourceCard.WaitForAsync();
+        Assert.Contains("finance-dw", await resourceCard.InnerTextAsync());
+        Assert.Contains("Approved", await resourceCard.InnerTextAsync());
+        Assert.Contains("Read, Write", await resourceCard.InnerTextAsync());
+
+        // Click to bind resource
+        await resourceCard.ClickAsync();
+        await page.Locator(".etlsql-cw-gateway-bound-banner").WaitForAsync();
+        Assert.Contains("Gateway Resource Bound", await page.Locator(".etlsql-cw-gateway-bound-banner").InnerTextAsync());
+
+        // Verify preview SQL
+        var preview = await page.Locator(".etlsql-cw-sql-box").InnerTextAsync();
+        Assert.Contains("Gateway: corp-gw", preview);
+        Assert.Contains("Resource: finance-dw", preview);
+
+        // Submit and verify payload contains gateway binding without physical target
+        await page.Locator("#etlsql-cw-submit-btn").ClickAsync();
+        var savedEntry = await page.EvaluateAsync<System.Text.Json.JsonElement>("() => window.__savedEntry");
+        Assert.Equal("corp_finance_conn", savedEntry.GetProperty("alias").GetString());
+        Assert.Equal("MSSQL", savedEntry.GetProperty("connectorType").GetString());
+        var gatewayObj = savedEntry.GetProperty("gateway");
+        Assert.Equal("corp-gw", gatewayObj.GetProperty("gatewayId").GetString());
+        Assert.Equal("finance-dw", gatewayObj.GetProperty("resourceId").GetString());
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task ConnectionWizard_KeepsModalOpenWhenCatalogSaveFails()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.EvaluateAsync(
+            """
+            async () => {
+              document.body.innerHTML = '<div id="canonical-connection-wizard"></div>';
+              const { createConnectionWizard } = await import('/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/connection-wizard.js');
+              window.__saveAttempts = 0;
+              createConnectionWizard({
+                host: document.getElementById('canonical-connection-wizard'),
+                mode: 'admin',
+                schemas: [{ connectorType: 'MSSQL', description: 'SQL Server', options: [] }],
+                gateways: [{ id: 'corp-gw', name: 'corp-gw', status: 'Online' }],
+                fetchGatewayResources: async () => [{
+                  resourceId: 'finance-dw', connectorType: 'MSSQL',
+                  allowedOperations: 'Read', state: 'Approved', isOnline: true
+                }],
+                onSave: async () => {
+                  window.__saveAttempts++;
+                  throw new Error('sensitive upstream detail');
+                }
+              });
+            }
+            """);
+
+        await page.Locator("#etlsql-cw-alias-input").FillAsync("corp_finance_conn");
+        await page.Locator("#etlsql-cw-gateway-select").SelectOptionAsync("corp-gw");
+        await page.Locator(".etlsql-cw-resource-card[data-resource-id='finance-dw']").ClickAsync();
+        await page.Locator("#etlsql-cw-submit-btn").ClickAsync();
+
+        var error = page.Locator(".etlsql-cw-save-error");
+        await error.WaitForAsync();
+        Assert.Contains("could not be saved", await error.InnerTextAsync());
+        Assert.DoesNotContain("sensitive upstream detail", await error.InnerTextAsync());
+        Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__saveAttempts"));
+        Assert.Equal(1, await page.Locator(".etlsql-cw-modal").CountAsync());
+        Assert.True(await page.Locator("#etlsql-cw-submit-btn").IsEnabledAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_Mounts_SwitchesProjections_AndScansSecrets()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+
+        // Wait for studio shell to mount
+        var studioShell = page.Locator(".etlsql-studio-shell");
+        await studioShell.WaitForAsync();
+
+        // 1. Verify tabs rendered
+        Assert.Equal(3, await page.Locator(".etlsql-studio-tab").CountAsync());
+        Assert.Contains("sales_overview.rptsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
+
+        // 2. Test projection switching
+        await page.Locator("button[data-projection='canvas']").ClickAsync();
+        Assert.True(await page.Locator("[data-visual-stage]").IsVisibleAsync());
+        Assert.False(await page.Locator("[data-code-stage]").IsVisibleAsync());
+
+        await page.Locator("button[data-projection='code']").ClickAsync();
+        Assert.False(await page.Locator("[data-visual-stage]").IsVisibleAsync());
+        Assert.True(await page.Locator("[data-code-stage]").IsVisibleAsync());
+
+        await page.Locator("button[data-projection='split']").ClickAsync();
+        Assert.True(await page.Locator("[data-visual-stage]").IsVisibleAsync());
+        Assert.True(await page.Locator("[data-code-stage]").IsVisibleAsync());
+
+        // 3. Test Activity Rail switching and Filter Pane
+        await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
+        Assert.Contains("Published Connections", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+
+        await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
+        Assert.Contains("Filter Pane", await page.Locator("[data-sidebar-title]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Region", await page.Locator(".etlsql-filter-card", new() { HasText = "Region" }).InnerTextAsync());
+
+        // 4. Assert Phase 2 Live In-Memory Visual Canvas calculations
+        var kpiCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='rev_kpi']");
+        await kpiCard.WaitForAsync();
+        Assert.Contains("Total Revenue", await kpiCard.InnerTextAsync());
+        Assert.Contains("$402,000", await kpiCard.InnerTextAsync());
+
+        var barCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='order_bar']");
+        await barCard.WaitForAsync();
+        Assert.True(await page.Locator(".etlsql-chart-bar-group").CountAsync() >= 3);
+
+        // 5. Test Phase 3 "Promote to Slicer" 1-click workflow
+        await page.Locator("button[data-promote-slicer='region']").ClickAsync();
+        var slicerCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='region_slicer']");
+        await slicerCard.WaitForAsync();
+        Assert.True(await slicerCard.IsVisibleAsync());
+
+        // Click "North" slicer pill and verify instant math recalculation ($45k + $62k + $54k = $161,000)
+        await page.Locator("button.etlsql-slicer-pill[data-slicer-value='North']").ClickAsync();
+        Assert.Contains("$161,000", await kpiCard.InnerTextAsync());
+
+        // Click "All" slicer pill and verify restoration to $402,000
+        await page.Locator("button.etlsql-slicer-pill[data-slicer-value='ALL']").ClickAsync();
+        Assert.Contains("$402,000", await kpiCard.InnerTextAsync());
+
+        // 6. Test Phase 4 Visual Card Click-to-Code and Surgical AST Patching
+        await kpiCard.ClickAsync();
+        Assert.True(await page.Locator(".etlsql-studio-canvas-card[data-visual-id='rev_kpi']").EvaluateAsync<bool>("el => el.classList.contains('selected')"));
+
+        // Trigger surgical option update on rev_kpi
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__?.surgicalPatchVisualOption('rev_kpi', 'TITLE', 'Executive Net Revenue')");
+        Assert.Contains("Executive Net Revenue", await kpiCard.InnerTextAsync());
+
+        // 7. Switch to ETL tab and assert Pipeline DAG rendering
+        await page.Locator(".etlsql-studio-tab", new() { HasText = "ingest_orders.etlsql" }).ClickAsync();
+        var dagView = page.Locator("[data-dag-view]");
+        await dagView.WaitForAsync();
+        Assert.True(await page.Locator("[data-dag-node]").CountAsync() >= 2);
+        Assert.Contains("staging_db", await page.Locator("[data-dag-node='staging_db']").InnerTextAsync());
+        Assert.Contains("#raw_sales", await page.Locator("[data-dag-node='#raw_sales']").InnerTextAsync());
+
+        // 8. Switch to secret-containing tab and test save secret detection modal
+        await page.Locator(".etlsql-studio-tab", new() { HasText = "direct_connect_test.sql" }).ClickAsync();
+        await page.Locator("button[data-action='save']").ClickAsync();
+
+        // Modal should appear with secret warning
+        var modalBackdrop = page.Locator("[data-modal-backdrop]");
+        await modalBackdrop.WaitForAsync();
+        Assert.False(await modalBackdrop.IsHiddenAsync());
+        Assert.Contains("Plaintext Secret Detected", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.Contains("SuperSecretPassword123!", await page.Locator("[data-modal-box]").InnerTextAsync());
+
+        // Cancel modal
+        await page.Locator("[data-modal-box] button[data-modal-close]").First.ClickAsync();
+        await page.WaitForTimeoutAsync(100);
+        Assert.True(await modalBackdrop.IsHiddenAsync());
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_AuditsResponsivenessAndLayoutShiftAcrossResolutions()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+
+        var studioShell = page.Locator(".etlsql-studio-shell");
+        await studioShell.WaitForAsync();
+
+        // Audit viewport geometries from 1024x768 up to 4K UHD
+        (int width, int height)[] viewports = [
+            (1024, 768),
+            (1366, 768),
+            (1920, 1080),
+            (2560, 1440),
+            (3840, 2160)
+        ];
+
+        foreach (var (w, h) in viewports)
+        {
+            await page.SetViewportSizeAsync(w, h);
+            await page.WaitForTimeoutAsync(50);
+
+            // 1. Verify no unwanted horizontal scroll overflow on the shell
+            var isOverflowing = await studioShell.EvaluateAsync<bool>("el => el.scrollWidth > el.clientWidth + 2");
+            Assert.False(isOverflowing, $"Studio shell unexpectedly overflowed horizontally at {w}x{h}");
+
+            // 2. Verify Activity Rail buttons maintain minimum accessible hitboxes (>= 24px)
+            var railButtons = page.Locator("button.etlsql-studio-rail-btn");
+            var buttonCount = await railButtons.CountAsync();
+            for (var i = 0; i < buttonCount; i++)
+            {
+                var box = await railButtons.Nth(i).BoundingBoxAsync();
+                Assert.NotNull(box);
+                Assert.True(box.Width >= 24, $"Rail button {i} width {box.Width} < 24px at {w}x{h}");
+                Assert.True(box.Height >= 24, $"Rail button {i} height {box.Height} < 24px at {w}x{h}");
+            }
+
+            // 3. Verify Canvas visual cards are rendered and accessible
+            var canvasCards = page.Locator(".etlsql-studio-canvas-card");
+            Assert.True(await canvasCards.CountAsync() >= 2);
+            for (var j = 0; j < await canvasCards.CountAsync(); j++)
+            {
+                var cardBox = await canvasCards.Nth(j).BoundingBoxAsync();
+                Assert.NotNull(cardBox);
+                Assert.True(cardBox.Width >= 200, $"Canvas card {j} width {cardBox.Width} is too narrow at {w}x{h}");
+            }
+        }
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task ConstrainedHtmlRuntime_SanitizesEmbedsActsAndPrintsAccessibly()
     {
         await using var session = await fixture.NewSessionAsync();

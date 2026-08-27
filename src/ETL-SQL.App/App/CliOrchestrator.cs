@@ -1833,6 +1833,15 @@ namespace ETL_SQL.App
             };
             initCommand.SetAction(context => Dispatch(context, "init", handler));
 
+            // 15. STUDIO Command — launch modern web-based ETL-SQL Studio on local loopback
+            var studioCommand = new Command("studio", "Launch the modern ETL-SQL Studio visual & script workbench on local loopback")
+            {
+                new Argument<string?>("file") { Description = "Optional script file or directory to open in Studio", Arity = ArgumentArity.ZeroOrOne },
+                ServePortOption,
+                ServeNoBrowserOption,
+            };
+            studioCommand.SetAction(context => Dispatch(context, "studio", handler));
+
             rootCommand.Add(runCommand);
             rootCommand.Add(testCommand);
             rootCommand.Add(encryptCommand);
@@ -1844,6 +1853,7 @@ namespace ETL_SQL.App
             rootCommand.Add(doctorCommand);
             rootCommand.Add(configCommand);
             rootCommand.Add(serveCommand);
+            rootCommand.Add(studioCommand);
             rootCommand.Add(purgeCommand);
             rootCommand.Add(genScriptCommand);
             rootCommand.Add(extractSpecCommand);
@@ -2074,6 +2084,15 @@ namespace ETL_SQL.App
                 if (!string.IsNullOrWhiteSpace(scriptInput))
                     cliContext.ScriptFile = new FileInfo(scriptInput.Trim('"', '\'', ' '));
                 cliContext.ServeManifest = res.GetValue(ServeManifestOption);
+                cliContext.ServePort = res.GetValue(ServePortOption);
+                cliContext.ServeNoBrowser = res.GetValue(ServeNoBrowserOption);
+            }
+            else if (commandName == "studio")
+            {
+                var fileResult = res.CommandResult.Children.OfType<ArgumentResult>().FirstOrDefault(a => a.Argument.Name == "file");
+                var filePath = fileResult?.GetValueOrDefault<string?>();
+                if (!string.IsNullOrWhiteSpace(filePath))
+                    cliContext.ScriptFile = new FileInfo(filePath.Trim('"', '\'', ' '));
                 cliContext.ServePort = res.GetValue(ServePortOption);
                 cliContext.ServeNoBrowser = res.GetValue(ServeNoBrowserOption);
             }

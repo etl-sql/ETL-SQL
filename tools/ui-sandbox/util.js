@@ -3,6 +3,7 @@
 // Canonical designer component module (the file you edit). Imported fresh on every
 // mount so editing it + hitting ↻ Reload shows changes with no sync / portal build.
 export const DESIGNER_JS = '/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js';
+export const STUDIO_JS = '/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js';
 
 // Dynamic import with a cache-bust query so the browser re-fetches the latest source.
 export function importFresh(path) {

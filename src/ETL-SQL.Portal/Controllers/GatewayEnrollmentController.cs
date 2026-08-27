@@ -24,11 +24,20 @@ public sealed class GatewayEnrollmentController(
     IGatewayEnrollmentStore enrollmentStore,
     AuditService audit,
     RequestTenantContextAccessor tenantAccessor,
-    GatewaySessionRegistry? gatewayRegistry = null) : ControllerBase
+    GatewaySessionRegistry? gatewayRegistry = null,
+    PortalConfig? config = null) : ControllerBase
 {
     public sealed record IssueEnrollmentRequest(
         string GatewayId,
         int? ExpirationMinutes = null);
+
+    public sealed record GatewayDiscoveredResourceDto(
+        string ResourceId,
+        string ConnectorType,
+        string AllowedOperations,
+        string State,
+        bool IsOnline,
+        DateTimeOffset? LastSeenUtc);
 
     public sealed record GatewayEnrollmentDto(
         string EnrollmentId,
@@ -41,10 +50,11 @@ public sealed class GatewayEnrollmentController(
         bool IsOnline = false,
         int ActiveNodes = 0,
         int TotalNodes = 0,
-        IReadOnlyList<GatewaySessionInfo>? Nodes = null);
+        IReadOnlyList<GatewaySessionInfo>? Nodes = null,
+        IReadOnlyList<GatewayDiscoveredResourceDto>? PublishedResources = null);
 
     private string CurrentTenantId =>
-        tenantAccessor.Current?.Tenant.Value ?? "default";
+        tenantAccessor.Current?.Tenant.Value ?? (string.IsNullOrWhiteSpace(config?.TenantId) ? "default" : config.TenantId);
 
     private int CurrentUserId =>
         int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
@@ -60,6 +70,21 @@ public sealed class GatewayEnrollmentController(
         {
             clusterMap.TryGetValue(e.GatewayId, out var cluster);
             var isOnline = cluster is { ActiveNodes: > 0 };
+            IReadOnlyList<GatewayDiscoveredResourceDto>? publishedResources = null;
+            if (isOnline && gatewayRegistry != null && gatewayRegistry.TryGet(CurrentTenantId, e.GatewayId, out var session) && session != null)
+            {
+                publishedResources = session.PublishedResources
+                    .Where(r => r.State == GatewayResourceState.Approved)
+                    .Select(r => new GatewayDiscoveredResourceDto(
+                        r.ResourceId,
+                        r.ConnectorType,
+                        r.AllowedOperations.ToString(),
+                        r.State.ToString(),
+                        IsOnline: session.IsActive,
+                        LastSeenUtc: session.LastSeenUtc))
+                    .ToList();
+            }
+
             return new GatewayEnrollmentDto(
                 e.EnrollmentId,
                 e.GatewayId,
@@ -71,7 +96,8 @@ public sealed class GatewayEnrollmentController(
                 IsOnline: isOnline,
                 ActiveNodes: cluster?.ActiveNodes ?? 0,
                 TotalNodes: cluster?.TotalNodes ?? 0,
-                Nodes: cluster?.Nodes ?? []);
+                Nodes: cluster?.Nodes ?? [],
+                PublishedResources: publishedResources);
         }).ToList();
 
         return Ok(list);
@@ -131,6 +157,21 @@ public sealed class GatewayEnrollmentController(
         if (enrollment is null)
             return NotFound(new { error = $"Gateway '{gatewayId}' has no enrollment record." });
 
+        IReadOnlyList<GatewayDiscoveredResourceDto>? publishedResources = null;
+        if (gatewayRegistry != null && gatewayRegistry.TryGet(CurrentTenantId, gatewayId.Trim(), out var session) && session is { IsActive: true })
+        {
+            publishedResources = session.PublishedResources
+                .Where(r => r.State == GatewayResourceState.Approved)
+                .Select(r => new GatewayDiscoveredResourceDto(
+                    r.ResourceId,
+                    r.ConnectorType,
+                    r.AllowedOperations.ToString(),
+                    r.State.ToString(),
+                    IsOnline: session.IsActive,
+                    LastSeenUtc: session.LastSeenUtc))
+                .ToList();
+        }
+
         return Ok(new GatewayEnrollmentDto(
             enrollment.EnrollmentId,
             enrollment.GatewayId,
@@ -138,7 +179,42 @@ public sealed class GatewayEnrollmentController(
             enrollment.CreatedUtc,
             enrollment.ExpiresUtc,
             enrollment.ConsumedUtc,
-            enrollment.WorkloadPublicKeyThumbprint));
+            enrollment.WorkloadPublicKeyThumbprint,
+            IsOnline: publishedResources is not null,
+            PublishedResources: publishedResources));
+    }
+
+    /// <summary>
+    /// Returns discoverable approved published resources for a live Gateway session.
+    /// Never returns physical targets, local connection strings, or credentials.
+    /// </summary>
+    [HttpGet("{gatewayId}/resources")]
+    public async Task<IActionResult> GetPublishedResources(string gatewayId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(gatewayId))
+            return BadRequest(new { error = "GatewayId is required." });
+
+        var enrollment = await enrollmentStore.FindByGatewayAsync(CurrentTenantId, gatewayId.Trim(), ct);
+        if (enrollment is null)
+            return NotFound(new { error = $"Gateway '{gatewayId}' has no enrollment record for the active tenant." });
+
+        if (gatewayRegistry is null || !gatewayRegistry.TryGet(CurrentTenantId, gatewayId.Trim(), out var session) || session is null || !session.IsActive)
+        {
+            return Ok(Array.Empty<GatewayDiscoveredResourceDto>());
+        }
+
+        var resources = session.PublishedResources
+            .Where(r => r.State == GatewayResourceState.Approved)
+            .Select(r => new GatewayDiscoveredResourceDto(
+                r.ResourceId,
+                r.ConnectorType,
+                r.AllowedOperations.ToString(),
+                r.State.ToString(),
+                IsOnline: session.IsActive,
+                LastSeenUtc: session.LastSeenUtc))
+            .ToList();
+
+        return Ok(resources);
     }
 
     [HttpPost("{gatewayId}/revoke")]

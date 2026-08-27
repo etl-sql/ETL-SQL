@@ -16,6 +16,33 @@ const SHARED_CONNECTIONS_CATALOG = [
   { alias: 'vendor_sftp_lake', type: 'SFTP', target: 'sftp.vendor.com:22', description: 'Nightly inbound flat files' }
 ];
 
+const GATEWAYS_CATALOG = [
+  {
+    id: 'corp-onprem-gw',
+    name: 'corp-onprem-gw',
+    status: 'Online',
+    region: 'US-East On-Prem',
+    resources: [
+      {
+        resourceId: 'prod-finance-db',
+        connectorType: 'MSSQL',
+        allowedOperations: 'Read, Write',
+        state: 'Approved',
+        isOnline: true,
+        lastSeenUtc: '2026-08-27T12:00:00Z'
+      },
+      {
+        resourceId: 'warehouse-analytics-pg',
+        connectorType: 'POSTGRES',
+        allowedOperations: 'Read',
+        state: 'Approved',
+        isOnline: true,
+        lastSeenUtc: '2026-08-27T12:05:00Z'
+      }
+    ]
+  }
+];
+
 const CONNECTOR_DOCS = {
   MSSQL: {
     title: 'Microsoft SQL Server (MSSQL)',

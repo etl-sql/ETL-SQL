@@ -2,6 +2,7 @@ using System.Text.Json;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Multitenancy;
+using ETL_SQL.Gateway;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,13 +17,15 @@ public sealed record PortalSharedConnectionSummary(
     DateTime UpdatedAtUtc,
     DateTime? LastUsedAtUtc,
     DateTime? LastVerifiedAtUtc,
-    long Version);
+    long Version,
+    GatewayResourceBinding? Gateway = null);
 
 public sealed record PortalSharedConnectionDetail(
     PortalSharedConnectionSummary Summary,
     string? Target,
     IReadOnlyDictionary<string, string> Options,
-    IReadOnlyList<string> SensitiveFields);
+    IReadOnlyList<string> SensitiveFields,
+    GatewayResourceBinding? Gateway = null);
 
 public sealed record SharedConnectionAclEntry(int GroupId, string GroupName, string Permission);
 
@@ -34,7 +37,8 @@ public sealed record PortalSharedConnectionExport(
     Dictionary<string, string> Options,
     string? EnvironmentScope,
     bool Disabled,
-    List<string>? SensitiveFields = null);
+    List<string>? SensitiveFields = null,
+    GatewayResourceBinding? Gateway = null);
 
 /// <summary>
 /// Portal-managed shared connection catalog (SHARED:alias). Credential fields hold SECRET:
@@ -43,10 +47,18 @@ public sealed record PortalSharedConnectionExport(
 public sealed class PortalConnectionCatalogService(
     PortalDbContext db,
     TenantContext? tenantContext = null,
-    PortalConfig? config = null)
+    PortalConfig? config = null,
+    IGatewayEnrollmentStore? enrollmentStore = null,
+    GatewaySessionRegistry? gatewayRegistry = null)
 {
+    private const string GatewayIdOption = "__gateway_id";
+    private const string GatewayResourceIdOption = "__gateway_resource_id";
     private readonly string _tenantScope = ResolveTenantScope(tenantContext, config);
     private string TenantScope => _tenantScope;
+    private string GatewayTenantScope =>
+        TenantScope == "portal-host" && config?.SharedTenancy.Enabled != true && string.IsNullOrWhiteSpace(config?.TenantId)
+            ? "default"
+            : TenantScope;
 
     private static string ResolveTenantScope(TenantContext? context, PortalConfig? config)
     {
@@ -62,7 +74,14 @@ public sealed class PortalConnectionCatalogService(
         int? userId = null,
         CancellationToken cancellationToken = default)
     {
-        Validate(entry);
+        await ValidateAsync(entry, cancellationToken);
+
+        var optionsToStore = new Dictionary<string, string>(entry.Options, StringComparer.OrdinalIgnoreCase);
+        if (entry.Gateway != null)
+        {
+            optionsToStore[GatewayIdOption] = entry.Gateway.GatewayId;
+            optionsToStore[GatewayResourceIdOption] = entry.Gateway.ResourceId;
+        }
 
         var now = DateTime.UtcNow;
         var existing = await db.PortalSharedConnections
@@ -75,7 +94,7 @@ public sealed class PortalConnectionCatalogService(
                 Alias = entry.Alias,
                 ConnectorType = entry.ConnectorType.Trim(),
                 Target = entry.Target,
-                OptionsJson = JsonSerializer.Serialize(entry.Options),
+                OptionsJson = JsonSerializer.Serialize(optionsToStore),
                 Disabled = entry.Disabled,
                 EnvironmentScope = entry.EnvironmentScope,
                 SensitiveFieldsCsv = ToCsv(entry.SensitiveFields),
@@ -91,7 +110,7 @@ public sealed class PortalConnectionCatalogService(
 
         existing.ConnectorType = entry.ConnectorType.Trim();
         existing.Target = entry.Target;
-        existing.OptionsJson = JsonSerializer.Serialize(entry.Options);
+        existing.OptionsJson = JsonSerializer.Serialize(optionsToStore);
         existing.Disabled = entry.Disabled;
         existing.EnvironmentScope = entry.EnvironmentScope;
         existing.SensitiveFieldsCsv = ToCsv(entry.SensitiveFields);
@@ -157,9 +176,13 @@ public sealed class PortalConnectionCatalogService(
 
         await EnforceUseAclAsync(entity, identity, cancellationToken);
 
+        var (options, gateway) = DeserializeOptionsAndGateway(entity);
+        if (gateway is not null)
+            gateway = gateway with { CatalogAlias = entity.Alias };
+
         var definition = new SharedConnectionDefinition(
-            entity.Alias, entity.ConnectorType, entity.Target, DeserializeOptions(entity), Disabled: false,
-            FromCsv(entity.SensitiveFieldsCsv));
+            entity.Alias, entity.ConnectorType, entity.Target, options, Disabled: false,
+            FromCsv(entity.SensitiveFieldsCsv), Gateway: gateway);
 
         try
         {
@@ -311,11 +334,13 @@ public sealed class PortalConnectionCatalogService(
             return null;
 
         var sensitiveFields = FromCsv(entity.SensitiveFieldsCsv);
+        var (options, gateway) = DeserializeOptionsAndGateway(entity);
         return new PortalSharedConnectionDetail(
             ToSummary(entity),
             MaskTarget(entity.Target, entity.ConnectorType, sensitiveFields),
-            MaskOptions(DeserializeOptions(entity), entity.ConnectorType, sensitiveFields),
-            sensitiveFields);
+            MaskOptions(options, entity.ConnectorType, sensitiveFields),
+            sensitiveFields,
+            gateway);
     }
 
     public async Task<IReadOnlyList<PortalSharedConnectionExport>> ExportAsync(CancellationToken cancellationToken = default)
@@ -324,14 +349,19 @@ public sealed class PortalConnectionCatalogService(
                 .Where(c => c.TenantId == TenantScope)
                 .OrderBy(c => c.Alias)
                 .ToListAsync(cancellationToken))
-            .Select(entity => new PortalSharedConnectionExport(
-                entity.Alias,
-                entity.ConnectorType,
-                entity.Target,
-                new Dictionary<string, string>(DeserializeOptions(entity), StringComparer.OrdinalIgnoreCase),
-                entity.EnvironmentScope,
-                entity.Disabled,
-                FromCsv(entity.SensitiveFieldsCsv).ToList()))
+            .Select(entity =>
+            {
+                var (options, gateway) = DeserializeOptionsAndGateway(entity);
+                return new PortalSharedConnectionExport(
+                    entity.Alias,
+                    entity.ConnectorType,
+                    entity.Target,
+                    new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase),
+                    entity.EnvironmentScope,
+                    entity.Disabled,
+                    FromCsv(entity.SensitiveFieldsCsv).ToList(),
+                    gateway);
+            })
             .ToList();
 
     public async Task<SecretLifecycleStatus> GetStatusAsync(string alias, CancellationToken cancellationToken = default)
@@ -405,40 +435,111 @@ public sealed class PortalConnectionCatalogService(
             c => c.TenantId == TenantScope && c.Alias == alias, cancellationToken)
             ?? throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the Portal connection catalog.");
 
-    private static void Validate(PortalSharedConnectionExport entry)
+    private async Task ValidateAsync(PortalSharedConnectionExport entry, CancellationToken cancellationToken)
     {
         SecretNameValidator.Validate(entry.Alias);
         if (string.IsNullOrWhiteSpace(entry.ConnectorType))
             throw new ArgumentException("A connector type is required.", nameof(entry));
 
-        var rawCredential = SharedConnectionValidator.FindRawCredential(entry.Options, entry.Target);
-        if (rawCredential != null)
+        var reservedOption = entry.Options.Keys.FirstOrDefault(IsGatewayBindingOption);
+        if (reservedOption is not null)
             throw new ArgumentException(
-                $"Field '{rawCredential}' holds a raw credential value. The catalog stores references only: " +
-                "store the value in the secret store and reference it as SECRET:name.", nameof(entry));
+                $"Option '{reservedOption}' is reserved for a server-validated Gateway binding.", nameof(entry));
 
-        var maskedPlaceholder = FindMaskedPlaceholder(entry);
-        if (maskedPlaceholder != null)
-            throw new ArgumentException(
-                $"Field '{maskedPlaceholder}' contains a masked display placeholder. Re-enter the original value or a SECRET:name reference before saving.",
-                nameof(entry));
+        if (entry.Gateway != null)
+        {
+            var violation = GatewayBindingValidator.FindViolation(entry.Gateway, entry.Target, entry.Options);
+            if (violation != null)
+                throw new InvalidOperationException(violation);
+
+            var tenant = GatewayTenantScope;
+            if (enrollmentStore != null)
+            {
+                var enrollment = await enrollmentStore.FindByGatewayAsync(tenant, entry.Gateway.GatewayId, cancellationToken);
+                if (enrollment is null || enrollment.State != GatewayEnrollmentState.Consumed)
+                    throw new InvalidOperationException($"Gateway '{entry.Gateway.GatewayId}' is not active or enrolled for tenant '{TenantScope}'.");
+            }
+
+            if (gatewayRegistry != null)
+            {
+                gatewayRegistry.TryGet(tenant, entry.Gateway.GatewayId, out var session);
+
+                if (session is null || !session.IsActive)
+                    throw new InvalidOperationException($"Gateway '{entry.Gateway.GatewayId}' is offline or disconnected.");
+
+                if (session.TenantId != tenant)
+                    throw new InvalidOperationException("Gateway session tenant mismatch.");
+
+                var resource = session.PublishedResources.FirstOrDefault(r =>
+                    string.Equals(r.ResourceId, entry.Gateway.ResourceId, StringComparison.OrdinalIgnoreCase));
+                if (resource is null)
+                    throw new InvalidOperationException($"Gateway '{entry.Gateway.GatewayId}' does not publish resource '{entry.Gateway.ResourceId}'.");
+
+                if (resource.State != GatewayResourceState.Approved)
+                    throw new InvalidOperationException($"Resource '{entry.Gateway.ResourceId}' on Gateway '{entry.Gateway.GatewayId}' is not approved.");
+
+                if (!string.Equals(resource.ConnectorType, entry.ConnectorType, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Connector type mismatch: resource '{entry.Gateway.ResourceId}' is '{resource.ConnectorType}', but requested connection specifies '{entry.ConnectorType}'.");
+
+                if (resource.AllowedOperations == GatewayOperationClass.None)
+                    throw new InvalidOperationException($"Resource '{entry.Gateway.ResourceId}' does not permit any operations.");
+            }
+        }
+        else
+        {
+            var rawCredential = SharedConnectionValidator.FindRawCredential(entry.Options, entry.Target);
+            if (rawCredential != null)
+                throw new ArgumentException(
+                    $"Field '{rawCredential}' holds a raw credential value. The catalog stores references only: " +
+                    "store the value in the secret store and reference it as SECRET:name.", nameof(entry));
+
+            var maskedPlaceholder = FindMaskedPlaceholder(entry);
+            if (maskedPlaceholder != null)
+                throw new ArgumentException(
+                    $"Field '{maskedPlaceholder}' contains a masked display placeholder. Re-enter the original value or a SECRET:name reference before saving.",
+                    nameof(entry));
+        }
+    }
+
+    private static (Dictionary<string, string> Options, GatewayResourceBinding? Gateway) DeserializeOptionsAndGateway(PortalSharedConnection entity)
+    {
+        if (JsonSerializer.Deserialize<Dictionary<string, string>>(entity.OptionsJson) is not { } raw)
+            return (new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), null);
+
+        var options = new Dictionary<string, string>(raw, StringComparer.OrdinalIgnoreCase);
+        GatewayResourceBinding? gateway = null;
+        if (options.TryGetValue(GatewayIdOption, out var gwId) && options.TryGetValue(GatewayResourceIdOption, out var resId)
+            && !string.IsNullOrWhiteSpace(gwId) && !string.IsNullOrWhiteSpace(resId))
+        {
+            gateway = new GatewayResourceBinding(gwId, resId);
+            options.Remove(GatewayIdOption);
+            options.Remove(GatewayResourceIdOption);
+        }
+        return (options, gateway);
     }
 
     private static Dictionary<string, string> DeserializeOptions(PortalSharedConnection entity)
-        => JsonSerializer.Deserialize<Dictionary<string, string>>(entity.OptionsJson) is { } options
-            ? new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        => DeserializeOptionsAndGateway(entity).Options;
 
-    private static PortalSharedConnectionSummary ToSummary(PortalSharedConnection entity) => new(
-        entity.Alias,
-        entity.ConnectorType,
-        entity.Disabled,
-        entity.EnvironmentScope,
-        entity.CreatedAtUtc,
-        entity.UpdatedAtUtc,
-        entity.LastUsedAtUtc,
-        entity.LastVerifiedAtUtc,
-        entity.Version);
+    private static bool IsGatewayBindingOption(string key) =>
+        string.Equals(key?.Trim(), GatewayIdOption, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key?.Trim(), GatewayResourceIdOption, StringComparison.OrdinalIgnoreCase);
+
+    private static PortalSharedConnectionSummary ToSummary(PortalSharedConnection entity)
+    {
+        var (_, gateway) = DeserializeOptionsAndGateway(entity);
+        return new(
+            entity.Alias,
+            entity.ConnectorType,
+            entity.Disabled,
+            entity.EnvironmentScope,
+            entity.CreatedAtUtc,
+            entity.UpdatedAtUtc,
+            entity.LastUsedAtUtc,
+            entity.LastVerifiedAtUtc,
+            entity.Version,
+            gateway);
+    }
 
     // Write-side validation guarantees credential fields hold references, but masking is
     // belt-and-braces for entries that arrived by import or older versions. Entry-classified

@@ -1,4 +1,4 @@
-﻿# ETL-SQL Product Roadmap
+# ETL-SQL Product Roadmap
 
 This document describes future product outcomes and their sequencing. Detailed architecture belongs
 in the linked decisions and architecture documents, executable release work belongs in `TODO.md`,
@@ -328,6 +328,43 @@ manifest version compatibility, rename, and designer round trips. Measured on th
 fixture: transient open 50.9 ms, refresh completion 65.3 ms, reposition 26.8 ms, dismissal 3.5 ms.
 
 **Reference:** [`TOOLTIP`](docs/reference/visuals-reporting/report/tooltip.md).
+
+### Presentation & Workspaces — ETL-SQL Studio (Report Studio, Script Editor, and Pipeline Studio)
+
+**Status:** Accepted  
+**Horizon:** Next  
+**Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md)  
+
+Authors need a full-viewport visual workspace combining connection/table discovery, drag-and-drop visual layout, design-time sample snapshot (`__ETLSNAP__`) live data rendering, visual filtering, and live code projection so non-SQL authors can visualize tables and views in seconds while preserving clean `.rptsql` and `.etlsql` as the single source of truth.
+
+**Problem and Intended Outcome:**
+Authoring currently splits across raw script editing and modal dialogs. Non-SQL business analysts need to browse tables, select fields, filter records visually, and arrange charts on a visual canvas with instant formatting presets and real sample data. Advanced authors need full access to underlying SQL, window transforms, and design tokens without risk of visual tools clobbering hand-crafted queries. ETL-SQL Studio delivers zero-code dashboard scaffolding, instant 60 FPS in-memory sample aggregation, an interactive Filter Pane, and an architectural foundation for visual ETL pipeline DAGs alongside a collapsible, synchronized CodeMirror 6 code panel.
+
+**Why now:**
+The native Grammar-of-Graphics spine, Connection Wizard, Gateway resource discovery, cascading parameters, offline snapshot engine (`__ETLSNAP__`), and design tokens have shipped. Unifying these capabilities into ETL-SQL Studio establishes the primary flagship UI across Desktop (`WorkstationEditor`) and SaaS Portal (`Portal Studio`).
+
+**Boundaries:**
+1. **Zero Proprietary Formats:** The studio stores and outputs standard `.rptsql` and `.etlsql` scripts exclusively. No binary project files or proprietary UI schemas are introduced.
+2. **Surgical AST Patching:** Visual modifications patch only the targeted `VISUAL`, `PAGE`, `WHERE`, or pipeline AST clauses. Complex dataset SQL queries, CTEs, comments, and whitespace are preserved.
+3. **Stateless Server Analysis & Bounded Ingestion:** AST parsing (`POST /api/designer/parse`), linting (`POST /api/designer/analyze`), and sample ingestion (`POST /api/designer/data-sample`) remain stateless HTTP calls honoring caller identity and RLS. No persistent server-side LSP process is spawned.
+
+**Dependencies:**
+The canonical `connection-wizard.js`, `codemirror` bundle, `DesignerScriptPatcher`, `PlotPlan` renderer, `report-runtime.js` snapshot evaluator, and Portal data-preview endpoint.
+
+**Vertical Delivery Slices:**
+1. **Slice 1 — Studio Shell & Data Dock:** Full-viewport layout, catalog & Gateway resource connection picker, and draggable typed field tree (`dates`, `measures`, `categories`).
+2. **Slice 2 — Live Data `__ETLSNAP__` Ingestion & 60 FPS Visual Canvas:** Fast sample query ingestion (`TOP 250`), in-memory browser aggregation, drag-and-drop visual card placement, and responsive container layout (`CONTAINER row { ... }`).
+3. **Slice 3 — Type-Aware Filter Pane & Slicer Promotion:** Global dataset `WHERE` filters, local visual `FILTERS`, distinct value checklist from `__ETLSNAP__`, relative date presets, and 1-click "Promote to Slicer" (`CREATE PARAMETER` + `SLICER`).
+4. **Slice 4 — Property Inspector & Smart Defaults:** Field role assignment (Measure/Category/Breakdown), aggregation selectors (`SUM`, `AVG`, `COUNT`, `MIN`, `MAX`), 1-click number formatting (currency, percent, compact), and design token themes.
+5. **Slice 5 — Collapsible Code Drawer & Bi-Directional Sync:** Slide-up CodeMirror 6 editor (`Alt+C`), surgical AST text patching, debounced code-to-canvas synchronization, and inline lint diagnostics.
+6. **Slice 6 — Governed Data Preview & Multi-Surface Packaging:** Interactive preview execution under caller RLS and memory arbiters; shared asset packaging across Portal Studio (`/studio/report.html`), VS Code Webview, and Workstation Editor.
+7. **Slice 7 — Pipeline Studio Foundational DAG (Future):** Visual node-graph canvas for multi-stage ETL pipelines emitting `.etlsql` scripts.
+
+**Acceptance Evidence:**
+- **AST Preservation Tests:** 100% round-trip fidelity asserting hand-written queries, CTEs, `WHERE` clauses, and comments are untouched after visual mutations.
+- **UI Sandbox Story:** Interactive story in `tools/ui-sandbox` demonstrating zero-code table scaffolding, live sample data aggregation, visual filter adjustments, property edits, and code drawer toggling.
+- **Playwright Browser Tests:** Automated browser tests exercising drag-and-drop card placement, filter pane updates, slicer promotion, code editing sync, and theme switching.
+- **Pre-Push Gates:** Strict compliance with `scripts/Test-PrePush.ps1`, asset sync checks, and doc hub audits.
 
 ---
 

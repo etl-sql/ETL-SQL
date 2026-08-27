@@ -153,6 +153,9 @@ public static class WorkstationEditorApp
         app.MapGet("/", (WorkstationWorkspace workspace, WorkstationEditorOptions editorOptions) =>
             Results.Content(EditorShell.Html(editorOptions, workspace), "text/html; charset=utf-8"));
 
+        app.MapGet("/studio", (WorkstationWorkspace workspace, WorkstationEditorOptions editorOptions) =>
+            Results.Content(StudioShell.Html(editorOptions, workspace), "text/html; charset=utf-8"));
+
         app.MapGet("/api/workspace", (WorkstationWorkspace workspace, WorkstationEditorOptions editorOptions) =>
             Results.Json(new
             {

@@ -1,4 +1,6 @@
 // Canonical "Data Gateways" admin surface (Admin → Data Gateways) over api/admin/gateways.
+import { createConnectionWizard } from '../designer/connection-wizard.js';
+import { connectionsApi } from './api.js';
 
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -206,6 +208,7 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
           <td>${formatDate(g.consumedUtc || g.createdUtc)}</td>
           <td>${thumbprint}</td>
           <td style="text-align: right;">
+            ${g.state !== 'Revoked' && g.isOnline ? `<button class="btn btn-outline btn-xs gw-create-conn-btn" data-gw-id="${escAttr(g.gatewayId)}">Bind Connection</button>` : ''}
             ${g.nodes && g.nodes.length > 0 ? `<button class="btn btn-outline btn-xs gw-view-nodes-btn" data-gw-id="${escAttr(g.gatewayId)}">Nodes</button>` : ''}
             ${g.state !== 'Revoked' ? `<button class="btn btn-outline btn-xs btn-danger gw-revoke-btn" data-gw-id="${escAttr(g.gatewayId)}">Revoke</button>` : ''}
           </td>
@@ -216,6 +219,13 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
     $tableWrap.innerHTML = html;
 
     // Attach row events
+    $tableWrap.querySelectorAll('.gw-create-conn-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gwId = btn.getAttribute('data-gw-id');
+        launchConnectionWizard(gwId);
+      });
+    });
+
     $tableWrap.querySelectorAll('.gw-view-nodes, .gw-view-nodes-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -237,6 +247,60 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
           alert('Failed to revoke gateway: ' + (err.message || err));
         }
       });
+    });
+  }
+
+  function launchConnectionWizard(gatewayId, resourceId = '') {
+    createConnectionWizard({
+      host: document.body,
+      mode: 'admin',
+      initialGateway: gatewayId,
+      initialResourceId: resourceId,
+      fetchSchemas: async () => {
+        const res = await fetch('/api/connectors/schema');
+        const json = await res.json();
+        return Array.isArray(json) ? json : (json.schemas || []);
+      },
+      fetchGateways: async () => {
+        try {
+          const json = await fetch('/api/connectors/gateways').then(r => r.json());
+          return Array.isArray(json) ? json : (json.gateways || []);
+        } catch {
+          return [];
+        }
+      },
+      fetchGatewayResources: async (gwId) => {
+        const res = await fetch(`/api/connectors/gateways/${encodeURIComponent(gwId)}/resources`);
+        if (!res.ok) throw new Error('Gateway resource discovery failed.');
+        const json = await res.json();
+        return Array.isArray(json) ? json : (json.resources || []);
+      },
+      fetchSecrets: async () => {
+        try {
+          const list = await (window.secretsApi ? window.secretsApi.list() : fetch('/api/admin/secrets').then(r => r.json()));
+          return Array.isArray(list) ? list.map(s => s.name || s) : [];
+        } catch {
+          return [];
+        }
+      },
+      onTest: async (req) => {
+        const res = await fetch('/api/connectors/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req)
+        });
+        return await res.json();
+      },
+      onSave: async (entry) => {
+        await connectionsApi.set(entry.alias, {
+          connectorType: entry.connectorType,
+          target: entry.target,
+          options: entry.options,
+          gateway: entry.gateway,
+          environmentScope: entry.environmentScope,
+          sensitiveFields: []
+        });
+      }
     });
   }
 

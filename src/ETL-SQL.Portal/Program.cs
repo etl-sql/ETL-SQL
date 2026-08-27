@@ -106,6 +106,7 @@ builder.Services.AddSingleton<ETL_SQL.Gateway.GatewaySessionRegistry>();
 builder.Services.AddSingleton<ETL_SQL.Gateway.GatewayBroker>();
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IViewerContextEnvelopeSigner,
     ETL_SQL.Portal.Services.PortalViewerContextEnvelopeSigner>();
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.IPortalGatewayGrantResolver, ETL_SQL.Portal.Services.PortalGatewayCatalogGrantResolver>();
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayOperationRouter, ETL_SQL.Portal.Services.PortalGatewayOperationRouter>();
 builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();
@@ -1045,7 +1046,9 @@ app.Use(async (context, next) =>
         var isReportEntry = string.Equals(path, "/", StringComparison.OrdinalIgnoreCase)
             || string.Equals(path, "/index.html", StringComparison.OrdinalIgnoreCase);
         var isDesignerEntry = string.Equals(path, "/designer.html", StringComparison.OrdinalIgnoreCase);
-        var isStudioEntry = string.Equals(path, "/studio.html", StringComparison.OrdinalIgnoreCase);
+        var isStudioEntry = string.Equals(path, "/studio.html", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, "/studio", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, "/studio/", StringComparison.OrdinalIgnoreCase);
         var isDocsEntry = string.Equals(path, "/docs.html", StringComparison.OrdinalIgnoreCase);
 
         if ((isReportEntry && !modules.IsEnabled("Reporting"))
@@ -1058,6 +1061,12 @@ app.Use(async (context, next) =>
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
+        }
+
+        if (string.Equals(path, "/studio", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, "/studio/", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Request.Path = "/studio.html";
         }
     }
 

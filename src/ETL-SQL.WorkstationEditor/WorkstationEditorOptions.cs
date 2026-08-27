@@ -9,7 +9,8 @@ public sealed record WorkstationEditorOptions(
     int Port,
     bool ReadOnly,
     string SessionToken,
-    bool OpenBrowser = false)
+    bool OpenBrowser = false,
+    bool StudioMode = false)
 {
     public static WorkstationEditorOptions Parse(string[] args, string invocationDirectory)
     {
@@ -17,6 +18,7 @@ public sealed record WorkstationEditorOptions(
         int port = 0;
         bool readOnly = false;
         bool openBrowser = false;
+        bool studioMode = false;
         string? token = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -32,6 +34,10 @@ public sealed record WorkstationEditorOptions(
             else if (args[i] == "--open")
             {
                 openBrowser = true;
+            }
+            else if (args[i] == "--studio")
+            {
+                studioMode = true;
             }
             else if (args[i] == "--token" && i + 1 < args.Length)
             {
@@ -73,7 +79,8 @@ public sealed record WorkstationEditorOptions(
             port,
             readOnly,
             string.IsNullOrWhiteSpace(token) ? GenerateToken() : token,
-            openBrowser);
+            openBrowser,
+            studioMode);
     }
 
     internal string LocalhostUrl => $"http://{IPAddress.Loopback}:{Port}";

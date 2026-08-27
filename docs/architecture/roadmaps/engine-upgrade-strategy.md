@@ -1,7 +1,7 @@
 # ETL-SQL Engine Architecture Separation Plan
 
 > [!IMPORTANT]
-> **Historical roadmap.** Much of this separation work has since shipped or changed shape. Use this file for planning history and rationale only. For current subsystem ownership, use the architecture docs under `Docs/Architecture/`, especially `Engine.md`, `Orchestrator.md`, `Reporting.md`, `Portal.md`, and `Source_Boundary_Migration_Plan.md`.
+> **Historical roadmap.** Much of this separation work has since shipped or changed shape. Use this file for planning history and rationale only. For current subsystem ownership, use the architecture docs under `docs/architecture/`, especially `engine.md`, `orchestrator.md`, `reporting.md`, `portal.md`, and `source-boundary-migration-plan.md`.
 
 **Status:** Historical roadmap — not current implementation guidance
 **Goal:** Split the monolithic `ETL-SQL.App` into four distinct, well-bounded executables/libraries while keeping the engine behavior identical: all tests pass, performance is at least as good.

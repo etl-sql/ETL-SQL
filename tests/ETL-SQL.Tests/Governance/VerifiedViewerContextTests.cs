@@ -273,7 +273,7 @@ public sealed class VerifiedViewerContextTests
         var sessions = new GatewaySessionRegistry();
         sessions.TryRegister(session);
         var signer = Service();
-        var router = new PortalGatewayOperationRouter(enrollments, sessions, signer);
+        var router = new PortalGatewayOperationRouter(enrollments, sessions, new TestGrantResolver(), signer);
 
         await router.ExecuteAsync(new ExecutionIdentity
         {
@@ -371,5 +371,20 @@ public sealed class VerifiedViewerContextTests
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class TestGrantResolver : IPortalGatewayGrantResolver
+    {
+        public Task<IReadOnlyList<GatewayResourceGrant>> ResolveAsync(
+            ExecutionIdentity identity,
+            GatewayResourceBinding binding,
+            GatewayOperationClass operationClass,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<GatewayResourceGrant>>(
+            [
+                new GatewayResourceGrant(
+                    identity.TenantId!, binding.GatewayId, binding.ResourceId,
+                    identity.EffectiveUser, operationClass)
+            ]);
     }
 }

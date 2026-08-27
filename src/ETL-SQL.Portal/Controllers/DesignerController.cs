@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
 using ETL_SQL.Core;
@@ -402,6 +402,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/designer/data-preview ──────────────────────────────────────
 
     [HttpPost("data-preview")]
+    [HttpPost("data-sample")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> DataPreview(

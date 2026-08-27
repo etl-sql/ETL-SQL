@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Portal.Data;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Portal.Tests;
@@ -199,8 +200,45 @@ public class GatewayEnrollmentControllerTests : IClassFixture<PortalWebFactory>
             RealUser = "admin",
             IsAdmin = true
         };
+        var catalogAlias = "gateway_route_" + Guid.NewGuid().ToString("N")[..8];
+        var binding = new GatewayResourceBinding(gatewayId, "orders") { CatalogAlias = catalogAlias };
+        var grantGroupId = 0;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var connection = new PortalSharedConnection
+            {
+                TenantId = "portal-host",
+                Alias = catalogAlias,
+                ConnectorType = "MOCKDB",
+                OptionsJson = JsonSerializer.Serialize(new Dictionary<string, string>
+                {
+                    ["__gateway_id"] = gatewayId,
+                    ["__gateway_resource_id"] = "orders"
+                })
+            };
+            db.PortalSharedConnections.Add(connection);
+            await db.SaveChangesAsync();
+
+            await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => router.ExecuteAsync(
+                identity, binding, GatewayOperationClass.Read, GatewayOperationEffect.ReadOnly,
+                GatewayOperationBounds.Default, JsonSerializer.Serialize(new { Table = "Orders" }),
+                null, CancellationToken.None));
+
+            var group = new Group { TenantId = "portal-host", Name = "gateway-route-grant-" + catalogAlias };
+            db.Groups.Add(group);
+            await db.SaveChangesAsync();
+            grantGroupId = group.Id;
+            db.SharedConnectionAcls.Add(new SharedConnectionAcl
+            {
+                TenantId = "portal-host",
+                SharedConnectionId = connection.Id,
+                GroupId = group.Id
+            });
+            await db.SaveChangesAsync();
+        }
         var routedTask = router.ExecuteAsync(
-            identity, new GatewayResourceBinding(gatewayId, "orders"),
+            identity, binding,
             GatewayOperationClass.Read, GatewayOperationEffect.ReadOnly,
             GatewayOperationBounds.Default, JsonSerializer.Serialize(new { Table = "Orders" }),
             null, CancellationToken.None);
@@ -231,11 +269,33 @@ public class GatewayEnrollmentControllerTests : IClassFixture<PortalWebFactory>
         var routed = await routedTask;
         Assert.Equal("42", routed.Rows.Single().Single());
 
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var acl = db.SharedConnectionAcls.Single(item => item.GroupId == grantGroupId);
+            var connectionId = acl.SharedConnectionId;
+            db.SharedConnectionAcls.Remove(acl);
+            await db.SaveChangesAsync();
+
+            await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => router.ExecuteAsync(
+                identity, binding, GatewayOperationClass.Read, GatewayOperationEffect.ReadOnly,
+                GatewayOperationBounds.Default, JsonSerializer.Serialize(new { Table = "Orders" }),
+                null, CancellationToken.None));
+
+            db.SharedConnectionAcls.Add(new SharedConnectionAcl
+            {
+                TenantId = "portal-host",
+                SharedConnectionId = connectionId,
+                GroupId = grantGroupId
+            });
+            await db.SaveChangesAsync();
+        }
+
         using var revoke = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/gateways/{gatewayId}/revoke");
         revoke.Headers.Authorization = new("Bearer", adminToken);
         (await _client.SendAsync(revoke)).EnsureSuccessStatusCode();
         await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => router.ExecuteAsync(
-            identity, new GatewayResourceBinding(gatewayId, "orders"),
+            identity, binding,
             GatewayOperationClass.Read, GatewayOperationEffect.ReadOnly,
             GatewayOperationBounds.Default, JsonSerializer.Serialize(new { Table = "Orders" }),
             null, CancellationToken.None));

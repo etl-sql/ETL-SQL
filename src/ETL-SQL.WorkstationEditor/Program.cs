@@ -26,8 +26,9 @@ catch (IOException ex)
     return 1;
 }
 
-var url = $"{WorkstationEditorApp.GetListeningUrl(app)}/?token={Uri.EscapeDataString(options.SessionToken)}";
-Console.WriteLine("ETL-SQL Local Script Editor");
+var pathPrefix = options.StudioMode ? "/studio" : "";
+var url = $"{WorkstationEditorApp.GetListeningUrl(app)}{pathPrefix}/?token={Uri.EscapeDataString(options.SessionToken)}";
+Console.WriteLine(options.StudioMode ? "ETL-SQL Studio (Local Workbench)" : "ETL-SQL Local Script Editor");
 Console.WriteLine($"Workspace: {options.WorkspaceRoot}");
 if (options.ReadOnly) Console.WriteLine("Mode:      read-only");
 Console.WriteLine($"URL:       {url}");

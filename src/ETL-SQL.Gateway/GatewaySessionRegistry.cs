@@ -28,6 +28,7 @@ public interface IGatewaySession : IAsyncDisposable
     string NodeId { get; }
     string WorkloadPublicKeyThumbprint { get; }
     DateTimeOffset ConnectedUtc { get; }
+    DateTimeOffset LastSeenUtc => ConnectedUtc;
     bool IsActive { get; }
     IReadOnlyList<GatewayPublishedResource> PublishedResources => [];
 

@@ -12,6 +12,51 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added Phase 6 of **ETL-SQL Studio** establishing automated multi-resolution usability audits and Playwright
+  browser verification. Added full geometry and bounding-box assertion suites testing viewports from 1024x768 to 4K UHD,
+  guaranteeing zero layout shift, strict horizontal scroll containment (`scrollWidth <= clientWidth`), minimum 24px
+  accessible button hitboxes, responsive auto-fitting visual card grids, and zero uncaught console/runtime errors.
+
+- Added Phase 5 of **ETL-SQL Studio** delivering multi-surface packaging across Desktop CLI and SaaS Portal.
+  Introduced the top-level `etlsql studio [script|dir]` CLI command launching the workstation host over local
+  loopback with automatic browser opening. Deployed the authenticated SaaS Portal route (`/studio` and
+  `studio.html`) binding the Zero-Trust connection catalog, Gateway routing, and OIDC identity contexts.
+
+- Added Phase 4 of **ETL-SQL Studio** introducing surgical AST synchronization and split-view CodeMirror
+  navigation. Clicking any visual card on the interactive canvas automatically navigates and highlights the
+  corresponding `VISUAL <id>` statement in the CodeMirror editor. Updating visual options (titles, layouts,
+  mappings) applies surgical AST span patching without modifying surrounding hand-crafted CTEs, custom procedural
+  logic, comments, or formatting. Debounced code-to-canvas synchronization refreshes visual calculations and DAG
+  nodes while preserving canvas stability during syntax editing.
+
+- Added Phase 3 of **ETL-SQL Studio** introducing the type-aware Filter Pane and 1-Click "Promote to Slicer"
+  workflow. Inspects `__ETLSNAP__` sample rows to populate categorical filter checkboxes (with distinct value counts),
+  numeric range inputs, and relative date presets (`Last 7 Days`, `Last 30 Days`, `This Quarter`, `YTD`). Clicking
+  "Promote to Slicer" automatically injects `@selected_*` parameter definitions and interactive `SLICER` visuals
+  into the script and WYSIWYG canvas, allowing live interactive multi-pill filtering across all canvas cards in <1ms.
+
+- Added Phase 2 of **ETL-SQL Studio** featuring live data `__ETLSNAP__` ingestion via `POST /api/designer/data-sample`
+  and a 60 FPS in-memory client math engine. Evaluates real-time aggregations (KPI `reduce()` sums/averages,
+  categorical Bar/Column SVG groups, Donut/Pie share-of-total arcs, and Line trend splines) in <1ms without
+  remote database round-trips. Automatically detects `.etlsql` scripts and projects an interactive directed
+  acyclic graph (DAG) visualizer tracing data movement from source connectors across memory staging tables to
+  destination loads.
+
+- Added Phase 1 of **ETL-SQL Studio**, the unified dual-projection visual and script workbench.
+  Features a top document tab manager, left Activity Rail (Explorer, Data Catalog, Filter Pane, Git Status,
+  and Settings), dual projection toggles (`[ 🎨 Canvas | 🌓 Split | ⌨️ Code ]`), CodeMirror 6 sub-line
+  selection execution with zero full-line expansion drift, and interactive zero-trust plaintext password
+  scanning with client passphrase encryption (`ENC:`) dialogs.
+
+- Added approved Gateway resource discovery and binding in the canonical Connection Wizard,
+  `Admin → Connections`, and `Admin → Data Gateways`. Active gateway sessions publish non-secret
+  metadata (resource ID, connector type, allowed operation classes, approval state, online status,
+  and last seen timestamp) for interactive resource selection, replacing manual Gateway and Resource ID
+  entry. Server-side validation re-verifies tenant ownership, active gateway session, resource approval,
+  allowed operations, and persisted connection use grants on save and execution. Reserved binding keys
+  cannot bypass validation, no grant denies execution, discovery is admin-only, and rejected catalog saves
+  remain visible in the wizard without exposing server error details or physical endpoints and credentials.
+
 - Added `SPARKLINE(...)` and `PROGRESS_BAR(...)` helpers to constrained `HTML` visual templates.
   Helpers validate source fields and bounded options during analysis, compile through the shared
   server-side chart plan into native SVG, render in single and repeater components without browser

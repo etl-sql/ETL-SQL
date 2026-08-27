@@ -216,12 +216,14 @@ internal sealed class ActiveGatewaySession : IGatewaySession
     private readonly CancellationTokenSource _sessionCts = new();
     private readonly Task _pumpTask;
     private readonly ITenantMeteringLedger? _meteringLedger;
+    private long _lastSeenUtcTicks;
 
     public string TenantId { get; }
     public string GatewayId { get; }
     public string NodeId { get; }
     public string WorkloadPublicKeyThumbprint { get; }
     public DateTimeOffset ConnectedUtc { get; }
+    public DateTimeOffset LastSeenUtc => new(Interlocked.Read(ref _lastSeenUtcTicks), TimeSpan.Zero);
     public bool IsActive => _socket.State == WebSocketState.Open && !_closeTcs.Task.IsCompleted;
     public IReadOnlyList<GatewayPublishedResource> PublishedResources { get; }
 
@@ -243,6 +245,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         _socket = socket;
         _maxFrameBytes = maxFrameBytes;
         ConnectedUtc = connectedUtc;
+        _lastSeenUtcTicks = connectedUtc.UtcTicks;
         _meteringLedger = meteringLedger;
         PublishedResources = publishedResources ?? [];
         _pumpTask = Task.Run(PumpInboundAsync);
@@ -375,6 +378,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                 while (true)
                 {
                     var result = await _socket.ReceiveAsync(buffer, _sessionCts.Token).ConfigureAwait(false);
+                    Interlocked.Exchange(ref _lastSeenUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
                         closed = true;

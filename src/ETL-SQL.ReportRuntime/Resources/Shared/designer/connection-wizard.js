@@ -36,6 +36,16 @@ function _attr(str) {
     return _h(str).replace(/'/g, '&#39;');
 }
 
+function formatDate(utcStr) {
+    if (!utcStr) return 'Online';
+    try {
+        const d = new Date(utcStr);
+        return isNaN(d.getTime()) ? String(utcStr) : d.toLocaleString();
+    } catch {
+        return String(utcStr);
+    }
+}
+
 /**
  * Encrypts a plaintext password with a client passphrase using PBKDF2 + AES-GCM (version 2 format),
  * byte-for-byte compatible with C# CryptoUtils.Decrypt.
@@ -181,7 +191,10 @@ export function createConnectionWizard(options = {}) {
         fetchSharedConnections = null,
         fetchSecrets = null,
         fetchGateways = null,
-        fetchStagedFiles = null
+        fetchGatewayResources = null,
+        fetchStagedFiles = null,
+        initialGateway = '',
+        initialResourceId = ''
     } = options;
 
     let state = {
@@ -192,7 +205,14 @@ export function createConnectionWizard(options = {}) {
         sharedAlias: '',
         alias: '',
         environmentScope: 'All',
-        gatewayCluster: '',
+        gatewayCluster: initialGateway || '',
+        selectedResourceId: initialResourceId || '',
+        selectedResource: null,
+        gatewayResources: [],
+        gatewayResourcesLoading: false,
+        gatewayResourcesError: null,
+        saveError: null,
+        isSaving: false,
         values: {},
         authType: 'secret', // 'secret' | 'env' | 'enc' | 'trusted' | 'keyfile'
         secretKey: '',
@@ -471,10 +491,71 @@ export function createConnectionWizard(options = {}) {
         if (gateways) state.gateways = Array.isArray(gateways) ? gateways : (gateways.gateways || []);
         if (stagedFiles) state.stagedFiles = Array.isArray(stagedFiles) ? stagedFiles : (stagedFiles.files || []);
         initFieldValues();
-        render();
+        if (state.gatewayCluster) {
+            loadGatewayResources(state.gatewayCluster);
+        } else {
+            render();
+        }
     }).catch(err => {
         console.warn('ConnectionWizard: Failed to fetch metadata from server, using built-ins.', err);
     });
+
+    async function loadGatewayResources(gatewayId) {
+        if (!gatewayId) {
+            state.gatewayResources = [];
+            state.selectedResourceId = '';
+            state.selectedResource = null;
+            state.gatewayResourcesLoading = false;
+            state.gatewayResourcesError = null;
+            render();
+            return;
+        }
+
+        state.gatewayResourcesLoading = true;
+        state.gatewayResourcesError = null;
+        render();
+
+        try {
+            let resList = null;
+            if (fetchGatewayResources) {
+                resList = await fetchGatewayResources(gatewayId);
+            } else {
+                const gw = (state.gateways || []).find(g => (g.name || g.id || g.gatewayId) === gatewayId);
+                if (gw && (gw.resources || gw.publishedResources)) {
+                    resList = gw.resources || gw.publishedResources;
+                }
+            }
+
+            if (resList && Array.isArray(resList)) {
+                state.gatewayResources = resList.filter(r => {
+                    const st = String(r.state || '').toLowerCase();
+                    return st === 'approved' || st === '1' || r.state === 1;
+                });
+            } else {
+                state.gatewayResources = [];
+            }
+
+            if (state.selectedResourceId) {
+                const match = state.gatewayResources.find(r => r.resourceId === state.selectedResourceId);
+                if (match) {
+                    state.selectedResource = match;
+                    state.connectorType = match.connectorType;
+                } else {
+                    state.selectedResourceId = '';
+                    state.selectedResource = null;
+                }
+            }
+        } catch (err) {
+            console.warn('ConnectionWizard: Gateway resource discovery failed.');
+            state.gatewayResourcesError = 'Failed to discover Gateway resources. Try again.';
+            state.gatewayResources = [];
+            state.selectedResourceId = '';
+            state.selectedResource = null;
+        } finally {
+            state.gatewayResourcesLoading = false;
+            render();
+        }
+    }
 
     function initFieldValues() {
         const schema = getCurrentSchema();
@@ -544,6 +625,14 @@ export function createConnectionWizard(options = {}) {
             return `CREATE CONNECTION ${alias} AS ${state.connectorType}('SHARED:${sharedRef}');`;
         }
 
+        // If a specific approved Gateway resource is selected:
+        if (state.selectedResourceId) {
+            if (state.mode === 'admin') {
+                return `-- Gateway-bound shared connection (SHARED:${alias})\n-- Gateway: ${state.gatewayCluster}\n-- Resource: ${state.selectedResourceId}\n-- Connector: ${state.connectorType}\n-- Physical destination & credentials resolved on Gateway`;
+            }
+            return `CREATE CONNECTION ${alias} AS ${state.connectorType}('SHARED:${state.alias || 'my_conn'}');\n-- Bound via Gateway: ${state.gatewayCluster} -> ${state.selectedResourceId}`;
+        }
+
         const schema = getCurrentSchema();
         const type = schema ? schema.connectorType : state.connectorType;
         const optionsList = [];
@@ -609,23 +698,25 @@ export function createConnectionWizard(options = {}) {
         const req = {
             alias: state.alias,
             connectorType: state.connectorType,
-            target: state.values.SERVER || state.values.HOST || state.values.PATH || '',
-            options: { ...state.values },
+            target: state.selectedResourceId ? '' : (state.values.SERVER || state.values.HOST || state.values.PATH || ''),
+            options: state.selectedResourceId ? { GATEWAY: state.gatewayCluster, RESOURCE: state.selectedResourceId } : { ...state.values },
             probeTimeoutSeconds: 5
         };
 
-        if (state.gatewayCluster) {
+        if (!state.selectedResourceId && state.gatewayCluster) {
             req.options.GATEWAY = state.gatewayCluster;
         }
 
-        if (state.authType === 'secret' && state.secretKey) {
-            req.options.PASSWORD = `SECRET:${state.secretKey}`;
-        } else if (state.authType === 'env' && state.envVarName) {
-            req.options.PASSWORD = `$ENV{${state.envVarName}}`;
-        } else if (state.authType === 'enc') {
-            req.options.PASSWORD = state.rawPassword || state.encryptedCipher || '';
-        } else if (state.authType === 'trusted') {
-            req.options.TRUSTED_CONNECTION = 'ON';
+        if (!state.selectedResourceId) {
+            if (state.authType === 'secret' && state.secretKey) {
+                req.options.PASSWORD = `SECRET:${state.secretKey}`;
+            } else if (state.authType === 'env' && state.envVarName) {
+                req.options.PASSWORD = `$ENV{${state.envVarName}}`;
+            } else if (state.authType === 'enc') {
+                req.options.PASSWORD = state.rawPassword || state.encryptedCipher || '';
+            } else if (state.authType === 'trusted') {
+                req.options.TRUSTED_CONNECTION = 'ON';
+            }
         }
 
         try {
@@ -788,9 +879,10 @@ export function createConnectionWizard(options = {}) {
                         </div>
 
                         <div class="etlsql-cw-footer-actions">
+                            ${state.saveError ? `<div class="etlsql-cw-save-error alert alert-danger" role="alert">${_h(state.saveError)}</div>` : ''}
                             <button type="button" class="btn btn-outline" id="etlsql-cw-cancel-btn">Cancel</button>
-                            <button type="button" class="btn btn-primary" id="etlsql-cw-submit-btn" ${securityViolation ? 'disabled title="Resolve security violation before saving"' : ''}>
-                                ${state.mode === 'admin' ? 'Save to Catalog' : 'Insert Connection'}
+                            <button type="button" class="btn btn-primary" id="etlsql-cw-submit-btn" ${(securityViolation || state.isSaving) ? 'disabled' : ''} ${securityViolation ? 'title="Resolve security violation before saving"' : ''}>
+                                ${state.isSaving ? 'Saving…' : (state.mode === 'admin' ? 'Save to Catalog' : 'Insert Connection')}
                             </button>
                         </div>
                     </div>
@@ -890,13 +982,29 @@ export function createConnectionWizard(options = {}) {
                 <!-- Data Gateway Cluster Routing -->
                 ${renderGatewayRoutingSelector()}
 
-                <div class="etlsql-cw-grid-2col">
-                    ${basicOptions.map(opt => renderOptionField(opt)).join('')}
-                </div>
+                ${state.selectedResourceId ? `
+                    <div class="alert alert-info etlsql-cw-gateway-bound-banner" style="margin-top: 12px;">
+                        <div style="font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                            <span>⚡</span>
+                            <span>Gateway Resource Bound: <code>${_h(state.selectedResourceId)}</code></span>
+                        </div>
+                        <p style="margin: 0 0 6px 0; font-size: 0.82rem;">
+                            Governed by Gateway <strong>${_h(state.gatewayCluster)}</strong>.
+                            Connector Type: <strong>${_h(state.connectorType)}</strong> | Operations: <strong>${_h(state.selectedResource?.allowedOperations || 'Read')}</strong>.
+                        </p>
+                        <p class="form-hint" style="margin: 0; font-size: 0.76rem;">
+                            Zero-Trust Security Boundary: Physical targets, hostnames, and credentials remain private on-premises and are never stored in the cloud catalog.
+                        </p>
+                    </div>
+                ` : `
+                    <div class="etlsql-cw-grid-2col">
+                        ${basicOptions.map(opt => renderOptionField(opt)).join('')}
+                    </div>
+                `}
             </div>
 
-            <!-- Zero-Trust Authentication Section -->
-            ${authOptions.length > 0 ? renderAuthSection(schema, authOptions) : ''}
+            <!-- Zero-Trust Authentication Section (suppressed for Gateway-bound resources) -->
+            ${!state.selectedResourceId && authOptions.length > 0 ? renderAuthSection(schema, authOptions) : ''}
 
             <!-- Advanced / Tuning Section (Collapsible) -->
             ${(securityOptions.length > 0 || tuningOptions.length > 0) ? `
@@ -943,18 +1051,84 @@ export function createConnectionWizard(options = {}) {
         const gateways = state.gateways || [];
         if (gateways.length === 0) return '';
 
+        let resourcePickerHtml = '';
+        if (state.gatewayCluster) {
+            if (state.gatewayResourcesLoading) {
+                resourcePickerHtml = `
+                    <div class="etlsql-cw-resource-loading" style="padding: 12px; margin-top: 8px; font-size: 0.82rem; color: var(--portal-muted, #7a8798);">
+                        <span class="spinner" style="display: inline-block; width: 14px; height: 14px; vertical-align: middle; margin-right: 6px;"></span>
+                        <span>Discovering approved gateway resources…</span>
+                    </div>
+                `;
+            } else if (state.gatewayResourcesError) {
+                resourcePickerHtml = `
+                    <div class="etlsql-cw-resource-error alert alert-danger" style="margin-top: 8px; font-size: 0.82rem;">
+                        <strong>Discovery Error:</strong> ${_h(state.gatewayResourcesError)}
+                    </div>
+                `;
+            } else if (!state.gatewayResources || state.gatewayResources.length === 0) {
+                resourcePickerHtml = `
+                    <div class="etlsql-cw-resource-empty alert alert-warning" id="etlsql-cw-no-resources" style="margin-top: 8px; font-size: 0.82rem;">
+                        <span class="status-pill status-pill-warn" style="font-size: 0.72rem;">No Resources</span>
+                        <span>No approved resources published by live session for this gateway.</span>
+                    </div>
+                `;
+            } else {
+                resourcePickerHtml = `
+                    <div class="etlsql-cw-resource-picker" role="radiogroup" aria-label="Discovered Gateway Resources" style="margin-top: 10px;">
+                        <div class="etlsql-cw-picker-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span class="etlsql-cw-picker-title" style="font-size: 0.8rem; font-weight: 600; color: var(--portal-text-soft, #46556c);">Published Gateway Resources (Approved)</span>
+                            <span class="form-hint" style="font-size: 0.74rem;">${state.gatewayResources.length} available</span>
+                        </div>
+                        <div class="etlsql-cw-resource-list" style="display: flex; flex-direction: column; gap: 6px;">
+                            ${state.gatewayResources.map(r => {
+                                const isSelected = state.selectedResourceId === r.resourceId;
+                                return `
+                                    <div class="etlsql-cw-resource-card ${isSelected ? 'is-selected' : ''}"
+                                         data-resource-id="${_attr(r.resourceId)}"
+                                         role="radio"
+                                         aria-checked="${isSelected}"
+                                         tabindex="0"
+                                         style="border: 1px solid ${isSelected ? 'var(--portal-primary, #3b82f6)' : 'var(--portal-border, #d9e0ea)'}; background: ${isSelected ? 'rgba(59, 130, 246, 0.08)' : 'var(--portal-surface, #ffffff)'}; border-radius: 6px; padding: 8px 12px; cursor: pointer; transition: all 0.15s ease;">
+                                        <div class="etlsql-cw-resource-card-header" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <input type="radio" name="cw-gw-resource" ${isSelected ? 'checked' : ''} style="margin: 0; pointer-events: none;" />
+                                                <strong class="etlsql-cw-resource-name" style="font-size: 0.86rem; color: var(--portal-text, #1e293b);">${_h(r.resourceId)}</strong>
+                                            </div>
+                                            <span class="status-pill status-pill-type" style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: var(--portal-surface-subtle, #f1f5f9); font-weight: 700;">${_h(r.connectorType)}</span>
+                                        </div>
+                                        <div class="etlsql-cw-resource-card-details" style="display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 0.76rem; color: var(--portal-muted, #64748b);">
+                                            <span class="etlsql-cw-resource-id">ID: <code>${_h(r.resourceId)}</code></span>
+                                            <span class="etlsql-cw-resource-ops">Ops: <strong>${_h(r.allowedOperations || 'Read')}</strong></span>
+                                            <span class="status-pill status-pill-good" style="font-size: 0.7rem; padding: 1px 5px; border-radius: 3px;">Approved</span>
+                                            <span class="etlsql-cw-resource-seen">${r.lastSeenUtc ? formatDate(r.lastSeenUtc) : 'Online'}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
         return `
-            <div class="form-group">
+            <div class="form-group etlsql-cw-gateway-group">
                 <label for="etlsql-cw-gateway-select">Hybrid Data Gateway Routing</label>
                 <select id="etlsql-cw-gateway-select" class="form-control">
                     <option value="">Direct Cloud Egress (No Gateway)</option>
-                    ${gateways.map(gw => `
-                        <option value="${_attr(gw.name || gw.id)}" ${state.gatewayCluster === (gw.name || gw.id) ? 'selected' : ''}>
-                            ⚡ ${gw.name || gw.id} (${gw.region || 'On-Premises'} - ${gw.status || 'Active'})
-                        </option>
-                    `).join('')}
+                    ${gateways.map(gw => {
+                        const val = gw.name || gw.id || gw.gatewayId;
+                        const status = gw.status || (gw.isOnline ? 'Online' : 'Disconnected');
+                        return `
+                            <option value="${_attr(val)}" ${state.gatewayCluster === val ? 'selected' : ''}>
+                                ⚡ ${_h(val)} (${_h(gw.region || 'On-Premises')} - ${_h(status)})
+                            </option>
+                        `;
+                    }).join('')}
                 </select>
-                <span class="form-hint">Routes egress queries through enrolled on-premises gateway daemon.</span>
+                <span class="form-hint">Routes egress queries through live on-premises gateway daemon.</span>
+                ${resourcePickerHtml}
             </div>
         `;
     }
@@ -1253,7 +1427,32 @@ export function createConnectionWizard(options = {}) {
         // Gateway select
         modalOverlay.querySelector('#etlsql-cw-gateway-select')?.addEventListener('change', e => {
             state.gatewayCluster = e.target.value;
-            updateSqlBox();
+            state.selectedResourceId = '';
+            state.selectedResource = null;
+            loadGatewayResources(state.gatewayCluster);
+        });
+
+        // Gateway Resource card selection
+        modalOverlay.querySelectorAll('.etlsql-cw-resource-card').forEach(card => {
+            const pick = () => {
+                const resId = card.dataset.resourceId;
+                if (resId) {
+                    state.selectedResourceId = resId;
+                    const match = (state.gatewayResources || []).find(r => r.resourceId === resId);
+                    if (match) {
+                        state.selectedResource = match;
+                        state.connectorType = match.connectorType;
+                    }
+                    render();
+                }
+            };
+            card.addEventListener('click', pick);
+            card.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    pick();
+                }
+            });
         });
 
         // Shared connection select
@@ -1451,23 +1650,45 @@ export function createConnectionWizard(options = {}) {
         });
 
         // Submit Button (Insert or Save)
-        modalOverlay.querySelector('#etlsql-cw-submit-btn')?.addEventListener('click', () => {
+        modalOverlay.querySelector('#etlsql-cw-submit-btn')?.addEventListener('click', async () => {
             const violation = getSecurityViolation();
-            if (violation) return;
+            if (violation || state.isSaving) return;
 
             const sql = generateSql();
             if (state.mode === 'admin') {
                 if (onSave) {
-                    onSave({
-                        alias: state.alias,
-                        connectorType: state.connectorType,
-                        target: state.values.SERVER || state.values.HOST || state.values.PATH || '',
-                        options: {
-                            ...state.values,
-                            ...(state.gatewayCluster ? { GATEWAY: state.gatewayCluster } : {})
-                        },
-                        environmentScope: state.environmentScope
-                    });
+                    state.isSaving = true;
+                    state.saveError = null;
+                    render();
+                    try {
+                        const entry = state.selectedResourceId ? {
+                            alias: state.alias,
+                            connectorType: state.connectorType,
+                            target: null,
+                            options: {},
+                            gateway: {
+                                gatewayId: state.gatewayCluster,
+                                resourceId: state.selectedResourceId
+                            },
+                            environmentScope: state.environmentScope
+                        } : {
+                            alias: state.alias,
+                            connectorType: state.connectorType,
+                            target: state.values.SERVER || state.values.HOST || state.values.PATH || '',
+                            options: {
+                                ...state.values,
+                                ...(state.gatewayCluster ? { GATEWAY: state.gatewayCluster } : {})
+                            },
+                            environmentScope: state.environmentScope
+                        };
+                        await onSave(entry);
+                        closeModal();
+                    } catch (error) {
+                        console.warn('ConnectionWizard: catalog save failed.');
+                        state.isSaving = false;
+                        state.saveError = 'Connection could not be saved. Review the entry and try again.';
+                        render();
+                    }
                 }
             } else {
                 if (onInsert) {
@@ -1475,12 +1696,12 @@ export function createConnectionWizard(options = {}) {
                         alias: state.alias,
                         connectorType: state.connectorType,
                         isShared: state.isSharedReference,
-                        gateway: state.gatewayCluster || null,
+                        gateway: state.selectedResourceId ? { gatewayId: state.gatewayCluster, resourceId: state.selectedResourceId } : (state.gatewayCluster || null),
                         options: state.values
                     });
                 }
+                closeModal();
             }
-            closeModal();
         });
     }
 

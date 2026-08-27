@@ -2,13 +2,97 @@ using System.Text.Json;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Gateway;
+using ETL_SQL.Portal.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Portal.Services;
 
 /// <summary>Catalog-authorized Portal route into an authenticated outbound Gateway session.</summary>
+public interface IPortalGatewayGrantResolver
+{
+    Task<IReadOnlyList<GatewayResourceGrant>> ResolveAsync(
+        ExecutionIdentity identity,
+        GatewayResourceBinding binding,
+        GatewayOperationClass operationClass,
+        CancellationToken cancellationToken);
+}
+
+public sealed class PortalGatewayCatalogGrantResolver(IServiceScopeFactory scopeFactory, PortalConfig config)
+    : IPortalGatewayGrantResolver
+{
+    public async Task<IReadOnlyList<GatewayResourceGrant>> ResolveAsync(
+        ExecutionIdentity identity,
+        GatewayResourceBinding binding,
+        GatewayOperationClass operationClass,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(identity.TenantId) || string.IsNullOrWhiteSpace(binding.CatalogAlias))
+            return [];
+
+        var catalogTenant = identity.TenantId == "default"
+            && config.SharedTenancy.Enabled != true
+            && string.IsNullOrWhiteSpace(config.TenantId)
+                ? "portal-host"
+                : identity.TenantId;
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var connection = await db.PortalSharedConnections
+            .AsNoTracking()
+            .Include(item => item.Acls).ThenInclude(acl => acl.Group)
+            .SingleOrDefaultAsync(item => item.TenantId == catalogTenant
+                && item.Alias == binding.CatalogAlias
+                && !item.Disabled, cancellationToken)
+            .ConfigureAwait(false);
+        if (connection is null || connection.Acls.Count == 0)
+            return [];
+
+        Dictionary<string, string>? options;
+        try
+        {
+            options = JsonSerializer.Deserialize<Dictionary<string, string>>(connection.OptionsJson);
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+
+        if (options is null
+            || !options.TryGetValue("__gateway_id", out var storedGatewayId)
+            || !options.TryGetValue("__gateway_resource_id", out var storedResourceId)
+            || !string.Equals(storedGatewayId, binding.GatewayId, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(storedResourceId, binding.ResourceId, StringComparison.OrdinalIgnoreCase))
+            return [];
+
+        var isGranted = identity.IsAdmin
+            || (connection.OwnerUserId is not null && identity.EffectiveUserId == connection.OwnerUserId);
+        if (!isGranted && identity.EffectiveUserId is int userId)
+        {
+            var groupIds = await db.UserGroups.AsNoTracking()
+                .Where(item => item.TenantId == catalogTenant && item.UserId == userId)
+                .Select(item => item.GroupId)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            isGranted = connection.Acls.Any(acl => groupIds.Contains(acl.GroupId));
+        }
+        else if (!isGranted)
+        {
+            isGranted = connection.Acls.Any(acl => identity.HasGroup(acl.Group.Name));
+        }
+
+        return isGranted
+            ? [new GatewayResourceGrant(
+                identity.TenantId, binding.GatewayId, binding.ResourceId,
+                identity.EffectiveUser, operationClass)]
+            : [];
+    }
+}
+
 public sealed class PortalGatewayOperationRouter(
     IGatewayEnrollmentStore enrollments,
     GatewaySessionRegistry sessions,
+    IPortalGatewayGrantResolver grantResolver,
     IViewerContextEnvelopeSigner? viewerContextSigner = null) : IGatewayOperationRouter
 {
     public async Task<GatewayRoutedResult> ExecuteAsync(
@@ -27,13 +111,9 @@ public sealed class PortalGatewayOperationRouter(
             .ConfigureAwait(false);
         var resource = session.PublishedResources.FirstOrDefault(item =>
             string.Equals(item.ResourceId, binding.ResourceId, StringComparison.OrdinalIgnoreCase));
-        var policyVersion = "catalog-acl-v1";
-        var grants = new[]
-        {
-            new GatewayResourceGrant(
-                tenantId, binding.GatewayId, binding.ResourceId, identity.EffectiveUser,
-                operationClass)
-        };
+        var policyVersion = "catalog-acl-v2";
+        var grants = await grantResolver.ResolveAsync(
+            identity, binding, operationClass, cancellationToken).ConfigureAwait(false);
         var decision = GatewayAuthority.Evaluate(
             new GatewayRoutingRequest(
                 tenantId, tenantId, session.TenantId, binding.GatewayId, binding.ResourceId,
