@@ -276,6 +276,11 @@ Statistical and financial summaries are also available as native channels in `CU
 [statistical and financial layer sample](../../../samples/08_Reporting/custom_statistical_financial_layers.rptsql)
 for candlestick plus volume and box plot plus mean tick compositions.
 
+Geographic composition uses `COORDINATE (TYPE = GEOGRAPHIC)` with an explicit projection and map
+authority. `REGION` drives `RECT` fills, `LONGITUDE`/`LATITUDE` place `POINT` and `TEXT`, and `ROUTE`
+groups source-ordered `LINE` paths. See the runnable
+[layered geographic sample](../../../samples/08_Reporting/custom_geographic_layers.rptsql).
+
 ### 1. Dual-Axis Zero Baseline Synchronization
 
 When displaying two metrics with drastically different units (e.g., Revenue in Dollars on `Y` vs. Profit Margin % on `Y2`), enforce zero-alignment by setting `INCLUDE_ZERO = ON` on both linear scales:

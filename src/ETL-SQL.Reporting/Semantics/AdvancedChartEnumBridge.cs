@@ -65,6 +65,10 @@ internal static class AdvancedChartEnumBridge
         AdvancedChartChannel.Shape => FieldChannel.Shape,
         AdvancedChartChannel.Theta => FieldChannel.Theta,
         AdvancedChartChannel.Radius => FieldChannel.Radius,
+        AdvancedChartChannel.Longitude => FieldChannel.Longitude,
+        AdvancedChartChannel.Latitude => FieldChannel.Latitude,
+        AdvancedChartChannel.Region => FieldChannel.Region,
+        AdvancedChartChannel.Route => FieldChannel.Route,
         AdvancedChartChannel.Text => FieldChannel.Text,
         AdvancedChartChannel.Tooltip => FieldChannel.Tooltip,
         AdvancedChartChannel.Detail => FieldChannel.Detail,
@@ -100,6 +104,10 @@ internal static class AdvancedChartEnumBridge
         FieldChannel.Shape => AdvancedChartChannel.Shape,
         FieldChannel.Theta => AdvancedChartChannel.Theta,
         FieldChannel.Radius => AdvancedChartChannel.Radius,
+        FieldChannel.Longitude => AdvancedChartChannel.Longitude,
+        FieldChannel.Latitude => AdvancedChartChannel.Latitude,
+        FieldChannel.Region => AdvancedChartChannel.Region,
+        FieldChannel.Route => AdvancedChartChannel.Route,
         FieldChannel.Text => AdvancedChartChannel.Text,
         FieldChannel.Tooltip => AdvancedChartChannel.Tooltip,
         FieldChannel.Detail => AdvancedChartChannel.Detail,
@@ -142,6 +150,7 @@ internal static class AdvancedChartEnumBridge
         AdvancedChartCoordinateKind.Cartesian => CoordinateKind.Cartesian,
         AdvancedChartCoordinateKind.TransposedCartesian => CoordinateKind.TransposedCartesian,
         AdvancedChartCoordinateKind.Polar => CoordinateKind.Polar,
+        AdvancedChartCoordinateKind.Geographic => CoordinateKind.Geographic,
         _ => throw Unmapped(value)
     };
 

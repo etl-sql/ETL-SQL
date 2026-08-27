@@ -1,0 +1,151 @@
+{
+  "kind": "rankedTable",
+  "heading": "Dense multi-series labels",
+  "items": [
+    {
+      "label": "Long category 01",
+      "value": "1",
+      "order": 0,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 02",
+      "value": "2",
+      "order": 1,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 03",
+      "value": "3",
+      "order": 2,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 04",
+      "value": "4",
+      "order": 3,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 05",
+      "value": "5",
+      "order": 4,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 06",
+      "value": "6",
+      "order": 5,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 07",
+      "value": "7",
+      "order": 6,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 08",
+      "value": "8",
+      "order": 7,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 09",
+      "value": "9",
+      "order": 8,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 10",
+      "value": "10",
+      "order": 9,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 11",
+      "value": "11",
+      "order": 10,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 12",
+      "value": "12",
+      "order": 11,
+      "group": "Actual"
+    },
+    {
+      "label": "Long category 01",
+      "value": "1",
+      "order": 100000,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 02",
+      "value": "2",
+      "order": 100001,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 03",
+      "value": "3",
+      "order": 100002,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 04",
+      "value": "4",
+      "order": 100003,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 05",
+      "value": "5",
+      "order": 100004,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 06",
+      "value": "6",
+      "order": 100005,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 07",
+      "value": "7",
+      "order": 100006,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 08",
+      "value": "8",
+      "order": 100007,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 09",
+      "value": "9",
+      "order": 100008,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 10",
+      "value": "10",
+      "order": 100009,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 11",
+      "value": "11",
+      "order": 100010,
+      "group": "Forecast"
+    },
+    {
+      "label": "Long category 12",
+      "value": "12",
+      "order": 100011,
+      "group": "Forecast"
+    }
+  ],
+  "summary": "Dense multi-series labels: 24 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

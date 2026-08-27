@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Completed native graphics across bounded responsive layout, deterministic smart-label placement,
+  statistical/financial `CUSTOM` channels, and geographic `CUSTOM` composition. Geographic charts
+  declare projection and map authority, resolve file-backed GeoJSON through the execution-context
+  path boundary, enforce geometry/render budgets, and share one resolved plan across SVG, PDF,
+  terminal fallback, accessibility, interactions, responsive refresh, and golden coverage.
+
 - Shipped constrained `HTML` report visuals across authoring and output surfaces. Analysis and LSP
   now validate and understand escaped typed bindings, scoped CSS, declarative actions, and bounded
   `VISUAL(...)` embeds. Source-free, single-row, and repeater components publish atomically under
@@ -150,8 +156,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   block. `custom-choropleth-point-map.md` and `custom-alluvial-flow-composition.md` are now
   `choropleth-point-map.md` and `alluvial-flow-composition.md`, and both describe what they actually
   are: coordinated named visuals over shared staged data. The choropleth recipe no longer claims a
-  single layered map surface, because layered geographic composition does not exist in the `CHART`
-  grammar; it is two independent `MAP` visuals sharing a page and a source.
+  single layered map surface at that point in its history; it remains the concise two-visual named
+  `MAP` pattern, while `CUSTOM` now supports a shared projected region/route/point/label surface.
 - Date and time values in charts are now rendered by the report formatter rather than reused from the
   engine's generic row strings, because only the formatter knows the report's zone and locale. A
   temporal string carrying no offset is anchored to UTC instead of picking up the server's local

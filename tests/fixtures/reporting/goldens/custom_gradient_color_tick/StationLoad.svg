@@ -21,10 +21,10 @@
 <line class='plot-tick' x1='326.5' y1='115' x2='443.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='2'><title>Target</title></line>
 <line class='plot-tick' x1='456.5' y1='115' x2='573.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='3'><title>Target</title></line>
 </g>
-<text x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Assembly</text>
-<text x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Paint</text>
-<text x='385' y='306' text-anchor='middle' font-size='9' fill='#666'>Trim</text>
-<text x='515' y='306' text-anchor='middle' font-size='9' fill='#666'>Final QA</text>
+<text class='plot-axis-label' data-axis-index='0' x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Assembly</text>
+<text class='plot-axis-label' data-axis-index='1' x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Paint</text>
+<text class='plot-axis-label' data-axis-index='2' x='385' y='306' text-anchor='middle' font-size='9' fill='#666'>Trim</text>
+<text class='plot-axis-label' data-axis-index='3' x='515' y='306' text-anchor='middle' font-size='9' fill='#666'>Final QA</text>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>

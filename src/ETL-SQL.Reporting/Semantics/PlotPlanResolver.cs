@@ -13,7 +13,8 @@ namespace ETL_SQL.Reporting.Semantics.Runtime;
 /// <summary>Resolves all shared semantic decisions once, before any backend renders.</summary>
 public sealed class PlotPlanResolver
 {
-    public PlotPlan Resolve(ChartSpec spec, ChartDataSet data, PlotBounds? bounds = null)
+    public PlotPlan Resolve(ChartSpec spec, ChartDataSet data, PlotBounds? bounds = null,
+        ResolvedGeographicGeometry? geography = null)
     {
         spec.Validate();
         data.Validate();
@@ -59,7 +60,8 @@ public sealed class PlotPlanResolver
             facets) with
         {
             CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, plotBounds),
-            Interaction = interaction
+            Interaction = interaction,
+            Geography = geography
         };
         plan.Validate();
         return plan;
@@ -786,7 +788,7 @@ public sealed class PlotPlanResolver
             .Where(value => value is not null).Sum(value => Math.Max(0m, Number(value!.Value) ?? 0m));
         var items = sourceLayers.SelectMany((layer, layerIndex) => layer.Data.Select((datum, index) =>
         {
-            var label = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.X or FieldChannel.Theta)?.DisplayValue
+            var label = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Region or FieldChannel.Route or FieldChannel.Text or FieldChannel.X or FieldChannel.Theta)?.DisplayValue
                 ?? (index < categories.Length ? categories[index] : $"Row {index + 1}");
             var value = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or
                 FieldChannel.Median or FieldChannel.Close or FieldChannel.Size or FieldChannel.YEnd);
@@ -811,6 +813,7 @@ public sealed class PlotPlanResolver
             { Detail = "labeled reference rule", Group = "Reference" };
         })).ToImmutableArray();
         return new SemanticFallback(
+            spec.Coordinate.Kind == CoordinateKind.Geographic && spec.Layers.Any(layer => layer.Bindings.Any(binding => binding.Channel == FieldChannel.Route)) ? SemanticFallbackKind.TransitionTable :
             spec.Coordinate.Kind == CoordinateKind.Polar ? SemanticFallbackKind.ProportionalBreakdown :
             spec.Bindings.Any(binding => binding.SemanticKind == DataSemanticKind.Temporal) ? SemanticFallbackKind.TimeSeriesTable : SemanticFallbackKind.RankedTable,
             spec.Title ?? spec.Id,

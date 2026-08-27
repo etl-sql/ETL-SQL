@@ -1,0 +1,5 @@
+╭─Regions, routes, and service locations───────────────────────────────────────────────────────────╮
+│ Regions, routes, and service locations: 4 rows, 4 ordered layers, 1 series, 1 facet panels, 0    │
+│ gaps, 0 skipped rows.                                                                            │
+│ all values are gaps                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

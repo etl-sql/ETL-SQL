@@ -8,7 +8,9 @@ Defines renderer-neutral native mark layers, encodings, scales, coordinates, con
 CREATE VISUAL name AS CUSTOM (
   SOURCE = #prepared,
   CHART (
-    COORDINATE (TYPE = CARTESIAN, ASPECT_RATIO = positive_number),
+    COORDINATE (TYPE = CARTESIAN, ASPECT_RATIO = positive_number) |
+               (TYPE = GEOGRAPHIC, PROJECTION = EQUIRECTANGULAR | MERCATOR,
+                MAP_NAME = 'WORLD' | MAP_FILE = 'allowed/path.geojson', FEATURE_KEY = 'name'),
     [SCALES (
       scale_name = LINEAR (
         CHANNEL = Y,
@@ -37,7 +39,8 @@ CREATE VISUAL name AS CUSTOM (
         ENCODINGS (
           X | X2 | X_START | X_END | X_OFFSET | Y | Y2 | Y_START | Y_END | Y_OFFSET |
           LOW | Q1 | MEDIAN | Q3 | HIGH | OPEN | CLOSE |
-          COLOR | SIZE | SHAPE | THETA | RADIUS | TEXT | TOOLTIP | DETAIL = field | DATUM(scalar) | VALUE(scalar) (
+          COLOR | SIZE | SHAPE | THETA | RADIUS | LONGITUDE | LATITUDE | REGION | ROUTE |
+          TEXT | TOOLTIP | DETAIL = field | DATUM(scalar) | VALUE(scalar) (
             TYPE = QUANTITATIVE | TEMPORAL | NOMINAL | ORDINAL,
             SCALE = scale_name,
             AXIS = NONE | PRIMARY | SECONDARY,
@@ -60,7 +63,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Mappings
 
-- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, or `POLAR`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and currently requires quantitative primary Cartesian X/Y scales.
+- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and currently requires quantitative primary Cartesian X/Y scales.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
 - **LAYERS** — Declares marks in deterministic `Z_INDEX` order. A layer consumes the visual's single `SOURCE`; stage differently prepared inputs into one visible `#temp` table before authoring the visual.
@@ -75,6 +78,7 @@ CREATE VISUAL name AS CUSTOM (
 - **Intervals** — Paired `Y_START`/`Y_END` creates an AREA ribbon, a vertical RULE span, or a ranged RECT such as a qualitative band or a floating variance bar; `X_START`/`X_END` supplies the symmetric horizontal range, which on a RECT with a continuous X scale is an explicit-bin histogram. Both endpoints are required, must share a quantitative or temporal `TYPE`, and both take part in scale-domain resolution. A ranged RECT owns its extent on that axis, so it rejects `Y`/`Y2` alongside `Y_START`/`Y_END` and `X`/`X2` alongside `X_START`/`X_END`; `STACK` computes its own endpoints and is unaffected. Endpoint calculations stay in SQL.
 - **TICK** — Draws a short category-local quantitative observation or target. It requires nominal/ordinal X and quantitative Y. `ORIENTATION = AUTO` resolves to a horizontal segment across the category band; `HORIZONTAL` and `VERTICAL` make that choice explicit. TICK is distinct from plot-spanning/ranged `RULE`; its `BAND_SIZE` is relative to the category band and `THICKNESS` is bounded to `(0, 1]` em.
 - **Statistical and financial rectangles** — A `RECT` with `X`, `LOW`, `Q1`, `MEDIAN`, `Q3`, and `HIGH` renders a box-plot glyph. A `RECT` with `X`, `OPEN`, `CLOSE`, `LOW`, and `HIGH` renders a candlestick glyph. These channels are quantitative and share the primary Y scale. Keep derived summaries in SQL. Add ordinary layers to the same `CUSTOM` chart for combinations such as box plot plus mean `TICK` or candlestick plus volume on `Y2`.
+- **Geographic composition** — `GEOGRAPHIC` requires an explicit `EQUIRECTANGULAR` or `MERCATOR` projection and exactly one geometry authority: a built-in `MAP_NAME` (`WORLD`, `US_STATES`, `US_COUNTIES`, `MN_COUNTIES`, `CANADA_PROVINCES`, or `EUROPE`) or a GeoJSON `MAP_FILE`. `MAP_FILE` is resolved through the engine path policy and is limited to 5 MiB, 10,000 features, 200,000 coordinates, and nesting depth 32. `FEATURE_KEY` names the GeoJSON property matched by `REGION`. Geographic `RECT` fills regions; `POINT` and `TEXT` require quantitative `LONGITUDE` and `LATITUDE`; `LINE` also requires nominal `ROUTE` and connects rows in source order. Rendering is bounded to 20,000 points/labels and 500 routes. Region and route fields are the default interaction keys. Terminal and assistive surfaces receive an ordered table/transition fallback, while browser and PDF use the same resolved SVG geometry. Resolved filesystem paths are never serialized.
 - **FACET** — Creates a row/column grid or a mutually exclusive one-dimensional `WRAP`. Wrap uses stable first-seen row-major ordering, 1–12 columns, at most 100 panels, render-work limits, and minimum panel dimensions.
 - **RESOLVE** — Selects shared or per-panel X, Y/Y2, and color scales. Independent resolution requires `FACET`.
 - **Visible transformations** — Aggregation, filtering, calculation, lookup, windowing, and statistical preparation belong in preceding ETL-SQL/`#temp` statements, not in `CHART`.
@@ -147,6 +151,29 @@ CREATE VISUAL PriceAndVolume AS CUSTOM (
           HIGH = HighPrice (TYPE = QUANTITATIVE, SCALE = price)
         )
       )
+    )
+  )
+);
+```
+
+```sql
+CREATE VISUAL ServiceMap AS CUSTOM (
+  SOURCE = #service_locations,
+  CHART (
+    COORDINATE (TYPE = GEOGRAPHIC, PROJECTION = EQUIRECTANGULAR,
+      MAP_NAME = 'WORLD', FEATURE_KEY = 'name'),
+    LAYERS (
+      regions = RECT (ENCODINGS (
+        REGION = Country (TYPE = NOMINAL), COLOR = Orders (TYPE = QUANTITATIVE)
+      )),
+      routes = LINE (Z_INDEX = 1, ENCODINGS (
+        LONGITUDE = Longitude (TYPE = QUANTITATIVE), LATITUDE = Latitude (TYPE = QUANTITATIVE),
+        ROUTE = RouteId (TYPE = NOMINAL)
+      )),
+      locations = POINT (Z_INDEX = 2, ENCODINGS (
+        LONGITUDE = Longitude (TYPE = QUANTITATIVE), LATITUDE = Latitude (TYPE = QUANTITATIVE),
+        TEXT = Location (TYPE = NOMINAL)
+      ))
     )
   )
 );

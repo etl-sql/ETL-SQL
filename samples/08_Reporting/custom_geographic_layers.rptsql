@@ -1,0 +1,65 @@
+SET REPORT TITLE = 'CUSTOM Geographic Composition';
+
+SELECT 'United States of America' AS Country, 90 AS Orders, -122.3 AS Longitude, 47.6 AS Latitude,
+       'west-route' AS RouteId, 'Seattle' AS Location
+INTO #service_locations
+UNION ALL
+SELECT 'Canada', 60, -79.4, 43.7, 'west-route', 'Toronto'
+UNION ALL
+SELECT 'France', 45, 2.35, 48.86, 'atlantic-route', 'Paris'
+UNION ALL
+SELECT 'United States of America', 90, -74.0, 40.71, 'atlantic-route', 'New York';
+
+CREATE VISUAL ServiceMap AS CUSTOM (
+  TITLE = 'Regions, routes, and service locations',
+  SOURCE = #service_locations,
+  CHART (
+    COORDINATE (
+      TYPE = GEOGRAPHIC,
+      PROJECTION = EQUIRECTANGULAR,
+      MAP_NAME = 'WORLD',
+      FEATURE_KEY = 'name'
+    ),
+    LAYERS (
+      regions = RECT (
+        ENCODINGS (
+          REGION = Country (TYPE = NOMINAL),
+          COLOR = Orders (TYPE = QUANTITATIVE)
+        )
+      ),
+      routes = LINE (
+        Z_INDEX = 1,
+        ENCODINGS (
+          LONGITUDE = Longitude (TYPE = QUANTITATIVE),
+          LATITUDE = Latitude (TYPE = QUANTITATIVE),
+          ROUTE = RouteId (TYPE = NOMINAL)
+        ),
+        STYLE (COLOR = '#2563eb')
+      ),
+      points = POINT (
+        Z_INDEX = 2,
+        ENCODINGS (
+          LONGITUDE = Longitude (TYPE = QUANTITATIVE),
+          LATITUDE = Latitude (TYPE = QUANTITATIVE),
+          TEXT = Location (TYPE = NOMINAL)
+        ),
+        STYLE (COLOR = '#dc2626')
+      ),
+      labels = TEXT (
+        Z_INDEX = 3,
+        ENCODINGS (
+          LONGITUDE = Longitude (TYPE = QUANTITATIVE),
+          LATITUDE = Latitude (TYPE = QUANTITATIVE),
+          TEXT = Location (TYPE = NOMINAL)
+        )
+      )
+    )
+  ),
+  INTERACTIONS (ON_SELECT = FILTER)
+);
+
+CREATE PAGE Main AS DASHBOARD (
+  STRUCTURE = 'A',
+  MAP ('A' = ServiceMap)
+);
+

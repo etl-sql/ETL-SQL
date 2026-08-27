@@ -501,6 +501,11 @@ SET @normal = 'still-visible';
             Assert.Contains(result, item => item.Label == "MEDIAN");
             Assert.Contains(result, item => item.Label == "OPEN");
             Assert.Contains(result, item => item.Label == "CLOSE");
+            Assert.Contains(result, item => item.Label == "GEOGRAPHIC");
+            Assert.Contains(result, item => item.Label == "MERCATOR");
+            Assert.Contains(result, item => item.Label == "MAP_FILE");
+            Assert.Contains(result, item => item.Label == "REGION");
+            Assert.Contains(result, item => item.Label == "ROUTE");
         }
 
         private class MockConfiguration : Microsoft.Extensions.Configuration.IConfiguration

@@ -264,6 +264,10 @@ namespace ETL_SQL.Reporting
         [JsonIgnore]
         public string? ResolvedMapFile { get; set; }
 
+        /// <summary>Validated, normalized map geometry retained for responsive server re-resolution.</summary>
+        [JsonIgnore]
+        public ResolvedGeographicGeometry? GeographicGeometry { get; set; }
+
         /// <summary>
         /// Ordered non-graphical interpretation shared by terminals, assistive technology,
         /// and plain-text/static delivery paths.

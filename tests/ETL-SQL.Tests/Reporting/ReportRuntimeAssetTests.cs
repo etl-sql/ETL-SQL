@@ -119,7 +119,7 @@ namespace ETL_SQL.Tests.Reporting
 
         [Fact]
         [Trait("Category", "Smoke.Reporting")]
-        public void ReportBuilder_ExposesStatisticalAndFinancialCustomRecipes()
+        public void ReportBuilder_ExposesNativeCustomCompositionRecipes()
         {
             var root = FindRepoRoot();
             var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "designer.js"));
@@ -129,6 +129,9 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("Candlestick + volume", js);
             Assert.Contains("Q1 = q1 (TYPE = QUANTITATIVE)", js);
             Assert.Contains("OPEN = open (TYPE = QUANTITATIVE, SCALE = price)", js);
+            Assert.Contains("Layered map", js);
+            Assert.Contains("TYPE = GEOGRAPHIC", js);
+            Assert.Contains("ROUTE = route (TYPE = NOMINAL)", js);
         }
 
         private static string FindRepoRoot([CallerFilePath] string sourceFilePath = "")

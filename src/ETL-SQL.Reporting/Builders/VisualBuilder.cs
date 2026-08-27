@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
 
 namespace ETL_SQL.Reporting.Builders
@@ -336,8 +337,14 @@ namespace ETL_SQL.Reporting.Builders
                         vm.ChartSpec = chartStatement.AdvancedChart is not null
                             ? new AdvancedChartLowerer(ctx).Lower(chartStatement, vm)
                             : new NamedVisualChartLowerer(ctx).Lower(chartStatement, vm);
+                        if (vm.ChartSpec.Coordinate.Geography is { } geographic)
+                        {
+                            if (geographic.SourceKind == GeographicMapSourceKind.File)
+                                vm.ResolvedMapFile = GeographicGeometryResolver.ResolveMapFile(ctx, geographic);
+                            vm.GeographicGeometry = GeographicGeometryResolver.Resolve(geographic, vm.ResolvedMapFile);
+                        }
                         vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
-                        vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData);
+                        vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData, geography: vm.GeographicGeometry);
                     }
                     // One resolved interaction contract per visual: from the plan when the visual has
                     // one, from the authored clauses when it does not (TABLE, SLICER, focused layouts).

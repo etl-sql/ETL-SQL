@@ -22,10 +22,10 @@
 <circle cx='515' cy='51.905' r='3' fill='#E11D48' data-row-index='3'><title>98.4</title></circle>
 <path d='M 125 57.228 L 255 60.616 L 385 55.05 L 515 51.905' fill='none' stroke='#E11D48' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
 </g>
-<text x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 1</text>
-<text x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 2</text>
-<text x='385' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 3</text>
-<text x='515' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 4</text>
+<text class='plot-axis-label' data-axis-index='0' x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 1</text>
+<text class='plot-axis-label' data-axis-index='1' x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 2</text>
+<text class='plot-axis-label' data-axis-index='2' x='385' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 3</text>
+<text class='plot-axis-label' data-axis-index='3' x='515' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 4</text>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>

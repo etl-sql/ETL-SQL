@@ -21,6 +21,8 @@ internal sealed class PlotPlanSvgRenderer
     private sealed record PositionedOverlayLabel(OverlayLabel Label, decimal Y);
     private sealed record ArcLabel(decimal AnchorX, decimal AnchorY, decimal ElbowX, decimal PreferredY, string Text, bool IsRight);
     private sealed record PositionedArcLabel(ArcLabel Label, decimal Y);
+    private sealed record SmartLabel(int RowIndex, decimal X, decimal Y, string Text, string Color, int Priority, decimal FontSize = 9m);
+    private sealed record LabelBox(decimal Left, decimal Top, decimal Right, decimal Bottom);
 
     public string Render(PlotPlan plan)
     {
@@ -54,6 +56,13 @@ internal sealed class PlotPlanSvgRenderer
             else if (standardLayout.Equals("gantt", StringComparison.OrdinalIgnoreCase)) RenderGantt(builder, plan);
             else if (standardLayout.Equals("radar", StringComparison.OrdinalIgnoreCase)) RenderRadar(builder, plan);
             else throw new InvalidOperationException($"Unsupported native standard layout '{standardLayout}'.");
+            builder.AppendLine("</svg>");
+            return builder.ToString();
+        }
+
+        if (plan.Coordinate?.Kind == CoordinateKind.Geographic)
+        {
+            RenderGeographic(builder, plan);
             builder.AppendLine("</svg>");
             return builder.ToString();
         }
@@ -118,6 +127,7 @@ internal sealed class PlotPlanSvgRenderer
         var plotWidth = plan.Bounds.Width - Left - plotRight;
         var plotHeight = plan.Bounds.Height - Top - Bottom;
         var overlayLabels = new List<OverlayLabel>();
+        var smartLabels = new List<SmartLabel>();
         builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
         builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
         var xScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
@@ -155,14 +165,19 @@ internal sealed class PlotPlanSvgRenderer
             switch (layer.Mark)
             {
                 case MarkKind.Rect:
-                    RenderRects(builder, plan, layer, rectLayers, layer.Stack != StackMode.None, categories.Length, plotWidth, plotHeight, xScale, yScale, color, showLabels);
+                    if (IsBoxPlotLayer(layer))
+                        RenderBoxPlotLayer(builder, layer, categories, plotWidth, plotHeight, yScale, color);
+                    else if (IsCandlestickLayer(layer))
+                        RenderCandlestickLayer(builder, layer, categories, plotWidth, plotHeight, yScale);
+                    else
+                        RenderRects(builder, plan, layer, rectLayers, layer.Stack != StackMode.None, categories.Length, plotWidth, plotHeight, xScale, yScale, color, showLabels);
                     break;
                 case MarkKind.Line:
                     var lineScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
                     if (layer.Stack != StackMode.None && overlayType is null)
                         RenderStackedLine(builder, plan, layer, lineLayers, categories.Length, plotWidth, plotHeight, lineScale, color, showLabels);
                     else
-                        RenderLine(builder, plan, layer, categories.Length, plotWidth, plotHeight, xScale, lineScale, color, showLabels, overlayLabels);
+                        RenderLine(builder, plan, layer, categories.Length, plotWidth, plotHeight, xScale, lineScale, color, showLabels, overlayLabels, smartLabels);
                     break;
                 case MarkKind.Area:
                     RenderArea(builder, layer, categories.Length, plotWidth, plotHeight, yScale, color);
@@ -171,14 +186,15 @@ internal sealed class PlotPlanSvgRenderer
                     var pointScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)
                         ? y2Scale ?? yScale
                         : yScale;
-                    RenderPoints(builder, plan, layer, categories.Length, plotWidth, plotHeight, xScale, pointScale, color);
+                    RenderPoints(builder, plan, layer, categories.Length, plotWidth, plotHeight, xScale, pointScale, color, smartLabels);
                     break;
                 case MarkKind.Rule:
                     RenderRule(builder, layer, plotWidth, plotHeight, xScale, yScale, overlayLabels);
                     break;
                 case MarkKind.Text:
-                    RenderText(builder, layer, categories.Length, plotWidth, plotHeight,
-                        layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale, color);
+                    RenderText(layer, categories.Length, plotWidth, plotHeight, xScale,
+                        layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale,
+                        color, smartLabels);
                     break;
                 case MarkKind.Tick:
                     RenderTicks(builder, plan, layer, categories.Length, plotWidth, plotHeight, yScale, color);
@@ -187,14 +203,11 @@ internal sealed class PlotPlanSvgRenderer
             if (overlayType is not null) builder.AppendLine("</g>");
         }
         builder.AppendLine("</g>");
+        RenderSmartLabels(builder, smartLabels, plotWidth, plotHeight);
         RenderOverlayLabels(builder, overlayLabels, plotHeight);
 
         if (categories.Length > 0)
-        {
-            var step = plotWidth / categories.Length;
-            for (var index = 0; index < categories.Length; index++)
-                builder.AppendLine($"<text x='{N(Left + step * (index + 0.5m))}' y='{N(Top + plotHeight + 16)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(categories[index], 12))}</text>");
-        }
+            RenderHorizontalCategoryAxisLabels(builder, categories, plotWidth, plotHeight);
         if (yScale is not null)
         {
             foreach (var tick in yScale.Ticks)
@@ -361,8 +374,7 @@ internal sealed class PlotPlanSvgRenderer
                 builder.AppendLine($"<path d='M {N(baseline)} {N(pointCoordinates[0].Y)} L {string.Join(" L ", points)} L {N(baseline)} {N(pointCoordinates[^1].Y)} Z' fill='{Esc(color)}' fill-opacity='0.25' stroke='{Esc(color)}' stroke-width='2'/>");
             }
         }
-        for (var index = 0; index < categories.Length; index++)
-            builder.AppendLine($"<text x='{N(Left - 6m)}' y='{N(Top + slot * (index + .5m) + 3m)}' text-anchor='end' font-size='9' fill='#666'>{Esc(Truncate(categories[index], 12))}</text>");
+        RenderVerticalCategoryAxisLabels(builder, categories, slot, plotHeight);
         var xTitle = Style(plan, "axis:x:label");
         var yTitle = Style(plan, "axis:y:label");
         if (!string.IsNullOrWhiteSpace(yTitle))
@@ -664,7 +676,7 @@ internal sealed class PlotPlanSvgRenderer
 
     private static void RenderLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels,
-        ICollection<OverlayLabel> overlayLabels)
+        ICollection<OverlayLabel> overlayLabels, ICollection<SmartLabel> smartLabels)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
         var lineStyle = LayerStyle(layer, "lineStyle");
@@ -695,7 +707,11 @@ internal sealed class PlotPlanSvgRenderer
             if (!isOverlay || !plan.Layers.Any(candidate => candidate.Mark == MarkKind.Point && LayerStyle(candidate, "overlayType") is null))
                 builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='{(isOverlay ? "4" : "3")}' fill='{Esc(color)}'{(isOverlay ? " stroke='white' stroke-width='1.5'" : string.Empty)} data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
             if (showLabels)
-                builder.AppendLine($"<text x='{N(x)}' y='{N(y - 6m)}' text-anchor='middle' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"))}'>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</text>");
+                smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
+                    FormatDataLabel(value.Value, DataFormat(plan)),
+                    SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"),
+                    120 + layer.ZIndex,
+                    FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"))));
         }
         Flush();
         var overlayLabel = LayerStyle(layer, "label");
@@ -765,7 +781,8 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static void RenderPoints(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
-        decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? yScale, string color)
+        decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? yScale, string color,
+        ICollection<SmartLabel> smartLabels)
     {
         if (xScale is null || yScale is null) return;
         var sizes = layer.Data.Select(datum => PlotPlanResolver.Number(Channel(datum, FieldChannel.Size) ?? ChartValue.Null()))
@@ -802,7 +819,11 @@ internal sealed class PlotPlanSvgRenderer
             var y = MapY(yValue.Value, yScale, plotHeight) + datum.DisplayOffsetY;
             builder.AppendLine($"<circle class='plot-point' cx='{N(x)}' cy='{N(y)}' r='{N(Math.Clamp(radius, 1m, 30m))}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' stroke='white' stroke-width='1.5' data-row-index='{datum.RowIndex}'>{(string.IsNullOrWhiteSpace(label) ? string.Empty : $"<title>{Esc(label)}</title>")}</circle>");
             if (IsEnabled(plan.Style, "DATA_LABELS"))
-                builder.AppendLine($"<text x='{N(x + 5m)}' y='{N(y - 5m)}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"))}'>{Esc(label ?? FormatDataLabel(yValue.Value, Style(plan, "DATA_LABELS:FORMAT")))}</text>");
+                smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
+                    label ?? FormatDataLabel(yValue.Value, Style(plan, "DATA_LABELS:FORMAT")),
+                    SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"),
+                    100 + layer.ZIndex,
+                    FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"))));
         }
     }
 
@@ -1283,11 +1304,268 @@ internal sealed class PlotPlanSvgRenderer
         _ => string.Empty
     };
 
-    private static void RenderText(StringBuilder builder, ResolvedMarkLayer layer, int categoryCount,
+    private static decimal FontSize(string? value) =>
+        decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Clamp(parsed, 7m, 24m)
+            : 9m;
+
+    /// <summary>
+    /// Deterministic priority-aware placement shared by explicit TEXT layers and data labels.
+    /// Higher-priority author TEXT wins, lower-priority labels try stable offsets, and labels that
+    /// cannot fit remain in the SVG description instead of overflowing the viewBox.
+    /// </summary>
+    private static void RenderSmartLabels(
+        StringBuilder builder,
+        IReadOnlyCollection<SmartLabel> labels,
+        decimal plotWidth,
+        decimal plotHeight)
+    {
+        if (labels.Count == 0) return;
+        var occupied = new List<LabelBox>();
+        var offsets = new (decimal X, decimal Y)[]
+        {
+            (0m, -7m), (7m, -13m), (-7m, -13m), (9m, 8m), (-9m, 8m), (0m, 17m)
+        };
+        foreach (var label in labels
+                     .OrderByDescending(item => item.Priority)
+                     .ThenBy(item => item.RowIndex)
+                     .ThenBy(item => item.Text, StringComparer.Ordinal))
+        {
+            var labelWidth = Math.Min(160m, Math.Max(8m, label.Text.Length * label.FontSize * .56m));
+            var labelHeight = label.FontSize + 4m;
+            (decimal X, decimal Y, LabelBox Box)? placed = null;
+            foreach (var offset in offsets)
+            {
+                var x = Math.Clamp(label.X + offset.X, Left + labelWidth / 2m, Left + plotWidth - labelWidth / 2m);
+                var y = Math.Clamp(label.Y + offset.Y, Top + labelHeight, Top + plotHeight - 2m);
+                var box = new LabelBox(x - labelWidth / 2m, y - labelHeight, x + labelWidth / 2m, y + 2m);
+                if (occupied.All(existing => !Overlaps(box, existing)))
+                {
+                    placed = (x, y, box);
+                    break;
+                }
+            }
+
+            if (placed is null)
+            {
+                builder.AppendLine($"<desc class='plot-smart-label-occluded' data-row-index='{label.RowIndex}'>{Esc(label.Text)}</desc>");
+                continue;
+            }
+
+            occupied.Add(placed.Value.Box);
+            var moved = Math.Abs(placed.Value.X - label.X) > 1m || Math.Abs(placed.Value.Y - label.Y) > 8m;
+            if (moved)
+                builder.AppendLine($"<path class='plot-smart-label-leader' data-row-index='{label.RowIndex}' d='M {N(label.X)} {N(label.Y)} L {N(placed.Value.X)} {N(placed.Value.Y - label.FontSize / 2m)}' fill='none' stroke='{Esc(label.Color)}' stroke-width='.75' stroke-opacity='.65'/>");
+            builder.AppendLine($"<text class='plot-smart-label' data-row-index='{label.RowIndex}' data-priority='{label.Priority}' x='{N(placed.Value.X)}' y='{N(placed.Value.Y)}' text-anchor='middle' font-size='{N(label.FontSize)}' fill='{Esc(label.Color)}'>{Esc(label.Text)}</text>");
+        }
+    }
+
+    private static bool IsBoxPlotLayer(ResolvedMarkLayer layer) =>
+        layer.Data.Any(datum => Channel(datum, FieldChannel.Q1) is not null || Channel(datum, FieldChannel.Median) is not null || Channel(datum, FieldChannel.Q3) is not null);
+
+    private static bool IsCandlestickLayer(ResolvedMarkLayer layer) =>
+        layer.Data.Any(datum => Channel(datum, FieldChannel.Open) is not null || Channel(datum, FieldChannel.Close) is not null);
+
+    private static void RenderBoxPlotLayer(StringBuilder builder, ResolvedMarkLayer layer, ImmutableArray<string> categories,
         decimal plotWidth, decimal plotHeight, ResolvedScale? scale, string color)
     {
         if (scale is null) return;
-        var denominator = Math.Max(1, categoryCount - 1);
+        var slot = plotWidth / Math.Max(1, categories.Length);
+        builder.AppendLine($"<g class='plot-boxplot' data-layer='{Esc(layer.Id)}'>");
+        foreach (var datum in layer.Data)
+        {
+            var low = Numeric(datum, FieldChannel.Low); var q1 = Numeric(datum, FieldChannel.Q1);
+            var median = Numeric(datum, FieldChannel.Median); var q3 = Numeric(datum, FieldChannel.Q3); var high = Numeric(datum, FieldChannel.High);
+            if (low is null || q1 is null || median is null || q3 is null || high is null) continue;
+            var category = DisplayChannel(datum, FieldChannel.X);
+            var index = category is null ? -1 : categories.IndexOf(category);
+            if (index < 0) continue;
+            var x = Left + slot * (index + .5m); var width = slot * layer.BandSize * .65m;
+            var lowY = MapY(low.Value, scale, plotHeight); var q1Y = MapY(q1.Value, scale, plotHeight);
+            var medianY = MapY(median.Value, scale, plotHeight); var q3Y = MapY(q3.Value, scale, plotHeight); var highY = MapY(high.Value, scale, plotHeight);
+            builder.AppendLine($"<g data-row-index='{datum.RowIndex}'><title>{Esc(category!)}: low {N(low.Value)}, Q1 {N(q1.Value)}, median {N(median.Value)}, Q3 {N(q3.Value)}, high {N(high.Value)}</title><line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='{Esc(color)}'/><line x1='{N(x - width / 4m)}' y1='{N(highY)}' x2='{N(x + width / 4m)}' y2='{N(highY)}' stroke='{Esc(color)}'/><line x1='{N(x - width / 4m)}' y1='{N(lowY)}' x2='{N(x + width / 4m)}' y2='{N(lowY)}' stroke='{Esc(color)}'/><rect x='{N(x - width / 2m)}' y='{N(q3Y)}' width='{N(width)}' height='{N(Math.Max(1m, q1Y - q3Y))}' fill='{Esc(color)}' fill-opacity='.35' stroke='{Esc(color)}'/><line x1='{N(x - width / 2m)}' y1='{N(medianY)}' x2='{N(x + width / 2m)}' y2='{N(medianY)}' stroke='{Esc(color)}' stroke-width='2'/></g>");
+        }
+        builder.AppendLine("</g>");
+    }
+
+    private static void RenderCandlestickLayer(StringBuilder builder, ResolvedMarkLayer layer, ImmutableArray<string> categories,
+        decimal plotWidth, decimal plotHeight, ResolvedScale? scale)
+    {
+        if (scale is null) return;
+        var slot = plotWidth / Math.Max(1, categories.Length);
+        builder.AppendLine($"<g class='plot-candlestick' data-layer='{Esc(layer.Id)}'>");
+        foreach (var datum in layer.Data)
+        {
+            var open = Numeric(datum, FieldChannel.Open); var close = Numeric(datum, FieldChannel.Close);
+            var low = Numeric(datum, FieldChannel.Low); var high = Numeric(datum, FieldChannel.High);
+            if (open is null || close is null || low is null || high is null) continue;
+            var category = DisplayChannel(datum, FieldChannel.X);
+            var index = category is null ? -1 : categories.IndexOf(category);
+            if (index < 0) continue;
+            var x = Left + slot * (index + .5m); var width = slot * layer.BandSize * .55m;
+            var openY = MapY(open.Value, scale, plotHeight); var closeY = MapY(close.Value, scale, plotHeight);
+            var lowY = MapY(low.Value, scale, plotHeight); var highY = MapY(high.Value, scale, plotHeight);
+            var color = close.Value >= open.Value ? "#26a69a" : "#ef5350";
+            builder.AppendLine($"<g data-row-index='{datum.RowIndex}' data-extent-axis='y'><title>{Esc(category!)}: O {N(open.Value)}, H {N(high.Value)}, L {N(low.Value)}, C {N(close.Value)}</title><line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='{color}'/><rect x='{N(x - width / 2m)}' y='{N(Math.Min(openY, closeY))}' width='{N(width)}' height='{N(Math.Max(1m, Math.Abs(openY - closeY)))}' fill='{color}' stroke='{color}'/></g>");
+        }
+        builder.AppendLine("</g>");
+    }
+
+    private static void RenderGeographic(StringBuilder builder, PlotPlan plan)
+    {
+        var geography = plan.Geography ?? throw new InvalidOperationException("Geographic PlotPlan has no resolved geometry.");
+        var plotWidth = plan.Bounds.Width - Left - Right;
+        var plotHeight = plan.Bounds.Height - Top - Bottom;
+        var regionRows = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect)
+            .SelectMany(layer => layer.Data.Select(datum => (Layer: layer, Datum: datum)))
+            .Where(item => !item.Datum.IsGap && !string.IsNullOrWhiteSpace(DisplayChannel(item.Datum, FieldChannel.Region)))
+            .GroupBy(item => DisplayChannel(item.Datum, FieldChannel.Region)!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var colorValues = regionRows.Values.Select(item => Number(Channel(item.Datum, FieldChannel.Color)))
+            .Where(value => value.HasValue).Select(value => value!.Value).ToArray();
+        var colorMin = colorValues.DefaultIfEmpty(0m).Min();
+        var colorMax = colorValues.DefaultIfEmpty(1m).Max();
+
+        builder.AppendLine("<g class='plot-geographic-regions'>");
+        foreach (var feature in geography.Features)
+        {
+            regionRows.TryGetValue(feature.Key, out var match);
+            var numeric = match.Datum is null ? null : Number(Channel(match.Datum, FieldChannel.Color));
+            var fill = numeric.HasValue ? GeographicRamp(numeric.Value, colorMin, colorMax) : "#e5e7eb";
+            foreach (var ring in feature.Rings)
+            {
+                var path = string.Join(" ", ring.Select((point, index) =>
+                {
+                    var projected = ProjectGeographic(point.Longitude, point.Latitude, geography.Projection, plotWidth, plotHeight);
+                    return $"{(index == 0 ? "M" : "L")} {N(projected.X)} {N(projected.Y)}";
+                })) + " Z";
+                var row = match.Datum is null ? string.Empty : $" data-row-index='{match.Datum.RowIndex}'";
+                builder.AppendLine($"<path class='plot-geographic-region'{row} d='{path}' fill='{fill}' stroke='#94a3b8' stroke-width='.45'><title>{Esc(feature.Key)}{(numeric.HasValue ? $": {N(numeric.Value)}" : string.Empty)}</title></path>");
+            }
+        }
+        builder.AppendLine("</g>");
+
+        foreach (var layer in plan.Layers.Where(layer => layer.Mark == MarkKind.Line))
+        {
+            var routes = layer.Data.Where(datum => !datum.IsGap)
+                .GroupBy(datum => DisplayChannel(datum, FieldChannel.Route) ?? string.Empty, StringComparer.Ordinal)
+                .Where(group => group.Key.Length > 0).Take(501).ToArray();
+            if (routes.Length > 500) throw new InvalidOperationException("Geographic chart exceeds the 500 route limit.");
+            foreach (var route in routes)
+            {
+                var points = route.Select(datum => GeographicDatum(datum, geography.Projection, plotWidth, plotHeight))
+                    .Where(point => point.HasValue).Select(point => point!.Value).ToArray();
+                if (points.Length < 2) continue;
+                var path = string.Join(" ", points.Select((point, index) => $"{(index == 0 ? "M" : "L")} {N(point.X)} {N(point.Y)}"));
+                builder.AppendLine($"<path class='plot-geographic-route' data-row-index='{route.First().RowIndex}' d='{path}' fill='none' stroke='{Esc(SafePaint(LayerStyle(layer, "stroke") ?? LayerStyle(layer, "color"), "#2563eb"))}' stroke-width='1.5'><title>{Esc(route.Key)}</title></path>");
+            }
+        }
+
+        var labels = new List<SmartLabel>();
+        var pointCount = 0;
+        foreach (var layer in plan.Layers.Where(layer => layer.Mark is MarkKind.Point or MarkKind.Text))
+            foreach (var datum in layer.Data.Where(datum => !datum.IsGap))
+            {
+                if (++pointCount > 20000) throw new InvalidOperationException("Geographic chart exceeds the 20,000 point/label limit.");
+                var point = GeographicDatum(datum, geography.Projection, plotWidth, plotHeight);
+                if (!point.HasValue) continue;
+                var text = DisplayChannel(datum, FieldChannel.Text) ?? DisplayChannel(datum, FieldChannel.Region) ?? $"Row {datum.RowIndex + 1}";
+                if (layer.Mark == MarkKind.Point)
+                    builder.AppendLine($"<circle class='plot-geographic-point' data-row-index='{datum.RowIndex}' cx='{N(point.Value.X)}' cy='{N(point.Value.Y)}' r='4' fill='{Esc(SafePaint(LayerStyle(layer, "fill") ?? LayerStyle(layer, "color"), "#dc2626"))}'><title>{Esc(text)}</title></circle>");
+                else labels.Add(new SmartLabel(datum.RowIndex, point.Value.X, point.Value.Y, text,
+                    SafePaint(LayerStyle(layer, "color"), "#1f2937"), 200 + layer.ZIndex));
+            }
+        RenderSmartLabels(builder, labels, plotWidth, plotHeight);
+    }
+
+    private static (decimal X, decimal Y)? GeographicDatum(ResolvedDatum datum, GeographicProjectionKind projection, decimal width, decimal height)
+    {
+        var longitude = Number(Channel(datum, FieldChannel.Longitude));
+        var latitude = Number(Channel(datum, FieldChannel.Latitude));
+        if (!longitude.HasValue || !latitude.HasValue || longitude is < -180m or > 180m || latitude is < -90m or > 90m) return null;
+        return ProjectGeographic(longitude.Value, latitude.Value, projection, width, height);
+    }
+
+    private static (decimal X, decimal Y) ProjectGeographic(decimal longitude, decimal latitude, GeographicProjectionKind projection, decimal width, decimal height)
+    {
+        var x = Left + (longitude + 180m) / 360m * width;
+        decimal normalizedY;
+        if (projection == GeographicProjectionKind.Mercator)
+        {
+            var clamped = Math.Clamp((double)latitude, -85.05112878d, 85.05112878d);
+            var radians = clamped * Math.PI / 180d;
+            normalizedY = (decimal)(.5d - Math.Log(Math.Tan(Math.PI / 4d + radians / 2d)) / (2d * Math.PI));
+        }
+        else normalizedY = (90m - latitude) / 180m;
+        return (x, Top + normalizedY * height);
+    }
+
+    private static string GeographicRamp(decimal value, decimal minimum, decimal maximum)
+    {
+        var t = maximum <= minimum ? 1m : Math.Clamp((value - minimum) / (maximum - minimum), 0m, 1m);
+        return $"#{(int)(219m - 190m * t):X2}{(int)(234m - 156m * t):X2}{(int)(254m - 38m * t):X2}";
+    }
+
+    private static bool Overlaps(LabelBox left, LabelBox right) =>
+        left.Left < right.Right + 2m && left.Right + 2m > right.Left
+        && left.Top < right.Bottom + 2m && left.Bottom + 2m > right.Top;
+
+    private static void RenderHorizontalCategoryAxisLabels(
+        StringBuilder builder,
+        ImmutableArray<string> categories,
+        decimal plotWidth,
+        decimal plotHeight)
+    {
+        var step = plotWidth / categories.Length;
+        var longest = categories.Max(category => Math.Min(18, category.Length));
+        var estimatedWidth = longest * 5.2m;
+        var crowded = estimatedWidth > step;
+        var stride = crowded ? Math.Max(1, (int)Math.Ceiling(estimatedWidth / Math.Max(1m, step * 1.7m))) : 1;
+        var hidden = new List<string>();
+        for (var index = 0; index < categories.Length; index++)
+        {
+            if (index % stride != 0 && index != categories.Length - 1)
+            {
+                hidden.Add(categories[index]);
+                continue;
+            }
+            var x = Left + step * (index + .5m);
+            var y = Top + plotHeight + 16m + (crowded && index % 2 == 1 ? 10m : 0m);
+            var rotation = crowded ? $" transform='rotate(-35 {N(x)} {N(y)})'" : string.Empty;
+            builder.AppendLine($"<text class='plot-axis-label' data-axis-index='{index}' x='{N(x)}' y='{N(y)}' text-anchor='{(crowded ? "end" : "middle")}' font-size='9' fill='#666'{rotation}>{Esc(Truncate(categories[index], crowded ? 18 : 12))}</text>");
+        }
+        if (hidden.Count > 0)
+            builder.AppendLine($"<desc class='plot-axis-label-occluded'>Additional categories: {Esc(string.Join(", ", hidden))}</desc>");
+    }
+
+    private static void RenderVerticalCategoryAxisLabels(
+        StringBuilder builder,
+        ImmutableArray<string> categories,
+        decimal slot,
+        decimal plotHeight)
+    {
+        if (categories.IsDefaultOrEmpty) return;
+        var stride = slot >= 12m ? 1 : Math.Max(1, (int)Math.Ceiling(12m / Math.Max(1m, slot)));
+        var hidden = new List<string>();
+        for (var index = 0; index < categories.Length; index++)
+        {
+            if (index % stride != 0 && index != categories.Length - 1)
+            {
+                hidden.Add(categories[index]);
+                continue;
+            }
+            var y = Math.Clamp(Top + slot * (index + .5m) + 3m, Top + 9m, Top + plotHeight - 1m);
+            builder.AppendLine($"<text class='plot-axis-label' data-axis-index='{index}' x='{N(Left - 6m)}' y='{N(y)}' text-anchor='end' font-size='9' fill='#666'>{Esc(Truncate(categories[index], 12))}</text>");
+        }
+        if (hidden.Count > 0)
+            builder.AppendLine($"<desc class='plot-axis-label-occluded'>Additional categories: {Esc(string.Join(", ", hidden))}</desc>");
+    }
+
+    private static void RenderText(ResolvedMarkLayer layer, int categoryCount,
+        decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? scale,
+        string color, ICollection<SmartLabel> smartLabels)
+    {
+        if (scale is null) return;
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
@@ -1296,9 +1574,13 @@ internal sealed class PlotPlanSvgRenderer
             var text = EncodingText(datum, ConditionalEncodingChannel.Text)
                 ?? (Channel(datum, FieldChannel.Text) is { } textValue ? PlotPlanResolver.Display(textValue) : null);
             if (string.IsNullOrEmpty(text)) continue;
-            var x = Left + plotWidth * index / denominator + datum.DisplayOffsetX;
+            var xValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
+            var x = xScale is not null && Continuous(xScale) && xValue.HasValue
+                ? MapX(xValue.Value, xScale, plotWidth)
+                : CategoryX(index, categoryCount, plotWidth);
+            x += datum.DisplayOffsetX;
             var y = MapY(value.Value, scale, plotHeight) + datum.DisplayOffsetY;
-            builder.AppendLine($"<text x='{N(x)}' y='{N(y)}' text-anchor='middle' font-size='10' fill='{Esc(color)}'>{Esc(text)}</text>");
+            smartLabels.Add(new SmartLabel(datum.RowIndex, x, y, text, color, 200 + layer.ZIndex, 10m));
         }
     }
 
@@ -1454,6 +1736,8 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static readonly SearchValues<char> SvgEscapeChars = SearchValues.Create("&<>'\"");
+
+    private static decimal? Number(ChartValue? value) => value is null ? null : PlotPlanResolver.Number(value);
 
     private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel)
     {

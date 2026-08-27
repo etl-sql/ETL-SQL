@@ -113,17 +113,14 @@ public sealed class AdvancedChartEnumBridgeParityTests
     }
 
     /// <summary>
-    /// <c>CoordinateKind.Geographic</c> has no grammar counterpart: layered geographic composition is a
-    /// separately designed feature, so the forward bridge covers every AST member and no more.
+    /// Geographic composition is now part of the grammar, so every coordinate member maps one-to-one.
     /// </summary>
     [Fact]
-    public void CoordinateBridgeCoversTheGrammarAndLeavesGeographicToItsOwnFeature()
+    public void CoordinateBridgeCoversEveryGrammarCoordinate()
     {
         Assert.Equal(
-            [CoordinateKind.Cartesian, CoordinateKind.TransposedCartesian, CoordinateKind.Polar],
+            [CoordinateKind.Cartesian, CoordinateKind.TransposedCartesian, CoordinateKind.Polar, CoordinateKind.Geographic],
             Enum.GetValues<AdvancedChartCoordinateKind>().Select(AdvancedChartEnumBridge.Coordinate).ToList());
-        Assert.DoesNotContain(CoordinateKind.Geographic,
-            Enum.GetValues<AdvancedChartCoordinateKind>().Select(AdvancedChartEnumBridge.Coordinate));
     }
 
     /// <summary>Sort direction is asymmetric by design; pin the mapping so a rename cannot silently invert it.</summary>

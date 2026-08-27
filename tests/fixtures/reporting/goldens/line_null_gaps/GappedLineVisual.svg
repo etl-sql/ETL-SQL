@@ -18,12 +18,12 @@
 <circle cx='363.333' cy='86.38' r='3' fill='#5470c6' data-row-index='3'><title>18.9</title></circle>
 <circle cx='536.667' cy='51.905' r='3' fill='#5470c6' data-row-index='5'><title>22.1</title></circle>
 </g>
-<text x='103.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 1</text>
-<text x='190' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 2</text>
-<text x='276.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 3</text>
-<text x='363.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 4</text>
-<text x='450' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 5</text>
-<text x='536.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 6</text>
+<text class='plot-axis-label' data-axis-index='0' x='103.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 1</text>
+<text class='plot-axis-label' data-axis-index='1' x='190' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 2</text>
+<text class='plot-axis-label' data-axis-index='2' x='276.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 3</text>
+<text class='plot-axis-label' data-axis-index='3' x='363.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 4</text>
+<text class='plot-axis-label' data-axis-index='4' x='450' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 5</text>
+<text class='plot-axis-label' data-axis-index='5' x='536.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 6</text>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>

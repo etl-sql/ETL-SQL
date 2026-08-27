@@ -504,6 +504,8 @@ public class ReportParser : ParserComponent
         Consume(TokenType.LPAREN, "Expected '(' after COORDINATE");
         AdvancedChartCoordinateKind? kind = null;
         decimal? startAngle = null, endAngle = null, innerRadius = null, aspectRatio = null;
+        AdvancedChartGeographicProjection? projection = null;
+        string? mapName = null, mapFile = null, featureKey = null;
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
             var option = ConsumeAdvancedWord("Expected COORDINATE option").ToUpperInvariant();
@@ -515,9 +517,28 @@ public class ReportParser : ParserComponent
                     "CARTESIAN" => AdvancedChartCoordinateKind.Cartesian,
                     "TRANSPOSED_CARTESIAN" => AdvancedChartCoordinateKind.TransposedCartesian,
                     "POLAR" => AdvancedChartCoordinateKind.Polar,
+                    "GEOGRAPHIC" => AdvancedChartCoordinateKind.Geographic,
                     var value => throw new SyntaxException($"Unsupported coordinate type '{value}'.",
                         _parser.Previous.Line, _parser.Previous.Column)
                 };
+            }
+            else if (option is "PROJECTION" or "MAP_NAME" or "MAP_FILE" or "FEATURE_KEY")
+            {
+                switch (option)
+                {
+                    case "PROJECTION":
+                        projection = ConsumeAdvancedWord("Expected geographic projection").ToUpperInvariant() switch
+                        {
+                            "EQUIRECTANGULAR" => AdvancedChartGeographicProjection.Equirectangular,
+                            "MERCATOR" => AdvancedChartGeographicProjection.Mercator,
+                            var value => throw new SyntaxException($"Unsupported geographic projection '{value}'.",
+                                _parser.Previous.Line, _parser.Previous.Column)
+                        };
+                        break;
+                    case "MAP_NAME": mapName = Consume(TokenType.STRING_LITERAL, "Expected MAP_NAME string").Value; break;
+                    case "MAP_FILE": mapFile = Consume(TokenType.STRING_LITERAL, "Expected MAP_FILE string").Value; break;
+                    case "FEATURE_KEY": featureKey = Consume(TokenType.STRING_LITERAL, "Expected FEATURE_KEY string").Value; break;
+                }
             }
             else
             {
@@ -546,6 +567,10 @@ public class ReportParser : ParserComponent
             EndAngle = endAngle,
             InnerRadius = innerRadius,
             AspectRatio = aspectRatio,
+            Projection = projection,
+            MapName = mapName,
+            MapFile = mapFile,
+            FeatureKey = featureKey,
             Line = start.Line,
             Column = start.Column,
             EndLine = end.EndLine,
@@ -1176,6 +1201,10 @@ public class ReportParser : ParserComponent
         "SHAPE" => AdvancedChartChannel.Shape,
         "THETA" => AdvancedChartChannel.Theta,
         "RADIUS" => AdvancedChartChannel.Radius,
+        "LONGITUDE" => AdvancedChartChannel.Longitude,
+        "LATITUDE" => AdvancedChartChannel.Latitude,
+        "REGION" => AdvancedChartChannel.Region,
+        "ROUTE" => AdvancedChartChannel.Route,
         "TEXT" => AdvancedChartChannel.Text,
         "TOOLTIP" => AdvancedChartChannel.Tooltip,
         "DETAIL" => AdvancedChartChannel.Detail,

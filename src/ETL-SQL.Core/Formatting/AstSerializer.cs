@@ -1482,6 +1482,10 @@ public static class AstSerializer
         if (coordinate.EndAngle.HasValue) yield return $"END_ANGLE = {Number(coordinate.EndAngle.Value)}";
         if (coordinate.InnerRadius.HasValue) yield return $"INNER_RADIUS = {Number(coordinate.InnerRadius.Value)}";
         if (coordinate.AspectRatio.HasValue) yield return $"ASPECT_RATIO = {Number(coordinate.AspectRatio.Value)}";
+        if (coordinate.Projection.HasValue) yield return $"PROJECTION = {Upper(coordinate.Projection.Value)}";
+        if (coordinate.MapName is not null) yield return $"MAP_NAME = {Quote(coordinate.MapName)}";
+        if (coordinate.MapFile is not null) yield return $"MAP_FILE = {Quote(coordinate.MapFile)}";
+        if (coordinate.FeatureKey is not null) yield return $"FEATURE_KEY = {Quote(coordinate.FeatureKey)}";
     }
 
     private static string FormatAdvancedScale(AdvancedChartScale scale)

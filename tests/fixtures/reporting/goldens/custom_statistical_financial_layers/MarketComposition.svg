@@ -12,13 +12,15 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='MarketComposition-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#MarketComposition-plot-clip)'>
-<rect x='144.5' y='111.429' width='44.5' height='178.571' fill='#94a3b8' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>1000</title></rect>
-<rect x='404.5' y='40' width='44.5' height='250' fill='#94a3b8' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>1400</title></rect>
-<g class='plot-candlestick' data-row-index='0'><title>Mon: O 10, H 15, L 8, C 13</title><line x1='190' y1='71.25' x2='190' y2='290' stroke='#26a69a'/><rect x='92.5' y='133.75' width='195' height='93.75' fill='#26a69a' stroke='#26a69a'/></g>
-<g class='plot-candlestick' data-row-index='1'><title>Tue: O 13, H 16, L 9, C 11</title><line x1='450' y1='40' x2='450' y2='258.75' stroke='#ef5350'/><rect x='352.5' y='133.75' width='195' height='62.5' fill='#ef5350' stroke='#ef5350'/></g>
+<rect x='144.5' y='-30710' width='44.5' height='31250' fill='#94a3b8' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>1000</title></rect>
+<rect x='404.5' y='-43210' width='44.5' height='43750' fill='#94a3b8' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>1400</title></rect>
+<g class='plot-candlestick' data-layer='candles'>
+<g data-row-index='0' data-extent-axis='y'><title>Mon: O 10, H 15, L 8, C 13</title><line x1='190' y1='71.25' x2='190' y2='290' stroke='#26a69a'/><rect x='136.375' y='133.75' width='107.25' height='93.75' fill='#26a69a' stroke='#26a69a'/></g>
+<g data-row-index='1' data-extent-axis='y'><title>Tue: O 13, H 16, L 9, C 11</title><line x1='450' y1='40' x2='450' y2='258.75' stroke='#ef5350'/><rect x='396.375' y='133.75' width='107.25' height='62.5' fill='#ef5350' stroke='#ef5350'/></g>
 </g>
-<text x='190' y='306' text-anchor='middle' font-size='9' fill='#666'>Mon</text>
-<text x='450' y='306' text-anchor='middle' font-size='9' fill='#666'>Tue</text>
+</g>
+<text class='plot-axis-label' data-axis-index='0' x='190' y='306' text-anchor='middle' font-size='9' fill='#666'>Mon</text>
+<text class='plot-axis-label' data-axis-index='1' x='450' y='306' text-anchor='middle' font-size='9' fill='#666'>Tue</text>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>8</text>
 <line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>

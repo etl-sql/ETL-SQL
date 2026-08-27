@@ -31,7 +31,7 @@ public static class ChartInteractionResolver
     /// <summary>Channels that can carry a selection key, in resolution priority order.</summary>
     private static readonly FieldChannel[] KeyChannels =
     [
-        FieldChannel.X, FieldChannel.XStart, FieldChannel.Theta, FieldChannel.Column,
+        FieldChannel.Region, FieldChannel.Route, FieldChannel.X, FieldChannel.XStart, FieldChannel.Theta, FieldChannel.Column,
         FieldChannel.Row, FieldChannel.Wrap, FieldChannel.Text, FieldChannel.Color, FieldChannel.Detail
     ];
 

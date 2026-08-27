@@ -14,11 +14,127 @@ using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
 using ETL_SQL.Tests.Reporting;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
 
 namespace ETL_SQL.Tests.Reporting.AdvancedAuthoring;
 
 public sealed class AdvancedChartProductionTests
 {
+    [Fact]
+    public void GeographicCustomLayers_ParseLowerResolveAndRenderWithBoundedBuiltInGeometry()
+    {
+        const string sql = """
+            CREATE VISUAL NativeGeography AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = GEOGRAPHIC, PROJECTION = EQUIRECTANGULAR, MAP_NAME = 'WORLD', FEATURE_KEY = 'name'),
+                LAYERS (
+                  regions = RECT (ENCODINGS (
+                    REGION = RegionName (TYPE = NOMINAL),
+                    COLOR = RegionValue (TYPE = QUANTITATIVE)
+                  )),
+                  routes = LINE (Z_INDEX = 1, ENCODINGS (
+                    LONGITUDE = Longitude (TYPE = QUANTITATIVE),
+                    LATITUDE = Latitude (TYPE = QUANTITATIVE),
+                    ROUTE = RouteName (TYPE = NOMINAL)
+                  )),
+                  points = POINT (Z_INDEX = 2, ENCODINGS (
+                    LONGITUDE = Longitude (TYPE = QUANTITATIVE),
+                    LATITUDE = Latitude (TYPE = QUANTITATIVE),
+                    TEXT = PlaceName (TYPE = NOMINAL)
+                  )),
+                  labels = TEXT (Z_INDEX = 3, ENCODINGS (
+                    LONGITUDE = Longitude (TYPE = QUANTITATIVE),
+                    LATITUDE = Latitude (TYPE = QUANTITATIVE),
+                    TEXT = PlaceName (TYPE = NOMINAL)
+                  ))
+                )
+              ),
+              INTERACTIONS (ON_SELECT = FILTER)
+            );
+            """;
+        var parsed = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(parsed.Diagnostics);
+        var statement = Assert.Single(parsed.Statements.OfType<CreateVisualStatement>());
+        var formatted = statement.ToSql();
+        Assert.Equal(formatted, new Parser(new Lexer(formatted).Tokenize(), formatted).Parse()
+            .Statements.OfType<CreateVisualStatement>().Single().ToSql());
+        var manifest = new VisualManifest
+        {
+            Name = "NativeGeography",
+            Columns = ["RegionName", "RegionValue", "Longitude", "Latitude", "RouteName", "PlaceName"],
+            Rows =
+            [
+                ["United States of America", "90", "-122.3", "47.6", "west-route", "Seattle"],
+                ["Canada", "60", "-79.4", "43.7", "west-route", "Toronto"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var geography = GeographicGeometryResolver.Resolve(Assert.IsType<GeographicCoordinateSpec>(spec.Coordinate.Geography), null);
+        var plan = new PlotPlanResolver().Resolve(spec, new VisualChartDataBuilder().Build(spec, manifest), geography: geography);
+        var svg = new SvgChartRenderer().Render(plan);
+
+        Assert.Equal(CoordinateKind.Geographic, plan.Coordinate!.Kind);
+        Assert.StartsWith("builtin:WORLD", plan.Geography!.SourceAuthority, StringComparison.Ordinal);
+        Assert.Contains("plot-geographic-region", svg);
+        Assert.Contains("plot-geographic-route", svg);
+        Assert.Contains("plot-geographic-point", svg);
+        Assert.Contains("Seattle", svg);
+        Assert.Equal(SemanticFallbackKind.TransitionTable, plan.Fallback.Kind);
+        Assert.Equal("RegionName", plan.Interaction!.Key);
+        var report = new ReportManifest
+        {
+            Title = "Geography",
+            Source = "geography.rptsql",
+            Visuals = [new VisualManifest { Name = "NativeGeography", VisualType = "CUSTOM", PlotPlan = plan, NativeSvg = svg }]
+        };
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, new PdfExporter().Export(report)[..4]);
+        Assert.Contains("west-route", new MarkdownRenderer().Render(report));
+    }
+
+    [Theory]
+    [InlineData("COORDINATE (TYPE = GEOGRAPHIC, PROJECTION = MERCATOR, MAP_NAME = 'WORLD', MAP_FILE = 'maps/world.geojson')", "exactly one")]
+    [InlineData("COORDINATE (TYPE = GEOGRAPHIC, MAP_NAME = 'WORLD')", "require PROJECTION")]
+    [InlineData("COORDINATE (TYPE = CARTESIAN, MAP_NAME = 'WORLD')", "require GEOGRAPHIC")]
+    public void GeographicCoordinateAuthority_IsRejectedConsistently(string coordinate, string expected)
+    {
+        var sql = $"""
+            CREATE VISUAL InvalidMap AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                {coordinate},
+                LAYERS (points = POINT (ENCODINGS (
+                  LONGITUDE = Longitude (TYPE = QUANTITATIVE),
+                  LATITUDE = Latitude (TYPE = QUANTITATIVE)
+                )))
+              )
+            );
+            """;
+        var parsed = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        var statement = Assert.Single(parsed.Statements.OfType<CreateVisualStatement>());
+        var diagnostics = AdvancedChartSemanticValidator.Validate(statement);
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Message.Contains(expected, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void GeographicMapFile_UsesExecutionContextPathBoundaryAndDoesNotExposeResolvedPath()
+    {
+        var context = new Mock<IExecutionContext>();
+        context.Setup(item => item.ResolvePath("maps/tenant.geojson")).Returns("D:/tenant-root/maps/tenant.geojson");
+        var spec = new GeographicCoordinateSpec(GeographicProjectionKind.Mercator,
+            GeographicMapSourceKind.File, "maps/tenant.geojson", "region_id");
+
+        var resolved = GeographicGeometryResolver.ResolveMapFile(context.Object, spec);
+        var manifest = new VisualManifest { ResolvedMapFile = resolved };
+        var json = System.Text.Json.JsonSerializer.Serialize(manifest);
+
+        context.Verify(item => item.ResolvePath("maps/tenant.geojson"), Times.Once);
+        Assert.Equal("D:/tenant-root/maps/tenant.geojson", resolved);
+        Assert.DoesNotContain("tenant-root", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Throws<InvalidDataException>(() => GeographicGeometryResolver.ResolveMapFile(context.Object,
+            spec with { Source = "maps/tenant.json" }));
+    }
+
     [Fact]
     public void StatisticalAndFinancialRectLayers_RenderAlongsideOrdinaryCustomLayers()
     {
@@ -785,6 +901,77 @@ public sealed class AdvancedChartProductionTests
         Assert.Contains("<path", svg);
         Assert.Contains(">high</text>", svg);
         Assert.NotNull(PlotPlanTerminalRenderer.Render(plan));
+    }
+
+    [Fact]
+    public void DenseMultiSeriesLabelsAndBandAxis_UseDeterministicBoundedPlacement()
+    {
+        var bindings = ImmutableArray.Create(
+            new FieldBinding(FieldChannel.X, "Category", DataSemanticKind.Nominal, "x"),
+            new FieldBinding(FieldChannel.Y, "Value", DataSemanticKind.Quantitative, "y"),
+            new FieldBinding(FieldChannel.Color, "Series", DataSemanticKind.Nominal));
+        var spec = ChartSpec.Create("dense-lines", "#data", bindings,
+            [new MarkLayerSpec("lines", MarkKind.Line, 0, bindings, [])],
+            new CoordinateSpec(CoordinateKind.Cartesian),
+            [new ScaleSpec("x", FieldChannel.X, ScaleKind.Band, false, []), new ScaleSpec("y", FieldChannel.Y, ScaleKind.Linear, true, [])],
+            new FormattingSpec("en-US", "UTC", "", []), new NullHandlingSpec(NullValuePolicy.Gap, []),
+            new ThemeSpec("default", [new StyleToken("DATA_LABELS", "ON")]),
+            new AccessibilitySpec("Two labeled series over twelve crowded categories.", null, null, true));
+        var categories = Enumerable.Range(1, 12).Select(index => $"Long category {index:D2}").ToArray();
+        var categoryValues = categories.SelectMany(category => new[] { ChartValue.From(category), ChartValue.From(category) }).ToImmutableArray();
+        var values = categories.SelectMany((_, index) => new[] { ChartValue.From((decimal)index), ChartValue.From((decimal)index) }).ToImmutableArray();
+        var series = categories.SelectMany(_ => new[] { ChartValue.From("Actual"), ChartValue.From("Forecast") }).ToImmutableArray();
+        var data = ChartDataSet.Create("#data", 24,
+        [
+            new ChartColumn("Category", ChartValueKind.Text, DataSemanticKind.Nominal, categoryValues, []),
+            new ChartColumn("Value", ChartValueKind.Decimal, DataSemanticKind.Quantitative, values, []),
+            new ChartColumn("Series", ChartValueKind.Text, DataSemanticKind.Nominal, series, [])
+        ]);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0m, 0m, 480m, 300m));
+
+        var first = new SvgChartRenderer().Render(plan);
+        var second = new SvgChartRenderer().Render(plan);
+
+        Assert.Equal(first, second);
+        Assert.Contains("class='plot-smart-label'", first);
+        Assert.Contains("class='plot-smart-label-leader'", first);
+        Assert.Contains("class='plot-axis-label-occluded'", first);
+        Assert.Contains("rotate(-35", first);
+        Assert.Contains("<desc id='dense-lines-desc'>", first);
+        Assert.Contains("Additional categories:", first);
+    }
+
+    [Fact]
+    public void ClusteredScatterText_PrioritizesExplicitLabelsAndKeepsOccludedTextAccessible()
+    {
+        var bindings = ImmutableArray.Create(
+            new FieldBinding(FieldChannel.X, "X", DataSemanticKind.Quantitative, "x"),
+            new FieldBinding(FieldChannel.Y, "Y", DataSemanticKind.Quantitative, "y"),
+            new FieldBinding(FieldChannel.Text, "Label", DataSemanticKind.Nominal));
+        var spec = ChartSpec.Create("clustered-scatter", "#data", bindings,
+            [
+                new MarkLayerSpec("points", MarkKind.Point, 0, bindings, []),
+                new MarkLayerSpec("labels", MarkKind.Text, 2, bindings, [])
+            ],
+            new CoordinateSpec(CoordinateKind.Cartesian),
+            [new ScaleSpec("x", FieldChannel.X, ScaleKind.Linear, false, []), new ScaleSpec("y", FieldChannel.Y, ScaleKind.Linear, false, [])],
+            new FormattingSpec("en-US", "UTC", "", []), new NullHandlingSpec(NullValuePolicy.Gap, []),
+            new ThemeSpec("default", []), new AccessibilitySpec("Clustered labeled scatter.", null, null, true));
+        var labels = Enumerable.Range(1, 10).Select(index => ChartValue.From($"Nearby point {index:D2}")).ToImmutableArray();
+        var data = ChartDataSet.Create("#data", 10,
+        [
+            new ChartColumn("X", ChartValueKind.Decimal, DataSemanticKind.Quantitative, Enumerable.Range(0, 10).Select(index => ChartValue.From(10m + index / 100m)).ToImmutableArray(), []),
+            new ChartColumn("Y", ChartValueKind.Decimal, DataSemanticKind.Quantitative, Enumerable.Range(0, 10).Select(index => ChartValue.From(20m + index / 100m)).ToImmutableArray(), []),
+            new ChartColumn("Label", ChartValueKind.Text, DataSemanticKind.Nominal, labels, [])
+        ]);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0m, 0m, 360m, 240m));
+
+        var svg = new SvgChartRenderer().Render(plan);
+
+        Assert.Contains("data-priority='202'", svg);
+        Assert.Contains("class='plot-smart-label-leader'", svg);
+        Assert.Contains("class='plot-smart-label-occluded'", svg);
+        Assert.Contains("Nearby point", svg);
     }
 
     [Fact]

@@ -4,7 +4,9 @@
 
 **Demonstrates**: `MAP` with `MAPPINGS (REGION, VALUE)` for choropleth shading, `MAP` with `MAPPINGS (LATITUDE, LONGITUDE, SIZE, COLOR)` for coordinate points, and page layout that reads the two together.
 
-> These are two independent visuals, not one layered surface. Report-SQL has no geographic composition in the `CHART` grammar, so a choropleth and its point overlay cannot share a single projected canvas. Give each visual the same page and the same staged source and the reader gets the pairing.
+> This recipe shows the concise named-`MAP` alternative: two independent visuals sharing a page and
+> staged source. When regions, routes, points, and labels must share one projected canvas, use
+> [`CUSTOM` geographic composition](../../../samples/08_Reporting/custom_geographic_layers.rptsql).
 
 ```sql
 SET REPORT TITLE = 'US Regional Revenue & Fulfillment Hub Logistics';

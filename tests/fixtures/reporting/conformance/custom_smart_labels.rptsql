@@ -1,0 +1,48 @@
+SET REPORT TITLE = 'Smart Label Collision';
+
+SELECT 'Long category 01' AS Category, 1 AS Value, 'Actual' AS Series
+INTO #dense
+UNION ALL SELECT 'Long category 01', 1, 'Forecast'
+UNION ALL SELECT 'Long category 02', 2, 'Actual'
+UNION ALL SELECT 'Long category 02', 2, 'Forecast'
+UNION ALL SELECT 'Long category 03', 3, 'Actual'
+UNION ALL SELECT 'Long category 03', 3, 'Forecast'
+UNION ALL SELECT 'Long category 04', 4, 'Actual'
+UNION ALL SELECT 'Long category 04', 4, 'Forecast'
+UNION ALL SELECT 'Long category 05', 5, 'Actual'
+UNION ALL SELECT 'Long category 05', 5, 'Forecast'
+UNION ALL SELECT 'Long category 06', 6, 'Actual'
+UNION ALL SELECT 'Long category 06', 6, 'Forecast'
+UNION ALL SELECT 'Long category 07', 7, 'Actual'
+UNION ALL SELECT 'Long category 07', 7, 'Forecast'
+UNION ALL SELECT 'Long category 08', 8, 'Actual'
+UNION ALL SELECT 'Long category 08', 8, 'Forecast'
+UNION ALL SELECT 'Long category 09', 9, 'Actual'
+UNION ALL SELECT 'Long category 09', 9, 'Forecast'
+UNION ALL SELECT 'Long category 10', 10, 'Actual'
+UNION ALL SELECT 'Long category 10', 10, 'Forecast'
+UNION ALL SELECT 'Long category 11', 11, 'Actual'
+UNION ALL SELECT 'Long category 11', 11, 'Forecast'
+UNION ALL SELECT 'Long category 12', 12, 'Actual'
+UNION ALL SELECT 'Long category 12', 12, 'Forecast';
+
+CREATE VISUAL DenseLabels AS CUSTOM (
+  TITLE = 'Dense multi-series labels',
+  SOURCE = #dense,
+  OPTIONS (DATA_LABELS = ON),
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (
+      lines = LINE (ENCODINGS (
+        X = Category (TYPE = NOMINAL),
+        Y = Value (TYPE = QUANTITATIVE),
+        COLOR = Series (TYPE = NOMINAL)
+      ))
+    )
+  )
+);
+
+CREATE PAGE Main AS DASHBOARD (
+  STRUCTURE = 'A',
+  MAP ('A' = DenseLabels)
+);

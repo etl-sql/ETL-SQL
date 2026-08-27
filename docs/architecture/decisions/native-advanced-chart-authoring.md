@@ -29,10 +29,14 @@ CREATE VISUAL visual_name AS CUSTOM (
   SOURCE = #prepared_rows,
   CHART (
     COORDINATE (
-      TYPE = CARTESIAN | TRANSPOSED_CARTESIAN | POLAR,
+      TYPE = CARTESIAN | TRANSPOSED_CARTESIAN | POLAR | GEOGRAPHIC,
       START_ANGLE = number,
       END_ANGLE = number,
-      INNER_RADIUS = number
+      INNER_RADIUS = number,
+      PROJECTION = EQUIRECTANGULAR | MERCATOR,
+      MAP_NAME = string,
+      MAP_FILE = string,
+      FEATURE_KEY = string
     ),
     SCALES (
       scale_name = LINEAR | LOGARITHMIC | TIME | BAND | POINT | ORDINAL | IDENTITY (
@@ -293,7 +297,10 @@ definitions, window clauses, or renderer-native escape hatches.
 - Embedded Vega-Lite/Vega JSON and compatibility shims.
 - ECharts option fragments, JavaScript callbacks, arbitrary SVG paths, or CSS selectors.
 - Hidden visual transforms or calculated fields.
-- Geographic projection and specialized layout authoring; these remain Phase 8 work.
+- Arbitrary geographic projections, remote map URLs, renderer-native paths, and client-side geometry
+  loading. The shipped geographic slice is bounded to equirectangular/Mercator projection, an
+  allow-listed built-in map or execution-context-resolved GeoJSON file, and region/point/label/route
+  layers resolved server-side.
 - Arbitrary repeat, concatenation, or nested dashboard layout inside one visual. Phase 7 composition
   is the explicit row/column facet grid; page/container layout composes independent visuals.
 - Row-varying conditions on connected marks until portable segment semantics are accepted.

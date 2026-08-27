@@ -50,7 +50,15 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             resolvedBindings,
             layers,
             new CoordinateSpec(Coordinate(chart.Coordinate.Kind), chart.Coordinate.StartAngle,
-                chart.Coordinate.EndAngle, chart.Coordinate.InnerRadius, chart.Coordinate.AspectRatio),
+                chart.Coordinate.EndAngle, chart.Coordinate.InnerRadius, chart.Coordinate.AspectRatio)
+            {
+                Geography = chart.Coordinate.Kind != AdvancedChartCoordinateKind.Geographic ? null : new GeographicCoordinateSpec(
+                    chart.Coordinate.Projection == AdvancedChartGeographicProjection.Mercator
+                        ? GeographicProjectionKind.Mercator : GeographicProjectionKind.Equirectangular,
+                    chart.Coordinate.MapFile is null ? GeographicMapSourceKind.BuiltIn : GeographicMapSourceKind.File,
+                    chart.Coordinate.MapFile ?? chart.Coordinate.MapName ?? "WORLD",
+                    chart.Coordinate.FeatureKey ?? "name")
+            },
             declaredScales.AddRange(inferredScales.Where(inferred => declaredScales.All(declared =>
                 !declared.Id.Equals(inferred.Id, StringComparison.OrdinalIgnoreCase)))),
             ChartStyleTokens.Formatting(context, manifest,
@@ -95,7 +103,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                 var advancedChannel = AdvancedChartEnumBridge.Channel(binding.Channel);
                 if (advancedChannel is null)
                 {
-                    if (binding.Channel is FieldChannel.Text or FieldChannel.Tooltip or FieldChannel.Detail) return binding;
+                    if (binding.Channel is FieldChannel.Longitude or FieldChannel.Latitude or FieldChannel.Region or FieldChannel.Route or FieldChannel.Text or FieldChannel.Tooltip or FieldChannel.Detail) return binding;
                     throw new InvalidOperationException($"Channel {binding.Channel} has no CUSTOM grammar counterpart and cannot infer a scale.");
                 }
                 var kind = AdvancedChartScaleInference.Infer(
@@ -104,7 +112,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                     AdvancedChartEnumBridge.Mark(layer.Mark));
                 if (kind is null)
                 {
-                    if (binding.Channel is FieldChannel.Text or FieldChannel.Tooltip or FieldChannel.Detail) return binding;
+                    if (binding.Channel is FieldChannel.Longitude or FieldChannel.Latitude or FieldChannel.Region or FieldChannel.Route or FieldChannel.Text or FieldChannel.Tooltip or FieldChannel.Detail) return binding;
                     throw new InvalidOperationException($"No deterministic scale inference exists for {layer.Mark} {binding.Channel} {binding.SemanticKind}; declare a compatible scale or encoding.");
                 }
                 var axis = binding.Axis == AxisRole.Secondary ? "secondary" : "primary";

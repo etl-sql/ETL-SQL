@@ -16,6 +16,14 @@ public enum SemanticFallbackKind
 
 public sealed record PlotBounds(decimal X, decimal Y, decimal Width, decimal Height);
 
+public sealed record GeographicPoint(decimal Longitude, decimal Latitude);
+public sealed record GeographicFeature(string Key, ImmutableArray<ImmutableArray<GeographicPoint>> Rings);
+public sealed record ResolvedGeographicGeometry(
+    GeographicProjectionKind Projection,
+    string SourceAuthority,
+    string FeatureKey,
+    ImmutableArray<GeographicFeature> Features);
+
 public sealed record PlotTick(ChartValue Value, string Label);
 
 public sealed record ResolvedColorRange(
@@ -126,6 +134,7 @@ public sealed record ResolvedFacetPanel(
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public PlotBounds? CartesianViewport { get; init; }
+
 }
 
 public sealed record SemanticFallbackItem(string Label, string Value, int Order)
@@ -215,6 +224,9 @@ public sealed record PlotPlan(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public PlotBounds? CartesianViewport { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResolvedGeographicGeometry? Geography { get; init; }
+
     /// <summary>Resolved interaction semantics. The compact browser interaction manifest is projected
     /// from this; browser clients never receive the plan itself.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -300,6 +312,15 @@ public sealed record PlotPlan(
             if (!datum.Encodings.IsDefault)
                 foreach (var encoding in datum.Encodings)
                     encoding.Value.Validate();
+        }
+        if (Coordinate?.Kind == CoordinateKind.Geographic && Geography is null)
+            throw new InvalidDataException("A geographic PlotPlan requires resolved bounded geometry.");
+        if (Geography is { } geography)
+        {
+            if (geography.Features.Length > 10000)
+                throw new InvalidDataException("Geographic geometry exceeds the 10,000 feature limit.");
+            if (geography.Features.SelectMany(feature => feature.Rings).Sum(ring => ring.Length) > 200000)
+                throw new InvalidDataException("Geographic geometry exceeds the 200,000 coordinate limit.");
         }
     }
 }

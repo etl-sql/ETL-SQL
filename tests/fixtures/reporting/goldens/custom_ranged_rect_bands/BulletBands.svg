@@ -20,7 +20,7 @@
 <line x1='491.6' y1='50.417' x2='491.6' y2='112.917' stroke='#000000' stroke-width='3'/>
 <line x1='538.4' y1='133.75' x2='538.4' y2='196.25' stroke='#000000' stroke-width='3'/>
 <line x1='476' y1='217.083' x2='476' y2='279.583' stroke='#000000' stroke-width='3'/>
-<text x='54' y='84.667' text-anchor='end' font-size='9' fill='#666'>Revenue</text>
-<text x='54' y='168' text-anchor='end' font-size='9' fill='#666'>Margin</text>
-<text x='54' y='251.333' text-anchor='end' font-size='9' fill='#666'>NPS</text>
+<text class='plot-axis-label' data-axis-index='0' x='54' y='84.667' text-anchor='end' font-size='9' fill='#666'>Revenue</text>
+<text class='plot-axis-label' data-axis-index='1' x='54' y='168' text-anchor='end' font-size='9' fill='#666'>Margin</text>
+<text class='plot-axis-label' data-axis-index='2' x='54' y='251.333' text-anchor='end' font-size='9' fill='#666'>NPS</text>
 </svg>

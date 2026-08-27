@@ -16,21 +16,21 @@ These items are active in the current planning horizon. Native charts continue t
 interaction model, `PlotPlan` carries resolved semantics, and normal browser payloads receive only a
 compact `InteractionManifest`.
 
-- [ ] Implement bounded responsive layout tiers for native charts. Define compact/standard/wide
+- [x] Implement bounded responsive layout tiers for native charts. Define compact/standard/wide
   bounds as explicit backend inputs. Observe the container after initial layout and request a
   debounced server re-resolve only when its tier changes; cache by report/visual/tier and preserve
   interaction state. Add tier-boundary, cache, interaction-refresh, PDF, and node-local HA-session
   tests. Do not send continuous resize traffic or restore `PlotPlan` to the browser.
-- [ ] Implement deterministic smart label collision avoidance and viewBox bounds heuristics for
+- [x] Implement deterministic smart label collision avoidance and viewBox bounds heuristics for
   `TEXT` mark layers and dense category axes. Cover clustered scatter points, multi-series line
   labels, and crowded band axes with priority-based occlusion pruning, angle staggering, or leader
   lines, plus stable golden and accessibility evidence.
-- [ ] Expose statistical and financial channels in `CUSTOM`. Add `LOW`, `Q1`, `MEDIAN`, `Q3`,
+- [x] Expose statistical and financial channels in `CUSTOM`. Add `LOW`, `Q1`, `MEDIAN`, `Q3`,
   `HIGH`, `OPEN`, and `CLOSE` across parser, immutable AST, formatter, lowering, validation, plan,
   renderer, Analysis/LSP, documentation, samples, Report Builder, and golden coverage. Keep named
   `BOXPLOT` and `CANDLESTICK` as the concise presets while enabling layered combinations such as
   candlestick plus volume and box plot plus mean tick.
-- [ ] Design and implement bounded geographic composition in `CUSTOM`. Define projection,
+- [x] Design and implement bounded geographic composition in `CUSTOM`. Define projection,
   geometry/map-source authority, region/point/label/route encodings, interaction semantics,
   zero-trust map-path handling, terminal fallback, and export behavior before extending the
   coordinate enum. Add parser-to-renderer, cross-surface, security, and layered-map examples.
@@ -124,6 +124,8 @@ Authoritative references:
 - [ ] **Mouse select not working on single line**  I can click the left mouse button and drag multiple lines and it selects them but 
       if I just wanted to for example I had a line SELECT 1; SELECT 2; SELECT 3;  and I want to just drag to highlight SELECT 2; to just
       run that command I cannot do it I can only run the whole line.
+- [ ] **Save button does nothing**  Save button does nothing, should pop open a message as to what you want to name the file and where
+      you want to save it.  If that file contains passwords or secrets it should prompt you for a passphrase to encrypt those.
 
 ## v0.19.0 Release Evidence Gates
 

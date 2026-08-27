@@ -218,7 +218,8 @@ public static class AdvancedChartSemanticValidator
         var kind = AdvancedChartScaleInference.Infer(encoding.Channel, encoding.DataKind, layer.Mark);
         if (kind is null)
         {
-            if (encoding.Channel is AdvancedChartChannel.Text or AdvancedChartChannel.Tooltip or AdvancedChartChannel.Detail)
+            if (encoding.Channel is AdvancedChartChannel.Longitude or AdvancedChartChannel.Latitude or AdvancedChartChannel.Region or AdvancedChartChannel.Route or
+                AdvancedChartChannel.Text or AdvancedChartChannel.Tooltip or AdvancedChartChannel.Detail)
                 return;
             Add(results, node, $"Layer '{layer.Name}' has no deterministic scale inference for {layer.Mark} {encoding.Channel} {encoding.DataKind}; declare a compatible scale or encoding.");
             return;
@@ -333,6 +334,19 @@ public static class AdvancedChartSemanticValidator
 
         if (chart.Coordinate.Kind == AdvancedChartCoordinateKind.Polar && layer.Mark != AdvancedChartMarkKind.Arc)
             Add(results, layerNode, "The native POLAR slice supports ARC layers only.");
+        if (chart.Coordinate.Kind == AdvancedChartCoordinateKind.Geographic)
+        {
+            var hasPoint = channels.Contains(AdvancedChartChannel.Longitude) && channels.Contains(AdvancedChartChannel.Latitude);
+            var hasRegion = channels.Contains(AdvancedChartChannel.Region);
+            if (layer.Mark == AdvancedChartMarkKind.Rect && !hasRegion)
+                Add(results, layerNode, $"Geographic RECT layer '{layer.Name}' requires REGION.");
+            else if (layer.Mark is AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text && !hasPoint)
+                Add(results, layerNode, $"Geographic {layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Name}' requires LONGITUDE and LATITUDE.");
+            else if (layer.Mark == AdvancedChartMarkKind.Line && (!hasPoint || !channels.Contains(AdvancedChartChannel.Route)))
+                Add(results, layerNode, $"Geographic LINE layer '{layer.Name}' requires LONGITUDE, LATITUDE, and ROUTE.");
+            else if (layer.Mark is not (AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text or AdvancedChartMarkKind.Line))
+                Add(results, layerNode, $"GEOGRAPHIC coordinates support RECT, POINT, TEXT, and LINE layers only; found {layer.Mark.ToString().ToUpperInvariant()}.");
+        }
     }
 
     private static void ValidateStatisticalRect(
@@ -452,6 +466,19 @@ public static class AdvancedChartSemanticValidator
             if (coordinate.InnerRadius is < 0m or >= 1m)
                 Add(results, node, "Polar INNER_RADIUS must be at least zero and less than one.");
         }
+        if (coordinate.Kind == AdvancedChartCoordinateKind.Geographic)
+        {
+            if (coordinate.MapName is null == (coordinate.MapFile is null))
+                Add(results, node, "GEOGRAPHIC coordinates require exactly one of MAP_NAME or MAP_FILE.");
+            if (coordinate.Projection is null)
+                Add(results, node, "GEOGRAPHIC coordinates require PROJECTION.");
+            if (string.IsNullOrWhiteSpace(coordinate.FeatureKey))
+                Add(results, node, "GEOGRAPHIC FEATURE_KEY cannot be empty.");
+            if (chart.Facet is not null)
+                Add(results, node, "GEOGRAPHIC coordinates do not support FACET.");
+        }
+        else if (coordinate.Projection is not null || coordinate.MapName is not null || coordinate.MapFile is not null || coordinate.FeatureKey is not null)
+            Add(results, node, "PROJECTION, MAP_NAME, MAP_FILE, and FEATURE_KEY require GEOGRAPHIC coordinates.");
         if (coordinate.AspectRatio is null) return;
         if (coordinate.AspectRatio <= 0m)
             Add(results, node, "Cartesian ASPECT_RATIO must be greater than zero.");

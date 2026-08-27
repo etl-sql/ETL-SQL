@@ -1,0 +1,103 @@
+{
+  "kind": "transitionTable",
+  "heading": "Regions, routes, and service locations",
+  "items": [
+    {
+      "label": "United States of America",
+      "value": "",
+      "order": 0,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "Canada",
+      "value": "",
+      "order": 1,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "France",
+      "value": "",
+      "order": 2,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "United States of America",
+      "value": "",
+      "order": 3,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "west-route",
+      "value": "",
+      "order": 100000,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "west-route",
+      "value": "",
+      "order": 100001,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "atlantic-route",
+      "value": "",
+      "order": 100002,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "atlantic-route",
+      "value": "",
+      "order": 100003,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "Seattle",
+      "value": "",
+      "order": 200000,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "Toronto",
+      "value": "",
+      "order": 200001,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "Paris",
+      "value": "",
+      "order": 200002,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "New York",
+      "value": "",
+      "order": 200003,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "Seattle",
+      "value": "",
+      "order": 300000,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "Toronto",
+      "value": "",
+      "order": 300001,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "Paris",
+      "value": "",
+      "order": 300002,
+      "group": "ServiceMap"
+    },
+    {
+      "label": "New York",
+      "value": "",
+      "order": 300003,
+      "group": "ServiceMap"
+    }
+  ],
+  "summary": "Regions, routes, and service locations: 4 rows, 4 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

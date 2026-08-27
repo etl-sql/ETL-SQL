@@ -35,6 +35,10 @@ public enum FieldChannel
     Shape,
     Theta,
     Radius,
+    Longitude,
+    Latitude,
+    Region,
+    Route,
     Text,
     Tooltip,
     Detail,
@@ -69,6 +73,15 @@ public enum CoordinateKind
     Polar,
     Geographic
 }
+
+public enum GeographicProjectionKind { Equirectangular, Mercator }
+public enum GeographicMapSourceKind { BuiltIn, File }
+
+public sealed record GeographicCoordinateSpec(
+    GeographicProjectionKind Projection,
+    GeographicMapSourceKind SourceKind,
+    string Source,
+    string FeatureKey = "name");
 
 public enum ScaleKind
 {
@@ -232,7 +245,11 @@ public sealed record CoordinateSpec(
     decimal? StartAngle = null,
     decimal? EndAngle = null,
     decimal? InnerRadius = null,
-    decimal? AspectRatio = null);
+    decimal? AspectRatio = null)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeographicCoordinateSpec? Geography { get; init; }
+}
 
 public sealed record ScaleSpec(
     string Id,
@@ -355,6 +372,17 @@ public sealed record ChartSpec(
             throw new InvalidDataException("A ChartSpec must contain at least one mark layer.");
         if (Coordinate.Kind == CoordinateKind.Polar && Coordinate.InnerRadius is < 0m or >= 1m)
             throw new InvalidDataException("Polar inner radius must be at least zero and less than one.");
+        if (Coordinate.Kind == CoordinateKind.Geographic)
+        {
+            if (Coordinate.Geography is null)
+                throw new InvalidDataException("Geographic coordinates require a geography contract.");
+            ChartContractValidation.RequireName(Coordinate.Geography.Source, "geographic map source");
+            ChartContractValidation.RequireName(Coordinate.Geography.FeatureKey, "geographic feature key");
+            if (Facet is not null)
+                throw new InvalidDataException("Geographic coordinates do not support facets.");
+        }
+        else if (Coordinate.Geography is not null)
+            throw new InvalidDataException("A geography contract requires Geographic coordinates.");
         if (Coordinate.AspectRatio is <= 0m)
             throw new InvalidDataException("Cartesian ASPECT_RATIO must be greater than zero.");
         if (Coordinate.AspectRatio is not null)
@@ -485,6 +513,18 @@ public sealed record ChartSpec(
                 layer.Bindings.Any(binding => binding.Channel is FieldChannel.XOffset or FieldChannel.YOffset))
                 throw new InvalidDataException($"Layer '{layer.Id}' cannot combine STACK with an offset channel.");
             var channels = layer.Bindings.Select(binding => binding.Channel).ToHashSet();
+            if (Coordinate.Kind == CoordinateKind.Geographic)
+            {
+                var hasPoint = channels.Contains(FieldChannel.Longitude) && channels.Contains(FieldChannel.Latitude);
+                if (layer.Mark == MarkKind.Rect && !channels.Contains(FieldChannel.Region))
+                    throw new InvalidDataException($"Geographic RECT layer '{layer.Id}' requires REGION.");
+                if (layer.Mark is MarkKind.Point or MarkKind.Text && !hasPoint)
+                    throw new InvalidDataException($"Geographic {layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' requires LONGITUDE and LATITUDE.");
+                if (layer.Mark == MarkKind.Line && (!hasPoint || !channels.Contains(FieldChannel.Route)))
+                    throw new InvalidDataException($"Geographic LINE layer '{layer.Id}' requires LONGITUDE, LATITUDE, and ROUTE.");
+                if (layer.Mark is not (MarkKind.Rect or MarkKind.Point or MarkKind.Text or MarkKind.Line))
+                    throw new InvalidDataException($"Geographic coordinates do not support {layer.Mark} layers.");
+            }
             if (layer.Mark == MarkKind.Rect)
             {
                 ValidateIntervalPair(layer, FieldChannel.XStart, FieldChannel.XEnd, "X_START/X_END");

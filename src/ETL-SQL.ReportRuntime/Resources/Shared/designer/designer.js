@@ -5340,6 +5340,33 @@ export function createDesigner(container, opts = {}) {
         )
     )
 )`;
+        const layeredMapRecipe = `CHART (
+    COORDINATE (TYPE = GEOGRAPHIC, PROJECTION = EQUIRECTANGULAR, MAP_NAME = 'WORLD', FEATURE_KEY = 'name'),
+    LAYERS (
+        regions = RECT (
+            ENCODINGS (
+                REGION = region (TYPE = NOMINAL),
+                COLOR = value (TYPE = QUANTITATIVE)
+            )
+        ),
+        routes = LINE (
+            Z_INDEX = 1,
+            ENCODINGS (
+                LONGITUDE = longitude (TYPE = QUANTITATIVE),
+                LATITUDE = latitude (TYPE = QUANTITATIVE),
+                ROUTE = route (TYPE = NOMINAL)
+            )
+        ),
+        points = POINT (
+            Z_INDEX = 2,
+            ENCODINGS (
+                LONGITUDE = longitude (TYPE = QUANTITATIVE),
+                LATITUDE = latitude (TYPE = QUANTITATIVE),
+                TEXT = label (TYPE = NOMINAL)
+            )
+        )
+    )
+)`;
         const chartCode = v.options?.advanced_chart || defaultCustomChart;
         const htmlMode = v.options?.html_mode || 'SINGLE';
         const htmlTemplate = v.options?.html_template || '<article class="custom-card">\n  <h3>{{Title}}</h3>\n  <p>{{Description}}</p>\n</article>';
@@ -5382,6 +5409,7 @@ export function createDesigner(container, opts = {}) {
                             <option value="CARTESIAN"${chartCode.includes('CARTESIAN') && !chartCode.includes('TRANSPOSED') ? ' selected' : ''}>CARTESIAN</option>
                             <option value="TRANSPOSED_CARTESIAN"${chartCode.includes('TRANSPOSED_CARTESIAN') ? ' selected' : ''}>TRANSPOSED</option>
                             <option value="POLAR"${chartCode.includes('POLAR') ? ' selected' : ''}>POLAR</option>
+                            <option value="GEOGRAPHIC"${chartCode.includes('GEOGRAPHIC') ? ' selected' : ''}>GEOGRAPHIC</option>
                         </select>
                     </label>
                     <label class="etlsql-dsgn-label">Primary Mark
@@ -5401,6 +5429,7 @@ export function createDesigner(container, opts = {}) {
                             <option value="">Keep current chart</option>
                             <option value="boxplot-mean"${/\bQ1\s*=/.test(chartCode) ? ' selected' : ''}>Box plot + mean tick</option>
                             <option value="candlestick-volume"${/\bOPEN\s*=/.test(chartCode) ? ' selected' : ''}>Candlestick + volume</option>
+                            <option value="layered-map"${/TYPE\s*=\s*GEOGRAPHIC/.test(chartCode) ? ' selected' : ''}>Layered map</option>
                         </select>
                     </label>
                 </div>
@@ -5536,7 +5565,10 @@ export function createDesigner(container, opts = {}) {
                     if (!v.options) v.options = {};
                     let cur = v.options.advanced_chart || chartCode;
                     if (/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i.test(cur)) {
-                        cur = cur.replace(/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i, `COORDINATE (TYPE = ${ev.target.value})`);
+                        const coordinate = ev.target.value === 'GEOGRAPHIC'
+                            ? "COORDINATE (TYPE = GEOGRAPHIC, PROJECTION = EQUIRECTANGULAR, MAP_NAME = 'WORLD', FEATURE_KEY = 'name')"
+                            : `COORDINATE (TYPE = ${ev.target.value})`;
+                        cur = cur.replace(/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i, coordinate);
                     }
                     v.options.advanced_chart = cur;
                     if (chartInput) chartInput.value = cur;
@@ -5564,7 +5596,8 @@ export function createDesigner(container, opts = {}) {
                 recipeInput.addEventListener('change', ev => {
                     const recipes = {
                         'boxplot-mean': boxPlotMeanRecipe,
-                        'candlestick-volume': candlestickVolumeRecipe
+                        'candlestick-volume': candlestickVolumeRecipe,
+                        'layered-map': layeredMapRecipe
                     };
                     const replacement = recipes[ev.target.value];
                     if (!replacement) return;

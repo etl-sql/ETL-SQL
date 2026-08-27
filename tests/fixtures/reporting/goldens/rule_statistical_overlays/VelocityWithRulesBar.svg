@@ -42,12 +42,12 @@
 <path class='plot-overlay-label-leader' d='M 427.4 90.403 L 431.4 92.887' fill='none' stroke='#2563EB' stroke-width='1'/>
 <rect class='plot-overlay-label-bg' x='431.4' y='85.387' width='116' height='14' rx='2' fill='white' fill-opacity='.94'/>
 <text class='plot-overlay-label' x='434.4' y='96.387' text-anchor='start' font-size='9' font-weight='600' fill='#2563EB'>Average (Historical)</text>
-<text x='90.367' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 1</text>
-<text x='151.1' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 2</text>
-<text x='211.833' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 3</text>
-<text x='272.567' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 4</text>
-<text x='333.3' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 5</text>
-<text x='394.033' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 6</text>
+<text class='plot-axis-label' data-axis-index='0' x='90.367' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 1</text>
+<text class='plot-axis-label' data-axis-index='1' x='151.1' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 2</text>
+<text class='plot-axis-label' data-axis-index='2' x='211.833' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 3</text>
+<text class='plot-axis-label' data-axis-index='3' x='272.567' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 4</text>
+<text class='plot-axis-label' data-axis-index='4' x='333.3' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 5</text>
+<text class='plot-axis-label' data-axis-index='5' x='394.033' y='306' text-anchor='middle' font-size='9' fill='#666'>Sprint 6</text>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>

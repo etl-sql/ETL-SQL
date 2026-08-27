@@ -9,12 +9,13 @@ public enum AdvancedChartChannel
     X, X2, XStart, XEnd, XOffset,
     Y, Y2, YStart, YEnd, YOffset,
     Low, Q1, Median, Q3, High, Open, Close,
-    Color, Size, Shape, Theta, Radius, Text, Tooltip, Detail
+    Color, Size, Shape, Theta, Radius, Longitude, Latitude, Region, Route, Text, Tooltip, Detail
 }
 public enum AdvancedChartAxisRole { None, Primary, Secondary }
 public enum AdvancedChartSortDirection { Source, Ascending, Descending }
 public enum AdvancedChartScaleKind { Linear, Logarithmic, Time, Band, Point, Ordinal, Identity }
-public enum AdvancedChartCoordinateKind { Cartesian, TransposedCartesian, Polar }
+public enum AdvancedChartCoordinateKind { Cartesian, TransposedCartesian, Polar, Geographic }
+public enum AdvancedChartGeographicProjection { Equirectangular, Mercator }
 public enum AdvancedChartResolutionMode { Shared, Independent }
 public enum AdvancedChartConditionChannel { Color, Opacity, Size, Shape, Text }
 public enum AdvancedChartBindingSourceKind { Field, Datum, Value }
@@ -134,6 +135,10 @@ public sealed record AdvancedChartCoordinate : AstNode
     public decimal? EndAngle { get; init; }
     public decimal? InnerRadius { get; init; }
     public decimal? AspectRatio { get; init; }
+    public AdvancedChartGeographicProjection? Projection { get; init; }
+    public string? MapName { get; init; }
+    public string? MapFile { get; init; }
+    public string? FeatureKey { get; init; }
 }
 
 public sealed record AdvancedChartFacet : AstNode

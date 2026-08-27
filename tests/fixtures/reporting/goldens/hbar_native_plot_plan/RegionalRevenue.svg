@@ -11,7 +11,7 @@
 <text x='376' y='168' text-anchor='start' font-size='9' fill='#333'>90</text>
 <rect x='60' y='217.083' width='520' height='61.5' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='x' data-extent-anchor='start'><title>150</title></rect>
 <text x='584' y='251.333' text-anchor='start' font-size='9' fill='#333'>150</text>
-<text x='54' y='84.667' text-anchor='end' font-size='9' fill='#666'>North</text>
-<text x='54' y='168' text-anchor='end' font-size='9' fill='#666'>South</text>
-<text x='54' y='251.333' text-anchor='end' font-size='9' fill='#666'>West</text>
+<text class='plot-axis-label' data-axis-index='0' x='54' y='84.667' text-anchor='end' font-size='9' fill='#666'>North</text>
+<text class='plot-axis-label' data-axis-index='1' x='54' y='168' text-anchor='end' font-size='9' fill='#666'>South</text>
+<text class='plot-axis-label' data-axis-index='2' x='54' y='251.333' text-anchor='end' font-size='9' fill='#666'>West</text>
 </svg>

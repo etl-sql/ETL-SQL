@@ -1,0 +1,98 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='DenseLabels-title DenseLabels-desc' font-family='sans-serif'>
+<title id='DenseLabels-title'>Dense multi-series labels</title>
+<desc id='DenseLabels-desc'>Dense multi-series labels: 24 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Dense multi-series labels</text>
+<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<defs><clipPath id='DenseLabels-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#DenseLabels-plot-clip)'>
+<circle cx='81.667' cy='278.636' r='3' fill='#5470c6' data-row-index='0'><title>1</title></circle>
+<circle cx='125' cy='257.975' r='3' fill='#5470c6' data-row-index='2'><title>2</title></circle>
+<circle cx='168.333' cy='237.314' r='3' fill='#5470c6' data-row-index='4'><title>3</title></circle>
+<circle cx='211.667' cy='216.653' r='3' fill='#5470c6' data-row-index='6'><title>4</title></circle>
+<circle cx='255' cy='195.992' r='3' fill='#5470c6' data-row-index='8'><title>5</title></circle>
+<circle cx='298.333' cy='175.331' r='3' fill='#5470c6' data-row-index='10'><title>6</title></circle>
+<circle cx='341.667' cy='154.669' r='3' fill='#5470c6' data-row-index='12'><title>7</title></circle>
+<circle cx='385' cy='134.008' r='3' fill='#5470c6' data-row-index='14'><title>8</title></circle>
+<circle cx='428.333' cy='113.347' r='3' fill='#5470c6' data-row-index='16'><title>9</title></circle>
+<circle cx='471.667' cy='92.686' r='3' fill='#5470c6' data-row-index='18'><title>10</title></circle>
+<circle cx='515' cy='72.025' r='3' fill='#5470c6' data-row-index='20'><title>11</title></circle>
+<circle cx='558.333' cy='51.364' r='3' fill='#5470c6' data-row-index='22'><title>12</title></circle>
+<path d='M 81.667 278.636 L 125 257.975 L 168.333 237.314 L 211.667 216.653 L 255 195.992 L 298.333 175.331 L 341.667 154.669 L 385 134.008 L 428.333 113.347 L 471.667 92.686 L 515 72.025 L 558.333 51.364' fill='none' stroke='#5470c6' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<circle cx='81.667' cy='278.636' r='3' fill='#91cc75' data-row-index='1'><title>1</title></circle>
+<circle cx='125' cy='257.975' r='3' fill='#91cc75' data-row-index='3'><title>2</title></circle>
+<circle cx='168.333' cy='237.314' r='3' fill='#91cc75' data-row-index='5'><title>3</title></circle>
+<circle cx='211.667' cy='216.653' r='3' fill='#91cc75' data-row-index='7'><title>4</title></circle>
+<circle cx='255' cy='195.992' r='3' fill='#91cc75' data-row-index='9'><title>5</title></circle>
+<circle cx='298.333' cy='175.331' r='3' fill='#91cc75' data-row-index='11'><title>6</title></circle>
+<circle cx='341.667' cy='154.669' r='3' fill='#91cc75' data-row-index='13'><title>7</title></circle>
+<circle cx='385' cy='134.008' r='3' fill='#91cc75' data-row-index='15'><title>8</title></circle>
+<circle cx='428.333' cy='113.347' r='3' fill='#91cc75' data-row-index='17'><title>9</title></circle>
+<circle cx='471.667' cy='92.686' r='3' fill='#91cc75' data-row-index='19'><title>10</title></circle>
+<circle cx='515' cy='72.025' r='3' fill='#91cc75' data-row-index='21'><title>11</title></circle>
+<circle cx='558.333' cy='51.364' r='3' fill='#91cc75' data-row-index='23'><title>12</title></circle>
+<path d='M 81.667 278.636 L 125 257.975 L 168.333 237.314 L 211.667 216.653 L 255 195.992 L 298.333 175.331 L 341.667 154.669 L 385 134.008 L 428.333 113.347 L 471.667 92.686 L 515 72.025 L 558.333 51.364' fill='none' stroke='#91cc75' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+</g>
+<text class='plot-smart-label' data-row-index='1' data-priority='121' x='81.667' y='271.636' text-anchor='middle' font-size='9' fill='#444'>1</text>
+<text class='plot-smart-label' data-row-index='3' data-priority='121' x='125' y='250.975' text-anchor='middle' font-size='9' fill='#444'>2</text>
+<text class='plot-smart-label' data-row-index='5' data-priority='121' x='168.333' y='230.314' text-anchor='middle' font-size='9' fill='#444'>3</text>
+<text class='plot-smart-label' data-row-index='7' data-priority='121' x='211.667' y='209.653' text-anchor='middle' font-size='9' fill='#444'>4</text>
+<text class='plot-smart-label' data-row-index='9' data-priority='121' x='255' y='188.992' text-anchor='middle' font-size='9' fill='#444'>5</text>
+<text class='plot-smart-label' data-row-index='11' data-priority='121' x='298.333' y='168.331' text-anchor='middle' font-size='9' fill='#444'>6</text>
+<text class='plot-smart-label' data-row-index='13' data-priority='121' x='341.667' y='147.669' text-anchor='middle' font-size='9' fill='#444'>7</text>
+<text class='plot-smart-label' data-row-index='15' data-priority='121' x='385' y='127.008' text-anchor='middle' font-size='9' fill='#444'>8</text>
+<text class='plot-smart-label' data-row-index='17' data-priority='121' x='428.333' y='106.347' text-anchor='middle' font-size='9' fill='#444'>9</text>
+<text class='plot-smart-label' data-row-index='19' data-priority='121' x='471.667' y='85.686' text-anchor='middle' font-size='9' fill='#444'>10</text>
+<text class='plot-smart-label' data-row-index='21' data-priority='121' x='515' y='65.025' text-anchor='middle' font-size='9' fill='#444'>11</text>
+<text class='plot-smart-label' data-row-index='23' data-priority='121' x='558.333' y='53' text-anchor='middle' font-size='9' fill='#444'>12</text>
+<desc class='plot-smart-label-occluded' data-row-index='0'>1</desc>
+<path class='plot-smart-label-leader' data-row-index='2' d='M 125 257.975 L 125 270.475' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='2' data-priority='120' x='125' y='274.975' text-anchor='middle' font-size='9' fill='#444'>2</text>
+<path class='plot-smart-label-leader' data-row-index='4' d='M 168.333 237.314 L 168.333 249.814' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='4' data-priority='120' x='168.333' y='254.314' text-anchor='middle' font-size='9' fill='#444'>3</text>
+<path class='plot-smart-label-leader' data-row-index='6' d='M 211.667 216.653 L 211.667 229.153' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='6' data-priority='120' x='211.667' y='233.653' text-anchor='middle' font-size='9' fill='#444'>4</text>
+<path class='plot-smart-label-leader' data-row-index='8' d='M 255 195.992 L 255 208.492' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='8' data-priority='120' x='255' y='212.992' text-anchor='middle' font-size='9' fill='#444'>5</text>
+<path class='plot-smart-label-leader' data-row-index='10' d='M 298.333 175.331 L 298.333 187.831' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='10' data-priority='120' x='298.333' y='192.331' text-anchor='middle' font-size='9' fill='#444'>6</text>
+<path class='plot-smart-label-leader' data-row-index='12' d='M 341.667 154.669 L 341.667 167.169' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='12' data-priority='120' x='341.667' y='171.669' text-anchor='middle' font-size='9' fill='#444'>7</text>
+<path class='plot-smart-label-leader' data-row-index='14' d='M 385 134.008 L 385 146.508' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='14' data-priority='120' x='385' y='151.008' text-anchor='middle' font-size='9' fill='#444'>8</text>
+<path class='plot-smart-label-leader' data-row-index='16' d='M 428.333 113.347 L 428.333 125.847' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='16' data-priority='120' x='428.333' y='130.347' text-anchor='middle' font-size='9' fill='#444'>9</text>
+<path class='plot-smart-label-leader' data-row-index='18' d='M 471.667 92.686 L 471.667 105.186' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='18' data-priority='120' x='471.667' y='109.686' text-anchor='middle' font-size='9' fill='#444'>10</text>
+<path class='plot-smart-label-leader' data-row-index='20' d='M 515 72.025 L 515 84.525' fill='none' stroke='#444' stroke-width='.75' stroke-opacity='.65'/>
+<text class='plot-smart-label' data-row-index='20' data-priority='120' x='515' y='89.025' text-anchor='middle' font-size='9' fill='#444'>11</text>
+<desc class='plot-smart-label-occluded' data-row-index='22'>12</desc>
+<text class='plot-axis-label' data-axis-index='0' x='81.667' y='306' text-anchor='end' font-size='9' fill='#666' transform='rotate(-35 81.667 306)'>Long category 01</text>
+<text class='plot-axis-label' data-axis-index='2' x='168.333' y='306' text-anchor='end' font-size='9' fill='#666' transform='rotate(-35 168.333 306)'>Long category 03</text>
+<text class='plot-axis-label' data-axis-index='4' x='255' y='306' text-anchor='end' font-size='9' fill='#666' transform='rotate(-35 255 306)'>Long category 05</text>
+<text class='plot-axis-label' data-axis-index='6' x='341.667' y='306' text-anchor='end' font-size='9' fill='#666' transform='rotate(-35 341.667 306)'>Long category 07</text>
+<text class='plot-axis-label' data-axis-index='8' x='428.333' y='306' text-anchor='end' font-size='9' fill='#666' transform='rotate(-35 428.333 306)'>Long category 09</text>
+<text class='plot-axis-label' data-axis-index='10' x='515' y='306' text-anchor='end' font-size='9' fill='#666' transform='rotate(-35 515 306)'>Long category 11</text>
+<text class='plot-axis-label' data-axis-index='11' x='558.333' y='316' text-anchor='end' font-size='9' fill='#666' transform='rotate(-35 558.333 316)'>Long category 12</text>
+<desc class='plot-axis-label-occluded'>Additional categories: Long category 02, Long category 04, Long category 06, Long category 08, Long category 10</desc>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0.45</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>3.48</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>6.5</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>9.53</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>12.55</text>
+<rect x='60' y='330' width='9' height='9' fill='#5470c6'/>
+<text x='73' y='338' font-size='9' fill='#444'>Actual</text>
+<rect x='125' y='330' width='9' height='9' fill='#91cc75'/>
+<text x='138' y='338' font-size='9' fill='#444'>Forecast</text>
+</svg>

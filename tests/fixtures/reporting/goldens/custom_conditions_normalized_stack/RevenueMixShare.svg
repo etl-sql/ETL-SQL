@@ -22,9 +22,9 @@
 <rect x='250.667' y='40' width='137.667' height='37.5' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>15</title></rect>
 <rect x='424' y='40' width='137.667' height='100' fill='#5470c6' fill-opacity='0.5' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>40</title></rect>
 </g>
-<text x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Q1</text>
-<text x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>Q2</text>
-<text x='493.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Q3</text>
+<text class='plot-axis-label' data-axis-index='0' x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Q1</text>
+<text class='plot-axis-label' data-axis-index='1' x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>Q2</text>
+<text class='plot-axis-label' data-axis-index='2' x='493.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Q3</text>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
