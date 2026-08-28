@@ -165,6 +165,17 @@ public static class WorkstationEditorApp
                 files = workspace.ListFiles()
             }, JsonOptions));
 
+        app.MapGet("/api/connections", (string? documentUri, IMetadataManager metadata) =>
+        {
+            var connections = metadata.GetConnections(documentUri).Select(c => new
+            {
+                alias = c.Name,
+                connectorType = c.Type,
+                description = $"{c.Type} connection ({c.Name})"
+            }).ToList();
+            return Results.Json(new { connections }, JsonOptions);
+        });
+
         app.MapGet("/api/session/metadata", async (string? documentUri, IMetadataManager metadata, CancellationToken cancellationToken) =>
         {
             var connections = metadata.GetConnections(documentUri).Select(c => c.Name).ToList();

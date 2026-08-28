@@ -179,12 +179,6 @@ function _parseEtlDag(scriptText) {
         nodes.push({ id: m[1], label: m[1], kind: 'target', detail: `Destination write from ${m[2]}` });
     }
 
-    if (nodes.length === 0) {
-        nodes.push({ id: 'raw_source', label: 'Source Ingest', kind: 'connection', detail: 'Source Endpoint' });
-        nodes.push({ id: '#staging_data', label: '#staging_data', kind: 'dataset', detail: 'Engine Temp Memory' });
-        nodes.push({ id: 'target_dw', label: 'Warehouse Target', kind: 'target', detail: 'Governed Load' });
-    }
-
     return nodes;
 }
 
@@ -311,19 +305,24 @@ export async function createStudioWorkbench(container, opts = {}) {
     const authFetch = opts.authFetch ?? ((url, init) => fetch(url, { ...init, headers: { ...(opts.headers || {}), ...(init?.headers || {}) } }));
     const apiBase = opts.apiBase || '';
 
-    const defaultInitialFile = opts.initialFile || 'untitled_1.rptsql';
+    const workspaceFiles = opts.workspaceFiles || [];
+    const documents = opts.documents ? [...opts.documents] : [];
+    if (!documents.length && (opts.initialFile || opts.initialContent)) {
+        const defaultInitialFile = opts.initialFile || 'untitled_1.rptsql';
+        documents.push({
+            id: 'doc-1',
+            path: defaultInitialFile,
+            name: defaultInitialFile.split('/').pop().split('\\').pop(),
+            content: opts.initialContent || '',
+            isDirty: false,
+            projection: 'split',
+        });
+    }
+
     const state = {
-        documents: opts.documents?.length ? opts.documents : [
-            {
-                id: 'doc-1',
-                path: defaultInitialFile,
-                name: defaultInitialFile.split('/').pop().split('\\').pop(),
-                content: opts.initialContent || '',
-                isDirty: false,
-                projection: 'split',
-            }
-        ],
-        activeDocId: (opts.documents?.length ? opts.documents[0].id : 'doc-1'),
+        workspaceFiles: workspaceFiles,
+        documents: documents,
+        activeDocId: opts.activeDocId || (documents.length > 0 ? documents[0].id : '__home__'),
         activeActivity: 'explorer',
         activeFilters: {},
         selectedVisualId: null,
@@ -331,6 +330,9 @@ export async function createStudioWorkbench(container, opts = {}) {
         runAbort: null,
         editorInstance: null,
     };
+
+    let isSyncingFromDesigner = false;
+    let codeMirrorDebounce = null;
 
     container.innerHTML = `
         <div class="etlsql-studio-shell">
@@ -343,7 +345,9 @@ export async function createStudioWorkbench(container, opts = {}) {
 
                 <!-- Document Tabs -->
                 <div class="etlsql-studio-tabs" data-studio-tabs></div>
-                <button type="button" class="etlsql-studio-tab-new" data-studio-new-tab title="New Script (Ctrl+N)">${_studioIcon('plus', 14)}</button>
+                <div class="etlsql-tab-new-wrapper">
+                    <button type="button" class="etlsql-studio-tab-new" data-studio-new-tab title="New File or Pipeline (Ctrl+N)">${_studioIcon('plus', 14)}</button>
+                </div>
 
                 <div class="etlsql-studio-header-spacer"></div>
 
@@ -418,6 +422,9 @@ export async function createStudioWorkbench(container, opts = {}) {
 
                 <!-- Center Multi-Projection Stage -->
                 <main class="etlsql-studio-stage" data-studio-stage>
+                    <!-- Home / Welcome Stage -->
+                    <div class="etlsql-studio-home-stage" data-home-stage style="display:none; flex:1; width:100%; height:100%; overflow:hidden;"></div>
+
                     <!-- Visual Stage Area (Report Builder Canvas & Pipeline DAG) -->
                     <div class="etlsql-studio-visual-stage" data-visual-stage style="display:flex; flex-direction:column; flex:1; height:100%; overflow:hidden; position:relative;">
                         <div class="etlsql-studio-designer-container" data-canvas-grid-container style="flex:1; width:100%; height:100%; overflow:hidden; position:relative;"></div>
@@ -428,7 +435,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
                     <!-- CodeMirror 6 Stage Area -->
                     <div class="etlsql-studio-code-stage" data-code-stage>
-                        <div class="etlsql-studio-editor-host" data-editor-host></div>
+                        <div class="etlsql-studio-editor-host etlsql-editor-container" data-editor-host></div>
                         <div class="etlsql-studio-results-host" data-results-host></div>
                     </div>
                 </main>
@@ -447,6 +454,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     const sidebar = shell.querySelector('[data-studio-sidebar]');
     const sidebarTitle = shell.querySelector('[data-sidebar-title]');
     const sidebarContent = shell.querySelector('[data-sidebar-content]');
+    const homeStage = shell.querySelector('[data-home-stage]');
     const visualStage = shell.querySelector('[data-visual-stage]');
     const codeStage = shell.querySelector('[data-code-stage]');
     const resizer = shell.querySelector('[data-stage-resizer]');
@@ -457,10 +465,13 @@ export async function createStudioWorkbench(container, opts = {}) {
     const modalBox = shell.querySelector('[data-modal-box]');
 
     function getActiveDoc() {
-        return state.documents.find(d => d.id === state.activeDocId) || state.documents[0];
+        if (state.activeDocId === '__home__') return null;
+        return state.documents.find(d => d.id === state.activeDocId) || state.documents[0] || null;
     }
 
     function setProjection(mode) {
+        if (state.activeDocId === '__home__') return;
+        homeStage.style.display = 'none';
         const doc = getActiveDoc();
         if (doc) doc.projection = mode;
 
@@ -504,31 +515,41 @@ export async function createStudioWorkbench(container, opts = {}) {
                 state.designerInstance = null;
             }
             const nodes = _parseEtlDag(content);
-            canvasContainer.innerHTML = `
-                <div class="etlsql-studio-dag-view" data-dag-view style="width:100%; height:100%; overflow-y:auto; display:flex; flex-direction:column; gap:16px; padding:16px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size:0.75rem; font-weight:700; color:var(--portal-text-soft,#8b949e); text-transform:uppercase; letter-spacing:0.05em;">
-                            Pipeline DAG Execution Flow (${nodes.length} Stages)
-                        </span>
-                        <span style="font-size:0.75rem; color:var(--portal-accent,#388bfd);">
-                            ${_studioIcon('git', 12)} Zero-Trust Governed Flow
-                        </span>
+            if (nodes.length === 0) {
+                canvasContainer.innerHTML = `
+                    <div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px; text-align:center; color:var(--portal-text-soft,#8b949e);">
+                        <span style="font-size:2rem; margin-bottom:12px;">⚡</span>
+                        <strong style="font-size:0.9375rem; color:var(--portal-text,#f0f6fc); margin-bottom:6px;">Pipeline DAG Flow (0 Stages)</strong>
+                        <p style="font-size:0.8125rem; max-width:380px; margin:0; line-height:1.4;">Add <code>CREATE CONNECTION</code>, <code>SELECT ... INTO #staging</code>, <code>TRANSFORM</code>, or <code>MERGE INTO</code> statements to visualize the data movement DAG.</p>
                     </div>
-                    <div class="etlsql-studio-dag-grid" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                        ${nodes.map((n, i) => `
-                            <div class="etlsql-studio-dag-card node-${n.kind}" data-dag-node="${_escapeHtml(n.id)}" style="background:var(--portal-surface,#161b22); border:1px solid var(--portal-border,#30363d); border-radius:8px; padding:12px 16px; min-width:180px; flex:1;">
-                                <div style="display:flex; align-items:center; justify-content:space-between;">
-                                    <span class="etlsql-card-type-pill" style="font-size:9px;">${n.kind.toUpperCase()}</span>
-                                    <span style="font-size:10px; color:var(--portal-muted,#8b949e);">${i + 1}</span>
+                `;
+            } else {
+                canvasContainer.innerHTML = `
+                    <div class="etlsql-studio-dag-view" data-dag-view style="width:100%; height:100%; overflow-y:auto; display:flex; flex-direction:column; gap:16px; padding:16px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:0.75rem; font-weight:700; color:var(--portal-text-soft,#8b949e); text-transform:uppercase; letter-spacing:0.05em;">
+                                Pipeline DAG Execution Flow (${nodes.length} Stages)
+                            </span>
+                            <span style="font-size:0.75rem; color:var(--portal-accent,#388bfd);">
+                                ${_studioIcon('git', 12)} Zero-Trust Governed Flow
+                            </span>
+                        </div>
+                        <div class="etlsql-studio-dag-grid" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                            ${nodes.map((n, i) => `
+                                <div class="etlsql-studio-dag-card node-${n.kind}" data-dag-node="${_escapeHtml(n.id)}" style="background:var(--portal-surface,#161b22); border:1px solid var(--portal-border,#30363d); border-radius:8px; padding:12px 16px; min-width:180px; flex:1;">
+                                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                                        <span class="etlsql-card-type-pill" style="font-size:9px;">${n.kind.toUpperCase()}</span>
+                                        <span style="font-size:10px; color:var(--portal-muted,#8b949e);">${i + 1}</span>
+                                    </div>
+                                    <strong style="display:block; margin:8px 0 4px; font-size:0.875rem; color:var(--portal-text,#f0f6fc);">${_escapeHtml(n.label)}</strong>
+                                    <span style="font-size:0.75rem; color:var(--portal-text-soft,#8b949e);">${_escapeHtml(n.detail)}</span>
                                 </div>
-                                <strong style="display:block; margin:8px 0 4px; font-size:0.875rem; color:var(--portal-text,#f0f6fc);">${_escapeHtml(n.label)}</strong>
-                                <span style="font-size:0.75rem; color:var(--portal-text-soft,#8b949e);">${_escapeHtml(n.detail)}</span>
-                            </div>
-                            ${i < nodes.length - 1 ? '<span style="color:var(--portal-border,#30363d); font-size:1.2rem;">➔</span>' : ''}
-                        `).join('')}
+                                ${i < nodes.length - 1 ? '<span style="color:var(--portal-border,#30363d); font-size:1.2rem;">➔</span>' : ''}
+                            `).join('')}
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
         } else {
             if (!state.designerInstance) {
                 canvasContainer.innerHTML = '';
@@ -542,7 +563,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                     previewUrl: opts.previewUrl || '/designer-preview.html',
                     onScriptChange: (newScript) => {
                         if (state.editorInstance && state.editorInstance.getValue() !== newScript) {
+                            isSyncingFromDesigner = true;
                             state.editorInstance.setValue(newScript);
+                            setTimeout(() => { isSyncingFromDesigner = false; }, 100);
                         }
                         doc.content = newScript;
                         doc.isDirty = true;
@@ -625,16 +648,17 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     function addVisualToCanvas(type) {
+        const uType = (type || 'BAR').toUpperCase();
         if (state.designerInstance?.addVisual) {
-            state.designerInstance.addVisual(type);
-            _feedback.notify(`Added ${type} visual to canvas.`, { title: 'Visual Added', tone: 'success' });
+            state.designerInstance.addVisual(uType);
+            _feedback.notify(`Added ${uType} visual to canvas.`, { title: 'Visual Added', tone: 'success' });
             return;
         }
         const doc = getActiveDoc();
         if (!doc) return;
         let script = state.editorInstance ? state.editorInstance.getValue() : doc.content;
-        const newId = `${type.toLowerCase()}_${Date.now().toString(36).slice(-4)}`;
-        const visualDecl = `\n        VISUAL ${newId} TYPE '${type.toUpperCase()}' MAPPINGS (VALUE = SUM(total_amount)) OPTIONS (TITLE = 'New ${type} Visual');`;
+        const newId = `${uType.toLowerCase()}_${Date.now().toString(36).slice(-4)}`;
+        const visualDecl = `\n        VISUAL ${newId} TYPE '${uType}' MAPPINGS (VALUE = SUM(total_amount)) OPTIONS (TITLE = 'New ${uType} Visual');`;
 
         if (script.includes('CONTAINER ')) {
             script = script.replace(/(CONTAINER\s+[A-Za-z0-9_]+\s*\{)/i, `$1${visualDecl}`);
@@ -652,7 +676,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         state.selectedVisualId = newId;
         renderTabs();
         renderVisualStage();
-        _feedback.notify(`Added ${type} visual to canvas.`, { title: 'Visual Added', tone: 'success' });
+        _feedback.notify(`Added ${uType} visual to canvas.`, { title: 'Visual Added', tone: 'success' });
     }
 
     function duplicateVisual(visualId) {
@@ -758,6 +782,17 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     function renderTabs() {
         tabsContainer.innerHTML = '';
+
+        // 🏠 Home Tab
+        const homeTab = document.createElement('div');
+        homeTab.className = `etlsql-studio-tab ${state.activeDocId === '__home__' ? 'active' : ''}`;
+        homeTab.innerHTML = `
+            <span class="etlsql-tab-icon">${_studioIcon('explorer', 14)}</span>
+            <span class="etlsql-tab-title">Home</span>
+        `;
+        homeTab.addEventListener('click', () => switchDoc('__home__'));
+        tabsContainer.appendChild(homeTab);
+
         state.documents.forEach(doc => {
             const tab = document.createElement('div');
             tab.className = `etlsql-studio-tab ${doc.id === state.activeDocId ? 'active' : ''}`;
@@ -789,20 +824,32 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         state.activeDocId = docId;
         state.selectedVisualId = null;
-        const newDoc = getActiveDoc();
-        renderTabs();
 
         if (state.designerInstance) {
             state.designerInstance.dispose?.();
             state.designerInstance = null;
         }
 
-        if (state.editorInstance && newDoc) {
-            state.editorInstance.setValue(newDoc.content);
+        renderTabs();
+
+        if (docId === '__home__') {
+            renderStudioHome();
+            setContextualRailVisibility();
+            if (state.activeActivity) {
+                renderSidebarContent(state.activeActivity);
+            }
+            return;
         }
+
+        const newDoc = getActiveDoc();
         if (newDoc) {
+            homeStage.style.display = 'none';
             setProjection(newDoc.projection || 'split');
+            if (state.editorInstance) {
+                state.editorInstance.setValue(newDoc.content);
+            }
             renderVisualStage();
+            setContextualRailVisibility();
             if (state.activeActivity) {
                 renderSidebarContent(state.activeActivity);
             }
@@ -815,45 +862,283 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         const doc = state.documents[docIndex];
         if (doc.isDirty) {
-            const confirmClose = await _feedback.confirm(`Save changes to ${doc.name} before closing?`);
-            if (confirmClose) {
+            const saveBeforeClose = await _feedback.confirm(`Save changes to ${doc.name} before closing?`, {
+                title: 'Unsaved Changes',
+                confirmLabel: 'Yes',
+                cancelLabel: 'No'
+            });
+            if (saveBeforeClose) {
                 await handleSave();
             }
         }
 
         state.documents.splice(docIndex, 1);
-        if (!state.documents.length) {
-            const freshName = 'untitled_1.rptsql';
-            state.documents.push({
-                id: 'doc-' + Date.now(),
-                path: freshName,
-                name: freshName,
-                content: '-- New Report\n',
-                isDirty: false,
-                projection: 'split',
-            });
-        }
-
         if (state.activeDocId === docId) {
-            state.activeDocId = state.documents[Math.max(0, docIndex - 1)].id;
+            if (state.documents.length > 0) {
+                state.activeDocId = state.documents[Math.max(0, docIndex - 1)].id;
+            } else {
+                state.activeDocId = '__home__';
+            }
         }
         await switchDoc(state.activeDocId);
     }
 
-    newTabBtn.addEventListener('click', () => {
-        const idx = state.documents.length + 1;
-        const freshName = `untitled_${idx}.rptsql`;
+    function createNewFile(type) {
+        const rptCount = state.documents.filter(d => (d.path || '').endsWith('.rptsql')).length + 1;
+        const etlCount = state.documents.filter(d => (d.path || '').endsWith('.etlsql')).length + 1;
+        const sqlCount = state.documents.filter(d => (d.path || '').endsWith('.sql')).length + 1;
+
+        let path = '';
+        let content = '';
+        let proj = 'split';
+
+        if (type === 'report') {
+            path = `untitled_${rptCount}.rptsql`;
+            content = '';
+            proj = 'split';
+        } else if (type === 'etl') {
+            path = `untitled_pipeline_${etlCount}.etlsql`;
+            content = '';
+            proj = 'split';
+        } else {
+            path = `untitled_query_${sqlCount}.sql`;
+            content = '';
+            proj = 'code';
+        }
+
         const newDoc = {
-            id: 'doc-' + Date.now(),
-            path: freshName,
-            name: freshName,
-            content: '-- New Report Script\n',
+            id: 'doc-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+            path: path,
+            name: path,
+            content: content,
             isDirty: false,
-            projection: 'split',
+            projection: proj
         };
+
         state.documents.push(newDoc);
         switchDoc(newDoc.id);
+    }
+
+    async function openWorkspaceFile(filePath, proj = 'split') {
+        let existing = state.documents.find(d => d.path === filePath);
+        if (existing) {
+            existing.projection = proj;
+            await switchDoc(existing.id);
+            return;
+        }
+
+        let content = '';
+        try {
+            const res = await authFetch(apiBase + '/api/files?path=' + encodeURIComponent(filePath));
+            if (res.ok) {
+                const data = await res.json();
+                content = data.content || '';
+            }
+        } catch (e) {
+            console.error('Failed to load file:', e);
+        }
+
+        const newDoc = {
+            id: 'doc-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+            path: filePath,
+            name: filePath.split('/').pop().split('\\').pop(),
+            content: content,
+            isDirty: false,
+            projection: proj
+        };
+
+        state.documents.push(newDoc);
+        await switchDoc(newDoc.id);
+    }
+
+    function renderStudioHome() {
+        visualStage.style.display = 'none';
+        codeStage.style.display = 'none';
+        resizer.style.display = 'none';
+        homeStage.style.display = 'flex';
+
+        const files = state.workspaceFiles || [];
+
+        homeStage.innerHTML = `
+            <div class="etlsql-studio-home">
+                <section class="etlsql-studio-home-hero">
+                    <div class="etlsql-studio-home-hero-content">
+                        <div class="etlsql-studio-kicker">Unified Authoring Workbench</div>
+                        <h1>ETL-SQL Studio</h1>
+                        <p>Design interactive report dashboards, author cross-source data pipelines, and manage database connections in a portable, zero-trust workspace.</p>
+                    </div>
+                    <div class="etlsql-studio-home-quick-actions">
+                        <button type="button" class="etlsql-home-action-card primary" data-create-from-home="report">
+                            <span class="etlsql-home-card-icon">${_studioIcon('canvas', 24)}</span>
+                            <div class="etlsql-home-card-info">
+                                <strong>New Report (.rptsql)</strong>
+                                <span>Visual drag-and-drop report canvas, charts, KPI metric cards, and live dual-projection.</span>
+                            </div>
+                        </button>
+                        <button type="button" class="etlsql-home-action-card secondary" data-create-from-home="etl">
+                            <span class="etlsql-home-card-icon">${_studioIcon('catalog', 24)}</span>
+                            <div class="etlsql-home-card-info">
+                                <strong>New ETL Pipeline (.etlsql)</strong>
+                                <span>Cross-source data staging, transformations, and governed warehouse loads with DAG execution flow.</span>
+                            </div>
+                        </button>
+                        <button type="button" class="etlsql-home-action-card tertiary" data-create-from-home="sql">
+                            <span class="etlsql-home-card-icon">${_studioIcon('code', 24)}</span>
+                            <div class="etlsql-home-card-info">
+                                <strong>New Script (.sql)</strong>
+                                <span>Direct SQL queries and multi-source join authoring.</span>
+                            </div>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="etlsql-studio-home-recent">
+                    <div class="etlsql-studio-recent-header">
+                        <h2>Workspace Files</h2>
+                        <span class="etlsql-recent-count">${files.length} available script${files.length === 1 ? '' : 's'}</span>
+                    </div>
+                    ${files.length === 0 ? `
+                        <div style="padding:24px; text-align:center; color:var(--portal-text-soft,#8b949e); background:var(--portal-surface,#161b22); border:1px dashed var(--portal-border,#30363d); border-radius:8px;">
+                            <p style="margin:0 0 12px; font-size:0.875rem;">No existing scripts found in this workspace directory.</p>
+                            <p style="margin:0; font-size:0.75rem; color:var(--portal-muted,#8b949e);">Click <strong>New Report</strong> or <strong>New ETL Pipeline</strong> above to start building.</p>
+                        </div>
+                    ` : `
+                        <div class="etlsql-studio-recent-grid">
+                            ${files.map(f => {
+                                const ext = (f.path || '').split('.').pop()?.toLowerCase();
+                                const isRpt = ext === 'rptsql';
+                                const isEtl = ext === 'etlsql';
+                                const typePill = isRpt ? 'REPORTSQL' : isEtl ? 'ETLSQL' : 'SQL';
+                                const name = f.path.split('/').pop().split('\\').pop();
+                                const sizeKb = f.size ? `${(f.size / 1024).toFixed(1)} KB` : '';
+                                return `
+                                    <div class="etlsql-studio-recent-card">
+                                        <div class="etlsql-recent-card-top">
+                                            <span class="etlsql-card-type-pill" style="font-size:9px;">${typePill}</span>
+                                            ${sizeKb ? `<span style="font-size:10px; color:var(--portal-muted,#8b949e);">${sizeKb}</span>` : ''}
+                                        </div>
+                                        <div class="etlsql-recent-card-title" title="${_escapeHtml(f.path)}">
+                                            <span>${_fileIcon(f.path)}</span>
+                                            <span>${_escapeHtml(name)}</span>
+                                        </div>
+                                        <div class="etlsql-recent-card-path" title="${_escapeHtml(f.path)}">${_escapeHtml(f.path)}</div>
+                                        <div class="etlsql-recent-card-actions">
+                                            <button type="button" class="etlsql-recent-card-btn" data-open-file="${_escapeHtml(f.path)}" data-open-proj="split">
+                                                ${_studioIcon('canvas', 12)} Design
+                                            </button>
+                                            <button type="button" class="etlsql-recent-card-btn" data-open-file="${_escapeHtml(f.path)}" data-open-proj="code">
+                                                ${_studioIcon('code', 12)} Code
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `}
+                </section>
+            </div>
+        `;
+
+        homeStage.querySelectorAll('[data-create-from-home]').forEach(b => {
+            b.addEventListener('click', () => createNewFile(b.dataset.createFromHome));
+        });
+
+        homeStage.querySelectorAll('[data-open-file]').forEach(b => {
+            b.addEventListener('click', async () => {
+                const filePath = b.dataset.openFile;
+                const proj = b.dataset.openProj || 'split';
+                await openWorkspaceFile(filePath, proj);
+            });
+        });
+    }
+
+    let newMenuEl = null;
+    function closeNewTabMenu() {
+        if (newMenuEl) {
+            newMenuEl.remove();
+            newMenuEl = null;
+        }
+    }
+
+    newTabBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (newMenuEl) {
+            closeNewTabMenu();
+            return;
+        }
+
+        const rect = newTabBtn.getBoundingClientRect();
+        newMenuEl = document.createElement('div');
+        newMenuEl.className = 'etlsql-tab-new-menu';
+        newMenuEl.style.position = 'fixed';
+        newMenuEl.style.top = `${rect.bottom + 4}px`;
+        newMenuEl.style.left = `${Math.max(10, Math.min(window.innerWidth - 270, rect.left))}px`;
+        newMenuEl.style.zIndex = '999999';
+        newMenuEl.innerHTML = `
+            <button type="button" class="etlsql-tab-new-item" data-new-type="report">
+                <span style="color:var(--portal-accent,#388bfd);">${_studioIcon('canvas', 16)}</span>
+                <div>
+                    <strong>New Report (.rptsql)</strong>
+                    <small>Visual Drag-and-Drop Designer</small>
+                </div>
+            </button>
+            <button type="button" class="etlsql-tab-new-item" data-new-type="etl">
+                <span style="color:var(--portal-success,#2ea043);">${_studioIcon('catalog', 16)}</span>
+                <div>
+                    <strong>New ETL Pipeline (.etlsql)</strong>
+                    <small>Data Movement & DAG Flow</small>
+                </div>
+            </button>
+            <button type="button" class="etlsql-tab-new-item" data-new-type="sql">
+                <span style="color:#a371f7;">${_studioIcon('code', 16)}</span>
+                <div>
+                    <strong>New Script (.sql)</strong>
+                    <small>Raw SQL Query</small>
+                </div>
+            </button>
+        `;
+
+        newMenuEl.querySelectorAll('[data-new-type]').forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const type = btn.dataset.newType;
+                closeNewTabMenu();
+                createNewFile(type);
+            });
+        });
+
+        document.body.appendChild(newMenuEl);
     });
+
+    document.addEventListener('click', () => closeNewTabMenu());
+
+    function setContextualRailVisibility() {
+        const paletteBtn = shell.querySelector('[data-activity="palette"]');
+        const filtersBtn = shell.querySelector('[data-activity="filters"]');
+        const projectionGroup = shell.querySelector('.etlsql-studio-projection-group');
+
+        if (state.activeDocId === '__home__') {
+            if (paletteBtn) paletteBtn.style.display = 'none';
+            if (filtersBtn) filtersBtn.style.display = 'none';
+            if (projectionGroup) projectionGroup.style.opacity = '0.4';
+            return;
+        }
+
+        if (projectionGroup) projectionGroup.style.opacity = '1';
+        const doc = getActiveDoc();
+        const isRpt = doc ? (doc.path || '').endsWith('.rptsql') : false;
+
+        if (paletteBtn) {
+            paletteBtn.style.display = isRpt ? 'flex' : 'none';
+        }
+        if (filtersBtn) {
+            filtersBtn.style.display = isRpt ? 'flex' : 'none';
+        }
+
+        if (!isRpt && (state.activeActivity === 'palette' || state.activeActivity === 'filters')) {
+            setActivity('explorer');
+        }
+    }
 
     function setActivity(activity) {
         if (state.activeActivity === activity && state.sidebarOpen) {
@@ -919,6 +1204,10 @@ export async function createStudioWorkbench(container, opts = {}) {
                     <span>Open Documents</span>
                 </div>
                 <div class="etlsql-studio-explorer-list">
+                    <div class="etlsql-studio-file-item ${state.activeDocId === '__home__' ? 'active' : ''}" data-open-doc="__home__">
+                        <span class="etlsql-file-icon">${_studioIcon('explorer', 14)}</span>
+                        <span class="etlsql-file-name">Home</span>
+                    </div>
                     ${state.documents.map(d => `
                         <div class="etlsql-studio-file-item ${d.id === state.activeDocId ? 'active' : ''}" data-open-doc="${d.id}">
                             <span class="etlsql-file-icon">${_fileIcon(d.path)}</span>
@@ -937,13 +1226,54 @@ export async function createStudioWorkbench(container, opts = {}) {
                     <span>Published Connections</span>
                     <button type="button" class="etlsql-sidebar-action" data-action="wizard">+ New</button>
                 </div>
-                <div class="etlsql-tree-row etlsql-tree-header">${_studioIcon('catalog', 14)} sample_gw (MSSQL)</div>
-                <div class="etlsql-tree-row etlsql-tree-column"><span class="etlsql-tree-indent"></span>📅 order_date (date)</div>
-                <div class="etlsql-tree-row etlsql-tree-column"><span class="etlsql-tree-indent"></span>💲 total_amount (decimal)</div>
-                <div class="etlsql-tree-row etlsql-tree-column"><span class="etlsql-tree-indent"></span>🔤 region (varchar)</div>
-                <div class="etlsql-tree-row etlsql-tree-column"><span class="etlsql-tree-indent"></span>📋 status (varchar)</div>
-                <div class="etlsql-tree-row etlsql-tree-column"><span class="etlsql-tree-indent"></span>🏢 vendor (varchar)</div>
+                <div class="etlsql-catalog-conn-list" style="display:flex; flex-direction:column; gap:4px; padding:6px 8px;">
+                    <div style="font-size:0.75rem; color:var(--portal-text-soft,#8b949e); padding:8px 6px;">Loading connections…</div>
+                </div>
             `;
+            sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard);
+
+            authFetch(apiBase + '/api/connections').then(async res => {
+                let connections = [];
+                if (res.ok) {
+                    const data = await res.json();
+                    connections = data.connections || (Array.isArray(data) ? data : []);
+                }
+                const listEl = sidebarContent.querySelector('.etlsql-catalog-conn-list');
+                if (!listEl) return;
+
+                if (connections.length === 0) {
+                    listEl.innerHTML = `
+                        <div style="padding:16px 8px; text-align:center; color:var(--portal-text-soft,#8b949e); font-size:0.75rem;">
+                            <p style="margin:0 0 10px;">No connections configured in this workspace.</p>
+                            <button type="button" class="etlsql-studio-btn" data-action="wizard-empty" style="margin:0 auto; font-size:0.75rem;">
+                                + Configure Connection
+                            </button>
+                        </div>
+                    `;
+                    listEl.querySelector('[data-action="wizard-empty"]')?.addEventListener('click', handleOpenConnectionWizard);
+                } else {
+                    listEl.innerHTML = connections.map(c => `
+                        <div class="etlsql-tree-row etlsql-tree-header" title="${_escapeHtml(c.description || c.alias)}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:4px;">
+                            ${_studioIcon('catalog', 14)}
+                            <strong style="color:var(--portal-text,#f0f6fc);">${_escapeHtml(c.alias || c.name)}</strong>
+                            <span style="font-size:10px; color:var(--portal-muted,#8b949e); margin-left:auto;">(${_escapeHtml(c.connectorType || 'SQL')})</span>
+                        </div>
+                    `).join('');
+                }
+            }).catch(() => {
+                const listEl = sidebarContent.querySelector('.etlsql-catalog-conn-list');
+                if (listEl) {
+                    listEl.innerHTML = `
+                        <div style="padding:16px 8px; text-align:center; color:var(--portal-text-soft,#8b949e); font-size:0.75rem;">
+                            <p style="margin:0 0 10px;">No connections found.</p>
+                            <button type="button" class="etlsql-studio-btn" data-action="wizard-empty" style="margin:0 auto; font-size:0.75rem;">
+                                + Configure Connection
+                            </button>
+                        </div>
+                    `;
+                    listEl.querySelector('[data-action="wizard-empty"]')?.addEventListener('click', handleOpenConnectionWizard);
+                }
+            });
             sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard);
         } else if (activity === 'palette') {
             sidebarTitle.textContent = 'Visual Components';
@@ -959,6 +1289,12 @@ export async function createStudioWorkbench(container, opts = {}) {
                 </div>
             `;
             sidebarContent.querySelectorAll('[data-add-visual]').forEach(btn => {
+                btn.draggable = true;
+                btn.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', btn.dataset.addVisual);
+                    e.dataTransfer.setData('application/x-etlsql-visual', btn.dataset.addVisual);
+                    e.dataTransfer.effectAllowed = 'copy';
+                });
                 btn.addEventListener('click', () => addVisualToCanvas(btn.dataset.addVisual));
             });
         } else if (activity === 'filters') {
@@ -1256,10 +1592,11 @@ export async function createStudioWorkbench(container, opts = {}) {
     try {
         const activeDoc = getActiveDoc();
         state.editorInstance = await createScriptEditor(editorHost, {
-            value: activeDoc.content,
+            value: activeDoc?.content || '',
             analyzeUrl: apiBase + '/api/analyze',
             completeUrl: apiBase + '/api/complete',
             hoverUrl: apiBase + '/api/hover',
+            diagnosticsPanel: false,
             authFetch,
             documentUri: () => getActiveDoc()?.path || 'untitled.rptsql',
             onChange: (newContent) => {
@@ -1268,7 +1605,12 @@ export async function createStudioWorkbench(container, opts = {}) {
                     doc.content = newContent;
                     doc.isDirty = true;
                     renderTabs();
-                    renderVisualStage();
+                    if (!isSyncingFromDesigner && state.designerInstance) {
+                        clearTimeout(codeMirrorDebounce);
+                        codeMirrorDebounce = setTimeout(() => {
+                            state.designerInstance.applyScriptText(newContent);
+                        }, 400);
+                    }
                 }
             }
         });
@@ -1303,8 +1645,14 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     renderTabs();
     renderSidebarContent('explorer');
-    setProjection(getActiveDoc()?.projection || 'split');
-    renderVisualStage();
+    if (state.activeDocId === '__home__') {
+        renderStudioHome();
+        setContextualRailVisibility();
+    } else {
+        setProjection(getActiveDoc()?.projection || 'split');
+        renderVisualStage();
+        setContextualRailVisibility();
+    }
 
     return {
         state,

@@ -68,14 +68,12 @@ public sealed class DesignerScriptPatcher
         string lineEnding,
         List<SpanReplacement> replacements)
     {
-        if (style is null) return;
-        var options = DesignerScriptGenerationService.BuildReportStyleOptions(style);
-        if (options.Count == 0) return;
+        if (style is null || string.IsNullOrWhiteSpace(style.Theme)) return;
 
-        var desired = $"SET REPORT STYLE ({string.Join(", ", options)});";
-        var existing = ast.Statements.OfType<CreateStyleStatement>().FirstOrDefault(statement => statement.StyleName == null)
-            ?? (Statement?)ast.Statements.OfType<SetReportMetadataStatement>()
-                .FirstOrDefault(statement => statement.Key.Equals("THEME", StringComparison.OrdinalIgnoreCase));
+        var desired = $"SET REPORT THEME = '{DesignerScriptGenerationService.EscapeStr(style.Theme)}';";
+        var existing = (Statement?)ast.Statements.OfType<SetReportMetadataStatement>()
+            .FirstOrDefault(statement => statement.Key.Equals("THEME", StringComparison.OrdinalIgnoreCase))
+            ?? ast.Statements.OfType<CreateStyleStatement>().FirstOrDefault(statement => statement.StyleName == null);
 
         if (existing is null)
         {

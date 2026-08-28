@@ -58,11 +58,12 @@ internal static class StudioShell
         console.error('Failed to fetch workspace files:', e);
       }
 
-      let primaryFile = initialFile || (workspaceFiles.length > 0 ? workspaceFiles[0].path : 'untitled.rptsql');
-      let initialContent = '';
-      if (primaryFile && primaryFile !== 'untitled.rptsql') {
+      let docs = [];
+      let activeDocId = '__home__';
+      if (initialFile) {
+        let initialContent = '';
         try {
-          const res = await authFetch('/api/files?path=' + encodeURIComponent(primaryFile));
+          const res = await authFetch('/api/files?path=' + encodeURIComponent(initialFile));
           if (res.ok) {
             const data = await res.json();
             initialContent = data.content || '';
@@ -70,41 +71,21 @@ internal static class StudioShell
         } catch (e) {
           console.error('Failed to load primary file:', e);
         }
-      }
-
-      const docs = [
-        {
+        docs.push({
           id: 'doc-primary',
-          path: primaryFile,
-          name: (primaryFile ? primaryFile.split('/').pop().split('\\').pop() : 'untitled.rptsql'),
+          path: initialFile,
+          name: initialFile.split('/').pop().split('\\').pop(),
           content: initialContent || '',
           isDirty: false,
           projection: 'split'
-        }
-      ];
-
-      for (const f of workspaceFiles.slice(0, 10)) {
-        if (f.path === primaryFile) continue;
-        let content = '';
-        try {
-          const res = await authFetch('/api/files?path=' + encodeURIComponent(f.path));
-          if (res.ok) {
-            const data = await res.json();
-            content = data.content || '';
-          }
-        } catch (e) {}
-        docs.push({
-          id: 'doc-' + Math.random().toString(36).slice(2, 7),
-          path: f.path,
-          name: f.path.split('/').pop().split('\\').pop(),
-          content: content,
-          isDirty: false,
-          projection: 'split'
         });
+        activeDocId = 'doc-primary';
       }
 
       window.__STUDIO__ = await createStudioWorkbench(document.getElementById('studioHost'), {
         documents: docs,
+        activeDocId: activeDocId,
+        workspaceFiles: workspaceFiles,
         apiBase: '',
         authFetch,
         onSave: async (content, filePath) => {

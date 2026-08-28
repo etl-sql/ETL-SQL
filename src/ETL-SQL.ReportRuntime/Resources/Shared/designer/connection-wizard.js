@@ -457,6 +457,177 @@ export function createConnectionWizard(options = {}) {
                 { name: 'TOPIC', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'events_stream' },
                 { name: 'GROUP_ID', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'etl_consumer' }
             ]
+        },
+        {
+            connectorType: 'ORACLE',
+            aliases: [],
+            description: 'Oracle Database Enterprise and Express editions.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'SERVER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'localhost' },
+                { name: 'PORT', type: 1, isMandatory: false, category: 'Basic', defaultValue: '1521' },
+                { name: 'SERVICE_NAME', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'XE' },
+                { name: 'USER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'system' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '30' }
+            ]
+        },
+        {
+            connectorType: 'ODBC',
+            aliases: [],
+            description: 'ODBC Generic Driver Connection.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'DSN', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'MyDataSource' },
+                { name: 'CONNECTION_STRING', type: 0, isMandatory: false, category: 'Basic' },
+                { name: 'USER', type: 0, isMandatory: false, category: 'Basic' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '30' }
+            ]
+        },
+        {
+            connectorType: 'MONGODB',
+            aliases: ['MONGO'],
+            description: 'MongoDB NoSQL Document Database.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'CONNECTION_STRING', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'mongodb://localhost:27017' },
+                { name: 'DATABASE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'admin' },
+                { name: 'USER', type: 0, isMandatory: false, category: 'Basic' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '30' }
+            ]
+        },
+        {
+            connectorType: 'NEO4J',
+            aliases: [],
+            description: 'Neo4j Graph Database Platform.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'URI', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'bolt://localhost:7687' },
+                { name: 'DATABASE', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'neo4j' },
+                { name: 'USER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'neo4j' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '30' }
+            ]
+        },
+        {
+            connectorType: 'AVRO',
+            aliases: [],
+            description: 'Apache Avro binary data serialization format.',
+            isFileBased: true,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'PATH', type: 4, isMandatory: true, category: 'Basic', defaultValue: 'data/events.avro' }
+            ]
+        },
+        {
+            connectorType: 'XML',
+            aliases: [],
+            description: 'Extensible Markup Language (XML) documents.',
+            isFileBased: true,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'PATH', type: 4, isMandatory: true, category: 'Basic', defaultValue: 'data/feed.xml' },
+                { name: 'ROW_TAG', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'item' }
+            ]
+        },
+        {
+            connectorType: 'SHAREPOINT',
+            aliases: [],
+            description: 'Microsoft 365 SharePoint Online lists and drive documents.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 60,
+            options: [
+                { name: 'SITE_URL', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'https://tenant.sharepoint.com/sites/analytics' },
+                { name: 'TENANT_ID', type: 0, isMandatory: true, category: 'Basic' },
+                { name: 'CLIENT_ID', type: 0, isMandatory: true, category: 'Basic' },
+                { name: 'CLIENT_SECRET', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'FOLDER', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'Shared Documents' }
+            ]
+        },
+        {
+            connectorType: 'GRAPHQL',
+            aliases: [],
+            description: 'GraphQL query endpoint with schema introspection.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'URL', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'https://api.example.com/graphql' },
+                { name: 'AUTH_HEADER', type: 3, isMandatory: false, category: 'Auth' },
+                { name: 'TIMEOUT_SECONDS', type: 1, isMandatory: false, category: 'Tuning', defaultValue: '30' }
+            ]
+        },
+        {
+            connectorType: 'EMAIL',
+            aliases: ['SMTP'],
+            description: 'SMTP Email server for alerting and notification pipelines.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'HOST', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'smtp.corp.internal' },
+                { name: 'PORT', type: 1, isMandatory: false, category: 'Basic', defaultValue: '587' },
+                { name: 'USER', type: 0, isMandatory: false, category: 'Basic' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'ENABLE_SSL', type: 2, isMandatory: false, category: 'Security', defaultValue: 'ON' },
+                { name: 'FROM', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'etl@corp.internal' }
+            ]
+        },
+        {
+            connectorType: 'WEBHOOK',
+            aliases: [],
+            description: 'HTTP Webhook endpoint for trigger alerts and external integrations.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'URL', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'https://hooks.slack.com/services/...' },
+                { name: 'METHOD', type: 5, isMandatory: false, category: 'Basic', allowedValues: ['POST', 'PUT'], defaultValue: 'POST' },
+                { name: 'AUTH_HEADER', type: 3, isMandatory: false, category: 'Auth' }
+            ]
+        },
+        {
+            connectorType: 'FTP',
+            aliases: ['FTP_CONN'],
+            description: 'Standard File Transfer Protocol (FTP) server.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'HOST', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'ftp.corp.internal' },
+                { name: 'PORT', type: 1, isMandatory: false, category: 'Basic', defaultValue: '21' },
+                { name: 'USER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'anonymous' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' },
+                { name: 'PASSIVE_MODE', type: 2, isMandatory: false, category: 'Tuning', defaultValue: 'ON' }
+            ]
+        },
+        {
+            connectorType: 'ACTIVEDIRECTORY',
+            aliases: ['AD', 'LDAP'],
+            description: 'Active Directory / LDAP directory query service.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+                { name: 'HOST', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'ad.corp.internal' },
+                { name: 'PORT', type: 1, isMandatory: false, category: 'Basic', defaultValue: '389' },
+                { name: 'DOMAIN', type: 0, isMandatory: false, category: 'Basic', defaultValue: 'corp.internal' },
+                { name: 'USER', type: 0, isMandatory: false, category: 'Basic' },
+                { name: 'PASSWORD', type: 3, isMandatory: false, category: 'Auth', mutuallyExclusiveGroup: 'Credentials' }
+            ]
         }
     ];
 

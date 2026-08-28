@@ -917,6 +917,7 @@ function _getRptsqlHighlightStyle(cm) {
  *   Returns a promise so callers can await the dynamic bundle load.
  */
 export async function createScriptEditor(container, opts = {}) {
+    container.classList.add('etlsql-editor-container');
     const cm = await _loadCm();
     const {
         EditorState,
@@ -3879,8 +3880,10 @@ export function createDesigner(container, opts = {}) {
     root.appendChild(topbar);
     topbar.querySelector('#dsgn-name').value = reportName;
     topbar.querySelector('#dsgn-theme-select').value = localStorage.getItem('portal-theme') || 'light';
-    if (sourceControlEnabled && reportId) topbar.querySelector('#dsgn-commit').style.display = '';
-    if (opts.hideTopbar) topbar.style.display = 'none';
+    if (opts.hideTopbar) {
+        topbar.style.display = 'none';
+        root.classList.add('no-topbar');
+    }
 
     function setScriptDiagnosticBadge(errorText) {
         const el = topbar.querySelector('#dsgn-diagnostic-badge');
@@ -3982,24 +3985,44 @@ export function createDesigner(container, opts = {}) {
     document.addEventListener('visibilitychange', visibilityLeaseHandler);
     if (reportId && opts.host === 'portal') queueMicrotask(acquireEditLease);
 
-    // Sidebar
+    function setSaveButtonLoading(isLoading) {
+        const btn = topbar.querySelector('#dsgn-save');
+        if (!btn) return;
+        btn.disabled = Boolean(isLoading);
+        btn.innerHTML = isLoading ? '<span class="etlsql-spinner" aria-hidden="true"></span> Saving…' : 'Save';
+    }
+
+    function applyCanvasTheme(themeName) {
+        const t = themeName === 'midnight' ? 'midnight' : themeName === 'dark' ? 'dark' : 'light';
+        canvasWrap.setAttribute('data-canvas-theme', t);
+        localStorage.setItem('portal-theme', t);
+        topbar.querySelector('#dsgn-theme-select').value = t;
+    }
+
+    // ── Sidebar (Palette + Tree + Datasets + Bookmarks) ─────────────────────────
     const sidebar = document.createElement('div');
     sidebar.className = 'etlsql-designer-sidebar';
     let sidebarHtml = `
+        <div class="etlsql-dsgn-section">
+            <div class="etlsql-dsgn-section-hdr">Report Tree</div>
+            <div id="dsgn-tree"></div>
+        </div>
         <div class="etlsql-dsgn-palette-discovery">
             <label for="dsgn-palette-search">Add a visual</label>
             <div class="etlsql-dsgn-palette-search-row">
                 <input id="dsgn-palette-search" type="search" placeholder="Search ${VTYPES.length} visual types" autocomplete="off" />
                 <span id="dsgn-palette-count" aria-live="polite">${VTYPES.length}</span>
             </div>
-        </div>`;
+            <div id="dsgn-palette-empty" class="etlsql-dsgn-palette-empty" style="display:none">No visual types match "<span id="dsgn-palette-empty-term"></span>".</div>
+        </div>
+    `;
     for (const cat of VCATEGORIES) {
         sidebarHtml += `
             <div class="etlsql-dsgn-section etlsql-dsgn-palette-section" data-palette-category="${esc(cat.name)}">
-                <div class="etlsql-dsgn-section-hdr"><span>${cat.name}</span><span>${cat.types.length}</span></div>
+                <div class="etlsql-dsgn-section-hdr">${esc(cat.name)}</div>
                 <div class="etlsql-dsgn-palette">
                     ${cat.types.map(([type, color]) => `
-                        <button class="etlsql-dsgn-palette-btn" data-vtype="${type}" data-search="${type} ${cat.name}" style="--vc: ${color}" title="Add ${type}" aria-label="Add ${type} visual">
+                        <button class="etlsql-dsgn-palette-btn" draggable="true" data-vtype="${type}" data-search="${type} ${cat.name}" style="--vc: ${color}" title="Add ${type}" aria-label="Add ${type} visual">
                             <span class="etlsql-dsgn-palette-dot" aria-hidden="true"></span><span>${type}</span>
                         </button>
                     `).join('')}
@@ -5780,29 +5803,66 @@ export function createDesigner(container, opts = {}) {
         renderAll();
     }
 
-    function addVisual(type) {
+    function addVisualAt(type, col = 1, row = null, colSpan = 12, rowSpan = 4) {
         pushUndoState();
-        const page = curPage();
+        if (!state.pages || !state.pages.length) {
+            state.pages = [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }];
+            pageIdx = 0;
+        }
+        let page = curPage();
+        if (!page) {
+            page = state.pages[0];
+            pageIdx = 0;
+        }
         if (!page.visuals) page.visuals = [];
         const newId = uid();
         const visual = {
             id: newId,
             name: type.toLowerCase() + '_' + newId.slice(2),
-            type,
-            gridCol: 1,
-            gridRow: maxRow(page.visuals) + 1,
-            gridColSpan: 12,
-            gridRowSpan: 4,
+            type: type.toUpperCase(),
+            gridCol: col || 1,
+            gridRow: row !== null ? row : maxRow(page.visuals) + 1,
+            gridColSpan: colSpan || (type === 'KPI' ? 3 : type === 'TABLE' ? 12 : 6),
+            gridRowSpan: rowSpan || (type === 'KPI' ? 2 : type === 'TABLE' ? 5 : 4),
             title: '',
             dataset: null,
             mappings: {},
             options: {},
         };
-        if (type === 'CONTAINER') {
+
+        const uType = type.toUpperCase();
+        if (uType === 'BAR') {
+            visual.mappings = { X: 'category', Y: 'value' };
+            visual.options = { TITLE: 'Bar Chart' };
+        } else if (uType === 'LINE') {
+            visual.mappings = { X: 'date', Y: 'value' };
+            visual.options = { TITLE: 'Trend Line' };
+        } else if (uType === 'KPI') {
+            visual.mappings = { VALUE: 'total_amount' };
+            visual.options = { TITLE: 'Key Metric' };
+            visual.gridColSpan = 3;
+            visual.gridRowSpan = 2;
+        } else if (uType === 'DONUT' || uType === 'PIE') {
+            visual.mappings = { CATEGORY: 'region', VALUE: 'amount' };
+            visual.options = { TITLE: 'Proportions' };
+        } else if (uType === 'TABLE') {
+            visual.options = { TITLE: 'Data Grid Table', PAGE_SIZE: '10' };
+            visual.gridColSpan = 12;
+            visual.gridRowSpan = 5;
+        } else if (uType === 'SLICER') {
+            visual.mappings = { FIELD: 'region' };
+            visual.options = { TITLE: 'Filter Slicer' };
+            visual.gridColSpan = 3;
+            visual.gridRowSpan = 3;
+        } else if (uType === 'CONTAINER') {
             visual.options.CONTAINER_TYPE = 'BOX';
-        } else if (type === 'BUTTON') {
+            visual.gridColSpan = 12;
+            visual.gridRowSpan = 6;
+        } else if (uType === 'BUTTON') {
             visual.options.BUTTON_TYPE = 'REFRESH';
-        } else if (type === 'CUSTOM') {
+            visual.gridColSpan = 2;
+            visual.gridRowSpan = 1;
+        } else if (uType === 'CUSTOM') {
             visual.options.advanced_chart = `CHART (
         COORDINATE (TYPE = CARTESIAN),
         LAYERS (
@@ -5814,7 +5874,7 @@ export function createDesigner(container, opts = {}) {
             )
         )
     )`;
-        } else if (type === 'HTML') {
+        } else if (uType === 'HTML') {
             visual.options.html_mode = 'SINGLE';
             visual.options.html_template = `<article class="custom-card">
   <h3>{{Title}}</h3>
@@ -5827,11 +5887,18 @@ export function createDesigner(container, opts = {}) {
 }`;
             visual.options.html_fallback = 'Custom HTML Visual: {{Title}} - {{Description}}';
         }
+
         page.visuals.push(visual);
         selVisualId = newId;
         renderCanvas();
         renderTree();
         renderProps();
+        syncScriptFromGridDebounced();
+    }
+
+    function addVisual(type) {
+        const uType = (type || 'BAR').toUpperCase();
+        addVisualAt(uType, 1, null, uType === 'KPI' ? 3 : uType === 'TABLE' ? 12 : 6, uType === 'KPI' ? 2 : uType === 'TABLE' ? 5 : 4);
     }
 
     function addPage() {
@@ -6398,6 +6465,18 @@ export function createDesigner(container, opts = {}) {
     });
 
     canvasGrid.addEventListener('click', e => {
+        const emptyAdd = e.target.closest('[data-empty-vtype]');
+        if (emptyAdd) {
+            e.stopPropagation();
+            addVisual(emptyAdd.dataset.emptyVtype);
+            return;
+        }
+        const del = e.target.closest('[data-del]');
+        if (del) {
+            e.stopPropagation();
+            deleteVisual(del.dataset.del);
+            return;
+        }
         const fold = e.target.closest('[data-fold]');
         if (fold) {
             const id = fold.dataset.fold;
@@ -6420,6 +6499,12 @@ export function createDesigner(container, opts = {}) {
                 renderAll();
             }
             return;
+        }
+        const card = e.target.closest('.etlsql-dsgn-visual-card');
+        if (card) {
+            selectVisual(card.dataset.vid, { toggle: e.shiftKey || e.ctrlKey || e.metaKey });
+        } else {
+            selectVisual(null);
         }
     });
 
@@ -6463,6 +6548,15 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-pages').addEventListener('click', e => {
         const tab = e.target.closest('.etlsql-designer-page-tab');
         if (tab) { pageIdx = +tab.dataset.idx; selVisualId = null; renderAll(); }
+    });
+
+    sidebar.addEventListener('dragstart', e => {
+        const btn = e.target.closest('.etlsql-dsgn-palette-btn');
+        if (btn) {
+            e.dataTransfer.setData('text/plain', btn.dataset.vtype);
+            e.dataTransfer.setData('application/x-etlsql-visual', btn.dataset.vtype);
+            e.dataTransfer.effectAllowed = 'copy';
+        }
     });
 
     sidebar.addEventListener('click', e => {
@@ -6536,8 +6630,9 @@ export function createDesigner(container, opts = {}) {
         const resizeHandle = e.target.closest('.etlsql-dsgn-vcard-resize');
         const card = e.target.closest('.etlsql-dsgn-visual-card');
         const delBtn = e.target.closest('[data-del]');
+        const emptyBtn = e.target.closest('[data-empty-vtype]');
 
-        if (delBtn) return; // Delete visual handler manages this
+        if (delBtn || emptyBtn) return; // Managed by click handlers
 
         if (!card && !resizeHandle) {
             isMarquee = true;
@@ -6850,17 +6945,57 @@ export function createDesigner(container, opts = {}) {
         document.removeEventListener('mouseup', handleMouseUp);
     }
 
-    canvasGrid.addEventListener('click', e => {
-        const emptyAdd = e.target.closest('[data-empty-vtype]');
-        if (emptyAdd) { addVisual(emptyAdd.dataset.emptyVtype); return; }
-        const del = e.target.closest('[data-del]');
-        if (del) { deleteVisual(del.dataset.del); return; }
-        const card = e.target.closest('.etlsql-dsgn-visual-card');
-        if (card) {
-            selectVisual(card.dataset.vid, { toggle: e.shiftKey || e.ctrlKey || e.metaKey });
-        } else {
-            selectVisual(null);
+    canvasGrid.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        const gridRect = canvasGrid.getBoundingClientRect();
+        const gridW = gridRect.width - 32;
+        const W_col = (gridW - 11 * 6) / 12;
+        const currentLeft = e.clientX - gridRect.left - 16;
+        const currentTop = e.clientY - gridRect.top - 16;
+        let col = Math.round(currentLeft / (W_col + 6)) + 1;
+        col = Math.max(1, Math.min(12, col));
+        let row = Math.round(currentTop / 66) + 1;
+        row = Math.max(1, row);
+
+        let ghost = canvasGrid.querySelector('.etlsql-dsgn-grid-ghost');
+        if (!ghost) {
+            ghost = document.createElement('div');
+            ghost.className = 'etlsql-dsgn-grid-ghost';
+            canvasGrid.appendChild(ghost);
         }
+        const colSpan = Math.min(6, Math.max(1, 13 - col));
+        ghost.style.gridColumn = `${col} / span ${colSpan}`;
+        ghost.style.gridRow = `${row} / span 4`;
+    });
+
+    canvasGrid.addEventListener('dragleave', e => {
+        if (!canvasGrid.contains(e.relatedTarget)) {
+            const ghost = canvasGrid.querySelector('.etlsql-dsgn-grid-ghost');
+            if (ghost) ghost.remove();
+        }
+    });
+
+    canvasGrid.addEventListener('drop', e => {
+        e.preventDefault();
+        const ghost = canvasGrid.querySelector('.etlsql-dsgn-grid-ghost');
+        if (ghost) ghost.remove();
+
+        const vtype = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('application/x-etlsql-visual');
+        if (!vtype) return;
+
+        const gridRect = canvasGrid.getBoundingClientRect();
+        const gridW = gridRect.width - 32;
+        const W_col = (gridW - 11 * 6) / 12;
+        const currentLeft = e.clientX - gridRect.left - 16;
+        const currentTop = e.clientY - gridRect.top - 16;
+        let col = Math.round(currentLeft / (W_col + 6)) + 1;
+        col = Math.max(1, Math.min(12, col));
+        let row = Math.round(currentTop / 66) + 1;
+        row = Math.max(1, row);
+        const colSpan = Math.min(6, Math.max(1, 13 - col));
+
+        addVisualAt(vtype.toUpperCase(), col, row, colSpan, 4);
     });
 
     sidebar.querySelector('#dsgn-tree').addEventListener('click', e => {
@@ -6914,7 +7049,11 @@ export function createDesigner(container, opts = {}) {
     saveModal.querySelector('#dsgn-modal-ok').addEventListener('click', () => saveAsNew().catch(e => _feedback.notify(e.message, { title: 'Save failed', tone: 'error' })));
 
     // ── Initial render ────────────────────────────────────────────────────────
-    renderAll();
+    if (opts.script || opts.initialScript) {
+        applyScriptText(opts.script || opts.initialScript);
+    } else {
+        renderAll();
+    }
     if (initialMode === 'code') queueMicrotask(() => openScript());
 
     return {

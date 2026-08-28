@@ -7,7 +7,8 @@ public sealed class WorkstationWorkspace
     private static readonly HashSet<string> EditableExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".etlsql",
-        ".rptsql"
+        ".rptsql",
+        ".sql"
     };
 
     public WorkstationWorkspace(string workspaceRoot, bool readOnly)
