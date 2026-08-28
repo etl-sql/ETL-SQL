@@ -21,6 +21,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   creates one high-priority case per tenant and operation with acknowledgement, assignment, evidence,
   notes, four externally verified resolutions, and append-only event history. Script and scheduler
   execution now carry a non-retryable outcome so configured job retries cannot duplicate the write.
+  Gateway restart promotes abandoned in-flight writes to ambiguous and republishes their non-secret
+  metadata during the authenticated handshake for deduplicated Portal recovery.
 
 - Added Phase 6 of **ETL-SQL Studio** establishing automated multi-resolution usability audits and Playwright
   browser verification. Added full geometry and bounding-box assertion suites testing viewports from 1024x768 to 4K UHD,

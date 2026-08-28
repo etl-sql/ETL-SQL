@@ -156,6 +156,12 @@ public class GatewayEnrollmentControllerTests : IClassFixture<PortalWebFactory>
             NodeId = "portal-route-test-node",
             WorkloadPublicKeyThumbprint = thumbprint,
             WorkloadPublicKey = Convert.ToBase64String(publicKey),
+            AmbiguousOutcomes =
+            [
+                new GatewayAmbiguousOutcomeNotice(
+                    "recovered-write", "default", gatewayId, "orders", "recovered-correlation",
+                    DateTimeOffset.UtcNow.AddMinutes(-5))
+            ],
             PublishedResources =
             [
                 new GatewayPublishedResource(
@@ -183,6 +189,20 @@ public class GatewayEnrollmentControllerTests : IClassFixture<PortalWebFactory>
         received = await socket.ReceiveAsync(buffer, CancellationToken.None);
         var ack = GatewayFrame.Deserialize(Encoding.UTF8.GetString(buffer, 0, received.Count));
         Assert.Equal(GatewayFrameKind.HelloAck, ack.Kind);
+
+        using (var recoveredRequest = new HttpRequestMessage(
+            HttpMethod.Get, "/api/admin/gateway-operations/ambiguous-writes"))
+        {
+            recoveredRequest.Headers.Authorization = new("Bearer", adminToken);
+            using var recoveredResponse = await _client.SendAsync(recoveredRequest);
+            recoveredResponse.EnsureSuccessStatusCode();
+            var recoveredCases = await recoveredResponse.Content
+                .ReadFromJsonAsync<List<GatewayAmbiguousWriteCaseDto>>(_json);
+            var recovered = Assert.Single(recoveredCases!, item => item.OperationId == "recovered-write");
+            Assert.Equal(gatewayId, recovered.GatewayId);
+            Assert.Equal("recovered-correlation", recovered.CorrelationId);
+            Assert.Equal("High", recovered.Priority);
+        }
 
         using var list = new HttpRequestMessage(HttpMethod.Get, "/api/admin/gateways");
         list.Headers.Authorization = new("Bearer", adminToken);

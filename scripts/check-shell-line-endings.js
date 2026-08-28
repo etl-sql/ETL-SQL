@@ -13,7 +13,7 @@ function findShFiles(dir, fileList = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'bin' || entry.name === 'obj') continue;
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.vscode-test' || entry.name === 'bin' || entry.name === 'obj') continue;
       findShFiles(path.join(dir, entry.name), fileList);
     } else if (entry.isFile() && entry.name.endsWith('.sh')) {
       fileList.push(path.join(dir, entry.name));

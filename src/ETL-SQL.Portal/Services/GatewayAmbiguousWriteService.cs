@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Gateway;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,7 +42,7 @@ public sealed record GatewayAmbiguousWriteCaseDto(
 /// </summary>
 public sealed class GatewayAmbiguousWriteService(
     IServiceScopeFactory scopeFactory,
-    PortalConfig config) : IGatewayAmbiguousWriteRecorder
+    PortalConfig config) : IGatewayAmbiguousWriteRecorder, IGatewayAmbiguousOutcomeSink
 {
     public static readonly IReadOnlySet<string> AllowedResolutions = new HashSet<string>(
         ["confirmed committed", "confirmed not applied", "compensated", "superseded"],
@@ -98,6 +99,12 @@ public sealed class GatewayAmbiguousWriteService(
                 throw;
         }
     }
+
+    public Task RecordAsync(GatewayAmbiguousOutcomeNotice notice, CancellationToken cancellationToken) =>
+        RecordAsync(new GatewayOperation(
+            notice.OperationId, notice.TenantId, notice.GatewayId, notice.ResourceId,
+            GatewayOperationClass.Write, GatewayOperationEffect.Mutating, GatewayOperationBounds.Default,
+            notice.CorrelationId, DispatchedAtUtc: notice.DispatchedAtUtc), cancellationToken);
 
     public async Task<IReadOnlyList<GatewayAmbiguousWriteCaseDto>> ListAsync(
         string tenantId,

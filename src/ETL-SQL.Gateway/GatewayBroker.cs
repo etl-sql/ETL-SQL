@@ -7,6 +7,11 @@ using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Gateway;
 
+public interface IGatewayAmbiguousOutcomeSink
+{
+    Task RecordAsync(GatewayAmbiguousOutcomeNotice notice, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Server-side broker that authenticates incoming on-premises Gateway WebSocket sessions,
 /// registers them in the <see cref="GatewaySessionRegistry"/>, and routes typed operations.
@@ -17,7 +22,8 @@ public sealed class GatewayBroker(
     ITenantMeteringLedger? meteringLedger = null,
     int maxFrameBytes = 1 << 20,
     TimeProvider? timeProvider = null,
-    bool allowUnprovenTestIdentities = false)
+    bool allowUnprovenTestIdentities = false,
+    IGatewayAmbiguousOutcomeSink? ambiguousOutcomeSink = null)
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private readonly ITenantMeteringLedger? _meteringLedger = meteringLedger;
@@ -80,6 +86,29 @@ public sealed class GatewayBroker(
                 await CloseSocketAsync(socket, "Authentication failed.", cancellationToken).ConfigureAwait(false);
                 return;
             }
+        }
+
+        foreach (var notice in helloFrame.AmbiguousOutcomes ?? [])
+        {
+            var invalid = ambiguousOutcomeSink is null
+                || !string.Equals(notice.TenantId, helloFrame.TenantId, StringComparison.Ordinal)
+                || !string.Equals(notice.GatewayId, helloFrame.GatewayId, StringComparison.Ordinal)
+                || string.IsNullOrWhiteSpace(notice.OperationId) || notice.OperationId.Length > 128
+                || string.IsNullOrWhiteSpace(notice.ResourceId) || notice.ResourceId.Length > 128
+                || string.IsNullOrWhiteSpace(notice.CorrelationId) || notice.CorrelationId.Length > 128
+                || notice.DispatchedAtUtc == default
+                || notice.DispatchedAtUtc > _time.GetUtcNow().AddMinutes(5);
+            if (invalid)
+            {
+                await SendFrameAsync(socket,
+                    GatewayFrame.Fault(notice.OperationId, "Gateway ambiguous-outcome metadata was refused."),
+                    cancellationToken).ConfigureAwait(false);
+                await CloseSocketAsync(socket, "Invalid ambiguous-outcome metadata.", cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            await ambiguousOutcomeSink!.RecordAsync(notice, cancellationToken).ConfigureAwait(false);
         }
 
         // 3. Start the operation pump only after the handshake has consumed its authentication

@@ -510,7 +510,7 @@ namespace ETL_SQL.Connectors.SqlServer
                     ["etlsql.operation_id"] = viewerContext.OperationId
                 };
                 foreach (var (key, value) in viewerContext.Claims)
-                    values[$"etlsql.claim_{key.ToLowerInvariant().Replace('-', '_')}"] = value;
+                    values[$"etlsql.claim_{key.ToLowerInvariant()}"] = value;
 
                 foreach (var (name, value) in values)
                 {

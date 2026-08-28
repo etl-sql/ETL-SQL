@@ -56,6 +56,7 @@ public sealed record GatewayFrame
     public string? Challenge { get; init; }
     public string? Signature { get; init; }
     public IReadOnlyList<GatewayPublishedResource>? PublishedResources { get; init; }
+    public IReadOnlyList<GatewayAmbiguousOutcomeNotice>? AmbiguousOutcomes { get; init; }
 
     public string? OperationId { get; init; }
     public string? CorrelationId { get; init; }

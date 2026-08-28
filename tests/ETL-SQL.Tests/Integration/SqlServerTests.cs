@@ -72,11 +72,13 @@ namespace ETL_SQL.Tests.Integration
                 var batch = await success.ExecuteRawSql(
                     "SELECT CONVERT(nvarchar(2048), SESSION_CONTEXT(N'etlsql.viewer_id')) AS viewer, " +
                     "CONVERT(nvarchar(2048), SESSION_CONTEXT(N'etlsql.claim_department')) AS department, " +
+                    "CONVERT(nvarchar(2048), SESSION_CONTEXT(N'etlsql.claim_cost-center')) AS cost_center, " +
                     "ORIGINAL_LOGIN() AS original_login, SUSER_SNAME() AS effective_login",
                     null, CancellationToken.None).FirstAsync();
                 var row = Assert.Single(batch.Rows);
                 Assert.Equal(hostile, row["viewer"]);
                 Assert.Equal(hostile, row["department"]);
+                Assert.Equal(hostile, row["cost_center"]);
                 Assert.Equal(executingLogin, row["original_login"]);
                 Assert.Equal(executingLogin, row["effective_login"]);
                 await success.CommitAsync();
@@ -132,7 +134,7 @@ namespace ETL_SQL.Tests.Integration
             VerifiedViewerContext Context(string operationId, string executingCredential, string viewer = "viewer") =>
                 new("tenant-a", "sqlserver-reports", operationId, viewer, "real-viewer",
                     executingCredential,
-                    new Dictionary<string, string> { ["department"] = viewer },
+                    new Dictionary<string, string> { ["department"] = viewer, ["cost-center"] = viewer },
                     DateTimeOffset.UtcNow);
         }
 
@@ -159,12 +161,14 @@ namespace ETL_SQL.Tests.Integration
             await using var reused = new SqlConnection(connectionString);
             await reused.OpenAsync();
             await using var check = new SqlCommand(
-                "SELECT SESSION_CONTEXT(N'etlsql.viewer_id'), SESSION_CONTEXT(N'etlsql.claim_department')",
+                "SELECT SESSION_CONTEXT(N'etlsql.viewer_id'), SESSION_CONTEXT(N'etlsql.claim_department'), " +
+                "SESSION_CONTEXT(N'etlsql.claim_cost-center')",
                 reused);
             await using var reader = await check.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
             Assert.True(reader.IsDBNull(0));
             Assert.True(reader.IsDBNull(1));
+            Assert.True(reader.IsDBNull(2));
         }
 
         private async Task TestDataTypes(Evaluator eval, string connStr)

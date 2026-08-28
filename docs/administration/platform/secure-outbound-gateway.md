@@ -183,6 +183,12 @@ of four externally verified outcomes: `confirmed committed`, `confirmed not appl
 or `superseded`. Resolution requires an external evidence reference. There is no dismiss or delete
 operation.
 
+If the Gateway process stops with a mutating operation still recorded as in flight, loading the
+durable ledger promotes that record to ambiguous. On the next outbound connection, the Gateway
+publishes the record's non-secret operation metadata inside its authenticated handshake. Portal
+persists the triage case before acknowledging the session. Repeated reconnects are harmless because
+tenant and operation ID form the case's unique key.
+
 An ambiguous Gateway write is also marked non-retryable in script execution results. The scheduler
 preserves the failure and stops immediately even when the job has retries configured. Operators must
 reconcile the case and make any later corrective action explicitly.

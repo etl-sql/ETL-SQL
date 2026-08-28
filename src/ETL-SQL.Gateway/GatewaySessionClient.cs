@@ -14,7 +14,8 @@ public sealed record GatewaySessionOptions(
     string? NodeId = null,
     int MaxFrameBytes = 1 << 20,
     string? WorkloadPrivateKeyPkcs8Base64 = null,
-    IReadOnlyList<GatewayPublishedResource>? PublishedResources = null)
+    IReadOnlyList<GatewayPublishedResource>? PublishedResources = null,
+    IReadOnlyList<GatewayAmbiguousOutcomeNotice>? AmbiguousOutcomes = null)
 {
     /// <summary>Resolved node identity (explicit or host machine name).</summary>
     public string EffectiveNodeId => !string.IsNullOrWhiteSpace(NodeId) ? NodeId : Environment.MachineName;
@@ -76,7 +77,8 @@ public sealed class GatewaySessionClient(
             NodeId = options.EffectiveNodeId,
             WorkloadPublicKeyThumbprint = options.WorkloadPublicKeyThumbprint,
             WorkloadPublicKey = ExportPublicKey(options.WorkloadPrivateKeyPkcs8Base64),
-            PublishedResources = options.PublishedResources
+            PublishedResources = options.PublishedResources,
+            AmbiguousOutcomes = options.AmbiguousOutcomes
         }, cancellationToken).ConfigureAwait(false);
 
         var ack = await ReceiveAsync(socket, cancellationToken).ConfigureAwait(false);

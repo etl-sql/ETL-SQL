@@ -224,11 +224,19 @@ public sealed class GatewayOperationProtocolTests
                 Effect = GatewayOperationEffect.Mutating
             };
             var ambiguous = committed with { OperationId = "ambiguous-write" };
+            var interruptedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
+            var interrupted = committed with
+            {
+                OperationId = "interrupted-write",
+                CorrelationId = "corr-interrupted",
+                DispatchedAtUtc = interruptedAt
+            };
             var firstProcess = new GatewayOutcomeLedger(path);
             firstProcess.RecordDispatched(committed);
             firstProcess.RecordTerminal(Tenant, committed.OperationId, GatewayOutcomeState.Committed, 3);
             firstProcess.RecordDispatched(ambiguous);
             firstProcess.RecordTerminal(Tenant, ambiguous.OperationId, GatewayOutcomeState.Ambiguous);
+            firstProcess.RecordDispatched(interrupted);
 
             var restarted = new GatewayOutcomeLedger(path);
             Assert.Equal(
@@ -238,6 +246,13 @@ public sealed class GatewayOperationProtocolTests
             Assert.Equal(
                 GatewayReconnectAction.EscalateAmbiguous,
                 restarted.DecideReconnect(Tenant, ambiguous.OperationId));
+            Assert.Equal(GatewayOutcomeState.Ambiguous, restarted.Find(Tenant, interrupted.OperationId)?.State);
+            var notice = Assert.Single(
+                restarted.ListAmbiguousMutating(Tenant), item => item.OperationId == interrupted.OperationId);
+            Assert.Equal(interrupted.GatewayId, notice.GatewayId);
+            Assert.Equal(interrupted.ResourceId, notice.ResourceId);
+            Assert.Equal(interrupted.CorrelationId, notice.CorrelationId);
+            Assert.Equal(interruptedAt, notice.DispatchedAtUtc);
         }
         finally
         {

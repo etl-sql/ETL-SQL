@@ -51,7 +51,8 @@ internal static class GatewayRuntimeService
             new Uri(config.BrokerUrl), config.TenantId, config.GatewayId,
             config.WorkloadPublicKeyThumbprint, config.NodeId,
             WorkloadPrivateKeyPkcs8Base64: privateKey,
-            PublishedResources: publishedResources)), dispatcher);
+            PublishedResources: publishedResources,
+            AmbiguousOutcomes: ledger.ListAmbiguousMutating(config.TenantId))), dispatcher);
 
         host.StatusChanged += status => logger.Info("Gateway status: {Status}", status);
         host.ErrorOccurred += ex => logger.Error("Gateway broker connection failed; reconnecting.", ex);

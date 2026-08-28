@@ -110,6 +110,8 @@ builder.Services.AddSingleton<ETL_SQL.Portal.Services.IPortalGatewayGrantResolve
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.GatewayAmbiguousWriteService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.IGatewayAmbiguousWriteRecorder>(sp =>
     sp.GetRequiredService<ETL_SQL.Portal.Services.GatewayAmbiguousWriteService>());
+builder.Services.AddSingleton<ETL_SQL.Gateway.IGatewayAmbiguousOutcomeSink>(sp =>
+    sp.GetRequiredService<ETL_SQL.Portal.Services.GatewayAmbiguousWriteService>());
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayOperationRouter, ETL_SQL.Portal.Services.PortalGatewayOperationRouter>();
 builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();

@@ -138,7 +138,20 @@ public sealed record GatewayOperationOutcome(
     GatewayOutcomeState State,
     GatewayOperationEffect Effect,
     long RowsProduced = 0,
-    string? Detail = null);
+    string? Detail = null,
+    string? GatewayId = null,
+    string? ResourceId = null,
+    string? CorrelationId = null,
+    DateTimeOffset? DispatchedAtUtc = null);
+
+/// <summary>Non-secret ambiguous-write metadata a Gateway publishes for operator triage.</summary>
+public sealed record GatewayAmbiguousOutcomeNotice(
+    string OperationId,
+    string TenantId,
+    string GatewayId,
+    string ResourceId,
+    string CorrelationId,
+    DateTimeOffset DispatchedAtUtc);
 
 /// <summary>
 /// The durable outcome ledger reconnect keys off (§11.5).
@@ -180,8 +193,17 @@ public sealed class GatewayOutcomeLedger
         {
             var records = JsonSerializer.Deserialize<List<GatewayOperationOutcome>>(
                 File.ReadAllText(_persistencePath)) ?? [];
+            var promoted = false;
             foreach (var record in records)
-                _outcomes[Key(record.TenantId, record.OperationId)] = record;
+            {
+                var restored = record.State == GatewayOutcomeState.InFlight
+                    && record.Effect == GatewayOperationEffect.Mutating
+                        ? record with { State = GatewayOutcomeState.Ambiguous }
+                        : record;
+                promoted |= restored.State != record.State;
+                _outcomes[Key(restored.TenantId, restored.OperationId)] = restored;
+            }
+            if (promoted) PersistLocked();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -204,7 +226,11 @@ public sealed class GatewayOutcomeLedger
             }
 
             _outcomes[Key(operation.TenantId, operation.OperationId)] = new GatewayOperationOutcome(
-                operation.OperationId, operation.TenantId, GatewayOutcomeState.InFlight, operation.Effect);
+                operation.OperationId, operation.TenantId, GatewayOutcomeState.InFlight, operation.Effect,
+                GatewayId: operation.GatewayId,
+                ResourceId: operation.ResourceId,
+                CorrelationId: operation.CorrelationId,
+                DispatchedAtUtc: operation.DispatchedAtUtc ?? DateTimeOffset.UtcNow);
             PersistLocked();
         }
     }
@@ -262,6 +288,25 @@ public sealed class GatewayOutcomeLedger
         lock (_gate)
         {
             return _outcomes.GetValueOrDefault(Key(tenantId, operationId));
+        }
+    }
+
+    public IReadOnlyList<GatewayAmbiguousOutcomeNotice> ListAmbiguousMutating(string tenantId)
+    {
+        lock (_gate)
+        {
+            return _outcomes.Values
+                .Where(item => item.TenantId == tenantId
+                    && item.Effect == GatewayOperationEffect.Mutating
+                    && item.State == GatewayOutcomeState.Ambiguous
+                    && !string.IsNullOrWhiteSpace(item.GatewayId)
+                    && !string.IsNullOrWhiteSpace(item.ResourceId)
+                    && !string.IsNullOrWhiteSpace(item.CorrelationId))
+                .OrderBy(item => item.DispatchedAtUtc)
+                .Select(item => new GatewayAmbiguousOutcomeNotice(
+                    item.OperationId, item.TenantId, item.GatewayId!, item.ResourceId!,
+                    item.CorrelationId!, item.DispatchedAtUtc ?? DateTimeOffset.UtcNow))
+                .ToList();
         }
     }
 

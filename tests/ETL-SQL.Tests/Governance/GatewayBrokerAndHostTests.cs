@@ -146,6 +146,41 @@ public sealed class GatewayBrokerAndHostTests
     }
 
     [Fact]
+    public async Task Broker_RefusesCrossTenantAmbiguousOutcomeBeforeRegisteringSession()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(
+            TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(
+            TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var sink = new CapturingAmbiguousOutcomeSink();
+        var broker = new GatewayBroker(
+            enrollmentStore, registry, allowUnprovenTestIdentities: true, ambiguousOutcomeSink: sink);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+        using var client = new ClientWebSocket();
+        await client.ConnectAsync(server.Uri, CancellationToken.None);
+
+        await SendFrameAsync(client, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint,
+            AmbiguousOutcomes =
+            [
+                new GatewayAmbiguousOutcomeNotice(
+                    "op-cross-tenant", TenantB, GatewayId, "resource-a", "corr-a", DateTimeOffset.UtcNow)
+            ]
+        });
+
+        var fault = await ReceiveFrameAsync(client);
+        Assert.Equal(GatewayFrameKind.Fault, fault?.Kind);
+        Assert.False(registry.TryGet(TenantA, GatewayId, out _));
+        Assert.Empty(sink.Notices);
+    }
+
+    [Fact]
     public async Task GatewayHost_TransitionsStatesAndConnectsSuccessfully()
     {
         var enrollmentStore = new InMemoryGatewayEnrollmentStore();
@@ -222,6 +257,17 @@ public sealed class GatewayBrokerAndHostTests
             if (res.EndOfMessage) break;
         }
         return GatewayFrame.Deserialize(System.Text.Encoding.UTF8.GetString(ms.ToArray()));
+    }
+
+    private sealed class CapturingAmbiguousOutcomeSink : IGatewayAmbiguousOutcomeSink
+    {
+        public List<GatewayAmbiguousOutcomeNotice> Notices { get; } = [];
+
+        public Task RecordAsync(GatewayAmbiguousOutcomeNotice notice, CancellationToken cancellationToken)
+        {
+            Notices.Add(notice);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class MockResourceExecutor : IGatewayResourceExecutor
