@@ -9,31 +9,7 @@ Unfinished `ROADMAP.md` initiatives and release gates are represented below.
 
 ---
 
-## 1. Hybrid Connectivity & Gateway Enhancements
-
-Authoritative references:
-[`secure-outbound-gateway.md`](docs/administration/platform/secure-outbound-gateway.md),
-[`saas-tenant-isolation.md`](docs/architecture/saas-tenant-isolation.md#11-secure-outbound-data-gateway), and
-[`verified-viewer-context.md`](docs/architecture/decisions/verified-viewer-context.md).
-
-- [ ] Certify Verified Viewer Context propagation for SQL Server as a connector-specific capability.
-  Add parameterized `SESSION_CONTEXT` setup using the existing HMAC-signed envelope, tenant/resource
-  binding validation, and resource-level opt-in contract. Keep the service credential as the database
-  identity and prohibit viewer claims from selecting database roles. Prove fail-closed cleanup before
-  pooled connection reuse after success, provider failure, cancellation, timeout, and broken-connection
-  paths. Do not advertise SQL Server support until the connector certification tests pass.
-- [ ] Implement Ambiguous Write outcome alerting and Portal operations triage. When network disconnection
-  or process termination causes an in-flight mutating operation to enter an ambiguous state in the outcome
-  ledger, surface a deduplicated high-priority alert on the Portal operations dashboard and block unsafe
-  automatic retry. Provide a dedicated triage view displaying operation ID, tenant, gateway, resource,
-  correlation ID, execution timestamp, current owner, and immutable event history. Authorized operators
-  may acknowledge and assign the case, attach evidence and notes, or record an externally verified outcome
-  (`confirmed committed`, `confirmed not applied`, `compensated`, or `superseded`). Closing or dismissing
-  an alert must never delete the ledger record, erase uncertainty without evidence, or weaken the
-  fail-closed ambiguous-write safety invariant. Treat this workflow as a prerequisite for production
-  Gateway write operations.
-
-## 2. ETL-SQL Studio (Unified Dual-Projection Visual & Script Workbench)
+## 1. ETL-SQL Studio (Unified Dual-Projection Visual & Script Workbench)
 
 Authoritative reference: [`docs/architecture/decisions/etl-sql-studio.md`](docs/architecture/decisions/etl-sql-studio.md).
 

@@ -374,6 +374,8 @@ public sealed class SharedTenantLifecycleService(
         await db.SharedConnectionUsages.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.SharedConnectionAcls.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.PortalSharedConnections.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
+        await db.GatewayAmbiguousWriteEvents.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
+        await db.GatewayAmbiguousWriteCases.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.PortalSecrets.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.SharedTenantResources.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.SharedIdentityAuthorities.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);

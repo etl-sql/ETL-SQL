@@ -17,17 +17,21 @@ function markup(fixtureId) {
       ${metric('Execution queue', attention ? '12' : '2', attention ? 'Oldest waiting 4m' : 'Within capacity')}
       ${metric('Approvals', attention ? '3' : '0', attention ? 'Awaiting a decision' : 'Nothing pending', attention ? 'is-warning' : '')}
       ${metric('Audit delivery', attention ? '18' : '0', attention ? 'Oldest pending 9m' : 'Outbox clear', attention ? 'is-warning' : 'is-good')}
+      ${metric('Ambiguous writes', attention ? '1' : '0', attention ? 'Retry blocked · operator evidence required' : 'No unresolved Gateway writes', attention ? 'is-warning' : 'is-good')}
     </nav>
     <section class="ops-lane"><header><span>01</span><div><h2>Now</h2><p>Runtime health and deployment readiness.</p></div></header><div class="ops-grid">
       <article class="card ops-card"><div class="card-header"><h3>Fleet status</h3><span class="status-badge ${attention ? 'status-warning' : 'status-success'}">${attention ? 'Degraded' : 'Healthy'}</span></div><dl class="ops-facts"><div><dt>Node</dt><dd>portal-chi-01</dd></div><div><dt>Version</dt><dd>0.17.0</dd></div><div><dt>Schema</dt><dd>Current</dd></div><div><dt>Upgrade</dt><dd>Ready</dd></div></dl></article>
       <article class="card ops-card"><div class="card-header"><h3>Workload</h3><span>24-hour window</span></div><dl class="ops-facts"><div><dt>Active</dt><dd>4 / 16</dd></div><div><dt>Failures</dt><dd>${attention ? '7' : '0'} / 182</dd></div><div><dt>Stale datasets</dt><dd>${attention ? '2' : '0'}</dd></div><div><dt>Storage</dt><dd>18.4 GB</dd></div></dl></article>
     </div></section>
-    <section class="ops-lane"><header><span>02</span><div><h2>Authority</h2><p>Machine identities, requests, and anonymous report access.</p></div></header><div class="ops-grid ops-grid-wide">
+    <section class="ops-lane"><header><span>02</span><div><h2>Ambiguous Gateway writes</h2><p>High-priority cases that must be reconciled before any retry.</p></div></header>
+      ${attention ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Priority</th><th>Operation</th><th>Tenant / Gateway / Resource</th><th>Correlation</th><th>Executed</th><th>Owner</th><th>State</th><th></th></tr></thead><tbody><tr><td><span class="chip chip-inactive">High</span></td><td><code>op-write-7f3a</code></td><td>tenant-a<small class="ops-cell-note">hq-gateway / corp-sql-sales</small></td><td><code>corr-98d1</code></td><td>Today, 9:42 AM</td><td>database-operations</td><td><span class="chip chip-inactive">Acknowledged</span></td><td><button class="btn btn-outline btn-sm">Review case</button></td></tr></tbody></table></div>` : '<div class="empty-state">No ambiguous Gateway writes have been recorded.</div>'}
+    </section>
+    <section class="ops-lane"><header><span>03</span><div><h2>Authority</h2><p>Machine identities, requests, and anonymous report access.</p></div></header><div class="ops-grid ops-grid-wide">
       <article class="card ops-card"><div class="card-header"><h3>Pending approvals</h3><button class="btn btn-primary btn-sm">Review ${attention ? '3' : '0'}</button></div><p class="text-muted">Report access decisions waiting for a manager.</p></article>
       <article class="card ops-card"><div class="card-header"><h3>Service accounts</h3><button class="btn btn-outline btn-sm">New account</button></div><p><strong>4 active</strong> · 1 expires within 30 days</p><small class="text-muted">Last machine use 11 minutes ago</small></article>
       <article class="card ops-card"><div class="card-header"><h3>Anonymous access</h3><button class="btn btn-outline btn-sm">Inspect</button></div><p><strong>6 active</strong> share or embed grants</p><small class="text-muted">2 created by a disabled user</small></article>
     </div></section>
-    <section class="ops-lane"><header><span>03</span><div><h2>Automation</h2><p>Native administrative services and durable run history.</p></div></header><div class="card ops-service-list">
+    <section class="ops-lane"><header><span>04</span><div><h2>Automation</h2><p>Native administrative services and durable run history.</p></div></header><div class="card ops-service-list">
       ${[['Failure digest','Enabled','Succeeded · 07:00'],['Backup report','Enabled', attention ? 'Failed · 06:00' : 'Succeeded · 06:00'],['Capacity report','Disabled','No recent run']].map(([name,state,last]) => `<button><span class="ops-service-dot"></span><strong>${name}</strong><span>${state}</span><small>${last}</small><span aria-hidden="true">›</span></button>`).join('')}
     </div></section>
   </main></body></html>`;

@@ -179,7 +179,7 @@ public sealed class GatewayOperationDispatcher(
                     verifiedViewerContext.ExecutingCredentialId,
                     $"gateway-resource:{resource.ResourceId}",
                     SecurityEventDecision.Allowed,
-                    "Verified application viewer context accepted; PostgreSQL authenticated the recorded executing credential.") with
+                    "Verified application viewer context accepted; the connector authenticated the recorded executing credential.") with
                 {
                     TenantId = operation.TenantId,
                     CorrelationId = operation.CorrelationId

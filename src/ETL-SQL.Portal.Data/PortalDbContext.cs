@@ -54,6 +54,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<PortalSharedConnection> PortalSharedConnections => Set<PortalSharedConnection>();
     public DbSet<SharedConnectionAcl> SharedConnectionAcls => Set<SharedConnectionAcl>();
     public DbSet<SharedConnectionUsage> SharedConnectionUsages => Set<SharedConnectionUsage>();
+    public DbSet<GatewayAmbiguousWriteCase> GatewayAmbiguousWriteCases => Set<GatewayAmbiguousWriteCase>();
+    public DbSet<GatewayAmbiguousWriteEvent> GatewayAmbiguousWriteEvents => Set<GatewayAmbiguousWriteEvent>();
     public DbSet<AdminServiceRun> AdminServiceRuns => Set<AdminServiceRun>();
     public DbSet<StewardshipSettings> StewardshipSettings => Set<StewardshipSettings>();
     public DbSet<StewardshipResolutionCategory> StewardshipResolutionCategories => Set<StewardshipResolutionCategory>();
@@ -367,6 +369,34 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.ConsumerUser).HasMaxLength(256);
             e.HasOne(x => x.SharedConnection).WithMany().HasForeignKey(x => x.SharedConnectionId);
+        });
+
+        builder.Entity<GatewayAmbiguousWriteCase>(e =>
+        {
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.TenantId, x.OperationId }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.OperationId).HasMaxLength(128);
+            e.Property(x => x.GatewayId).HasMaxLength(128);
+            e.Property(x => x.ResourceId).HasMaxLength(128);
+            e.Property(x => x.CorrelationId).HasMaxLength(128);
+            e.Property(x => x.State).HasMaxLength(32);
+            e.Property(x => x.Priority).HasMaxLength(16);
+            e.Property(x => x.Owner).HasMaxLength(256);
+            e.Property(x => x.Resolution).HasMaxLength(64);
+        });
+
+        builder.Entity<GatewayAmbiguousWriteEvent>(e =>
+        {
+            e.HasIndex(x => new { x.TenantId, x.CaseId, x.Id });
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.EventType).HasMaxLength(64);
+            e.Property(x => x.Actor).HasMaxLength(256);
+            e.Property(x => x.Note).HasMaxLength(4000);
+            e.Property(x => x.EvidenceReference).HasMaxLength(1000);
+            e.Property(x => x.Resolution).HasMaxLength(64);
+            e.HasOne(x => x.Case).WithMany(x => x.Events).HasForeignKey(x => x.CaseId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<AdminServiceRun>(e =>

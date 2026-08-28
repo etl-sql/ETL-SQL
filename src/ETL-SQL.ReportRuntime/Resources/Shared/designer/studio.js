@@ -8,7 +8,7 @@
  *   createStudioWorkbench(container, options)
  */
 
-import { createScriptEditor } from './designer.js';
+import { createScriptEditor, createDesigner } from './designer.js';
 import { createConnectionWizard } from './connection-wizard.js';
 
 const _feedback = globalThis.ETLSQLFeedback || {
@@ -89,19 +89,10 @@ function _detectPlaintextSecrets(scriptText) {
 }
 
 const DEFAULT_SAMPLE_SNAP = {
-    source: 'sample_gw.orders',
-    columns: ['order_date', 'total_amount', 'region', 'status', 'vendor'],
-    rowCount: 8,
-    rows: [
-        { order_date: '2026-08-01', total_amount: 45000.0, region: 'North', status: 'Completed', vendor: 'Acme Supply' },
-        { order_date: '2026-08-02', total_amount: 32000.0, region: 'South', status: 'Completed', vendor: 'Global Logistics' },
-        { order_date: '2026-08-03', total_amount: 58000.0, region: 'West', status: 'Completed', vendor: 'Prime Tech' },
-        { order_date: '2026-08-04', total_amount: 41000.0, region: 'East', status: 'Completed', vendor: 'Acme Supply' },
-        { order_date: '2026-08-05', total_amount: 62000.0, region: 'North', status: 'Completed', vendor: 'Prime Tech' },
-        { order_date: '2026-08-06', total_amount: 39000.0, region: 'South', status: 'Pending', vendor: 'Global Logistics' },
-        { order_date: '2026-08-07', total_amount: 71000.0, region: 'West', status: 'Completed', vendor: 'Apex Dynamics' },
-        { order_date: '2026-08-08', total_amount: 54000.0, region: 'North', status: 'Completed', vendor: 'Apex Dynamics' }
-    ]
+    source: '',
+    columns: [],
+    rowCount: 0,
+    rows: []
 };
 
 const CHART_PALETTE = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787', '#d29922', '#bc8cff'];
@@ -322,7 +313,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                 id: 'doc-1',
                 path: defaultInitialFile,
                 name: defaultInitialFile.split('/').pop().split('\\').pop(),
-                content: opts.initialContent || '-- Welcome to ETL-SQL Studio\nCREATE CONNECTION sample_gw AS MSSQL(\'SHARED:corp_sales\');\n\nCREATE DATASET ds_orders AS SELECT order_date, total_amount, region FROM sample_gw.orders;\n\nPAGE "Executive Overview" {\n    CONTAINER row {\n        VISUAL rev_kpi TYPE \'KPI\' MAPPINGS (VALUE = SUM(total_amount)) OPTIONS (TITLE = \'Total Revenue\');\n        VISUAL order_bar TYPE \'BAR\' MAPPINGS (X = region, Y = SUM(total_amount)) OPTIONS (TITLE = \'Revenue by Region\');\n    }\n}\n',
+                content: opts.initialContent || '',
                 isDirty: false,
                 projection: 'split',
             }
@@ -422,24 +413,9 @@ export async function createStudioWorkbench(container, opts = {}) {
 
                 <!-- Center Multi-Projection Stage -->
                 <main class="etlsql-studio-stage" data-studio-stage>
-                    <!-- Visual Stage Area (Canvas, Component Palette & Inspector) -->
-                    <div class="etlsql-studio-visual-stage" data-visual-stage>
-                        <!-- Top Visual Component Palette Bar -->
-                        <div class="etlsql-visual-palette-bar" data-palette-bar>
-                            <span style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--portal-text-soft,#8b949e); letter-spacing:0.05em; margin-right:4px;">Add Visual:</span>
-                            <button type="button" class="etlsql-palette-btn" data-add-visual="KPI">${_studioIcon('kpi', 12)} KPI</button>
-                            <button type="button" class="etlsql-palette-btn" data-add-visual="BAR">${_studioIcon('bar', 12)} Bar</button>
-                            <button type="button" class="etlsql-palette-btn" data-add-visual="LINE">${_studioIcon('line', 12)} Line</button>
-                            <button type="button" class="etlsql-palette-btn" data-add-visual="DONUT">${_studioIcon('donut', 12)} Donut</button>
-                            <button type="button" class="etlsql-palette-btn" data-add-visual="TABLE">${_studioIcon('table', 12)} Table</button>
-                            <button type="button" class="etlsql-palette-btn" data-add-visual="SLICER">${_studioIcon('slicer', 12)} Slicer</button>
-                        </div>
-
-                        <!-- Canvas Workspace Grid & Properties Panel Container -->
-                        <div class="etlsql-canvas-and-inspector" style="display:flex; flex:1; gap:16px; overflow:hidden; width:100%;">
-                            <div class="etlsql-canvas-grid-scroll" data-canvas-grid-container style="flex:1; overflow-y:auto; padding-right:4px;"></div>
-                            <div class="etlsql-visual-inspector" data-visual-inspector style="width:260px; min-width:260px; background:var(--portal-surface,#161b22); border:1px solid var(--portal-border,#30363d); border-radius:8px; padding:12px; display:none; flex-direction:column; gap:12px; overflow-y:auto;"></div>
-                        </div>
+                    <!-- Visual Stage Area (Report Builder Canvas & Pipeline DAG) -->
+                    <div class="etlsql-studio-visual-stage" data-visual-stage style="display:flex; flex-direction:column; flex:1; height:100%; overflow:hidden; position:relative;">
+                        <div class="etlsql-studio-designer-container" data-canvas-grid-container style="flex:1; width:100%; height:100%; overflow:hidden; position:relative;"></div>
                     </div>
 
                     <!-- Split Resizer Bar -->
@@ -472,7 +448,6 @@ export async function createStudioWorkbench(container, opts = {}) {
     const editorHost = shell.querySelector('[data-editor-host]');
     const resultsHost = shell.querySelector('[data-results-host]');
     const canvasContainer = shell.querySelector('[data-canvas-grid-container]');
-    const inspector = shell.querySelector('[data-visual-inspector]');
     const modalBackdrop = shell.querySelector('[data-modal-backdrop]');
     const modalBox = shell.querySelector('[data-modal-box]');
 
@@ -515,24 +490,17 @@ export async function createStudioWorkbench(container, opts = {}) {
         const doc = getActiveDoc();
         if (!doc) return;
         const content = state.editorInstance ? state.editorInstance.getValue() : doc.content;
-        const snap = window.__ETLSNAP__ || DEFAULT_SAMPLE_SNAP;
-
-        let rows = snap.rows ? [...snap.rows] : [];
-        for (const [col, activeVal] of Object.entries(state.activeFilters)) {
-            if (activeVal && activeVal !== 'ALL') {
-                rows = rows.filter(r => String(r[col] ?? '').toLowerCase() === String(activeVal).toLowerCase());
-            }
-        }
 
         const isEtl = (doc.path || '').endsWith('.etlsql') || content.includes('TRANSFORM ') || content.includes('MERGE INTO');
-        const paletteBar = shell.querySelector('[data-palette-bar]');
-        if (paletteBar) paletteBar.style.display = isEtl ? 'none' : 'flex';
 
         if (isEtl) {
-            inspector.style.display = 'none';
+            if (state.designerInstance) {
+                state.designerInstance.dispose?.();
+                state.designerInstance = null;
+            }
             const nodes = _parseEtlDag(content);
             canvasContainer.innerHTML = `
-                <div class="etlsql-studio-dag-view" data-dag-view style="width:100%; display:flex; flex-direction:column; gap:16px;">
+                <div class="etlsql-studio-dag-view" data-dag-view style="width:100%; height:100%; overflow-y:auto; display:flex; flex-direction:column; gap:16px; padding:16px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span style="font-size:0.75rem; font-weight:700; color:var(--portal-text-soft,#8b949e); text-transform:uppercase; letter-spacing:0.05em;">
                             Pipeline DAG Execution Flow (${nodes.length} Stages)
@@ -557,156 +525,28 @@ export async function createStudioWorkbench(container, opts = {}) {
                 </div>
             `;
         } else {
-            const visuals = _parseReportVisuals(content);
-            canvasContainer.innerHTML = `
-                <div class="etlsql-studio-canvas-view" data-canvas-view style="width:100%; display:flex; flex-direction:column; gap:16px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size:0.75rem; font-weight:700; color:var(--portal-text-soft,#8b949e); text-transform:uppercase; letter-spacing:0.05em;">
-                            Interactive Canvas (${visuals.length} Visuals · ${rows.length} Matching Rows)
-                        </span>
-                        <span style="font-size:0.75rem; color:var(--portal-success,#238636);">
-                            ✓ Live In-Memory Data (${snap.source || 'Sample'})
-                        </span>
-                    </div>
-                    <div class="etlsql-studio-cards-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
-                        ${visuals.map(v => {
-                            const title = v.options.TITLE || v.id;
-                            const isSelected = state.selectedVisualId === v.id;
-                            let visualBody = '';
-
-                            if (v.type === 'SLICER') {
-                                const field = (v.mappings.FIELD || v.mappings.X || 'region').toLowerCase();
-                                const allRows = snap.rows || [];
-                                const distinctValues = Array.from(new Set(allRows.map(r => String(r[field] ?? '')).filter(Boolean)));
-                                const activeVal = state.activeFilters[field] || 'ALL';
-
-                                visualBody = `
-                                    <div class="etlsql-studio-slicer-card" data-slicer-field="${_escapeHtml(field)}">
-                                        <div class="etlsql-slicer-pills">
-                                            <button type="button" class="etlsql-slicer-pill ${activeVal === 'ALL' ? 'active' : ''}" data-slicer-value="ALL">All</button>
-                                            ${distinctValues.map(dv => `
-                                                <button type="button" class="etlsql-slicer-pill ${activeVal === dv ? 'active' : ''}" data-slicer-value="${_escapeHtml(dv)}">${_escapeHtml(dv)}</button>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-                                `;
-                            } else if (v.type === 'KPI' || v.type === 'CARD') {
-                                const sumVal = rows.reduce((acc, r) => acc + (Number(r.total_amount || r.amount || 0)), 0);
-                                visualBody = `
-                                    <div class="etlsql-canvas-card-value" style="font-size:2rem; font-weight:700; color:var(--portal-accent,#388bfd); padding:12px 0;">
-                                        ${_formatNumber(sumVal, 'currency')}
-                                    </div>
-                                    <div class="etlsql-canvas-card-footer" style="font-size:0.75rem; color:var(--portal-muted,#8b949e);">
-                                        Calculated from ${rows.length} rows (Agg: SUM)
-                                    </div>
-                                `;
-                            } else if (v.type === 'BAR' || v.type === 'COLUMN' || v.type === 'HBAR') {
-                                const groupField = (v.mappings.X || 'region').toLowerCase();
-                                const grouped = {};
-                                for (const r of rows) {
-                                    const key = String(r[groupField] || 'Other');
-                                    grouped[key] = (grouped[key] || 0) + Number(r.total_amount || r.amount || 0);
-                                }
-                                const groupData = Object.entries(grouped).map(([category, value]) => ({ category, value }));
-                                visualBody = _renderBarChartSvg(groupData);
-                            } else if (v.type === 'DONUT' || v.type === 'PIE') {
-                                const groupField = (v.mappings.CATEGORY || v.mappings.X || 'vendor').toLowerCase();
-                                const grouped = {};
-                                for (const r of rows) {
-                                    const key = String(r[groupField] || 'Other');
-                                    grouped[key] = (grouped[key] || 0) + Number(r.total_amount || r.amount || 0);
-                                }
-                                const groupData = Object.entries(grouped).map(([category, value]) => ({ category, value }));
-                                visualBody = _renderDonutChartSvg(groupData);
-                            } else if (v.type === 'LINE' || v.type === 'AREA') {
-                                visualBody = _renderLineChartSvg(rows);
-                            } else {
-                                visualBody = _renderTableGrid(rows);
-                            }
-
-                            return `
-                                <div class="etlsql-studio-canvas-card ${isSelected ? 'selected' : ''}" data-visual-id="${_escapeHtml(v.id)}" style="position:relative; cursor:pointer;">
-                                    <div class="etlsql-canvas-card-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                                        <div style="display:flex; align-items:center; gap:8px;">
-                                            <span class="etlsql-card-type-pill">${v.type}</span>
-                                            <strong class="etlsql-card-title" style="font-size:0.875rem; color:var(--portal-text,#f0f6fc);">${_escapeHtml(title)}</strong>
-                                        </div>
-                                        <div class="etlsql-card-actions" style="display:flex; align-items:center; gap:4px;">
-                                            <button type="button" class="etlsql-card-action-btn" data-card-options title="Edit Visual Options">${_studioIcon('edit', 12)}</button>
-                                            <button type="button" class="etlsql-card-action-btn" data-card-duplicate title="Duplicate Visual">${_studioIcon('duplicate', 12)}</button>
-                                            <button type="button" class="etlsql-card-action-btn" data-card-delete title="Delete Visual">${_studioIcon('trash', 12)}</button>
-                                        </div>
-                                    </div>
-                                    <div class="etlsql-canvas-card-body">
-                                        ${visualBody}
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-            `;
-
-            canvasContainer.querySelectorAll('.etlsql-studio-canvas-card[data-visual-id]').forEach(card => {
-                card.addEventListener('click', (e) => {
-                    if (e.target.closest('button') || e.target.closest('input')) return;
-                    const vId = card.dataset.visualId;
-                    if (!vId) return;
-
-                    state.selectedVisualId = vId;
-                    renderVisualStage();
-                    renderVisualInspector(vId);
-
-                    if (state.editorInstance) {
-                        const curContent = state.editorInstance.getValue();
-                        const vRegex = new RegExp(`\bVISUAL\s+${vId}\b`, 'i');
-                        const match = vRegex.exec(curContent);
-                        if (match) {
-                            const lineNo = curContent.slice(0, match.index).split('\n').length;
-                            state.editorInstance.gotoLine(lineNo, 1);
+            if (!state.designerInstance) {
+                canvasContainer.innerHTML = '';
+                state.designerInstance = createDesigner(canvasContainer, {
+                    reportName: doc.name,
+                    script: content,
+                    initialScript: content,
+                    hideTopbar: true,
+                    apiBase: apiBase,
+                    authFetch: authFetch,
+                    previewUrl: opts.previewUrl || '/designer-preview.html',
+                    onScriptChange: (newScript) => {
+                        if (state.editorInstance && state.editorInstance.getValue() !== newScript) {
+                            state.editorInstance.setValue(newScript);
                         }
+                        doc.content = newScript;
+                        doc.isDirty = true;
+                        renderTabs();
                     }
                 });
-
-                card.querySelector('[data-card-delete]')?.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const vId = card.dataset.visualId;
-                    deleteVisual(vId);
-                });
-
-                card.querySelector('[data-card-duplicate]')?.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const vId = card.dataset.visualId;
-                    duplicateVisual(vId);
-                });
-
-                card.querySelector('[data-card-options]')?.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const vId = card.dataset.visualId;
-                    state.selectedVisualId = vId;
-                    renderVisualStage();
-                    renderVisualInspector(vId);
-                });
-            });
-
-            canvasContainer.querySelectorAll('[data-slicer-field]').forEach(slicerEl => {
-                const field = slicerEl.dataset.slicerField;
-                slicerEl.querySelectorAll('[data-slicer-value]').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const val = btn.dataset.slicerValue;
-                        if (val === 'ALL') {
-                            delete state.activeFilters[field];
-                        } else {
-                            state.activeFilters[field] = val;
-                        }
-                        renderVisualStage();
-                        if (state.activeActivity === 'filters') {
-                            renderSidebarContent('filters');
-                        }
-                    });
-                });
-            });
+            } else {
+                state.designerInstance.applyScriptText(content);
+            }
         }
     }
 
@@ -780,6 +620,11 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     function addVisualToCanvas(type) {
+        if (state.designerInstance?.addVisual) {
+            state.designerInstance.addVisual(type);
+            _feedback.notify(`Added ${type} visual to canvas.`, { title: 'Visual Added', tone: 'success' });
+            return;
+        }
         const doc = getActiveDoc();
         if (!doc) return;
         let script = state.editorInstance ? state.editorInstance.getValue() : doc.content;
@@ -802,7 +647,6 @@ export async function createStudioWorkbench(container, opts = {}) {
         state.selectedVisualId = newId;
         renderTabs();
         renderVisualStage();
-        renderVisualInspector(newId);
         _feedback.notify(`Added ${type} visual to canvas.`, { title: 'Visual Added', tone: 'success' });
     }
 
@@ -942,6 +786,11 @@ export async function createStudioWorkbench(container, opts = {}) {
         state.selectedVisualId = null;
         const newDoc = getActiveDoc();
         renderTabs();
+
+        if (state.designerInstance) {
+            state.designerInstance.dispose?.();
+            state.designerInstance = null;
+        }
 
         if (state.editorInstance && newDoc) {
             state.editorInstance.setValue(newDoc.content);
@@ -1463,6 +1312,8 @@ export async function createStudioWorkbench(container, opts = {}) {
         duplicateVisual,
         deleteVisual,
         dispose: () => {
+            state.designerInstance?.dispose?.();
+            state.designerInstance = null;
             container.innerHTML = '';
         }
     };

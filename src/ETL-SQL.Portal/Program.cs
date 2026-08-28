@@ -107,6 +107,9 @@ builder.Services.AddSingleton<ETL_SQL.Gateway.GatewayBroker>();
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IViewerContextEnvelopeSigner,
     ETL_SQL.Portal.Services.PortalViewerContextEnvelopeSigner>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.IPortalGatewayGrantResolver, ETL_SQL.Portal.Services.PortalGatewayCatalogGrantResolver>();
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.GatewayAmbiguousWriteService>();
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.IGatewayAmbiguousWriteRecorder>(sp =>
+    sp.GetRequiredService<ETL_SQL.Portal.Services.GatewayAmbiguousWriteService>());
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayOperationRouter, ETL_SQL.Portal.Services.PortalGatewayOperationRouter>();
 builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();

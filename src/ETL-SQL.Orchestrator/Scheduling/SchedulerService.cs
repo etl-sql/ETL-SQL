@@ -830,6 +830,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         }
                     }
 
+                    if (lastResult?.RetryAllowed == false)
+                    {
+                        _logger.LogError(
+                            "Job {JobName} will not be retried because its failure has an ambiguous external write outcome.",
+                            job.Name);
+                        break;
+                    }
+
                     if (attempt < maxAttempts)
                     {
                         int backoffSeconds = (int)Math.Pow(2, attempt - 1) * job.RetryDelaySeconds;

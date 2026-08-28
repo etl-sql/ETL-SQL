@@ -15,19 +15,20 @@ const MARKUP = `
     <div id="ops-error" class="error-msg" role="status"></div>
     <nav id="ops-signals" class="ops-signal-rail" aria-label="Operational signals"></nav>
     <section class="ops-lane" id="ops-now"><header><span>01</span><div><h3>Now</h3><p>Runtime health and deployment readiness.</p></div></header><div id="ops-now-grid" class="ops-grid"></div></section>
-    <section class="ops-lane" id="ops-authority"><header><span>02</span><div><h3>Authority</h3><p>Machine identities, requests, and anonymous report access.</p></div></header>
+    <section class="ops-lane" id="ops-ambiguous"><header><span>02</span><div><h3>Ambiguous Gateway writes</h3><p>High-priority cases that must be reconciled before any retry.</p></div></header><div id="ops-ambiguous-writes"></div></section>
+    <section class="ops-lane" id="ops-authority"><header><span>03</span><div><h3>Authority</h3><p>Machine identities, requests, and anonymous report access.</p></div></header>
       <div class="ops-section-head"><h4>Pending approvals</h4></div><div id="ops-approvals"></div>
       <div class="ops-section-head"><h4>Service accounts</h4><button class="btn btn-primary btn-sm" data-action="create-account">New service account</button></div><div id="ops-accounts"></div>
       <div class="ops-section-head"><h4>Anonymous access</h4></div><div id="ops-access"></div>
     </section>
-    <section class="ops-lane" id="ops-automation"><header><span>03</span><div><h3>Automation</h3><p>Native administrative services and durable run history.</p></div></header><div id="ops-services"></div></section>
+    <section class="ops-lane" id="ops-automation"><header><span>04</span><div><h3>Automation</h3><p>Native administrative services and durable run history.</p></div></header><div id="ops-services"></div></section>
   </div>
   <div class="modal-overlay" id="ops-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="ops-modal-title"><div class="modal-card modal-xl"><div class="modal-header"><div><span class="section-kicker" id="ops-modal-kicker">Operations</span><h3 class="modal-title" id="ops-modal-title"></h3></div></div><div id="ops-modal-body"></div><div id="ops-modal-error" class="error-msg"></div><div class="modal-actions"><button class="btn btn-outline" data-action="close-modal">Cancel</button><button class="btn btn-primary" id="ops-modal-submit">Continue</button></div></div></div>`;
 
 export function createOperationsAdmin({ host, adminApi }) {
   host.innerHTML = MARKUP;
   const find = (selector) => host.querySelector(selector);
-  let state = { metrics: null, fleet: null, approvals: [], accounts: [], access: [], services: [], users: [] };
+  let state = { metrics: null, fleet: null, ambiguousWrites: [], approvals: [], accounts: [], access: [], services: [], users: [] };
   let submitHandler = null;
 
   function signal(label, value, note, tone, target) {
@@ -36,11 +37,13 @@ export function createOperationsAdmin({ host, adminApi }) {
 
   function renderSignals() {
     const m = state.metrics; const f = state.fleet;
+    const unresolved = state.ambiguousWrites.filter(item => item.state !== 'Resolved');
     find('#ops-signals').innerHTML = [
       signal('Fleet', f?.status || 'Unavailable', f ? `${f.environment} · ${f.inventory?.upgradeReadiness?.ready ? 'upgrade ready' : 'review readiness'}` : 'Status could not be loaded', f?.status === 'Healthy' ? 'good' : 'warning', 'ops-now'),
       signal('Execution queue', m?.queuedExecutions ?? '—', m ? `${m.activeExecutions} active · cap ${m.executionCap}` : 'Metrics unavailable', m?.queuedExecutions > 0 ? 'warning' : '', 'ops-now'),
       signal('Approvals', state.approvals.length, state.approvals.length ? 'Awaiting a decision' : 'Nothing pending', state.approvals.length ? 'warning' : '', 'ops-authority'),
       signal('Audit delivery', m?.auditOutboxPending ?? '—', m ? `${m.auditOutboxFailed} failed · oldest ${Math.round(m.auditOutboxOldestPendingAgeSeconds || 0)}s` : 'Metrics unavailable', m?.auditOutboxFailed || m?.auditOutboxPending ? 'warning' : 'good', 'ops-now'),
+      signal('Ambiguous writes', unresolved.length, unresolved.length ? 'Retry blocked · operator evidence required' : 'No unresolved Gateway writes', unresolved.length ? 'warning' : 'good', 'ops-ambiguous'),
     ].join('');
   }
 
@@ -53,6 +56,30 @@ export function createOperationsAdmin({ host, adminApi }) {
 
   function table(headers, rows, empty) {
     return rows.length ? `<div class="table-scroll"><table class="data-table"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>` : `<div class="empty-state">${esc(empty)}</div>`;
+  }
+
+  function renderAmbiguousWrites() {
+    find('#ops-ambiguous-writes').innerHTML = table(
+      ['Priority', 'Operation', 'Tenant / Gateway / Resource', 'Correlation', 'Executed', 'Owner', 'State', ''],
+      state.ambiguousWrites.map(item => `<tr class="${item.state === 'Resolved' ? '' : 'is-warning'}">
+        <td>${chip(item.priority, 'inactive')}</td>
+        <td><code>${esc(item.operationId)}</code></td>
+        <td>${esc(item.tenantId)}<small class="ops-cell-note">${esc(item.gatewayId)} / ${esc(item.resourceId)}</small></td>
+        <td><code>${esc(item.correlationId)}</code></td><td>${date(item.executedAtUtc)}</td>
+        <td>${esc(item.owner || 'Unassigned')}</td><td>${chip(item.state, item.state === 'Resolved' ? 'active' : 'inactive')}</td>
+        <td><button class="btn btn-outline btn-sm" data-action="ambiguous-review" data-id="${item.id}">Review case</button></td></tr>`),
+      'No ambiguous Gateway writes have been recorded.');
+  }
+
+  function ambiguousCaseBody(item) {
+    const events = table(['When', 'Event', 'Actor', 'Evidence / note', 'Resolution'], (item.events || []).map(entry =>
+      `<tr><td>${date(entry.createdAtUtc)}</td><td>${esc(entry.eventType)}</td><td>${esc(entry.actor)}</td><td>${esc(entry.evidenceReference || entry.note || '—')}</td><td>${esc(entry.resolution || '—')}</td></tr>`), 'No case events were recorded.');
+    const actions = item.state === 'Resolved' ? '' : `<div class="modal-actions">
+      <button class="btn btn-outline" data-action="ambiguous-ack" data-id="${item.id}">Acknowledge</button>
+      <button class="btn btn-outline" data-action="ambiguous-assign" data-id="${item.id}">Assign</button>
+      <button class="btn btn-outline" data-action="ambiguous-evidence" data-id="${item.id}">Add evidence</button>
+      <button class="btn btn-primary" data-action="ambiguous-resolve" data-id="${item.id}">Record verified outcome</button></div>`;
+    return `<dl class="ops-facts"><div><dt>Operation</dt><dd><code>${esc(item.operationId)}</code></dd></div><div><dt>Tenant</dt><dd>${esc(item.tenantId)}</dd></div><div><dt>Gateway</dt><dd>${esc(item.gatewayId)}</dd></div><div><dt>Resource</dt><dd>${esc(item.resourceId)}</dd></div><div><dt>Correlation</dt><dd><code>${esc(item.correlationId)}</code></dd></div><div><dt>Executed</dt><dd>${date(item.executedAtUtc)}</dd></div><div><dt>Owner</dt><dd>${esc(item.owner || 'Unassigned')}</dd></div><div><dt>State</dt><dd>${esc(item.state)}</dd></div></dl><h4>Immutable event history</h4>${events}${actions}`;
   }
 
   function renderAuthority() {
@@ -76,12 +103,12 @@ export function createOperationsAdmin({ host, adminApi }) {
 
   async function load() {
     find('#ops-error').classList.remove('show');
-    const requests = [adminApi.operationalMetrics(), adminApi.fleetStatus(), adminApi.pendingAccessRequests(), adminApi.listServiceAccounts(), adminApi.anonymousReportAccess(), adminApi.listAdminServices(), adminApi.listUsers()];
-    const results = await Promise.allSettled(requests); const keys = ['metrics', 'fleet', 'approvals', 'accounts', 'access', 'services', 'users'];
+    const requests = [adminApi.operationalMetrics(), adminApi.fleetStatus(), adminApi.gatewayAmbiguousWrites(true), adminApi.pendingAccessRequests(), adminApi.listServiceAccounts(), adminApi.anonymousReportAccess(), adminApi.listAdminServices(), adminApi.listUsers()];
+    const results = await Promise.allSettled(requests); const keys = ['metrics', 'fleet', 'ambiguousWrites', 'approvals', 'accounts', 'access', 'services', 'users'];
     const failures = [];
     results.forEach((result, index) => { if (result.status === 'fulfilled') state[keys[index]] = result.value; else failures.push(keys[index]); });
     if (failures.length) { const error = find('#ops-error'); error.textContent = `Some operational sources are unavailable: ${failures.join(', ')}. Available sections remain current.`; error.classList.add('show'); }
-    renderSignals(); renderNow(); renderAuthority(); renderServices();
+    renderSignals(); renderNow(); renderAmbiguousWrites(); renderAuthority(); renderServices();
   }
 
   function accountForm() {
@@ -99,6 +126,12 @@ export function createOperationsAdmin({ host, adminApi }) {
     if (button.dataset.target) { find(`#${button.dataset.target}`)?.focus(); find(`#${button.dataset.target}`)?.scrollIntoView({ behavior: 'smooth' }); return; }
     if (action === 'refresh') return load();
     if (action === 'close-modal') return closeModal();
+    const ambiguous = state.ambiguousWrites.find(item => item.id === +button.dataset.id);
+    if (action === 'ambiguous-review') return showModal({ title: `Ambiguous write ${ambiguous.operationId}`, kicker: 'High-priority Gateway triage', body: ambiguousCaseBody(ambiguous), onSubmit: null });
+    if (action === 'ambiguous-ack') return showModal({ title: 'Acknowledge ambiguous write', body: '<div class="form-group"><label for="ops-case-note">Operator note</label><textarea id="ops-case-note" maxlength="4000" rows="3"></textarea></div>', submit: 'Acknowledge', onSubmit: async () => { await adminApi.acknowledgeGatewayAmbiguousWrite(ambiguous.id, { version: ambiguous.version, note: find('#ops-case-note').value }); closeModal(); await load(); } });
+    if (action === 'ambiguous-assign') return showModal({ title: 'Assign ambiguous write', body: '<div class="form-group"><label for="ops-case-owner">Owner</label><input id="ops-case-owner" maxlength="256"></div><div class="form-group"><label for="ops-case-note">Note</label><textarea id="ops-case-note" maxlength="4000" rows="2"></textarea></div>', submit: 'Assign', onSubmit: async () => { await adminApi.assignGatewayAmbiguousWrite(ambiguous.id, { version: ambiguous.version, owner: find('#ops-case-owner').value, note: find('#ops-case-note').value }); closeModal(); await load(); } });
+    if (action === 'ambiguous-evidence') return showModal({ title: 'Attach reconciliation evidence', body: '<div class="form-group"><label for="ops-case-evidence">Evidence reference</label><input id="ops-case-evidence" maxlength="1000" placeholder="Ticket, query result, or external verification reference"></div><div class="form-group"><label for="ops-case-note">Evidence note</label><textarea id="ops-case-note" maxlength="4000" rows="3"></textarea></div>', submit: 'Add evidence', onSubmit: async () => { await adminApi.addGatewayAmbiguousWriteEvidence(ambiguous.id, { version: ambiguous.version, evidenceReference: find('#ops-case-evidence').value, note: find('#ops-case-note').value }); closeModal(); await load(); } });
+    if (action === 'ambiguous-resolve') return showModal({ title: 'Record externally verified outcome', body: '<div class="form-group"><label for="ops-case-resolution">Outcome</label><select id="ops-case-resolution"><option>confirmed committed</option><option>confirmed not applied</option><option>compensated</option><option>superseded</option></select></div><div class="form-group"><label for="ops-case-evidence">Evidence reference</label><input id="ops-case-evidence" maxlength="1000"></div><div class="form-group"><label for="ops-case-note">Verification note</label><textarea id="ops-case-note" maxlength="4000" rows="3"></textarea></div>', submit: 'Record outcome', onSubmit: async () => { await adminApi.resolveGatewayAmbiguousWrite(ambiguous.id, { version: ambiguous.version, resolution: find('#ops-case-resolution').value, evidenceReference: find('#ops-case-evidence').value, note: find('#ops-case-note').value }); closeModal(); await load(); } });
     if (action === 'copy-secret') { await navigator.clipboard.writeText(find('#ops-secret-value').textContent); button.textContent = 'Copied'; return; }
     if (action === 'create-account') return showModal({ title: 'Create service account', body: accountForm(), submit: 'Create account', onSubmit: async () => { const scopes = [...host.querySelectorAll('input[name="ops-scope"]:checked')].map(i => i.value); const result = await adminApi.createServiceAccount({ name: find('#ops-account-name').value, description: find('#ops-account-description').value, ownerUserId: +find('#ops-account-owner').value, scopes, roles: find('#ops-account-roles').value.split(',').map(v => v.trim()).filter(Boolean), expiresAt: find('#ops-account-expiry').value || null }); closeModal(); await load(); revealSecret(result); } });
     const account = state.accounts.find(a => a.id === button.dataset.id);

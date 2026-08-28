@@ -33,6 +33,8 @@ namespace ETL_SQL.Orchestrator.Execution
         /// <summary>Structured counts-only rule failures; never contains sample values.</summary>
         public List<DataQualityRuleFailureMetric> DataQualityRuleFailures { get; set; } = new();
         public bool Success { get; set; }
+        /// <summary>False when retrying could duplicate an externally applied mutation.</summary>
+        public bool RetryAllowed { get; set; } = true;
         /// <summary>Captured log messages for display in the TUI.</summary>
         public List<LogEntry> Messages { get; set; } = new();
         /// <summary>Active connections captured from the engine after execution, used for TUI autocomplete.</summary>

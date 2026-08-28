@@ -87,9 +87,9 @@ etlsql gateway resource approve --resource-id corp-sql-sales
 etlsql gateway resource list
 ```
 
-To enable asserted viewer context on PostgreSQL, configure the same Base64 256-bit-or-longer
+To enable asserted viewer context on PostgreSQL or SQL Server, configure the same Base64 256-bit-or-longer
 `ETLSQL_VIEWER_CONTEXT_HMAC_KEY` in the Portal and Gateway secret stores. Give the resource an
-expected PostgreSQL `session_user` for audit:
+expected database login for audit:
 
 ```powershell
 etlsql gateway resource propose --resource-id corp-pg-reports --connector POSTGRES `
@@ -99,9 +99,10 @@ etlsql gateway resource propose --resource-id corp-pg-reports --connector POSTGR
   --viewer-context-ttl-seconds 60
 ```
 
-This does not delegate the viewer identity to PostgreSQL. PostgreSQL authenticates the service
-credential; the signed viewer values are parameterized, transaction-local application context.
-OIDC roles and groups never select PostgreSQL roles. See
+This does not delegate the viewer identity to the database. PostgreSQL and SQL Server authenticate
+the service credential; the signed viewer values are parameterized application context scoped to a
+fresh transaction. OIDC roles and groups never select database roles. SQL Server explicitly clears
+all installed `SESSION_CONTEXT` keys before pool reuse and evicts broken connections. See
 [Verified Viewer Context](../../architecture/decisions/verified-viewer-context.md).
 
 `list` exposes the ID, state, connector, and operation classes only. Disablement is immediate for
@@ -173,6 +174,18 @@ Reconnect keys off operation IDs against a durable outcome ledger:
 That last row is the important one. A blind retry can double-apply a write, and calling it failed
 tells you the data is not there when it may be. A committed outcome is final and cannot be downgraded
 by a late ambiguous report.
+
+Portal records every ambiguous mutating outcome as one deduplicated, high-priority case keyed by
+tenant and operation ID. The Operations dashboard shows operation, tenant, Gateway, resource,
+correlation ID, execution time, owner, state, and its append-only event history. Admins and
+Orchestrator Managers can acknowledge or assign a case, add evidence and notes, and record only one
+of four externally verified outcomes: `confirmed committed`, `confirmed not applied`, `compensated`,
+or `superseded`. Resolution requires an external evidence reference. There is no dismiss or delete
+operation.
+
+An ambiguous Gateway write is also marked non-retryable in script execution results. The scheduler
+preserves the failure and stops immediately even when the job has retries configured. Operators must
+reconcile the case and make any later corrective action explicitly.
 
 ## See also
 

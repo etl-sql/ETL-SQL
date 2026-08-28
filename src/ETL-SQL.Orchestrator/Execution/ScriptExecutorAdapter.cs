@@ -132,7 +132,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId,
                     result.RowsQuarantined, result.RowsWarned, result.DataQualityFailures,
                     result.DataQualityColumnMetrics, result.DataQualityRuleFailures,
-                    CollectStatementMetrics(runFailed: !result.Success));
+                    CollectStatementMetrics(runFailed: !result.Success), result.RetryAllowed);
                 sw.Stop();
                 EngineExecutionObservability.CompleteExecutionActivity(
                     activity,

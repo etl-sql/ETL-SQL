@@ -63,8 +63,23 @@ COMMIT;
 - **SSL / Certificate Error**: For self-signed certificates in non-production, set `TRUST_SERVER_CERTIFICATE=TRUE`.
 - **Connection Timeout**: Verify SQL Server is listening on TCP/IP and SQL Browser is active for named instances.
 
+## Verified Gateway viewer context
+
+An approved SQL Server Gateway resource can opt into signed application viewer context. SQL Server
+still authenticates the configured service credential. The Gateway requires `ORIGINAL_LOGIN()` to
+match the resource's `executing-credential-id` and installs viewer values through parameterized
+`sys.sp_set_session_context` calls. Viewer claims never select SQL Server logins, users, or roles.
+
+Every installed key is cleared before the connection returns to the pool. Cancellation, command
+timeout, provider failure, and killed-session paths roll back and clear or evict the affected pool.
+Database policies consuming `SESSION_CONTEXT(N'etlsql.viewer_id')` must deny missing values.
+
+See [Verified Viewer Context](../../../architecture/decisions/verified-viewer-context.md) for the
+assurance boundary, allowed claims, configuration, and certification evidence.
+
 ## References
 
 - [Database Connectors](README.md)
 - [Connectors](../README.md)
+- [Verified Viewer Context](../../../architecture/decisions/verified-viewer-context.md)
 - [PostgreSQL](postgres.md) · [Oracle](oracle.md) · [ODBC](odbc.md)

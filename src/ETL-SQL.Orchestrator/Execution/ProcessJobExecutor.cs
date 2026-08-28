@@ -379,10 +379,12 @@ namespace ETL_SQL.Orchestrator.Execution
                     var columnMetrics = ParseColumnMetrics(root);
                     var ruleFailures = ParseRuleFailures(root);
                     var statementMetrics = ParseStatementMetrics(root);
+                    var retryAllowed = !root.TryGetProperty("retryAllowed", out var retry)
+                        || retry.ValueKind != JsonValueKind.False;
 
                     return new ScriptExecutionResult(
                         success, rows, error, peakMemory, cpuSeconds, session, quarantined, warned, dqFailures,
-                        columnMetrics, ruleFailures, statementMetrics);
+                        columnMetrics, ruleFailures, statementMetrics, retryAllowed);
                 }
                 catch (JsonException)
                 {
@@ -826,7 +828,8 @@ namespace ETL_SQL.Orchestrator.Execution
                     response.DataQualityFailures,
                     response.DataQualityColumnMetrics,
                     response.DataQualityRuleFailures,
-                    response.StatementMetrics);
+                    response.StatementMetrics,
+                    response.RetryAllowed);
             }
         }
 
@@ -876,5 +879,6 @@ namespace ETL_SQL.Orchestrator.Execution
         string? DataQualityFailures = null,
         IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null,
         IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures = null,
-        IReadOnlyList<StatementMetricsPayload>? StatementMetrics = null);
+        IReadOnlyList<StatementMetricsPayload>? StatementMetrics = null,
+        bool RetryAllowed = true);
 }

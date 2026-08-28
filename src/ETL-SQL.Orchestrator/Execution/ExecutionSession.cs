@@ -182,6 +182,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 result.Diagnostics.Add(new Diagnostic(safeMessage, 0, 0, DiagnosticSeverity.Error));
                 if (evaluator != null) CopyDataQualityOutcomes(evaluator, result);
                 result.Success = false;
+                result.RetryAllowed = ex is not ETL_SQL.Core.Common.Exceptions.AmbiguousGatewayWriteException;
             }
             finally
             {

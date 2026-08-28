@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Portal.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Portal.Tests;
@@ -158,7 +159,7 @@ public class GatewayEnrollmentControllerTests : IClassFixture<PortalWebFactory>
             PublishedResources =
             [
                 new GatewayPublishedResource(
-                    "orders", "MOCKDB", GatewayOperationClass.Read,
+                    "orders", "MOCKDB", GatewayOperationClass.Read | GatewayOperationClass.Write,
                     new GatewayResourceLimits(), GatewayResourceState.Approved, "Orders")
             ]
         };
@@ -269,6 +270,99 @@ public class GatewayEnrollmentControllerTests : IClassFixture<PortalWebFactory>
         var routed = await routedTask;
         Assert.Equal("42", routed.Rows.Single().Single());
 
+        var ambiguousTask = router.ExecuteAsync(
+            identity, binding,
+            GatewayOperationClass.Write, GatewayOperationEffect.Mutating,
+            GatewayOperationBounds.Default,
+            JsonSerializer.Serialize(new { Table = "Orders", Columns = new[] { "id" }, Rows = new[] { new[] { "43" } } }),
+            null, CancellationToken.None);
+        received = await socket.ReceiveAsync(buffer, CancellationToken.None);
+        var ambiguousOperation = GatewayFrame.Deserialize(Encoding.UTF8.GetString(buffer, 0, received.Count));
+        Assert.Equal(GatewayFrameKind.Operation, ambiguousOperation.Kind);
+        payload = Encoding.UTF8.GetBytes(new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Fault,
+            OperationId = ambiguousOperation.OperationId,
+            OutcomeState = GatewayOutcomeState.Ambiguous,
+            Reason = "The operation failed on the Gateway."
+        }.Serialize());
+        await socket.SendAsync(payload, WebSocketMessageType.Text, true, CancellationToken.None);
+        var ambiguousError = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.AmbiguousGatewayWriteException>(
+            () => ambiguousTask);
+        Assert.Contains(ambiguousOperation.OperationId!, ambiguousError.Message);
+
+        using var caseListRequest = new HttpRequestMessage(
+            HttpMethod.Get, "/api/admin/gateway-operations/ambiguous-writes");
+        caseListRequest.Headers.Authorization = new("Bearer", adminToken);
+        using var caseListResponse = await _client.SendAsync(caseListRequest);
+        caseListResponse.EnsureSuccessStatusCode();
+        var cases = await caseListResponse.Content.ReadFromJsonAsync<List<GatewayAmbiguousWriteCaseDto>>(_json);
+        var triageCase = Assert.Single(cases!, item => item.OperationId == ambiguousOperation.OperationId);
+        Assert.Equal("High", triageCase.Priority);
+        Assert.Equal(gatewayId, triageCase.GatewayId);
+        Assert.Equal("orders", triageCase.ResourceId);
+        Assert.Equal(ambiguousOperation.CorrelationId, triageCase.CorrelationId);
+        Assert.Equal("Detected", Assert.Single(triageCase.Events).EventType);
+        var recorder = _factory.Services.GetRequiredService<IGatewayAmbiguousWriteRecorder>();
+        await recorder.RecordAsync(new GatewayOperation(
+            ambiguousOperation.OperationId!, "default", gatewayId, "orders",
+            GatewayOperationClass.Write, GatewayOperationEffect.Mutating,
+            GatewayOperationBounds.Default, ambiguousOperation.CorrelationId!), CancellationToken.None);
+        using var deduplicatedRequest = new HttpRequestMessage(
+            HttpMethod.Get, "/api/admin/gateway-operations/ambiguous-writes");
+        deduplicatedRequest.Headers.Authorization = new("Bearer", adminToken);
+        using var deduplicatedResponse = await _client.SendAsync(deduplicatedRequest);
+        var deduplicatedCases = await deduplicatedResponse.Content
+            .ReadFromJsonAsync<List<GatewayAmbiguousWriteCaseDto>>(_json);
+        Assert.Single(deduplicatedCases!, item => item.OperationId == ambiguousOperation.OperationId);
+
+        triageCase = await MutateCaseAsync($"{triageCase.Id}/acknowledge", new
+        {
+            triageCase.Version,
+            Note = "Investigating against the destination audit log."
+        });
+        triageCase = await MutateCaseAsync($"{triageCase.Id}/assign", new
+        {
+            triageCase.Version,
+            Owner = "database-operations",
+            Note = "Assigned for reconciliation."
+        });
+        triageCase = await MutateCaseAsync($"{triageCase.Id}/evidence", new
+        {
+            triageCase.Version,
+            Note = "Destination transaction ID captured.",
+            EvidenceReference = "INC-4242"
+        });
+
+        using (var invalidResolution = new HttpRequestMessage(
+            HttpMethod.Post, $"/api/admin/gateway-operations/ambiguous-writes/{triageCase.Id}/resolve")
+        {
+            Content = JsonContent.Create(new
+            {
+                triageCase.Version,
+                Resolution = "confirmed committed",
+                Note = (string?)null,
+                EvidenceReference = (string?)null
+            })
+        })
+        {
+            invalidResolution.Headers.Authorization = new("Bearer", adminToken);
+            using var invalidResolutionResponse = await _client.SendAsync(invalidResolution);
+            Assert.Equal(HttpStatusCode.BadRequest, invalidResolutionResponse.StatusCode);
+        }
+
+        triageCase = await MutateCaseAsync($"{triageCase.Id}/resolve", new
+        {
+            triageCase.Version,
+            Resolution = "confirmed committed",
+            Note = "Transaction 9127 is committed in the destination audit ledger.",
+            EvidenceReference = "INC-4242#transaction-9127"
+        });
+        Assert.Equal("Resolved", triageCase.State);
+        Assert.Equal("confirmed committed", triageCase.Resolution);
+        Assert.Equal(["Detected", "Acknowledged", "Assigned", "EvidenceAdded", "Resolved"],
+            triageCase.Events.Select(item => item.EventType));
+
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -301,6 +395,19 @@ public class GatewayEnrollmentControllerTests : IClassFixture<PortalWebFactory>
             null, CancellationToken.None));
 
         socket.Abort();
+
+        async Task<GatewayAmbiguousWriteCaseDto> MutateCaseAsync(string path, object body)
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post, $"/api/admin/gateway-operations/ambiguous-writes/{path}")
+            {
+                Content = JsonContent.Create(body)
+            };
+            request.Headers.Authorization = new("Bearer", adminToken);
+            using var response = await _client.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            return (await response.Content.ReadFromJsonAsync<GatewayAmbiguousWriteCaseDto>(_json))!;
+        }
     }
 
     private async Task<string> GetAdminTokenAsync()

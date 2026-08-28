@@ -587,6 +587,71 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task OperationsAdmin_ReconcilesAmbiguousGatewayWriteWithImmutableEvidence()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.EvaluateAsync(
+            """
+            async () => {
+              document.body.innerHTML = '<div id="operations-admin"></div>';
+              const { createOperationsAdmin } = await import('/src/ETL-SQL.Portal/wwwroot/js/operations-admin.js');
+              let item = {
+                id: 7, operationId: 'op-write-7f3a', tenantId: 'tenant-a', gatewayId: 'hq-gateway',
+                resourceId: 'corp-sql-sales', correlationId: 'corr-98d1',
+                executedAtUtc: '2026-08-27T14:42:00Z', state: 'Acknowledged', priority: 'High',
+                owner: 'database-operations', resolution: null, version: 2,
+                events: [
+                  { eventType: 'Detected', actor: 'Gateway', note: 'Ambiguous outcome.', createdAtUtc: '2026-08-27T14:42:00Z' },
+                  { eventType: 'Acknowledged', actor: 'admin', note: 'Investigating.', createdAtUtc: '2026-08-27T14:45:00Z' }
+                ]
+              };
+              const empty = async () => [];
+              const admin = createOperationsAdmin({
+                host: document.getElementById('operations-admin'),
+                adminApi: {
+                  operationalMetrics: async () => ({ queuedExecutions: 0, activeExecutions: 1, executionCap: 8, auditOutboxPending: 0, auditOutboxFailed: 0, auditOutboxOldestPendingAgeSeconds: 0, windowHours: 24, recentExecutionFailures: 0, recentExecutions: 1, staleDatasets: 0, datasetStorageBytes: 0, securityEventPending: 0, securityEventFailed: 0 }),
+                  fleetStatus: async () => ({ status: 'Healthy', environment: 'Test', storage: 'Ready', inventory: { nodeId: 'test-node', installedVersion: 'test', upgradeReadiness: { ready: true, findings: [] } } }),
+                  gatewayAmbiguousWrites: async () => [item],
+                  pendingAccessRequests: empty, listServiceAccounts: empty, anonymousReportAccess: empty,
+                  listAdminServices: empty, listUsers: empty,
+                  resolveGatewayAmbiguousWrite: async (id, body) => {
+                    window.__resolutionRequest = { id, body };
+                    item = { ...item, state: 'Resolved', resolution: body.resolution, version: item.version + 1,
+                      events: [...item.events, { eventType: 'Resolved', actor: 'admin', note: body.note,
+                        evidenceReference: body.evidenceReference, resolution: body.resolution,
+                        createdAtUtc: '2026-08-27T15:00:00Z' }] };
+                    return item;
+                  }
+                }
+              });
+              await admin.load();
+            }
+            """);
+
+        Assert.Contains("Retry blocked", await page.Locator("#ops-signals").InnerTextAsync());
+        Assert.Contains("op-write-7f3a", await page.Locator("#ops-ambiguous-writes").InnerTextAsync());
+        await page.GetByRole(AriaRole.Button, new() { Name = "Review case" }).ClickAsync();
+        Assert.Contains("Immutable event history", await page.Locator("#ops-modal-body").InnerTextAsync());
+        Assert.Contains("Detected", await page.Locator("#ops-modal-body").InnerTextAsync());
+        await page.GetByRole(AriaRole.Button, new() { Name = "Record verified outcome" }).ClickAsync();
+        await page.Locator("#ops-case-resolution").SelectOptionAsync("confirmed committed");
+        await page.Locator("#ops-case-evidence").FillAsync("INC-2042/query-17");
+        await page.Locator("#ops-case-note").FillAsync("Target row and transaction log verified externally.");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Record outcome" }).ClickAsync();
+
+        await page.Locator("#ops-ambiguous-writes").GetByText("Resolved", new() { Exact = true }).WaitForAsync();
+        var request = await page.EvaluateAsync<System.Text.Json.JsonElement>("() => window.__resolutionRequest");
+        Assert.Equal(7, request.GetProperty("id").GetInt32());
+        Assert.Equal("confirmed committed", request.GetProperty("body").GetProperty("resolution").GetString());
+        Assert.Equal("INC-2042/query-17", request.GetProperty("body").GetProperty("evidenceReference").GetString());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_Mounts_SwitchesProjections_AndScansSecrets()
     {
         await using var session = await fixture.NewSessionAsync();

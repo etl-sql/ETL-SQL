@@ -459,6 +459,128 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.ToTable("FolderAcls");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayAmbiguousWriteCase", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExecutedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GatewayId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("OperationId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Owner")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Resolution")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ResourceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "OperationId")
+                        .IsUnique();
+
+                    b.ToTable("GatewayAmbiguousWriteCases");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayAmbiguousWriteEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<long>("CaseId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("EvidenceReference")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Resolution")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CaseId");
+
+                    b.HasIndex("TenantId", "CaseId", "Id");
+
+                    b.ToTable("GatewayAmbiguousWriteEvents");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayEnrollmentEntity", b =>
                 {
                     b.Property<string>("EnrollmentId")
@@ -2998,6 +3120,17 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Navigation("Group");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayAmbiguousWriteEvent", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.GatewayAmbiguousWriteCase", "Case")
+                        .WithMany("Events")
+                        .HasForeignKey("CaseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Case");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.GroupStudioCapability", b =>
                 {
                     b.HasOne("ETL_SQL.Portal.Data.Group", "Group")
@@ -3381,6 +3514,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Navigation("Children");
 
                     b.Navigation("Reports");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayAmbiguousWriteCase", b =>
+                {
+                    b.Navigation("Events");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Group", b =>

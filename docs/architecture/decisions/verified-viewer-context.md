@@ -1,13 +1,13 @@
-# Verified Viewer Context for Gateway PostgreSQL Resources
+# Verified Viewer Context for Gateway Database Resources
 
-**Status:** Accepted and implemented for PostgreSQL Gateway resources.
+**Status:** Accepted and implemented for PostgreSQL and SQL Server Gateway resources.
 
 ## Decision
 
 ETL-SQL supports asserted application viewer context as a separate assurance tier from delegated
 database authentication. The Portal signs a short-lived operation envelope. The Gateway verifies
-that envelope and installs the accepted values into PostgreSQL transaction-local custom settings.
-PostgreSQL authenticates the configured service credential, not the viewer.
+that envelope and installs the accepted values as connector-specific transaction context.
+The database authenticates the configured service credential, not the viewer.
 
 This decision does not implement OAuth delegated or on-behalf-of authentication and does not
 implement Kerberos constrained delegation.
@@ -21,7 +21,7 @@ implement Kerberos constrained delegation.
 | Kerberos constrained delegation | Delegated Kerberos principal, when the database validates the service ticket | The database authenticated the delegated principal under the configured KDC and constrained-delegation policy. This requires a separate connector design and certification. |
 
 Audit records and user-facing messages must use these exact boundaries. An asserted viewer is never
-described as the PostgreSQL login, database principal, delegated user, impersonated database role,
+described as the database login, database principal, delegated user, impersonated database role,
 or end-to-end authenticated database identity.
 
 ## Threat model
@@ -91,22 +91,41 @@ transaction-local. Fixed settings are `etlsql.viewer_id`, `etlsql.real_viewer_id
 
 The operation runs on that same connection and transaction. Success commits; cancellation, provider
 failure, and disposal roll back. Commit or rollback ends every setting before Npgsql returns the
-connection to its pool. A context-enabled resource using another connector fails closed.
+connection to its pool. A context-enabled resource using an uncertified connector fails closed.
 
 PostgreSQL row policies can read `current_setting('etlsql.viewer_id', true)` and must deny null or
 empty values. Policies must not convert `etlsql` settings into `SET ROLE` or database grants.
 
+## SQL Server installation and pool cleanup
+
+The Gateway creates a fresh SQL Server transaction and first requires `ORIGINAL_LOGIN()` to exactly
+match the resource's expected executing credential. It then calls
+`sys.sp_set_session_context` with parameters for both the key and value. Fixed keys are
+`etlsql.viewer_id`, `etlsql.real_viewer_id`, `etlsql.executing_credential`, `etlsql.tenant_id`,
+`etlsql.resource_id`, and `etlsql.operation_id`. Accepted claims use
+`etlsql.claim_<allowlisted_name>`.
+
+Viewer and claim values remain application data. They never select a login, user, role, identifier,
+or SQL fragment. SQL Server continues to authorize the configured service credential.
+
+The operation uses the same connection and transaction. On every terminal path, ETL-SQL rolls back
+or commits, explicitly sets each installed session-context key to `NULL`, and only then disposes the
+connection for pool reuse. If the connection is broken or cleanup itself fails, ETL-SQL clears the
+affected SQL client pool so the session cannot be reused. Provider errors remain exceptions; they are
+not converted into informational messages or empty successful results.
+
 ## Audit contract
 
-After verification, PostgreSQL identity matching, and successful execution, the Gateway emits
+After verification, connector identity matching, and successful execution, the Gateway emits
 `ViewerContextAccepted`.
 `ActorIdentity` is the verified viewer. `EffectiveIdentity` is the expected executing credential.
 Tenant, resource ID, and correlation ID are recorded. Claims, raw credentials, targets, connection
 strings, signatures, and signing keys are not recorded.
 
-Before installing any setting, the PostgreSQL connector reads `session_user` on the new transaction
-and requires an exact match with that expected identity. A mismatch rolls back and denies the
-operation, so the configured audit identity cannot silently drift from the database login.
+Before installing any setting, PostgreSQL reads `session_user` and SQL Server reads
+`ORIGINAL_LOGIN()` on the new transaction. Each connector requires an exact match with the expected
+identity. A mismatch rolls back and denies the operation, so the configured audit identity cannot
+silently drift from the database login.
 
 ## Configuration
 
@@ -124,9 +143,9 @@ etlsql gateway resource propose --resource-id corp-pg-reports --connector POSTGR
 etlsql gateway resource approve --resource-id corp-pg-reports
 ```
 
-The credential ID is the expected PostgreSQL `session_user`. It is not the password, secret
-reference, or connection string. PostgreSQL verifies it against the authenticated session before
-context installation.
+For PostgreSQL, the credential ID is the expected `session_user`. For SQL Server, it is the expected
+`ORIGINAL_LOGIN()`. It is not the password, secret reference, or connection string. The connector
+verifies it against the authenticated session before context installation.
 
 ## Certification evidence
 
@@ -135,9 +154,14 @@ context installation.
 - `PostgresTests.VerifiedViewerContext_IsParameterizedTransactionLocalAndClearedBeforePoolReuse`
   uses PostgreSQL to prove parameterized values, unchanged `current_user`, transaction lifetime, and
   absence of viewer context after connection-pool reuse.
+- `SqlServerTests.VerifiedViewerContext_IsParameterizedAndClearedBeforePoolReuseAcrossTerminalPaths`
+  uses SQL Server to prove parameterized hostile values, unchanged `ORIGINAL_LOGIN()` and
+  `SUSER_SNAME()`, and fail-closed pool cleanup after success, provider failure, cancellation,
+  command timeout, and a killed database session.
 
 ## References
 
 - [Secure Outbound Gateway](../../administration/platform/secure-outbound-gateway.md)
 - [PostgreSQL Connector](../../reference/connectors/databases/postgres.md)
+- [SQL Server Connector](../../reference/connectors/databases/mssql.md)
 - [SaaS Tenant Isolation](../saas-tenant-isolation.md)

@@ -93,7 +93,8 @@ public sealed class PortalGatewayOperationRouter(
     IGatewayEnrollmentStore enrollments,
     GatewaySessionRegistry sessions,
     IPortalGatewayGrantResolver grantResolver,
-    IViewerContextEnvelopeSigner? viewerContextSigner = null) : IGatewayOperationRouter
+    IViewerContextEnvelopeSigner? viewerContextSigner = null,
+    IGatewayAmbiguousWriteRecorder? ambiguousWrites = null) : IGatewayOperationRouter
 {
     public async Task<GatewayRoutedResult> ExecuteAsync(
         ExecutionIdentity identity, GatewayResourceBinding binding,
@@ -124,7 +125,8 @@ public sealed class PortalGatewayOperationRouter(
 
         var operation = new GatewayOperation(
             Guid.NewGuid().ToString("N"), tenantId, binding.GatewayId, binding.ResourceId,
-            operationClass, effect, bounds, Guid.NewGuid().ToString("N"), session.NodeId);
+            operationClass, effect, bounds, Guid.NewGuid().ToString("N"), session.NodeId,
+            DateTimeOffset.UtcNow);
         ViewerContextEnvelope? viewerContext = null;
         if (resource?.ViewerContextPolicy is not null)
         {
@@ -134,9 +136,21 @@ public sealed class PortalGatewayOperationRouter(
                 operation, identity.EffectiveUser, identity.RealUser, resource.ExecutingCredentialId,
                 BuildClaims(identity, resource.ViewerContextPolicy), resource.ViewerContextPolicy);
         }
-        var result = await session.ExecuteAsync(operation, request, parameters, viewerContext, cancellationToken)
-            .ConfigureAwait(false);
-        return new GatewayRoutedResult(result.Columns, result.Rows, result.Truncated);
+        try
+        {
+            var result = await session.ExecuteAsync(operation, request, parameters, viewerContext, cancellationToken)
+                .ConfigureAwait(false);
+            return new GatewayRoutedResult(result.Columns, result.Rows, result.Truncated);
+        }
+        catch (GatewayProtocolException ex) when (
+            effect == GatewayOperationEffect.Mutating && ex.OutcomeState == GatewayOutcomeState.Ambiguous)
+        {
+            if (ambiguousWrites is null)
+                throw new ExecutionException(
+                    "The Gateway write outcome is ambiguous and could not be placed in operator triage.");
+            await ambiguousWrites.RecordAsync(operation, CancellationToken.None).ConfigureAwait(false);
+            throw new AmbiguousGatewayWriteException(operation.OperationId);
+        }
     }
 
     private static IReadOnlyDictionary<string, string> BuildClaims(

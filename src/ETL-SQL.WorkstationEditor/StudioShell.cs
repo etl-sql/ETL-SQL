@@ -77,7 +77,7 @@ internal static class StudioShell
           id: 'doc-primary',
           path: primaryFile,
           name: (primaryFile ? primaryFile.split('/').pop().split('\\').pop() : 'untitled.rptsql'),
-          content: initialContent || '-- Welcome to ETL-SQL Studio\nCREATE CONNECTION corp_db AS MSSQL(\'SHARED:corp_sales_gw\');\n\nCREATE DATASET ds_orders AS SELECT order_date, total_amount, region FROM corp_db.orders WHERE status = \'Completed\';\n\nPAGE "Executive Overview" {\n    CONTAINER row {\n        VISUAL rev_kpi TYPE \'KPI\' MAPPINGS (VALUE = SUM(total_amount)) OPTIONS (TITLE = \'Total Revenue\');\n    }\n}\n',
+          content: initialContent || '',
           isDirty: false,
           projection: 'split'
         }

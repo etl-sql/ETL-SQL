@@ -3885,6 +3885,7 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-name').value = reportName;
     topbar.querySelector('#dsgn-theme-select').value = localStorage.getItem('portal-theme') || 'light';
     if (sourceControlEnabled && reportId) topbar.querySelector('#dsgn-commit').style.display = '';
+    if (opts.hideTopbar) topbar.style.display = 'none';
 
     function setScriptDiagnosticBadge(errorText) {
         const el = topbar.querySelector('#dsgn-diagnostic-badge');
@@ -6056,29 +6057,31 @@ export function createDesigner(container, opts = {}) {
     }
 
     async function syncScriptFromGrid() {
-        if (!isSplitActive || !scriptEditor) return;
         try {
-            const currentScript = scriptEditor.getValue();
+            const currentScript = scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || '');
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
-            if (r?.script && r.script !== currentScript) {
-                // Get scroll position and selection to restore them
-                const view = scriptEditor.editor.view;
-                const prevSel = view.state.selection.main;
-                scriptEditor.setValue(r.script);
-                // Try to restore selection safely if within bounds
-                try {
-                    const newLen = view.state.doc.length;
-                    const anchor = Math.min(prevSel.anchor, newLen);
-                    const head = Math.min(prevSel.head, newLen);
-                    view.dispatch({ selection: { anchor, head } });
-                } catch {}
+            if (r?.script) {
+                if (typeof opts.onScriptChange === 'function') {
+                    opts.onScriptChange(r.script);
+                }
+                if (isSplitActive && scriptEditor && r.script !== currentScript) {
+                    const view = scriptEditor.editor.view;
+                    const prevSel = view.state.selection.main;
+                    scriptEditor.setValue(r.script);
+                    try {
+                        const newLen = view.state.doc.length;
+                        const anchor = Math.min(prevSel.anchor, newLen);
+                        const head = Math.min(prevSel.head, newLen);
+                        view.dispatch({ selection: { anchor, head } });
+                    } catch {}
+                }
             }
         } catch {}
     }
 
     let syncTimeout = null;
     function syncScriptFromGridDebounced() {
-        if (!isSplitActive || !scriptEditor) return;
+        if (!isSplitActive && !scriptEditor && typeof opts.onScriptChange !== 'function') return;
         clearTimeout(syncTimeout);
         syncTimeout = setTimeout(syncScriptFromGrid, 400);
     }
@@ -6921,6 +6924,8 @@ export function createDesigner(container, opts = {}) {
 
     return {
         applyScriptText,
+        addVisual,
+        getState: () => state,
         dispose: () => {
             leaseDisposed = true;
             void releaseEditLease({ keepalive: true });

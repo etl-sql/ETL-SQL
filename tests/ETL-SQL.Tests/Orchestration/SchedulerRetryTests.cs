@@ -116,6 +116,68 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task ExecuteJobAsync_DoesNotRetryAmbiguousExternalWrite()
+        {
+            var executor = new Mock<IScriptExecutor>();
+            var store = new Mock<IJobHistoryStore>();
+            store.Setup(s => s.LogJobStartAsync(It.IsAny<JobId>())).ReturnsAsync(1L);
+            store.Setup(s => s.AcquireJobLeaseAsync(
+                It.IsAny<JobId>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(1L);
+            store.Setup(s => s.TryRenewJobLeaseAsync(
+                It.IsAny<JobId>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            store.Setup(s => s.ReleaseJobLeaseAsync(
+                It.IsAny<JobId>(), It.IsAny<string>())).Returns(Task.CompletedTask);
+            store.Setup(s => s.LogJobEndAsync(
+                It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(),
+                It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()))
+                .Returns(Task.CompletedTask);
+            store.Setup(s => s.TryUpdateJobLastRunFencedAsync(
+                It.IsAny<JobId>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<long>()))
+                .ReturnsAsync(true);
+
+            var attempts = 0;
+            executor.Setup(e => e.ExecuteTextAsync(
+                    It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(),
+                    It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<ExecutionIdentity?>()))
+                .ReturnsAsync(() =>
+                {
+                    attempts++;
+                    return new ScriptExecutionResult(
+                        false, 0, "Ambiguous Gateway write requires operator triage.", RetryAllowed: false);
+                });
+
+            var throttleDbPath = Path.Combine(
+                Path.GetTempPath(), $"etlsql_ambiguous_retry_{Guid.NewGuid():N}.db");
+            var throttleConfig = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Orchestrator:DatabasePath"] = throttleDbPath
+                })
+                .Build();
+            using var throttle = new JobThrottle(
+                Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 1 }),
+                NullLogger<JobThrottle>.Instance,
+                throttleConfig);
+            var services = new ServiceCollection().AddSingleton(executor.Object).BuildServiceProvider();
+            var scheduler = new SchedulerService(
+                services, store.Object, NullLogger<SchedulerService>.Instance, throttle,
+                new ConfigurationBuilder().Build(), new Mock<ISessionStateManager>().Object,
+                new HealthyCapacityMonitor());
+            var job = new JobDefinition(
+                "AmbiguousWrite", "SELECT 1;", 1, "HOUR", null, null, null, true,
+                MaxRetries: 3, RetryDelaySeconds: 1);
+            var method = typeof(SchedulerService).GetMethod(
+                "ExecuteJobAsync",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+            await (Task)method!.Invoke(scheduler, [job, null, null, false])!;
+
+            Assert.Equal(1, attempts);
+            store.Verify(s => s.LogJobStartAsync(job.Id), Times.Once());
+            try { if (File.Exists(throttleDbPath)) File.Delete(throttleDbPath); } catch { }
+        }
+
+        [Fact]
         public async Task ExecuteJobAsync_DispatchesCompletionNotificationAfterFinalOutcome()
         {
             var dbPath = Path.Combine(Path.GetTempPath(), $"etlsql_notify_test_{Guid.NewGuid():N}.db");

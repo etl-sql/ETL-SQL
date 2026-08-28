@@ -12,6 +12,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Certified Verified Viewer Context for SQL Server Gateway resources. SQL Server preserves the
+  configured service login, installs signed viewer values through parameterized `SESSION_CONTEXT`,
+  prohibits claim-driven role selection, and clears or evicts pooled sessions after success,
+  provider failure, cancellation, timeout, and broken connections.
+
+- Added durable ambiguous Gateway write triage to Portal Operations. Mutating transport uncertainty
+  creates one high-priority case per tenant and operation with acknowledgement, assignment, evidence,
+  notes, four externally verified resolutions, and append-only event history. Script and scheduler
+  execution now carry a non-retryable outcome so configured job retries cannot duplicate the write.
+
 - Added Phase 6 of **ETL-SQL Studio** establishing automated multi-resolution usability audits and Playwright
   browser verification. Added full geometry and bounding-box assertion suites testing viewports from 1024x768 to 4K UHD,
   guaranteeing zero layout shift, strict horizontal scroll containment (`scrollWidth <= clientWidth`), minimum 24px

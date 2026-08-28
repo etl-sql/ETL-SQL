@@ -71,4 +71,9 @@ public record ScriptExecutionResult(
     /// <c>StatementMetricsPayload.From</c> before it gets here, and the list is capped — a run is
     /// represented by its failures and its slowest statements, not by every statement it executed.
     /// </summary>
-    IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>? StatementMetrics = null);
+    IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>? StatementMetrics = null,
+    /// <summary>
+    /// False when another attempt could duplicate an externally applied mutation. Schedulers must
+    /// stop retrying and preserve the failure for operator reconciliation.
+    /// </summary>
+    bool RetryAllowed = true);

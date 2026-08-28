@@ -6,6 +6,7 @@ using System.Threading;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using Microsoft.Data.SqlClient;
 
@@ -25,6 +26,7 @@ namespace ETL_SQL.Connectors.SqlServer
         private readonly int _commandTimeout;
         private SqlConnection? _transactionalConnection;
         private SqlTransaction? _activeTransaction;
+        private readonly List<string> _viewerContextKeys = [];
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SqlServerDataSource"/> class.
@@ -271,7 +273,10 @@ namespace ETL_SQL.Connectors.SqlServer
                 }
             };
             conn.InfoMessage += infoHandler;
-            conn.FireInfoMessageEventOnUserErrors = true;
+            // Keep provider errors on the exception path. Setting this to true converts SQL Server
+            // errors into InfoMessage events and can make a failed statement look like an empty,
+            // successful result set.
+            conn.FireInfoMessageEventOnUserErrors = false;
 
             try
             {
@@ -462,6 +467,66 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
+        /// <summary>
+        /// Starts a fresh transaction and installs signed application viewer values with
+        /// parameterized SESSION_CONTEXT calls. SQL Server continues to authenticate the configured
+        /// service login; no viewer value is used as a login, role, identifier, or SQL fragment.
+        /// </summary>
+        public async Task BeginVerifiedViewerContextAsync(
+            VerifiedViewerContext viewerContext,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(viewerContext);
+            if (_activeTransaction is not null)
+                throw new ExecutionException("Verified viewer context requires a fresh SQL Server transaction.");
+
+            var conn = new SqlConnection(_connectionString);
+            try
+            {
+                await conn.OpenAsync(cancellationToken);
+                _transactionalConnection = conn;
+                _activeTransaction = (SqlTransaction)await conn.BeginTransactionAsync(cancellationToken);
+
+                await using (var identityCommand = CreateCommand("SELECT ORIGINAL_LOGIN()", conn))
+                {
+                    identityCommand.Transaction = _activeTransaction;
+                    var authenticatedIdentity = Convert.ToString(
+                        await identityCommand.ExecuteScalarAsync(cancellationToken));
+                    if (!string.Equals(authenticatedIdentity, viewerContext.ExecutingCredentialId,
+                        StringComparison.Ordinal))
+                    {
+                        throw new ExecutionException(
+                            "The SQL Server identity does not match the viewer context executing credential.");
+                    }
+                }
+
+                var values = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["etlsql.viewer_id"] = viewerContext.ViewerId,
+                    ["etlsql.real_viewer_id"] = viewerContext.RealViewerId,
+                    ["etlsql.executing_credential"] = viewerContext.ExecutingCredentialId,
+                    ["etlsql.tenant_id"] = viewerContext.TenantId,
+                    ["etlsql.resource_id"] = viewerContext.ResourceId,
+                    ["etlsql.operation_id"] = viewerContext.OperationId
+                };
+                foreach (var (key, value) in viewerContext.Claims)
+                    values[$"etlsql.claim_{key.ToLowerInvariant().Replace('-', '_')}"] = value;
+
+                foreach (var (name, value) in values)
+                {
+                    await SetSessionContextAsync(conn, _activeTransaction, name, value, cancellationToken);
+                    _viewerContextKeys.Add(name);
+                }
+            }
+            catch (Exception ex)
+            {
+                await AbortViewerTransactionAsync(conn).ConfigureAwait(false);
+                if (ShouldWrapProviderException(ex))
+                    throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+                throw;
+            }
+        }
+
         public async Task CommitAsync()
         {
             if (_activeTransaction == null) return;
@@ -475,10 +540,15 @@ namespace ETL_SQL.Connectors.SqlServer
             }
             finally
             {
-                await _activeTransaction.DisposeAsync();
-                if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-                _activeTransaction = null;
-                _transactionalConnection = null;
+                try
+                {
+                    await _activeTransaction.DisposeAsync();
+                }
+                finally
+                {
+                    _activeTransaction = null;
+                    await ReleaseTransactionalConnectionAsync().ConfigureAwait(false);
+                }
             }
         }
 
@@ -495,10 +565,95 @@ namespace ETL_SQL.Connectors.SqlServer
             }
             finally
             {
-                await _activeTransaction.DisposeAsync();
-                if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-                _activeTransaction = null;
-                _transactionalConnection = null;
+                try
+                {
+                    await _activeTransaction.DisposeAsync();
+                }
+                finally
+                {
+                    _activeTransaction = null;
+                    await ReleaseTransactionalConnectionAsync().ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static async Task SetSessionContextAsync(
+            SqlConnection connection,
+            SqlTransaction? transaction,
+            string key,
+            string? value,
+            CancellationToken cancellationToken)
+        {
+            await using var command = new SqlCommand(
+                "EXEC sys.sp_set_session_context @key=@context_key, @value=@context_value, @read_only=0;",
+                connection,
+                transaction);
+            command.Parameters.Add("@context_key", System.Data.SqlDbType.NVarChar, 128).Value = key;
+            command.Parameters.Add("@context_value", System.Data.SqlDbType.NVarChar, 2048).Value =
+                value is null ? DBNull.Value : value;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        private async Task AbortViewerTransactionAsync(SqlConnection connection)
+        {
+            try
+            {
+                if (_activeTransaction is not null && connection.State == System.Data.ConnectionState.Open)
+                    await _activeTransaction.RollbackAsync(CancellationToken.None);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                SqlConnection.ClearPool(connection);
+            }
+            finally
+            {
+                try
+                {
+                    if (_activeTransaction is not null) await _activeTransaction.DisposeAsync();
+                }
+                finally
+                {
+                    _activeTransaction = null;
+                    await ReleaseTransactionalConnectionAsync().ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async Task ReleaseTransactionalConnectionAsync()
+        {
+            var connection = _transactionalConnection;
+            _transactionalConnection = null;
+            if (connection is null)
+            {
+                _viewerContextKeys.Clear();
+                return;
+            }
+
+            try
+            {
+                if (_viewerContextKeys.Count > 0)
+                {
+                    if (connection.State != System.Data.ConnectionState.Open)
+                    {
+                        SqlConnection.ClearPool(connection);
+                    }
+                    else
+                    {
+                        foreach (var key in _viewerContextKeys.AsEnumerable().Reverse())
+                            await SetSessionContextAsync(connection, null, key, null, CancellationToken.None);
+                    }
+                }
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                SqlConnection.ClearPool(connection);
+                throw new ExecutionException(
+                    "SQL Server viewer context cleanup failed; the affected connection pool was cleared.");
+            }
+            finally
+            {
+                _viewerContextKeys.Clear();
+                await connection.DisposeAsync();
             }
         }
 
@@ -551,8 +706,20 @@ namespace ETL_SQL.Connectors.SqlServer
 
         public async ValueTask DisposeAsync()
         {
-            if (_activeTransaction != null) await RollbackAsync();
-            if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
+            if (_activeTransaction != null)
+            {
+                try
+                {
+                    await RollbackAsync();
+                }
+                catch (ExecutionException)
+                {
+                    // Rollback can report a zombie transaction after cancellation, timeout, or a
+                    // killed session. RollbackAsync has already cleared/evicted and disposed the
+                    // connection in its finally path, so disposal remains idempotent.
+                }
+            }
+            else if (_transactionalConnection != null) await ReleaseTransactionalConnectionAsync();
             _activeTransaction = null;
             _transactionalConnection = null;
         }

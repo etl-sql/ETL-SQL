@@ -48,7 +48,14 @@ public sealed record GatewayOperationBounds(
 }
 
 /// <summary>Thrown when a typed operation violates the protocol contract.</summary>
-public sealed class GatewayProtocolException(string message) : Exception(message);
+public sealed class GatewayProtocolException(
+    string message,
+    GatewayOutcomeState? outcomeState = null,
+    string? operationId = null) : Exception(message)
+{
+    public GatewayOutcomeState? OutcomeState { get; } = outcomeState;
+    public string? OperationId { get; } = operationId;
+}
 
 /// <summary>Whether an operation can change state on the far side. Drives the reconnect rule.</summary>
 public enum GatewayOperationEffect
@@ -74,7 +81,8 @@ public sealed record GatewayOperation(
     GatewayOperationEffect Effect,
     GatewayOperationBounds Bounds,
     string CorrelationId,
-    string? GatewayNodeId = null)
+    string? GatewayNodeId = null,
+    DateTimeOffset? DispatchedAtUtc = null)
 {
     public void Validate()
     {

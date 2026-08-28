@@ -687,6 +687,45 @@ public class SharedConnectionUsage
 }
 
 /// <summary>
+/// Durable, tenant-scoped operator case for a mutating Gateway operation whose far-side result is
+/// unknown. Cases are never deleted through the Portal API; resolution appends evidence while the
+/// original ambiguity remains part of the immutable event history.
+/// </summary>
+public class GatewayAmbiguousWriteCase : IVersionedEntity
+{
+    public long Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
+    public string OperationId { get; set; } = "";
+    public string GatewayId { get; set; } = "";
+    public string ResourceId { get; set; } = "";
+    public string CorrelationId { get; set; } = "";
+    public DateTime ExecutedAtUtc { get; set; } = DateTime.UtcNow;
+    public string State { get; set; } = "Open";
+    public string Priority { get; set; } = "High";
+    public string? Owner { get; set; }
+    public string? Resolution { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public long Version { get; set; } = 1;
+    public ICollection<GatewayAmbiguousWriteEvent> Events { get; set; } = [];
+}
+
+/// <summary>An append-only event in an ambiguous-write case.</summary>
+public class GatewayAmbiguousWriteEvent
+{
+    public long Id { get; set; }
+    public long CaseId { get; set; }
+    public GatewayAmbiguousWriteCase Case { get; set; } = null!;
+    public string TenantId { get; set; } = "portal-host";
+    public string EventType { get; set; } = "";
+    public string Actor { get; set; } = "";
+    public string? Note { get; set; }
+    public string? EvidenceReference { get; set; }
+    public string? Resolution { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
 /// One run of a native admin background service (failure digest, backup report, capacity report):
 /// the durable per-run ledger behind retention, the admin status API, and operational review.
 /// </summary>

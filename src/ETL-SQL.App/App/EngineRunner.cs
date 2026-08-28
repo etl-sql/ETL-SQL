@@ -806,7 +806,8 @@ namespace ETL_SQL.App
                                 : null,
                             dataQualityColumnMetrics = evaluator.DataQuality.ColumnMetrics,
                             dataQualityRuleFailures = evaluator.DataQuality.FailureMetrics,
-                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: false)
+                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: false),
+                            retryAllowed = true
                         }));
                     }
 
@@ -885,7 +886,8 @@ namespace ETL_SQL.App
                                 : null,
                             dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics,
                             dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics,
-                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: true)
+                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: true),
+                            retryAllowed = ex is not AmbiguousGatewayWriteException
                         }));
                     }
                     else
@@ -947,7 +949,8 @@ namespace ETL_SQL.App
                                 : null,
                             dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics,
                             dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics,
-                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: true)
+                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: true),
+                            retryAllowed = true
                         }));
                     }
                     else

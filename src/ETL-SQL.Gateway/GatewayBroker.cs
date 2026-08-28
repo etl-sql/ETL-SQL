@@ -273,6 +273,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         long ingressBytes = 0;
         long totalRows = 0;
         var status = TenantMeteringStatus.Failed;
+        var dispatchAttempted = false;
         try
         {
             var opFrame = new GatewayFrame
@@ -293,6 +294,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
 
             var serialized = opFrame.Serialize();
             egressBytes = Encoding.UTF8.GetByteCount(serialized);
+            dispatchAttempted = true;
             await SendFrameInternalAsync(opFrame, cancellationToken).ConfigureAwait(false);
 
             var columns = new List<string>();
@@ -305,7 +307,10 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                 ingressBytes += Encoding.UTF8.GetByteCount(frame.Serialize());
 
                 if (frame.Kind == GatewayFrameKind.Fault)
-                    throw new GatewayProtocolException(frame.Reason ?? "Gateway returned an unclassified fault.");
+                    throw new GatewayProtocolException(
+                        frame.Reason ?? "Gateway returned an unclassified fault.",
+                        frame.OutcomeState,
+                        frame.OperationId);
 
                 if (frame.Kind == GatewayFrameKind.RowBatch)
                 {
@@ -325,6 +330,17 @@ internal sealed class ActiveGatewaySession : IGatewaySession
             totalRows = rows.Count;
             status = TenantMeteringStatus.Succeeded;
             return new GatewayExecutionResult(columns, rows, truncated);
+        }
+        catch (GatewayProtocolException)
+        {
+            throw;
+        }
+        catch (Exception) when (dispatchAttempted && operation.Effect == GatewayOperationEffect.Mutating)
+        {
+            throw new GatewayProtocolException(
+                "The mutating Gateway operation lost its transport before a terminal outcome was received.",
+                GatewayOutcomeState.Ambiguous,
+                operation.OperationId);
         }
         finally
         {

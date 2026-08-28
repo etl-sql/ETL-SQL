@@ -535,6 +535,11 @@ export const adminApi = {
     auditLog: (page = 1, pageSize = 50, action = '', userId = '', resourceType = '', resourceId = '') =>
         apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}&resourceType=${encodeURIComponent(resourceType)}&resourceId=${encodeURIComponent(resourceId)}`),
     operationalMetrics: () => apiJson('/api/admin/metrics/operational'),
+    gatewayAmbiguousWrites: (includeResolved = true) => apiJson(`/api/admin/gateway-operations/ambiguous-writes?includeResolved=${includeResolved}`),
+    acknowledgeGatewayAmbiguousWrite: (id, body) => apiJson(`/api/admin/gateway-operations/ambiguous-writes/${id}/acknowledge`, { method: 'POST', body }),
+    assignGatewayAmbiguousWrite: (id, body) => apiJson(`/api/admin/gateway-operations/ambiguous-writes/${id}/assign`, { method: 'POST', body }),
+    addGatewayAmbiguousWriteEvidence: (id, body) => apiJson(`/api/admin/gateway-operations/ambiguous-writes/${id}/evidence`, { method: 'POST', body }),
+    resolveGatewayAmbiguousWrite: (id, body) => apiJson(`/api/admin/gateway-operations/ambiguous-writes/${id}/resolve`, { method: 'POST', body }),
 
     // operations hub
     fleetStatus: () => apiJson('/api/fleet/status'),

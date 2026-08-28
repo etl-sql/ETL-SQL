@@ -60,6 +60,21 @@ public class ExecutionException : ETLException
     }
 }
 
+/// <summary>
+/// A mutating Gateway request was dispatched, but no authoritative terminal outcome was received.
+/// Callers must not retry it automatically; an operator must reconcile the durable triage case.
+/// </summary>
+public sealed class AmbiguousGatewayWriteException : ExecutionException
+{
+    public string OperationId { get; }
+
+    public AmbiguousGatewayWriteException(string operationId)
+        : base($"Gateway write operation '{operationId}' has an ambiguous outcome and requires operator triage.")
+    {
+        OperationId = operationId;
+    }
+}
+
 public class ConnectionException : ExecutionException
 {
     public string ConnectionAlias { get; }

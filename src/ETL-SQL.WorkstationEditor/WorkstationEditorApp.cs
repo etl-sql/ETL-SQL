@@ -338,6 +338,56 @@ public static class WorkstationEditorApp
             }
         });
 
+        var designerParsing = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService();
+        var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
+        var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
+
+        app.MapPost("/api/designer/generate", (GenerateDesignerAuthoringRequest request) =>
+        {
+            var script = !string.IsNullOrWhiteSpace(request.Script)
+                ? designerPatcher.Patch(request.Script, request.DesignState)
+                : designerGen.Generate(request.DesignState);
+            return Results.Json(new { script }, JsonOptions);
+        });
+
+        app.MapPost("/api/designer/patch", (PatchDesignerAuthoringRequest request) =>
+        {
+            var script = designerPatcher.Patch(request.Script, request.DesignState);
+            return Results.Json(new { script }, JsonOptions);
+        });
+
+        app.MapPost("/api/designer/parse", (ParseDesignerAuthoringRequest request) =>
+        {
+            var state = designerParsing.Parse(request.Script);
+            return Results.Json(new { designState = state, error = (string?)null }, JsonOptions);
+        });
+
+        app.MapPost("/api/designer/run", async (RunRequest request, WorkstationRunService runner, CancellationToken cancellationToken) =>
+            Results.Json(await runner.RunAsync(request, cancellationToken), JsonOptions));
+
+        app.MapPost("/api/designer/analyze", async (AnalyzeRequest request, WorkstationAnalysisService analysis) =>
+            Results.Json(await analysis.AnalyzeAsync(request), JsonOptions));
+
+        app.MapPost("/api/designer/complete", async (CompleteRequest request, WorkstationCompletionService completion, CancellationToken cancellationToken) =>
+            Results.Json(await completion.CompleteAsync(request, cancellationToken), JsonOptions));
+
+        app.MapPost("/api/designer/dag", (ScriptDagRequest request, ScriptDagProjectionService dag) =>
+            Results.Json(dag.Project(request.Script), JsonOptions));
+
+        app.MapPost("/api/designer/preview", async (PreviewRequest request, WorkstationPreviewService previewer, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var manifest = await previewer.BuildPreviewAsync(request.Script ?? string.Empty, cancellationToken);
+                return Results.Content(
+                    ETL_SQL.Reporting.BrowserDeliveryProjection.Serialize(manifest), "application/json");
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+        });
+
         app.MapPost("/api/run", async (RunRequest request, WorkstationRunService runner, CancellationToken cancellationToken) =>
             Results.Json(await runner.RunAsync(request, cancellationToken), JsonOptions));
 
@@ -535,3 +585,6 @@ public static class WorkstationEditorApp
 public sealed record SaveFileRequest(string? Path, string? Content);
 public sealed record ParseConnectionStringRequest(string? ConnectionString, string? HintProvider);
 public sealed record TestConnectionRequest(string? Alias, string? ConnectorType, string? Target, Dictionary<string, string>? Options, int ProbeTimeoutSeconds = 5);
+public sealed record GenerateDesignerAuthoringRequest(ETL_SQL.Reporting.Authoring.DesignerAuthoringState DesignState, string? Script = null);
+public sealed record PatchDesignerAuthoringRequest(string Script, ETL_SQL.Reporting.Authoring.DesignerAuthoringState DesignState);
+public sealed record ParseDesignerAuthoringRequest(string Script);

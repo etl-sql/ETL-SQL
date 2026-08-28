@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,6 +36,135 @@ namespace ETL_SQL.Tests.Integration
             await TestDataTypes(eval, connStr);
             await TestFunctions(eval, connStr);
             await TestMetadata(eval, connStr);
+        }
+
+        [Fact]
+        public async Task VerifiedViewerContext_IsParameterizedAndClearedBeforePoolReuseAcrossTerminalPaths()
+        {
+            var builder = new SqlConnectionStringBuilder(_fixture.SqlConnectionString)
+            {
+                ApplicationName = "etlsql-viewer-context-" + Guid.NewGuid().ToString("N"),
+                MaxPoolSize = 1
+            };
+            var connStr = builder.ConnectionString;
+            const string hostile = "finance'; EXEC sp_addrolemember 'db_owner','viewer'; --";
+            string executingLogin;
+            await using (var baseline = new SqlConnection(connStr))
+            {
+                await baseline.OpenAsync();
+                await using var identity = new SqlCommand("SELECT ORIGINAL_LOGIN()", baseline);
+                executingLogin = (string)(await identity.ExecuteScalarAsync())!;
+            }
+
+            await using (var mismatched = new SqlServerDataSource(SystemExecutionContext.Instance, connStr))
+            {
+                var denied = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+                    mismatched.BeginVerifiedViewerContextAsync(
+                        Context("identity-mismatch", "different-login"), CancellationToken.None));
+                Assert.Contains("does not match", denied.Message);
+            }
+            await AssertContextClearedAsync(connStr);
+
+            await using (var success = new SqlServerDataSource(SystemExecutionContext.Instance, connStr))
+            {
+                await success.BeginVerifiedViewerContextAsync(
+                    Context("success", executingLogin, hostile), CancellationToken.None);
+                var batch = await success.ExecuteRawSql(
+                    "SELECT CONVERT(nvarchar(2048), SESSION_CONTEXT(N'etlsql.viewer_id')) AS viewer, " +
+                    "CONVERT(nvarchar(2048), SESSION_CONTEXT(N'etlsql.claim_department')) AS department, " +
+                    "ORIGINAL_LOGIN() AS original_login, SUSER_SNAME() AS effective_login",
+                    null, CancellationToken.None).FirstAsync();
+                var row = Assert.Single(batch.Rows);
+                Assert.Equal(hostile, row["viewer"]);
+                Assert.Equal(hostile, row["department"]);
+                Assert.Equal(executingLogin, row["original_login"]);
+                Assert.Equal(executingLogin, row["effective_login"]);
+                await success.CommitAsync();
+            }
+            await AssertContextClearedAsync(connStr);
+
+            await AssertFailurePathClearsAsync(connStr, executingLogin, "provider-failure", async source =>
+            {
+                await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
+                    await source.ExecuteRawSql(
+                        "SELECT * FROM dbo.__etlsql_missing_viewer_context_table",
+                        null, CancellationToken.None).FirstAsync());
+            });
+
+            await AssertFailurePathClearsAsync(connStr, executingLogin, "cancellation", async source =>
+            {
+                using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+                var cancelled = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
+                    await source.ExecuteRawSql("WAITFOR DELAY '00:00:05'; SELECT 1 AS value",
+                        null, cancellation.Token).FirstAsync());
+                Assert.IsType<SqlException>(cancelled.InnerException);
+            });
+
+            await using (var timeout = new SqlServerDataSource(
+                SystemExecutionContext.Instance, connStr, options: new Dictionary<string, string>
+                {
+                    ["TIMEOUT_SECONDS"] = "1"
+                }))
+            {
+                await timeout.BeginVerifiedViewerContextAsync(
+                    Context("timeout", executingLogin), CancellationToken.None);
+                await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
+                    await timeout.ExecuteRawSql("WAITFOR DELAY '00:00:05'; SELECT 1 AS value",
+                        null, CancellationToken.None).FirstAsync());
+            }
+            await AssertContextClearedAsync(connStr);
+
+            await using (var broken = new SqlServerDataSource(SystemExecutionContext.Instance, connStr))
+            {
+                await broken.BeginVerifiedViewerContextAsync(
+                    Context("broken", executingLogin), CancellationToken.None);
+                var spidBatch = await broken.ExecuteRawSql("SELECT @@SPID AS spid", null, CancellationToken.None).FirstAsync();
+                var spid = Convert.ToInt32(Assert.Single(spidBatch.Rows)["spid"]);
+                await using var killer = new SqlConnection(_fixture.SqlConnectionString);
+                await killer.OpenAsync();
+                await using var kill = new SqlCommand($"KILL {spid}", killer);
+                await kill.ExecuteNonQueryAsync();
+                await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
+                    await broken.ExecuteRawSql("SELECT 1 AS value", null, CancellationToken.None).FirstAsync());
+            }
+            await AssertContextClearedAsync(connStr);
+
+            VerifiedViewerContext Context(string operationId, string executingCredential, string viewer = "viewer") =>
+                new("tenant-a", "sqlserver-reports", operationId, viewer, "real-viewer",
+                    executingCredential,
+                    new Dictionary<string, string> { ["department"] = viewer },
+                    DateTimeOffset.UtcNow);
+        }
+
+        private static async Task AssertFailurePathClearsAsync(
+            string connectionString,
+            string executingLogin,
+            string operationId,
+            Func<SqlServerDataSource, Task> exercise)
+        {
+            await using (var source = new SqlServerDataSource(SystemExecutionContext.Instance, connectionString))
+            {
+                await source.BeginVerifiedViewerContextAsync(
+                    new VerifiedViewerContext(
+                        "tenant-a", "sqlserver-reports", operationId, "viewer", "real-viewer",
+                        executingLogin, new Dictionary<string, string>(), DateTimeOffset.UtcNow),
+                    CancellationToken.None);
+                await exercise(source);
+            }
+            await AssertContextClearedAsync(connectionString);
+        }
+
+        private static async Task AssertContextClearedAsync(string connectionString)
+        {
+            await using var reused = new SqlConnection(connectionString);
+            await reused.OpenAsync();
+            await using var check = new SqlCommand(
+                "SELECT SESSION_CONTEXT(N'etlsql.viewer_id'), SESSION_CONTEXT(N'etlsql.claim_department')",
+                reused);
+            await using var reader = await check.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.True(reader.IsDBNull(0));
+            Assert.True(reader.IsDBNull(1));
         }
 
         private async Task TestDataTypes(Evaluator eval, string connStr)

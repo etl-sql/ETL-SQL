@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
@@ -118,13 +119,25 @@ internal static class GatewayRuntimeService
             try
             {
                 await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, target).WithTable(operation.Table);
-                PostgresDataSource? contextSource = null;
+                ITransactionalDataSource? contextSource = null;
                 if (viewerContext is not null)
                 {
-                    contextSource = source as PostgresDataSource
-                        ?? throw new InvalidOperationException("Verified viewer context is supported only by the PostgreSQL connector.");
-                    await contextSource.BeginVerifiedViewerContextAsync(viewerContext, cancellationToken)
-                        .ConfigureAwait(false);
+                    switch (source)
+                    {
+                        case PostgresDataSource postgres:
+                            contextSource = postgres;
+                            await postgres.BeginVerifiedViewerContextAsync(viewerContext, cancellationToken)
+                                .ConfigureAwait(false);
+                            break;
+                        case SqlServerDataSource sqlServer:
+                            contextSource = sqlServer;
+                            await sqlServer.BeginVerifiedViewerContextAsync(viewerContext, cancellationToken)
+                                .ConfigureAwait(false);
+                            break;
+                        default:
+                            throw new InvalidOperationException(
+                                "Verified viewer context is not certified for this connector type.");
+                    }
                 }
                 if (operationClass == GatewayOperationClass.Execute)
                     throw new NotSupportedException("The local connector does not expose a bounded execute operation.");
