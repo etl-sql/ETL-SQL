@@ -23,7 +23,7 @@ namespace ETL_SQL.Reporting.Renderers
         /// <summary>
         /// Renders a full report page into a collection of Spectre.Console renderables.
         /// </summary>
-        public static IRenderable RenderPage(PageManifest page, ReportManifest manifest)
+        public static IRenderable RenderPage(PageManifest page, ReportManifest manifest, string? activeControlName = null)
         {
             var content = new List<IRenderable>();
 
@@ -47,7 +47,7 @@ namespace ETL_SQL.Reporting.Renderers
 
             foreach (var vName in visualNames)
             {
-                var item = RenderSlotItem(vName, manifest);
+                var item = RenderSlotItem(vName, manifest, activeControlName);
                 if (item != null)
                 {
                     content.Add(item);
@@ -58,20 +58,23 @@ namespace ETL_SQL.Reporting.Renderers
             return new Rows(content);
         }
 
-        private static IRenderable? RenderSlotItem(string name, ReportManifest manifest)
+        private static IRenderable? RenderSlotItem(string name, ReportManifest manifest, string? activeControlName = null)
         {
             // 1. Check if it's a visual
             var visual = manifest.Visuals?.FirstOrDefault(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
             if (visual != null)
             {
-                return RenderVisual(visual, manifest);
+                var rendered = RenderVisual(visual, manifest);
+                return string.Equals(visual.Name, activeControlName, StringComparison.OrdinalIgnoreCase)
+                    ? new Rows(new Markup("[black on yellow] ▶ ACTIVE CONTROL · Enter to change [/]"), rendered)
+                    : rendered;
             }
 
             // 2. Check if it's a container
             var container = manifest.Containers?.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
             if (container != null)
             {
-                return RenderContainer(container, manifest);
+                return RenderContainer(container, manifest, activeControlName);
             }
 
             // 3. Check if it's a button
@@ -84,7 +87,7 @@ namespace ETL_SQL.Reporting.Renderers
             return null;
         }
 
-        private static IRenderable RenderContainer(ContainerManifest container, ReportManifest manifest)
+        private static IRenderable RenderContainer(ContainerManifest container, ReportManifest manifest, string? activeControlName = null)
         {
             var content = new List<IRenderable>();
 
@@ -101,7 +104,7 @@ namespace ETL_SQL.Reporting.Renderers
                 var sortedSlots = container.SlotMap.OrderBy(kv => kv.Key).Select(kv => kv.Value).Distinct();
                 foreach (var childName in sortedSlots)
                 {
-                    var childRenderable = RenderSlotItem(childName, manifest);
+                    var childRenderable = RenderSlotItem(childName, manifest, activeControlName);
                     if (childRenderable != null)
                     {
                         content.Add(childRenderable);
@@ -740,7 +743,17 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            var type = visual.VisualType.ToUpperInvariant();
+            var needsOptions = type is "SLICER" or "MULTISELECT";
+            if (needsOptions && rows.Count == 0)
+            {
+                return new Panel(new Markup("[grey]No choices are currently available.[/]"))
+                {
+                    Header = new PanelHeader(Markup.Escape(title)),
+                    Border = BoxBorder.Rounded,
+                    Expand = false
+                };
+            }
 
             // Determine current selected value if manifest is available
             string? selectedValue = null;
@@ -758,14 +771,16 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            // A slicer in terminal shows options as selectable tags
-            var items = rows.Select(r => r.FirstOrDefault()?.Trim() ?? "").Where(s => !string.IsNullOrEmpty(s)).ToList();
+            // A sourced control shows option tags. Value controls show their current editable value.
+            var items = needsOptions
+                ? rows.Select(r => r.FirstOrDefault()?.Trim() ?? "").Where(s => !string.IsNullOrEmpty(s)).ToList()
+                : [selectedValue ?? visual.DefaultValue ?? visual.Options.GetValueOrDefault("DEFAULT") ?? string.Empty];
 
             // Highlight options (simulated in TUI preview)
             var tags = items.Select(i =>
             {
                 bool isSelected = selectedValue != null && i.Equals(selectedValue, StringComparison.OrdinalIgnoreCase);
-                var style = isSelected ? "white on green" : "white on blue";
+                var style = isSelected || !needsOptions ? "white on green" : "white on blue";
                 return $"[{style}] {Markup.Escape(i)} [/]";
             });
 

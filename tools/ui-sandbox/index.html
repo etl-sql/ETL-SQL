@@ -51,6 +51,10 @@
       z-index: 10;
     }
 
+    body.sidebar-collapsed #sidebar {
+      display: none;
+    }
+
     .sidebar-header {
       padding: 14px 14px 10px;
       border-bottom: 1px solid var(--border-subtle);
@@ -78,6 +82,12 @@
       margin: 0;
     }
 
+    .brand-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .brand-badge {
       font-size: 11px;
       font-weight: 600;
@@ -86,6 +96,25 @@
       background: var(--accent-blue-bg);
       color: var(--accent-blue);
       border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+
+    .sidebar-icon-btn {
+      background: #152033;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 3px 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.12s;
+    }
+
+    .sidebar-icon-btn:hover {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border-color: var(--border-medium);
     }
 
     /* Search input */
@@ -417,6 +446,40 @@
       flex-wrap: wrap;
     }
 
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .sidebar-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 8px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      background: #1a2436;
+      border: 1px solid var(--border-medium);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+
+    .sidebar-toggle-btn:hover {
+      background: #24324a;
+      border-color: var(--border-accent);
+      color: var(--text-main);
+    }
+
+    body.sidebar-collapsed .sidebar-toggle-btn {
+      background: var(--accent-blue-bg);
+      color: var(--accent-blue);
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
     .story-header-meta {
       display: flex;
       align-items: center;
@@ -570,7 +633,14 @@
         <h1 class="brand-title">
           <span>ETL-SQL UI Sandbox</span>
         </h1>
-        <span class="brand-badge" id="storyCountBadge">0</span>
+        <div class="brand-actions">
+          <span class="brand-badge" id="storyCountBadge">0</span>
+          <button class="sidebar-icon-btn" id="sidebarCollapseBtn" title="Collapse sidebar (Ctrl+B)" aria-label="Collapse sidebar">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
+              <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="search-wrap">
@@ -604,11 +674,18 @@
 
   <main>
     <header>
-      <div class="story-header-meta">
-        <span class="story-category-tag" id="storyCategory">SURFACE</span>
-        <div class="story-title-group">
-          <h2 id="storyTitle">Story Title</h2>
-          <span class="story-subhead" id="storySubtitle"></span>
+      <div class="header-left">
+        <button class="action-btn sidebar-toggle-btn" id="sidebarToggleBtn" title="Toggle sidebar (Ctrl+B)" aria-label="Toggle sidebar" aria-expanded="true">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
+            <path fill-rule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 10.5a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <div class="story-header-meta">
+          <span class="story-category-tag" id="storyCategory">SURFACE</span>
+          <div class="story-title-group">
+            <h2 id="storyTitle">Story Title</h2>
+            <span class="story-subhead" id="storySubtitle"></span>
+          </div>
         </div>
       </div>
 
@@ -625,7 +702,7 @@
 
     <div class="status-bar">
       <span id="stat">Ready</span>
-      <span id="keyNavHint">Navigate: ↑ ↓ / Esc</span>
+      <span id="keyNavHint">Toggle sidebar: Ctrl+B · Navigate: ↑ ↓ · Search: /</span>
     </div>
 
     <div id="stage"></div>

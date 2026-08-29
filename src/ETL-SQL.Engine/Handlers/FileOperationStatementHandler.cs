@@ -14,15 +14,30 @@ namespace ETL_SQL.Engine.Handlers;
 /// <summary>
 /// Handles various file operations including DELETE, COPY, MOVE, RENAME, COMPRESS, DECOMPRESS, ENCRYPT, and DECRYPT.
 /// </summary>
-public class FileOperationStatementHandler : IStatementHandler
+public class FileOperationStatementHandler(
+    ILogger logger,
+    IConnectorRegistry? connectorRegistry = null) : IStatementHandler
 {
-    private readonly ILogger _logger;
+    private readonly ILogger _logger = logger;
+    private readonly IConnectorRegistry? _connectorRegistry = connectorRegistry;
     public Type SupportedStatementType => typeof(FileOperationStatement);
 
-    public FileOperationStatementHandler(ILogger logger)
+    private static readonly HashSet<string> KnownFileConnectorTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        _logger = logger;
-    }
+        "FLATFILE", "CSV", "JSON", "XML", "EXCEL", "PARQUET", "AVRO", "DIRECTORY", "SQLITE", "FILE", "SFTP", "FTP", "AZUREBLOB", "S3", "SHAREPOINT"
+    };
+
+    private readonly record struct ResolvedFileOperand(
+        string RawValue,
+        string? ConnectionName,
+        IDataSource? DataSource,
+        bool IsConnection,
+        bool IsRemote,
+        IRemoteFileSystem? RemoteFs,
+        bool IsDirectory,
+        string ResolvedPath);
+
+    public FileOperationStatementHandler(ILogger logger) : this(logger, null) { }
 
     /// <summary>Executes the file operation, resolving paths and performing the requested action.</summary>
     public async Task Execute(Statement statement, IExecutionContext context)
@@ -31,7 +46,7 @@ public class FileOperationStatementHandler : IStatementHandler
 
         if (!string.IsNullOrEmpty(stmt.ConnectionName))
         {
-            // Remote execution context
+            // Remote execution context via explicit AT clause
             if (!context.Connections.TryGetValue(stmt.ConnectionName, out var ds) || ds is not IRemoteFileSystem remoteFs)
             {
                 throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found or does not support remote file operations.");
@@ -104,10 +119,34 @@ public class FileOperationStatementHandler : IStatementHandler
             return;
         }
 
-        string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
-        string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
-        string? destVal = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "" : null;
-        destVal = await ApplyDestinationNamingOptionsAsync(stmt, context, source, destVal, remote: false);
+        var sourceOperand = await ResolveOperandAsync(stmt.Source, context);
+        var destOperand = stmt.Destination != null ? await ResolveOperandAsync(stmt.Destination, context) : default;
+
+        bool overwrite = true;
+        if (stmt.Overwrite != null)
+        {
+            var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());
+            if (ovrVal != null)
+            {
+                if (ovrVal is bool b) overwrite = b;
+                else if (string.Equals(ovrVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) overwrite = true;
+                else if (string.Equals(ovrVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) overwrite = false;
+                else if (string.Equals(ovrVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) overwrite = true;
+                else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) overwrite = false;
+            }
+        }
+
+        // Bridge Remote <-> Local / Remote <-> Remote connections
+        if (sourceOperand.IsRemote || destOperand.IsRemote)
+        {
+            await ExecuteRemoteBridgedFileOperationAsync(stmt, context, sourceOperand, destOperand, overwrite);
+            return;
+        }
+
+        string sourceVal = sourceOperand.RawValue;
+        string source = sourceOperand.ResolvedPath;
+        string? destVal = destOperand.RawValue != null ? destOperand.ResolvedPath : null;
+        destVal = await ApplyDestinationNamingOptionsAsync(stmt, context, source, destVal, remote: false, isDestinationDirectory: destOperand.IsDirectory);
         string? dest = destVal != null ? context.ResolvePath(destVal) : null;
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
         var sourceAccess = stmt.Type is FileOpType.Delete or FileOpType.Move or FileOpType.Rename
@@ -130,20 +169,6 @@ public class FileOperationStatementHandler : IStatementHandler
         {
             context.Log($"WHAT IF: Would perform {stmt.Type}_FILE", ConsoleColor.Yellow);
             return;
-        }
-
-        bool overwrite = true; // Default to true for backward compatibility with underscore functions
-        if (stmt.Overwrite != null)
-        {
-            var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());
-            if (ovrVal != null)
-            {
-                if (ovrVal is bool b) overwrite = b;
-                else if (string.Equals(ovrVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) overwrite = true;
-                else if (string.Equals(ovrVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) overwrite = false;
-                else if (string.Equals(ovrVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) overwrite = true;
-                else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) overwrite = false;
-            }
         }
 
         _logger.Debug("File Operation: {OperationType} on {Source}{Dest}", stmt.Type, source, dest != null ? $" -> {dest}" : "");
@@ -179,20 +204,12 @@ public class FileOperationStatementHandler : IStatementHandler
                     }
                     else
                     {
-                        // If not if_exists, the engine usually continues but logs a warning or throws depending on strictness
-                        // Standards say: Check existence first to avoid silent no-ops or errors (Rule 9)
                         _logger.Warning("File not found for deletion: {Source}", source);
                     }
                     break;
                 case FileOpType.Copy:
                     if (dest != null)
                     {
-                        // Re-authorize source (read) and destination (write) immediately before the
-                        // copy and stream the bytes through handle-validated opens, so a link swapped
-                        // in after the path check cannot redirect the read or the write to an
-                        // unauthorized target (TOCTOU / link-race hardening — the write handle is
-                        // non-destructive until its final path is verified). Consistent with the
-                        // recursive directory-copy path.
                         var copySource = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read);
                         var copyDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
                         // Security Hardening: Block writing to script files and dangerous types
@@ -223,6 +240,11 @@ public class FileOperationStatementHandler : IStatementHandler
                         pathAuthorizer.MoveValidatedFile(context, moveSource, moveDest, overwrite);
                         source = moveSource.CanonicalPath;
                         dest = moveDest.CanonicalPath;
+
+                        if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
+                        {
+                            await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, dest);
+                        }
                     }
                     break;
                 case FileOpType.Rename:
@@ -242,6 +264,11 @@ public class FileOperationStatementHandler : IStatementHandler
 
                         pathAuthorizer.MoveValidatedFile(context, renameSource, renameDest, overwrite);
                         dest = renameDest.CanonicalPath;
+
+                        if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
+                        {
+                            await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, dest);
+                        }
                     }
                     else
                     {
@@ -373,14 +400,271 @@ public class FileOperationStatementHandler : IStatementHandler
         await Task.CompletedTask;
     }
 
+    private async Task ExecuteRemoteBridgedFileOperationAsync(
+        FileOperationStatement stmt,
+        IExecutionContext context,
+        ResolvedFileOperand sourceOperand,
+        ResolvedFileOperand destOperand,
+        bool overwrite)
+    {
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        context.IncrementOperationCount(OperationType.FileSystem, sourceOperand.ResolvedPath, 1);
+
+        if (context.IsWhatIf)
+        {
+            context.Log($"WHAT IF: Would perform {stmt.Type}_FILE {sourceOperand.ResolvedPath} -> {destOperand.ResolvedPath}", ConsoleColor.Yellow);
+            return;
+        }
+
+        try
+        {
+            // Case 1: Both source and destination are remote
+            if (sourceOperand.IsRemote && destOperand.IsRemote)
+            {
+                if (sourceOperand.RemoteFs == destOperand.RemoteFs || string.Equals(sourceOperand.ConnectionName, destOperand.ConnectionName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var remoteFs = sourceOperand.RemoteFs ?? destOperand.RemoteFs!;
+                    string destPath = destOperand.ResolvedPath;
+                    if (destOperand.IsDirectory)
+                        destPath = CombineRemotePath(destPath, GetRemoteFileName(sourceOperand.ResolvedPath));
+
+                    switch (stmt.Type)
+                    {
+                        case FileOpType.Delete:
+                            await remoteFs.DeleteFileAsync(sourceOperand.ResolvedPath);
+                            context.Log($"Remote file deleted: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath}", ConsoleColor.Green);
+                            break;
+                        case FileOpType.Move:
+                        case FileOpType.Rename:
+                            await remoteFs.RenameFileAsync(sourceOperand.ResolvedPath, destPath, overwrite);
+                            context.Log($"Remote file moved: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {destPath}", ConsoleColor.Green);
+                            if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
+                            {
+                                await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, destPath);
+                            }
+                            break;
+                        default:
+                            throw new ExecutionException($"File operation '{stmt.Type}' is not supported on remote connection '{sourceOperand.ConnectionName}'.");
+                    }
+                }
+                else
+                {
+                    // Different remote filesystems: Download to temp local file, upload to target
+                    string tempLocal = Path.GetTempFileName();
+                    try
+                    {
+                        await sourceOperand.RemoteFs!.DownloadFileAsync(sourceOperand.ResolvedPath, tempLocal, overwrite: true);
+                        string destPath = destOperand.ResolvedPath;
+                        if (destOperand.IsDirectory)
+                            destPath = CombineRemotePath(destPath, GetRemoteFileName(sourceOperand.ResolvedPath));
+                        await destOperand.RemoteFs!.UploadFileAsync(tempLocal, destPath, overwrite, context.CancellationToken);
+
+                        if (stmt.Type == FileOpType.Move)
+                        {
+                            await sourceOperand.RemoteFs!.DeleteFileAsync(sourceOperand.ResolvedPath);
+                            if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
+                            {
+                                await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, destPath);
+                            }
+                        }
+                        context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "copied")}: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {destOperand.ConnectionName}:{destPath}", ConsoleColor.Green);
+                    }
+                    finally
+                    {
+                        if (File.Exists(tempLocal)) File.Delete(tempLocal);
+                    }
+                }
+                return;
+            }
+
+            // Case 2: Remote source -> Local destination (Download)
+            if (sourceOperand.IsRemote && !destOperand.IsRemote)
+            {
+                if (stmt.Type == FileOpType.Delete)
+                {
+                    await sourceOperand.RemoteFs!.DeleteFileAsync(sourceOperand.ResolvedPath);
+                    context.Log($"Remote file deleted: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath}", ConsoleColor.Green);
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(destOperand.ResolvedPath))
+                    throw new ExecutionException($"{stmt.Type}_FILE requires a destination name.");
+
+                string localDest = destOperand.ResolvedPath;
+                localDest = await ApplyDestinationNamingOptionsAsync(stmt, context, sourceOperand.ResolvedPath, localDest, remote: false, isDestinationDirectory: destOperand.IsDirectory) ?? localDest;
+                var copyDest = pathAuthorizer.Authorize(context, localDest, FileSystemAccessKind.Write);
+                context.SecurityService.ValidateWriteAccess(copyDest.CanonicalPath);
+                context.SecurityService.ValidateFileType(copyDest.CanonicalPath);
+
+                await sourceOperand.RemoteFs!.DownloadFileAsync(sourceOperand.ResolvedPath, copyDest.CanonicalPath, overwrite);
+
+                if (stmt.Type == FileOpType.Move)
+                {
+                    await sourceOperand.RemoteFs!.DeleteFileAsync(sourceOperand.ResolvedPath);
+                    if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
+                    {
+                        await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, copyDest.CanonicalPath);
+                    }
+                }
+                context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "copied")}: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {copyDest.CanonicalPath}", ConsoleColor.Green);
+                return;
+            }
+
+            // Case 3: Local source -> Remote destination (Upload)
+            if (!sourceOperand.IsRemote && destOperand.IsRemote)
+            {
+                if (string.IsNullOrWhiteSpace(destOperand.ResolvedPath))
+                    throw new ExecutionException($"{stmt.Type}_FILE requires a destination name.");
+
+                string localSource = sourceOperand.ResolvedPath;
+                var copySource = pathAuthorizer.Authorize(context, localSource, FileSystemAccessKind.Read);
+
+                string remoteDest = destOperand.ResolvedPath;
+                if (destOperand.IsDirectory)
+                    remoteDest = CombineRemotePath(remoteDest, Path.GetFileName(copySource.CanonicalPath));
+
+                await destOperand.RemoteFs!.UploadFileAsync(copySource.CanonicalPath, remoteDest, overwrite, context.CancellationToken);
+
+                if (stmt.Type == FileOpType.Move)
+                {
+                    pathAuthorizer.DeleteValidatedFile(context, pathAuthorizer.Authorize(context, copySource.CanonicalPath, FileSystemAccessKind.Delete));
+                    if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
+                    {
+                        await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, remoteDest);
+                    }
+                }
+                context.Log($"File {(stmt.Type == FileOpType.Move ? "moved" : "copied")}: {copySource.CanonicalPath} -> {destOperand.ConnectionName}:{remoteDest}", ConsoleColor.Green);
+            }
+        }
+        catch (ExecutionException) { throw; }
+        catch (Exception ex)
+        {
+            throw new ExecutionException($"Bridged remote file operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
+        }
+    }
+
+    private async Task<ResolvedFileOperand> ResolveOperandAsync(
+        Expression? expr,
+        IExecutionContext context)
+    {
+        if (expr == null)
+            return default;
+
+        string? connName = null;
+        IDataSource? ds = null;
+
+        if (expr is IdentifierExpression id && context.Connections.TryGetValue(id.Name, out var foundDs))
+        {
+            connName = id.Name;
+            ds = foundDs;
+        }
+        else
+        {
+            var val = (await context.EvaluateValue(expr, new Row()))?.ToString() ?? "";
+            if (!string.IsNullOrEmpty(val) && context.Connections.TryGetValue(val, out var foundDs2))
+            {
+                connName = val;
+                ds = foundDs2;
+            }
+            else
+            {
+                bool isLocalDir = !string.IsNullOrEmpty(val) && Directory.Exists(context.ResolvePath(val));
+                return new ResolvedFileOperand(
+                    RawValue: val,
+                    ConnectionName: null,
+                    DataSource: null,
+                    IsConnection: false,
+                    IsRemote: false,
+                    RemoteFs: null,
+                    IsDirectory: isLocalDir,
+                    ResolvedPath: context.ResolvePath(val));
+            }
+        }
+
+        if (ds == null)
+        {
+            var rawVal = (await context.EvaluateValue(expr, new Row()))?.ToString() ?? "";
+            bool isLocalDir = !string.IsNullOrEmpty(rawVal) && Directory.Exists(context.ResolvePath(rawVal));
+            return new ResolvedFileOperand(
+                RawValue: rawVal,
+                ConnectionName: null,
+                DataSource: null,
+                IsConnection: false,
+                IsRemote: false,
+                RemoteFs: null,
+                IsDirectory: isLocalDir,
+                ResolvedPath: context.ResolvePath(rawVal));
+        }
+
+        if (!IsFileOrRemoteConnector(ds))
+        {
+            throw new ExecutionException($"Connection '{connName}' of type '{ds.ConnectorType}' does not support file operations.");
+        }
+
+        var path = ds.Path ?? "";
+        if (path.Contains('*') || path.Contains('?'))
+        {
+            throw new ExecutionException($"Wildcard patterns in connection '{connName}' are not supported for single-file operations. Use a FOREACH loop to process multiple files.");
+        }
+
+        bool isRemote = ds is IRemoteFileSystem;
+        var remoteFs = ds as IRemoteFileSystem;
+        bool isDirectory = ds.ConnectorType.Equals("DIRECTORY", StringComparison.OrdinalIgnoreCase);
+
+        string resolvedPath = isRemote ? path : context.ResolvePath(path);
+
+        return new ResolvedFileOperand(
+            RawValue: connName ?? path,
+            ConnectionName: connName,
+            DataSource: ds,
+            IsConnection: true,
+            IsRemote: isRemote,
+            RemoteFs: remoteFs,
+            IsDirectory: isDirectory,
+            ResolvedPath: resolvedPath);
+    }
+
+    private bool IsFileOrRemoteConnector(IDataSource ds)
+    {
+        if (ds is IRemoteFileSystem) return true;
+        if (KnownFileConnectorTypes.Contains(ds.ConnectorType)) return true;
+        var connector = _connectorRegistry?.GetConnector(ds.ConnectorType) ?? ConnectorRegistry.Instance?.GetConnector(ds.ConnectorType);
+        return connector?.IsFileBased == true;
+    }
+
+    private async Task UpdateConnectionPathInPlaceAsync(
+        IExecutionContext context,
+        string connectionName,
+        IDataSource existingDs,
+        string newPath)
+    {
+        var connectionType = existingDs.ConnectorType;
+        var options = new Dictionary<string, string>(
+            existingDs.Options ?? new Dictionary<string, string>(),
+            StringComparer.OrdinalIgnoreCase);
+
+        var connector = _connectorRegistry?.GetConnector(connectionType)
+            ?? ConnectorRegistry.Instance?.GetConnector(connectionType);
+
+        if (connector != null)
+        {
+            var newDs = connector.CreateDataSource(context, newPath, options);
+            await existingDs.DisposeAsync();
+            context.Connections[connectionName] = newDs;
+            _logger.Debug("Updated connection '{ConnectionName}' path to '{NewPath}'", connectionName, newPath);
+        }
+    }
+
     private static async Task<string?> ApplyDestinationNamingOptionsAsync(
         FileOperationStatement stmt,
         IExecutionContext context,
         string source,
         string? destination,
-        bool remote)
+        bool remote,
+        bool isDestinationDirectory = false)
     {
-        if (stmt.DateSuffix == null && !stmt.DestinationIsDirectory)
+        bool destIsDir = stmt.DestinationIsDirectory || isDestinationDirectory;
+        if (stmt.DateSuffix == null && !destIsDir)
             return destination;
 
         if (stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename))
@@ -390,7 +674,7 @@ public class FileOperationStatementHandler : IStatementHandler
             throw new ExecutionException($"{stmt.Type}_FILE requires a destination when using DATE_SUFFIX or TO DIRECTORY.", null, stmt.Line, stmt.Column);
 
         var finalDestination = destination;
-        if (stmt.DestinationIsDirectory)
+        if (destIsDir)
         {
             var sourceFileName = remote
                 ? GetRemoteFileName(source)

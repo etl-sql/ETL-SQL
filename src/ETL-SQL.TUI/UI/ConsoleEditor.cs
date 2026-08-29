@@ -642,6 +642,77 @@ namespace ETL_SQL.TUI.UI
             return (i >= 0 && i < list.Count) ? list[i] : null;
         }
 
+        /// <summary>Prompts for and applies the active parameter-bound control in Report Preview.</summary>
+        internal async Task ActivateReportControl()
+        {
+            var manifest = _renderer.CurrentReportManifest;
+            if (manifest is null) return;
+            var controls = ReportControlInteraction.GetControls(manifest, _renderer.ActiveReportPageIndex);
+            if (controls.Count == 0)
+            {
+                _renderer.ShowStatus("This report page has no interactive controls.");
+                return;
+            }
+
+            _renderer.ActiveReportControlIndex = Math.Clamp(
+                _renderer.ActiveReportControlIndex, 0, controls.Count - 1);
+            var control = controls[_renderer.ActiveReportControlIndex];
+            var type = control.VisualType.ToUpperInvariant();
+            var current = ReportControlInteraction.GetCurrentValue(manifest, control);
+            string? requested;
+
+            if (type == "SLICER")
+            {
+                var choices = ReportControlInteraction.GetChoices(control);
+                if (choices.Count == 0)
+                {
+                    _renderer.ShowStatus($"{control.Name} has no available choices.");
+                    return;
+                }
+                var choice = await ShowChooser($"{control.Name} — choose value", choices);
+                requested = choice < 0 ? null : choices[choice];
+            }
+            else if (type == "CHECKBOX")
+            {
+                requested = current.Equals("true", StringComparison.OrdinalIgnoreCase)
+                    || current.Equals("on", StringComparison.OrdinalIgnoreCase)
+                    || current == "1"
+                    ? "false"
+                    : "true";
+            }
+            else
+            {
+                var hint = type switch
+                {
+                    "DATEPICKER" => "YYYY-MM-DD",
+                    "RELDATEPICKER" or "REDATEPICKER" => "relative date or YYYY-MM-DD",
+                    "MULTISELECT" => "comma-separated values",
+                    "SLIDER" or "NUMBERBOX" => "numeric value",
+                    _ => "value"
+                };
+                requested = await ShowPrompt($"{control.Name} — {hint}", current);
+            }
+
+            if (requested is null) return;
+            if (!ReportControlInteraction.TryNormalizeValue(control, requested, out var normalized, out var error))
+            {
+                _renderer.ShowStatus(error ?? "Invalid report-control value.");
+                return;
+            }
+
+            try
+            {
+                var refreshed = await ReportControlInteraction.ApplyAsync(_evaluator, manifest, control, normalized);
+                _renderer.ShowStatus($"{control.Name} updated; {refreshed} dependent visual(s) refreshed.");
+                _renderer.ForceFullRepaint();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Report control '{control.Name}' could not be applied: {ex.Message}");
+                _renderer.ShowStatus($"Could not update {control.Name}: {ex.Message}");
+            }
+        }
+
         /// <summary>Opens the selected Output entry: a URL in the browser, a file in the OS file manager.</summary>
         public Task OpenSelectedOutput()
         {

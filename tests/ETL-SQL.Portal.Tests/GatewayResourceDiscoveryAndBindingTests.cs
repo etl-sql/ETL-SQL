@@ -185,6 +185,15 @@ public class GatewayResourceDiscoveryAndBindingTests : IClassFixture<PortalWebFa
         Assert.Equal(gatewayId, detail.Gateway.GatewayId);
         Assert.Equal("orders-dw", detail.Gateway.ResourceId);
 
+        // Verification is a live Gateway probe, not a no-op just because the entry has no secrets.
+        using var verifyReq = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/connections/{alias}/verify");
+        verifyReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        using var verifyResp = await _client.SendAsync(verifyReq);
+        verifyResp.EnsureSuccessStatusCode();
+        var verifyBody = await verifyResp.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal("ok", verifyBody?["status"]?.GetValue<string>());
+        Assert.Equal(0, verifyBody?["secretReferences"]?.GetValue<int>());
+
         // 8. Rejection on mismatched connector type
         var invalidAlias = "shared_invalid_" + Guid.NewGuid().ToString("N")[..6];
         using var invalidReq = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/connections/{invalidAlias}")
@@ -260,7 +269,29 @@ public class GatewayResourceDiscoveryAndBindingTests : IClassFixture<PortalWebFa
             Assert.False(resolved.Options.ContainsKey("__gateway_resource_id"));
         }
 
+        // Verification must fail once the live session disappears, even though the catalog binding
+        // and its prior verification remain stored.
         socket.Abort();
+        HttpResponseMessage? offlineVerifyResp = null;
+        var offlineDeadline = DateTime.UtcNow.AddSeconds(5); // flaky-wait-budget-ok: max polling deadline for gateway session disconnect
+        do
+        {
+            offlineVerifyResp?.Dispose();
+            using var offlineVerifyReq = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/connections/{alias}/verify");
+            offlineVerifyReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+            offlineVerifyResp = await _client.SendAsync(offlineVerifyReq);
+            if (offlineVerifyResp.StatusCode == HttpStatusCode.Conflict) break;
+            await Task.Delay(50); // flaky-delay-ok: polling retry interval for gateway session disconnect
+        } while (DateTime.UtcNow < offlineDeadline);
+
+        using (offlineVerifyResp)
+        {
+            Assert.NotNull(offlineVerifyResp);
+            Assert.Equal(HttpStatusCode.Conflict, offlineVerifyResp.StatusCode);
+            var offlineBody = await offlineVerifyResp.Content.ReadFromJsonAsync<JsonObject>(_json);
+            Assert.Equal("unresolvable", offlineBody?["status"]?.GetValue<string>());
+            Assert.Contains("offline", offlineBody?["error"]?.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private async Task<string> GetAdminTokenAsync()

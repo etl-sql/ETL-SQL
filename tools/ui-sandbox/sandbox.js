@@ -14,6 +14,8 @@ const categoryIcons = {
 };
 
 // DOM Elements
+const $sidebarCollapseBtn = document.getElementById('sidebarCollapseBtn');
+const $sidebarToggleBtn   = document.getElementById('sidebarToggleBtn');
 const $storiesNav       = document.getElementById('storiesNav');
 const $searchInput      = document.getElementById('searchInput');
 const $searchClearBtn   = document.getElementById('searchClearBtn');
@@ -41,9 +43,16 @@ let searchQuery = '';
 let activeCategoryFilter = 'all';
 let collapsedCategories = new Set();
 let stageTheme = 'light'; // 'light' or 'dark'
+let isSidebarCollapsed = false;
 
 // Parse URL Hash on initial load
 function parseUrlHash() {
+  try {
+    if (localStorage.getItem('etlsql_sandbox_sidebar_collapsed') === 'true') {
+      isSidebarCollapsed = true;
+    }
+  } catch { /* ignore */ }
+
   const hash = window.location.hash.replace(/^#/, '');
   if (!hash) return;
   const params = new URLSearchParams(hash);
@@ -52,6 +61,7 @@ function parseUrlHash() {
   const theme = params.get('theme');
   const q = params.get('q');
   const cat = params.get('filter');
+  const sidebar = params.get('sidebar');
 
   if (storyId) {
     const found = stories.find((s) => s.id === storyId);
@@ -59,6 +69,11 @@ function parseUrlHash() {
   }
   if (fix) currentFixtureId = fix;
   if (theme === 'dark' || theme === 'light') stageTheme = theme;
+  if (sidebar === 'collapsed' || sidebar === '0') {
+    isSidebarCollapsed = true;
+  } else if (sidebar === 'expanded' || sidebar === '1') {
+    isSidebarCollapsed = false;
+  }
   if (q) {
     searchQuery = q;
     $searchInput.value = q;
@@ -78,6 +93,7 @@ function syncUrlHash() {
   if (currentStory) params.set('story', currentStory.id);
   if ($fixtureSel.value) params.set('fixture', $fixtureSel.value);
   if (stageTheme !== 'light') params.set('theme', stageTheme);
+  if (isSidebarCollapsed) params.set('sidebar', 'collapsed');
   if (searchQuery) params.set('q', searchQuery);
   if (activeCategoryFilter !== 'all') params.set('filter', activeCategoryFilter);
 
@@ -85,6 +101,21 @@ function syncUrlHash() {
   if (window.location.hash !== newHash) {
     window.history.replaceState(null, '', newHash);
   }
+}
+
+function setSidebarCollapsed(collapsed) {
+  isSidebarCollapsed = Boolean(collapsed);
+  document.body.classList.toggle('sidebar-collapsed', isSidebarCollapsed);
+  if ($sidebarToggleBtn) {
+    $sidebarToggleBtn.setAttribute('aria-expanded', String(!isSidebarCollapsed));
+    $sidebarToggleBtn.title = isSidebarCollapsed ? 'Expand sidebar (Ctrl+B or [)' : 'Collapse sidebar (Ctrl+B or [)';
+  }
+  try {
+    localStorage.setItem('etlsql_sandbox_sidebar_collapsed', String(isSidebarCollapsed));
+  } catch { /* ignore */ }
+  syncUrlHash();
+  window.dispatchEvent(new Event('resize'));
+  try { currentInstance?.resize?.(); } catch { /* ignore */ }
 }
 
 // Group stories by ordered category
@@ -371,13 +402,26 @@ function copyDeepLink() {
   });
 }
 
-// Keyboard navigation (Arrow keys, Focus shortcut)
+// Keyboard navigation (Arrow keys, Focus shortcut, Sidebar toggle)
 window.addEventListener('keydown', (e) => {
   // Focus search box with '/' or 'Ctrl+K'
   if ((e.key === '/' || (e.key === 'k' && (e.ctrlKey || e.metaKey))) && document.activeElement !== $searchInput) {
     e.preventDefault();
+    if (isSidebarCollapsed) {
+      setSidebarCollapsed(false);
+    }
     $searchInput.focus();
     $searchInput.select();
+    return;
+  }
+
+  // Toggle sidebar with 'Ctrl+B', 'Cmd+B', or '[' when not typing in inputs
+  if (
+    ((e.key === 'b' || e.key === 'B') && (e.ctrlKey || e.metaKey)) ||
+    (e.key === '[' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.matches('input, select, textarea, [contenteditable]'))
+  ) {
+    e.preventDefault();
+    setSidebarCollapsed(!isSidebarCollapsed);
     return;
   }
 
@@ -459,6 +503,15 @@ $collapseAllBtn.addEventListener('click', () => {
   renderSidebar();
 });
 
+// Sidebar collapse buttons
+$sidebarCollapseBtn?.addEventListener('click', () => {
+  setSidebarCollapsed(true);
+});
+
+$sidebarToggleBtn?.addEventListener('click', () => {
+  setSidebarCollapsed(!isSidebarCollapsed);
+});
+
 // Action buttons
 $fixtureSel.addEventListener('change', () => {
   currentFixtureId = $fixtureSel.value;
@@ -477,4 +530,5 @@ window.addEventListener('resize', () => currentInstance?.resize?.());
 // Initialize
 parseUrlHash();
 applyTheme(stageTheme);
+setSidebarCollapsed(isSidebarCollapsed);
 selectStory();

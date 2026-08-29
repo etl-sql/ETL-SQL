@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using DesignerQueryFilterService = ETL_SQL.Reporting.Authoring.DesignerQueryFilterService;
 
 namespace ETL_SQL.Portal.Controllers;
 
@@ -37,6 +38,7 @@ public class DesignerController : ControllerBase
     private readonly IMetadataManager? _metadata;
     private readonly DesignerSnapshotService? _snapshots;
     private readonly ScriptDagProjectionService _scriptDag;
+    private readonly DesignerQueryFilterService _queryFilters = new();
 
     public DesignerController(
         PortalDesignerSchemaService? schemaService = null,
@@ -696,6 +698,43 @@ public class DesignerController : ControllerBase
         }
     }
 
+    // ── POST /api/designer/query-filter ───────────────────────────────────────
+
+    [HttpPost("query-filter")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult ApplyQueryFilters([FromBody] ApplyDesignerQueryFiltersRequest req)
+    {
+        if (ValidateTextLimit(req.Source, "query source", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        try
+        {
+            return Ok(new ApplyDesignerQueryFiltersResponse(_queryFilters.Apply(req.Source, req.Filters, req.AsVisualSource)));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("option-source")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult BuildOptionSource([FromBody] BuildDesignerOptionSourceRequest req)
+    {
+        if (ValidateTextLimit(req.Source, "option source", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        try
+        {
+            return Ok(new ApplyDesignerQueryFiltersResponse(
+                _queryFilters.BuildCategoricalOptionSource(req.Source, req.Column)));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     private static IReadOnlyList<string> SplitLines(string text) =>
         text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
@@ -725,7 +764,8 @@ public class DesignerController : ControllerBase
         var pageCount = state.Pages?.Count ?? 0;
         var visualCount = state.Pages?.Sum(p => p.Visuals?.Count ?? 0) ?? 0;
         var datasetCount = state.Datasets?.Count ?? 0;
-        if (pageCount + visualCount + datasetCount > MaxGeneratedItems)
+        var parameterCount = state.Parameters?.Count ?? 0;
+        if (pageCount + visualCount + datasetCount + parameterCount > MaxGeneratedItems)
         {
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { error = $"Designer state exceeds the {MaxGeneratedItems} generated item limit." });

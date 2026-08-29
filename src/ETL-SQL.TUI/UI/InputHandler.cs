@@ -562,7 +562,7 @@ namespace ETL_SQL.TUI.UI
 
             if (_renderer.ReportVisible)
             {
-                HandleReportKey(key);
+                await HandleReportKey(key);
                 return;
             }
 
@@ -1025,7 +1025,7 @@ namespace ETL_SQL.TUI.UI
                 _renderer.PromptSuggestions.Clear();
             }
         }
-        private void HandleReportKey(ConsoleKeyInfo key)
+        private async Task HandleReportKey(ConsoleKeyInfo key)
         {
             if (key.Key == ConsoleKey.Escape)
             {
@@ -1043,6 +1043,7 @@ namespace ETL_SQL.TUI.UI
             {
                 _renderer.ActiveReportPageIndex = Math.Max(0, _renderer.ActiveReportPageIndex - 1);
                 _renderer.ReportScrollRow = 0;
+                _renderer.ActiveReportControlIndex = 0;
                 _renderer.ForceFullRepaint();
                 return;
             }
@@ -1050,6 +1051,7 @@ namespace ETL_SQL.TUI.UI
             {
                 _renderer.ActiveReportPageIndex = Math.Min(manifest.Pages.Count - 1, _renderer.ActiveReportPageIndex + 1);
                 _renderer.ReportScrollRow = 0;
+                _renderer.ActiveReportControlIndex = 0;
                 _renderer.ForceFullRepaint();
                 return;
             }
@@ -1057,6 +1059,22 @@ namespace ETL_SQL.TUI.UI
             // Left / Right arrows switch pages.
             if (key.Key == ConsoleKey.LeftArrow) { _renderer.ReportPrevPage(); return; }
             if (key.Key == ConsoleKey.RightArrow) { _renderer.ReportNextPage(); return; }
+
+            var controls = ReportControlInteraction.GetControls(manifest, _renderer.ActiveReportPageIndex);
+            if (key.Key == ConsoleKey.Tab && controls.Count > 0)
+            {
+                var delta = key.Modifiers.HasFlag(ConsoleModifiers.Shift) ? -1 : 1;
+                _renderer.ActiveReportControlIndex =
+                    (_renderer.ActiveReportControlIndex + delta + controls.Count) % controls.Count;
+                _renderer.ShowStatus($"Report control: {controls[_renderer.ActiveReportControlIndex].Name} (Enter to change)");
+                _renderer.ForceFullRepaint();
+                return;
+            }
+            if (key.Key == ConsoleKey.Enter && controls.Count > 0)
+            {
+                await _editor.ActivateReportControl();
+                return;
+            }
 
             // Scrolling (Arrows / PgUp / PgDn)
             if (key.Key == ConsoleKey.UpArrow) { _renderer.ReportScrollRow = Math.Max(0, _renderer.ReportScrollRow - 1); }
@@ -1072,6 +1090,7 @@ namespace ETL_SQL.TUI.UI
                 {
                     _renderer.ActiveReportPageIndex = index;
                     _renderer.ReportScrollRow = 0;
+                    _renderer.ActiveReportControlIndex = 0;
                     _renderer.ForceFullRepaint();
                 }
             }

@@ -3,9 +3,11 @@ using ETL_SQL.Analysis.Diagnostics;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Portal.Controllers;
 using ETL_SQL.Portal.Models;
+using ETL_SQL.Reporting.Authoring;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
@@ -15,6 +17,21 @@ namespace ETL_SQL.Portal.Tests;
 
 public class DesignerControllerTests
 {
+    [Fact]
+    public void ApplyQueryFilters_ReturnsParserValidatedVisualSource()
+    {
+        var controller = new DesignerController();
+
+        var result = Assert.IsType<OkObjectResult>(controller.ApplyQueryFilters(
+            new ApplyDesignerQueryFiltersRequest(
+                "#sales",
+                [new DesignerQueryFilter("region", "Region", "categorical", ["North"])])));
+        var response = Assert.IsType<ApplyDesignerQueryFiltersResponse>(result.Value);
+
+        Assert.Contains("Region = 'North'", response.Source, StringComparison.Ordinal);
+        Assert.StartsWith("(SELECT * FROM #sales", response.Source, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Parse_RejectsScriptOverLimit()
     {
@@ -115,6 +132,56 @@ public class DesignerControllerTests
         Assert.Contains("SOURCE = &sales", response.Script);
         Assert.DoesNotContain("CREATE DATASET #", response.Script);
         Assert.DoesNotContain("SOURCE = #", response.Script);
+    }
+
+    [Fact]
+    public async Task GenerateAndParse_RoundTripsSlicerParameterAndAction()
+    {
+        var controller = new DesignerController();
+        var state = new DesignerStateDto(
+            [
+                new DesignerPageDto("p1", "Main", "Dashboard",
+                [
+                    new DesignerVisualDto(
+                        "v1", "RegionSlicer", "SLICER", 1, 1, 3, 3, null, "&regions",
+                        new Dictionary<string, string> { ["VALUE"] = "Region" },
+                        new Dictionary<string, string>
+                        {
+                            ["TITLE"] = "Region",
+                            ["action:ON_CHANGE"] = "SET_PARAMETER(@selected_region, value)"
+                        })
+                ])
+            ],
+            [new DesignerDatasetDto("ds1", "&regions", "SELECT DISTINCT Region FROM #sales")],
+            Parameters:
+            [
+                new DesignerParameterDto("@selected_region", "VARCHAR", "'All'", IsInput: true)
+            ]);
+
+        var generatedResult = Assert.IsType<OkObjectResult>(controller.Generate(new GenerateDesignerRequest(state)));
+        var generated = Assert.IsType<GenerateDesignerResponse>(generatedResult.Value);
+        Assert.Contains("DECLARE @selected_region VARCHAR = 'All' INPUT;", generated.Script, StringComparison.Ordinal);
+        Assert.Contains("ACTIONS (ON_CHANGE = SET_PARAMETER(@selected_region, value))", generated.Script, StringComparison.Ordinal);
+
+        var parsedResult = Assert.IsType<OkObjectResult>(controller.Parse(new ParseDesignerRequest(generated.Script)));
+        var parsed = Assert.IsType<ParseDesignerResponse>(parsedResult.Value);
+        Assert.Null(parsed.Error);
+        var parameter = Assert.Single(parsed.DesignState.Parameters!);
+        Assert.Equal("@selected_region", parameter.Name);
+        Assert.Equal("'All'", parameter.InitialValue);
+        Assert.True(parameter.IsInput);
+        var slicer = Assert.Single(parsed.DesignState.Pages[0].Visuals);
+        Assert.Equal("Region", slicer.Mappings["VALUE"]);
+        Assert.Equal("SET_PARAMETER(@selected_region, value)", slicer.Options["action:ON_CHANGE"]);
+
+        var formatted = SqlFormatter.Format(generated.Script);
+        var formattedAst = new CoreParser(new Lexer(formatted).Tokenize(), formatted).Parse();
+        Assert.DoesNotContain(formattedAst.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
+        var analyzedResult = Assert.IsType<OkObjectResult>(
+            await controller.Analyze(new AnalyzeDesignerRequest(generated.Script, DocumentUri: "slicer.rptsql")));
+        var analyzed = Assert.IsType<AnalyzeDesignerResponse>(analyzedResult.Value);
+        Assert.DoesNotContain(analyzed.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
     [Fact]

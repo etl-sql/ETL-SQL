@@ -225,8 +225,40 @@ export default {
     { id: 'mssql-trusted',  label: 'SQL Server (Windows / Integrated Auth)' },
     { id: 'csv-standard',    label: 'CSV / FlatFile (Standard Path & Delimiter)' },
     { id: 'csv-advanced',    label: 'CSV / FlatFile (TSV, Skip Header Rows)' },
+    { id: 'gateway-resources', label: 'Canonical Gateway Resource Binding' },
   ],
   async mount(stage, fixtureId, ctx) {
+    if (fixtureId === 'gateway-resources') {
+      const { createConnectionWizard } = await import('/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/connection-wizard.js');
+      let fetchCount = 0;
+      const wizard = createConnectionWizard({
+        host: stage,
+        mode: 'admin',
+        schemas: [
+          {
+            connectorType: 'MSSQL', description: 'Microsoft SQL Server', isFileBased: false,
+            options: [
+              { name: 'SERVER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'sql.test' },
+              { name: 'DATABASE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'warehouse' }
+            ]
+          },
+          { connectorType: 'MOCKDB', description: 'Generated test data', isFileBased: false, options: [] }
+        ],
+        gateways: [{ id: 'corp-gw', name: 'corp-gw', status: 'Online', region: 'On-Premises' }],
+        fetchGatewayResources: async () => {
+          fetchCount++;
+          ctx.stat(`Gateway resource discovery request ${fetchCount}`);
+          return [{
+            resourceId: 'finance-dw', connectorType: 'MSSQL', allowedOperations: 'Read, Write',
+            state: 'Approved', isOnline: true, lastSeenUtc: '2026-08-27T12:00:00Z'
+          }];
+        },
+        onSave: async entry => ctx.stat(`Saved ${entry.alias} → ${entry.gateway?.resourceId || 'direct'}`)
+      });
+      ctx.stat('Canonical Gateway resource controls mounted');
+      return { dispose() { wizard.close(); } };
+    }
+
     const initial = FIXTURES[fixtureId] || FIXTURES['mssql-standard'];
     const state = JSON.parse(JSON.stringify(initial));
     state.isSharedRef = false;

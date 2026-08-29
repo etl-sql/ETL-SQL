@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Threading.Tasks;
@@ -10,18 +11,19 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
+
 /// <summary>
 /// Handles directory-related operations such as CREATE, DELETE, MOVE, RENAME, COPY, DELETE_CONTENTS, COMPRESS, and DECOMPRESS.
 /// </summary>
-public class DirectoryOperationStatementHandler : IStatementHandler
+public class DirectoryOperationStatementHandler(
+    ILogger logger,
+    IConnectorRegistry? connectorRegistry = null) : IStatementHandler
 {
-    private readonly ILogger _logger;
+    private readonly ILogger _logger = logger;
+    private readonly IConnectorRegistry? _connectorRegistry = connectorRegistry;
     public Type SupportedStatementType => typeof(DirectoryOperationStatement);
 
-    public DirectoryOperationStatementHandler(ILogger logger)
-    {
-        _logger = logger;
-    }
+    public DirectoryOperationStatementHandler(ILogger logger) : this(logger, null) { }
 
     /// <summary>Executes the directory operation, resolving paths and performing filesystem actions.</summary>
     public async Task Execute(Statement statement, IExecutionContext context)
@@ -71,10 +73,42 @@ public class DirectoryOperationStatementHandler : IStatementHandler
             return;
         }
 
-        string pathVal = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
+        string? sourceConnectionName = null;
+        IDataSource? sourceDs = null;
+        if (stmt.Path is IdentifierExpression pathId && context.Connections.TryGetValue(pathId.Name, out var foundPathDs))
+        {
+            sourceConnectionName = pathId.Name;
+            sourceDs = foundPathDs;
+        }
+        else
+        {
+            var pVal = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
+            if (!string.IsNullOrEmpty(pVal) && context.Connections.TryGetValue(pVal, out var foundPathDs2))
+            {
+                sourceConnectionName = pVal;
+                sourceDs = foundPathDs2;
+            }
+        }
+
+        string pathVal = sourceDs != null ? sourceDs.Path : ((await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "");
         string path = context.ResolvePath(pathVal);
 
-        string? destVal = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "" : null;
+        string? destVal = null;
+        if (stmt.Destination != null)
+        {
+            if (stmt.Destination is IdentifierExpression destId && context.Connections.TryGetValue(destId.Name, out var foundDestDs))
+            {
+                destVal = foundDestDs.Path;
+            }
+            else
+            {
+                var dVal = (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString();
+                if (!string.IsNullOrEmpty(dVal) && context.Connections.TryGetValue(dVal, out var foundDestDs2))
+                    destVal = foundDestDs2.Path;
+                else
+                    destVal = dVal ?? "";
+            }
+        }
         string? dest = destVal != null ? context.ResolvePath(destVal) : null;
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
         var sourceAccess = stmt.Type is DirectoryOpType.Delete or DirectoryOpType.DeleteContents
@@ -183,6 +217,11 @@ public class DirectoryOperationStatementHandler : IStatementHandler
                         pathAuthorizer.MoveValidatedDirectory(context, moveSource, moveDest, overwrite);
                         path = moveSource.CanonicalPath;
                         dest = moveDest.CanonicalPath;
+
+                        if (sourceConnectionName != null && sourceDs != null && dest != null)
+                        {
+                            await UpdateConnectionPathInPlaceAsync(context, sourceConnectionName, sourceDs, dest);
+                        }
                     }
                     break;
                 case DirectoryOpType.Copy:
@@ -280,5 +319,28 @@ public class DirectoryOperationStatementHandler : IStatementHandler
             throw new ExecutionException($"Directory operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
         }
         await Task.CompletedTask;
+    }
+
+    private async Task UpdateConnectionPathInPlaceAsync(
+        IExecutionContext context,
+        string connectionName,
+        IDataSource existingDs,
+        string newPath)
+    {
+        var connectionType = existingDs.ConnectorType;
+        var options = new Dictionary<string, string>(
+            existingDs.Options ?? new Dictionary<string, string>(),
+            StringComparer.OrdinalIgnoreCase);
+
+        var connector = _connectorRegistry?.GetConnector(connectionType)
+            ?? ConnectorRegistry.Instance?.GetConnector(connectionType);
+
+        if (connector != null)
+        {
+            var newDs = connector.CreateDataSource(context, newPath, options);
+            await existingDs.DisposeAsync();
+            context.Connections[connectionName] = newDs;
+            _logger.Debug("Updated directory connection '{ConnectionName}' path to '{NewPath}'", connectionName, newPath);
+        }
     }
 }

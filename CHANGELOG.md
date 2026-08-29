@@ -12,6 +12,40 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Routed Studio visual creation, duplication, deletion, property edits, mapping edits, and slicer
+  promotion through the canonical parser and surgical patcher. The shared authoring contract now
+  round-trips report parameters, and promoted slicers emit real parameter/action bindings without
+  rewriting hand-authored queries, CTEs, comments, or formatting.
+
+- Connected Portal Studio Home to the real permission-filtered report and folder catalog. Creating,
+  opening, saving, and closing now carry catalog identity, optimistic version, source revision,
+  deployment capabilities, source-control state, and renewable edit leases. Studio releases leases
+  only on actual close or page teardown, blocks saves without an active lease, and keeps untouched
+  documents clean when switching tabs. Snapshots, filters, selected sources, field metadata, preview
+  caches, diagnostics/run ownership, and result panes are now document-scoped. Production browser
+  coverage proves catalog creation/open, lease acquire/release, and cross-tab state restoration.
+
+- Fixed the two Studio save integrity blockers. Portal Studio now opens real versioned catalog
+  reports, saves with report identity, source revision, and optimistic concurrency, preserves dirty
+  state after failures, and blocks close after a failed save. Studio secret handling no longer puts
+  plaintext values in modal markup or emits Base64 disguised as encryption; it now uses the same
+  PBKDF2 + AES-GCM `ENC:` envelope as the Connection Wizard and engine. Production-host browser
+  journeys prove exact save/reload persistence, stale-writer conflicts, close protection, hidden
+  plaintext, and engine-compatible decryption.
+
+- Completed the connection-catalog bug backlog: Gateway-bound verification now probes live approved
+  resources, the connection wizard can refresh and clear Gateway bindings and groups MOCKDB under
+  Test Data, and TUI report controls update parameters and refresh dependent visuals.
+
+- Refined ETL-SQL Studio report authoring around one left workspace. The embedded designer no longer
+  duplicates the visual library or property dock; the activity sidebar now owns the report tree,
+  searchable visual catalog, guided source/table picker, draggable typed fields, and an honest empty
+  filter lane. Split view adds local Format, Run selected, and Run all controls, while the first save
+  of an untitled script now asks for its file name and folder. Visual creation is gated on a reusable
+  source sample, filters update that preview sample, chart fields can be clicked or dragged into the
+  complete property editor, card titles are editable in place, and duplicate/remove actions use
+  precisely centered SVG controls.
+
 - Certified Verified Viewer Context for SQL Server Gateway resources. SQL Server preserves the
   configured service login, installs signed viewer values through parameterized `SESSION_CONTEXT`,
   prohibits claim-driven role selection, and clears or evicts pooled sessions after success,

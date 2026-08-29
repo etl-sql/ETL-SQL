@@ -407,13 +407,25 @@ public sealed class PortalConnectionCatalogService(
     public async Task DeleteAsync(string alias, CancellationToken cancellationToken = default)
         => db.PortalSharedConnections.Remove(await Require(alias, cancellationToken));
 
-    /// <summary>Resolves every SECRET: reference in the entry to prove it is usable; values are discarded.</summary>
+    /// <summary>
+    /// Resolves every SECRET: reference in a direct entry, or verifies that a Gateway-bound entry
+    /// still has a live session and an approved, usable published resource. Secret values and
+    /// Gateway physical targets never leave their owning boundary.
+    /// </summary>
     public async Task<int> VerifySecretReferencesAsync(
         string alias,
         ISecretProvider secrets,
         CancellationToken cancellationToken = default)
     {
         var entity = await Require(alias, cancellationToken);
+        var (_, gateway) = DeserializeOptionsAndGateway(entity);
+        if (gateway is not null)
+        {
+            VerifyLiveGatewayBinding(entity, gateway);
+            entity.LastVerifiedAtUtc = DateTime.UtcNow;
+            return 0;
+        }
+
         var references = DeserializeOptions(entity).Values
             .Concat(string.IsNullOrEmpty(entity.Target) ? [] : entity.Target.Split(';'))
             .Select(value => value.Trim().Trim('\'', '"'))
@@ -428,6 +440,33 @@ public sealed class PortalConnectionCatalogService(
 
         entity.LastVerifiedAtUtc = DateTime.UtcNow;
         return references.Count;
+    }
+
+    private void VerifyLiveGatewayBinding(PortalSharedConnection entity, GatewayResourceBinding gateway)
+    {
+        if (gatewayRegistry is null)
+            throw new InvalidOperationException("Gateway session verification is unavailable on this host.");
+
+        gatewayRegistry.TryGet(GatewayTenantScope, gateway.GatewayId, out var session);
+        if (session is null || !session.IsActive)
+            throw new InvalidOperationException($"Gateway '{gateway.GatewayId}' is offline or disconnected.");
+        if (!string.Equals(session.TenantId, GatewayTenantScope, StringComparison.Ordinal))
+            throw new InvalidOperationException("Gateway session tenant mismatch.");
+
+        var resource = session.PublishedResources.FirstOrDefault(candidate =>
+            string.Equals(candidate.ResourceId, gateway.ResourceId, StringComparison.OrdinalIgnoreCase));
+        if (resource is null)
+            throw new InvalidOperationException(
+                $"Gateway '{gateway.GatewayId}' does not publish resource '{gateway.ResourceId}'.");
+        if (resource.State != GatewayResourceState.Approved)
+            throw new InvalidOperationException(
+                $"Resource '{gateway.ResourceId}' on Gateway '{gateway.GatewayId}' is not approved.");
+        if (!string.Equals(resource.ConnectorType, entity.ConnectorType, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Connector type mismatch: resource '{gateway.ResourceId}' is '{resource.ConnectorType}', but the connection specifies '{entity.ConnectorType}'.");
+        if (resource.AllowedOperations == GatewayOperationClass.None)
+            throw new InvalidOperationException(
+                $"Resource '{gateway.ResourceId}' does not permit any operations.");
     }
 
     private async Task<PortalSharedConnection> Require(string alias, CancellationToken cancellationToken)

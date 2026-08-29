@@ -1,8 +1,11 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Renderers;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
@@ -28,6 +31,19 @@ namespace ETL_SQL.Tests.Reporting
                     v.Options[k] = val;
             v.Styles = styles;
             return v;
+        }
+
+        private static string RenderToText(IRenderable renderable)
+        {
+            using var writer = new StringWriter();
+            var console = AnsiConsole.Create(new AnsiConsoleSettings
+            {
+                Ansi = AnsiSupport.No,
+                ColorSystem = ColorSystemSupport.NoColors,
+                Out = new AnsiConsoleOutput(writer)
+            });
+            console.Write(renderable);
+            return writer.ToString();
         }
 
         // ── RenderPage ────────────────────────────────────────────────────────
@@ -432,6 +448,19 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("Sl2", "SLIDER", new[] { "Val" }, new[] { new[] { "50" } });
             Assert.NotNull(TerminalRenderer.RenderVisual(v));
+        }
+
+        [Fact]
+        public void RenderVisual_DatePickerWithoutRows_RendersAsSupportedControl()
+        {
+            var v = V("AsOf", "DATEPICKER", Array.Empty<string>());
+            v.DefaultValue = "2026-08-20";
+
+            var rendered = TerminalRenderer.RenderVisual(v);
+            var text = RenderToText(rendered);
+
+            Assert.Contains("2026-08-20", text);
+            Assert.DoesNotContain("not currently supported", text, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

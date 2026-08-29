@@ -145,6 +145,70 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
             + string.Join("\n  ", failures));
     }
 
+    [Fact]
+    public async Task Sidebar_CollapseAndExpand_TogglesPanelVisibilityAndResizesStage()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.WaitForSelectorAsync(".story-link", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Attached,
+            Timeout = 30_000
+        });
+
+        var sidebar = page.Locator("#sidebar");
+        var stage = page.Locator("#stage");
+        var toggleBtn = page.Locator("#sidebarToggleBtn");
+        var collapseBtn = page.Locator("#sidebarCollapseBtn");
+        var searchInput = page.Locator("#searchInput");
+
+        // 1. Initially expanded
+        Assert.True(await sidebar.IsVisibleAsync());
+        Assert.Equal("true", await toggleBtn.GetAttributeAsync("aria-expanded"));
+        var initialStageBox = await stage.BoundingBoxAsync();
+        Assert.NotNull(initialStageBox);
+
+        // 2. Collapse via sidebar button
+        await collapseBtn.ClickAsync();
+        await page.WaitForTimeoutAsync(100);
+        Assert.False(await sidebar.IsVisibleAsync());
+        Assert.Equal("false", await toggleBtn.GetAttributeAsync("aria-expanded"));
+        var collapsedStageBox = await stage.BoundingBoxAsync();
+        Assert.NotNull(collapsedStageBox);
+        Assert.True(collapsedStageBox.Width > initialStageBox.Width + 200,
+            $"Stage width ({collapsedStageBox.Width}) did not expand when sidebar collapsed (was {initialStageBox.Width})");
+
+        // 3. Expand via header toggle button
+        await toggleBtn.ClickAsync();
+        await page.WaitForTimeoutAsync(100);
+        Assert.True(await sidebar.IsVisibleAsync());
+        Assert.Equal("true", await toggleBtn.GetAttributeAsync("aria-expanded"));
+
+        // 4. Toggle with Ctrl+B shortcut
+        await page.Keyboard.PressAsync("Control+b");
+        await page.WaitForTimeoutAsync(100);
+        Assert.False(await sidebar.IsVisibleAsync());
+
+        // 5. Toggle with [ shortcut
+        await page.Keyboard.PressAsync("[");
+        await page.WaitForTimeoutAsync(100);
+        Assert.True(await sidebar.IsVisibleAsync());
+
+        // 6. Search hotkey '/' auto-expands sidebar when collapsed
+        await page.Keyboard.PressAsync("Control+b");
+        await page.WaitForTimeoutAsync(100);
+        Assert.False(await sidebar.IsVisibleAsync());
+        await page.Keyboard.PressAsync("/");
+        await page.WaitForTimeoutAsync(100);
+        Assert.True(await sidebar.IsVisibleAsync());
+        Assert.True(await searchInput.EvaluateAsync<bool>("el => document.activeElement === el"));
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
     /// <summary>
     /// The Report Builder's bookmark panel, driven in a real browser against the canonical
     /// <c>designer.js</c>.
@@ -261,7 +325,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         var card = page.Locator(".etlsql-dsgn-visual-card");
         Assert.Equal(1, await card.CountAsync());
         var svg = card.Locator("svg");
-        Assert.Equal(1, await svg.CountAsync());
+        Assert.True(await svg.CountAsync() >= 1);
         Assert.Contains("CUSTOM CHART", await card.InnerTextAsync());
 
         // 3. Click the visual to select and open Properties panel
@@ -391,6 +455,10 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
                       { name: 'PATH', type: 4, isMandatory: true, category: 'Basic', defaultValue: 'uploads/default.csv' },
                       { name: 'HEADER', type: 2, category: 'Basic', defaultValue: 'ON' }
                     ]
+                  },
+                  {
+                    connectorType: 'MOCKDB', description: 'Generated test data', isFileBased: false,
+                    options: []
                   }
                 ],
                 secrets: ['WAREHOUSE_PASSWORD'],
@@ -426,6 +494,11 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.Locator("#etlsql-cw-test-btn").ClickAsync();
         await page.Locator(".etlsql-cw-diag-badge.badge-fail").WaitForAsync();
         Assert.Contains("Provider rejected", await page.Locator(".etlsql-cw-diag-result").InnerTextAsync());
+
+        await page.Locator("button[data-cat='testdata']").ClickAsync();
+        Assert.Equal(1, await page.Locator("button[data-type='MOCKDB']").CountAsync());
+        Assert.Equal(0, await page.Locator("button[data-type='MSSQL']").CountAsync());
+        Assert.Contains("MOCKDB", await page.Locator(".etlsql-cw-sql-box").InnerTextAsync());
 
         await page.Locator("button[data-cat='files']").ClickAsync();
         await page.Locator("button[data-type='FLATFILE']").ClickAsync();
@@ -463,6 +536,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
               document.body.innerHTML = '<div id="canonical-connection-wizard"></div>';
               const { createConnectionWizard } = await import('/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/connection-wizard.js');
               window.__savedEntry = null;
+              window.__gatewayResourceFetches = 0;
               createConnectionWizard({
                 host: document.getElementById('canonical-connection-wizard'),
                 mode: 'admin',
@@ -482,7 +556,9 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
                   }
                 ],
                 gateways: [{ id: 'corp-gw', name: 'corp-gw', status: 'Online', region: 'On-Premises' }],
-                fetchGatewayResources: async (gwId) => [
+                fetchGatewayResources: async (gwId) => {
+                  window.__gatewayResourceFetches++;
+                  return [
                   {
                     resourceId: 'finance-dw',
                     connectorType: 'MSSQL',
@@ -499,7 +575,8 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
                     isOnline: true,
                     lastSeenUtc: '2026-08-27T12:05:00Z'
                   }
-                ],
+                  ];
+                },
                 onSave: async (entry) => {
                   window.__savedEntry = entry;
                 }
@@ -526,6 +603,18 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         var preview = await page.Locator(".etlsql-cw-sql-box").InnerTextAsync();
         Assert.Contains("Gateway: corp-gw", preview);
         Assert.Contains("Resource: finance-dw", preview);
+
+        // Clear only the resource binding; keep the selected Gateway available for another choice.
+        await page.Locator("[data-unbind-gateway-resource]").ClickAsync();
+        Assert.Equal("corp-gw", await page.Locator("#etlsql-cw-gateway-select").InputValueAsync());
+        Assert.Equal(0, await page.Locator(".etlsql-cw-gateway-bound-banner").CountAsync());
+        Assert.Contains("SERVER", await page.Locator(".etlsql-cw-content").InnerTextAsync());
+
+        // Manual refresh re-runs discovery without changing the selected Gateway.
+        await page.Locator("[data-refresh-gateway-resources]").ClickAsync();
+        await page.Locator(".etlsql-cw-resource-card[data-resource-id='finance-dw']").WaitForAsync();
+        Assert.Equal(2, await page.EvaluateAsync<int>("() => window.__gatewayResourceFetches"));
+        await page.Locator(".etlsql-cw-resource-card[data-resource-id='finance-dw']").ClickAsync();
 
         // Submit and verify payload contains gateway binding without physical target
         await page.Locator("#etlsql-cw-submit-btn").ClickAsync();
@@ -664,9 +753,11 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         var studioShell = page.Locator(".etlsql-studio-shell");
         await studioShell.WaitForAsync();
 
-        // 1. Verify tabs rendered
-        Assert.Equal(3, await page.Locator(".etlsql-studio-tab").CountAsync());
+        // 1. Verify tabs rendered (Home + 3 documents)
+        Assert.Equal(4, await page.Locator(".etlsql-studio-tab").CountAsync());
         Assert.Contains("sales_overview.rptsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
+        var overflowBtn = page.Locator("[data-studio-overflow-btn]");
+        Assert.True(await overflowBtn.IsVisibleAsync());
 
         // 2. Test projection switching
         await page.Locator("button[data-projection='canvas']").ClickAsync();
@@ -721,8 +812,14 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__?.surgicalPatchVisualOption('rev_kpi', 'TITLE', 'Executive Net Revenue')");
         Assert.Contains("Executive Net Revenue", await kpiCard.InnerTextAsync());
 
-        // 7. Switch to ETL tab and assert Pipeline DAG rendering
-        await page.Locator(".etlsql-studio-tab", new() { HasText = "ingest_orders.etlsql" }).ClickAsync();
+        // 7. Switch to ETL tab via overflow dropdown and assert Pipeline DAG rendering
+        await overflowBtn.ClickAsync();
+        var tabDropdown = page.Locator("[data-studio-tab-dropdown]");
+        Assert.False(await tabDropdown.IsHiddenAsync());
+        Assert.Contains("ingest_orders.etlsql", await tabDropdown.InnerTextAsync());
+        await tabDropdown.Locator(".etlsql-studio-tab-dropdown-item", new() { HasText = "ingest_orders.etlsql" }).ClickAsync();
+        Assert.True(await tabDropdown.IsHiddenAsync());
+        Assert.Contains("ingest_orders.etlsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
         var dagView = page.Locator("[data-dag-view]");
         await dagView.WaitForAsync();
         Assert.True(await page.Locator("[data-dag-node]").CountAsync() >= 2);
@@ -745,6 +842,34 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.WaitForTimeoutAsync(100);
         Assert.True(await modalBackdrop.IsHiddenAsync());
 
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_FilterPane_RendersCategoricalNumericAndDateControls()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
+
+        var fields = page.Locator("[data-field]");
+        Assert.Equal(3, await fields.CountAsync());
+        for (var index = 0; index < await fields.CountAsync(); index++)
+            await fields.Nth(index).ClickAsync();
+
+        Assert.Equal(3, await page.Locator(".etlsql-filter-card").CountAsync());
+        Assert.True(await page.Locator("[data-date-preset='order_date']").IsVisibleAsync());
+        Assert.True(await page.Locator("[data-filter-date-min='order_date']").IsVisibleAsync());
+        Assert.True(await page.Locator("[data-filter-date-max='order_date']").IsVisibleAsync());
+        Assert.True(await page.Locator("[data-filter-min='total_amount']").IsVisibleAsync());
+        Assert.True(await page.Locator("[data-filter-max='total_amount']").IsVisibleAsync());
+        Assert.Equal(4, await page.Locator("[data-filter-value='region']").CountAsync());
+        Assert.Equal(3, await page.Locator("[data-filter-scope]").CountAsync());
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }

@@ -1,6 +1,7 @@
 namespace ETL_SQL.Portal.Models;
 
 using ETL_SQL.Analysis.Diagnostics;
+using ETL_SQL.Reporting.Authoring;
 
 public record ParseDesignerRequest(string Script);
 
@@ -95,13 +96,33 @@ public record PatchDesignerRequest(string Script, DesignerStateDto DesignState);
 
 public record PatchDesignerResponse(string Script);
 
+public record ApplyDesignerQueryFiltersRequest(
+    string Source,
+    List<DesignerQueryFilter> Filters,
+    bool AsVisualSource = true);
+
+public record ApplyDesignerQueryFiltersResponse(string Source);
+
+public record BuildDesignerOptionSourceRequest(string Source, string Column);
+
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,
     List<DesignerDatasetDto> Datasets,
     DesignerReportStyleDto? ReportStyle = null,
     // Null means "this client does not edit bookmarks", and existing CREATE BOOKMARK statements are
     // left alone. An empty list is an explicit "no bookmarks" and removes them.
-    List<DesignerBookmarkDto>? Bookmarks = null);
+    List<DesignerBookmarkDto>? Bookmarks = null,
+    // Null preserves declarations for clients that do not edit parameters. Empty removes them.
+    List<DesignerParameterDto>? Parameters = null);
+
+public record DesignerParameterDto(
+    string Name,
+    string DataType,
+    string? InitialValue = null,
+    bool IsInput = false,
+    bool IsOutput = false,
+    bool IsRequired = false,
+    bool IsSensitive = false);
 
 public record DesignerBookmarkDto(
     string Id,

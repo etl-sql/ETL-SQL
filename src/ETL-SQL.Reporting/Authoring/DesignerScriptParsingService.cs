@@ -41,7 +41,7 @@ public sealed class DesignerScriptParsingService
             .Select((ds, i) => new DesignerAuthoringDataset(
                 $"ds_{i}",
                 NormalizeDatasetName(ds.TempTableName),
-                ds.SourceQuery.ToSql().Trim().TrimEnd(';')))
+                ExtractAuthoredNode(script, ds.SourceQuery, ds.SourceQuery.ToSql()).Trim().TrimEnd(';')))
             .ToList();
 
         var elements = new Dictionary<string, DesignerAuthoringVisual>(StringComparer.OrdinalIgnoreCase);
@@ -156,8 +156,22 @@ public sealed class DesignerScriptParsingService
             pages.Add(new DesignerAuthoringPage("p1", "Page 1", "Dashboard", []));
         }
 
-        return new DesignerAuthoringState(pages, datasets, null, BookmarksToAuthoring(ast));
+        return new DesignerAuthoringState(pages, datasets, null, BookmarksToAuthoring(ast), ParametersToAuthoring(ast));
     }
+
+    private static List<DesignerAuthoringParameter> ParametersToAuthoring(Script ast) =>
+        ast.Statements.SelectMany(statement => statement is BlockStatement block
+                ? block.Statements.OfType<DeclareStatement>()
+                : statement is DeclareStatement declaration ? [declaration] : [])
+            .Select(parameter => new DesignerAuthoringParameter(
+                parameter.VariableName,
+                parameter.DataType,
+                parameter.InitialValue?.ToSql(),
+                parameter.IsInput,
+                parameter.IsOutput,
+                parameter.IsRequired,
+                parameter.IsSensitive))
+            .ToList();
 
     private static List<DesignerAuthoringBookmark> BookmarksToAuthoring(Script ast) =>
         ast.Statements.OfType<CreateBookmarkStatement>()
@@ -185,7 +199,10 @@ public sealed class DesignerScriptParsingService
             ? lit.Value?.ToString()
             : v.Title?.ToSql().Trim('\'', '"');
 
-        var dataset = string.IsNullOrWhiteSpace(v.Source.TempTableName) ? null : NormalizeDatasetName(v.Source.TempTableName);
+        var sourceName = v.Source.TempTableName;
+        var dataset = !string.IsNullOrWhiteSpace(sourceName) && sourceName.StartsWith('&')
+            ? NormalizeDatasetName(sourceName)
+            : null;
 
         var mappings = v.Mappings.ToDictionary(
             m => m.Role.ToUpper(),
@@ -199,11 +216,13 @@ public sealed class DesignerScriptParsingService
 
         if (v.Source.InlineSelect != null)
         {
-            options["inline_source"] = v.Source.ToSql().Trim();
+            var inline = ExtractAuthoredNode(script, v.Source.InlineSelect, v.Source.InlineSelect.ToSql())
+                .Trim().TrimEnd(';');
+            options["inline_source"] = $"({inline})";
         }
         else if (!string.IsNullOrWhiteSpace(v.Source.TempTableName))
         {
-            options["inline_source"] = NormalizeDatasetName(v.Source.TempTableName);
+            options["inline_source"] = v.Source.TempTableName;
         }
 
         foreach (var style in v.Styles)
@@ -253,6 +272,13 @@ public sealed class DesignerScriptParsingService
             dataset,
             mappings,
             options);
+    }
+
+    private static string ExtractAuthoredNode(string? script, AstNode node, string fallback)
+    {
+        if (script is null || node.StartOffset < 0 || node.EndOffset <= node.StartOffset || node.EndOffset > script.Length)
+            return fallback;
+        return script[node.StartOffset..node.EndOffset];
     }
 
     private static DesignerAuthoringVisual ContainerToAuthoring(CreateContainerStatement c, int idx)
@@ -385,4 +411,3 @@ public sealed class DesignerScriptParsingService
         return char.IsDigit(clean[0]) ? "v_" + clean : clean;
     }
 }
-

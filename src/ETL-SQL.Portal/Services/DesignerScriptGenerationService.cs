@@ -34,7 +34,16 @@ internal static class DesignerAuthoringStateAdapter
                 state.ReportStyle.Surface,
                 state.ReportStyle.Text),
         // Preserve the null/empty distinction: null means the client does not edit bookmarks.
-        state.Bookmarks?.Select(ToAuthoringBookmark).ToList());
+        state.Bookmarks?.Select(ToAuthoringBookmark).ToList(),
+        // Preserve the same distinction for DECLARE statements.
+        state.Parameters?.Select(parameter => new DesignerAuthoringParameter(
+            parameter.Name,
+            parameter.DataType,
+            parameter.InitialValue,
+            parameter.IsInput,
+            parameter.IsOutput,
+            parameter.IsRequired,
+            parameter.IsSensitive)).ToList());
 
     private static DesignerAuthoringBookmark ToAuthoringBookmark(DesignerBookmarkDto bookmark) => new(
         bookmark.Id,

@@ -335,10 +335,22 @@ fixture: transient open 50.9 ms, refresh completion 65.3 ms, reposition 26.8 ms,
 **Horizon:** Next  
 **Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md)  
 
-Authors need a full-viewport visual workspace combining connection/table discovery, drag-and-drop visual layout, design-time sample snapshot (`__ETLSNAP__`) live data rendering, visual filtering, and live code projection so non-SQL authors can visualize tables and views in seconds while preserving clean `.rptsql` and `.etlsql` as the single source of truth.
+Authors need a full-viewport visual workspace combining connection/table discovery, full script
+editing, guided report creation, drag-and-drop visual layout, design-time sample snapshot
+(`__ETLSNAP__`) live data rendering, visual filtering, and visual pipeline authoring while preserving
+clean `.rptsql` and `.etlsql` as the single source of truth. Studio Home provides distinct entry
+points for **Dashboard**, **Paginated Report**, **ETL Pipeline**, and ordinary script creation.
 
 **Problem and Intended Outcome:**
-Authoring currently splits across raw script editing and modal dialogs. Non-SQL business analysts need to browse tables, select fields, filter records visually, and arrange charts on a visual canvas with instant formatting presets and real sample data. Advanced authors need full access to underlying SQL, window transforms, and design tokens without risk of visual tools clobbering hand-crafted queries. ETL-SQL Studio delivers zero-code dashboard scaffolding, instant 60 FPS in-memory sample aggregation, an interactive Filter Pane, and an architectural foundation for visual ETL pipeline DAGs alongside a collapsible, synchronized CodeMirror 6 code panel.
+Authoring currently splits across raw script editing and modal dialogs. Non-SQL business analysts
+need to browse tables, select fields, filter records visually, arrange interactive dashboards, and
+build print-oriented reports through a clear sequence. A dashboard canvas and a paginated report
+designer share datasets, expressions, formatting, preview, parser, and patcher services, but they do
+not share the same authoring workflow: dashboards are responsive and interaction-first; paginated
+reports are page-, group-, parameter-, and export-first. Advanced authors retain full access to the
+underlying script without visual tools clobbering hand-crafted queries. Studio also carries forward
+the full Workstation Editor scripting experience and adds a visual ETL pipeline DAG that remains
+synchronized with the authoritative `.etlsql` document.
 
 **Why now:**
 The native Grammar-of-Graphics spine, Connection Wizard, Gateway resource discovery, cascading parameters, offline snapshot engine (`__ETLSNAP__`), and design tokens have shipped. Unifying these capabilities into ETL-SQL Studio establishes the primary flagship UI across Desktop (`WorkstationEditor`) and SaaS Portal (`Portal Studio`).
@@ -347,23 +359,67 @@ The native Grammar-of-Graphics spine, Connection Wizard, Gateway resource discov
 1. **Zero Proprietary Formats:** The studio stores and outputs standard `.rptsql` and `.etlsql` scripts exclusively. No binary project files or proprietary UI schemas are introduced.
 2. **Surgical AST Patching:** Visual modifications patch only the targeted `VISUAL`, `PAGE`, `WHERE`, or pipeline AST clauses. Complex dataset SQL queries, CTEs, comments, and whitespace are preserved.
 3. **Stateless Server Analysis & Bounded Ingestion:** AST parsing (`POST /api/designer/parse`), linting (`POST /api/designer/analyze`), and sample ingestion (`POST /api/designer/data-sample`) remain stateless HTTP calls honoring caller identity and RLS. No persistent server-side LSP process is spawned.
+4. **Shared Core, Purpose-Built Report Workflows:** Dashboard and Paginated Report authoring reuse
+   the same Report-SQL services and controls where their semantics match. Each keeps its own guided
+   workflow, canvas rules, inspector, defaults, preview, and acceptance evidence.
+5. **Engine-Compatible Secret Handling:** Studio may prompt for the same passphrase used by VS Code,
+   TUI, and the Connection Wizard, but it must use that passphrase with the engine-compatible
+   encryption contract. Plaintext secret values are never rendered back into modal or DOM content,
+   and Base64 encoding is never presented as encryption.
 
 **Dependencies:**
 The canonical `connection-wizard.js`, `codemirror` bundle, `DesignerScriptPatcher`, `PlotPlan` renderer, `report-runtime.js` snapshot evaluator, and Portal data-preview endpoint.
 
 **Vertical Delivery Slices:**
-1. **Slice 1 — Studio Shell & Data Dock:** Full-viewport layout, catalog & Gateway resource connection picker, and draggable typed field tree (`dates`, `measures`, `categories`).
-2. **Slice 2 — Live Data `__ETLSNAP__` Ingestion & 60 FPS Visual Canvas:** Fast sample query ingestion (`TOP 250`), in-memory browser aggregation, drag-and-drop visual card placement, and responsive container layout (`CONTAINER row { ... }`).
-3. **Slice 3 — Type-Aware Filter Pane & Slicer Promotion:** Global dataset `WHERE` filters, local visual `FILTERS`, distinct value checklist from `__ETLSNAP__`, relative date presets, and 1-click "Promote to Slicer" (`CREATE PARAMETER` + `SLICER`).
-4. **Slice 4 — Property Inspector & Smart Defaults:** Field role assignment (Measure/Category/Breakdown), aggregation selectors (`SUM`, `AVG`, `COUNT`, `MIN`, `MAX`), 1-click number formatting (currency, percent, compact), and design token themes.
-5. **Slice 5 — Collapsible Code Drawer & Bi-Directional Sync:** Slide-up CodeMirror 6 editor (`Alt+C`), surgical AST text patching, debounced code-to-canvas synchronization, and inline lint diagnostics.
-6. **Slice 6 — Governed Data Preview & Multi-Surface Packaging:** Interactive preview execution under caller RLS and memory arbiters; shared asset packaging across Portal Studio (`/studio/report.html`), VS Code Webview, and Workstation Editor.
-7. **Slice 7 — Pipeline Studio Foundational DAG (Future):** Visual node-graph canvas for multi-stage ETL pipelines emitting `.etlsql` scripts.
+1. **Slice 1 — Studio Home, Shell & Data Dock:** Full-viewport layout; distinct Dashboard,
+   Paginated Report, ETL Pipeline, and Script creation actions; catalog and Gateway resource picker;
+   and draggable typed field tree (`dates`, `measures`, `categories`).
+2. **Slice 2 — Shared Report Authoring Core:** Governed `TOP 250` sample ingestion, document-scoped
+   snapshots, shared dataset and expression editors, field mappings, formatting controls, parser and
+   patcher services, preview, and code/canvas synchronization.
+3. **Slice 3 — Dashboard Workflow:** Responsive/freeform card canvas, chart and KPI palette,
+   containers, visual and dataset filters, slicers, cross-visual interactions, smart formatting
+   defaults, and dashboard preview.
+4. **Slice 4 — Paginated Report Workflow:** Guided data and parameter setup, page-oriented canvas,
+   group/detail/total sections, headers and footers, page size/orientation/margins, explicit page
+   breaks, repeating table headers, pagination preview, and multi-page export.
+5. **Slice 5 — Full Script Workbench Parity:** CodeMirror editor, exact selection execution,
+   completion, hover, lint, formatting, Results, Messages, Performance, workspace operations, dirty
+   state, and session inspection carried forward from Workstation Editor.
+6. **Slice 6 — Connection Easy Button:** Production-host connector discovery, Gateway resources,
+   MOCKDB Test Data onboarding, diagnostics, valid script insertion, and engine-compatible secret
+   reference or encryption handling.
+7. **Slice 7 — Pipeline Projection and Visual Authoring:** Engine-projected DAG with real edges and
+   branches, draggable task palette, explicit parallel/loop/transaction containers, conditional
+   routes, lossless `.etlsql` patching, and run-to-node inspection.
+8. **Slice 8 — Governed Multi-Surface Packaging and Lifecycle:** Equivalent tested contracts across
+   Portal and desktop, authenticated preview execution under caller RLS and memory arbiters,
+   document-scoped state, save/reload correctness, and desktop multi-project lifecycle management.
+
+**Delivered foundation:** Portal Studio Home now lists only permission-visible catalog reports and
+writable folders from the Studio API. Catalog create/open/save/close carries report identity,
+optimistic version, source revision, deployment capabilities, and renewable edit leases. Snapshots,
+filters, selected data source, field metadata, preview cache, diagnostics/run ownership, and results
+are isolated per document and restored when tabs switch. Production browser tests cover catalog
+creation, opening, exact persistence, conflicts, lease acquisition/release, and cross-tab state
+isolation. Visual creation, duplication, deletion, mapping and option edits, and slicer promotion now
+flow through the shared typed authoring state and server parser/patcher. Report parameters are part of
+that contract, so slicer promotion emits parser-valid `DECLARE` and `ACTIONS` syntax while surgical
+patching preserves hand-authored SQL and comments.
 
 **Acceptance Evidence:**
 - **AST Preservation Tests:** 100% round-trip fidelity asserting hand-written queries, CTEs, `WHERE` clauses, and comments are untouched after visual mutations.
 - **UI Sandbox Story:** Interactive story in `tools/ui-sandbox` demonstrating zero-code table scaffolding, live sample data aggregation, visual filter adjustments, property edits, and code drawer toggling.
 - **Playwright Browser Tests:** Automated browser tests exercising drag-and-drop card placement, filter pane updates, slicer promotion, code editing sync, and theme switching.
+- **Production Connection Journey:** Portal and desktop tests discover MOCKDB from the real connector
+  registry under Test Data, create a connection, run a sample, insert valid syntax, save, and reload.
+- **Dashboard Journey:** Build a KPI, trend, category, and detail dashboard with slicers,
+  cross-filtering, and persistent formatting entirely in Studio.
+- **Paginated Journey:** Build a parameterized grouped report with details, totals, headers,
+  repeating columns, page breaks, and a verified multi-page PDF entirely in Studio.
+- **Pipeline Journey:** Build a MOCKDB extract, `#temp` stage, validation, transform, explicit
+  parallel branch, and load flow; round-trip it through code and inspect intermediate execution
+  state.
 - **Pre-Push Gates:** Strict compliance with `scripts/Test-PrePush.ps1`, asset sync checks, and doc hub audits.
 
 ---

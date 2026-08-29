@@ -10,7 +10,18 @@ public sealed record DesignerAuthoringState(
     List<DesignerAuthoringPage> Pages,
     List<DesignerAuthoringDataset> Datasets,
     DesignerAuthoringReportStyle? ReportStyle = null,
-    List<DesignerAuthoringBookmark>? Bookmarks = null);
+    List<DesignerAuthoringBookmark>? Bookmarks = null,
+    List<DesignerAuthoringParameter>? Parameters = null);
+
+/// <summary>A report parameter declaration carried as authored source text for lossless patching.</summary>
+public sealed record DesignerAuthoringParameter(
+    string Name,
+    string DataType,
+    string? InitialValue = null,
+    bool IsInput = false,
+    bool IsOutput = false,
+    bool IsRequired = false,
+    bool IsSensitive = false);
 
 /// <summary>
 /// One author bookmark as the designer edits it. Values are carried as the authored source text

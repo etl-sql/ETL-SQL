@@ -126,7 +126,7 @@ public sealed class OperationalMetricsDigestTests
         Assert.Contains(content.Alerts, a => a.Code == "portal_stale_datasets");
         Assert.Contains(content.Alerts, a => a.Code == "portal_policy_version_expiring");
         Assert.Contains(content.Alerts, a => a.Code == "portal_policy_version_expired" && a.Severity == "critical");
-        Assert.All(content.Alerts, alert => Assert.Contains("Alerting_Service_Objectives.md#", alert.Runbook));
+        Assert.All(content.Alerts, alert => Assert.Contains("alerting-service-objectives.md#", alert.Runbook));
     }
 
     [Fact]

@@ -975,6 +975,10 @@ export function createConnectionWizard(options = {}) {
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
                                 Cloud & Remote
                             </button>
+                            <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'testdata' && !state.isSharedReference ? 'active' : ''}" data-cat="testdata">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"></path><path d="M10 3v6l-5 9a2 2 0 0 0 1.75 3h10.5A2 2 0 0 0 19 18l-5-9V3"></path><path d="M8 15h8"></path></svg>
+                                Test Data
+                            </button>
                             <button type="button" class="etlsql-cw-cat-btn ${state.isSharedReference ? 'active' : ''}" data-cat="shared">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                                 Shared Catalog
@@ -1094,17 +1098,7 @@ export function createConnectionWizard(options = {}) {
                 const matchAlias = (s.aliases || []).some(a => a.toLowerCase().includes(q));
                 if (!matchName && !matchDesc && !matchAlias) return false;
             }
-            if (state.selectedCategory === 'all') return true;
-            if (state.selectedCategory === 'database') {
-                return !s.isFileBased && ['MSSQL', 'SQLSERVER', 'POSTGRES', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLITE', 'ORACLE', 'SNOWFLAKE', 'BIGQUERY', 'DUCKDB', 'ODBC', 'MONGODB', 'NEO4J', 'MOCKDB'].includes(type);
-            }
-            if (state.selectedCategory === 'files') {
-                return s.isFileBased || ['FLATFILE', 'CSV', 'PARQUET', 'EXCEL', 'JSON', 'XML', 'AVRO', 'DIRECTORY'].includes(type);
-            }
-            if (state.selectedCategory === 'remote') {
-                return ['SFTP', 'FTP', 'FTP_CONN', 'REST', 'S3', 'AZUREBLOB', 'GCS', 'SHAREPOINT', 'KAFKA', 'WEBHOOK', 'SMTP', 'ACTIVEDIRECTORY', 'PORTAL', 'ORCHESTRATOR'].includes(type) || (!s.isFileBased && !['MSSQL', 'SQLSERVER', 'POSTGRES', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLITE', 'ORACLE', 'SNOWFLAKE', 'BIGQUERY', 'DUCKDB', 'ODBC', 'MONGODB', 'NEO4J', 'MOCKDB'].includes(type));
-            }
-            return true;
+            return isConnectorInCategory(s, state.selectedCategory);
         });
 
         if (filtered.length === 0) {
@@ -1117,6 +1111,21 @@ export function createConnectionWizard(options = {}) {
                 <span class="etlsql-cw-type-desc">${_h(s.description || '')}</span>
             </button>
         `).join('');
+    }
+
+    function isConnectorInCategory(schema, category) {
+        const type = (schema.connectorType || '').toUpperCase();
+        const databaseTypes = ['MSSQL', 'SQLSERVER', 'POSTGRES', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLITE', 'ORACLE', 'SNOWFLAKE', 'BIGQUERY', 'DUCKDB', 'ODBC', 'MONGODB', 'NEO4J'];
+        const fileTypes = ['FLATFILE', 'CSV', 'PARQUET', 'EXCEL', 'JSON', 'XML', 'AVRO', 'DIRECTORY'];
+        const remoteTypes = ['SFTP', 'FTP', 'FTP_CONN', 'REST', 'S3', 'AZUREBLOB', 'GCS', 'SHAREPOINT', 'KAFKA', 'WEBHOOK', 'SMTP', 'ACTIVEDIRECTORY', 'PORTAL', 'ORCHESTRATOR'];
+
+        if (category === 'all') return true;
+        if (category === 'testdata') return type === 'MOCKDB';
+        if (category === 'database') return !schema.isFileBased && databaseTypes.includes(type);
+        if (category === 'files') return schema.isFileBased || fileTypes.includes(type);
+        if (category === 'remote') return remoteTypes.includes(type)
+            || (!schema.isFileBased && !databaseTypes.includes(type) && type !== 'MOCKDB');
+        return true;
     }
 
     function renderSharedReferenceForm() {
@@ -1229,21 +1238,36 @@ export function createConnectionWizard(options = {}) {
 
         let resourcePickerHtml = '';
         if (state.gatewayCluster) {
+            const availableCount = state.gatewayResources?.length || 0;
+            const pickerHeader = `
+                <div class="etlsql-cw-picker-header">
+                    <span class="etlsql-cw-picker-title">Published Gateway Resources (Approved)</span>
+                    <div class="etlsql-cw-picker-actions">
+                        <span class="form-hint">${state.gatewayResourcesLoading ? 'Refreshing…' : `${availableCount} available`}</span>
+                        <button type="button" class="btn btn-xs btn-outline etlsql-cw-resource-refresh" data-refresh-gateway-resources aria-label="Refresh published Gateway resources" title="Refresh published resources" ${state.gatewayResourcesLoading ? 'disabled' : ''}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path></svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>`;
             if (state.gatewayResourcesLoading) {
                 resourcePickerHtml = `
-                    <div class="etlsql-cw-resource-loading" style="padding: 12px; margin-top: 8px; font-size: 0.82rem; color: var(--portal-muted, #7a8798);">
+                    ${pickerHeader}
+                    <div class="etlsql-cw-resource-loading">
                         <span class="spinner" style="display: inline-block; width: 14px; height: 14px; vertical-align: middle; margin-right: 6px;"></span>
                         <span>Discovering approved gateway resources…</span>
                     </div>
                 `;
             } else if (state.gatewayResourcesError) {
                 resourcePickerHtml = `
+                    ${pickerHeader}
                     <div class="etlsql-cw-resource-error alert alert-danger" style="margin-top: 8px; font-size: 0.82rem;">
                         <strong>Discovery Error:</strong> ${_h(state.gatewayResourcesError)}
                     </div>
                 `;
             } else if (!state.gatewayResources || state.gatewayResources.length === 0) {
                 resourcePickerHtml = `
+                    ${pickerHeader}
                     <div class="etlsql-cw-resource-empty alert alert-warning" id="etlsql-cw-no-resources" style="margin-top: 8px; font-size: 0.82rem;">
                         <span class="status-pill status-pill-warn" style="font-size: 0.72rem;">No Resources</span>
                         <span>No approved resources published by live session for this gateway.</span>
@@ -1252,10 +1276,7 @@ export function createConnectionWizard(options = {}) {
             } else {
                 resourcePickerHtml = `
                     <div class="etlsql-cw-resource-picker" role="radiogroup" aria-label="Discovered Gateway Resources" style="margin-top: 10px;">
-                        <div class="etlsql-cw-picker-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <span class="etlsql-cw-picker-title" style="font-size: 0.8rem; font-weight: 600; color: var(--portal-text-soft, #46556c);">Published Gateway Resources (Approved)</span>
-                            <span class="form-hint" style="font-size: 0.74rem;">${state.gatewayResources.length} available</span>
-                        </div>
+                        ${pickerHeader}
                         <div class="etlsql-cw-resource-list" style="display: flex; flex-direction: column; gap: 6px;">
                             ${state.gatewayResources.map(r => {
                                 const isSelected = state.selectedResourceId === r.resourceId;
@@ -1278,6 +1299,7 @@ export function createConnectionWizard(options = {}) {
                                             <span class="etlsql-cw-resource-ops">Ops: <strong>${_h(r.allowedOperations || 'Read')}</strong></span>
                                             <span class="status-pill status-pill-good" style="font-size: 0.7rem; padding: 1px 5px; border-radius: 3px;">Approved</span>
                                             <span class="etlsql-cw-resource-seen">${r.lastSeenUtc ? formatDate(r.lastSeenUtc) : 'Online'}</span>
+                                            ${isSelected ? '<button type="button" class="btn btn-xs btn-outline etlsql-cw-resource-unbind" data-unbind-gateway-resource>Clear selection</button>' : ''}
                                         </div>
                                     </div>
                                 `;
@@ -1555,14 +1577,7 @@ export function createConnectionWizard(options = {}) {
                 } else {
                     state.isSharedReference = false;
                     state.selectedCategory = cat;
-                    const firstInCat = state.schemas.find(s => {
-                        const type = (s.connectorType || '').toUpperCase();
-                        if (cat === 'all') return true;
-                        if (cat === 'database') return !s.isFileBased && ['MSSQL', 'SQLSERVER', 'POSTGRES', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLITE', 'ORACLE', 'SNOWFLAKE', 'BIGQUERY', 'DUCKDB', 'ODBC', 'MONGODB', 'NEO4J', 'MOCKDB'].includes(type);
-                        if (cat === 'files') return s.isFileBased || ['FLATFILE', 'CSV', 'PARQUET', 'EXCEL', 'JSON', 'XML', 'AVRO', 'DIRECTORY'].includes(type);
-                        if (cat === 'remote') return ['SFTP', 'FTP', 'FTP_CONN', 'REST', 'S3', 'AZUREBLOB', 'GCS', 'SHAREPOINT', 'KAFKA', 'WEBHOOK', 'SMTP', 'ACTIVEDIRECTORY', 'PORTAL', 'ORCHESTRATOR'].includes(type);
-                        return true;
-                    });
+                    const firstInCat = state.schemas.find(s => isConnectorInCategory(s, cat));
                     if (firstInCat) {
                         state.connectorType = firstInCat.connectorType;
                         state.values = {};
@@ -1608,6 +1623,17 @@ export function createConnectionWizard(options = {}) {
             loadGatewayResources(state.gatewayCluster);
         });
 
+        modalOverlay.querySelector('[data-refresh-gateway-resources]')?.addEventListener('click', () => {
+            loadGatewayResources(state.gatewayCluster);
+        });
+
+        modalOverlay.querySelector('[data-unbind-gateway-resource]')?.addEventListener('click', e => {
+            e.stopPropagation();
+            state.selectedResourceId = '';
+            state.selectedResource = null;
+            render();
+        });
+
         // Gateway Resource card selection
         modalOverlay.querySelectorAll('.etlsql-cw-resource-card').forEach(card => {
             const pick = () => {
@@ -1618,6 +1644,12 @@ export function createConnectionWizard(options = {}) {
                     if (match) {
                         state.selectedResource = match;
                         state.connectorType = match.connectorType;
+                        const schema = state.schemas.find(candidate =>
+                            String(candidate.connectorType).toUpperCase() === String(match.connectorType).toUpperCase());
+                        if (schema) {
+                            state.selectedCategory = ['database', 'files', 'remote', 'testdata']
+                                .find(category => isConnectorInCategory(schema, category)) || 'all';
+                        }
                     }
                     render();
                 }

@@ -7,19 +7,29 @@ const SAMPLE_DOCS = [
     id: 'doc-report',
     path: 'reports/sales_overview.rptsql',
     name: 'sales_overview.rptsql',
-    content: `CREATE CONNECTION corp_db AS MSSQL('SHARED:corp_sales_gw');
+    content: `CREATE CONNECTION corp_db AS MSSQL(CONNECTION_STRING = 'SHARED:corp_sales_gw');
 
-CREATE DATASET ds_orders AS 
+CREATE DATASET &orders AS (
   SELECT order_date, total_amount, region 
   FROM corp_db.orders
-  WHERE status = 'Completed';
+  WHERE status = 'Completed'
+);
 
-PAGE "Executive Overview" {
-    CONTAINER row {
-        VISUAL rev_kpi TYPE 'KPI' MAPPINGS (VALUE = SUM(total_amount)) OPTIONS (TITLE = 'Total Revenue');
-        VISUAL order_bar TYPE 'BAR' MAPPINGS (X = region, Y = SUM(total_amount)) OPTIONS (TITLE = 'Sales by Region');
-    }
-}`,
+CREATE VISUAL RevenueCard AS CARD (
+  SOURCE = &orders,
+  TITLE = 'Total Revenue',
+  MAPPINGS (VALUE = total_amount)
+);
+
+CREATE VISUAL SalesByRegion AS BAR (
+  SOURCE = &orders,
+  TITLE = 'Sales by Region',
+  MAPPINGS (X = region, Y = total_amount)
+);
+
+CREATE PAGE [Executive Overview] AS DASHBOARD (
+  LAYOUT (STRUCTURE = 'A B', MAP ('A' = RevenueCard, 'B' = SalesByRegion))
+);`,
     isDirty: false,
     projection: 'split',
   },
@@ -65,6 +75,23 @@ SELECT TOP 10 * FROM raw_test.users;`,
   }
 ];
 
+const STUDIO_DESIGN_STATE = {
+  pages: [{
+    id: 'p1', name: 'Executive Overview', mode: 'Dashboard', visuals: [
+      { id: 'v1', name: 'RevenueCard', type: 'CARD', gridCol: 1, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Total Revenue', dataset: '&orders', mappings: { VALUE: 'total_amount' }, options: {} },
+      { id: 'v2', name: 'SalesByRegion', type: 'BAR', gridCol: 7, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Sales by Region', dataset: '&orders', mappings: { X: 'region', Y: 'total_amount' }, options: {} },
+    ],
+  }],
+  datasets: [{ id: 'ds1', name: '&orders', query: "SELECT order_date, total_amount, region FROM corp_db.orders WHERE status = 'Completed'" }],
+  parameters: [],
+  files: [
+    { path: 'reports/sales_overview.rptsql', size: 1420 },
+    { path: 'etl/ingest_orders.etlsql', size: 980 },
+    { path: 'scripts/direct_connect_test.sql', size: 450 },
+  ],
+  connections: ['corp_db', 'staging_db'],
+};
+
 export default {
   id: 'studio',
   title: 'ETL-SQL Studio',
@@ -75,19 +102,28 @@ export default {
   async mount(stage, fixtureId, ctx) {
     // Import canonical studio module
     const studioMod = await importFresh(STUDIO_JS);
-    const api = makeMockApi({
-      files: [
-        { path: 'reports/sales_overview.rptsql', size: 1420 },
-        { path: 'etl/ingest_orders.etlsql', size: 980 },
-        { path: 'scripts/direct_connect_test.sql', size: 450 }
-      ],
-      connections: ['corp_db', 'staging_db']
-    });
+    const api = makeMockApi(STUDIO_DESIGN_STATE);
 
     const workbench = await studioMod.createStudioWorkbench(stage, {
       documents: JSON.parse(JSON.stringify(SAMPLE_DOCS)),
       authFetch: api,
       apiBase: '',
+      initialSnapshot: {
+        source: '&orders',
+        columns: [
+          { name: 'order_date', type: 'DATE' },
+          { name: 'total_amount', type: 'DECIMAL' },
+          { name: 'region', type: 'VARCHAR' },
+        ],
+        rowCount: 5,
+        rows: [
+          { order_date: '2026-08-03', total_amount: 1840, region: 'North' },
+          { order_date: '2026-08-09', total_amount: 920, region: 'South' },
+          { order_date: '2026-08-14', total_amount: 2310, region: 'North' },
+          { order_date: '2026-08-21', total_amount: 1280, region: 'West' },
+          { order_date: '2026-08-27', total_amount: 2760, region: 'East' },
+        ],
+      },
       onSave: async (content, path) => {
         console.log(`[Studio Save] Saved ${path} (${content.length} chars)`);
       },

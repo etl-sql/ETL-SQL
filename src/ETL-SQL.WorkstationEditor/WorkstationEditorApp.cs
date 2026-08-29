@@ -352,6 +352,7 @@ public static class WorkstationEditorApp
         var designerParsing = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
+        var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
 
         app.MapPost("/api/designer/generate", (GenerateDesignerAuthoringRequest request) =>
         {
@@ -371,6 +372,36 @@ public static class WorkstationEditorApp
         {
             var state = designerParsing.Parse(request.Script);
             return Results.Json(new { designState = state, error = (string?)null }, JsonOptions);
+        });
+
+        app.MapPost("/api/designer/query-filter", (ApplyDesignerQueryFiltersAuthoringRequest request) =>
+        {
+            try
+            {
+                return Results.Json(new
+                {
+                    source = designerQueryFilters.Apply(request.Source, request.Filters, request.AsVisualSource)
+                }, JsonOptions);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapPost("/api/designer/option-source", (BuildDesignerOptionSourceAuthoringRequest request) =>
+        {
+            try
+            {
+                return Results.Json(new
+                {
+                    source = designerQueryFilters.BuildCategoricalOptionSource(request.Source, request.Column)
+                }, JsonOptions);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         app.MapPost("/api/designer/run", async (RunRequest request, WorkstationRunService runner, CancellationToken cancellationToken) =>
@@ -599,3 +630,8 @@ public sealed record TestConnectionRequest(string? Alias, string? ConnectorType,
 public sealed record GenerateDesignerAuthoringRequest(ETL_SQL.Reporting.Authoring.DesignerAuthoringState DesignState, string? Script = null);
 public sealed record PatchDesignerAuthoringRequest(string Script, ETL_SQL.Reporting.Authoring.DesignerAuthoringState DesignState);
 public sealed record ParseDesignerAuthoringRequest(string Script);
+public sealed record ApplyDesignerQueryFiltersAuthoringRequest(
+    string Source,
+    List<ETL_SQL.Reporting.Authoring.DesignerQueryFilter> Filters,
+    bool AsVisualSource = true);
+public sealed record BuildDesignerOptionSourceAuthoringRequest(string Source, string Column);

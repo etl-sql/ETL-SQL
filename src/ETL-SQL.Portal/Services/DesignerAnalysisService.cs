@@ -111,7 +111,7 @@ public sealed class DesignerAnalysisService
             .Select((ds, i) => new DesignerDatasetDto(
                 $"ds_{i}",
                 NormalizeDatasetName(ds.TempTableName),
-                ds.SourceQuery.ToSql().Trim().TrimEnd(';')))
+                ExtractAuthoredNode(script, ds.SourceQuery, ds.SourceQuery.ToSql()).Trim().TrimEnd(';')))
             .ToList();
 
         var elements = new Dictionary<string, DesignerVisualDto>(StringComparer.OrdinalIgnoreCase);
@@ -218,8 +218,22 @@ public sealed class DesignerAnalysisService
             pages.Add(new DesignerPageDto("p1", "Page 1", "Dashboard", synth));
         }
 
-        return new DesignerStateDto(pages, datasets, null, BookmarksToDto(ast));
+        return new DesignerStateDto(pages, datasets, null, BookmarksToDto(ast), ParametersToDto(ast));
     }
+
+    private static List<DesignerParameterDto> ParametersToDto(Script ast) =>
+        ast.Statements.SelectMany(statement => statement is BlockStatement block
+                ? block.Statements.OfType<DeclareStatement>()
+                : statement is DeclareStatement declaration ? [declaration] : [])
+            .Select(parameter => new DesignerParameterDto(
+                parameter.VariableName,
+                parameter.DataType,
+                parameter.InitialValue?.ToSql(),
+                parameter.IsInput,
+                parameter.IsOutput,
+                parameter.IsRequired,
+                parameter.IsSensitive))
+            .ToList();
 
     /// <summary>
     /// Surfaces the script's author bookmarks so the builder can list and edit them. Parameter values
@@ -252,7 +266,10 @@ public sealed class DesignerAnalysisService
             ? lit.Value?.ToString()
             : v.Title?.ToSql().Trim('\'', '"');
 
-        var dataset = string.IsNullOrWhiteSpace(v.Source.TempTableName) ? null : NormalizeDatasetName(v.Source.TempTableName);
+        var sourceName = v.Source.TempTableName;
+        var dataset = !string.IsNullOrWhiteSpace(sourceName) && sourceName.StartsWith('&')
+            ? NormalizeDatasetName(sourceName)
+            : null;
 
         var mappings = v.Mappings.ToDictionary(
             m => m.Role.ToUpper(),
@@ -266,11 +283,13 @@ public sealed class DesignerAnalysisService
 
         if (v.Source.InlineSelect != null)
         {
-            options["inline_source"] = v.Source.ToSql().Trim();
+            var inline = ExtractAuthoredNode(script, v.Source.InlineSelect, v.Source.InlineSelect.ToSql())
+                .Trim().TrimEnd(';');
+            options["inline_source"] = $"({inline})";
         }
         else if (!string.IsNullOrWhiteSpace(v.Source.TempTableName))
         {
-            options["inline_source"] = NormalizeDatasetName(v.Source.TempTableName);
+            options["inline_source"] = v.Source.TempTableName;
         }
 
         foreach (var style in v.Styles)
@@ -320,6 +339,13 @@ public sealed class DesignerAnalysisService
             dataset,
             mappings,
             options);
+    }
+
+    private static string ExtractAuthoredNode(string? script, AstNode node, string fallback)
+    {
+        if (script is null || node.StartOffset < 0 || node.EndOffset <= node.StartOffset || node.EndOffset > script.Length)
+            return fallback;
+        return script[node.StartOffset..node.EndOffset];
     }
 
     private static DesignerVisualDto ContainerToDto(CreateContainerStatement c, int idx)

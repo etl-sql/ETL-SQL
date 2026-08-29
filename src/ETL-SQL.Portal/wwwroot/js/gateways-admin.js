@@ -16,7 +16,7 @@ const PANEL_HTML = `
   <div class="card">
     <div class="card-header">
       <div>
-        <span class="section-kicker">Hybrid Connectivity — Zero-Trust on-premises gateway clusters</span>
+        <span class="section-kicker">Hybrid Connectivity</span>
         <h3>Data Gateways</h3>
       </div>
       <div class="admin-action-group">
@@ -28,75 +28,72 @@ const PANEL_HTML = `
     <div id="gw-tableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading gateways…</span></div></div>
   </div>
 
-  <!-- Enroll Gateway Modal -->
-  <div class="modal-overlay" id="gw-enrollModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="gw-enrollModal-title">
-    <div class="modal-card" style="max-width: 580px;">
-      <div class="modal-header">
-        <h3 id="gw-enrollModal-title">Enroll Data Gateway</h3>
-        <button class="modal-close" id="gw-enrollCloseBtn" aria-label="Close">&times;</button>
+  <div class="card" id="gw-enrollCard">
+    <div class="card-header"><h3>Enroll a data gateway</h3></div>
+    <div id="gw-enrollForm">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gw-input-id">Gateway Cluster ID</label>
+          <input id="gw-input-id" type="text" placeholder="corp-mssql-gw" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="gw-input-expiry">Token Expiration (minutes)</label>
+          <input id="gw-input-expiry" type="number" value="60" min="5" max="1440">
+        </div>
       </div>
-      <div class="modal-body">
-        <div id="gw-enrollForm">
-          <p class="form-hint" style="margin-bottom: 12px;">
-            Issue a cryptographically verified one-time enrollment token to connect an on-premises Gateway daemon cluster to this Portal.
-          </p>
-          <div class="form-group">
-            <label for="gw-input-id">Gateway Cluster ID</label>
-            <input type="text" id="gw-input-id" placeholder="e.g. corp-mssql-gw" class="form-control" />
-            <small class="form-hint">Unique identifier for this logical gateway or cluster.</small>
-          </div>
-          <div class="form-group" style="margin-top: 12px;">
-            <label for="gw-input-expiry">Token Expiration (minutes)</label>
-            <input type="number" id="gw-input-expiry" value="60" min="5" max="1440" class="form-control" />
-          </div>
-          <div id="gw-enroll-error" class="error-msg" style="display:none; margin-top: 10px;"></div>
-          <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px;">
-            <button class="btn btn-outline" id="gw-enrollCancelBtn">Cancel</button>
-            <button class="btn btn-primary" id="gw-enrollSubmitBtn">Generate Token</button>
-          </div>
-        </div>
+      <div id="gw-enroll-error" class="error-msg"></div>
+      <div class="form-actions">
+        <button class="btn btn-primary btn-sm" id="gw-enrollSubmitBtn">Generate Token</button>
+        <span class="form-hint">Issues a cryptographically verified one-time enrollment token to connect an on-premises Gateway daemon cluster to this Portal.</span>
+      </div>
+    </div>
 
-        <div id="gw-enrollResult" style="display:none;">
-          <div class="alert alert-success" style="margin-bottom: 16px;">
-            <strong>Enrollment Token Generated!</strong>
-            <p style="margin: 4px 0 0 0; font-size: 0.9em;">
-              This token is shown only once. Use it to install or start your on-premises Gateway daemon.
-            </p>
-          </div>
-          <div class="form-group">
-            <label>One-Time Token</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="text" id="gw-result-token" readonly class="form-control" style="font-family: monospace; font-size: 0.85em;" />
-              <button class="btn btn-outline btn-sm" id="gw-copyTokenBtn">Copy</button>
-            </div>
-          </div>
-          <div class="form-group" style="margin-top: 14px;">
-            <label>Quick Setup Command</label>
-            <div style="display: flex; gap: 8px;">
-              <textarea id="gw-result-cmd" readonly class="form-control" rows="2" style="font-family: monospace; font-size: 0.85em; resize: none;"></textarea>
-              <button class="btn btn-outline btn-sm" id="gw-copyCmdBtn">Copy</button>
-            </div>
-          </div>
-          <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
-            <button class="btn btn-primary" id="gw-enrollDoneBtn">Done</button>
+    <div id="gw-enrollResult" style="display:none">
+      <div class="status-banner status-banner-info">
+        <div>
+          <strong>Enrollment Token Generated!</strong>
+          <div class="text-sm">This token is shown only once. Use it to install or start your on-premises Gateway daemon.</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gw-result-token">One-Time Token</label>
+          <div class="inline-control inline-control-gap">
+            <input id="gw-result-token" type="text" readonly class="param-input" style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85em;">
+            <button class="btn btn-outline btn-sm" id="gw-copyTokenBtn">Copy</button>
           </div>
         </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gw-result-cmd">Quick Setup Command</label>
+          <div class="inline-control inline-control-gap">
+            <input id="gw-result-cmd" type="text" readonly class="param-input" style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85em;">
+            <button class="btn btn-outline btn-sm" id="gw-copyCmdBtn">Copy</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary btn-sm" id="gw-enrollDoneBtn">Done</button>
       </div>
     </div>
   </div>
 
   <!-- Cluster Nodes Modal -->
   <div class="modal-overlay" id="gw-nodesModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="gw-nodesModal-title">
-    <div class="modal-card" style="max-width: 650px;">
+    <div class="modal-card modal-lg">
       <div class="modal-header">
-        <h3 id="gw-nodesModal-title">Cluster Nodes — <span id="gw-nodesModalGatewayId"></span></h3>
-        <button class="modal-close" id="gw-nodesCloseBtn" aria-label="Close">&times;</button>
+        <div>
+          <span class="section-kicker">Cluster Nodes</span>
+          <h3 class="modal-title" id="gw-nodesModal-title">Cluster Nodes — <code id="gw-nodesModalGatewayId"></code></h3>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="gw-nodesCloseBtn" aria-label="Close" style="font-size: 1.1em; line-height: 1;">✕</button>
       </div>
       <div class="modal-body">
         <div id="gw-nodesTableWrap"></div>
-        <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
-          <button class="btn btn-outline" id="gw-nodesDismissBtn">Close</button>
-        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline btn-sm" id="gw-nodesDismissBtn">Close</button>
       </div>
     </div>
   </div>
@@ -113,16 +110,13 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
   const $enrollBtn = host.querySelector('#gw-enrollBtn');
   const $refreshBtn = host.querySelector('#gw-refreshBtn');
 
-  // Enroll modal elements
-  const $enrollModal = host.querySelector('#gw-enrollModal');
+  // Enroll elements
   const $enrollForm = host.querySelector('#gw-enrollForm');
   const $enrollResult = host.querySelector('#gw-enrollResult');
   const $inputId = host.querySelector('#gw-input-id');
   const $inputExpiry = host.querySelector('#gw-input-expiry');
   const $enrollError = host.querySelector('#gw-enroll-error');
   const $enrollSubmitBtn = host.querySelector('#gw-enrollSubmitBtn');
-  const $enrollCancelBtn = host.querySelector('#gw-enrollCancelBtn');
-  const $enrollCloseBtn = host.querySelector('#gw-enrollCloseBtn');
   const $enrollDoneBtn = host.querySelector('#gw-enrollDoneBtn');
   const $resultToken = host.querySelector('#gw-result-token');
   const $resultCmd = host.querySelector('#gw-result-cmd');
@@ -138,6 +132,13 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
 
   let gatewaysCache = [];
 
+  function focusEnrollForm() {
+    $enrollForm.style.display = '';
+    $enrollResult.style.display = 'none';
+    $inputId.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $inputId.focus();
+  }
+
   async function load() {
     $tableWrap.innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading gateways…</span></div>';
     try {
@@ -152,22 +153,21 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
   function render() {
     if (!gatewaysCache.length) {
       $tableWrap.innerHTML = `
-        <div class="empty-state" style="padding: 32px; text-align: center;">
-          <h4>No Data Gateways Enrolled</h4>
-          <p class="form-hint" style="margin: 8px 0 16px;">Enroll an on-premises Data Gateway to securely query internal databases without opening firewall ports.</p>
+        <div class="empty-state">
+          <h2>No Data Gateways Enrolled</h2>
+          <p class="form-hint" style="margin: 8px auto 16px; max-width: 460px;">Enroll an on-premises Data Gateway to securely query internal databases without opening firewall ports.</p>
           <button class="btn btn-primary btn-sm" id="gw-emptyEnrollBtn">Enroll First Gateway</button>
         </div>`;
-      host.querySelector('#gw-emptyEnrollBtn')?.addEventListener('click', openEnrollModal);
+      host.querySelector('#gw-emptyEnrollBtn')?.addEventListener('click', focusEnrollForm);
       $status.textContent = '0 Gateways';
       return;
     }
 
-    const onlineCount = gatewaysCache.filter(g => g.isOnline).length;
     const totalNodes = gatewaysCache.reduce((sum, g) => sum + (g.activeNodes || 0), 0);
     $status.textContent = `${gatewaysCache.length} Gateway${gatewaysCache.length === 1 ? '' : 's'} • ${totalNodes} Active Node${totalNodes === 1 ? '' : 's'}`;
 
     let html = `
-      <table class="admin-table">
+      <table class="data-table">
         <thead>
           <tr>
             <th>Gateway ID</th>
@@ -175,7 +175,7 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
             <th>Cluster Nodes</th>
             <th>Enrolled</th>
             <th>Workload Identity</th>
-            <th style="text-align: right;">Actions</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>`;
@@ -183,34 +183,36 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
     for (const g of gatewaysCache) {
       let statusBadge = '';
       if (g.state === 'Revoked') {
-        statusBadge = '<span class="status-pill status-pill-bad">Revoked</span>';
+        statusBadge = '<span class="chip chip-inactive">Revoked</span>';
       } else if (g.state === 'Pending') {
-        statusBadge = '<span class="status-pill status-pill-warn">Enrollment Pending</span>';
+        statusBadge = '<span class="badge badge-warning">Enrollment Pending</span>';
       } else if (g.isOnline) {
-        statusBadge = `<span class="status-pill status-pill-good">● ${g.activeNodes} Node${g.activeNodes === 1 ? '' : 's'} Online</span>`;
+        statusBadge = `<span class="chip chip-active">● ${g.activeNodes} Node${g.activeNodes === 1 ? '' : 's'} Online</span>`;
       } else {
-        statusBadge = '<span class="status-pill status-pill-neutral">○ Disconnected</span>';
+        statusBadge = '<span class="badge badge-neutral">○ Disconnected</span>';
       }
 
       const thumbprint = g.workloadPublicKeyThumbprint
-        ? `<code style="font-size: 0.8em;">${esc(g.workloadPublicKeyThumbprint.substring(0, 12))}…</code>`
-        : '<span class="form-hint">None</span>';
+        ? `<code>${esc(g.workloadPublicKeyThumbprint.substring(0, 12))}…</code>`
+        : '<span class="text-muted">—</span>';
 
       const nodesCountText = g.nodes && g.nodes.length > 0
-        ? `<a href="#" class="gw-view-nodes" data-gw-id="${escAttr(g.gatewayId)}">${g.activeNodes} / ${g.totalNodes} Active</a>`
+        ? `<a href="#" class="gw-view-nodes btn-link" data-gw-id="${escAttr(g.gatewayId)}">${g.activeNodes} / ${g.totalNodes} Active</a>`
         : `${g.activeNodes} Active`;
 
+      const enrolledDate = g.consumedUtc || g.createdUtc || g.consumedAtUtc || g.issuedAtUtc;
+
       html += `
-        <tr>
-          <td><strong>${esc(g.gatewayId)}</strong></td>
+        <tr data-gw-id="${escAttr(g.gatewayId)}">
+          <td><code>${esc(g.gatewayId)}</code></td>
           <td>${statusBadge}</td>
           <td>${nodesCountText}</td>
-          <td>${formatDate(g.consumedUtc || g.createdUtc)}</td>
+          <td>${esc(formatDate(enrolledDate))}</td>
           <td>${thumbprint}</td>
-          <td style="text-align: right;">
-            ${g.state !== 'Revoked' && g.isOnline ? `<button class="btn btn-outline btn-xs gw-create-conn-btn" data-gw-id="${escAttr(g.gatewayId)}">Bind Connection</button>` : ''}
-            ${g.nodes && g.nodes.length > 0 ? `<button class="btn btn-outline btn-xs gw-view-nodes-btn" data-gw-id="${escAttr(g.gatewayId)}">Nodes</button>` : ''}
-            ${g.state !== 'Revoked' ? `<button class="btn btn-outline btn-xs btn-danger gw-revoke-btn" data-gw-id="${escAttr(g.gatewayId)}">Revoke</button>` : ''}
+          <td class="table-actions">
+            ${g.state !== 'Revoked' && g.isOnline ? `<button class="btn btn-outline btn-sm gw-create-conn-btn" data-gw-id="${escAttr(g.gatewayId)}">Bind Connection</button>` : ''}
+            ${g.nodes && g.nodes.length > 0 ? `<button class="btn btn-outline btn-sm gw-view-nodes-btn" data-gw-id="${escAttr(g.gatewayId)}">Nodes</button>` : ''}
+            ${g.state !== 'Revoked' ? `<button class="btn btn-danger-soft btn-sm gw-revoke-btn" data-gw-id="${escAttr(g.gatewayId)}">Revoke</button>` : ''}
           </td>
         </tr>`;
     }
@@ -237,14 +239,29 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
     $tableWrap.querySelectorAll('.gw-revoke-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const gwId = btn.getAttribute('data-gw-id');
-        if (!confirm(`Are you sure you want to revoke Gateway '${gwId}'? Connected nodes will be disconnected immediately.`)) {
-          return;
-        }
+        const confirmed = window.ETLSQLFeedback?.confirm
+          ? await window.ETLSQLFeedback.confirm(`Are you sure you want to revoke Gateway '${gwId}'? Connected nodes will be disconnected immediately.`, {
+              title: 'Revoke Gateway',
+              impact: 'Connected nodes will be disconnected immediately.',
+              confirmLabel: 'Revoke gateway',
+              danger: true,
+              auditAction: 'admin.gateway.revoke'
+            })
+          : confirm(`Are you sure you want to revoke Gateway '${gwId}'? Connected nodes will be disconnected immediately.`);
+        if (!confirmed) return;
+
         try {
           await gatewaysApi.revoke(gwId);
+          if (window.ETLSQLFeedback?.notify) {
+            window.ETLSQLFeedback.notify(`Gateway '${gwId}' revoked.`, { title: 'Gateway Revoked', tone: 'success' });
+          }
           await load();
         } catch (err) {
-          alert('Failed to revoke gateway: ' + (err.message || err));
+          if (window.ETLSQLFeedback?.notify) {
+            window.ETLSQLFeedback.notify(err.message || 'Failed to revoke gateway.', { title: 'Revocation failed', tone: 'error' });
+          } else {
+            alert('Failed to revoke gateway: ' + (err.message || err));
+          }
         }
       });
     });
@@ -304,29 +321,16 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
     });
   }
 
-  function openEnrollModal() {
-    $inputId.value = '';
-    $inputExpiry.value = '60';
-    $enrollError.style.display = 'none';
-    $enrollForm.style.display = 'block';
-    $enrollResult.style.display = 'none';
-    $enrollModal.style.display = 'flex';
-  }
-
-  function closeEnrollModal() {
-    $enrollModal.style.display = 'none';
-  }
-
   function openNodesModal(gatewayId) {
-    const gw = gatewaysCache.find(g => g.gatewayId.toLowerCase() === gatewayId.toLowerCase());
+    const gw = gatewaysCache.find(g => (g.gatewayId || '').toLowerCase() === (gatewayId || '').toLowerCase());
     if (!gw) return;
 
     $nodesModalGatewayId.textContent = gw.gatewayId;
     if (!gw.nodes || !gw.nodes.length) {
-      $nodesTableWrap.innerHTML = '<p class="form-hint" style="padding: 16px;">No live nodes connected to this gateway cluster.</p>';
+      $nodesTableWrap.innerHTML = '<p class="form-hint" style="padding: 16px; margin: 0;">No live nodes connected to this gateway cluster.</p>';
     } else {
       let nodeHtml = `
-        <table class="admin-table">
+        <table class="data-table">
           <thead>
             <tr>
               <th>Node Identifier</th>
@@ -337,12 +341,17 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
           </thead>
           <tbody>`;
       for (const node of gw.nodes) {
+        const isOnline = node.isActive || node.status === 'Active';
+        const connectedDate = node.connectedUtc || node.connectedAtUtc;
+        const thumbprint = node.workloadPublicKeyThumbprint
+          ? `<code>${esc(node.workloadPublicKeyThumbprint.substring(0, 12))}…</code>`
+          : '<span class="text-muted">—</span>';
         nodeHtml += `
           <tr>
             <td><code>${esc(node.nodeId)}</code></td>
-            <td>${node.isActive ? '<span class="status-pill status-pill-good">Online</span>' : '<span class="status-pill status-pill-bad">Disconnected</span>'}</td>
-            <td>${formatDate(node.connectedUtc)}</td>
-            <td><code style="font-size: 0.8em;">${esc((node.workloadPublicKeyThumbprint || '').substring(0, 12))}…</code></td>
+            <td>${isOnline ? '<span class="chip chip-active">● Online</span>' : '<span class="chip chip-inactive">○ Disconnected</span>'}</td>
+            <td>${esc(formatDate(connectedDate))}</td>
+            <td>${thumbprint}</td>
           </tr>`;
       }
       nodeHtml += '</tbody></table>';
@@ -357,38 +366,46 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
 
   // Event bindings
   $refreshBtn.addEventListener('click', load);
-  $enrollBtn.addEventListener('click', openEnrollModal);
-  $enrollCancelBtn.addEventListener('click', closeEnrollModal);
-  $enrollCloseBtn.addEventListener('click', closeEnrollModal);
-  $enrollDoneBtn.addEventListener('click', () => { closeEnrollModal(); load(); });
-
+  $enrollBtn.addEventListener('click', focusEnrollForm);
   $nodesCloseBtn.addEventListener('click', closeNodesModal);
   $nodesDismissBtn.addEventListener('click', closeNodesModal);
+  $nodesModal.addEventListener('click', (e) => {
+    if (e.target === $nodesModal) closeNodesModal();
+  });
 
   $enrollSubmitBtn.addEventListener('click', async () => {
     const gatewayId = $inputId.value.trim();
     const expiry = parseInt($inputExpiry.value, 10) || 60;
     if (!gatewayId) {
       $enrollError.textContent = 'Please enter a Gateway ID.';
-      $enrollError.style.display = 'block';
+      $enrollError.classList.add('show');
       return;
     }
 
     $enrollSubmitBtn.disabled = true;
-    $enrollError.style.display = 'none';
+    $enrollError.textContent = '';
+    $enrollError.classList.remove('show');
     try {
       const res = await gatewaysApi.enroll(gatewayId, expiry);
       $resultToken.value = res.oneTimeToken;
       const portalOrigin = window.location.origin;
-      $resultCmd.value = `etlsql gateway setup --portal ${portalOrigin} --tenant ${res.tenantId} --gateway-id ${res.gatewayId} --token ${res.oneTimeToken}`;
+      $resultCmd.value = `etlsql gateway setup --portal ${portalOrigin} --tenant ${res.tenantId || 'default'} --gateway-id ${res.gatewayId || gatewayId} --token ${res.oneTimeToken}`;
       $enrollForm.style.display = 'none';
-      $enrollResult.style.display = 'block';
+      $enrollResult.style.display = '';
     } catch (err) {
       $enrollError.textContent = err.message || 'Failed to generate enrollment token.';
-      $enrollError.style.display = 'block';
+      $enrollError.classList.add('show');
     } finally {
       $enrollSubmitBtn.disabled = false;
     }
+  });
+
+  $enrollDoneBtn.addEventListener('click', () => {
+    $inputId.value = '';
+    $inputExpiry.value = '60';
+    $enrollResult.style.display = 'none';
+    $enrollForm.style.display = '';
+    load();
   });
 
   $copyTokenBtn.addEventListener('click', () => {

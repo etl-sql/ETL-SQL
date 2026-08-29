@@ -25,10 +25,11 @@ asserts that property rather than trusting it — see
 
 ## Explorer & Navigation Features
 
+- **Collapsible Navigation Panel**: Collapse and expand the left sidebar via the header toggle button (`#sidebarToggleBtn`), the sidebar header collapse button (`#sidebarCollapseBtn`), or keyboard shortcuts (`Ctrl+B` / `Cmd+B` / `[`). Sidebar state persists across reloads via localStorage and URL hash (`#sidebar=collapsed`).
 - **Live Search & Filter**: Instant filtering by keyword across title, subtitle, route, and category with search highlighting.
 - **Collapsible Category Accordions**: Stories organized into logical functional groups (`Admin & Fleet`, `Control Plane & SaaS`, `Orchestrator & Jobs`, `Governance & Security`, `Lineage & Graphs`, `Designers & Visuals`, `Script Editors & IDE`, `Portal Shell & Views`).
 - **Category Filter Chips**: Fast one-click category filtering (`Admin`, `Control Plane`, `Orchestrator`, etc.).
-- **Keyboard Navigation**: Press `/` or `Ctrl+K` to search; `↑` / `↓` arrow keys to cycle through stories; `Esc` to clear search.
+- **Keyboard Navigation**: Press `/` or `Ctrl+K` to search (auto-expands sidebar); `↑` / `↓` arrow keys to cycle through stories; `Ctrl+B` or `[` to toggle sidebar; `Esc` to clear search.
 - **Deep Linking**: URL hash synchronization (`#story=gateways-admin&fixture=healthy-fleet`) allows shareable URLs that restore the exact story and fixture state on reload.
 - **Theme Testing**: Toggle between `☀️ Light` and `🌙 Dark` stage themes to inspect components across themes.
 

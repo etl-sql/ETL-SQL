@@ -44,9 +44,14 @@ namespace ETL_SQL.TUI.UI
             // Select the active page (Research Paper mode: usually Page 0)
             var activePageIndex = Math.Clamp(_renderer.ActiveReportPageIndex, 0, manifest.Pages.Count - 1);
             var page = manifest.Pages[activePageIndex];
+            var controls = ReportControlInteraction.GetControls(manifest, activePageIndex);
+            _renderer.ActiveReportControlIndex = controls.Count == 0
+                ? 0
+                : Math.Clamp(_renderer.ActiveReportControlIndex, 0, controls.Count - 1);
+            var activeControl = controls.Count == 0 ? null : controls[_renderer.ActiveReportControlIndex];
 
             // Render the page using the shared reporting terminal renderer.
-            var reportContent = TerminalRenderer.RenderPage(page, manifest);
+            var reportContent = TerminalRenderer.RenderPage(page, manifest, activeControl?.Name);
 
             // ── Scrolling Implementation ──
             // We render to segments and then slice by line.
@@ -85,7 +90,10 @@ namespace ETL_SQL.TUI.UI
                 visibleContent.Add(new RawLine(line));
             }
 
-            string pageInfo = $"[cyan]Page {activePageIndex + 1}/{manifest.Pages.Count}: {Markup.Escape(page.Name)}[/] [grey](Line {_renderer.ReportScrollRow + 1}/{lines.Count} · ←→ pages · ↑↓ scroll · Esc exit)[/]";
+            var controlInfo = activeControl is null
+                ? string.Empty
+                : $" · Control {_renderer.ActiveReportControlIndex + 1}/{controls.Count}: {Markup.Escape(activeControl.Name)}";
+            string pageInfo = $"[cyan]Page {activePageIndex + 1}/{manifest.Pages.Count}: {Markup.Escape(page.Name)}{controlInfo}[/] [grey](Tab controls · Enter change · ←→ pages · ↑↓ scroll · Esc exit)[/]";
             var borderStyleStr = _renderer.ResultsFocus ? TuiTheme.Instance.Ui.ResultsFocusedBorder : TuiTheme.Instance.Ui.ResultsUnfocusedBorder;
             var borderStyle = TuiTheme.Instance.GetStyle(borderStyleStr, new Style(_renderer.ResultsFocus ? Color.Yellow : Color.Blue));
 

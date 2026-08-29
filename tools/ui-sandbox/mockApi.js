@@ -22,6 +22,12 @@ export function makeMockApi(seedState) {
     let data = {};
     if (path.endsWith('/api/designer/generate')) {
       data = { script: generateMockScript(body.designState ?? seedState) };
+    } else if (path.endsWith('/api/designer/patch')) {
+      data = { script: body.script || generateMockScript(body.designState ?? seedState) };
+    } else if (path.endsWith('/api/designer/query-filter')) {
+      data = { source: body.source };
+    } else if (path.endsWith('/api/designer/option-source')) {
+      data = { source: `(SELECT DISTINCT ${body.column} FROM &orders ORDER BY ${body.column})` };
     } else if (path.endsWith('/api/designer/parse')) {
       const scriptText = body.script || '';
       if (scriptText.includes('SYNTAX_ERROR') || scriptText.includes('>>> INVALID <<<') || body._mockParseError) {
@@ -45,7 +51,7 @@ export function makeMockApi(seedState) {
       data = await fetch('/tools/ui-sandbox/fixtures/sandbox-report.manifest.json')
         .then(r => r.json())
         .catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
-    } else if (path.endsWith('/api/designer/data-preview')) {
+    } else if (path.endsWith('/api/designer/data-preview') || path.endsWith('/api/designer/data-sample')) {
       const source = body.sourceKind === 'temp' ? body.tempTable : `${body.connection}.${body.table}`;
       const tableName = body.sourceKind === 'temp' ? body.tempTable : body.table;
       const table = mockSchemaTables().find((t) => t.name.toLowerCase() === String(tableName || '').replace(/^#/, '').toLowerCase())

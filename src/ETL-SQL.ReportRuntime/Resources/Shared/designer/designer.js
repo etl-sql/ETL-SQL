@@ -3580,6 +3580,9 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
  * @param {Function}    [opts.onSaveScript]         (script: string) → Promise. VS Code host override — bypasses portal API save.
  * @param {Function}    [opts.onSave]               Called after successful save.
  * @param {Function}    [opts.onCancel]             Called on back/cancel.
+ * @param {boolean}     [opts.hideSidebar=false]     Hide the built-in library when hosted by Studio's activity rail.
+ * @param {boolean}     [opts.hideProps=false]       Hide the built-in property dock when Studio provides its own inspector.
+ * @param {Function}    [opts.onVisualSelect]         Called with the selected visual id.
  * @returns {{ dispose: Function }}
  */
 export const DATA_PREP_RECIPES = [
@@ -4054,6 +4057,10 @@ export function createDesigner(container, opts = {}) {
     `;
     sidebar.innerHTML = sidebarHtml;
     root.appendChild(sidebar);
+    if (opts.hideSidebar) {
+        sidebar.hidden = true;
+        root.classList.add('no-sidebar');
+    }
 
     const paletteSearch = sidebar.querySelector('#dsgn-palette-search');
     const paletteCount = sidebar.querySelector('#dsgn-palette-count');
@@ -4090,7 +4097,17 @@ export function createDesigner(container, opts = {}) {
     // Properties panel
     const propsPanel = document.createElement('div');
     propsPanel.className = 'etlsql-designer-props';
-    root.appendChild(propsPanel);
+    if (opts.propertiesHost) {
+        propsPanel.classList.add('etlsql-designer-props-external');
+        opts.propertiesHost.appendChild(propsPanel);
+        root.classList.add('no-props');
+    } else {
+        root.appendChild(propsPanel);
+    }
+    if (opts.hideProps && !opts.propertiesHost) {
+        propsPanel.hidden = true;
+        root.classList.add('no-props');
+    }
 
     // Script overlay
     const scriptOverlay = document.createElement('div');
@@ -4558,7 +4575,10 @@ export function createDesigner(container, opts = {}) {
         if (!visuals.length) {
             const ph = document.createElement('div');
             ph.className = 'etlsql-dsgn-canvas-empty';
-            ph.innerHTML = `<strong>Build your first visual</strong><span>Search the visual library, or start with a familiar chart.</span><button type="button" data-empty-vtype="BAR">+ Add bar chart</button>`;
+            const dataRequired = opts.requireDataFirst && opts.canAddVisual && !opts.canAddVisual();
+            ph.innerHTML = dataRequired
+                ? `<strong>Connect data to start</strong><span>Choose a source and build a reusable sample before adding visuals.</span><button type="button" data-empty-data>Choose data</button>`
+                : `<strong>Build your first visual</strong><span>Search the visual library, or start with a familiar chart.</span><button type="button" data-empty-vtype="BAR">+ Add bar chart</button>`;
             canvasGrid.appendChild(ph);
             return;
         }
@@ -4574,6 +4594,8 @@ export function createDesigner(container, opts = {}) {
                 card.dataset.containerId = v.containerId;
             }
             card.dataset.vid = v.id;
+            card.dataset.visualId = v.id;
+            card.classList.add('etlsql-studio-canvas-card');
             card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
             card.style.gridRow    = `${v.gridRow || 1} / span ${isFolded ? 1 : (v.gridRowSpan || 4)}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
@@ -4606,17 +4628,18 @@ export function createDesigner(container, opts = {}) {
             }
 
             const badgeText = isContainer ? `📁 ${v.options?.CONTAINER_TYPE || 'BOX'}` : v.type;
-            const foldBtn = isContainer ? `<button class="etlsql-dsgn-vcard-fold" data-fold="${v.id}" title="${isFolded ? 'Expand container' : 'Collapse container'}">${isFolded ? '►' : '▼'}</button>` : '';
-            const dupBtn = `<button class="etlsql-dsgn-vcard-dup" data-dup="${v.id}" title="Duplicate visual">📋</button>`;
-            const detachBtn = v.containerId ? `<button class="etlsql-dsgn-vcard-detach" data-detach="${v.id}" title="Detach from container">↗</button>` : '';
+            const foldBtn = isContainer ? `<button class="etlsql-dsgn-vcard-fold" data-fold="${v.id}" title="${isFolded ? 'Expand container' : 'Collapse container'}" aria-label="${isFolded ? 'Expand container' : 'Collapse container'}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${isFolded ? 'M6 3.5 11 8l-5 4.5' : 'm3.5 6 4.5 5 4.5-5'}"/></svg></button>` : '';
+            const dupBtn = `<button class="etlsql-dsgn-vcard-dup" data-dup="${v.id}" title="Duplicate visual" aria-label="Duplicate visual"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="2.5" width="8" height="8" rx="1.5"/><path d="M10.5 11v1.5a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1H5"/></svg></button>`;
+            const detachBtn = v.containerId ? `<button class="etlsql-dsgn-vcard-detach" data-detach="${v.id}" title="Detach from container" aria-label="Detach from container"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11 11.5 4.5M7.5 4.5h4v4M3 7v5a1 1 0 0 0 1 1h5"/></svg></button>` : '';
 
             const cardHdr = document.createElement('div');
             cardHdr.className = 'etlsql-dsgn-vcard-hdr';
             cardHdr.innerHTML = `
                 <div class="etlsql-dsgn-vcard-badge">${badgeText}${badgeExtra}</div>
-                <div class="etlsql-dsgn-vcard-name" style="flex:1;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title || v.name)}</div>
-                ${foldBtn}${dupBtn}${detachBtn}
-                <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual">✕</button>
+                <button type="button" class="etlsql-dsgn-vcard-name" data-edit-title="${v.id}" title="Rename visual">${esc(v.title || v.name)}</button>
+                <div class="etlsql-dsgn-vcard-actions">${foldBtn}${dupBtn}${detachBtn}
+                    <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual" aria-label="Remove visual"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button>
+                </div>
             `;
             card.appendChild(cardHdr);
 
@@ -5702,8 +5725,8 @@ export function createDesigner(container, opts = {}) {
 
     let selVisualIds = new Set();
 
-    function selectVisual(id, opts = {}) {
-        if (opts.toggle || opts.multi) {
+    function selectVisual(id, selectionOpts = {}) {
+        if (selectionOpts.toggle || selectionOpts.multi) {
             if (id) {
                 if (selVisualIds.has(id)) selVisualIds.delete(id);
                 else selVisualIds.add(id);
@@ -5723,7 +5746,9 @@ export function createDesigner(container, opts = {}) {
         renderProps();
         renderAlignmentToolbar();
 
-        if (selVisualId && !opts.skipEditorSync) {
+        opts.onVisualSelect?.(selVisualId);
+
+        if (selVisualId && !selectionOpts.skipEditorSync) {
             const v = findVis(selVisualId);
             if (v && v.name) {
                 selectVisualInEditor(v.name);
@@ -5804,6 +5829,10 @@ export function createDesigner(container, opts = {}) {
     }
 
     function addVisualAt(type, col = 1, row = null, colSpan = 12, rowSpan = 4) {
+        if (opts.canAddVisual && !opts.canAddVisual()) {
+            opts.onAddVisualBlocked?.();
+            return null;
+        }
         pushUndoState();
         if (!state.pages || !state.pages.length) {
             state.pages = [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }];
@@ -5832,25 +5861,20 @@ export function createDesigner(container, opts = {}) {
 
         const uType = type.toUpperCase();
         if (uType === 'BAR') {
-            visual.mappings = { X: 'category', Y: 'value' };
             visual.options = { TITLE: 'Bar Chart' };
         } else if (uType === 'LINE') {
-            visual.mappings = { X: 'date', Y: 'value' };
             visual.options = { TITLE: 'Trend Line' };
         } else if (uType === 'KPI') {
-            visual.mappings = { VALUE: 'total_amount' };
             visual.options = { TITLE: 'Key Metric' };
             visual.gridColSpan = 3;
             visual.gridRowSpan = 2;
         } else if (uType === 'DONUT' || uType === 'PIE') {
-            visual.mappings = { CATEGORY: 'region', VALUE: 'amount' };
             visual.options = { TITLE: 'Proportions' };
         } else if (uType === 'TABLE') {
             visual.options = { TITLE: 'Data Grid Table', PAGE_SIZE: '10' };
             visual.gridColSpan = 12;
             visual.gridRowSpan = 5;
         } else if (uType === 'SLICER') {
-            visual.mappings = { FIELD: 'region' };
             visual.options = { TITLE: 'Filter Slicer' };
             visual.gridColSpan = 3;
             visual.gridRowSpan = 3;
@@ -5894,6 +5918,7 @@ export function createDesigner(container, opts = {}) {
         renderTree();
         renderProps();
         syncScriptFromGridDebounced();
+        return newId;
     }
 
     function addVisual(type) {
@@ -6465,10 +6490,47 @@ export function createDesigner(container, opts = {}) {
     });
 
     canvasGrid.addEventListener('click', e => {
+        const chooseData = e.target.closest('[data-empty-data]');
+        if (chooseData) {
+            e.stopPropagation();
+            opts.onRequestData?.();
+            return;
+        }
         const emptyAdd = e.target.closest('[data-empty-vtype]');
         if (emptyAdd) {
             e.stopPropagation();
             addVisual(emptyAdd.dataset.emptyVtype);
+            return;
+        }
+        const titleButton = e.target.closest('[data-edit-title]');
+        if (titleButton) {
+            e.stopPropagation();
+            const visual = findVis(titleButton.dataset.editTitle);
+            if (!visual) return;
+            const input = document.createElement('input');
+            input.className = 'etlsql-dsgn-vcard-name-input';
+            input.value = visual.title || visual.name;
+            titleButton.replaceWith(input);
+            input.focus();
+            input.select();
+            let committed = false;
+            const finish = save => {
+                if (committed) return;
+                committed = true;
+                if (save && input.value.trim()) {
+                    visual.title = input.value.trim();
+                    visual.options = { ...(visual.options || {}), TITLE: visual.title };
+                    renderTree();
+                    renderProps();
+                    syncScriptFromGridDebounced();
+                }
+                renderCanvas();
+            };
+            input.addEventListener('blur', () => finish(true), { once: true });
+            input.addEventListener('keydown', event => {
+                if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+                if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+            });
             return;
         }
         const del = e.target.closest('[data-del]');
@@ -6631,8 +6693,9 @@ export function createDesigner(container, opts = {}) {
         const card = e.target.closest('.etlsql-dsgn-visual-card');
         const delBtn = e.target.closest('[data-del]');
         const emptyBtn = e.target.closest('[data-empty-vtype]');
+        const headerControl = e.target.closest('.etlsql-dsgn-vcard-actions, .etlsql-dsgn-vcard-name, .etlsql-dsgn-vcard-name-input');
 
-        if (delBtn || emptyBtn) return; // Managed by click handlers
+        if (delBtn || emptyBtn || headerControl) return; // Managed by click handlers
 
         if (!card && !resizeHandle) {
             isMarquee = true;
@@ -7059,6 +7122,8 @@ export function createDesigner(container, opts = {}) {
     return {
         applyScriptText,
         addVisual,
+        selectVisual,
+        refreshSnapshot: renderCanvas,
         getState: () => state,
         dispose: () => {
             leaseDisposed = true;
@@ -7072,6 +7137,7 @@ export function createDesigner(container, opts = {}) {
             clearTimeout(cursorTimeout);
             clearTimeout(syncTimeout);
             closeScript();
+            propsPanel.remove();
             container.innerHTML = '';
         }
     };

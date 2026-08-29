@@ -46,6 +46,7 @@ public sealed class DesignerScriptPatcher
         var lineEnding = DetectLineEnding(script);
         var replacements = new List<SpanReplacement>();
 
+        PatchParameters(script, ast, state.Parameters, lineEnding, replacements);
         PatchReportStyle(script, ast, state.ReportStyle, lineEnding, replacements);
         PatchDatasets(script, ast, state.Datasets ?? [], lineEnding, replacements);
 
@@ -59,6 +60,57 @@ public sealed class DesignerScriptPatcher
         PatchBookmarks(script, ast, state.Bookmarks, lineEnding, replacements);
 
         return ApplyReplacements(script, replacements);
+    }
+
+    private static void PatchParameters(
+        string script,
+        Script ast,
+        IReadOnlyList<DesignerAuthoringParameter>? parameters,
+        string lineEnding,
+        List<SpanReplacement> replacements)
+    {
+        if (parameters is null) return;
+
+        var existing = ast.Statements
+            .SelectMany(statement => statement is BlockStatement block
+                ? block.Statements.OfType<DeclareStatement>().Select(declaration => (Declaration: declaration, Patchable: false))
+                : statement is DeclareStatement declaration
+                    ? [(Declaration: declaration, Patchable: true)]
+                    : [])
+            .GroupBy(item => item.Declaration.VariableName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var desiredNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var additions = new List<string>();
+
+        foreach (var parameter in parameters)
+        {
+            var name = parameter.Name.StartsWith('@') ? parameter.Name : "@" + parameter.Name;
+            desiredNames.Add(name);
+            var desired = DesignerScriptGenerationService.GenerateParameter(parameter with { Name = name });
+            if (!existing.TryGetValue(name, out var existingParameter))
+            {
+                additions.Add(desired);
+                continue;
+            }
+
+            var statement = existingParameter.Declaration;
+            var same = string.Equals(statement.DataType, parameter.DataType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(statement.InitialValue?.ToSql(), parameter.InitialValue?.Trim(), StringComparison.Ordinal)
+                && statement.IsInput == parameter.IsInput
+                && statement.IsOutput == parameter.IsOutput
+                && statement.IsRequired == parameter.IsRequired
+                && statement.IsSensitive == parameter.IsSensitive;
+            if (!same && existingParameter.Patchable)
+                AddStatementReplacementIfChanged(script, statement, desired, replacements);
+        }
+
+        foreach (var (name, existingParameter) in existing)
+            if (!desiredNames.Contains(name) && existingParameter.Patchable)
+                replacements.Add(DeletionReplacement(script, existingParameter.Declaration));
+
+        if (additions.Count > 0)
+            replacements.Add(new SpanReplacement(0, 0,
+                string.Join(lineEnding, additions) + lineEnding + lineEnding));
     }
 
     private static void PatchReportStyle(
@@ -471,6 +523,7 @@ public sealed class DesignerScriptPatcher
     {
         var comments = Regex.Matches(original, @"--[^\r\n]*|/\*[\s\S]*?\*/", RegexOptions.CultureInvariant)
             .Select(match => match.Value)
+            .Where(comment => !comment.StartsWith("/* ETL-SQL-STUDIO-FILTER ", StringComparison.Ordinal))
             .Where(comment => !replacement.Contains(comment, StringComparison.Ordinal))
             .ToList();
         if (comments.Count == 0) return replacement;

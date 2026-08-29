@@ -90,17 +90,12 @@ internal static class StudioShell
         authFetch,
         onSave: async (content, filePath) => {
           if (readOnly) return;
-          try {
-            const res = await authFetch('/api/files', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ path: filePath, content })
-            });
-            if (!res.ok) throw new Error(await res.text());
-            ETLSQLFeedback?.notify?.('Saved ' + filePath, { title: 'File Saved', tone: 'success' });
-          } catch (e) {
-            ETLSQLFeedback?.notify?.('Save failed: ' + e.message, { title: 'Save failed', tone: 'error' });
-          }
+          const res = await authFetch('/api/files', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath, content })
+          });
+          if (!res.ok) throw new Error(await res.text());
         }
       });
     }

@@ -531,5 +531,222 @@ namespace ETL_SQL.Tests.Statements.Statements
                 if (File.Exists(hashFile)) File.Delete(hashFile);
             }
         }
+
+        private async Task<List<Row>> QueryRowsAsync(string sql, Evaluator evaluator)
+        {
+            var selectStmt = (SelectStatement)new Parser(new Lexer(sql).Tokenize()).Parse().Statements[0];
+            var rows = new List<Row>();
+            await foreach (var batch in evaluator.EvaluateSelect(selectStmt))
+            {
+                rows.AddRange(batch.Rows);
+            }
+            return rows;
+        }
+
+        [Fact]
+        public async Task TestMoveFileConnectionToDirectoryConnection_UpdatesConnectionInPlace()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string src = "test_conn_move_src.csv";
+            string dir = "test_conn_move_dir";
+            if (File.Exists(src)) File.Delete(src);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+                await File.WriteAllTextAsync(src, "id,name\n1,Alice\n2,Bob");
+
+                await ExecuteAsync($"CREATE CONNECTION src_conn AS FLATFILE('{src}');", evaluator);
+                await ExecuteAsync($"CREATE CONNECTION archive_dir AS DIRECTORY('{dir}');", evaluator);
+
+                // MOVE FILE connection TO directory connection
+                await ExecuteAsync("MOVE FILE src_conn TO archive_dir;", evaluator);
+
+                string expectedNewPath = Path.Combine(dir, src);
+                Assert.False(File.Exists(src));
+                Assert.True(File.Exists(expectedNewPath));
+
+                // Query src_conn to verify it was updated in-place and reads from the new location
+                var result = await QueryRowsAsync("SELECT * FROM src_conn;", evaluator);
+                Assert.Equal(2, result.Count);
+                Assert.Equal(1m, Convert.ToDecimal(result[0]["id"]));
+                Assert.Equal("Alice", result[0]["name"]);
+            }
+            finally
+            {
+                if (File.Exists(src)) File.Delete(src);
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task TestMoveFileConnectionToDirectoryConnectionWithDateSuffix()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string src = "test_conn_suf_src.csv";
+            string dir = "test_conn_suf_dir";
+            if (File.Exists(src)) File.Delete(src);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+                await File.WriteAllTextAsync(src, "id,name\n1,Alice");
+
+                await ExecuteAsync($"CREATE CONNECTION c_suf AS FLATFILE('{src}');", evaluator);
+                await ExecuteAsync($"CREATE CONNECTION d_suf AS DIRECTORY('{dir}');", evaluator);
+
+                await ExecuteAsync("MOVE FILE c_suf TO d_suf WITH (DATE_SUFFIX = 'yyyyMMdd');", evaluator);
+
+                Assert.False(File.Exists(src));
+                string dateStr = DateTime.Now.ToString("yyyyMMdd");
+                string expectedNewPath = Path.Combine(dir, $"test_conn_suf_src_{dateStr}.csv");
+                Assert.True(File.Exists(expectedNewPath));
+
+                // Query c_suf to verify it reads from the date-suffixed location
+                var result = await QueryRowsAsync("SELECT * FROM c_suf;", evaluator);
+                Assert.Single(result);
+                Assert.Equal("Alice", result[0]["name"]);
+            }
+            finally
+            {
+                if (File.Exists(src)) File.Delete(src);
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task TestMoveFileConnectionToFilePath_UpdatesConnectionInPlace()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string src = "test_conn_fp_src.csv";
+            string dst = "test_conn_fp_dst.csv";
+            if (File.Exists(src)) File.Delete(src);
+            if (File.Exists(dst)) File.Delete(dst);
+
+            try
+            {
+                await File.WriteAllTextAsync(src, "id,name\n10,Charlie");
+
+                await ExecuteAsync($"CREATE CONNECTION c_fp AS FLATFILE('{src}');", evaluator);
+                await ExecuteAsync($"MOVE FILE c_fp TO '{dst}';", evaluator);
+
+                Assert.False(File.Exists(src));
+                Assert.True(File.Exists(dst));
+
+                // Query c_fp
+                var result = await QueryRowsAsync("SELECT * FROM c_fp;", evaluator);
+                Assert.Single(result);
+                Assert.Equal("Charlie", result[0]["name"]);
+            }
+            finally
+            {
+                if (File.Exists(src)) File.Delete(src);
+                if (File.Exists(dst)) File.Delete(dst);
+            }
+        }
+
+        [Fact]
+        public async Task TestDeleteFileConnection_LeavesConnectionInPlace_AllowsSubsequentAlterInLoop()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string src1 = "test_conn_del_1.csv";
+            string src2 = "test_conn_del_2.csv";
+            if (File.Exists(src1)) File.Delete(src1);
+            if (File.Exists(src2)) File.Delete(src2);
+
+            try
+            {
+                await File.WriteAllTextAsync(src1, "id,name\n1,FileOne");
+                await File.WriteAllTextAsync(src2, "id,name\n2,FileTwo");
+
+                await ExecuteAsync($"CREATE CONNECTION c_del AS FLATFILE('{src1}');", evaluator);
+
+                // DELETE FILE connection
+                await ExecuteAsync("DELETE FILE c_del;", evaluator);
+                Assert.False(File.Exists(src1));
+
+                // Connection remains registered
+                Assert.True(evaluator.Connections.ContainsKey("c_del"));
+
+                // Querying without alter returns 0 rows because the file does not exist
+                var emptyResult = await QueryRowsAsync("SELECT * FROM c_del;", evaluator);
+                Assert.Empty(emptyResult);
+
+                // In a loop scenario: ALTER CONNECTION to next file works
+                await ExecuteAsync($"ALTER CONNECTION c_del AS FLATFILE('{src2}');", evaluator);
+                var result = await QueryRowsAsync("SELECT * FROM c_del;", evaluator);
+                Assert.Single(result);
+                Assert.Equal("FileTwo", result[0]["name"]);
+            }
+            finally
+            {
+                if (File.Exists(src1)) File.Delete(src1);
+                if (File.Exists(src2)) File.Delete(src2);
+            }
+        }
+
+        [Fact]
+        public async Task TestCopyFileConnectionToDirectoryConnection_LeavesSourceConnectionUnchanged()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string src = "test_conn_cp_src.csv";
+            string dir = "test_conn_cp_dir";
+            if (File.Exists(src)) File.Delete(src);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+                await File.WriteAllTextAsync(src, "id,name\n99,Preserved");
+
+                await ExecuteAsync($"CREATE CONNECTION c_cp AS FLATFILE('{src}');", evaluator);
+                await ExecuteAsync($"CREATE CONNECTION d_cp AS DIRECTORY('{dir}');", evaluator);
+
+                await ExecuteAsync("COPY FILE c_cp TO d_cp;", evaluator);
+
+                Assert.True(File.Exists(src));
+                Assert.True(File.Exists(Path.Combine(dir, src)));
+
+                // Source connection still points to src
+                var result = await QueryRowsAsync("SELECT * FROM c_cp;", evaluator);
+                Assert.Single(result);
+                Assert.Equal("Preserved", result[0]["name"]);
+            }
+            finally
+            {
+                if (File.Exists(src)) File.Delete(src);
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task TestNonFileConnectionInFileOp_ThrowsExecutionException()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            await ExecuteAsync("CREATE CONNECTION non_file_db AS MSSQL('Server=localhost;Database=test;User Id=sa;Password=secret;');", evaluator);
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await ExecuteAsync("MOVE FILE non_file_db TO 'dest.csv';", evaluator);
+            });
+
+            Assert.Contains("does not support file operations", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task TestWildcardPathInConnection_ThrowsExecutionException()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            await ExecuteAsync("CREATE CONNECTION wildcard_conn AS FLATFILE('data/*.csv');", evaluator);
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await ExecuteAsync("MOVE FILE wildcard_conn TO 'dest.csv';", evaluator);
+            });
+
+            Assert.Contains("Wildcard patterns in connection 'wildcard_conn' are not supported", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

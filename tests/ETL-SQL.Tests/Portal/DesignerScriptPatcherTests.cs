@@ -12,6 +12,43 @@ public class DesignerScriptPatcherTests
     private readonly DesignerScriptPatcher _patcher = new();
 
     [Fact]
+    public void AddsReportParameterWithoutRewritingExistingSqlOrPresentation()
+    {
+        const string original = """
+            -- hand-authored preparation stays byte-identical
+            WITH source_rows AS (SELECT Region FROM #sales)
+            SELECT Region INTO #regions FROM source_rows;
+
+            CREATE VISUAL RegionSlicer AS SLICER (
+                SOURCE = #regions,
+                MAPPINGS (VALUE = Region)
+            );
+
+            CREATE PAGE [Main] AS DASHBOARD (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = RegionSlicer))
+            );
+            """;
+        var protectedSql = original[..original.IndexOf("CREATE VISUAL", StringComparison.Ordinal)];
+        var state = new DesignerStateDto(
+            [
+                new DesignerPageDto("p1", "Main", "Dashboard",
+                [
+                    new DesignerVisualDto(
+                        "v1", "RegionSlicer", "SLICER", 1, 1, 12, 4, null, "regions",
+                        new Dictionary<string, string> { ["VALUE"] = "Region" },
+                        new Dictionary<string, string>())
+                ])
+            ],
+            [],
+            Parameters: [new DesignerParameterDto("@selected_region", "VARCHAR", "'All'", IsInput: true)]);
+
+        var patched = _patcher.Patch(original, state);
+
+        Assert.StartsWith("DECLARE @selected_region VARCHAR = 'All' INPUT;", patched, StringComparison.Ordinal);
+        Assert.Contains(protectedSql, patched, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PreservesPrecedingSqlAndComments_WhenVisualIsUpdated()
     {
         var originalScript = """

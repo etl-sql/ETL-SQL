@@ -71,6 +71,24 @@ public class ConnectionForwardReferenceRule : ILintRule
         {
             names.Add(alter.ConnectionName);
         }
+        else if (stmt is FileOperationStatement fileOp)
+        {
+            if (fileOp.Source is IdentifierExpression sid) names.Add(sid.Name);
+            if (fileOp.Destination is IdentifierExpression did) names.Add(did.Name);
+            if (!string.IsNullOrEmpty(fileOp.ConnectionName)) names.Add(fileOp.ConnectionName);
+        }
+        else if (stmt is DirectoryOperationStatement dirOp)
+        {
+            if (dirOp.Path is IdentifierExpression pid) names.Add(pid.Name);
+            if (dirOp.Destination is IdentifierExpression did) names.Add(did.Name);
+            if (!string.IsNullOrEmpty(dirOp.ConnectionName)) names.Add(dirOp.ConnectionName);
+        }
+        else if (stmt is FileTransferStatement trans)
+        {
+            if (trans.LocalPath is IdentifierExpression lid) names.Add(lid.Name);
+            if (trans.RemotePath is IdentifierExpression rid) names.Add(rid.Name);
+            if (!string.IsNullOrEmpty(trans.ConnectionName)) names.Add(trans.ConnectionName);
+        }
 
         return names;
     }

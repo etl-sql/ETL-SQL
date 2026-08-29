@@ -112,6 +112,7 @@ namespace ETL_SQL.TUI.UI
         public bool ReportVisible { get; set; } = false;
         public int ActiveReportPageIndex { get; set; } = 0;
         public int ReportScrollRow { get; set; } = 0;
+        public int ActiveReportControlIndex { get; set; } = 0;
         public ReportManifest? CurrentReportManifest { get; set; }
         private Dictionary<int, int> _linePhysicalShifts = new();
 
@@ -120,6 +121,7 @@ namespace ETL_SQL.TUI.UI
             if (CurrentReportManifest == null) return;
             ActiveReportPageIndex = Math.Max(0, ActiveReportPageIndex - 1);
             ReportScrollRow = 0;
+            ActiveReportControlIndex = 0;
             ForceFullRepaint();
         }
 
@@ -128,6 +130,7 @@ namespace ETL_SQL.TUI.UI
             if (CurrentReportManifest == null || CurrentReportManifest.Pages.Count == 0) return;
             ActiveReportPageIndex = Math.Min(CurrentReportManifest.Pages.Count - 1, ActiveReportPageIndex + 1);
             ReportScrollRow = 0;
+            ActiveReportControlIndex = 0;
             ForceFullRepaint();
         }
 
