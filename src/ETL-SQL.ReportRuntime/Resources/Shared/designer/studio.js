@@ -454,12 +454,6 @@ export async function createStudioWorkbench(container, opts = {}) {
 
                 <!-- Global Action Controls -->
                 <div class="etlsql-studio-actions">
-                    <button type="button" class="etlsql-studio-btn" data-action="wizard" title="New Connection Wizard">
-                        ${_studioIcon('wizard', 14)} Connection
-                    </button>
-                    <button type="button" class="etlsql-studio-btn" data-action="format" title="Format Document (Shift+Alt+F)">
-                        ${_studioIcon('format', 14)}
-                    </button>
                     <button type="button" class="etlsql-studio-btn" data-action="theme" title="Toggle Theme">
                         ${_studioIcon('theme', 14)}
                     </button>
@@ -1378,7 +1372,6 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         const rptCount = state.documents.filter(d => (d.path || '').endsWith('.rptsql')).length + 1;
         const etlCount = state.documents.filter(d => (d.path || '').endsWith('.etlsql')).length + 1;
-        const sqlCount = state.documents.filter(d => (d.path || '').endsWith('.sql')).length + 1;
 
         let path = '';
         let content = '';
@@ -1393,7 +1386,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             content = '';
             proj = 'split';
         } else {
-            path = `untitled_query_${sqlCount}.sql`;
+            path = `untitled_query_${etlCount}.etlsql`;
             content = '';
             proj = 'code';
         }
@@ -1515,7 +1508,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                         <button type="button" class="etlsql-home-action-card tertiary" data-create-from-home="sql">
                             <span class="etlsql-home-card-icon">${_studioIcon('code', 24)}</span>
                             <div class="etlsql-home-card-info">
-                                <strong>New Script (.sql)</strong>
+                                <strong>New Script (.etlsql)</strong>
                                 <span>Direct SQL queries and multi-source join authoring.</span>
                             </div>
                         </button>
@@ -1545,7 +1538,10 @@ export async function createStudioWorkbench(container, opts = {}) {
                                     <div class="etlsql-studio-recent-card">
                                         <div class="etlsql-recent-card-top">
                                             <span class="etlsql-card-type-pill" style="font-size:9px;">${typePill}</span>
-                                            ${sizeKb ? `<span style="font-size:10px; color:var(--portal-muted,#8b949e);">${sizeKb}</span>` : ''}
+                                            <div class="etlsql-recent-card-meta">
+                                                ${sizeKb ? `<span style="font-size:10px; color:var(--portal-muted,#8b949e);">${sizeKb}</span>` : ''}
+                                                ${catalogMode ? '' : `<button type="button" class="etlsql-recent-card-dismiss" data-dismiss-file="${_escapeHtml(f.path)}" title="Remove from Studio Home" aria-label="Remove ${_escapeHtml(name)} from Studio Home">${_studioIcon('close', 10)}</button>`}
+                                            </div>
                                         </div>
                                         <div class="etlsql-recent-card-title" title="${_escapeHtml(f.path)}">
                                             <span>${_fileIcon(f.path)}</span>
@@ -1585,6 +1581,15 @@ export async function createStudioWorkbench(container, opts = {}) {
             b.addEventListener('click', async () => {
                 const report = state.catalogReports.find(item => String(item.id) === b.dataset.openReport);
                 if (report) await openCatalogReport(report, b.dataset.openProj || 'split');
+            });
+        });
+
+        homeStage.querySelectorAll('[data-dismiss-file]').forEach(button => {
+            button.addEventListener('click', () => {
+                const filePath = button.dataset.dismissFile;
+                state.workspaceFiles = state.workspaceFiles.filter(file => file.path !== filePath);
+                renderStudioHome();
+                _feedback.notify('Removed from Studio Home. The file was not deleted.', { title: 'Recent File Removed', tone: 'info' });
             });
         });
     }
@@ -1629,7 +1634,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             <button type="button" class="etlsql-tab-new-item" data-new-type="sql">
                 <span style="color:#a371f7;">${_studioIcon('code', 16)}</span>
                 <div>
-                    <strong>New Script (.sql)</strong>
+                    <strong>New Script (.etlsql)</strong>
                     <small>Raw SQL Query</small>
                 </div>
             </button>
@@ -2177,26 +2182,19 @@ export async function createStudioWorkbench(container, opts = {}) {
         } else if (activity === 'git') {
             sidebarTitle.textContent = 'Source Control';
             sidebarContent.innerHTML = `
-                <div class="etlsql-sidebar-section-header"><span>Git Workspace</span></div>
-                <div style="padding:10px 12px; font-size:0.75rem; color:var(--portal-text-soft,#8b949e);">
-                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-                        <span>🌿 Branch:</span> <strong style="color:var(--portal-text,#f0f6fc);">main</strong>
-                    </div>
-                    <div style="font-size:0.6875rem; opacity:0.8;">Working tree clean. All changes tracked in Git.</div>
+                <div class="etlsql-studio-capability-state" data-capability-state="git" role="status">
+                    <span class="etlsql-studio-capability-label">Host capability</span>
+                    <strong>Source control is unavailable</strong>
+                    <p>This Studio host does not provide Git status or source-control actions.</p>
                 </div>
             `;
         } else if (activity === 'settings') {
             sidebarTitle.textContent = 'Settings';
             sidebarContent.innerHTML = `
-                <div style="padding:10px 12px; font-size:0.75rem; display:flex; flex-direction:column; gap:8px;">
-                    <label style="display:flex; align-items:center; gap:6px;">
-                        <input type="checkbox" checked>
-                        <span>Auto-format on save</span>
-                    </label>
-                    <label style="display:flex; align-items:center; gap:6px;">
-                        <input type="checkbox" checked>
-                        <span>Zero-Trust Secret Scanner</span>
-                    </label>
+                <div class="etlsql-studio-capability-state" data-capability-state="settings" role="status">
+                    <span class="etlsql-studio-capability-label">Host capability</span>
+                    <strong>Settings are unavailable</strong>
+                    <p>This Studio host does not expose editable workspace settings.</p>
                 </div>
             `;
         }
@@ -2305,21 +2303,44 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     function handleOpenConnectionWizard() {
         createConnectionWizard({
-            authFetch,
-            apiBase,
-            onCreated: (conn) => {
+            fetchSchemas: async () => {
+                const response = await authFetch(apiBase + '/api/connectors/schema');
+                if (!response.ok) throw new Error('Connector types could not be loaded.');
+                return response.json();
+            },
+            onInsert: (sql, metadata) => {
                 const doc = getActiveDoc();
                 if (!doc) return;
-                const decl = `\nCREATE CONNECTION ${conn.name} AS ${conn.type}('${conn.options?.DATABASE || 'db'}');\n`;
+                const nextScript = `${sql.trim()}\n${state.editorInstance?.getValue?.() || doc.content}`;
+                doc.content = nextScript;
+                doc.isDirty = true;
                 if (state.editorInstance) {
-                    state.editorInstance.setValue(decl + state.editorInstance.getValue());
-                } else {
-                    doc.content = decl + doc.content;
+                    state.editorInstance.setValue(nextScript);
                 }
+                renderTabs();
                 renderVisualStage();
-                _feedback.notify(`Created connection ${conn.name}`, { title: 'Connection Created', tone: 'success' });
+                _feedback.notify(`Created connection ${metadata.alias}`, { title: 'Connection Created', tone: 'success' });
             }
         });
+    }
+
+    async function handleFormatDocument() {
+        const doc = getActiveDoc();
+        if (!doc || !state.editorInstance) return;
+        try {
+            const res = await authFetch(apiBase + '/api/format', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script: state.editorInstance.getValue() })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                state.editorInstance.setValue(data.formatted || state.editorInstance.getValue());
+                _feedback.notify('Formatted document', { title: 'Document Formatted', tone: 'success' });
+            }
+        } catch (e) {
+            _feedback.notify('Format failed: ' + e.message, { title: 'Format Failed', tone: 'error' });
+        }
     }
 
     shell.querySelectorAll('[data-projection]').forEach(btn => {
@@ -2340,9 +2361,8 @@ export async function createStudioWorkbench(container, opts = {}) {
         btn.addEventListener('click', () => addVisualToCanvas(btn.dataset.addVisual));
     });
 
-    shell.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard);
     shell.querySelector('[data-action="save"]')?.addEventListener('click', handleSave);
-    shell.querySelector('[data-action="code-format"]')?.addEventListener('click', () => shell.querySelector('[data-action="format"]')?.click());
+    shell.querySelector('[data-action="code-format"]')?.addEventListener('click', handleFormatDocument);
     shell.querySelector('[data-action="code-run"]')?.addEventListener('click', () => shell.querySelector('[data-action="run"]')?.click());
     shell.querySelector('[data-action="run-selected"]')?.addEventListener('click', async () => {
         const doc = getActiveDoc();
@@ -2362,25 +2382,6 @@ export async function createStudioWorkbench(container, opts = {}) {
     shell.querySelector('[data-action="theme"]')?.addEventListener('click', () => {
         const isDark = document.body.classList.toggle('theme-dark');
         localStorage.setItem('portal-theme', isDark ? 'dark' : 'light');
-    });
-
-    shell.querySelector('[data-action="format"]')?.addEventListener('click', async () => {
-        const doc = getActiveDoc();
-        if (!doc || !state.editorInstance) return;
-        try {
-            const res = await authFetch(apiBase + '/api/format', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ script: state.editorInstance.getValue() })
-            });
-            if (res.ok) {
-                const data = await res.json();
-                state.editorInstance.setValue(data.formatted || state.editorInstance.getValue());
-                _feedback.notify('Formatted document', { title: 'Document Formatted', tone: 'success' });
-            }
-        } catch (e) {
-            _feedback.notify('Format failed: ' + e.message, { title: 'Format Failed', tone: 'error' });
-        }
     });
 
     shell.querySelector('[data-action="run"]')?.addEventListener('click', async () => {

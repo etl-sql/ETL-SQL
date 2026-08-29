@@ -957,6 +957,22 @@ export async function createScriptEditor(container, opts = {}) {
         ...(Array.isArray(historyKeymap) ? historyKeymap : []),
         ...(Array.isArray(searchKeymap) ? searchKeymap : []),
     ];
+
+    function etlSqlTokenRange(state, pos) {
+        const line = state.doc.lineAt(pos);
+        const text = line.text;
+        let offset = Math.max(0, Math.min(text.length, pos - line.from));
+        const isTokenCharacter = character => /[\w@#&$]/.test(character || '');
+        if (!isTokenCharacter(text[offset]) && offset > 0 && isTokenCharacter(text[offset - 1])) offset--;
+        if (!isTokenCharacter(text[offset])) return null;
+
+        let from = offset;
+        let to = offset + 1;
+        while (from > 0 && isTokenCharacter(text[from - 1])) from--;
+        while (to < text.length && isTokenCharacter(text[to])) to++;
+        return { from: line.from + from, to: line.from + to };
+    }
+
     const extensions = [
         lineNumbers(),
         highlightActiveLine(),
@@ -977,6 +993,17 @@ export async function createScriptEditor(container, opts = {}) {
         // Accept schema/session explorer drags. Scoped to our private MIME type so
         // ordinary text drag-and-drop keeps CodeMirror's default behaviour.
         EditorView.domEventHandlers({
+            mousedown(event, view) {
+                if (event.button !== 0 || event.detail !== 2) return false;
+                const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+                if (pos == null) return false;
+                const range = etlSqlTokenRange(view.state, pos);
+                if (!range) return false;
+                event.preventDefault();
+                view.dispatch({ selection: { anchor: range.from, head: range.to } });
+                view.focus();
+                return true;
+            },
             dragover(event) {
                 if (!event.dataTransfer?.types?.includes('application/x-etlsql-snippet')) return false;
                 event.preventDefault();

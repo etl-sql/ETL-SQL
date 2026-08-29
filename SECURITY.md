@@ -8,6 +8,24 @@ ETL-SQL does not claim that a script sandbox eliminates all risk. The goal is na
 
 ---
 
+## Supported Releases
+
+ETL-SQL is pre-1.0 software under active development. Security fixes are made on the latest released
+minor line. As of this review, that is `0.18.x`. Older `0.x` lines do not receive routine security
+backports unless a published advisory explicitly says otherwise.
+
+| Version | Security updates |
+| :--- | :--- |
+| `0.18.x` | Supported |
+| `< 0.18` | Upgrade to the latest release |
+| Unreleased builds | Development only; not a supported production baseline |
+
+The applicable deployment claim also matters. A feature present in source is not automatically
+certified for every topology. See [Deployment Profiles](docs/architecture/deployment-profiles.md) and
+the [v0.18.0 certification ledger](artifacts/release-evidence/0.18.0/deployment-profiles/claims-index.md).
+
+---
+
 ## 1. Threat Model
 
 ETL-SQL assumes that script content may be mistaken, over-broad, or hostile. The engine therefore applies guardrails around host filesystem access, network egress, environment variables, credentials, resource use, and script self-modification.
@@ -36,14 +54,17 @@ The primary risks not fully solved by ETL-SQL are:
 | Area | Default | Notes |
 | :--- | :--- | :--- |
 | Path protection | `Restricted` | Blocks known system, credential, IDE, build, and session metadata locations. |
-| Network egress | Allow all hosts | Configure `Security:AllowedHosts` to enable strict outbound allowlisting. |
-| Environment variables | Deny all | Configure `Security:AllowedEnvVars` to permit specific `ENV()` reads. |
+| Connector host allowlist | Allow all hosts | Configure `Security:AllowedHosts` to enable strict outbound allowlisting. The infrastructure egress fence still applies. |
+| Infrastructure egress fence | Enabled | Blocks cloud metadata, link-local, container-host, and cluster-service destinations unless an exact local exemption applies. Administrator-declared denied CIDRs cannot be exempted. |
+| Environment variables | Allow three host facts | The shipped configuration permits `TEMP`, `USERDOMAIN`, and `PROCESSOR_ARCHITECTURE`; all other `ENV()` reads are denied. Use an empty list for deny-all. |
 | File operation count | 100 per script | Configurable with `Security:MaxFileOperationsPerScript`. |
 | SMTP email sends | 100 per script | Configurable with `Security:MaxSmtpEmailsPerScript`; scripts may lower or raise up to the configured ceiling with `SET MAX_SMTP_EMAILS_PER_SCRIPT = n`. |
 | Recursive directory depth | 5 levels | Configurable with `Security:MaxRecursiveNestingDepth`. |
 | Parallel degree ceiling | 32 | Configurable with `Security:MaxParallelDegree`; session-level overrides are validated. |
 | String result ceiling | 100 MiB | Configurable with `Security:MaxStringResultSize`. |
 | Regex timeout | 1000 ms | Configurable with `Security:RegexMatchTimeoutMs`. |
+| Plaintext connection secrets | Blocked | `Engine:AllowPlaintextSecrets` defaults to `false`. Prefer `SECRET:name`; use `ENC:` for portable encrypted literals. |
+| Disk spill encryption | Enabled | `Security:SpillEncryptionEnabled` defaults to `true`; standalone scripts can change it with `SET SPILL_ENCRYPTION`. |
 | Script file writes | Blocked | `.etlsql`, `.rptsql`, `.sql`, `.py`, `.js`, `.sh`, `.bat`, `.cmd`, and `.etls` are write-blocked. |
 | Dangerous file types | Blocked | Executables, libraries, installers, shell/batch files, system files, and cert/key containers such as `.pfx` / `.cer`. |
 | Snapshot encryption at rest | AES-256-GCM | `.etlsnap` report packages are compressed and encrypted at rest with versioned key rotation. |
@@ -123,6 +144,7 @@ The data-file allowlist includes:
 ```text
 .csv .json .parquet .avro .db .enc .pgp .asc .gpg .key .gz .7z
 .txt .sql .log .xlsx .xml .yaml .yml .ini .md .zip .dat .tsv .psv .fixed
+.etlds .etlsnap
 ```
 
 Unknown extensions are blocked by default. A session can permit an unknown extension with:
@@ -139,7 +161,11 @@ Scripts cannot create, overwrite, move, or rename application logic files with t
 .etlsql .rptsql .sql .etls .py .js .sh .bat .cmd
 ```
 
-This protects the control plane from script-driven self-modification. Reading `.sql` files is allowed because linting and analysis scenarios need it; writing `.sql` files is blocked.
+This protects the control plane from script-driven self-modification. The engine's file-type allowlist
+still permits reading `.sql` for linting and analysis, so write blocking must not be described as a
+general read sandbox. Repository authoring policy is stricter: agents must not generate ETL-SQL that
+reads `.sql`, `.etlsql`, or `.rptsql` files. `RUN SCRIPT`, report publication, and other host-owned
+script-loading paths are separate, purpose-built operations.
 
 ---
 
@@ -147,7 +173,9 @@ This protects the control plane from script-driven self-modification. Reading `.
 
 ### 5.1 Network Egress
 
-By default, `AllowedHosts` contains `*`, so network connectors can connect to any host. This is convenient for local development but permissive for production.
+By default, `AllowedHosts` contains `*`, so the configurable connector allowlist permits any host.
+This is convenient for local development but permissive for production. It does not disable the
+infrastructure egress fence.
 
 To enforce egress allowlisting, configure a non-empty `Security:AllowedHosts` list. Once set, only exact host matches and leading-wildcard domains are allowed:
 
@@ -163,11 +191,22 @@ To enforce egress allowlisting, configure a non-empty `Security:AllowedHosts` li
 }
 ```
 
-`localhost`, `127.0.0.1`, and `::1` are always allowed for local tooling and report hosting.
+`localhost`, `127.0.0.1`, and `::1` are always allowed by the configurable host allowlist for local
+tooling and report hosting. Do not treat `AllowedHosts` as a loopback-denial control; use process and
+network isolation if scripts must not reach local services.
+
+Independently of `AllowedHosts`, the infrastructure egress fence blocks cloud metadata endpoints,
+link-local node services, container-host aliases, and cluster-service discovery names. It is applied
+at connection creation, on dynamic HTTP targets and redirects, and at socket connect after DNS
+resolution. Exact entries in `Security:EgressFenceExemptions` can exempt built-in destinations.
+`Security:DeniedEgressRanges` adds deployment-specific CIDRs with no exemption path. See
+[Security Configuration](docs/administration/platform/config/security-configuration.md).
 
 ### 5.2 Environment Variables
 
-`ENV('NAME')` is deny-by-default. Configure `Security:AllowedEnvVars` to allow specific variables:
+`ENV('NAME')` is allowlist-only. A bare `SecurityService` starts with an empty list, while the shipped
+`src/appsettings.json` permits `TEMP`, `USERDOMAIN`, and `PROCESSOR_ARCHITECTURE`. Configure an
+explicit list for the deployed host:
 
 ```json
 {
@@ -195,6 +234,13 @@ The engine enforces configurable ceilings for operations that can destabilize a 
 
 Overrides that increase risk are validated against safe-zone context where applicable and produce warning/audit entries. They should be treated as intentional exceptions, not normal script setup. `SET ALLOW_LARGE_STRING_RESULTS ON` is separate from the byte ceiling: it permits guarded oversized string results only when the current script/path is inside an approved safe zone.
 
+Spill encryption and compression are enabled by default. In a standalone execution, script-level
+`SET SPILL_ENCRYPTION OFF` and `SET SPILL_COMPRESSION OFF` can weaken those defaults. Enrolled
+policy can bound spill volume, but it does not currently make the encryption/compression toggles
+non-bypassable. Governed deployments must therefore reject those statements through script review
+and admission policy when encrypted spill is mandatory. The worker scratch volume still needs
+OS-level access control and lifecycle cleanup.
+
 `SET WHAT_IF ON` provides dry-run behavior for many side-effecting statements, including DML, file operations, email, Docker, and remote execution paths that explicitly check `IsWhatIf`. It is a safety preview, not a full transaction simulator.
 
 ### 6.1 Enterprise Policy Enforcement
@@ -213,17 +259,24 @@ ETL-SQL supports encrypted string values with the `ENC:` prefix. These are decry
 USE PASSWORD = 'myMasterSecret';
 ```
 
-Current `ENC:` encryption uses:
+New `ENC:` encryption uses the version-2 authenticated envelope:
 
 | Property | Value |
 | :--- | :--- |
-| Algorithm | AES-256-CBC |
+| Algorithm | AES-256-GCM |
 | Key derivation | PBKDF2-SHA256 |
 | Iterations | 600,000 |
 | Salt | 16 random bytes per operation |
-| IV | Random per operation |
+| Nonce | 12 random bytes per operation |
+| Authentication tag | 16 bytes |
 
-The same plaintext encrypted twice produces different ciphertext because the salt and IV are random.
+The same plaintext encrypted twice produces different ciphertext because the salt and nonce are random.
+
+The decryptor retains read compatibility for legacy version-1 AES-CBC `ENC:` payloads. Re-encrypt
+legacy values to emit the authenticated v2 format. Password-based file encryption is a separate
+versioned format: current files use AES-256-CBC with independent encryption/HMAC keys and an
+authenticate-before-decrypt HMAC-SHA256 tag; legacy unauthenticated files remain readable for
+compatibility.
 
 ### 7.2 Named Secret References
 
@@ -273,7 +326,7 @@ Security implication: machine-bound data is intended to stay local to the deploy
 
 ETL-SQL supports:
 
-- Password-based file encryption using AES-256-CBC with PBKDF2.
+- Password-based file encryption using AES-256-CBC, PBKDF2-derived encryption/HMAC keys, and HMAC-SHA256 authentication for current-format files.
 - SSH/RSA-wrapped AES file encryption for key-pair workflows.
 - PGP encryption and decryption for partner/file-exchange workflows.
 
@@ -299,12 +352,16 @@ Report-SQL and the Portal add a web surface around script execution and report v
 
 Controls include:
 
-- `ReportPlayer` serves local dashboards and defaults to local hosting; port selection is configurable with `ReportPlayer:Port`.
+- `ReportPlayer` binds to `127.0.0.1`; port selection is configurable with `ReportPlayer:Port`.
 - `SnapshotStore` uses atomic write behavior and path-based async locks to reduce snapshot corruption during refreshes.
 - Portal records report publish/update/delete, folder permission, subscription, saved view, share link, embed token, dataset, and admin actions in portal audit logs.
 - Portal publish and update flows validate script paths against configured script roots.
-- JWT secrets must be configured with sufficient length before production use.
-- Folder, report, and dataset permissions are enforced in portal controllers.
+- Production startup validates JWT, dataset-at-rest, OIDC, and HA key-ring configuration and fails closed on invalid required material.
+- Security stamps and refresh-token revocation invalidate sessions after account, role, group, ACL, password, or directory-mapping changes.
+- Local accounts enforce first-login password change, account lockout, and password hashing through ASP.NET Core Identity.
+- Folder, report, dataset, Studio, and administrative permissions are enforced server-side. UI visibility is not an authorization boundary.
+- Browser responses carry CSP with per-response script nonces, `nosniff`, referrer and permissions policies, and controlled `frame-ancestors` configuration.
+- Authentication, anonymous-token, Designer, and metrics endpoints have configurable fixed-window rate limits.
 
 ### 8.1 Snapshot Packaging & At-Rest Encryption
 Report snapshots (`.etlsnap`) are packaged as compressed ZIP streams containing the report layout, metadata, and optional binary data tables.
@@ -315,22 +372,39 @@ Production portals must configure `Portal:Dataset:AtRestKey` as a base64 value t
 
 Backups must preserve the Portal database, Orchestrator database, `Portal:ScriptRootPath`, `Portal:SnapshotDirectory`, `Portal:DatasetRootPath`, Data Protection key ring, JWT secret, dataset at-rest key and versions, and Orchestrator API key as one coordinated set. Restoring dataset files or database rows without the matching key material makes cached datasets and snapshots unreadable.
 
-### 8.2 Identity and Authentication (OIDC)
-The Portal supports federated identity via OpenID Connect (OIDC) to standardize access:
+### 8.2 Identity and Authentication
+
+The Portal supports local accounts and federated OpenID Connect (OIDC). LDAP verification can be
+enabled alongside the selected primary provider:
+
 - **Token Validation**: Strictly validates OIDC signatures, issuer authority, and token audience.
 - **Group Claim Synchronization**: Maps configured OIDC group claims to portal groups for folder, report, and dataset authorization. Membership is reconciled on login and token/session renewal according to the configured identity-provider and Portal JWT/refresh-token lifetimes; revocation is not an instantaneous push from the identity provider.
+- **LDAP Lifecycle Boundary**: LDAP membership synchronization occurs at login. The Portal does not
+  continuously poll the directory for disabled or removed accounts; offboarding must also disable
+  the Portal account to revoke its sessions promptly.
+- **Service Boundary**: The Orchestrator API key authenticates the Portal service. Human or service
+  caller identity is carried separately in a short-lived signed assertion, and management routes
+  require both where configured.
 
 ETL-SQL delegates MFA, conditional access, device trust, and risk-based authentication to the configured identity provider. The Portal validates the resulting token and bridges it into its own JWT/refresh-token session. Keep Portal token lifetimes aligned with the organization's identity-provider reauthentication policy.
 
-### 8.3 Data Minimization & Memory Safety (Apache Arrow)
-ETL-SQL utilizes the Apache Arrow columnar format to govern large payloads and optimize resource safety:
-- **On-Demand Lazy Loading**: Visuals with large row counts (exceeding 10,000 rows) are serialized as binary Apache Arrow IPC streams inside the encrypted snapshot. The web dashboard loads only a lightweight manifest; row segments are lazy-loaded on-demand, minimizing server and client memory overhead and reducing the risk of bulk memory extraction.
+### 8.3 Payload and Memory Boundaries (Apache Arrow)
+
+ETL-SQL uses the Apache Arrow columnar format to keep large payloads out of the initial browser manifest:
+
+- **On-Demand Lazy Loading**: Visuals with 10,000 or more rows are serialized as binary Apache Arrow IPC streams inside the encrypted snapshot. The web dashboard initially loads a lightweight manifest and requests the row payload on demand. This reduces initial server/client memory pressure; it is not an authorization, download-prevention, or exfiltration control.
 - **Engine Temp Table Spilling**: To protect the host from memory exhaustion, active `#temp` tables that exceed memory ceilings are automatically spilled to the host filesystem as columnar Apache Arrow IPC packages, subject to path protection rules.
 
-### 8.4 Native Vector Rendering & Zero-Scripting Execution
-Report-SQL rendering employs a 100% managed C# Grammar of Graphics pipeline (`PlotPlan` $\to$ SVG vector output):
-- **Elimination of Embedded Scripting Engines**: Unlike visualization platforms that run embedded JavaScript engines (V8 / ClearScript) or headless browsers to render server-side charts, ETL-SQL compiles and renders all chart layouts directly in managed .NET code. This eliminates the remote code execution (RCE), prototype pollution, memory corruption, and SSRF risks associated with embedded browser runtimes.
-- **Sanitized SVG Generation**: All generated SVG outputs strictly emit clean vector geometry (`<svg>`, `<path>`, `<rect>`, `<text>`, `<line>`) with no inline executable `<script>` elements, unvetted external resource references, or HTML event handlers (`onload`, `onclick`).
+### 8.4 Native Vector Rendering
+
+Server-side chart generation uses a managed C# Grammar of Graphics pipeline (`PlotPlan` $\to$ SVG
+vector output). It does not embed V8, ClearScript, or a headless browser for server-side chart
+rendering. This narrows that rendering attack surface; it does not eliminate RCE, SSRF, browser, or
+connector risk elsewhere in the product.
+
+Generated SVG is limited to vector geometry and escaped text. The renderer does not emit inline
+`<script>` elements, external resource references, or HTML event handlers. The browser report runtime
+still executes the shipped ETL-SQL JavaScript bundle and must remain protected by normal web controls.
 
 Operational cautions:
 
@@ -338,6 +412,25 @@ Operational cautions:
 - Restrict who can publish, update, or execute report scripts.
 - Do not expose ReportPlayer directly to untrusted networks without an authenticated reverse proxy or the Portal.
 - Review share-link and embed-token lifetimes and revocation behavior before enabling external access.
+
+### 8.5 Deployment and Tenant-Isolation Boundaries
+
+Security claims are profile- and topology-specific:
+
+- Solo and Team deployments rely on local process, OS account, filesystem, database, and network boundaries.
+- Enterprise adds signed organization policy, provider-backed shared state, remote audit delivery, enrollment, and HA certification gates.
+- Managed Dedicated SaaS uses disjoint per-tenant deployment boundaries and passed its v0.18.0 profile lane.
+- Shared SaaS uses tenant-aware shared control planes with hardened per-run execution. Its hostile-isolation profile lane passed and is marked release-eligible in the v0.18.0 certification ledger.
+
+Certification remains lane-specific. The v0.18.0 Enterprise-to-SaaS, Solo-to-SaaS, SaaS exit, and
+upgrade transition lanes name Managed Dedicated explicitly; the passing Shared SaaS profile lane does
+not silently broaden those transition claims.
+
+The Portal's environment/tenant identity must come from host routing and signed authority, not a
+caller-selectable request value. Operators must isolate every environment's databases, artifact
+roots, secrets, key rings, service keys, enrollment state, and security-event outbox. See
+[SaaS Tenant Isolation](docs/architecture/saas-tenant-isolation.md) and
+[Deployment Profile Certification](docs/administration/platform/deployment-profile-certification.md).
 
 ---
 
@@ -378,7 +471,10 @@ Beyond local logs, ETL-SQL emits a dedicated, versioned **security-event** strea
 
 `SecurityService` has an `IsTestMode` flag used by tests and some development execution contexts. In test mode, paths under the application base directory, current directory, and temp directory are treated as safe-zone-like locations for development and CI practicality.
 
-Critical caveat: test-mode detection is intentionally broad and may be active in `dotnet`-hosted development runs. Do not use development/test execution behavior as proof of production hardening. Validate production security settings in the deployed host process with explicit configuration.
+Automatic detection is limited to .NET test-host processes (`testhost`, `vstest.console`, xUnit, or
+Microsoft Test Platform assemblies); ordinary `dotnet run` does not enable it. Tests and isolated
+contexts can still set the flag explicitly. Do not use test-host behavior as proof of production
+hardening. Validate the deployed host process with explicit production configuration.
 
 Even in test mode, dangerous file extensions and script immutability checks still apply, but path access is more permissive for test directories and temp directories.
 
@@ -406,23 +502,30 @@ AI agents working in this repository or generating ETL-SQL scripts must follow t
 | :--- | :--- | :--- |
 | Safe zones are administrative trust boundaries. A broad safe zone can authorize risky access. | High | Keep safe zones narrow and data-specific; inspect with `SHOW SAFE ZONES`. |
 | Network egress is allow-all by default. | Medium | Configure `Security:AllowedHosts` in production. |
+| The connector host allowlist always permits loopback. | Medium | Isolate local control-plane services from script processes; do not rely on `AllowedHosts` to deny loopback. |
+| SaaS evidence is topology- and lane-specific. A passing profile lane does not certify unnamed transition, upgrade, or HA paths. | Medium | Check the release claims ledger and linked evidence bundle for the exact topology and operation being claimed. |
 | Audit logs are not inherently immutable. | Medium | Forward logs to protected external storage. |
 | `SET ALLOW_...` overrides are script-controlled once safe-zone conditions are met. | Medium | Limit safe zones and review scripts before scheduling. |
+| Scripts can disable spill encryption and compression; signed policy currently bounds spill volume but not these toggles. | Medium | Reject the disabling statements through governed script review/admission when encryption is mandatory, and protect worker scratch storage at the OS/container layer. |
 | SMTP abuse can still occur within the configured send limit. | Medium | Keep `Security:MaxSmtpEmailsPerScript` conservative, restrict SMTP credentials, monitor send volume, and use provider-side throttles. |
 | Secrets can still be intentionally written into output by a script author. | High | Use linting, review, least-privilege accounts, and restricted output sinks. |
+| The engine permits `.sql` reads for lint/analysis even though writes are blocked. | Medium | Follow the stricter repository authoring rule; expose script content only through purpose-built, authorized host operations. |
+| The standalone security-event outbox path is machine-wide by default. | High in co-located environments | Set `ETLSQL_SECURITY_EVENT_OUTBOX_PATH` to a distinct persistent path per deployment or environment. |
 | Development/test mode can be more permissive than production. | Medium | Verify production behavior in the real host process and configuration. |
 | `SHOW_SECRETS` can unmask sensitive variables for an authorized session. | Medium | Restrict access to interactive sessions and logs. |
 | Host compromise defeats process-level controls. | High | Use OS hardening, service accounts, patching, endpoint controls, and secret rotation. |
 
 ---
 
-## 13. Dependency Vulnerability Management
+## 13. Supply-Chain and Dependency Security
 
 Every CI run gates on known-vulnerable third-party packages; a finding fails the build.
 
 - **NuGet:** `scripts/Test-VulnerablePackages.ps1` runs `dotnet list package --vulnerable --include-transitive` across the solution via the shared helpers in `scripts/lib/DependencyAudit.ps1` (solution-level audit with a per-project fallback for the .NET 10.0.300 SDK + CPM bug). It fails on any vulnerable package — direct or transitive — and also fails when no authoritative audit could run, so an unknown dependency posture is never certified silently.
 - **npm (VS Code extension):** `npm audit` runs in `src/etl-sql-vscode` and `src/etl-sql-vscode/ui` and fails on any reported vulnerability.
 - The pre-release gate (`scripts/Test-PreRelease.ps1`) additionally blocks on non-Legacy deprecated packages and reports outdated ones.
+- Dependabot monitors NuGet, npm, and GitHub Actions dependencies. CodeQL analyzes C# and JavaScript/TypeScript on `main` pushes and on its scheduled workflow.
+- The pre-release flow scans for committed secrets, generates a CycloneDX SBOM, checks third-party inventory drift, and publishes SHA-256 checksums. Release automation also creates keyless build-provenance attestations for published artifacts.
 
 Reproduce locally with `dotnet restore ETL-SQL.slnx` followed by `./scripts/Test-VulnerablePackages.ps1`, and `npm audit` in the two extension roots.
 
@@ -445,10 +548,26 @@ To report a security vulnerability in ETL-SQL, please use one of these **private
 - **GitHub private vulnerability reporting:** open a private report from the repository's **Security → Report a vulnerability** tab (GitHub Security Advisories).
 - **Email:** [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com).
 
-Where possible, include a minimal reproduction, the affected version, and an impact assessment. You will receive an acknowledgement, and any fix will be coordinated privately before public disclosure.
+Include, where possible:
+
+- The affected release, component, deployment profile, and operating system.
+- A minimal reproduction or proof of concept with sensitive values removed.
+- The expected and observed behavior, prerequisites, and impact.
+- Whether the issue is already public or has a disclosure deadline.
+- A safe way to contact you for follow-up.
+
+Do not include production credentials, customer data, private keys, or access tokens. Do not test
+against systems or data you do not own or have explicit permission to assess. The maintainers will
+acknowledge receipt, validate scope and severity, coordinate a fix and release when needed, and agree
+on disclosure timing before publishing an advisory. Exact response and remediation times depend on
+severity, reproducibility, and release impact; this policy does not promise a fixed SLA.
+
+Security questions without a suspected vulnerability can use GitHub Discussions or the contact
+email. Public issues are appropriate after coordinated disclosure or when they contain no sensitive
+security detail.
 
 ---
 
 **Policy Version**: 0.18.0
-**Last Review Date**: 2026-08-23
+**Last Review Date**: 2026-08-29
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.

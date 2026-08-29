@@ -138,7 +138,7 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
     when unambiguous and otherwise asks the author without changing the script.
   - [ ] Switching between code and either report workflow must preserve unsupported hand-authored
     syntax and the last valid canvas while an edit is temporarily invalid.
-- [ ] **P2 — Replace decorative workbench controls with honest capability states**: Wire Git and
+- [x] **P2 — Replace decorative workbench controls with honest capability states**: Wire Git and
   settings to their host services or mark them unavailable. Do not display a hardcoded branch,
   clean-tree status, formatter preference, or security setting.
 - [ ] **P2 — Add production-host browser journeys**: Keep fast UI-sandbox stories, but add real
@@ -150,12 +150,12 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P2 — Split the canonical Studio module by responsibility**: Separate document/session state,
   host adapters, API contracts, SQL mutations, data sampling, workbench rendering, and lifecycle
   handling while retaining the canonical shared-asset distribution model.
-- [ ] **P3 - Replace New Script (.sql) button wth New script (.etlsql)**: The only change is the extension.
-- [ ] **P3 - Need a way to remove the opening workspace files**  The opening screen shows recent files
+- [x] **P3 - Replace New Script (.sql) button wth New script (.etlsql)**: The only change is the extension.
+- [x] **P3 - Need a way to remove the opening workspace files**  The opening screen shows recent files
   it needs an x - close button added so we can clear them out if a user wants to.
 - [ ] **P3 - Explorer tab needs delete, rename, new folder**  The File explorer tab needs the ability to add
   new folder, rename file or folder, delete file or folder.  Drag and drop files into folders or back to the root.
-- [ ] **P3 - Verify MOCKDB is visible as a connection type**: Source and sandbox coverage are not
+- [x] **P3 - Verify MOCKDB is visible as a connection type**: Source and sandbox coverage are not
   sufficient. Confirm that both production Portal Studio and desktop Studio return MOCKDB from the
   real connector registry, display it under **Test Data**, allow it to be selected without an
   external server, and insert parser-valid connection syntax.
@@ -172,10 +172,10 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   dependency edges form a join and must not silently imply parallel execution. Other boxes include FILE operations, loops,
   validation, notifications, and control flow. Verify every emitted statement form against the canonical parser and focused
   statement reference before exposing it in the palette.
-- [ ] **P4 - Connection and format button from the top toolbar can be removed**  Format is with the script so the top one is
+- [x] **P4 - Connection and format button from the top toolbar can be removed**  Format is with the script so the top one is
   redundant.  The New connection should live in the sidebar instead.
 - [ ] **P4 - Double-clicking on the name in the top tab should allow you to rename the file.**
-- [ ] **P4 - Script editor cannot use the mouse to highlight unless multi line**  Need to be able to grab however much of the
+- [x] **P4 - Script editor cannot use the mouse to highlight unless multi line**  Need to be able to grab however much of the
   string as needed with the mouse.  Double-clicking left mouse button highlights the whole word.  Making sure special characters
   are grabbed like in the case of #temp, @declare, etc.  Double-click should include those but not commas.
 - [ ] **P4 — Pipeline DAG Conditional Precedence & Container Scopes (SSIS Parity)**:

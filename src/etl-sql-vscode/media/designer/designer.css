@@ -587,6 +587,12 @@ body.vscode-high-contrast .btn-primary:hover {
     font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
 }
 
+.etlsql-editor-container .cm-content,
+.etlsql-editor-container .cm-line {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
 .etlsql-editor-container.has-diagnostics .cm-editor {
     height: calc(100% - 112px);
 }
@@ -4213,6 +4219,36 @@ body.vscode-dark .etlsql-cw-missing-hint {
     cursor: pointer;
 }
 
+.etlsql-studio-capability-state {
+    margin: 12px;
+    padding: 12px;
+    border: 1px dashed var(--portal-border, #30363d);
+    border-radius: 6px;
+    background: var(--portal-surface-subtle, rgba(255, 255, 255, 0.04));
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.etlsql-studio-capability-state strong {
+    display: block;
+    margin-top: 6px;
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.8125rem;
+}
+
+.etlsql-studio-capability-state p {
+    margin: 4px 0 0;
+}
+
+.etlsql-studio-capability-label {
+    color: var(--portal-muted, #7d8590);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
 .etlsql-studio-file-item {
     display: flex;
     align-items: center;
@@ -4888,6 +4924,33 @@ body.vscode-dark .etlsql-cw-missing-hint {
     display: flex;
     align-items: center;
     justify-content: space-between;
+}
+
+.etlsql-recent-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.etlsql-recent-card-dismiss {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--portal-muted, #8b949e);
+    cursor: pointer;
+}
+
+.etlsql-recent-card-dismiss:hover,
+.etlsql-recent-card-dismiss:focus-visible {
+    background: var(--portal-hover, rgba(255, 255, 255, 0.08));
+    color: var(--portal-text, #f0f6fc);
+    outline: none;
 }
 
 .etlsql-recent-card-title {

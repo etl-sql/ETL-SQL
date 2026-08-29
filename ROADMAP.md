@@ -192,6 +192,37 @@ documentation, Gemini baselines, and production conformance tests use the same c
 
 ## Later Reporting and Presentation Work
 
+### Reporting & Presentation — Grammar-of-Graphics Semantic Extensions
+
+**Status:** Incremental
+**Horizon:** Later
+**Authoritative design:** [Native Grammar-of-Graphics Contract](docs/architecture/decisions/grammar-of-graphics-spec-ir.md) and [Native Advanced Chart Authoring](docs/architecture/decisions/native-advanced-chart-authoring.md)
+
+The native `ChartSpec` → `PlotPlan` spine is shipped and remains closed as a foundation initiative.
+The next increment should address semantic combinations that deliberately fail validation today:
+renderer-neutral polar/radial stacking, physical aspect semantics beyond continuous Cartesian plots,
+and safe row-level conditions for connected `LINE` and `AREA` marks.
+
+**Why later:** These are useful expressiveness gains, but no current catalog visual or renderer
+retirement depends on them. Demand and representative reports should choose their order.
+
+**Boundaries:** Do not add renderer-specific syntax, hidden data transformations, arbitrary SVG
+paths, or a second chart schema. Focused native layouts remain valid where a force, flow, hierarchy,
+map, or other specialized algorithm does not fit the shared plan. Do not migrate focused modules
+through `PlotPlan` only for architectural uniformity.
+
+**Dependencies:** The versioned GoG contract, native SVG renderer, semantic fallback contract,
+capability matrix, lossless Report Builder editing, and existing cross-backend golden lane.
+
+**Delivery slices:** Add one complete semantic combination at a time—grammar, immutable contracts,
+resolution, validation, authoring help, and every applicable backend—then update the capability
+matrix before selecting the next combination.
+
+**Acceptance evidence:** Parser/formatter/LSP/lineage and Report Builder round trips; versioned
+`ChartSpec`/`PlotPlan` compatibility; deterministic plan and SVG goldens; browser, static export,
+terminal, and accessibility conformance; invalid-combination diagnostics; and unchanged payload,
+render-time, and bundle budgets.
+
 ### Reporting & Interaction — Author Bookmarks
 
 **Status:** Complete  
@@ -526,6 +557,42 @@ fault suites; deployment-profile certification integration.
 
 **Acceptance evidence:** Repeatable fault matrices prove no split-brain mutation, authority reuse,
 silent loss, or false checkpoint-resume claim.
+
+### SaaS Operations — Shared Lifecycle, Metering, and Hosted Launch Evidence
+
+**Status:** Incremental
+**Horizon:** Launch Gate
+**Authoritative design:** [SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md), [Deployment Profile Certification](docs/administration/platform/deployment-profile-certification.md), and [Provider-Neutral Fault Certification](docs/architecture/decisions/provider-neutral-fault-certification.md)
+
+Managed Dedicated and Shared SaaS profile lanes have passed their topology-specific isolation gates.
+The remaining increment is operational closure around those certified boundaries: complete Shared
+metering, recover queued work after scheduler-process loss, certify Shared lifecycle transitions,
+and attach physical runtime and hosting evidence to production claims.
+
+**Why launch gate:** Contract and deterministic-adapter evidence proves product invariants, but it
+does not prove an untested hardened runtime, cloud service, HA topology, or production region. Those
+claims must be bound to the provider and candidate commit that actually ran them.
+
+**Boundaries:** Do not reopen the passing Shared hostile-isolation profile or infer a Shared
+transition from Managed Dedicated evidence. Provider-specific fault activation stays behind the
+provider-neutral contract. Metering remains observational and cannot become an execution-policy or
+authorization input.
+
+**Dependencies:** The Shared tenant lifecycle saga, ledger-backed sandbox admission, immutable
+scheduler workload identity, object-native artifact storage, tenant metering ledger, hardened
+sandbox provider, production canaries, HA soak tooling, and release claims index.
+
+**Delivery slices:** Add Gateway-traffic, storage-sampling, and connector-class metering producers;
+host queued-admission recovery from immutable scheduler metadata; add explicit Shared upgrade,
+promotion/import, backup/restore, and exit lanes where those journeys are supported; then run the
+provider-specific hardened-runtime, cloud-fault, HA/soak, and canary evidence for each production
+topology.
+
+**Acceptance evidence:** Tenant-partitioned and idempotent metering across every producer; restart
+tests that recover only current queued authority; release-eligible Shared transition bundles with
+hostile negative cases; physical-provider fault reports naming runtime/provider versions; validated
+HA and canary artifacts for the exact clean candidate commit; and a claims ledger whose uncovered
+items and human-readable documentation agree with its topology rows.
 
 ### SaaS Reliability — Production Canaries
 

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using ETL_SQL.Data;
 using ETL_SQL.WorkstationEditor;
 using Xunit;
 
@@ -103,6 +104,25 @@ public sealed class WorkstationEditorTests
         var authenticatedResponse = await client.SendAsync(authenticated);
 
         Assert.Equal(HttpStatusCode.OK, authenticatedResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConnectorSchema_ReturnsMockDbFromTheDesktopHostRegistry()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/connectors/schema");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        var schemas = await response.Content.ReadFromJsonAsync<List<ConnectorSchemaDescriptor>>();
+        var mockDb = Assert.Single(schemas!, schema => schema.ConnectorType == "MOCKDB");
+        Assert.Empty(mockDb.Options);
     }
 
     [Fact]

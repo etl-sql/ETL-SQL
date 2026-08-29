@@ -875,6 +875,158 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_NewScript_CreatesAnEtlSqlDocument()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.Locator("[data-studio-new-tab]").ClickAsync();
+
+        var newScript = page.Locator("[data-new-type='sql']");
+        Assert.Contains("New Script (.etlsql)", await newScript.InnerTextAsync());
+        await newScript.ClickAsync();
+
+        var activeTab = page.Locator(".etlsql-studio-tab.active");
+        Assert.Contains("untitled_query_", await activeTab.InnerTextAsync());
+        Assert.Contains(".etlsql", await activeTab.InnerTextAsync());
+        Assert.DoesNotContain(".sql", await activeTab.InnerTextAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_Home_CanDismissAWorkspaceFileWithoutClosingItsDocument()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
+
+        var cards = page.Locator(".etlsql-studio-recent-card");
+        await cards.First.WaitForAsync();
+        Assert.Equal(3, await cards.CountAsync());
+        await page.Locator("[data-dismiss-file='reports/sales_overview.rptsql']").ClickAsync();
+
+        Assert.Equal(2, await cards.CountAsync());
+        Assert.Equal(0, await page.Locator("[data-dismiss-file='reports/sales_overview.rptsql']").CountAsync());
+        Assert.Equal(1, await page.Locator(".etlsql-studio-tab", new() { HasText = "sales_overview.rptsql" }).CountAsync());
+        Assert.Contains("file was not deleted", await page.Locator("body").InnerTextAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_Header_OmitsConnectionAndFormatWhileContextualActionsRemain()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var header = page.Locator(".etlsql-studio-header");
+        Assert.Equal(0, await header.Locator("[data-action='wizard']").CountAsync());
+        Assert.Equal(0, await header.Locator("[data-action='format']").CountAsync());
+        Assert.True(await page.Locator("[data-action='code-format']").IsVisibleAsync());
+
+        await page.Locator("[data-activity='catalog']").ClickAsync();
+        Assert.True(await page.Locator(".etlsql-studio-sidebar [data-action='wizard']").IsVisibleAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_DecorativeWorkbenchControls_ReportUnavailableCapabilities()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        await page.Locator("[data-activity='git']").ClickAsync();
+        var gitState = page.Locator("[data-capability-state='git']");
+        Assert.Contains("Source control is unavailable", await gitState.InnerTextAsync());
+        Assert.DoesNotContain("Branch:", await gitState.InnerTextAsync());
+        Assert.DoesNotContain("Working tree clean", await gitState.InnerTextAsync());
+
+        await page.Locator("[data-activity='settings']").ClickAsync();
+        var settingsState = page.Locator("[data-capability-state='settings']");
+        Assert.Contains("Settings are unavailable", await settingsState.InnerTextAsync());
+        Assert.Equal(0, await page.Locator("[data-sidebar-content] input").CountAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task ScriptEditor_MouseSelectsSingleLineRangesAndWholeEtlSqlTokens()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.EvaluateAsync(
+            """
+            async () => {
+                document.body.innerHTML = '<div id="selection-editor" style="width:700px;height:240px"></div>';
+                const module = await import('/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js?selection-test');
+                window.__selectionEditor = await module.createScriptEditor(
+                    document.getElementById('selection-editor'),
+                    { value: 'SELECT #temp, @declare, plain_word, commas;' });
+            }
+            """);
+        await page.Locator(".cm-content").WaitForAsync();
+
+        async Task<(float X, float Y)> CharacterPositionAsync(int offset)
+        {
+            var point = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+                """
+                offset => {
+                    const line = document.querySelector('.cm-line');
+                    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+                    let remaining = offset;
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        if (remaining <= node.textContent.length) {
+                            const range = document.createRange();
+                            range.setStart(node, remaining);
+                            range.setEnd(node, remaining);
+                            const rect = range.getBoundingClientRect();
+                            const lineRect = line.getBoundingClientRect();
+                            return { x: rect.left, y: lineRect.top + lineRect.height / 2 };
+                        }
+                        remaining -= node.textContent.length;
+                    }
+                    throw new Error(`Offset ${offset} is outside the editor line.`);
+                }
+                """, offset);
+            return ((float)point.GetProperty("x").GetDouble(), (float)point.GetProperty("y").GetDouble());
+        }
+
+        var dragStart = await CharacterPositionAsync(7);
+        var dragEnd = await CharacterPositionAsync(12);
+        await page.Mouse.MoveAsync(dragStart.X, dragStart.Y);
+        await page.Mouse.DownAsync();
+        await page.Mouse.MoveAsync(dragEnd.X, dragEnd.Y, new() { Steps = 5 });
+        await page.Mouse.UpAsync();
+        Assert.Equal("#temp", await page.EvaluateAsync<string>("() => window.__selectionEditor.getSelection()"));
+
+        var variable = await CharacterPositionAsync(16);
+        await page.Mouse.DblClickAsync(variable.X, variable.Y);
+        Assert.Equal("@declare", await page.EvaluateAsync<string>("() => window.__selectionEditor.getSelection()"));
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_AuditsResponsivenessAndLayoutShiftAcrossResolutions()
     {
         await using var session = await fixture.NewSessionAsync();

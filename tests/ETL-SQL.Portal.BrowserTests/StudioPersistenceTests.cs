@@ -513,6 +513,57 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task ConnectionWizard_UsesProductionRegistryAndInsertsParserValidMockDb()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await fixture.SignInAsync(page);
+        await page.GotoAsync("/studio.html");
+        await WaitForStudioAsync(page);
+
+        await page.EvaluateAsync(
+            """
+            async () => {
+                const studio = window.__STUDIO__;
+                studio.state.documents.push({
+                    id: 'mockdb-script', path: 'mockdb-script.etlsql', name: 'mockdb-script.etlsql',
+                    content: 'SELECT 1 AS Value;', isDirty: false, projection: 'code'
+                });
+                await studio.switchDoc('mockdb-script');
+            }
+            """);
+        await page.Locator("[data-activity='catalog']").ClickAsync();
+        await page.Locator(".etlsql-studio-sidebar [data-action='wizard']").ClickAsync();
+        await page.Locator("button[data-cat='testdata']").ClickAsync();
+
+        var mockDb = page.Locator("button[data-type='MOCKDB']");
+        await mockDb.WaitForAsync();
+        await mockDb.ClickAsync();
+        await page.Locator("#etlsql-cw-alias-input").FillAsync("sample_data");
+        Assert.Equal("CREATE CONNECTION sample_data AS MOCKDB();",
+            (await page.Locator(".etlsql-cw-sql-box").InnerTextAsync()).Trim());
+        await page.Locator("#etlsql-cw-submit-btn").ClickAsync();
+
+        var script = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
+        Assert.StartsWith("CREATE CONNECTION sample_data AS MOCKDB();", script, StringComparison.Ordinal);
+        var parseError = await page.EvaluateAsync<string?>(
+            """
+            async script => {
+                const { auth } = await import('/js/api.js');
+                const response = await fetch('/api/designer/parse', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${auth.getToken()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script })
+                });
+                if (!response.ok) return `HTTP ${response.status}`;
+                return (await response.json()).error;
+            }
+            """, script);
+        Assert.Null(parseError);
+        Assert.Empty(session.PageErrors);
+    }
+
     private async Task<int> CreateWritableFolderAsync()
     {
         using var scope = fixture.Factory.Services.CreateScope();

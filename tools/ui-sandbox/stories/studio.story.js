@@ -106,6 +106,7 @@ export default {
 
     const workbench = await studioMod.createStudioWorkbench(stage, {
       documents: JSON.parse(JSON.stringify(SAMPLE_DOCS)),
+      workspaceFiles: JSON.parse(JSON.stringify(STUDIO_DESIGN_STATE.files)),
       authFetch: api,
       apiBase: '',
       initialSnapshot: {
