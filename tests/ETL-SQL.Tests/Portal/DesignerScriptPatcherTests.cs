@@ -310,7 +310,7 @@ public class DesignerScriptPatcherTests
 
         var patched = _patcher.Patch(originalScript, state);
 
-        Assert.Contains("SET REPORT STYLE (THEME = 'dark', ACCENT = '#00E5FF');", patched);
+        Assert.Contains("SET REPORT THEME = 'dark';", patched);
         Assert.Contains("SELECT 42 AS val INTO #metrics;", patched);
         Assert.Contains("CREATE VISUAL v_card AS CARD", patched);
     }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -45,6 +45,7 @@ namespace ETL_SQL.Tests.Hardening
             _securityService = new SecurityService(_mockLogger.Object) { IsTestMode = true };
 
             _mockContext.Setup(c => c.SecurityService).Returns(_securityService);
+            _mockContext.Setup(c => c.Connections).Returns(new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase));
             _mockContext.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns<string>(s => s);
             _mockContext.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>(), It.IsAny<bool>()))
                 .Returns<Expression, Row, bool>((e, r, d) => new ValueTask<object?>(e is LiteralExpression le ? le.Value?.ToString() : e?.ToString()?.Trim('\'')));

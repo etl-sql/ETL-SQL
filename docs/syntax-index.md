@@ -1471,6 +1471,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql serve` | Start a live preview server for a Report-SQL script | [serve](reference/cli/serve.md) |
 | `etl-sql session clear` | Clear a session state | [session clear](reference/cli/session-clear.md) |
 | `etl-sql session` | Manage ad-hoc execution sessions | [session](reference/cli/session.md) |
+| `etl-sql studio` | Launch the modern ETL-SQL Studio visual & script workbench on local loopback | [studio](reference/cli/studio.md) |
 | `etl-sql test` | Run native ETL-SQL test suites (*.test.etlsql) and table assertions | [test](reference/cli/test.md) |
 | `etl-sql ui edit` | Start the modern windowed Terminal IDE (default) | [ui edit](reference/cli/ui-edit.md) |
 | `etl-sql ui old` | Start the legacy Spectre-based console editor | [ui old](reference/cli/ui-old.md) |

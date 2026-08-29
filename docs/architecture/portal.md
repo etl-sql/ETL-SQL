@@ -62,6 +62,7 @@ WorkloadIdentityReplay  (tenant-scoped, hashed one-use assertion and approval ID
 SharedIdentityAuthority (tenant-owned OIDC authority metadata; client secrets remain external)
 PolicyVersionEntity / PolicyMachineEntity   (enterprise policy authority + machine registry)
 GatewayEnrollmentEntity                     (gateway machine enrollment tokens and bootstrap metadata)
+GatewayAmbiguousWriteCase / GatewayAmbiguousWriteEvent (on-premises ambiguous write incident tracking and resolution ledger)
 SharedConnectionAcl / SharedConnectionUsage (per-connection use grants and consumers)
 GroupStudioCapability   (deny-by-default Studio capabilities granted to a group)
 DatasetUserAcl          (per-user dataset grant; a sibling table because the rolling-expand
@@ -622,6 +623,7 @@ by the administration guides rather than restated here.
 | `/api/admin/workload-identity/approvals` | Admin (non-owner) | Signed one-use approval for sensitive workload exchange |
 | `/api/admin/identity/authorities` | Admin | Tenant-scoped shared-host OIDC authority registration, rotation metadata, enablement, and deletion |
 | `/api/admin/policy-authority` | Admin | Enterprise policy publish, activate, canary, roll back, impact |
+| `/api/admin/gateway-operations/ambiguous-writes` | Admin, OrchestratorManager | Ambiguous gateway write incident triage, review, and resolution ledger |
 | `/api/policy-authority` | Machine | Policy distribution to enrolled machines |
 | `/api/admin/configuration` | Admin | Configuration export and promotion between environments |
 | `/api/studio` | Studio capabilities | Authoring surface; `GET /api/studio/session` is a **probe** reachable by any authenticated user |

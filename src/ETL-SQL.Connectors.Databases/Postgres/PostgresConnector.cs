@@ -117,7 +117,7 @@ namespace ETL_SQL.Connectors.Postgres
                 await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
                 return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "Postgres authentication succeeded.")];
             }
-            catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or TimeoutException)
+            catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
             {
                 return
                 [

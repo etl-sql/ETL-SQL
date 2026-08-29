@@ -20,6 +20,7 @@ COPY ["src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj", "ETL-SQL.Orchestra
 COPY ["src/ETL-SQL.ReportBuilder/ETL-SQL.ReportBuilder.csproj", "ETL-SQL.ReportBuilder/"]
 COPY ["src/ETL-SQL.Analysis/ETL-SQL.Analysis.csproj", "ETL-SQL.Analysis/"]
 COPY ["src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj", "ETL-SQL.Reporting/"]
+COPY ["src/ETL-SQL.Reporting.Contracts/ETL-SQL.Reporting.Contracts.csproj", "ETL-SQL.Reporting.Contracts/"]
 COPY ["src/ETL-SQL.ReportHosting/ETL-SQL.ReportHosting.csproj", "ETL-SQL.ReportHosting/"]
 COPY ["src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj", "ETL-SQL.ReportPlayer/"]
 COPY ["src/ETL-SQL.App/ETL-SQL.App.csproj", "ETL-SQL.App/"]

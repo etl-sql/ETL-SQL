@@ -109,10 +109,11 @@ public sealed class SaasTenantRuntimeIsolationTests : IDisposable
         string label)
     {
         var lower = label.ToLowerInvariant();
-        var folder = new Folder { Id = 7, Name = "Reports", Path = "/Reports", OwnerId = 41 };
+        var folder = new Folder { Id = 7, TenantId = tenant, Name = "Reports", Path = "/Reports", OwnerId = 41 };
         var report = new Report
         {
             Id = 9,
+            TenantId = tenant,
             Folder = folder,
             Name = $"{label} Report",
             ScriptPath = $"{lower}/report.rptsql",
