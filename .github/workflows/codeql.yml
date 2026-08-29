@@ -27,7 +27,7 @@ jobs:
       uses: actions/checkout@v6
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4.37.7
+      uses: github/codeql-action/init@v4.37.9
       with:
         languages: ${{ matrix.language }}
         config: |
@@ -71,7 +71,7 @@ jobs:
     # JS/TS does not need compilation, so we run a dummy step for non-csharp matrix options
     - name: Autobuild non-compiled languages
       if: matrix.language != 'csharp'
-      uses: github/codeql-action/autobuild@v4.37.7
+      uses: github/codeql-action/autobuild@v4.37.9
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4.37.7
+      uses: github/codeql-action/analyze@v4.37.9
