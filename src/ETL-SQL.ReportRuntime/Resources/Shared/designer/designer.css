@@ -1624,6 +1624,21 @@ body.vscode-dark .cm-diagnostic-source {
     font-size: 0.8125rem;
 }
 
+/* Diagnostics carry a line reference, so they double as navigation into the editor. */
+.etlsql-script-message-jump {
+    cursor: pointer;
+}
+
+.etlsql-script-message-jump:hover,
+.etlsql-script-message-jump:focus-visible {
+    background: var(--portal-surface-alt, rgba(127, 127, 127, 0.12));
+    outline: none;
+}
+
+.etlsql-script-message-jump:focus-visible {
+    box-shadow: inset 2px 0 0 var(--portal-accent, #388bfd);
+}
+
 .etlsql-script-message span {
     color: var(--portal-muted, #5b677a);
     text-transform: uppercase;
@@ -4374,12 +4389,29 @@ body.vscode-dark .etlsql-cw-missing-hint {
     position: relative;
 }
 
+/* Hosts the shared script results panel (Results / Messages / Pipeline / Performance). The panel
+   sizes itself with `height: 100%`, so this wrapper must give it a definite height rather than
+   collapsing to content — and the panel body owns its own scrolling. */
 .etlsql-studio-results-host {
-    min-height: 36px;
-    max-height: 40%;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    height: 34%;
+    min-height: 120px;
+    max-height: 60%;
+    overflow: hidden;
     border-top: 1px solid var(--portal-border, #30363d);
     background: var(--portal-surface, #161b22);
+}
+
+.etlsql-studio-results-host > .etlsql-script-results {
+    flex: 1 1 auto;
+    min-height: 0;
+    border-top: 0;
+}
+
+.etlsql-studio-results-host:empty {
+    display: none;
 }
 
 .etlsql-studio-modal-backdrop {

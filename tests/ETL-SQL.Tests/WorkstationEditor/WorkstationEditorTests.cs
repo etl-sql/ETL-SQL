@@ -350,6 +350,31 @@ public sealed class WorkstationEditorTests
         Assert.Contains("CREATE CONNECTION", formatResult.Script);
     }
 
+    [Fact]
+    public async Task Complete_OffersSnippetTemplatesFromTheSharedLibrary()
+    {
+        // End-to-end wiring check: the snippet library is embedded in Core and shared with the TUI
+        // and VS Code, but neither GUI editor surfaced it until now.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/designer/complete");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        request.Content = JsonContent.Create(new CompleteRequest("$kpi", 0, 4, "pipeline.etlsql"));
+
+        var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<CompleteResponse>();
+        Assert.NotNull(result);
+        var snippet = result!.Items.FirstOrDefault(item => item.Kind == "snippet" && item.Label == "$kpi");
+        Assert.NotNull(snippet);
+        Assert.Contains("CREATE VISUAL", snippet!.InsertText, StringComparison.Ordinal);
+    }
+
     private const string MockDbScript = "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users;";
 
     [Fact]

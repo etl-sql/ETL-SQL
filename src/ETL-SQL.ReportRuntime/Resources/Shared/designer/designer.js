@@ -938,6 +938,7 @@ export async function createScriptEditor(container, opts = {}) {
     const debounceMs = Number.isFinite(opts.analyzeDebounceMs) ? opts.analyzeDebounceMs : 450;
     const hasCmLint = Boolean(analyzeUrl && typeof linter === 'function');
     const completionKeys = Array.isArray(completionKeymap) ? completionKeymap : [];
+    const historyKeys = Array.isArray(historyKeymap) ? historyKeymap : [];
     const acceptCompletionKey = completionKeys.find(binding => binding?.key === 'Enter' && typeof binding.run === 'function');
     // Reuse the bundle's Ctrl-Space -> startCompletion binding so the toolbar button and an
     // OS-safe alternate key can invoke completion without importing the minified internal.
@@ -1544,6 +1545,55 @@ export async function createScriptEditor(container, opts = {}) {
         setValue: (text) => view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: text },
         }),
+        /**
+         * Bring the buffer to `text` by dispatching only the span that actually changed.
+         *
+         * A whole-document replacement (setValue) moves the cursor to the end, drops the scroll
+         * position, and gives no clue *which* part changed — which matters most for GUI-generated
+         * edits, where the point is to see what the canvas just wrote. Trimming the common prefix
+         * and suffix keeps the caret where the author left it and yields the inserted range.
+         *
+         * @returns {{from:number,to:number}|null} the inserted range, or null when nothing changed.
+         */
+        replaceAll: (text) => {
+            const current = view.state.doc.toString();
+            const next = String(text ?? '');
+            if (current === next) return null;
+
+            let prefix = 0;
+            const maxPrefix = Math.min(current.length, next.length);
+            while (prefix < maxPrefix && current[prefix] === next[prefix]) prefix++;
+
+            let suffix = 0;
+            const maxSuffix = Math.min(current.length - prefix, next.length - prefix);
+            while (
+                suffix < maxSuffix
+                && current[current.length - 1 - suffix] === next[next.length - 1 - suffix]
+            ) suffix++;
+
+            const from = prefix;
+            const to = current.length - suffix;
+            const insert = next.slice(prefix, next.length - suffix);
+
+            // Keep the caret where it was; CodeMirror maps it through the change for us, and
+            // clamping guards the case where the caret sat inside the replaced span.
+            const anchor = Math.min(view.state.selection.main.anchor, from);
+            view.dispatch({
+                changes: { from, to, insert },
+                selection: { anchor },
+                scrollIntoView: false,
+            });
+            return { from, to: from + insert.length };
+        },
+        /** Scrolls a document range into view without stealing focus from the canvas. */
+        revealRange: (from, to) => {
+            if (!view) return;
+            const length = view.state.doc.length;
+            const start = Math.max(0, Math.min(length, Number(from) || 0));
+            const end = Math.max(start, Math.min(length, Number(to) || start));
+            view.dispatch({ effects: EditorView.scrollIntoView(start, { y: 'center' }) });
+            return { from: start, to: end };
+        },
         gotoLine: (line, column = 1) => {
             if (!view) return;
             const safeLine = Math.max(1, Math.min(view.state.doc.lines, Number(line) || 1));
@@ -1553,6 +1603,22 @@ export async function createScriptEditor(container, opts = {}) {
             view.focus();
         },
         analyze: () => runAnalysis(view.state.doc.toString()),
+        /**
+         * Script-level undo/redo, reused from the bundle's own history keymap.
+         *
+         * The script is the authoritative artifact, so undoing a canvas action means undoing the
+         * text it generated. This works because GUI mutations are applied as ranged transactions
+         * (see replaceAll) rather than whole-document replacements — a host that binds these gets
+         * working undo for palette and filter actions, not just for typing.
+         */
+        undo: () => {
+            const binding = historyKeys.find(entry => entry?.key === 'Mod-z');
+            return binding?.run ? binding.run(view) : false;
+        },
+        redo: () => {
+            const binding = historyKeys.find(entry => entry?.key === 'Mod-y' || entry?.key === 'Mod-Shift-z');
+            return binding?.run ? binding.run(view) : false;
+        },
         dispose: () => {
             clearTimeout(analyzeTimer);
             clearTimeout(hoverTimer);
@@ -1575,7 +1641,7 @@ export function redactSecrets(text) {
         .replace(/\bBearer\s+[A-Za-z0-9._~+/=\-]+/gi, 'Bearer ********');
 }
 
-function normalizeRunTrace(result, script) {
+export function normalizeRunTrace(result, script) {
     if (Array.isArray(result?.trace)) return result.trace;
     const isSuccess = result?.success !== false;
     const rows = Array.isArray(result?.rows) ? result.rows : [];
@@ -1764,7 +1830,8 @@ function updateDagLines(container) {
     }
 }
 
-export function createScriptResultsPanel(container) {
+export function createScriptResultsPanel(container, { onNavigate = null } = {}) {
+    let navigate = onNavigate;
     let messages = [];
     let progress = [];
     let resultSets = [];
@@ -1795,6 +1862,18 @@ export function createScriptResultsPanel(container) {
     const statusEl = container.querySelector('[data-status]');
     const filterEl = container.querySelector('[data-result-filter]');
     const toolsEl = container.querySelector('[data-result-tools]');
+
+    // A diagnostic that names a line but cannot take you there makes the reader do the lookup by
+    // hand. Hosts supply onNavigate; without one the entries stay inert rather than pretending.
+    function onDiagnosticActivate(event) {
+        const target = event.target.closest?.('[data-jump-line]');
+        if (!target) return;
+        if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        navigate?.(Number(target.dataset.jumpLine) || 1, Number(target.dataset.jumpColumn) || 1);
+    }
+    container.addEventListener('click', onDiagnosticActivate);
+    container.addEventListener('keydown', onDiagnosticActivate);
 
     function setTab(tab) {
         activeTab = tab;
@@ -1878,7 +1957,7 @@ export function createScriptResultsPanel(container) {
             // Analyzer positions are 0-based; the editor gutter shows them 1-based.
             const line = (Number.isFinite(d.startLine) ? d.startLine : 0) + 1;
             const column = (Number.isFinite(d.startColumn) ? d.startColumn : 0) + 1;
-            return `<div class="etlsql-script-message" data-level="${diagnosticLevel(d)}"><span>${escape(d.code || d.source || 'lint')}</span>${escape(`${line}:${column}  ${d.message || ''}`)}</div>`;
+            return `<div class="etlsql-script-message etlsql-script-message-jump" role="button" tabindex="0" data-level="${diagnosticLevel(d)}" data-jump-line="${line}" data-jump-column="${column}" title="Go to line ${line}"><span>${escape(d.code || d.source || 'lint')}</span>${escape(`${line}:${column}  ${d.message || ''}`)}</div>`;
         }).join('');
         return `<div class="etlsql-script-message-group"><div class="etlsql-script-message-group-title">Diagnostics</div>${rows}</div>`;
     }
@@ -2116,10 +2195,16 @@ export function createScriptResultsPanel(container) {
             paintStatus();
         },
         clear,
+        /** Sets the jump-to-line handler used by clickable diagnostics. */
+        setNavigate(handler) {
+            navigate = typeof handler === 'function' ? handler : null;
+        },
         dispose() {
             clearInterval(elapsedTimer);
             elapsedTimer = null;
             window.removeEventListener('resize', onResize);
+            container.removeEventListener('click', onDiagnosticActivate);
+            container.removeEventListener('keydown', onDiagnosticActivate);
             container.replaceChildren();
         },
     };

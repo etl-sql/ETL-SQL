@@ -1,4 +1,4 @@
-# ETL-SQL Development TODO List
+﻿# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for all unfinished product and release work. All remaining
 product work is active for the current planning horizon. Work top to bottom unless a dependency or
@@ -91,6 +91,23 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P1 — Finish code-to-canvas data synchronization**: Dataset query edits must call the governed
   preview path after successful parsing, refresh the correct document's sample, preserve the last
   valid canvas on errors, and cancel or ignore stale responses.
+- [x] **P2 — Full editor feature-parity groundwork**: Canvas mutations now apply as ranged CodeMirror
+  transactions (`replaceAll`) instead of a whole-document `setValue`, so the author keeps cursor and
+  scroll position and the generated span is scrolled into view. Because the edit is a normal
+  transaction, CodeMirror history covers it: Ctrl+Z genuinely undoes an "Add visual". The shortcuts
+  the toolbar had always advertised (`Ctrl+N`, `Ctrl+S`, `Ctrl+Enter`, `Ctrl+Shift+Enter`) are bound —
+  `studio.js` previously had no `keydown` handler at all — plus a `beforeunload` guard for unsaved
+  documents. (Delete still relies on undo rather than a prompt: `deleteVisual` is a programmatic API
+  and a modal there blocks every non-human caller; the interactive Delete-key path already pushes an
+  undo state.) The 83-snippet `$trigger` library, already
+  shared with the TUI and VS Code, now reaches both GUI editors through a shared
+  `SnippetCompletionSource`. Studio Home leads with a MOCKDB **Start with sample data** action so a
+  first session is not a dead end (the palette stays disabled until a sample exists), the three
+  blank-document actions no longer read as two identical `.etlsql` buttons, and the Portal's
+  permission dead-ends explain what is missing and who can grant it. Removed ~250 lines of
+  unreachable `studio.js` code, including a hardcoded filter pane with fabricated `$32,000`/`$71,000`
+  values; `CARD` (the KPI tile) now gets its compact grid size, since the old special case tested for
+  a `KPI` type name the grammar does not have.
 - [x] **P1 — Restore desktop and Portal feature parity**: `studio.js` now resolves every server path
   through a single `STUDIO_ROUTES` table on the canonical `/api/designer/*` dialect, which both hosts
   serve. Added the governed desktop `POST /api/designer/data-sample` (schema-validated, bounded run,
@@ -178,8 +195,14 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   also have a new filters button with dialog to choose what to filter based on the tables.  We need a mechanism so that
   both filters and data sidebars can be open at the same time to be able to drag columns from data to filters and that
   would be the trigger to filter on that column and open the dialog on how to filter.
-- [ ] **P4 - Script editor missing the results pane**  This exists in the current Workstation Editor but needs
-  Results, Messages, Performance but the Pipeline DAG should instead go up on top.  More on the next item.
+- [x] **P4 - Script editor missing the results pane**  Studio now mounts the shared
+  `createScriptResultsPanel`, so it has the Workstation Editor's Results / Messages / Pipeline /
+  Performance tabs, result filter, CSV/Excel/JSON export, and column lineage bar. Results are a
+  per-document trace replayed into one panel, so switching tabs restores each document's own run.
+  Lint diagnostics are routed to the Messages tab (Studio passes `diagnosticsPanel: false`, so they
+  previously existed only as gutter squiggles) and each diagnostic jumps to its line when clicked.
+  Remaining from this item: moving the Pipeline DAG out of the tab strip and up on top belongs with
+  the DAG rebuild in the next item.
 - [ ] **P4 - Pipeline DAG needs draggable items**  Similar to report we need a way to drag and drop items onto the DAG.
   A execution box added should open a dialog to label name (auto but changeable), pick connection, add query (query window should reuse script editor window with full suggest, colors, run, messages, results).  In the created script it should be label  execute_sql: EXECUTE BEGIN <script> END;  There should be a way to connect the boxes to each and form a flow.  If
   work must run concurrently, the canvas creates an explicit PARALLEL container and the script reflects it. Multiple incoming
@@ -228,6 +251,7 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
     canvas without changing untouched script text.
 
 
+
 ## Bugs & Triage
 
 ### Connection Catalog & Gateway Resource Discovery
@@ -237,6 +261,9 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [x] **TUI slicers not working** Report Preview now supports keyboard selection and parameter updates for slicers, date pickers, sliders, multi-select, search, checkbox, textbox, and number controls, then refreshes affected visuals.
 - [x] **Connection wizard sources** MOCKDB now has its own Test Data category in the connection wizard.
 - [ ] **TUI Filters VISUALS (SLICER, DATEPICKER, etc)**  These can be changed now but how do you navigate between them.  Can we hook up the mouse to interact?
+- [ ] **ETL-SQL Studio create connection doesn't work** I tried to create a connection using the connection wizard for MOCKDB
+  - It let me Insert connection without a name, that may be fine as long as it says this will be autogenerated
+  = After clicking Insert Connection, screen flashed and nothing happened.
 
 
 ## v0.19.0 Release Evidence Gates

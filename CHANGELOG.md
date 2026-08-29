@@ -12,6 +12,37 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Gave ETL-SQL Studio the script workbench it was missing. Studio now mounts the shared results
+  panel, so it has the Workstation Editor's **Results / Messages / Pipeline / Performance** tabs,
+  result filter, CSV/Excel/JSON export, and column lineage bar. Results are a per-document trace
+  replayed into one panel, so switching tabs restores each document's own run. Lint diagnostics are
+  routed to the Messages tab — Studio suppressed the editor's own diagnostics panel without providing
+  a replacement, so they had existed only as gutter squiggles — and clicking one jumps to its line.
+
+- Canvas edits are applied as ranged editor transactions rather than replacing the whole document.
+  The author keeps cursor and scroll position, the generated span is scrolled into view, and because
+  the edit is an ordinary transaction, undo now covers it: Ctrl+Z genuinely reverses an "Add visual".
+  Bound the shortcuts the toolbar had advertised all along (`Ctrl+N`, `Ctrl+S`, `Ctrl+Enter`,
+  `Ctrl+Shift+Enter`) — Studio had no keyboard handler at all — and added an unsaved-work guard on
+  browser close.
+
+- The shared `$trigger` snippet library reaches the GUI editors. Its 83 templates were embedded in
+  the engine and already served the TUI and VS Code, but neither Studio nor the Workstation Editor
+  exposed them; both now offer them through a shared `SnippetCompletionSource`, carrying the readable
+  `«placeholder»` form rather than LSP tab stops.
+
+- Studio Home no longer dead-ends a first session. Because the visual palette stays disabled until a
+  data sample exists, and a sample needs a connection a new author does not have, Home now leads with
+  **Start with sample data** — a working dashboard on the built-in MOCKDB connector, needing no
+  database. The three blank-document actions are distinguishable (they previously read as two
+  identical `.etlsql` buttons), and the Portal's permission dead-ends now say what is missing and who
+  can grant it. Starter scripts are parser-checked in CI.
+
+- Removed ~250 lines of unreachable Studio code, including a hardcoded filter pane with fabricated
+  `$32,000`/`$71,000` values that a routing change would have exposed. `CARD` — the KPI tile — now
+  gets its intended compact grid size; the previous special case tested for a `KPI` type name that
+  the grammar does not define.
+
 - Repaired Studio's editor-assist layer, which was silently dead in Portal Studio. The shared
   `studio.js` requested `/api/analyze`, `/api/complete`, `/api/hover`, `/api/format`, and `/api/run` —
   names only the desktop Workstation Editor serves — so autocomplete and hover documentation returned

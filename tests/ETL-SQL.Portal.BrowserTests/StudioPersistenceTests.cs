@@ -249,14 +249,18 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
                 first.activeFilters.region = { kind: 'values', values: ['North'] };
                 first.filterFields.push('region');
                 first.selectedSource = { connection: 'alpha', table: 'orders' };
-                document.querySelector('[data-results-host]').innerHTML = '<div>alpha result</div>';
+                studio.setDocumentTrace(studio.state.documents.find(doc => doc.id === 'context-a'), [
+                    { type: 'results', columns: ['note'], rows: [{ note: 'alpha result' }] },
+                ]);
 
                 await studio.switchDoc('context-b');
                 const second = studio.state.documents.find(doc => doc.id === 'context-b').studioContext;
                 second.snapshot = { source: 'beta.customers', columns: ['country'], rowCount: 1, rows: [{ country: 'CA' }] };
                 second.activeFilters.country = { kind: 'values', values: ['CA'] };
                 second.selectedSource = { connection: 'beta', table: 'customers' };
-                document.querySelector('[data-results-host]').innerHTML = '<div>beta result</div>';
+                studio.setDocumentTrace(studio.state.documents.find(doc => doc.id === 'context-b'), [
+                    { type: 'results', columns: ['note'], rows: [{ note: 'beta result' }] },
+                ]);
 
                 await studio.switchDoc('context-a');
                 return {
@@ -265,6 +269,7 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
                     filterValues: first.activeFilters.region.values,
                     connection: first.selectedSource.connection,
                     results: document.querySelector('[data-results-host]').textContent,
+                    restoredTrace: JSON.stringify(first.resultsTrace),
                     secondSource: second.snapshot.source,
                     contextsAreDistinct: first !== second
                 };
@@ -275,7 +280,11 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         Assert.Equal("region", restored.GetProperty("filterFields")[0].GetString());
         Assert.Equal("North", restored.GetProperty("filterValues")[0].GetString());
         Assert.Equal("alpha", restored.GetProperty("connection").GetString());
+        // Results now live in the shared Results/Messages/Performance panel as a per-document trace
+        // rather than an HTML blob, so assert the restored trace and that it reached the panel.
+        Assert.Contains("alpha result", restored.GetProperty("restoredTrace").GetString(), StringComparison.Ordinal);
         Assert.Contains("alpha result", restored.GetProperty("results").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("beta result", restored.GetProperty("results").GetString(), StringComparison.Ordinal);
         Assert.Equal("beta.customers", restored.GetProperty("secondSource").GetString());
         Assert.True(restored.GetProperty("contextsAreDistinct").GetBoolean());
         Assert.Empty(session.PageErrors);

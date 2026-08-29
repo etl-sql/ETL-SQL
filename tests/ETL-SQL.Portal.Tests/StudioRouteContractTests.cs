@@ -1,10 +1,10 @@
 using System.Text.RegularExpressions;
+using ETL_SQL.Core;
 using ETL_SQL.Portal.Controllers;
 using ETL_SQL.Portal.Models;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
-using Microsoft.AspNetCore.Http;
-using ETL_SQL.Core;
 
 namespace ETL_SQL.Portal.Tests;
 
@@ -224,6 +224,36 @@ public sealed class DesignerAssistEndpointTests
         // indistinguishable from "this token has no documentation".
         var result = Assert.IsType<ObjectResult>(new DesignerController().Hover(new HoverDesignerRequest("SELECT")));
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, result.StatusCode);
+    }
+
+    [Fact]
+    public void Snippets_AreOfferedForADollarTriggerAtStatementStart()
+    {
+        // The 83-snippet library already reached the TUI and VS Code; neither GUI editor exposed it,
+        // so the two surfaces a newcomer is most likely to start in had no starter templates.
+        var matches = ETL_SQL.Analysis.Services.SnippetCompletionSource.GetMatches("$kpi", "$kpi");
+
+        var kpi = matches.FirstOrDefault(snippet => snippet.Trigger == "$kpi");
+        Assert.NotNull(kpi);
+        Assert.Contains("CREATE VISUAL", kpi!.TuiBody, StringComparison.Ordinal);
+        // The GUI editors insert completion text literally, so placeholders stay in the readable
+        // «guillemet» form rather than LSP ${1:} tab stops.
+        Assert.Contains("«", kpi.TuiBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("${1:", kpi.TuiBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Snippets_AreNotOfferedMidExpression()
+    {
+        // A snippet expands to a whole statement, so firing one inside an expression would splice
+        // a CREATE VISUAL into the middle of a SELECT.
+        Assert.Empty(ETL_SQL.Analysis.Services.SnippetCompletionSource.GetMatches("SELECT $kpi", "$kpi"));
+    }
+
+    [Fact]
+    public void Snippets_AreNotOfferedForAnOrdinaryWord()
+    {
+        Assert.Empty(ETL_SQL.Analysis.Services.SnippetCompletionSource.GetMatches("kpi", "kpi"));
     }
 
     [Fact]

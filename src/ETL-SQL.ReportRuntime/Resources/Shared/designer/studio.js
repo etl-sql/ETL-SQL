@@ -8,7 +8,7 @@
  *   createStudioWorkbench(container, options)
  */
 
-import { createScriptEditor, createDesigner } from './designer.js';
+import { createScriptEditor, createDesigner, createScriptResultsPanel, normalizeRunTrace } from './designer.js';
 import { createConnectionWizard, encryptClientPassword } from './connection-wizard.js';
 
 const _feedback = globalThis.ETLSQLFeedback || {
@@ -151,7 +151,7 @@ const STUDIO_WORKSPACE_ROUTES = Object.freeze({
 
 const STUDIO_VISUAL_GROUPS = [
     { name: 'Charts', types: ['BAR', 'LINE', 'AREA', 'PIE', 'DONUT', 'HBAR', 'SCATTER', 'GAUGE', 'FUNNEL', 'TREEMAP', 'HEATMAP', 'COMBO', 'BOXPLOT', 'WATERFALL', 'BUBBLE', 'RADAR', 'CANDLESTICK', 'MAP', 'GANTT', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX', 'CUSTOM'] },
-    { name: 'Data & Content', types: ['TABLE', 'CARD', 'TEXT', 'IMAGE', 'HTML'] },
+    { name: 'Data & Content', types: ['CARD', 'TABLE', 'TEXT', 'IMAGE', 'HTML'] },
     { name: 'Filters & Inputs', types: ['SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'] },
     { name: 'Layout & Actions', types: ['CONTAINER', 'BUTTON'] },
 ];
@@ -183,58 +183,56 @@ function _isUntitledPath(path) {
     return /^untitled(?:_|\.)/i.test(String(path || '').split(/[\\/]/).pop() || '');
 }
 
-function _formatNumber(val, format = 'currency') {
-    const num = Number(val) || 0;
-    if (format === 'currency') {
-        return '$' + num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    }
-    if (format === 'percent') {
-        return (num * 100).toFixed(1) + '%';
-    }
-    return num.toLocaleString();
-}
+// Starter scripts backed by MOCKDB, the built-in in-memory sample connector.
+//
+// Without these, a first session is a dead end: the visual palette stays disabled until a data
+// sample exists, and a sample needs a connection the newcomer does not have yet. MOCKDB needs no
+// external database, so "Start with sample data" reaches a working canvas — and a readable script —
+// immediately. Keep these parser-valid; StudioStarterScriptTests parses every one.
+const STUDIO_STARTER_SCRIPTS = Object.freeze({
+    report: `-- Sample dashboard. MOCKDB is a built-in in-memory connector, so this needs no database.
+-- Replace the connection below with your own when you are ready.
+SET REPORT TITLE = 'Sample Dashboard';
 
-function _parseReportVisuals(scriptText) {
-    if (!scriptText || typeof scriptText !== 'string') return [];
-    const visuals = [];
-    const visualHeaderRegex = /VISUAL\s+([A-Za-z0-9_]+)\s+TYPE\s+['"]?([A-Za-z0-9_]+)['"]?/gi;
-    let match;
-    while ((match = visualHeaderRegex.exec(scriptText)) !== null) {
-        const id = match[1];
-        const type = match[2].toUpperCase();
-        const startIdx = match.index + match[0].length;
-        const remainder = scriptText.slice(startIdx, startIdx + 500);
+CREATE CONNECTION demo AS MOCKDB();
 
-        const mappings = {};
-        const options = {};
+SELECT Region, SUM(Total) AS Revenue
+INTO #revenue_by_region
+FROM demo.Orders
+GROUP BY Region;
 
-        const mapMatch = remainder.match(/MAPPINGS\s*\(([^)]+)\)/i);
-        if (mapMatch) {
-            const mapPairs = mapMatch[1].split(',');
-            for (const p of mapPairs) {
-                const parts = p.split('=');
-                if (parts.length === 2) {
-                    mappings[parts[0].trim().toUpperCase()] = parts[1].trim();
-                }
-            }
-        }
+CREATE VISUAL revenue_by_region AS BAR (
+    SOURCE = #revenue_by_region,
+    MAPPINGS (X = Region, Y = Revenue),
+    OPTIONS (LEGEND = OFF)
+);
+`,
+    etl: `-- Sample pipeline. MOCKDB is a built-in in-memory connector, so this needs no database.
+-- Replace the connection below with your own when you are ready.
+CREATE CONNECTION demo AS MOCKDB();
 
-        const optMatch = remainder.match(/OPTIONS\s*\(([^)]+)\)/i);
-        if (optMatch) {
-            const optPairs = optMatch[1].split(',');
-            for (const p of optPairs) {
-                const parts = p.split('=');
-                if (parts.length === 2) {
-                    options[parts[0].trim().toUpperCase()] = parts[1].trim().replace(/^['"]|['"]$/g, '');
-                }
-            }
-        }
+-- Stage the rows you care about in a #temp table.
+SELECT SaleID, OrderDate, Region, Total
+INTO #recent_sales
+FROM demo.Orders
+WHERE Total > 100;
 
-        visuals.push({ id, type, mappings, options });
-    }
+-- Summarise the staged rows.
+SELECT Region, COUNT(*) AS Orders, SUM(Total) AS Revenue
+INTO #revenue_by_region
+FROM #recent_sales
+GROUP BY Region;
 
-    return visuals;
-}
+SELECT * FROM #revenue_by_region;
+`,
+    sql: `-- MOCKDB is a built-in in-memory connector, so this needs no database.
+CREATE CONNECTION demo AS MOCKDB();
+
+SELECT Region, COUNT(*) AS Orders, SUM(Total) AS Revenue
+FROM demo.Orders
+GROUP BY Region;
+`,
+});
 
 function _parseEtlDag(scriptText) {
     if (!scriptText || typeof scriptText !== 'string') return [];
@@ -263,105 +261,6 @@ function _parseEtlDag(scriptText) {
     return nodes;
 }
 
-function _renderBarChartSvg(groupedData) {
-    if (!groupedData || groupedData.length === 0) return '';
-    const maxVal = Math.max(...groupedData.map(d => d.value), 1);
-    return `
-        <div style="height:120px; display:flex; align-items:flex-end; gap:12px; padding:12px 0;">
-            ${groupedData.map((d, i) => {
-                const pct = Math.max(12, Math.round((d.value / maxVal) * 100));
-                const color = CHART_PALETTE[i % CHART_PALETTE.length];
-                return `
-                    <div class="etlsql-chart-bar-group" style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
-                        <span style="font-size:10px; color:var(--portal-text,#f0f6fc); margin-bottom:4px; font-weight:600;">${_formatNumber(d.value, 'currency')}</span>
-                        <div style="width:100%; background:${color}; height:${pct}%; border-radius:3px 3px 0 0; min-height:4px; transition:height 0.2s ease;"></div>
-                        <span style="font-size:10px; color:var(--portal-text-soft,#8b949e); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60px;">${_escapeHtml(d.category)}</span>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-    `;
-}
-
-function _renderDonutChartSvg(groupedData) {
-    if (!groupedData || groupedData.length === 0) return '';
-    const total = groupedData.reduce((acc, d) => acc + d.value, 0) || 1;
-    const r = 40;
-    const cx = 60;
-    const cy = 60;
-    const circ = 2 * Math.PI * r;
-    let accumulatedAngle = 0;
-
-    const segments = groupedData.map((d, i) => {
-        const pct = d.value / total;
-        const strokeDasharray = `${pct * circ} ${circ}`;
-        const strokeDashoffset = -accumulatedAngle * circ;
-        accumulatedAngle += pct;
-        const color = CHART_PALETTE[i % CHART_PALETTE.length];
-        return `
-            <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="16"
-                stroke-dasharray="${strokeDasharray}" stroke-dashoffset="${strokeDashoffset}" />
-        `;
-    }).join('');
-
-    return `
-        <div style="display:flex; align-items:center; gap:16px;">
-            <svg viewBox="0 0 120 120" style="width:110px; height:110px; transform:rotate(-90deg);">
-                ${segments}
-                <text x="${cx}" y="${cy + 4}" text-anchor="middle" transform="rotate(90, ${cx}, ${cy})" font-size="11" font-weight="700" fill="var(--portal-text,#f0f6fc)">
-                    ${groupedData.length} Items
-                </text>
-            </svg>
-            <div style="font-size:0.75rem; display:flex; flex-direction:column; gap:4px;">
-                ${groupedData.map((d, i) => `
-                    <div style="display:flex; align-items:center; gap:6px;">
-                        <span style="width:8px; height:8px; border-radius:50%; background:${CHART_PALETTE[i % CHART_PALETTE.length]}; display:inline-block;"></span>
-                        <span style="color:var(--portal-text-soft,#8b949e);">${_escapeHtml(d.category)}</span>
-                        <strong style="color:var(--portal-text,#f0f6fc);">${((d.value / total) * 100).toFixed(0)}%</strong>
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-    `;
-}
-
-function _renderLineChartSvg(rows) {
-    if (!rows || rows.length === 0) return '';
-    const points = rows.map((r, i) => ({ x: i, y: Number(r.total_amount || r.amount || 0) }));
-    const maxY = Math.max(...points.map(p => p.y), 1);
-    const width = 240;
-    const height = 100;
-
-    const pathPoints = points.map((p, i) => {
-        const x = (i / (points.length - 1 || 1)) * (width - 20) + 10;
-        const y = height - (p.y / maxY) * (height - 20) - 10;
-        return `${x},${y}`;
-    }).join(' ');
-
-    return `
-        <svg viewBox="0 0 ${width} ${height + 20}" style="width:100%; height:120px;">
-            <polyline fill="none" stroke="var(--portal-accent,#388bfd)" stroke-width="2.5" points="${pathPoints}" stroke-linecap="round" stroke-linejoin="round" />
-            ${points.map((p, i) => {
-                const x = (i / (points.length - 1 || 1)) * (width - 20) + 10;
-                const y = height - (p.y / maxY) * (height - 20) - 10;
-                return `<circle cx="${x}" cy="${y}" r="3" fill="var(--portal-accent,#388bfd)" />`;
-            }).join('')}
-        </svg>
-    `;
-}
-
-// A failed run must never be dressed as a successful one, and must never show design-time sample
-// rows as if they were results.
-function runFailureMarkup(message) {
-    const text = String(message || 'The run did not complete.').trim() || 'The run did not complete.';
-    return `
-        <div style="padding:8px 12px; background:var(--portal-surface,#161b22); font-size:0.75rem; border-bottom:1px solid var(--portal-border,#30363d); display:flex; justify-content:space-between;">
-            <span style="color:var(--portal-danger,#f85149); font-weight:600;">✕ Execution Failed</span>
-        </div>
-        <div style="padding:12px; color:var(--portal-danger,#f85149); font-size:0.75rem; white-space:pre-wrap;">${_escapeHtml(text)}</div>
-    `;
-}
-
 // Prefer a structured { error } / { message } body over a raw HTML error page.
 async function _readErrorText(response) {
     let body = '';
@@ -380,29 +279,6 @@ async function _readErrorText(response) {
     const trimmed = body.trim();
     if (!trimmed || /^\s*</.test(trimmed)) return `The run request failed (${response.status}).`;
     return trimmed;
-}
-
-function _renderTableGrid(rows) {
-    if (!rows || rows.length === 0) return '<div style="color:var(--portal-muted,#8b949e);">No records found.</div>';
-    const cols = Object.keys(rows[0] || {});
-    return `
-        <div style="max-height:160px; overflow:auto; border:1px solid var(--portal-border,#30363d); border-radius:4px;">
-            <table style="width:100%; border-collapse:collapse; font-size:0.75rem; text-align:left;">
-                <thead>
-                    <tr style="background:var(--portal-surface,#161b22); border-bottom:1px solid var(--portal-border,#30363d);">
-                        ${cols.map(c => `<th style="padding:6px 10px; color:var(--portal-text-soft,#8b949e); font-weight:600;">${_escapeHtml(c)}</th>`).join('')}
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rows.slice(0, 10).map((r, i) => `
-                        <tr style="border-bottom:1px solid rgba(255,255,255,0.03); background:${i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)'};">
-                            ${cols.map(c => `<td style="padding:5px 10px; color:var(--portal-text,#f0f6fc);">${_escapeHtml(r[c])}</td>`).join('')}
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
 }
 
 export async function createStudioWorkbench(container, opts = {}) {
@@ -448,6 +324,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         selectedVisualId: null,
         sidebarOpen: true,
         editorInstance: null,
+        resultsPanel: null,
     };
 
     const homeDocumentContext = createDocumentContext();
@@ -462,7 +339,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             sourceColumns: [],
             diagnostics: [],
             runAbort: null,
-            resultsHtml: ''
+            resultsTrace: []
         };
     }
     function documentContext(doc) {
@@ -660,10 +537,79 @@ export async function createStudioWorkbench(container, opts = {}) {
         studioSnapshotPackage.metadata = { isSampled: true, source: snapshot?.source || null, rowCount: rows.length };
     }
 
-    function setDocumentResults(document, html) {
+    // Results are a per-document trace replayed into one shared panel, not an HTML blob. The panel
+    // owns the Results / Messages / Pipeline / Performance tabs, the result filter, CSV/Excel/JSON
+    // export, and the column lineage bar — the workbench surface Studio previously did without.
+    function setDocumentTrace(document, trace) {
         const context = documentContext(document);
-        context.resultsHtml = html;
-        if (getActiveDoc() === document) resultsHost.innerHTML = html;
+        context.resultsTrace = Array.isArray(trace) ? trace : [];
+        if (getActiveDoc() === document) paintResults(context);
+    }
+
+    function paintResults(context) {
+        if (!state.resultsPanel) return;
+        state.resultsPanel.clear();
+        if (context.resultsTrace?.length) state.resultsPanel.replay(context.resultsTrace);
+        state.resultsPanel.setDiagnostics(context.diagnostics || []);
+    }
+
+    // Studio owns the Messages surface, so lint diagnostics are routed to it rather than living only
+    // as gutter squiggles. They belong to the buffer, so they survive clear() between runs.
+    function setDocumentDiagnostics(document, list) {
+        const context = documentContext(document);
+        context.diagnostics = Array.isArray(list) ? list : [];
+        if (getActiveDoc() === document && state.resultsPanel) {
+            state.resultsPanel.setDiagnostics(context.diagnostics);
+        }
+    }
+
+    // One run path for "Run all" and "Run selected". Results, messages, the execution pipeline, and
+    // performance all flow into the shared results panel as a trace, so a failure lands on the
+    // Messages tab with the real reason instead of being painted as a success.
+    async function executeRun(doc, { script, selection = null, label }) {
+        setDocumentTrace(doc, runStatusTrace(`Running ${label}…`, 'running'));
+        state.resultsPanel?.startElapsed();
+        try {
+            const response = await authFetch(apiBase + STUDIO_ROUTES.run, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(selection === null ? { script } : { script, selection }),
+            });
+
+            if (!response.ok) {
+                const reason = await _readErrorText(response);
+                setDocumentTrace(doc, [
+                    { type: 'clear', resetHistory: true },
+                    { type: 'status', status: 'failed' },
+                    { type: 'message', level: 'error', text: reason },
+                    { type: 'done', exitCode: 1, status: 'Failed' },
+                ]);
+                return;
+            }
+
+            const data = await response.json();
+            setDocumentTrace(doc, normalizeRunTrace(data, selection ?? script));
+        } catch (error) {
+            // A transport failure is a failed run. This once rendered a green
+            // "In-Memory Run Completed" over stale sample rows, so a script that never executed
+            // looked like it had succeeded.
+            setDocumentTrace(doc, [
+                { type: 'clear', resetHistory: true },
+                { type: 'status', status: 'failed' },
+                { type: 'message', level: 'error', text: error.message || 'The run did not complete.' },
+                { type: 'done', exitCode: 1, status: 'Failed' },
+            ]);
+        } finally {
+            state.resultsPanel?.stopElapsed();
+        }
+    }
+
+    function runStatusTrace(text, tone) {
+        return [
+            { type: 'clear', resetHistory: true },
+            { type: 'status', status: tone },
+            { type: 'message', level: tone === 'failed' ? 'error' : 'sys', text },
+        ];
     }
 
     inspector.querySelector('[data-properties-back]').addEventListener('click', () => {
@@ -823,79 +769,6 @@ export async function createStudioWorkbench(container, opts = {}) {
         }
     }
 
-    function renderLegacyVisualInspector(visualId) {
-        if (!visualId) {
-            inspector.style.display = 'none';
-            return;
-        }
-        const doc = getActiveDoc();
-        if (!doc) return;
-        const visuals = _parseReportVisuals(state.editorInstance ? state.editorInstance.getValue() : doc.content);
-        const visual = visuals.find(v => v.id === visualId);
-        if (!visual) {
-            inspector.style.display = 'none';
-            return;
-        }
-
-        inspector.style.display = 'flex';
-        inspector.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--portal-border,#30363d); padding-bottom:8px;">
-                <strong style="font-size:0.75rem; text-transform:uppercase; color:var(--portal-text,#f0f6fc);">${_escapeHtml(visual.id)} (${visual.type})</strong>
-                <button type="button" class="etlsql-studio-sidebar-close" data-close-inspector>${_studioIcon('close', 12)}</button>
-            </div>
-
-            <div style="display:flex; flex-direction:column; gap:6px;">
-                <label style="font-size:0.6875rem; color:var(--portal-text-soft,#8b949e); font-weight:600;">Visual Title</label>
-                <input type="text" class="etlsql-inspector-input" data-inspect-option="TITLE" value="${_escapeHtml(visual.options.TITLE || '')}" placeholder="e.g. Sales Overview" style="background:var(--portal-bg,#0d1117); border:1px solid var(--portal-border,#30363d); color:var(--portal-text,#f0f6fc); border-radius:4px; padding:6px 8px; font-size:0.75rem;">
-            </div>
-
-            <div style="display:flex; flex-direction:column; gap:6px;">
-                <label style="font-size:0.6875rem; color:var(--portal-text-soft,#8b949e); font-weight:600;">Category / X-Axis</label>
-                <input type="text" class="etlsql-inspector-input" data-inspect-mapping="X" value="${_escapeHtml(visual.mappings.X || visual.mappings.FIELD || '')}" placeholder="e.g. region" style="background:var(--portal-bg,#0d1117); border:1px solid var(--portal-border,#30363d); color:var(--portal-text,#f0f6fc); border-radius:4px; padding:6px 8px; font-size:0.75rem;">
-            </div>
-
-            <div style="display:flex; flex-direction:column; gap:6px;">
-                <label style="font-size:0.6875rem; color:var(--portal-text-soft,#8b949e); font-weight:600;">Value / Y-Axis Aggregation</label>
-                <input type="text" class="etlsql-inspector-input" data-inspect-mapping="Y" value="${_escapeHtml(visual.mappings.Y || visual.mappings.VALUE || '')}" placeholder="e.g. SUM(total_amount)" style="background:var(--portal-bg,#0d1117); border:1px solid var(--portal-border,#30363d); color:var(--portal-text,#f0f6fc); border-radius:4px; padding:6px 8px; font-size:0.75rem;">
-            </div>
-
-            <div style="margin-top:auto; padding-top:8px; border-top:1px solid var(--portal-border,#30363d); display:flex; flex-direction:column; gap:8px;">
-                <button type="button" class="etlsql-studio-btn" data-action="promote-slicer-from-inspect" style="width:100%; justify-content:center;">
-                    ⚡ Promote to Slicer
-                </button>
-            </div>
-        `;
-
-        inspector.querySelector('[data-close-inspector]').addEventListener('click', () => {
-            state.selectedVisualId = null;
-            inspector.style.display = 'none';
-            renderVisualStage();
-        });
-
-        inspector.querySelectorAll('[data-inspect-option]').forEach(inp => {
-            inp.addEventListener('input', () => {
-                const optKey = inp.dataset.inspectOption;
-                surgicalPatchVisualOption(visualId, optKey, inp.value);
-            });
-        });
-
-        inspector.querySelectorAll('[data-inspect-mapping]').forEach(inp => {
-            inp.addEventListener('input', () => {
-                const mapKey = inp.dataset.inspectMapping;
-                surgicalPatchVisualMapping(visualId, mapKey, inp.value);
-            });
-        });
-
-        inspector.querySelector('[data-action="promote-slicer-from-inspect"]')?.addEventListener('click', () => {
-            const field = visual.mappings.X || visual.mappings.FIELD || 'region';
-            promoteFilterToSlicer(field);
-        });
-    }
-
-    function renderVisualInspector(visualId) {
-        if (visualId) state.designerInstance?.selectVisual?.(visualId);
-    }
-
     function hasCapability(capability) {
         return state.deploymentMode === 'Desktop' || state.capabilities.has(capability);
     }
@@ -1039,7 +912,11 @@ export async function createStudioWorkbench(container, opts = {}) {
             doc.content = patched.script;
             doc.isDirty = patched.script !== script || doc.isDirty;
             if (getActiveDoc() === doc) {
-                if (state.editorInstance?.getValue() !== patched.script) state.editorInstance?.setValue(patched.script);
+                // Apply as a ranged edit so the author keeps their cursor and scroll position, then
+                // scroll the generated span into view — the code pane is where a script-first author
+                // learns what the canvas just wrote, so it must not silently swap underneath them.
+                const changed = state.editorInstance?.replaceAll?.(patched.script);
+                if (changed) state.editorInstance?.revealRange?.(changed.from, changed.to);
                 await state.designerInstance?.applyScriptText?.(patched.script);
                 renderVisualStage();
             }
@@ -1071,8 +948,8 @@ export async function createStudioWorkbench(container, opts = {}) {
                 type: uType,
                 gridCol: 1,
                 gridRow: maxRow + 1,
-                gridColSpan: uType === 'KPI' ? 3 : uType === 'TABLE' ? 12 : 6,
-                gridRowSpan: uType === 'KPI' ? 2 : uType === 'TABLE' ? 5 : 4,
+                gridColSpan: uType === 'CARD' ? 3 : uType === 'TABLE' ? 12 : 6,
+                gridRowSpan: uType === 'CARD' ? 2 : uType === 'TABLE' ? 5 : 4,
                 title: `New ${uType} Visual`,
                 dataset: null,
                 mappings: {},
@@ -1102,6 +979,9 @@ export async function createStudioWorkbench(container, opts = {}) {
         return duplicateName;
     }
 
+    // Programmatic API: no confirmation here. The interactive Delete-key path lives in the designer
+    // canvas and confirms there — putting a modal in this function would block any caller that is
+    // not a human, which is every automated one.
     async function deleteVisual(visualId) {
         const deleted = await canonicalDesignerMutation('Delete visual', designState => {
             const visual = findDesignerVisual(designState, visualId);
@@ -1287,6 +1167,52 @@ export async function createStudioWorkbench(container, opts = {}) {
     };
     document.addEventListener('click', onOutsideClick);
 
+    // The toolbar has advertised these shortcuts in its tooltips since Studio shipped, but nothing
+    // ever bound them. Undo/redo are routed to the editor's history so a canvas action — which is
+    // now applied as a ranged text edit — can be undone from anywhere in the workbench.
+    const onShellKeyDown = (event) => {
+        const mod = event.ctrlKey || event.metaKey;
+        if (!mod) return;
+        const key = event.key.toLowerCase();
+        const inEditor = editorHost.contains(event.target);
+
+        if (key === 'n' && !event.shiftKey) {
+            event.preventDefault();
+            shell.querySelector('[data-studio-new-tab]')?.click();
+            return;
+        }
+        if (key === 's' && !event.shiftKey) {
+            event.preventDefault();
+            void handleSave();
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const action = event.shiftKey ? 'run' : 'run-selected';
+            shell.querySelector(`[data-action="${action}"]`)?.click();
+            return;
+        }
+        // CodeMirror already owns these while it has focus; only handle the case where the author
+        // just used the canvas and the editor is not focused.
+        if (inEditor) return;
+        if (key === 'z' && !event.shiftKey) {
+            if (state.editorInstance?.undo?.()) event.preventDefault();
+        } else if (key === 'y' || (key === 'z' && event.shiftKey)) {
+            if (state.editorInstance?.redo?.()) event.preventDefault();
+        }
+    };
+    document.addEventListener('keydown', onShellKeyDown);
+
+    // Closing a tab already prompts; a browser close did not, so unsaved work could vanish silently.
+    const onBeforeUnload = (event) => {
+        if (!state.documents.some(doc => doc.isDirty)) return undefined;
+        event.preventDefault();
+        // Browsers show their own wording; a non-empty returnValue is what triggers the prompt.
+        event.returnValue = '';
+        return '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
     let tabResizeObserver = null;
     if (typeof ResizeObserver !== 'undefined') {
         tabResizeObserver = new ResizeObserver(() => {
@@ -1299,7 +1225,6 @@ export async function createStudioWorkbench(container, opts = {}) {
         const currentDoc = getActiveDoc();
         if (currentDoc && state.editorInstance) {
             currentDoc.content = state.editorInstance.getValue();
-            documentContext(currentDoc).resultsHtml = resultsHost.innerHTML;
         }
 
         state.activeDocId = docId;
@@ -1313,7 +1238,8 @@ export async function createStudioWorkbench(container, opts = {}) {
         renderTabs();
 
         if (docId === '__home__') {
-            resultsHost.innerHTML = '';
+            state.resultsPanel?.clear();
+            state.resultsPanel?.setDiagnostics([]);
             renderStudioHome();
             setContextualRailVisibility();
             if (state.activeActivity) {
@@ -1326,7 +1252,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (newDoc) {
             const context = documentContext(newDoc);
             homeStage.style.display = 'none';
-            resultsHost.innerHTML = context.resultsHtml;
+            paintResults(context);
             updateSnapshotPackage(context.snapshot);
             setProjection(newDoc.projection || 'split');
             if (state.editorInstance) {
@@ -1381,7 +1307,12 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     async function promptForCatalogReport() {
         if (!state.catalogFolders.length) {
-            _feedback.notify('You do not have a writable catalog folder.', { title: 'Create Report', tone: 'warning' });
+            // A dead end with no explanation is the worst first impression the Portal can give, so
+            // say what is missing and who can grant it.
+            _feedback.notify(
+                'Studio saves reports into catalog folders, and you do not have write access to any. '
+                + 'Ask a Portal administrator to grant you Manage permission on a folder, then reopen Studio.',
+                { title: 'No writable folder', tone: 'warning' });
             return null;
         }
 
@@ -1414,20 +1345,27 @@ export async function createStudioWorkbench(container, opts = {}) {
         });
     }
 
-    async function createNewFile(type) {
+    async function createNewFile(type, { seed = false } = {}) {
         if (opts.onCreateDocument) {
             if (type !== 'report') {
                 _feedback.notify('Catalog creation currently supports Report-SQL documents.', { title: 'Create Document', tone: 'warning' });
                 return;
             }
             if (!hasCapability('ScriptSave') || !hasCapability('ReportPublish')) {
-                _feedback.notify('Your deployment mode or permissions do not allow report creation.', { title: 'Create Report', tone: 'warning' });
+                const missing = [
+                    hasCapability('ScriptSave') ? null : 'save scripts',
+                    hasCapability('ReportPublish') ? null : 'publish reports',
+                ].filter(Boolean).join(' and ');
+                _feedback.notify(
+                    `Creating a report needs permission to ${missing}. Ask a Portal administrator to grant it, `
+                    + 'or open an existing report to explore Studio in the meantime.',
+                    { title: 'Create Report', tone: 'warning' });
                 return;
             }
             const request = await promptForCatalogReport();
             if (!request) return;
             try {
-                const created = await opts.onCreateDocument({ ...request, type, scriptText: '' });
+                const created = await opts.onCreateDocument({ ...request, type, scriptText: seed ? STUDIO_STARTER_SCRIPTS.report : '' });
                 state.catalogReports.push(created);
                 await openCatalogReport(created, 'split');
             } catch (error) {
@@ -1445,15 +1383,15 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         if (type === 'report') {
             path = `untitled_${rptCount}.rptsql`;
-            content = '';
+            content = seed ? STUDIO_STARTER_SCRIPTS.report : '';
             proj = 'split';
         } else if (type === 'etl') {
             path = `untitled_pipeline_${etlCount}.etlsql`;
-            content = '';
+            content = seed ? STUDIO_STARTER_SCRIPTS.etl : '';
             proj = 'split';
         } else {
             path = `untitled_query_${etlCount}.etlsql`;
-            content = '';
+            content = seed ? STUDIO_STARTER_SCRIPTS.sql : '';
             proj = 'code';
         }
 
@@ -1462,7 +1400,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             path: path,
             name: path,
             content: content,
-            isDirty: false,
+            isDirty: Boolean(seed),
             projection: proj
         };
 
@@ -1557,25 +1495,32 @@ export async function createStudioWorkbench(container, opts = {}) {
                         <p>Design interactive report dashboards, author cross-source data pipelines, and manage database connections in a portable, zero-trust workspace.</p>
                     </div>
                     <div class="etlsql-studio-home-quick-actions">
-                        <button type="button" class="etlsql-home-action-card primary" data-create-from-home="report">
+                        <button type="button" class="etlsql-home-action-card primary" data-create-from-home="report" data-seed-sample>
                             <span class="etlsql-home-card-icon">${_studioIcon('canvas', 24)}</span>
                             <div class="etlsql-home-card-info">
-                                <strong>New Report (.rptsql)</strong>
-                                <span>Visual drag-and-drop report canvas, charts, KPI metric cards, and live dual-projection.</span>
+                                <strong>Start with sample data</strong>
+                                <span>Opens a working dashboard on the built-in MOCKDB sample connector &mdash; no database or connection needed. The best place to start.</span>
+                            </div>
+                        </button>
+                        <button type="button" class="etlsql-home-action-card secondary" data-create-from-home="report">
+                            <span class="etlsql-home-card-icon">${_studioIcon('canvas', 24)}</span>
+                            <div class="etlsql-home-card-info">
+                                <strong>Blank report (.rptsql)</strong>
+                                <span>Drag-and-drop dashboard canvas with charts, cards, and slicers. Needs a connection before visuals can be added.</span>
                             </div>
                         </button>
                         <button type="button" class="etlsql-home-action-card secondary" data-create-from-home="etl">
                             <span class="etlsql-home-card-icon">${_studioIcon('catalog', 24)}</span>
                             <div class="etlsql-home-card-info">
-                                <strong>New ETL Pipeline (.etlsql)</strong>
-                                <span>Cross-source data staging, transformations, and governed warehouse loads with DAG execution flow.</span>
+                                <strong>Blank pipeline (.etlsql)</strong>
+                                <span>Multi-step data movement: stage into #temp tables, transform, validate, and load. Opens with the pipeline canvas.</span>
                             </div>
                         </button>
                         <button type="button" class="etlsql-home-action-card tertiary" data-create-from-home="sql">
                             <span class="etlsql-home-card-icon">${_studioIcon('code', 24)}</span>
                             <div class="etlsql-home-card-info">
-                                <strong>New Script (.etlsql)</strong>
-                                <span>Direct SQL queries and multi-source join authoring.</span>
+                                <strong>Blank query (.etlsql)</strong>
+                                <span>Same file type as a pipeline, opened straight into the script editor with no canvas.</span>
                             </div>
                         </button>
                     </div>
@@ -1632,7 +1577,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         `;
 
         homeStage.querySelectorAll('[data-create-from-home]').forEach(b => {
-            b.addEventListener('click', () => createNewFile(b.dataset.createFromHome));
+            b.addEventListener('click', () => createNewFile(b.dataset.createFromHome, { seed: b.hasAttribute('data-seed-sample') }));
         });
 
         homeStage.querySelectorAll('[data-open-file]').forEach(b => {
@@ -2110,149 +2055,6 @@ export async function createStudioWorkbench(container, opts = {}) {
             sidebarContent.querySelectorAll('[data-open-doc]').forEach(el => {
                 el.addEventListener('click', () => switchDoc(el.dataset.openDoc));
             });
-        } else if (activity === 'catalog') {
-            sidebarTitle.textContent = 'Data Catalog';
-            sidebarContent.innerHTML = `
-                <div class="etlsql-sidebar-section-header">
-                    <span>Published Connections</span>
-                    <button type="button" class="etlsql-sidebar-action" data-action="wizard">+ New</button>
-                </div>
-                <div class="etlsql-catalog-conn-list" style="display:flex; flex-direction:column; gap:4px; padding:6px 8px;">
-                    <div style="font-size:0.75rem; color:var(--portal-text-soft,#8b949e); padding:8px 6px;">Loading connections…</div>
-                </div>
-            `;
-            sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard);
-
-            loadConnectionAliases().then(connections => {
-                const listEl = sidebarContent.querySelector('.etlsql-catalog-conn-list');
-                if (!listEl) return;
-
-                if (connections.length === 0) {
-                    listEl.innerHTML = `
-                        <div style="padding:16px 8px; text-align:center; color:var(--portal-text-soft,#8b949e); font-size:0.75rem;">
-                            <p style="margin:0 0 10px;">No connections configured in this workspace.</p>
-                            <button type="button" class="etlsql-studio-btn" data-action="wizard-empty" style="margin:0 auto; font-size:0.75rem;">
-                                + Configure Connection
-                            </button>
-                        </div>
-                    `;
-                    listEl.querySelector('[data-action="wizard-empty"]')?.addEventListener('click', handleOpenConnectionWizard);
-                } else {
-                    listEl.innerHTML = connections.map(c => `
-                        <div class="etlsql-tree-row etlsql-tree-header" title="${_escapeHtml(c.description || c.alias)}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:4px;">
-                            ${_studioIcon('catalog', 14)}
-                            <strong style="color:var(--portal-text,#f0f6fc);">${_escapeHtml(c.alias || c.name)}</strong>
-                            <span style="font-size:10px; color:var(--portal-muted,#8b949e); margin-left:auto;">(${_escapeHtml(c.connectorType || 'SQL')})</span>
-                        </div>
-                    `).join('');
-                }
-            }).catch(() => {
-                const listEl = sidebarContent.querySelector('.etlsql-catalog-conn-list');
-                if (listEl) {
-                    listEl.innerHTML = `
-                        <div style="padding:16px 8px; text-align:center; color:var(--portal-text-soft,#8b949e); font-size:0.75rem;">
-                            <p style="margin:0 0 10px;">No connections found.</p>
-                            <button type="button" class="etlsql-studio-btn" data-action="wizard-empty" style="margin:0 auto; font-size:0.75rem;">
-                                + Configure Connection
-                            </button>
-                        </div>
-                    `;
-                    listEl.querySelector('[data-action="wizard-empty"]')?.addEventListener('click', handleOpenConnectionWizard);
-                }
-            });
-            sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard);
-        } else if (activity === 'palette') {
-            sidebarTitle.textContent = 'Visual Components';
-            sidebarContent.innerHTML = `
-                <div class="etlsql-sidebar-section-header"><span>Charts & Metrics</span></div>
-                <div style="display:flex; flex-direction:column; gap:4px; padding:6px 10px;">
-                    <button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="KPI">${_studioIcon('kpi', 14)} KPI Metric Card</button>
-                    <button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="BAR">${_studioIcon('bar', 14)} Bar Chart</button>
-                    <button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="LINE">${_studioIcon('line', 14)} Line Trend Chart</button>
-                    <button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="DONUT">${_studioIcon('donut', 14)} Donut / Proportion</button>
-                    <button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="TABLE">${_studioIcon('table', 14)} Data Grid Table</button>
-                    <button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="SLICER">${_studioIcon('slicer', 14)} Interactive Slicer</button>
-                </div>
-            `;
-            sidebarContent.querySelectorAll('[data-add-visual]').forEach(btn => {
-                btn.draggable = true;
-                btn.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.setData('text/plain', btn.dataset.addVisual);
-                    e.dataTransfer.setData('application/x-etlsql-visual', btn.dataset.addVisual);
-                    e.dataTransfer.effectAllowed = 'copy';
-                });
-                btn.addEventListener('click', () => addVisualToCanvas(btn.dataset.addVisual));
-            });
-        } else if (activity === 'filters') {
-            sidebarTitle.textContent = 'Filter Pane';
-            const context = activeDocumentContext();
-            const snap = context.snapshot || { columns: [], rows: [] };
-            const allRows = snap.rows || [];
-
-            const regionCounts = {};
-            for (const r of allRows) {
-                const k = String(r.region || 'Other');
-                regionCounts[k] = (regionCounts[k] || 0) + 1;
-            }
-
-            sidebarContent.innerHTML = `
-                <div style="padding:10px 12px; display:flex; flex-direction:column; gap:12px;">
-                    <div class="etlsql-filter-card">
-                        <div class="etlsql-filter-card-header">
-                            <span>Region</span>
-                            <span class="etlsql-filter-type-badge">Categorical</span>
-                        </div>
-                        <div class="etlsql-filter-items-list">
-                            ${Object.entries(regionCounts).map(([k, count]) => `
-                                <label class="etlsql-filter-item-label">
-                                    <input type="radio" name="filter_region" value="${_escapeHtml(k)}" ${context.activeFilters['region'] === k ? 'checked' : ''}>
-                                    <span>${_escapeHtml(k)}</span>
-                                    <span style="margin-left:auto; font-size:10px; opacity:0.6;">${count}</span>
-                                </label>
-                            `).join('')}
-                            <label class="etlsql-filter-item-label">
-                                <input type="radio" name="filter_region" value="ALL" ${!context.activeFilters['region'] || context.activeFilters['region'] === 'ALL' ? 'checked' : ''}>
-                                <span>(All Regions)</span>
-                            </label>
-                        </div>
-                        <button type="button" class="etlsql-studio-btn etlsql-filter-promote-btn" data-promote-slicer="region">
-                            ⚡ Promote to Slicer
-                        </button>
-                    </div>
-
-                    <div class="etlsql-filter-card">
-                        <div class="etlsql-filter-card-header">
-                            <span>Total Amount</span>
-                            <span class="etlsql-filter-type-badge">Numeric Range</span>
-                        </div>
-                        <div style="font-size:0.75rem; color:var(--portal-text-soft,#8b949e); display:flex; justify-content:space-between;">
-                            <span>$32,000</span>
-                            <span>$71,000</span>
-                        </div>
-                        <input type="range" min="32000" max="71000" step="1000" style="width:100%; margin:8px 0;">
-                        <button type="button" class="etlsql-studio-btn etlsql-filter-promote-btn" data-promote-slicer="total_amount">
-                            ⚡ Promote to Slicer
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            sidebarContent.querySelectorAll('input[name="filter_region"]').forEach(radio => {
-                radio.addEventListener('change', () => {
-                    if (radio.value === 'ALL') {
-                        delete activeDocumentContext().activeFilters['region'];
-                    } else {
-                        activeDocumentContext().activeFilters['region'] = radio.value;
-                    }
-                    renderVisualStage();
-                });
-            });
-
-            sidebarContent.querySelectorAll('[data-promote-slicer]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    promoteFilterToSlicer(btn.dataset.promoteSlicer);
-                });
-            });
         } else if (activity === 'git') {
             sidebarTitle.textContent = 'Source Control';
             sidebarContent.innerHTML = `
@@ -2462,18 +2264,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (!doc) return;
         const script = state.editorInstance?.getValue?.() || doc.content;
         const selection = state.editorInstance?.getSelection?.() || state.editorInstance?.getCurrentStatement?.() || script;
-        setDocumentResults(doc, '<div style="padding:12px;color:var(--portal-accent,#388bfd);font-size:.75rem;">Running selection…</div>');
-        try {
-            const response = await authFetch(apiBase + STUDIO_ROUTES.run, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script, selection }) });
-            if (!response.ok) {
-                setDocumentResults(doc, runFailureMarkup(await _readErrorText(response)));
-                return;
-            }
-            const data = await response.json();
-            setDocumentResults(doc, `<div style="padding:10px">${_renderTableGrid(data.rows || [])}</div>`);
-        } catch (error) {
-            setDocumentResults(doc, runFailureMarkup(error.message));
-        }
+        await executeRun(doc, { script, selection, label: 'selection' });
     });
 
     shell.querySelector('[data-action="theme"]')?.addEventListener('click', () => {
@@ -2485,35 +2276,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         const doc = getActiveDoc();
         if (!doc) return;
         const script = state.editorInstance ? state.editorInstance.getValue() : doc.content;
-        setDocumentResults(doc, `<div style="padding:12px; color:var(--portal-accent,#388bfd); font-size:0.75rem;">Running script...</div>`);
-        try {
-            const res = await authFetch(apiBase + STUDIO_ROUTES.run, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ script })
-            });
-            if (res.ok) {
-                const data = await res.json();
-                // Only report rows the server actually returned. Falling back to the design-time
-                // sample here would present cached sample data as an execution result.
-                setDocumentResults(doc, `
-                    <div style="padding:8px 12px; background:var(--portal-surface,#161b22); font-size:0.75rem; border-bottom:1px solid var(--portal-border,#30363d); display:flex; justify-content:space-between;">
-                        <span style="color:var(--portal-success,#238636); font-weight:600;">✓ Execution Successful</span>
-                        <span style="color:var(--portal-muted,#8b949e);">${Number.isFinite(data.elapsedMs) ? data.elapsedMs + 'ms' : ''}</span>
-                    </div>
-                    <div style="padding:10px;">
-                        ${_renderTableGrid(data.rows || [])}
-                    </div>
-                `);
-            } else {
-                setDocumentResults(doc, runFailureMarkup(await _readErrorText(res)));
-            }
-        } catch (e) {
-            // A transport failure is a failed run. This previously rendered a green
-            // "In-Memory Run Completed" over stale sample rows, so a script that never executed
-            // looked like it had succeeded.
-            setDocumentResults(doc, runFailureMarkup(e.message));
-        }
+        await executeRun(doc, { script, label: 'script' });
     });
 
     let isResizing = false;
@@ -2560,6 +2323,17 @@ export async function createStudioWorkbench(container, opts = {}) {
     };
     if (opts.onCloseDocument) window.addEventListener('pagehide', releaseLeasesOnPageHide);
 
+    // The panel overwrites its container's className, so it gets its own child element rather than
+    // the host — the host keeps the Studio sizing rules the panel's `height: 100%` depends on.
+    const resultsPanelHost = document.createElement('div');
+    resultsHost.appendChild(resultsPanelHost);
+    state.resultsPanel = createScriptResultsPanel(resultsPanelHost, {
+        onNavigate: (line, column) => {
+            setProjection(getActiveDoc()?.projection === 'canvas' ? 'split' : (getActiveDoc()?.projection || 'split'));
+            state.editorInstance?.gotoLine?.(line, column);
+        },
+    });
+
     try {
         const activeDoc = getActiveDoc();
         state.editorInstance = await createScriptEditor(editorHost, {
@@ -2567,7 +2341,10 @@ export async function createStudioWorkbench(container, opts = {}) {
             analyzeUrl: apiBase + STUDIO_ROUTES.analyze,
             completeUrl: apiBase + STUDIO_ROUTES.complete,
             hoverUrl: apiBase + STUDIO_ROUTES.hover,
+            // Studio owns the Messages surface, so the editor's own diagnostics panel stays off and
+            // diagnostics are routed to the results panel instead of living only as gutter squiggles.
             diagnosticsPanel: false,
+            onDiagnostics: (list) => setDocumentDiagnostics(getActiveDoc(), list),
             authFetch,
             documentUri: () => getActiveDoc()?.path || 'untitled.rptsql',
             onChange: (newContent) => {
@@ -2634,6 +2411,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         surgicalPatchVisualOption,
         surgicalPatchVisualMapping,
         addVisualToCanvas,
+        setDocumentTrace,
         duplicateVisual,
         deleteVisual,
         openCatalogReport,
@@ -2642,11 +2420,15 @@ export async function createStudioWorkbench(container, opts = {}) {
                 void opts.onCloseDocument?.(doc, { keepalive: false });
             }
             document.removeEventListener('click', onOutsideClick);
+            document.removeEventListener('keydown', onShellKeyDown);
+            window.removeEventListener('beforeunload', onBeforeUnload);
             window.removeEventListener('pagehide', releaseLeasesOnPageHide);
             if (renewLeaseTimer) window.clearInterval(renewLeaseTimer);
             tabResizeObserver?.disconnect();
             state.designerInstance?.dispose?.();
             state.designerInstance = null;
+            state.resultsPanel?.dispose?.();
+            state.resultsPanel = null;
             container.innerHTML = '';
         }
     };

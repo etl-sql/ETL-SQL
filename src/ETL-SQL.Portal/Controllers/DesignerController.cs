@@ -1,13 +1,13 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
+using ETL_SQL.Analysis.Services;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
-using ETL_SQL.Core.Services;
 using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Interfaces;
-using ETL_SQL.Analysis.Services;
+using ETL_SQL.Core.Services;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Filters;
 using ETL_SQL.Portal.Models;
@@ -284,6 +284,18 @@ public class DesignerController : ControllerBase
 
             var suggestionList = suggestions.Take(100).ToList();
             var items = new List<DesignerCompletionItem>();
+
+            // Snippets lead: a `$trigger` match is an explicit request for that template, so burying
+            // it under keyword suggestions would make the library undiscoverable in the GUI editors.
+            items.AddRange(SnippetCompletionSource.GetMatches(scriptBefore, prefix)
+                .Select(snippet => new DesignerCompletionItem(
+                    snippet.Trigger,
+                    snippet.TuiBody,
+                    "snippet",
+                    snippet.Label,
+                    snippet.Description,
+                    Math.Max(0, req.Column - prefix.Length),
+                    req.Column)));
             if (prefix == "*")
             {
                 var columnExpansion = suggestionList
