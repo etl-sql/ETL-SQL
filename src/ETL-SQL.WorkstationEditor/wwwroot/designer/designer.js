@@ -6284,7 +6284,31 @@ export function createDesigner(container, opts = {}) {
     }
 
     let syncTimeout = null;
+
+    // Depth counter, not a boolean: renderAll() can nest, and a boolean would be cleared by the
+    // inner call while the outer one is still ingesting.
+    let suppressScriptSync = 0;
+
+    /**
+     * Re-render after ingesting script text, without writing the script back.
+     *
+     * The canvas regenerates its script from `state` alone, so anything the design state does not
+     * model — a bare CREATE CONNECTION, hand-authored SQL that did not round-trip — is absent from
+     * the regenerated text. Letting that regeneration run in response to the editor's own content
+     * meant typing into the script pane produced: text -> canvas -> regenerate -> overwrite the text
+     * the author had just typed. A canvas update caused *by* the script must never write back to it.
+     */
+    function renderAllFromScript() {
+        suppressScriptSync++;
+        try {
+            renderAll();
+        } finally {
+            suppressScriptSync--;
+        }
+    }
+
     function syncScriptFromGridDebounced() {
+        if (suppressScriptSync > 0) return;
         if (!isSplitActive && !scriptEditor && typeof opts.onScriptChange !== 'function') return;
         clearTimeout(syncTimeout);
         syncTimeout = setTimeout(syncScriptFromGrid, 400);
@@ -6418,7 +6442,7 @@ export function createDesigner(container, opts = {}) {
                 if (!isSplitActive) {
                     closeScript();
                 }
-                renderAll();
+                renderAllFromScript();
             } else {
                 setScriptDiagnosticBadge(r?.error || 'Script syntax error');
                 if (!isSplitActive) {

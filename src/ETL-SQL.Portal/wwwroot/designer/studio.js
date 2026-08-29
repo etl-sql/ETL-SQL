@@ -2182,8 +2182,23 @@ export async function createStudioWorkbench(container, opts = {}) {
         }
     }
 
+    // Connection aliases already declared in the active document. Read from the script text rather
+    // than the design state, because CREATE CONNECTION is exactly the kind of statement the design
+    // state does not model.
+    function existingConnectionNames() {
+        const script = state.editorInstance?.getValue?.() || getActiveDoc()?.content || '';
+        const names = [];
+        const pattern = /CREATE\s+(?:OR\s+REPLACE\s+)?CONNECTION\s+(?:IF\s+NOT\s+EXISTS\s+)?\[?([A-Za-z_][A-Za-z0-9_]*)\]?/gi;
+        let match;
+        while ((match = pattern.exec(script)) !== null) names.push(match[1]);
+        return names;
+    }
+
     function handleOpenConnectionWizard() {
         createConnectionWizard({
+            // Without these the wizard cannot detect a collision or pick a free alias, so it would
+            // happily suggest a name the script already uses.
+            existingNames: existingConnectionNames(),
             fetchSchemas: async () => {
                 const response = await authFetch(apiBase + STUDIO_ROUTES.connectorsSchema);
                 if (!response.ok) throw new Error('Connector types could not be loaded.');

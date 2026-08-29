@@ -245,6 +245,21 @@ export function createConnectionWizard(options = {}) {
     // Default built-in fallback schemas if server schemas not yet loaded
     const defaultSchemas = [
         {
+            // MOCKDB leads the fallback list deliberately. It is registered unconditionally in every
+            // deployment and needs no server details, so it is the one connector a new author can
+            // always use — and it backs Studio Home's "Start with sample data". Omitting it here
+            // meant that whenever connector discovery failed, the Test Data category rendered empty
+            // and the zero-dependency on-ramp disappeared exactly when the environment was least
+            // able to reach a real database.
+            connectorType: 'MOCKDB',
+            aliases: [],
+            description: 'Built-in in-memory sample data. Needs no external database.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: []
+        },
+        {
             connectorType: 'MSSQL',
             aliases: ['SQLSERVER'],
             description: 'Microsoft SQL Server and Azure SQL Database.',
@@ -650,6 +665,7 @@ export function createConnectionWizard(options = {}) {
     host.appendChild(modalOverlay);
 
     // Initialize initial field values from schema defaults
+    if (!(state.alias || '').trim()) state.alias = suggestAlias(state.connectorType);
     initFieldValues();
 
     // Async loader
@@ -781,6 +797,62 @@ export function createConnectionWizard(options = {}) {
             return `An object or connection named '${state.alias}' already exists in the current script.`;
         }
         return null;
+    }
+
+    /**
+     * A ready-to-use alias for a freshly picked connector.
+     *
+     * The alias is the one field with no sensible blank state: it is required, but a newcomer has
+     * no basis to invent a name before they know what the connection is for. Prefilling keeps the
+     * live SQL preview showing real, valid syntax from the first click instead of a `<alias>`
+     * placeholder, and the author can still overwrite it.
+     */
+    function suggestAlias(connectorType) {
+        const base = String(connectorType || 'conn')
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, '_')
+            .replace(/^[^a-z_]+/, '') || 'conn';
+
+        const taken = name => (state.existingNames || [])
+            .some(existing => String(existing).trim().toLowerCase() === name.toLowerCase());
+
+        if (!taken(base)) return base;
+        let counter = 2;
+        while (taken(`${base}_${counter}`)) counter++;
+        return `${base}_${counter}`;
+    }
+
+    /**
+     * Switch the selected connector, keeping the suggested alias in step.
+     *
+     * Both the category buttons and the connector cards change the type, so the alias rule lives
+     * here rather than being duplicated (and drifting) at each call site.
+     */
+    function selectConnectorType(type) {
+        if (!type || type === state.connectorType) return;
+        const previousSuggestion = suggestAlias(state.connectorType);
+        const alias = (state.alias || '').trim();
+        state.connectorType = type;
+        state.values = {};
+        // Never overwrite a name the author typed; only replace the suggestion we made ourselves.
+        if (!alias || alias === previousSuggestion) state.alias = suggestAlias(type);
+        initFieldValues();
+    }
+
+    /**
+     * Why the alias cannot be used, or null when it can.
+     *
+     * Insert used to stay enabled with an empty alias, and generateSql substitutes the literal
+     * `<alias>` placeholder — so confirming the dialog wrote `CREATE CONNECTION <alias> AS ...`
+     * into the script, which does not parse.
+     */
+    function getAliasProblem() {
+        const alias = (state.alias || '').trim();
+        if (!alias) return 'Enter a connection alias.';
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) {
+            return 'The alias must start with a letter or underscore and contain only letters, digits, and underscores.';
+        }
+        return getNameCollision();
     }
 
     function getAutoRenameSuggestion() {
@@ -933,6 +1005,7 @@ export function createConnectionWizard(options = {}) {
         const schema = getCurrentSchema();
         const sql = generateSql();
         const securityViolation = getSecurityViolation();
+        const aliasProblem = getAliasProblem();
         const nameCollision = getNameCollision();
         const autoRename = nameCollision ? getAutoRenameSuggestion() : null;
 
@@ -1061,7 +1134,7 @@ export function createConnectionWizard(options = {}) {
                         <div class="etlsql-cw-footer-actions">
                             ${state.saveError ? `<div class="etlsql-cw-save-error alert alert-danger" role="alert">${_h(state.saveError)}</div>` : ''}
                             <button type="button" class="btn btn-outline" id="etlsql-cw-cancel-btn">Cancel</button>
-                            <button type="button" class="btn btn-primary" id="etlsql-cw-submit-btn" ${(securityViolation || state.isSaving) ? 'disabled' : ''} ${securityViolation ? 'title="Resolve security violation before saving"' : ''}>
+                            <button type="button" class="btn btn-primary" id="etlsql-cw-submit-btn" ${(securityViolation || state.isSaving || aliasProblem) ? 'disabled' : ''} ${securityViolation ? 'title="Resolve security violation before saving"' : (aliasProblem ? `title="${_attr(aliasProblem)}"` : '')}>
                                 ${state.isSaving ? 'Saving…' : (state.mode === 'admin' ? 'Save to Catalog' : 'Insert Connection')}
                             </button>
                         </div>
@@ -1578,11 +1651,7 @@ export function createConnectionWizard(options = {}) {
                     state.isSharedReference = false;
                     state.selectedCategory = cat;
                     const firstInCat = state.schemas.find(s => isConnectorInCategory(s, cat));
-                    if (firstInCat) {
-                        state.connectorType = firstInCat.connectorType;
-                        state.values = {};
-                        initFieldValues();
-                    }
+                    if (firstInCat) selectConnectorType(firstInCat.connectorType);
                 }
                 render();
             });
@@ -1861,6 +1930,7 @@ export function createConnectionWizard(options = {}) {
         modalOverlay.querySelector('#etlsql-cw-submit-btn')?.addEventListener('click', async () => {
             const violation = getSecurityViolation();
             if (violation || state.isSaving) return;
+            if (getAliasProblem()) return;
 
             const sql = generateSql();
             if (state.mode === 'admin') {
@@ -1918,9 +1988,7 @@ export function createConnectionWizard(options = {}) {
             btn.addEventListener('click', () => {
                 const type = btn.dataset.type;
                 if (type && type !== state.connectorType) {
-                    state.connectorType = type;
-                    state.values = {};
-                    initFieldValues();
+                    selectConnectorType(type);
                     render();
                 }
             });
@@ -1929,7 +1997,9 @@ export function createConnectionWizard(options = {}) {
 
     function checkAndAlertValidation() {
         const violation = getSecurityViolation();
-        const nameCollision = getNameCollision();
+        // One source of truth for alias validity: empty, malformed, or colliding. This runs on every
+        // keystroke, unlike render(), so it is what actually gates the button.
+        const aliasProblem = getAliasProblem();
         const isAliasMissing = !state.alias || !state.alias.trim();
         let securityAlert = modalOverlay.querySelector('.etlsql-cw-security-alert');
         if (violation) {
@@ -1944,20 +2014,23 @@ export function createConnectionWizard(options = {}) {
         }
         const submitBtn = modalOverlay.querySelector('#etlsql-cw-submit-btn');
         if (submitBtn) {
-            submitBtn.disabled = Boolean(violation || nameCollision || isAliasMissing);
+            submitBtn.disabled = Boolean(violation || aliasProblem);
+            submitBtn.title = violation || aliasProblem || '';
         }
 
         const aliasInput = modalOverlay.querySelector('#etlsql-cw-alias-input');
         if (aliasInput) {
-            aliasInput.classList.toggle('etlsql-cw-alias-missing', isAliasMissing);
+            aliasInput.classList.toggle('etlsql-cw-alias-missing', Boolean(aliasProblem));
         }
         const missingHint = modalOverlay.querySelector('.etlsql-cw-missing-hint');
         if (missingHint) {
-            missingHint.style.display = isAliasMissing ? '' : 'none';
+            missingHint.style.display = aliasProblem ? '' : 'none';
+            // Say which problem it is; "required" is wrong when the name is present but malformed.
+            missingHint.textContent = aliasProblem ? `⚠️ ${aliasProblem}` : '';
         }
         const validHint = modalOverlay.querySelector('.etlsql-cw-valid-hint');
         if (validHint) {
-            validHint.style.display = isAliasMissing ? 'none' : '';
+            validHint.style.display = aliasProblem ? 'none' : '';
             const code = validHint.querySelector('code');
             if (code) code.textContent = (state.alias || '').trim();
         }

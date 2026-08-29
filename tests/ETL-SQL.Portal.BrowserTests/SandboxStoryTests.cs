@@ -741,6 +741,140 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_ScriptPane_KeepsHandAuthoredTextAndInsertedConnections()
+    {
+        // Typing into the script pane used to erase itself. The canvas regenerates its script from
+        // the design state alone, and updating the canvas *from* the editor let that regeneration
+        // run and overwrite the author's text ~800ms later -- so anything the design state does not
+        // model, most visibly a CREATE CONNECTION, vanished as it was typed. That made the
+        // Connection Wizard look broken too: its inserted statement disappeared moments later.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var survived = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+            """
+            async () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const editor = studio.state.editorInstance;
+                const marker = 'CREATE CONNECTION demo AS MOCKDB();';
+                editor.setValue(marker + String.fromCharCode(10) + editor.getValue());
+
+                // Long enough for both debounces to fire: editor->canvas (400ms) and the
+                // canvas->script regeneration (400ms) that used to clobber the buffer.
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return { keptConnection: editor.getValue().includes(marker) };
+            }
+            """);
+
+        Assert.True(survived.GetProperty("keptConnection").GetBoolean(),
+            "The script pane discarded a hand-authored CREATE CONNECTION after the canvas re-rendered.");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_CanvasEdits_StillWriteBackToTheScript()
+    {
+        // The guard above must stay surgical: suppressing the write-back only while ingesting
+        // script text, never for a genuine canvas edit. Without this, fixing the clobber would
+        // silently sever canvas-to-code sync.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var result = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+            """
+            async () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const editor = studio.state.editorInstance;
+                const before = editor.getValue();
+                studio.state.designerInstance.addVisual('BAR');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return { grew: editor.getValue().length > before.length };
+            }
+            """);
+
+        Assert.True(result.GetProperty("grew").GetBoolean(),
+            "A canvas edit no longer writes back to the script.");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_ConnectionWizard_OffersMockDbUnderTestData()
+    {
+        // MOCKDB is the only connector a new author can use with no database, and it backs Studio
+        // Home's "Start with sample data". The wizard falls back to a built-in connector list when
+        // discovery fails, and that list had no MOCKDB -- so the zero-dependency on-ramp went
+        // missing exactly when the environment could not reach a real server.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        await page.ClickAsync(".etlsql-studio-rail-btn[data-activity='catalog']");
+        await page.ClickAsync("[data-action='wizard']");
+        await page.Locator(".etlsql-cw-overlay").WaitForAsync();
+        await page.ClickAsync(".etlsql-cw-overlay [data-cat='testdata']");
+
+        await page.Locator(".etlsql-cw-overlay [data-type='MOCKDB']").WaitForAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_ConnectionWizard_PrefillsAUsableAliasAndBlocksInvalidOnes()
+    {
+        // The alias was marked required but nothing enforced it, and generateSql substitutes the
+        // literal `<alias>` placeholder when it is blank -- so confirming the dialog wrote
+        // `CREATE CONNECTION <alias> AS ...` into the script, which does not parse. It is also the
+        // one field a newcomer has no basis to fill in before knowing what the connection is for,
+        // so it is prefilled with a free name rather than left as a wall.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        await page.ClickAsync(".etlsql-studio-rail-btn[data-activity='catalog']");
+        await page.ClickAsync("[data-action='wizard']");
+        await page.Locator(".etlsql-cw-overlay").WaitForAsync();
+
+        var alias = page.Locator("#etlsql-cw-alias-input");
+        var submit = page.Locator("#etlsql-cw-submit-btn");
+
+        // Prefilled and immediately usable.
+        Assert.False(string.IsNullOrWhiteSpace(await alias.InputValueAsync()));
+        Assert.True(await submit.IsEnabledAsync());
+
+        // The generated SQL shows a real alias, never the placeholder.
+        Assert.DoesNotContain("<alias>", await page.Locator(".etlsql-cw-overlay").InnerTextAsync(), StringComparison.Ordinal);
+
+        // Cleared: blocked.
+        await alias.FillAsync("");
+        Assert.True(await submit.IsDisabledAsync());
+
+        // Not an identifier: blocked, and the hint says why rather than just "required".
+        await alias.FillAsync("9 bad-name");
+        Assert.True(await submit.IsDisabledAsync());
+        Assert.Contains("must start with a letter",
+            await page.Locator(".etlsql-cw-missing-hint").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+
+        // Valid again: re-enabled.
+        await alias.FillAsync("good_name");
+        Assert.True(await submit.IsEnabledAsync());
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task Studio_Mounts_SwitchesProjections_AndScansSecrets()
     {
         await using var session = await fixture.NewSessionAsync();

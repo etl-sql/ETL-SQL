@@ -130,7 +130,34 @@ export function makeMockApi(seedState) {
         ? { markdown: '#### ' + word + String.fromCharCode(10,10) + 'Sandbox help for ' + word + '.', kind: 'keyword' }
         : { markdown: null, kind: null };
     } else if (path.endsWith('/api/connectors/schema')) {
-      data = { connectors: [] };
+      // Shape matters: the wizard reads an array, or { schemas: [...] }. Returning an empty or
+      // wrongly-keyed payload silently leaves it on its built-in fallback list, which is how the
+      // sandbox hid an empty Test Data category.
+      data = {
+        schemas: [
+          {
+            connectorType: 'MOCKDB',
+            aliases: [],
+            description: 'Built-in in-memory sample data. Needs no external database.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [],
+          },
+          {
+            connectorType: 'MSSQL',
+            aliases: ['SQLSERVER'],
+            description: 'Microsoft SQL Server and Azure SQL Database.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+              { name: 'SERVER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'localhost' },
+              { name: 'DATABASE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'master' },
+            ],
+          },
+        ],
+      };
     } else if (path.endsWith('/api/designer/format') || path.endsWith('/api/format')) {
       const casing = (seedState?._formatterOptions?.keywordCasing || 'upper').toLowerCase();
       let formatted = body.script || '';

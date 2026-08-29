@@ -75,3 +75,106 @@ public sealed class StudioStarterScriptTests
         Assert.False(string.IsNullOrWhiteSpace(name));
     }
 }
+
+/// <summary>
+/// Verifies MOCKDB reaches Studio's Connection Wizard as a Test Data connector.
+///
+/// <para>MOCKDB is the zero-dependency on-ramp: Studio Home's "Start with sample data" seeds a
+/// script that uses it, and it is the only connector a new author can pick without provisioning a
+/// database. The wizard groups it under **Test Data** by matching `connectorType == "MOCKDB"`
+/// against whatever the connector registry returns from <c>/api/connectors/schema</c>, and it falls
+/// back to a built-in connector list when that request fails — a fallback that has no MOCKDB in it.
+/// So "is MOCKDB registered?" and "does it carry a schema descriptor?" are the two things that
+/// decide whether the Test Data category is empty.</para>
+/// </summary>
+[Trait("Category", "Portal")]
+public sealed class ConnectionWizardTestDataTests
+{
+    [Fact]
+    public void ProductionConnectorRegistration_IncludesMockDb()
+    {
+        // Mirrors the production registration in
+        // ETL-SQL.Orchestrator/DependencyInjectionExtensions.cs, which registers MockDbConnector
+        // alongside the real connectors.
+        var registry = new ETL_SQL.Data.ConnectorRegistry();
+        registry.Register(new ETL_SQL.Connectors.MockDb.MockDbConnector());
+
+        var schemas = registry.GetAllConnectorSchemas().ToList();
+
+        var mockDb = schemas.FirstOrDefault(schema =>
+            string.Equals(schema.ConnectorType, "MOCKDB", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(mockDb);
+    }
+
+    [Fact]
+    public void MockDbSchema_MatchesTheWizardsTestDataCategoryRule()
+    {
+        // The wizard's rule is `type === 'MOCKDB'` after upper-casing (connection-wizard.js,
+        // isConnectorInCategory). Asserting the descriptor's casing keeps that match honest.
+        // GetSchemaDescriptor is a default interface method, so it needs an interface-typed reference.
+        ETL_SQL.Data.IConnector connector = new ETL_SQL.Connectors.MockDb.MockDbConnector();
+        var schema = connector.GetSchemaDescriptor();
+
+        Assert.Equal("MOCKDB", schema.ConnectorType.ToUpperInvariant());
+        Assert.Equal("MOCKDB", connector.Name);
+    }
+
+    /// <summary>Connector types the wizard can derive an alias from, read from its fallback list.</summary>
+    public static TheoryData<string> WizardConnectorTypes()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "ETL-SQL.slnx")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+
+        var wizard = File.ReadAllText(Path.Combine(dir!.FullName,
+            "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "connection-wizard.js"));
+
+        var data = new TheoryData<string>();
+        foreach (Match match in Regex.Matches(wizard, @"connectorType:\s*'(?<type>[A-Za-z0-9_]+)'"))
+            data.Add(match.Groups["type"].Value);
+
+        Assert.True(data.Count > 5, "Expected the wizard's fallback connector list to be found.");
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(WizardConnectorTypes))]
+    public void SuggestedAliasForEveryConnectorType_IsParserValid(string connectorType)
+    {
+        // The wizard prefills the alias by lower-casing the connector type. That is only safe while
+        // no connector type is also a reserved word — a real trap here, since `SAMPLE` is reserved
+        // and `CREATE CONNECTION sample AS MOCKDB();` does not parse. If a future connector collides,
+        // this fails rather than shipping a wizard whose default suggestion is unusable.
+        var alias = connectorType.ToLowerInvariant();
+        var script = $"CREATE CONNECTION {alias} AS MOCKDB();";
+
+        var parsed = new CoreParser(new Lexer(script).Tokenize(), script).Parse();
+        var errors = parsed.Diagnostics
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(diagnostic => diagnostic.Message)
+            .ToList();
+
+        Assert.True(errors.Count == 0,
+            $"The alias '{alias}' suggested for connector '{connectorType}' does not parse: "
+            + string.Join("; ", errors));
+    }
+
+    [Fact]
+    public void MockDbConnection_NeedsNoServerDetails()
+    {
+        // "Start with sample data" emits `MOCKDB()` with no arguments. If the descriptor demanded a
+        // required field, the wizard would render an unfillable form for the one connector that is
+        // supposed to need nothing.
+        ETL_SQL.Data.IConnector connector = new ETL_SQL.Connectors.MockDb.MockDbConnector();
+        var schema = connector.GetSchemaDescriptor();
+
+        var required = (schema.Options ?? [])
+            .Where(option => option.IsMandatory)
+            .Select(option => option.Name)
+            .ToList();
+
+        Assert.True(required.Count == 0,
+            "MOCKDB must be usable with no configuration; mandatory options: " + string.Join(", ", required));
+    }
+}

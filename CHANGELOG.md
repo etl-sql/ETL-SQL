@@ -12,6 +12,26 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fixed the Studio script pane erasing what you typed. The canvas regenerates its script from the
+  design state alone, and updating the canvas *from* the editor let that regeneration run and
+  overwrite the buffer ~800ms later — so anything the design state does not model, most visibly a
+  `CREATE CONNECTION`, vanished as it was typed. A canvas update caused *by* the script no longer
+  writes back to it; genuine canvas edits still do. This also made the Connection Wizard look
+  broken: its inserted statement disappeared moments after Insert.
+
+- Fixed the Connection Wizard accepting an empty alias. The field was marked required but nothing
+  enforced it, and the generator substitutes a literal `<alias>` placeholder when it is blank, so
+  confirming the dialog wrote `CREATE CONNECTION <alias> AS …` — which does not parse. The alias is
+  now prefilled with a free, valid name derived from the connector (avoiding names already used in
+  the script), stays editable, and Insert is blocked with a specific reason when it is empty,
+  malformed, or already taken. Studio now passes its existing connection names to the wizard, so
+  collision detection works there at all.
+
+- Added MOCKDB to the Connection Wizard's built-in connector list. It is the only connector that
+  needs no external database and it backs Studio Home's "Start with sample data", but it was absent
+  from the fallback list used when connector discovery fails — so the zero-dependency on-ramp
+  disappeared exactly when the environment could least reach a real server.
+
 - Gave ETL-SQL Studio the script workbench it was missing. Studio now mounts the shared results
   panel, so it has the Workstation Editor's **Results / Messages / Pipeline / Performance** tabs,
   result filter, CSV/Excel/JSON export, and column lineage bar. Results are a per-document trace

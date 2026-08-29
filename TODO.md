@@ -91,6 +91,12 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P1 — Finish code-to-canvas data synchronization**: Dataset query edits must call the governed
   preview path after successful parsing, refresh the correct document's sample, preserve the last
   valid canvas on errors, and cancel or ignore stale responses.
+  - [x] **Stop the canvas clobbering the script pane.** Typing erased itself: editor text updated the
+    canvas, `renderAll()` then regenerated the script from the design state and overwrote the buffer,
+    dropping anything that state does not model (`CREATE CONNECTION` most visibly). Ingesting script
+    text no longer triggers the write-back; genuine canvas edits still do. Covered by
+    `Studio_ScriptPane_KeepsHandAuthoredTextAndInsertedConnections` and, guarding the other
+    direction, `Studio_CanvasEdits_StillWriteBackToTheScript`.
 - [x] **P2 — Full editor feature-parity groundwork**: Canvas mutations now apply as ranged CodeMirror
   transactions (`replaceAll`) instead of a whole-document `setValue`, so the author keeps cursor and
   scroll position and the generated span is scrolled into view. Because the edit is a normal
@@ -186,7 +192,10 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   it needs an x - close button added so we can clear them out if a user wants to.
 - [ ] **P3 - Explorer tab needs delete, rename, new folder**  The File explorer tab needs the ability to add
   new folder, rename file or folder, delete file or folder.  Drag and drop files into folders or back to the root.
-- [x] **P3 - Verify MOCKDB is visible as a connection type**: Source and sandbox coverage are not
+- [x] **P3 - Verify MOCKDB is visible as a connection type** — MOCKDB is registered in production DI
+  and carries a schema descriptor with no mandatory options (`ConnectionWizardTestDataTests`), and it
+  is now also in the wizard's built-in fallback list, which had omitted it — so Test Data rendered
+  empty whenever connector discovery failed. Original item:: Source and sandbox coverage are not
   sufficient. Confirm that both production Portal Studio and desktop Studio return MOCKDB from the
   real connector registry, display it under **Test Data**, allow it to be selected without an
   external server, and insert parser-valid connection syntax.
