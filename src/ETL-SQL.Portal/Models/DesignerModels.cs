@@ -28,6 +28,27 @@ public record CompleteDesignerRequest(
 
 public record CompleteDesignerResponse(IReadOnlyList<DesignerCompletionItem> Items);
 
+public record HoverDesignerRequest(
+    string? Word,
+    string? Script = null,
+    int Line = 0,
+    int Column = 0,
+    string? DocumentUri = null);
+
+public record HoverDesignerResponse(string? Markdown, string? Kind = null);
+
+public record FormatDesignerRequest(
+    string Script,
+    string? DocumentUri = null);
+
+/// <param name="Diagnostics">Reasons the script could not be formatted; empty on success.</param>
+/// <remarks>
+/// Shape-compatible with the desktop host's <c>FormatResponse</c> so Studio consumes one contract.
+/// </remarks>
+public record FormatDesignerResponse(string Script, IReadOnlyList<FormatDesignerDiagnostic> Diagnostics);
+
+public record FormatDesignerDiagnostic(string Message);
+
 public record DesignerCompletionItem(
     string Label,
     string InsertText,

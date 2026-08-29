@@ -12,6 +12,29 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Repaired Studio's editor-assist layer, which was silently dead in Portal Studio. The shared
+  `studio.js` requested `/api/analyze`, `/api/complete`, `/api/hover`, `/api/format`, and `/api/run` —
+  names only the desktop Workstation Editor serves — so autocomplete and hover documentation returned
+  nothing, the linter pinned a spurious "Not Found" diagnostic to line 1, Format silently changed
+  nothing while reporting success, and a failed Run rendered as a green "In-Memory Run Completed" over
+  stale design-time sample rows. Studio now resolves every server path through one `STUDIO_ROUTES`
+  table on the canonical `/api/designer/*` dialect that both hosts serve. Format reads the `script`
+  field both hosts actually return and reports success only when the document changed; a failed run
+  renders as a failure and never presents sample rows as results.
+
+- Closed the Studio desktop/Portal route gap. Added the governed desktop
+  `POST /api/designer/data-sample` — schema-validated, bounded, secret-redacted, and self-registering
+  the script's connections — without which the desktop visual canvas could never enable its palette.
+  Added `/api/designer/hover` and `/api/designer/format` on both hosts, with hover served from one
+  host-neutral `LanguageHoverService` over the embedded `docs/reference` help corpus. Desktop-only
+  workspace routes are now gated behind an explicit host capability instead of 404ing silently.
+
+- Added `StudioRouteContractTests`, which asserts that every route Studio calls exists on both the
+  Portal and the desktop host and that no route bypasses the route table, plus behavioural cover for
+  the hover and format endpoints. The ui-sandbox mock now fails closed on an unmatched route; its
+  previous `{ok:true}` catch-all answered any URL successfully and is what kept this entire class of
+  defect invisible. Shared-asset sync now also covers the Workstation Editor's published `wwwroot`.
+
 - Routed Studio visual creation, duplication, deletion, property edits, mapping edits, and slicer
   promotion through the canonical parser and surgical patcher. The shared authoring contract now
   round-trips report parameters, and promoted slicers emit real parameter/action bindings without

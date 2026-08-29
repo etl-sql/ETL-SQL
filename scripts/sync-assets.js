@@ -6,6 +6,9 @@ const sharedDir = path.join(repoRoot, 'src', 'ETL-SQL.ReportRuntime', 'Resources
 
 const vsCodeMedia = path.join(repoRoot, 'src', 'etl-sql-vscode', 'media');
 const playerWwwRoot = path.join(repoRoot, 'src', 'ETL-SQL.ReportPlayer', 'wwwroot');
+// Published fallback for the desktop Studio/editor host. Running from a checkout serves
+// Resources/Shared directly, so drift here only surfaces in published builds.
+const workstationWwwRoot = path.join(repoRoot, 'src', 'ETL-SQL.WorkstationEditor', 'wwwroot');
 // The Workstation editor serves the canonical Shared folder when running from a checkout,
 // but a published install has no repo tree — these copies are what ship.
 const editorWwwRoot = path.join(repoRoot, 'src', 'ETL-SQL.WorkstationEditor', 'wwwroot');
@@ -130,6 +133,9 @@ async function run() {
 
         // 2. ReportPlayer
         await syncOrCheck(file, relativePath, playerWwwRoot, "ReportPlayer", fileContent);
+
+        // 2b. Workstation Editor / desktop Studio
+        await syncOrCheck(file, relativePath, workstationWwwRoot, "WorkstationEditor", fileContent);
 
         // 2b. Workstation editor (published install assets)
         await syncOrCheck(file, relativePath, editorWwwRoot, "Workstation Editor", fileContent);

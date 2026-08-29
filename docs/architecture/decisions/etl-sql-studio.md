@@ -68,6 +68,40 @@ ETL-SQL Studio adopts the clean, minimalist vector icon design language establis
 - 🌿 **Source Control (Git)**: Active branch indicator, file change status, commit, and diff inspection.
 - ⚙️ **Settings**: Light/Dark theme toggle, font scale, formatter options.
 
+### 2.5 Progressive Disclosure & the Learning Path
+
+ETL-SQL Studio is **script-first**. The visual surfaces exist so that an author who does not yet know
+the language can produce correct script, and so that watching the script appear teaches them the
+language. A successful Studio makes itself progressively unnecessary: the author graduates to the
+script editor and returns to the visual helpers only when they are stuck.
+
+The following are binding design constraints, not aspirations:
+
+1. **The script is always visible and always authoritative.** The GUI is a *generator*. No visual
+   state may exist that is not expressible in the saved `.rptsql` / `.etlsql` document.
+2. **GUI mutations patch a range; they never replace the document.** Cursor position, scroll
+   position, and selection survive every visual edit. A wholesale buffer replacement is a defect,
+   because it destroys the author's place in the text and hides what actually changed.
+3. **A host that lacks a capability says so.** Studio ships as one canonical asset across several
+   hosts with different server surfaces. Any capability the active host cannot serve must be
+   presented as explicitly unavailable, with a reason. Silently degrading to a no-op — an assist
+   request that 404s, a control that appears to work and does nothing, a failure rendered as success
+   — is prohibited. Editor assist routes are resolved from the host's declared capabilities, never
+   hardcoded.
+4. **Diagnostics are legible and actionable.** Author-facing messages explain the problem in the
+   author's terms and carry a remedy line, following the Connection Wizard's `💡 Remedy:` pattern.
+   Raw parser output or a raw HTTP body is not an acceptable author-facing message.
+5. **The first session requires no database.** MOCKDB provides a zero-dependency cold start, so a new
+   author can reach a working visual and its generated script without provisioning anything.
+6. **Every GUI mutation can explain what it wrote.** The patched range is identifiable, so a
+   changed-range highlight and a one-line plain-language explanation can be attached to it. The
+   explanation text is sourced from the embedded language help corpus (`docs/reference`, embedded via
+   `ETL-SQL.Core`) so that hover documentation, `HELP`, and Studio explanations never drift apart.
+
+Constraints 1–5 are required for Studio to be considered functionally complete. Constraint 6 is the
+learning layer built on top of them; its delivery may follow, but the range-level patch dispatch it
+depends on is part of constraint 2 and is not optional.
+
 ---
 
 ## 3. Dynamic Context-Aware Canvas Adaptation
@@ -135,6 +169,12 @@ The **Filter Pane** eliminates manual SQL boolean syntax while maintaining code-
 - **Date/Time**: Relative presets (`Today`, `Last 7 Days`, `Last 30 Days`, `This Quarter`, `YTD`) or calendar range picker. Emits `WHERE order_date >= DATEADD(day, -30, CURRENT_DATE)`.
 - **Top-N**: "Show Top [ N ] by [ Measure ]". Emits `ORDER BY measure DESC LIMIT N`.
 
+> **Implementation status.** Shipped today: categorical distinct-value checkboxes (capped at 12
+> sampled values), numeric min/max bounds, and the date presets above. **Not yet shipped:** the
+> categorical search and Select All / Invert controls, the numeric operator set (`between`, `>`, `<`,
+> `is not null`) as distinct operators rather than min/max, and Top-N. Treat the unshipped items as
+> planned scope, not as current behaviour.
+
 ### 5.3 1-Click "Promote to Viewer Slicer"
 Clicking **"Promote to Slicer"** on any filter:
 1. Declares a report parameter: `CREATE PARAMETER selected_region AS STRING('North') OPTIONS (LABEL = 'Select Region');`
@@ -169,6 +209,14 @@ When opening an `.etlsql` script, the Canvas View projects the pipeline's execut
 - **Destination Nodes (`MERGE / LOAD / EXPORT`)**: Target database tables, SFTP destinations, S3/Azure object storage buckets.
 
 All nodes and connections map losslessly to statements in the underlying `.etlsql` file.
+
+> **Implementation status.** The current Canvas View for `.etlsql` is **not** an interactive DAG. It
+> recognises four statement shapes by regular expression (`CREATE CONNECTION`, `SELECT ... INTO
+> #temp`, `TRANSFORM ... USING`, `MERGE INTO`) and renders them as a flat, read-only row of cards
+> joined by arrows. Nodes are not clickable, draggable, or editable; branches, conditional edges,
+> validation gates, file/REST sources, and object-storage destinations are not parsed. Replacing this
+> with the real engine projection from `ScriptDagProjectionService` is tracked work — do not describe
+> the current card sequence as an interactive DAG.
 
 ---
 

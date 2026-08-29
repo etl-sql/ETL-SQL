@@ -316,6 +316,92 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task DesignerPrefixedHoverAndFormat_MatchTheirUnprefixedAliases()
+    {
+        // Studio speaks one route dialect on every host: /api/designer/*. Hover and format had no
+        // designer-prefixed alias here, so Studio requested names only this host served and lost
+        // both features entirely on the Portal.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var hover = new HttpRequestMessage(HttpMethod.Post, "/api/designer/hover");
+        hover.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        hover.Content = JsonContent.Create(new HoverRequest("SELECT", "SELECT 1;", 0, 0, "pipeline.etlsql"));
+        var hoverResponse = await client.SendAsync(hover);
+        hoverResponse.EnsureSuccessStatusCode();
+        var hoverResult = await hoverResponse.Content.ReadFromJsonAsync<HoverResponse>();
+        Assert.NotNull(hoverResult);
+        Assert.Contains("SELECT", hoverResult!.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        using var format = new HttpRequestMessage(HttpMethod.Post, "/api/designer/format");
+        format.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        format.Content = JsonContent.Create(new FormatRequest(
+            "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users WHERE UserID = 1;",
+            "pipeline.etlsql"));
+        var formatResponse = await client.SendAsync(format);
+        formatResponse.EnsureSuccessStatusCode();
+        var formatResult = await formatResponse.Content.ReadFromJsonAsync<FormatResponse>();
+        Assert.NotNull(formatResult);
+        Assert.Empty(formatResult!.Diagnostics);
+        Assert.Contains("CREATE CONNECTION", formatResult.Script);
+    }
+
+    private const string MockDbScript = "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users;";
+
+    [Fact]
+    public async Task DataSample_ReturnsRowsForAnAuthorizedTable()
+    {
+        // Studio keeps its entire visual palette disabled until a sample exists, so without this
+        // route the desktop canvas could never be used at all.
+        using var temp = new TempWorkspace();
+        var scriptPath = Path.Combine(temp.Root, "pipeline.etlsql");
+        await File.WriteAllTextAsync(scriptPath, "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users;");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, scriptPath, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/designer/data-sample");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        request.Content = JsonContent.Create(new DataSampleRequest("connection", "m", "Users", "pipeline.etlsql", MockDbScript));
+
+        var response = await client.SendAsync(request);
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        var result = await response.Content.ReadFromJsonAsync<DataSampleResponse>();
+        Assert.NotNull(result);
+        Assert.Equal("connection", result!.SourceKind);
+        Assert.NotEmpty(result.Columns);
+        Assert.NotEmpty(result.Rows);
+    }
+
+    [Fact]
+    public async Task DataSample_RejectsATableOutsideTheConnectionSchema()
+    {
+        using var temp = new TempWorkspace();
+        var scriptPath = Path.Combine(temp.Root, "pipeline.etlsql");
+        await File.WriteAllTextAsync(scriptPath, "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users;");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, scriptPath, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/designer/data-sample");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        request.Content = JsonContent.Create(new DataSampleRequest("connection", "m", "NotARealTable", "pipeline.etlsql", MockDbScript));
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Format_UsesSharedSqlFormatter()
     {
         using var temp = new TempWorkspace();

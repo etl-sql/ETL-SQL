@@ -125,6 +125,35 @@ export async function secureStudioScriptForSave(scriptText, passphrase, encrypt 
 
 const CHART_PALETTE = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787', '#d29922', '#bc8cff'];
 
+// Studio ships as one canonical asset across several hosts (Portal, Workstation Editor, VS Code,
+// Report Player, ui-sandbox). Those hosts do NOT expose identical routes, so every server path used
+// here goes through this table. `/api/designer/*` is the one dialect every Studio host serves; the
+// Workstation Editor also keeps unprefixed aliases for its legacy editor shell, which Studio must
+// not depend on. Adding a route here means adding it to BOTH hosts — see the route-contract test.
+const STUDIO_ROUTES = Object.freeze({
+    analyze: '/api/designer/analyze',
+    complete: '/api/designer/complete',
+    hover: '/api/designer/hover',
+    format: '/api/designer/format',
+    run: '/api/designer/run',
+    parse: '/api/designer/parse',
+    patch: '/api/designer/patch',
+    queryFilter: '/api/designer/query-filter',
+    optionSource: '/api/designer/option-source',
+    dataSample: '/api/designer/data-sample',
+    schema: '/api/designer/schema',
+    sessionMetadata: '/api/session/metadata',
+    connectorsSchema: '/api/connectors/schema',
+});
+
+// Desktop-only routes: they read the local workspace filesystem, which the Portal has no equivalent
+// for (it uses the report catalog instead). Guarded by `hasWorkspaceHost` rather than requested
+// blindly, so the Portal shows an honest state instead of silently 404ing.
+const STUDIO_WORKSPACE_ROUTES = Object.freeze({
+    files: '/api/files',
+    connections: '/api/connections',
+});
+
 const STUDIO_VISUAL_GROUPS = [
     { name: 'Charts', types: ['BAR', 'LINE', 'AREA', 'PIE', 'DONUT', 'HBAR', 'SCATTER', 'GAUGE', 'FUNNEL', 'TREEMAP', 'HEATMAP', 'COMBO', 'BOXPLOT', 'WATERFALL', 'BUBBLE', 'RADAR', 'CANDLESTICK', 'MAP', 'GANTT', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX', 'CUSTOM'] },
     { name: 'Data & Content', types: ['TABLE', 'CARD', 'TEXT', 'IMAGE', 'HTML'] },
@@ -326,6 +355,38 @@ function _renderLineChartSvg(rows) {
     `;
 }
 
+// A failed run must never be dressed as a successful one, and must never show design-time sample
+// rows as if they were results.
+function runFailureMarkup(message) {
+    const text = String(message || 'The run did not complete.').trim() || 'The run did not complete.';
+    return `
+        <div style="padding:8px 12px; background:var(--portal-surface,#161b22); font-size:0.75rem; border-bottom:1px solid var(--portal-border,#30363d); display:flex; justify-content:space-between;">
+            <span style="color:var(--portal-danger,#f85149); font-weight:600;">✕ Execution Failed</span>
+        </div>
+        <div style="padding:12px; color:var(--portal-danger,#f85149); font-size:0.75rem; white-space:pre-wrap;">${_escapeHtml(text)}</div>
+    `;
+}
+
+// Prefer a structured { error } / { message } body over a raw HTML error page.
+async function _readErrorText(response) {
+    let body = '';
+    try {
+        body = await response.text();
+    } catch {
+        return `The run request failed (${response.status}).`;
+    }
+    try {
+        const parsed = JSON.parse(body);
+        const detail = parsed?.error || parsed?.message || parsed?.title;
+        if (detail) return String(detail);
+    } catch {
+        // Not JSON; fall through to the raw body.
+    }
+    const trimmed = body.trim();
+    if (!trimmed || /^\s*</.test(trimmed)) return `The run request failed (${response.status}).`;
+    return trimmed;
+}
+
 function _renderTableGrid(rows) {
     if (!rows || rows.length === 0) return '<div style="color:var(--portal-muted,#8b949e);">No records found.</div>';
     const cols = Object.keys(rows[0] || {});
@@ -359,6 +420,11 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     const authFetch = opts.authFetch ?? ((url, init) => fetch(url, { ...init, headers: { ...(opts.headers || {}), ...(init?.headers || {}) } }));
     const apiBase = opts.apiBase || '';
+
+    // Does this host expose a local workspace filesystem (/api/files, /api/connections)? The
+    // Workstation Editor does; the Portal serves the report catalog instead. Callers should say so
+    // explicitly. Inferred for older callers: a host that passed a deploymentMode is the Portal.
+    const hasWorkspaceHost = opts.hasWorkspaceHost ?? !opts.deploymentMode;
 
     const workspaceFiles = opts.workspaceFiles || [];
     const documents = opts.documents ? [...opts.documents] : [];
@@ -899,7 +965,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     async function composeFilteredSource(source, filters, asVisualSource = true) {
-        const result = await designerApiJson('/api/designer/query-filter', { source, filters, asVisualSource });
+        const result = await designerApiJson(STUDIO_ROUTES.queryFilter, { source, filters, asVisualSource });
         if (typeof result.source !== 'string') throw new Error('The filter service returned no query source.');
         return result.source;
     }
@@ -965,14 +1031,14 @@ export async function createStudioWorkbench(container, opts = {}) {
         context.patchQueue ||= Promise.resolve();
         context.patchQueue = context.patchQueue.catch(() => {}).then(async () => {
             const script = getActiveDoc() === doc && state.editorInstance ? state.editorInstance.getValue() : doc.content;
-            const parsed = await designerApiJson('/api/designer/parse', { script });
+            const parsed = await designerApiJson(STUDIO_ROUTES.parse, { script });
             if (parsed.error) throw new Error(parsed.error);
             const designState = parsed.designState || { pages: [], datasets: [], bookmarks: null, parameters: null };
             if (!designState.pages?.length) {
                 designState.pages = [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }];
             }
             const mutationResult = await mutate(designState);
-            const patched = await designerApiJson('/api/designer/patch', { script, designState });
+            const patched = await designerApiJson(STUDIO_ROUTES.patch, { script, designState });
             if (typeof patched.script !== 'string') throw new Error('The canonical patcher returned no script.');
 
             doc.content = patched.script;
@@ -1451,7 +1517,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         let content = '';
         try {
-            const res = await authFetch(apiBase + '/api/files?path=' + encodeURIComponent(filePath));
+            const res = await authFetch(apiBase + STUDIO_WORKSPACE_ROUTES.files + '?path=' + encodeURIComponent(filePath));
             if (res.ok) {
                 const data = await res.json();
                 content = data.content || '';
@@ -1760,7 +1826,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             } else if (isDate) {
                 options['action:ON_CHANGE'] = `SET_PARAMETER(${parameterName}, value)`;
             } else {
-                const optionSource = await designerApiJson('/api/designer/option-source', { source: resolved.source, column: col });
+                const optionSource = await designerApiJson(STUDIO_ROUTES.optionSource, { source: resolved.source, column: col });
                 options.inline_source = optionSource.source;
                 options.INCLUDE_ALL = 'ON';
                 options.ALL_LABEL = 'All';
@@ -1964,7 +2030,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             if (getActiveDoc() === document) { updateSnapshotPackage(cached); state.designerInstance?.refreshSnapshot?.(); renderSidebarContent(state.activeActivity); }
             return;
         }
-        const response = await authFetch(apiBase + '/api/designer/data-sample', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceKind: 'connection', connection, table, documentUri: getActiveDoc()?.path || 'studio' }) });
+        const response = await authFetch(apiBase + STUDIO_ROUTES.dataSample, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceKind: 'connection', connection, table, documentUri: getActiveDoc()?.path || 'studio', script: state.editorInstance?.getValue?.() ?? getActiveDoc()?.content ?? '' }) });
         if (!response.ok) throw new Error(await response.text() || 'Data sample failed.');
         const sample = await response.json();
         context.snapshot = { source: sample.source || key, columns: sample.columns || context.sourceColumns, rowCount: sample.rowCount || sample.rows?.length || 0, rows: sample.rows || [] };
@@ -1984,20 +2050,33 @@ export async function createStudioWorkbench(container, opts = {}) {
             list.querySelectorAll('[data-connection]').forEach(button => button.addEventListener('click', async () => {
                 const connection = button.dataset.connection; activeDocumentContext().selectedSource = { connection, table: null };
                 const tableList = sidebarContent.querySelector('[data-table-list]'); tableList.innerHTML = '<span class="etlsql-studio-loading">Loading tables…</span>';
-                const response = await authFetch(apiBase + `/api/designer/schema?connection=${encodeURIComponent(connection)}`); const data = response.ok ? await response.json() : { tables: [] };
+                const response = await authFetch(apiBase + STUDIO_ROUTES.schema + `?connection=${encodeURIComponent(connection)}`); const data = response.ok ? await response.json() : { tables: [] };
                 tableList.innerHTML = (data.tables || []).map(table => `<button type="button" class="etlsql-studio-table-btn" data-table="${_escapeHtml(table.name)}"><span>${_studioIcon('table',13)} ${_escapeHtml(table.name)}</span><small>${table.columns?.length || 0} fields</small></button>`).join('');
                 tableList.querySelectorAll('[data-table]').forEach(tableButton => tableButton.addEventListener('click', async () => { const table = data.tables.find(item => item.name === tableButton.dataset.table); const activeContext = activeDocumentContext(); activeContext.selectedSource = { connection, table: table.name }; activeContext.sourceColumns = table.columns || []; renderSidebarContent(state.activeActivity); try { await loadSourceSample(connection, table.name); } catch (error) { _feedback.notify(error.message, { title: 'Data sample failed', tone: 'error' }); } }));
             }));
         };
-        authFetch(apiBase + '/api/connections').then(async response => {
-            const data = response.ok ? await response.json() : {};
-            let connections = data.connections || (Array.isArray(data) ? data : []);
-            if (!connections.length) {
-                const sessionResponse = await authFetch(apiBase + '/api/session/metadata');
-                if (sessionResponse.ok) connections = (await sessionResponse.json()).connections || [];
+        loadConnectionAliases().then(renderConnections).catch(() => renderConnections([]));
+    }
+
+    // Connection aliases come from different places per host: the desktop reads the workspace's
+    // registered connections, the Portal exposes only ACL-filtered aliases via session metadata.
+    // Session metadata exists on both, so it is the fallback rather than a second guess.
+    async function loadConnectionAliases() {
+        if (hasWorkspaceHost) {
+            try {
+                const res = await authFetch(apiBase + STUDIO_WORKSPACE_ROUTES.connections);
+                if (res.ok) {
+                    const data = await res.json();
+                    const connections = data.connections || (Array.isArray(data) ? data : []);
+                    if (connections.length) return connections;
+                }
+            } catch {
+                // Fall through to session metadata below.
             }
-            renderConnections(connections);
-        }).catch(() => renderConnections([]));
+        }
+        const sessionResponse = await authFetch(apiBase + STUDIO_ROUTES.sessionMetadata);
+        if (!sessionResponse.ok) return [];
+        return (await sessionResponse.json()).connections || [];
     }
 
     function renderVisualLibrary() {
@@ -2049,12 +2128,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             `;
             sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard);
 
-            authFetch(apiBase + '/api/connections').then(async res => {
-                let connections = [];
-                if (res.ok) {
-                    const data = await res.json();
-                    connections = data.connections || (Array.isArray(data) ? data : []);
-                }
+            loadConnectionAliases().then(connections => {
                 const listEl = sidebarContent.querySelector('.etlsql-catalog-conn-list');
                 if (!listEl) return;
 
@@ -2309,7 +2383,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     function handleOpenConnectionWizard() {
         createConnectionWizard({
             fetchSchemas: async () => {
-                const response = await authFetch(apiBase + '/api/connectors/schema');
+                const response = await authFetch(apiBase + STUDIO_ROUTES.connectorsSchema);
                 if (!response.ok) throw new Error('Connector types could not be loaded.');
                 return response.json();
             },
@@ -2332,17 +2406,36 @@ export async function createStudioWorkbench(container, opts = {}) {
     async function handleFormatDocument() {
         const doc = getActiveDoc();
         if (!doc || !state.editorInstance) return;
+        const before = state.editorInstance.getValue();
         try {
-            const res = await authFetch(apiBase + '/api/format', {
+            const res = await authFetch(apiBase + STUDIO_ROUTES.format, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ script: state.editorInstance.getValue() })
+                body: JSON.stringify({ script: before, documentUri: doc.path || null })
             });
-            if (res.ok) {
-                const data = await res.json();
-                state.editorInstance.setValue(data.formatted || state.editorInstance.getValue());
-                _feedback.notify('Formatted document', { title: 'Document Formatted', tone: 'success' });
+            if (!res.ok) {
+                _feedback.notify(`The formatter is unavailable on this host (${res.status}).`, { title: 'Format Failed', tone: 'error' });
+                return;
             }
+            const data = await res.json();
+            // Both hosts return { script, diagnostics }. Reading any other field silently no-ops,
+            // which is how this path previously reported success while changing nothing.
+            const formatted = typeof data?.script === 'string' ? data.script : null;
+            const reason = data?.diagnostics?.[0]?.message || data?.diagnostics?.[0];
+            if (formatted === null) {
+                _feedback.notify('The formatter returned no script.', { title: 'Format Failed', tone: 'error' });
+                return;
+            }
+            if (reason) {
+                _feedback.notify(String(reason), { title: 'Document Not Formatted', tone: 'warning' });
+                return;
+            }
+            if (formatted === before) {
+                _feedback.notify('Already formatted — no changes needed.', { title: 'Document Formatted', tone: 'info' });
+                return;
+            }
+            state.editorInstance.setValue(formatted);
+            _feedback.notify('Formatted document', { title: 'Document Formatted', tone: 'success' });
         } catch (e) {
             _feedback.notify('Format failed: ' + e.message, { title: 'Format Failed', tone: 'error' });
         }
@@ -2376,11 +2469,15 @@ export async function createStudioWorkbench(container, opts = {}) {
         const selection = state.editorInstance?.getSelection?.() || state.editorInstance?.getCurrentStatement?.() || script;
         setDocumentResults(doc, '<div style="padding:12px;color:var(--portal-accent,#388bfd);font-size:.75rem;">Running selection…</div>');
         try {
-            const response = await authFetch(apiBase + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script, selection }) });
-            const data = response.ok ? await response.json() : { rows: [], error: await response.text() };
-            setDocumentResults(doc, response.ok ? `<div style="padding:10px">${_renderTableGrid(data.rows || [])}</div>` : `<div style="padding:12px;color:var(--portal-danger,#f85149);font-size:.75rem;">${_escapeHtml(data.error)}</div>`);
+            const response = await authFetch(apiBase + STUDIO_ROUTES.run, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script, selection }) });
+            if (!response.ok) {
+                setDocumentResults(doc, runFailureMarkup(await _readErrorText(response)));
+                return;
+            }
+            const data = await response.json();
+            setDocumentResults(doc, `<div style="padding:10px">${_renderTableGrid(data.rows || [])}</div>`);
         } catch (error) {
-            setDocumentResults(doc, `<div style="padding:12px;color:var(--portal-danger,#f85149);font-size:.75rem;">${_escapeHtml(error.message)}</div>`);
+            setDocumentResults(doc, runFailureMarkup(error.message));
         }
     });
 
@@ -2395,35 +2492,32 @@ export async function createStudioWorkbench(container, opts = {}) {
         const script = state.editorInstance ? state.editorInstance.getValue() : doc.content;
         setDocumentResults(doc, `<div style="padding:12px; color:var(--portal-accent,#388bfd); font-size:0.75rem;">Running script...</div>`);
         try {
-            const res = await authFetch(apiBase + '/api/run', {
+            const res = await authFetch(apiBase + STUDIO_ROUTES.run, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ script })
             });
             if (res.ok) {
                 const data = await res.json();
+                // Only report rows the server actually returned. Falling back to the design-time
+                // sample here would present cached sample data as an execution result.
                 setDocumentResults(doc, `
                     <div style="padding:8px 12px; background:var(--portal-surface,#161b22); font-size:0.75rem; border-bottom:1px solid var(--portal-border,#30363d); display:flex; justify-content:space-between;">
                         <span style="color:var(--portal-success,#238636); font-weight:600;">✓ Execution Successful</span>
-                        <span style="color:var(--portal-muted,#8b949e);">${data.elapsedMs || 12}ms</span>
+                        <span style="color:var(--portal-muted,#8b949e);">${Number.isFinite(data.elapsedMs) ? data.elapsedMs + 'ms' : ''}</span>
                     </div>
                     <div style="padding:10px;">
-                        ${_renderTableGrid(data.rows || documentContext(doc).snapshot?.rows || [])}
+                        ${_renderTableGrid(data.rows || [])}
                     </div>
                 `);
             } else {
-                setDocumentResults(doc, `<div style="padding:12px; color:var(--portal-danger,#f85149); font-size:0.75rem;">Execution error: ${await res.text()}</div>`);
+                setDocumentResults(doc, runFailureMarkup(await _readErrorText(res)));
             }
         } catch (e) {
-            setDocumentResults(doc, `
-                <div style="padding:8px 12px; background:var(--portal-surface,#161b22); font-size:0.75rem; border-bottom:1px solid var(--portal-border,#30363d); display:flex; justify-content:space-between;">
-                    <span style="color:var(--portal-success,#238636); font-weight:600;">✓ In-Memory Run Completed</span>
-                    <span style="color:var(--portal-muted,#8b949e);">&lt;1ms</span>
-                </div>
-                <div style="padding:10px;">
-                    ${_renderTableGrid(documentContext(doc).snapshot?.rows || [])}
-                </div>
-            `);
+            // A transport failure is a failed run. This previously rendered a green
+            // "In-Memory Run Completed" over stale sample rows, so a script that never executed
+            // looked like it had succeeded.
+            setDocumentResults(doc, runFailureMarkup(e.message));
         }
     });
 
@@ -2475,9 +2569,9 @@ export async function createStudioWorkbench(container, opts = {}) {
         const activeDoc = getActiveDoc();
         state.editorInstance = await createScriptEditor(editorHost, {
             value: activeDoc?.content || '',
-            analyzeUrl: apiBase + '/api/analyze',
-            completeUrl: apiBase + '/api/complete',
-            hoverUrl: apiBase + '/api/hover',
+            analyzeUrl: apiBase + STUDIO_ROUTES.analyze,
+            completeUrl: apiBase + STUDIO_ROUTES.complete,
+            hoverUrl: apiBase + STUDIO_ROUTES.hover,
             diagnosticsPanel: false,
             authFetch,
             documentUri: () => getActiveDoc()?.path || 'untitled.rptsql',

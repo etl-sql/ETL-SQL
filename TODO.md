@@ -91,9 +91,23 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P1 — Finish code-to-canvas data synchronization**: Dataset query edits must call the governed
   preview path after successful parsing, refresh the correct document's sample, preserve the last
   valid canvas on errors, and cancel or ignore stale responses.
-- [ ] **P1 — Restore desktop and Portal feature parity**: Add the governed desktop data-sample route
-  or define and surface an explicit reduced desktop capability set. Run the same contract suite
-  against both hosts instead of assuming identical assets provide identical behavior.
+- [x] **P1 — Restore desktop and Portal feature parity**: `studio.js` now resolves every server path
+  through a single `STUDIO_ROUTES` table on the canonical `/api/designer/*` dialect, which both hosts
+  serve. Added the governed desktop `POST /api/designer/data-sample` (schema-validated, bounded run,
+  secret-redacted, self-registering the script's connections) and desktop `/api/designer/hover` and
+  `/api/designer/format` aliases; added Portal `POST /api/designer/hover` and `POST /api/designer/format`
+  over the shared help corpus and `SqlFormatter`. Hover lookup is now one host-neutral
+  `LanguageHoverService`. `StudioRouteContractTests` asserts every route Studio calls exists on both
+  hosts and that no route bypasses the table. Desktop-only workspace routes are gated behind
+  `hasWorkspaceHost` instead of 404ing silently.
+- [x] **P0 — Repair silently-dead editor assist and two lying success paths**: Portal Studio requested
+  the desktop-only `/api/analyze`, `/api/complete`, `/api/hover`, `/api/format` and `/api/run`, so
+  completion, hover documentation and lint were dead, format silently changed nothing while showing a
+  success toast, and a failed run rendered as a green "In-Memory Run Completed" over stale sample rows.
+  Format now reads the `script` field both hosts actually return and only reports success when the
+  document changed; a failed run renders as a failure and never presents design-time sample rows as
+  results. The ui-sandbox mock now fails closed on an unmatched route — its `{ok:true}` catch-all was
+  what made the whole class of defect invisible.
 - [ ] **P1 — Add a desktop host lifecycle and multi-project session contract**: Keep automatic
   ephemeral-port allocation and isolate each project host from every other project host.
   - [ ] Add an explicit **Exit Studio** action that checks for dirty documents and active runs,

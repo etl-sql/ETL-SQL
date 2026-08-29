@@ -12,6 +12,9 @@
 //
 // The parse round-trip just echoes the seed state — a faithful script↔state parse
 // is the real DesignerController's job; here we only need the UI to round-trip.
+// Distinguishes "no handler matched" from a handler that legitimately returns an empty object.
+const UNMATCHED = Symbol('unmatched-mock-route');
+
 export function makeMockApi(seedState) {
   let commitCount = 0;
   return async (url, init) => {
@@ -19,7 +22,7 @@ export function makeMockApi(seedState) {
     let body = {};
     try { body = init?.body ? JSON.parse(init.body) : {}; } catch { /* ignore */ }
 
-    let data = {};
+    let data = UNMATCHED;
     if (path.endsWith('/api/designer/generate')) {
       data = { script: generateMockScript(body.designState ?? seedState) };
     } else if (path.endsWith('/api/designer/patch')) {
@@ -94,6 +97,10 @@ export function makeMockApi(seedState) {
           { path: 'etl/staging_clean.etlsql', size: 450 }
         ]
       };
+    } else if (path.endsWith('/api/connections')) {
+      // Desktop-host route: the workspace's registered connections. The Portal has no equivalent,
+      // which is why studio.js reaches it behind a workspace-host check.
+      data = { connections: seedState?.connections || ['staging_db', 'analytics_dw'] };
     } else if (path.endsWith('/api/session/metadata')) {
       data = {
         connections: seedState?.connections || ['staging_db', 'analytics_dw'],
@@ -117,7 +124,14 @@ export function makeMockApi(seedState) {
           rightAlignKeywords: false,
         };
       }
-    } else if (path.endsWith('/api/format')) {
+    } else if (path.endsWith('/api/designer/hover')) {
+      const word = String(body.word || '').toUpperCase();
+      data = word
+        ? { markdown: '#### ' + word + String.fromCharCode(10,10) + 'Sandbox help for ' + word + '.', kind: 'keyword' }
+        : { markdown: null, kind: null };
+    } else if (path.endsWith('/api/connectors/schema')) {
+      data = { connectors: [] };
+    } else if (path.endsWith('/api/designer/format') || path.endsWith('/api/format')) {
       const casing = (seedState?._formatterOptions?.keywordCasing || 'upper').toLowerCase();
       let formatted = body.script || '';
       if (casing === 'lower') {
@@ -125,7 +139,7 @@ export function makeMockApi(seedState) {
       } else if (casing === 'upper') {
         formatted = formatted.replace(/\b(select|from|where|join|left|right|inner|outer|group by|order by|having|create|connection|dataset|visual|page|as|into|begin|try|catch|merge|update|set|insert|values)\b/gi, m => m.toUpperCase());
       }
-      data = { script: formatted };
+      data = { script: formatted, diagnostics: [] };
     } else if (path.endsWith('/api/git/status')) {
       data = {
         branch: 'main',
@@ -139,6 +153,21 @@ export function makeMockApi(seedState) {
         committed: true,
         sourceRevision: 'c0ffee1',
         message: 'Committed successfully.'
+      };
+    }
+
+    // Fail closed on an unrecognised path. This used to answer ok:true with an empty body for ANY
+    // route, so a client calling a URL the real host does not serve looked healthy here and 404'd in
+    // production. That is exactly how Studio shipped pointing at desktop-only routes.
+    if (data === UNMATCHED) {
+      const message = `[ui-sandbox] No mock for ${init?.method || 'GET'} ${path}. `
+        + 'Add a handler in mockApi.js, or fix the caller if the real host does not serve this route.';
+      console.error(message);
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({ error: message }),
+        text: async () => message,
       };
     }
 

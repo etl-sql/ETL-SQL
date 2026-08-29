@@ -60,6 +60,7 @@ public static class WorkstationEditorApp
         builder.Services.AddSingleton<WorkstationFormatService>();
         builder.Services.AddSingleton<WorkstationRunService>();
         builder.Services.AddSingleton<WorkstationPreviewService>();
+        builder.Services.AddSingleton<WorkstationDataSampleService>();
         builder.Services.AddSingleton<WorkstationGitService>();
 
         var app = builder.Build();
@@ -415,6 +416,52 @@ public static class WorkstationEditorApp
 
         app.MapPost("/api/designer/dag", (ScriptDagRequest request, ScriptDagProjectionService dag) =>
             Results.Json(dag.Project(request.Script), JsonOptions));
+
+        // Studio speaks one route dialect on every host: /api/designer/*. The unprefixed forms above
+        // stay for the legacy editor shell, but hover and format had no designer-prefixed alias, so
+        // Studio silently lost them on any host that did not serve the unprefixed name.
+        app.MapPost("/api/designer/hover", (HoverRequest request, WorkstationHelpService help) =>
+            Results.Json(help.GetHover(request), JsonOptions));
+
+        app.MapPost("/api/designer/format", (FormatRequest request, WorkstationFormatService formatter) =>
+            Results.Json(formatter.Format(request), JsonOptions));
+
+        // Studio's visual canvas is built on this sample and keeps its palette disabled until one
+        // exists, so the desktop host needs it just as much as the Portal does. The service applies
+        // the same schema validation and bounded-run governance as the Portal's route.
+        app.MapPost("/api/designer/data-sample", async (
+            DataSampleRequest request,
+            WorkstationDataSampleService sampler,
+            IMetadataManager metadata,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                EnforceSchemaAccessPolicy(metadata, request.Connection ?? string.Empty, request.DocumentUri);
+            }
+            catch (System.Security.SecurityException ex)
+            {
+                return Results.Json(new { error = SecretRedactor.Redact(ex.Message) }, JsonOptions, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            try
+            {
+                return Results.Json(await sampler.SampleAsync(request, cancellationToken), JsonOptions);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+            catch (OperationCanceledException)
+            {
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // Connector failures routinely quote the connection string back.
+                return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+        });
 
         app.MapPost("/api/designer/preview", async (PreviewRequest request, WorkstationPreviewService previewer, CancellationToken cancellationToken) =>
         {
