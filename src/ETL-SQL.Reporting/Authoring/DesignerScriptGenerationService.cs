@@ -36,7 +36,7 @@ public sealed class DesignerScriptGenerationService
             var query = string.IsNullOrWhiteSpace(dataset.Query)
                 ? "SELECT 1 AS Placeholder"
                 : dataset.Query.Trim().TrimEnd(';');
-            AppendLine(sb, $"CREATE DATASET {name} AS (", nl);
+            AppendLine(sb, $"CREATE DATASET {name}{DatasetLifespanClauses(dataset)} AS (", nl);
             AppendLine(sb, $"  {query}", nl);
             AppendLine(sb, ");", nl);
             AppendLine(sb, string.Empty, nl);
@@ -75,6 +75,24 @@ public sealed class DesignerScriptGenerationService
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// The dataset's cache rules, written exactly as authored. An absent clause stays absent: a
+    /// dataset with no TTL is not the same as one with a zero TTL, and inventing a default here would
+    /// silently change how often every report refreshes.
+    /// </summary>
+    internal static string DatasetLifespanClauses(DesignerAuthoringDataset dataset)
+    {
+        var clauses = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(dataset.RefreshInterval))
+            clauses.Append($" REFRESH EVERY '{EscapeStr(TrimQuotes(dataset.RefreshInterval))}'");
+        if (!string.IsNullOrWhiteSpace(dataset.Ttl))
+            clauses.Append($" TTL = '{EscapeStr(TrimQuotes(dataset.Ttl))}'");
+        return clauses.ToString();
+    }
+
+    /// <summary>Durations round-trip as authored text, which may or may not arrive already quoted.</summary>
+    private static string TrimQuotes(string? value) => (value ?? string.Empty).Trim().Trim('\'');
 
     internal static string GenerateParameter(DesignerAuthoringParameter parameter)
     {

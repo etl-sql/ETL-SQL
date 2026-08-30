@@ -4327,6 +4327,13 @@ body.vscode-dark .etlsql-cw-missing-hint {
     display: none;
 }
 
+.etlsql-studio-filter-sidebar {
+    width: 280px;
+    min-width: 280px;
+    border-left: 2px solid rgba(56, 139, 253, 0.45);
+    box-shadow: -8px 0 22px rgba(1, 4, 9, 0.18);
+}
+
 .etlsql-studio-sidebar-header {
     display: flex;
     align-items: center;
@@ -4634,6 +4641,9 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-property-fields>div { display:flex;flex-wrap:wrap;gap:5px; }
 .etlsql-studio-property-fields button { padding:3px 7px;border:1px solid var(--portal-border,#30363d);border-radius:999px;background:var(--portal-bg,#0d1117);color:var(--portal-text,#f0f6fc);font:inherit;font-size:.6875rem;cursor:grab; }
 .etlsql-studio-data-workflow { display:flex;flex-direction:column;gap:14px;padding:10px; }
+.etlsql-studio-data-actions { display:flex;flex-direction:column;gap:6px; }
+.etlsql-studio-data-actions .etlsql-studio-btn { justify-content:center;width:100%; }
+.etlsql-studio-new-connection { min-height:38px;font-size:.8125rem; }
 .etlsql-studio-workflow-intro { display:flex;flex-direction:column;gap:4px;padding:10px;border:1px solid rgba(56,139,253,.3);border-radius:6px;background:rgba(56,139,253,.07); }
 .etlsql-studio-workflow-intro span,.etlsql-studio-subhead span,.etlsql-studio-empty-guidance span { color:var(--portal-text-soft,#8b949e);font-size:.6875rem;line-height:1.4; }
 .etlsql-studio-steps { display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:0;padding:0;list-style:none; }
@@ -4647,6 +4657,11 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-field-pill { cursor:grab; }
 .etlsql-studio-filter-drop { min-height:70px;padding:7px;border:1px dashed var(--portal-border,#30363d);border-radius:6px; }
 .etlsql-studio-filter-drop.drag-over { border-color:var(--portal-accent,#58a6ff);background:rgba(56,139,253,.08); }
+.etlsql-studio-filter-workflow { display:flex;flex-direction:column;gap:12px;padding:10px; }
+.etlsql-studio-filter-intro { display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid rgba(56,139,253,.3);border-radius:6px;background:linear-gradient(135deg,rgba(56,139,253,.09),rgba(56,139,253,.025)); }
+.etlsql-studio-filter-intro>strong { font-size:.8125rem; }
+.etlsql-studio-filter-intro>span { color:var(--portal-text-soft,#8b949e);font-size:.6875rem;line-height:1.4; }
+.etlsql-studio-new-filter { justify-content:center;width:100%;margin-top:2px; }
 .etlsql-studio-empty-guidance { display:flex;flex-direction:column;gap:5px;padding:10px;text-align:center; }
 .etlsql-studio-library-section { display:flex;flex-direction:column;gap:8px;padding:10px;border-bottom:1px solid var(--portal-border,#30363d); }
 .etlsql-studio-library-search { display:flex;flex-direction:column;gap:5px;font-size:.75rem; }
@@ -4732,6 +4747,27 @@ body.vscode-dark .etlsql-cw-missing-hint {
     padding: 12px 16px;
     border-top: 1px solid var(--portal-border, #30363d);
     background: var(--portal-surface-subtle, rgba(255, 255, 255, 0.02));
+}
+
+.etlsql-studio-modal.etlsql-studio-filter-dialog { width:min(520px,92vw); }
+.etlsql-studio-filter-dialog .etlsql-studio-modal-header>div { display:flex;flex-direction:column;gap:2px; }
+.etlsql-studio-filter-dialog .etlsql-studio-modal-header span { color:var(--portal-text-soft,#8b949e);font-size:.6875rem;font-weight:400; }
+.etlsql-filter-dialog-body { display:flex;flex-direction:column;gap:12px; }
+.etlsql-filter-dialog-field { display:flex;flex-direction:column;gap:5px;color:var(--portal-text-soft,#8b949e);font-size:.6875rem;font-weight:600; }
+.etlsql-filter-dialog-field select,
+.etlsql-filter-dialog-range input { width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--portal-border,#30363d);border-radius:4px;background:var(--portal-bg,#0d1117);color:var(--portal-text,#f0f6fc);font:inherit; }
+.etlsql-filter-dialog-kind { display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-left:3px solid var(--portal-accent,#388bfd);background:var(--portal-surface-subtle,rgba(255,255,255,.03)); }
+.etlsql-filter-dialog-kind span { color:var(--portal-accent,#58a6ff);font-family:var(--portal-font-mono,"Cascadia Code",Consolas,monospace);font-size:.6875rem;font-weight:700;text-transform:uppercase; }
+.etlsql-filter-dialog-kind small { color:var(--portal-text-soft,#8b949e);font-size:.625rem; }
+.etlsql-filter-dialog-range { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
+.etlsql-filter-dialog-range label { display:flex;flex-direction:column;gap:5px;color:var(--portal-text-soft,#8b949e);font-size:.6875rem;font-weight:600; }
+.etlsql-filter-dialog-values { display:flex;flex-direction:column;gap:4px;max-height:180px;margin:0;padding:8px;border:1px solid var(--portal-border,#30363d);border-radius:5px;overflow:auto; }
+.etlsql-filter-dialog-values legend { padding:0 4px;color:var(--portal-text-soft,#8b949e);font-size:.6875rem;font-weight:600; }
+.etlsql-filter-dialog-values label { display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:7px;padding:4px 3px;font-size:.75rem; }
+.etlsql-filter-dialog-values small { color:var(--portal-text-soft,#8b949e); }
+
+@media (max-width: 1100px) {
+    .etlsql-studio-filter-sidebar:not(.collapsed) { position:absolute;top:0;bottom:0;left:284px;z-index:30; }
 }
 
 .etlsql-studio-modal.etlsql-studio-git-diff-modal {
@@ -5944,3 +5980,269 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .etlsql-studio-new-dataset { margin-top: 8px; width: 100%; }
+
+/* ── Guided rail dismissal ─────────────────────────────────────────────────── */
+
+.etlsql-workflow-dismiss {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    border: 0;
+    background: none;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 2px 6px;
+    cursor: pointer;
+}
+.etlsql-workflow-dismiss:hover { color: var(--portal-text, #f0f6fc); }
+.etlsql-studio-workflow-bar { position: relative; }
+
+.etlsql-studio-rail-restore {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 8px;
+    padding: 6px 8px;
+    border: 1px dashed var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: none;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    cursor: pointer;
+}
+.etlsql-studio-rail-restore:hover { color: var(--portal-text, #f0f6fc); border-color: var(--portal-accent, #388bfd); }
+
+/* ── Wizard groupings ──────────────────────────────────────────────────────── */
+
+.etlsql-studio-guided-group { display: flex; flex-direction: column; gap: 6px; }
+.etlsql-studio-guided-group > span {
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.etlsql-studio-choice-list button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Embedded query workbench ──────────────────────────────────────────────── */
+
+.etlsql-studio-query-workbench {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.etlsql-studio-workbench-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--portal-border, #30363d);
+    background: var(--portal-surface-subtle, rgba(255, 255, 255, 0.02));
+    font-size: 0.6875rem;
+    color: var(--portal-text-soft, #8b949e);
+}
+.etlsql-studio-workbench-editor { min-height: 150px; max-height: 260px; overflow: auto; }
+.etlsql-studio-workbench-editor .cm-editor { height: 100%; }
+.etlsql-studio-workbench-fallback {
+    width: 100%;
+    min-height: 150px;
+    border: 0;
+    padding: 8px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.75rem;
+    resize: vertical;
+}
+.etlsql-studio-workbench-output:not(:empty) { border-top: 1px solid var(--portal-border, #30363d); padding: 8px; }
+
+/* ── Chart builder ─────────────────────────────────────────────────────────── */
+
+.etlsql-studio-builder { display: grid; grid-template-columns: 150px 1fr; gap: 12px; }
+
+.etlsql-studio-builder-types {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.etlsql-studio-builder-group > span {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.5625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.etlsql-studio-builder-group > div { display: flex; flex-wrap: wrap; gap: 3px; }
+.etlsql-studio-builder-group button {
+    padding: 3px 6px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 3px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.5625rem;
+    cursor: pointer;
+}
+.etlsql-studio-builder-group button:hover { color: var(--portal-text, #f0f6fc); border-color: var(--portal-accent, #388bfd); }
+.etlsql-studio-builder-group button.active {
+    background: var(--portal-accent, #388bfd);
+    border-color: var(--portal-accent, #388bfd);
+    color: #fff;
+}
+
+.etlsql-studio-builder-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.etlsql-studio-builder-bind { display: grid; grid-template-columns: 160px 1fr; gap: 10px; }
+
+.etlsql-studio-builder-fields,
+.etlsql-studio-builder-roles { display: flex; flex-direction: column; gap: 5px; }
+.etlsql-studio-builder-fields > span,
+.etlsql-studio-builder-roles > span {
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.5625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.etlsql-studio-builder-fields { max-height: 220px; overflow-y: auto; }
+.etlsql-studio-builder-field {
+    display: block;
+    padding: 4px 7px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 3px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.6875rem;
+    text-align: left;
+    cursor: grab;
+}
+.etlsql-studio-builder-field:active { cursor: grabbing; }
+.etlsql-studio-builder-field[data-field-kind="number"]::before { content: '#  '; color: var(--portal-accent, #58a6ff); white-space: pre; }
+.etlsql-studio-builder-field[data-field-kind="date"]::before { content: '\1f4c5 '; }
+.etlsql-studio-builder-field[data-field-kind="text"]::before { content: 'Aa '; color: var(--portal-text-soft, #8b949e); white-space: pre; }
+
+.etlsql-studio-role-slot,
+.etlsql-studio-role-repeat {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 8px;
+    border: 1px dashed var(--portal-border, #30363d);
+    border-radius: 4px;
+}
+.etlsql-studio-role-slot > span,
+.etlsql-studio-role-repeat > span { font-size: 0.6875rem; color: var(--portal-text, #f0f6fc); }
+.etlsql-studio-role-slot > div { display: flex; gap: 4px; align-items: center; }
+.etlsql-studio-role-slot select {
+    flex: 1;
+    padding: 3px 5px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 3px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.6875rem;
+}
+.etlsql-studio-role-slot button {
+    border: 0;
+    background: none;
+    color: var(--portal-text-soft, #8b949e);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0 4px;
+}
+.etlsql-studio-role-slot small { color: var(--portal-text-soft, #8b949e); font-size: 0.5625rem; }
+.etlsql-studio-role-slot.is-bound { border-style: solid; }
+.etlsql-studio-role-slot.is-required { border-color: var(--portal-warning, #d29922); }
+.etlsql-studio-role-slot.is-over { border-color: var(--portal-accent, #388bfd); background: rgba(56, 139, 253, 0.1); }
+.etlsql-studio-role-slot.is-empty { align-items: flex-start; color: var(--portal-text-soft, #8b949e); font-size: 0.625rem; }
+.etlsql-studio-role-repeat { gap: 5px; }
+
+.etlsql-studio-builder-preview {
+    min-height: 170px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: var(--portal-bg, #0d1117);
+    padding: 8px;
+    overflow: auto;
+}
+
+/* ── Shared visual sample rendering ────────────────────────────────────────── */
+
+.etlsql-visual-preview-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 100%;
+    min-height: 120px;
+    text-align: center;
+    color: var(--portal-text-soft, #8b949e);
+}
+.etlsql-visual-preview-empty strong { color: var(--portal-text, #f0f6fc); font-size: 0.75rem; }
+.etlsql-visual-preview-empty span { font-size: 0.6875rem; }
+
+.etlsql-visual-preview-table { max-height: 100%; overflow: auto; }
+.etlsql-visual-preview-table table { width: 100%; border-collapse: collapse; font-size: 0.6875rem; }
+.etlsql-visual-preview-table th,
+.etlsql-visual-preview-table td {
+    padding: 3px 7px;
+    text-align: left;
+    border-bottom: 1px solid var(--portal-border, #30363d);
+    white-space: nowrap;
+}
+.etlsql-visual-preview-table th {
+    position: sticky;
+    top: 0;
+    background: var(--portal-surface, #161b22);
+    color: var(--portal-text-soft, #8b949e);
+}
+
+.etlsql-visual-preview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 100%;
+    min-height: 90px;
+}
+.etlsql-visual-preview-card strong { font-size: 1.75rem; color: var(--portal-accent, #58a6ff); line-height: 1.1; }
+.etlsql-visual-preview-card span { font-size: 0.6875rem; color: var(--portal-text-soft, #8b949e); }
+.etlsql-visual-preview-card small { font-size: 0.625rem; color: var(--portal-text-soft, #8b949e); }
+
+.etlsql-visual-preview-bars { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
+.etlsql-visual-preview-bar { display: grid; grid-template-columns: 90px 1fr auto; gap: 6px; align-items: center; font-size: 0.625rem; }
+.etlsql-visual-preview-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.etlsql-visual-preview-bar i { display: block; height: 10px; border-radius: 2px; min-width: 2px; }
+
+.etlsql-visual-preview-share { display: flex; align-items: center; gap: 10px; height: 100%; }
+.etlsql-visual-preview-share svg { width: 108px; height: 108px; flex: 0 0 auto; }
+.etlsql-visual-preview-share ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 0.625rem; }
+.etlsql-visual-preview-share li { display: flex; align-items: center; gap: 5px; }
+.etlsql-visual-preview-share i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+
+.etlsql-visual-preview-heatmap { display: grid; gap: 2px; align-items: center; font-size: 0.5625rem; }
+.etlsql-visual-preview-heatmap .is-axis { color: var(--portal-text-soft, #8b949e); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.etlsql-visual-preview-heatmap i { display: block; height: 14px; border-radius: 2px; background: var(--portal-accent, #388bfd); }
+
+.etlsql-visual-preview-slicer { display: flex; flex-wrap: wrap; gap: 4px; }
+.etlsql-visual-preview-slicer button {
+    padding: 2px 7px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 10px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.625rem;
+}
+
+@media (max-width: 760px) {
+    .etlsql-studio-builder { grid-template-columns: 1fr; }
+    .etlsql-studio-builder-bind { grid-template-columns: 1fr; }
+}

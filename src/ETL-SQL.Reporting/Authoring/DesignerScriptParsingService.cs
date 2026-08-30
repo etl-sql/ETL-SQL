@@ -51,7 +51,9 @@ public sealed class DesignerScriptParsingService
             .Select((ds, i) => new DesignerAuthoringDataset(
                 $"ds_{i}",
                 NormalizeDatasetName(ds.TempTableName),
-                ExtractAuthoredNode(script, ds.SourceQuery, ds.SourceQuery.ToSql()).Trim().TrimEnd(';')))
+                ExtractAuthoredNode(script, ds.SourceQuery, ds.SourceQuery.ToSql()).Trim().TrimEnd(';'),
+                ds.RefreshInterval,
+                ds.Ttl))
             .ToList();
 
         var elements = new Dictionary<string, DesignerAuthoringVisual>(StringComparer.OrdinalIgnoreCase);

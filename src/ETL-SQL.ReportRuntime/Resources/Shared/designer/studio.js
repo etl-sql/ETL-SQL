@@ -9,6 +9,7 @@
  */
 
 import { createScriptEditor, createDesigner, createScriptResultsPanel, normalizeRunTrace, renderDag } from './designer.js';
+import { renderVisualSample, rolesForVisualType, missingRequiredRoles } from './visual-preview.js';
 import { createConnectionWizard, encryptClientPassword } from './connection-wizard.js';
 import { buildSideBySideDiff } from './studio-git-diff.js';
 
@@ -141,6 +142,9 @@ const STUDIO_ROUTES = Object.freeze({
     schema: '/api/designer/schema',
     sessionMetadata: '/api/session/metadata',
     connectorsSchema: '/api/connectors/schema',
+    // Registered datasets the signed-in user may read. Catalog hosts only — `registryDatasets()`
+    // skips it on the desktop, which has no registry rather than an empty one.
+    datasetRegistry: '/api/datasets',
 });
 
 // Desktop-only routes: they read the local workspace filesystem, which the Portal has no equivalent
@@ -319,6 +323,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         explorerExpanded: new Set((opts.workspaceFolders || []).map(folder => folder.path)),
         activeDocId: opts.activeDocId || (documents.length > 0 ? documents[0].id : '__home__'),
         activeActivity: 'explorer',
+        filterSidebarOpen: false,
         selectedVisualId: null,
         sidebarOpen: true,
         editorInstance: null,
@@ -459,6 +464,14 @@ export async function createStudioWorkbench(container, opts = {}) {
                     </div>
                 </aside>
 
+                <aside class="etlsql-studio-sidebar etlsql-studio-filter-sidebar collapsed" data-filter-sidebar aria-label="Filters">
+                    <div class="etlsql-studio-sidebar-header">
+                        <span>Filters</span>
+                        <button type="button" class="etlsql-studio-sidebar-close" data-filter-sidebar-close title="Close Filters" aria-label="Close Filters">${_studioIcon('close', 12)}</button>
+                    </div>
+                    <div class="etlsql-studio-sidebar-content" data-filter-sidebar-content></div>
+                </aside>
+
                 <!-- Center Multi-Projection Stage -->
                 <main class="etlsql-studio-stage" data-studio-stage>
                     <!-- Home / Welcome Stage -->
@@ -505,6 +518,8 @@ export async function createStudioWorkbench(container, opts = {}) {
     const sidebar = shell.querySelector('[data-studio-sidebar]');
     const sidebarTitle = shell.querySelector('[data-sidebar-title]');
     const sidebarContent = shell.querySelector('[data-sidebar-content]');
+    const filterSidebar = shell.querySelector('[data-filter-sidebar]');
+    const filterSidebarContent = shell.querySelector('[data-filter-sidebar-content]');
     const inspector = shell.querySelector('[data-studio-inspector]');
     const propertiesHost = shell.querySelector('[data-properties-host]');
     const propertyFields = shell.querySelector('[data-property-fields]');
@@ -876,7 +891,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         return context.snapshot;
     }
 
-    function sampleRowsMarkup(snapshot, limit = 5) {
+    function sampleRowsMarkup(snapshot, limit = STUDIO_SAMPLE_PREVIEW_ROWS) {
         const columns = _snapshotColumns(snapshot).map(_columnName);
         if (!columns.length) return guidedNoteMarkup('The sample came back with no columns.', 'warning');
         const rows = (snapshot.rows || []).slice(0, limit);
@@ -888,25 +903,90 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     // --- Step 1: the data wizard ------------------------------------------------------------------
+    //
+    // There are exactly three ways a report gets data, and they have different prerequisites and
+    // different runtime behaviour:
+    //
+    //   * Use an existing dataset — one this script already declares, or a registered dataset the
+    //     signed-in user has permission to read. Reusing a registered one writes `USE DATASET &name`.
+    //     No connection is involved; the dataset was produced by some other process.
+    //
+    //   * Create a new dataset — cached, with the standard REFRESH EVERY / TTL lifespan rules. Needs a
+    //     connection to read from, so a script with no `CREATE CONNECTION` cannot reach this path until
+    //     the connection wizard has written one.
+    //
+    //   * Live query — no cache at all: the visual's SOURCE holds the query and the connection is read
+    //     on every run. Also needs a connection. Chosen when the report must show current data and the
+    //     cost of querying every time is acceptable.
+    //
+    // Host-registered aliases never count as connections here: an alias this script does not declare
+    // would preview correctly and then fail for every other reader of the report.
 
     function datasetBaseName(seed) {
         const cleaned = String(seed || 'dataset').replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+/, '').toLowerCase();
         return /^[a-z]/.test(cleaned) ? cleaned : `data_${cleaned || 'set'}`;
     }
 
+    /** Datasets this script declares, from the canonical parse rather than a text scan. */
+    async function scriptDatasetNames() {
+        try {
+            const parsed = await designerApiJson(STUDIO_ROUTES.parse, {
+                script: state.editorInstance?.getValue?.() ?? getActiveDoc()?.content ?? '',
+            });
+            return (parsed.designState?.datasets || []).map(dataset => ({
+                name: String(dataset.name || '').startsWith('&') ? dataset.name : `&${dataset.name}`,
+                query: dataset.query || '',
+            }));
+        } catch {
+            // A document mid-keystroke does not parse; an empty list is honest, and the wizard's
+            // other path still works.
+            return [];
+        }
+    }
+
     /**
-     * Connection -> table or query -> name -> CREATE DATASET. This is the only path that produces a
-     * named, reusable query without writing code, which is what every later step depends on.
-     * Resolves with the dataset name when one was created.
+     * Datasets the signed-in user may read from the report registry. Only the catalog host has one —
+     * the desktop workspace has no registry, so it honestly reports none rather than 404ing.
+     */
+    async function registryDatasets() {
+        if (hasWorkspaceHost) return [];
+        try {
+            const response = await authFetch(apiBase + STUDIO_ROUTES.datasetRegistry);
+            if (!response.ok) return [];
+            const data = await response.json();
+            return (Array.isArray(data) ? data : data.datasets || [])
+                .filter(dataset => dataset?.name)
+                .map(dataset => ({
+                    name: String(dataset.name).startsWith('&') ? dataset.name : `&${dataset.name}`,
+                    folderPath: dataset.folderPath || '',
+                    rowCount: dataset.rowCount ?? null,
+                    accessLevel: dataset.accessLevel || null,
+                    isStale: Boolean(dataset.isStale),
+                }));
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Connection -> table or query -> name -> CREATE DATASET, or reuse an existing dataset. This is
+     * the only path that produces a named, reusable query without writing code, which is what every
+     * later step depends on. Resolves with the dataset name that is now in play.
      */
     async function openDataWizard() {
         const doc = getActiveDoc();
         if (!doc) return null;
         const context = documentContext(doc);
         const wizard = {
-            pane: 'connection',
-            connections: null,
-            connection: context.selectedSource?.connection || null,
+            pane: 'start',
+            // 'dataset' caches through CREATE DATASET; 'live' binds the query straight to the visuals.
+            intent: 'dataset',
+            refreshInterval: '',
+            ttl: '',
+            scriptDatasets: null,
+            registry: null,
+            connections: existingConnectionNames(),
+            connection: null,
             tables: null,
             table: null,
             mode: 'table',
@@ -914,164 +994,127 @@ export async function createStudioWorkbench(container, opts = {}) {
             name: '',
             preview: null,
             error: null,
-            existingNames: [],
+            queryWorkbench: null,
         };
 
-        return await studioDialog({ kicker: 'Step 1 · Choose data', title: 'Create a dataset', wide: true }, api => {
+        return await studioDialog({ kicker: 'Step 1 · Choose data', title: 'Choose data', wide: true }, api => {
             const fail = message => { wizard.error = message; paint(); };
+            const errorMarkup = () => (wizard.error ? guidedNoteMarkup(_escapeHtml(wizard.error), 'error') : '');
 
-            const loadConnections = async () => {
-                try {
-                    wizard.connections = await loadConnectionAliases();
-                } catch {
-                    wizard.connections = [];
-                }
-                paint();
+            const disposeWorkbench = () => {
+                wizard.queryWorkbench?.dispose?.();
+                wizard.queryWorkbench = null;
             };
+            const finish = value => { disposeWorkbench(); api.close(value); };
 
-            const openConnection = async alias => {
-                wizard.connection = alias;
-                wizard.tables = null;
-                wizard.table = null;
-                wizard.pane = 'source';
-                wizard.error = null;
-                paint();
-                try {
-                    const documentUri = doc.path || 'studio';
-                    const response = await authFetch(apiBase + STUDIO_ROUTES.schema
-                        + `?connection=${encodeURIComponent(alias)}&documentUri=${encodeURIComponent(documentUri)}`);
-                    if (!response.ok) throw new Error(`The schema for ${alias} could not be read (${response.status}).`);
-                    wizard.tables = (await response.json()).tables || [];
-                } catch (error) {
-                    wizard.tables = [];
-                    wizard.error = error.message;
-                }
-                paint();
-            };
-
-            const goToName = async () => {
-                wizard.pane = 'name';
-                wizard.error = null;
-                wizard.name = wizard.name || datasetBaseName(wizard.mode === 'table' ? wizard.table : `${wizard.connection}_query`);
-                paint();
-                try {
-                    const parsed = await designerApiJson(STUDIO_ROUTES.parse, {
-                        script: state.editorInstance?.getValue?.() ?? doc.content ?? '',
-                    });
-                    wizard.existingNames = (parsed.designState?.datasets || [])
-                        .map(dataset => String(dataset.name || '').replace(/^&/, '').toLowerCase());
-                } catch {
-                    // A document that does not parse yet cannot report its datasets; the mutation
-                    // below still de-duplicates against the real design state before writing.
-                    wizard.existingNames = [];
-                }
-                paint();
-            };
-
-            const previewSource = async () => {
-                if (wizard.mode !== 'table' || !wizard.table) return;
-                api.busy(true);
-                try {
-                    const response = await authFetch(apiBase + STUDIO_ROUTES.dataSample, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            sourceKind: 'connection',
-                            connection: wizard.connection,
-                            table: wizard.table,
-                            documentUri: doc.path || 'studio',
-                            script: state.editorInstance?.getValue?.() ?? doc.content ?? '',
-                        }),
-                    });
-                    if (!response.ok) throw new Error(await response.text() || 'The preview failed.');
-                    const sample = await response.json();
-                    wizard.preview = {
-                        columns: sample.columns || [],
-                        rows: sample.rows || [],
-                        rowCount: sample.rowCount ?? sample.rows?.length ?? 0,
-                    };
-                    wizard.error = null;
-                } catch (error) {
-                    wizard.preview = null;
-                    wizard.error = error.message;
-                }
-                api.busy(false);
-                paint();
-            };
-
-            const create = async () => {
-                const base = datasetBaseName(wizard.name);
-                const query = wizardQuery();
-                if (!query) return fail('This dataset has no query yet.');
-                api.busy(true);
-                const created = await canonicalDesignerMutation('Create dataset', design => {
-                    design.datasets ||= [];
-                    const taken = new Set(design.datasets.map(item => String(item.name || '').replace(/^&/, '').toLowerCase()));
-                    let name = base;
-                    let suffix = 2;
-                    while (taken.has(name.toLowerCase())) name = `${base}_${suffix++}`;
-                    design.datasets.push({ id: `studio_ds_${Date.now().toString(36)}`, name: `&${name}`, query });
-                    return `&${name}`;
-                });
-                if (!created) { api.busy(false); return; }
-
-                context.selectedSource = { connection: wizard.connection, table: wizard.mode === 'table' ? wizard.table : created };
-                context.sourceColumns = wizard.preview?.columns || context.sourceColumns;
-                try {
-                    const snapshot = await loadDatasetSample(created);
-                    _feedback.notify(
-                        `${created} is ready with ${snapshot.rowCount} sampled row${snapshot.rowCount === 1 ? '' : 's'}. Visuals can reference it by name.`,
-                        { title: 'Dataset created', tone: 'success' });
-                } catch (error) {
-                    // The statement is in the script either way; say so rather than implying the step
-                    // failed, because the author's next step depends on knowing it exists.
-                    _feedback.notify(
-                        `${created} was written to the script, but its preview could not run: ${error.message}`,
-                        { title: 'Dataset created without a sample', tone: 'warning' });
-                }
-                api.close(created);
-            };
-
-            const wizardQuery = () => (wizard.mode === 'table'
-                ? (wizard.connection && wizard.table ? `SELECT * FROM ${wizard.connection}.${wizard.table}` : '')
-                : wizard.query.trim().replace(/;$/, ''));
-
-            const scriptDeclaresConnection = () => {
-                const script = state.editorInstance?.getValue?.() ?? doc.content ?? '';
-                return new RegExp(`CREATE\\s+CONNECTION\\s+${wizard.connection}\\b`, 'i').test(script);
-            };
+            // ── Panes ─────────────────────────────────────────────────────────────────────────────
 
             const paint = () => {
+                if (wizard.pane !== 'source' || wizard.mode !== 'query') disposeWorkbench();
+                if (wizard.pane === 'start') return paintStart();
+                if (wizard.pane === 'existing') return paintExisting();
                 if (wizard.pane === 'connection') return paintConnection();
                 if (wizard.pane === 'source') return paintSource();
                 return paintName();
             };
 
-            const errorMarkup = () => (wizard.error ? guidedNoteMarkup(_escapeHtml(wizard.error), 'error') : '');
+            const paintStart = () => {
+                const available = (wizard.scriptDatasets?.length || 0) + (wizard.registry?.length || 0);
+                const loading = wizard.scriptDatasets === null || wizard.registry === null;
+                const connectionNote = wizard.connections.length
+                    ? `Reads from ${wizard.connections.length === 1 ? `the ${wizard.connections[0]} connection` : 'one of this report’s connections'}`
+                    : 'Needs a connection first — the wizard will create one';
+                return api.render({
+                    lede: 'Three ways to get data, and they behave differently at run time. '
+                        + 'A <strong>dataset</strong> is a named query the report caches and reuses; a <strong>live query</strong> '
+                        + 'is read fresh from the connection every time the report runs.',
+                    body: errorMarkup() + `<div class="etlsql-studio-choice-list">
+                        <button type="button" data-start-path="existing" ${loading || !available ? 'disabled' : ''}>
+                            <strong>Use an existing dataset</strong>
+                            <span>${loading
+                                ? 'Looking for datasets you can use…'
+                                : available
+                                    ? `${available} dataset${available === 1 ? '' : 's'} available · cached, refreshed on its own schedule`
+                                    : 'None available — this report declares none, and none are shared with you'}</span>
+                        </button>
+                        <button type="button" data-start-path="create">
+                            <strong>Create a new dataset</strong>
+                            <span>Cached with a refresh interval and TTL · ${_escapeHtml(connectionNote)}</span>
+                        </button>
+                        <button type="button" data-start-path="live">
+                            <strong>Live query</strong>
+                            <span>No cache — the connection is queried on every run · ${_escapeHtml(connectionNote)}</span>
+                        </button>
+                    </div>`,
+                    actions: [{ id: 'cancel', label: 'Cancel', run: () => finish(null) }],
+                    wire: host => host.querySelectorAll('[data-start-path]').forEach(button => button.addEventListener('click', () => {
+                        wizard.error = null;
+                        const path = button.dataset.startPath;
+                        wizard.intent = path === 'live' ? 'live' : 'dataset';
+                        wizard.pane = path === 'existing' ? 'existing' : 'connection';
+                        paint();
+                    })),
+                });
+            };
 
-            const paintConnection = () => api.render({
-                lede: 'A <strong>dataset</strong> is a named query this report can reuse. Every visual points at one, '
-                    + 'so the report runs the query once. Start with the connection Studio should read.',
-                body: errorMarkup() + (wizard.connections === null
-                    ? '<div class="etlsql-studio-loading">Loading connections…</div>'
-                    : wizard.connections.length
-                        ? `<div class="etlsql-studio-choice-list">${wizard.connections.map(item => {
-                            const alias = typeof item === 'string' ? item : item.alias || item.name;
-                            const detail = typeof item === 'string' ? 'Connection' : item.description || item.connectorType || 'Connection';
-                            return `<button type="button" data-pick-connection="${_escapeHtml(alias)}">
-                                <strong>${_escapeHtml(alias)}</strong><span>${_escapeHtml(detail)}</span></button>`;
-                        }).join('')}</div>`
-                        : guidedNoteMarkup('This document has no connections yet. Create one first — the dataset needs somewhere to read from.', 'info')),
+            const paintExisting = () => api.render({
+                lede: 'Pick the dataset this report should read from. A dataset already declared here is used as-is; '
+                    + 'a registered one is brought in with <code>USE DATASET</code>.',
+                body: errorMarkup()
+                    + (wizard.scriptDatasets?.length ? `<div class="etlsql-studio-guided-group"><span>In this report</span>
+                        <div class="etlsql-studio-choice-list">${wizard.scriptDatasets.map(dataset => `
+                            <button type="button" data-use-dataset="${_escapeHtml(dataset.name)}" data-dataset-origin="script">
+                                <strong>${_escapeHtml(dataset.name)}</strong>
+                                <span>${_escapeHtml((dataset.query || '').replace(/\s+/g, ' ').slice(0, 90)) || 'Declared in this script'}</span>
+                            </button>`).join('')}</div></div>` : '')
+                    + (wizard.registry?.length ? `<div class="etlsql-studio-guided-group"><span>Shared with you</span>
+                        <div class="etlsql-studio-choice-list">${wizard.registry.map(dataset => `
+                            <button type="button" data-use-dataset="${_escapeHtml(dataset.name)}" data-dataset-origin="registry">
+                                <strong>${_escapeHtml(dataset.name)}</strong>
+                                <span>${_escapeHtml(dataset.folderPath || 'Registered dataset')}${dataset.rowCount != null ? ` · ${dataset.rowCount} rows` : ''}${dataset.isStale ? ' · stale' : ''}</span>
+                            </button>`).join('')}</div></div>` : '')
+                    + (!wizard.scriptDatasets?.length && !wizard.registry?.length
+                        ? guidedNoteMarkup('No datasets are available to this report yet. Create one instead.', 'info')
+                        : ''),
                 actions: [
-                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
-                    { id: 'new', label: 'New connection…', primary: !wizard.connections?.length, run: () => { api.close(null); handleOpenConnectionWizard(); } },
+                    { id: 'back', label: 'Back', run: () => { wizard.pane = 'start'; wizard.error = null; paint(); } },
+                    { id: 'create', label: 'Create a new dataset', primary: true, run: () => { wizard.pane = 'connection'; wizard.error = null; paint(); } },
                 ],
-                wire: host => host.querySelectorAll('[data-pick-connection]').forEach(button =>
-                    button.addEventListener('click', () => openConnection(button.dataset.pickConnection))),
+                wire: host => host.querySelectorAll('[data-use-dataset]').forEach(button =>
+                    button.addEventListener('click', () => useExistingDataset(button.dataset.useDataset, button.dataset.datasetOrigin))),
             });
 
+            const paintConnection = () => {
+                if (!wizard.connections.length) {
+                    return api.render({
+                        lede: 'A new dataset reads from a connection, and this report does not declare one yet. '
+                            + 'The connection wizard writes a <code>CREATE CONNECTION</code> statement into the script, '
+                            + 'which is what makes the report runnable anywhere — not just in this session.',
+                        body: errorMarkup() + guidedNoteMarkup(
+                            'Host-registered aliases are deliberately not offered here. A dataset built on an alias this script '
+                            + 'does not declare would preview correctly and then fail for every other reader.', 'info'),
+                        actions: [
+                            { id: 'back', label: 'Back', run: () => { wizard.pane = 'start'; wizard.error = null; paint(); } },
+                            { id: 'connect', label: 'Create a connection', primary: true, run: openConnectionThenReturn },
+                        ],
+                    });
+                }
+                return api.render({
+                    lede: 'Pick the connection this dataset reads from. These are the connections this report declares.',
+                    body: errorMarkup() + `<div class="etlsql-studio-choice-list">${wizard.connections.map(alias => `
+                        <button type="button" data-pick-connection="${_escapeHtml(alias)}" class="${wizard.connection === alias ? 'active' : ''}">
+                            <strong>${_escapeHtml(alias)}</strong><span>Declared in this report</span></button>`).join('')}</div>`,
+                    actions: [
+                        { id: 'back', label: 'Back', run: () => { wizard.pane = 'start'; wizard.error = null; paint(); } },
+                        { id: 'connect', label: 'New connection…', run: openConnectionThenReturn },
+                    ],
+                    wire: host => host.querySelectorAll('[data-pick-connection]').forEach(button =>
+                        button.addEventListener('click', () => openConnection(button.dataset.pickConnection))),
+                });
+            };
+
             const paintSource = () => api.render({
-                lede: `Reading from <strong>${_escapeHtml(wizard.connection)}</strong>. Pick a table to read whole, or write the query yourself.`,
+                lede: `Reading from <strong>${_escapeHtml(wizard.connection)}</strong>. Pick a table to read whole, or build the query yourself.`,
                 body: errorMarkup() + `
                     <div class="etlsql-studio-segmented" role="group" aria-label="Dataset source">
                         <button type="button" data-source-mode="table" class="${wizard.mode === 'table' ? 'active' : ''}">Pick a table</button>
@@ -1089,14 +1132,10 @@ export async function createStudioWorkbench(container, opts = {}) {
                                         <span>${table.columns?.length || 0} field${table.columns?.length === 1 ? '' : 's'}</span>
                                     </button>`).join('')}</div>`
                                 : guidedNoteMarkup('This connection reported no tables you can read.', 'warning'))
-                        : `<label class="etlsql-studio-guided-field"><span>Query</span>
-                            <textarea data-dataset-query rows="6" spellcheck="false"
-                                placeholder="SELECT region, SUM(total_amount) AS revenue&#10;FROM ${_escapeHtml(wizard.connection)}.orders&#10;GROUP BY region">${_escapeHtml(wizard.query)}</textarea></label>
-                           <p class="etlsql-studio-guided-hint">Qualify tables with the connection alias, the way the script does.</p>`)
+                        : '<div class="etlsql-studio-query-workbench" data-query-workbench></div>')
                     + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
                 actions: [
-                    { id: 'back', label: 'Back', run: () => { wizard.pane = 'connection'; wizard.error = null; paint(); } },
-                    ...(wizard.mode === 'table' && wizard.table ? [{ id: 'preview', label: 'Preview rows', run: previewSource }] : []),
+                    { id: 'back', label: 'Back', run: () => { wizard.pane = 'connection'; wizard.error = null; wizard.preview = null; paint(); } },
                     { id: 'next', label: 'Next', primary: true, disabled: !wizardQuery(), run: goToName },
                 ],
                 wire: host => {
@@ -1109,6 +1148,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                         wizard.table = button.dataset.pickTable;
                         wizard.preview = null;
                         paint();
+                        // Seeing the rows is the point of this step, so the sample loads on selection
+                        // rather than behind another button.
+                        previewTable();
                     }));
                     const filter = host.querySelector('[data-table-filter]');
                     filter?.addEventListener('input', () => {
@@ -1117,21 +1159,22 @@ export async function createStudioWorkbench(container, opts = {}) {
                             button.hidden = Boolean(query) && !button.dataset.pickTable.toLowerCase().includes(query);
                         });
                     });
-                    const textarea = host.querySelector('[data-dataset-query]');
-                    // Re-rendering on every keystroke would steal the caret, so only the footer's
-                    // enabled state is refreshed while the author types.
-                    textarea?.addEventListener('input', () => {
-                        wizard.query = textarea.value;
-                        const next = modalBox.querySelector('[data-dialog-action="next"]');
-                        if (next) next.disabled = !wizardQuery();
-                    });
+                    const workbenchHost = host.querySelector('[data-query-workbench]');
+                    if (workbenchHost) mountQueryWorkbench(workbenchHost);
                 },
             });
 
             const paintName = () => {
+                if (wizard.intent === 'live') return paintLive();
                 const base = datasetBaseName(wizard.name);
-                const collides = wizard.existingNames.includes(base);
-                const sql = `CREATE DATASET &${base} AS (\n  ${wizardQuery()}\n);`;
+                const collides = (wizard.scriptDatasets || []).some(dataset => dataset.name.replace(/^&/, '').toLowerCase() === base);
+                const lifespan = [
+                    wizard.refreshInterval.trim() ? ` REFRESH EVERY '${wizard.refreshInterval.trim()}'` : '',
+                    wizard.ttl.trim() ? ` TTL = '${wizard.ttl.trim()}'` : '',
+                ].join('');
+                const sql = `CREATE DATASET &${base}${lifespan} AS (
+  ${wizardQuery()}
+);`;
                 return api.render({
                     lede: 'Name the dataset. Visuals reference it as <code>&amp;name</code>, and the report runs its query once no matter how many visuals read from it.',
                     body: errorMarkup()
@@ -1139,42 +1182,373 @@ export async function createStudioWorkbench(container, opts = {}) {
                             <div class="etlsql-studio-prefixed-input"><span>&amp;</span>
                             <input type="text" data-dataset-name value="${_escapeHtml(base)}" spellcheck="false"></div></label>`
                         + (collides ? guidedNoteMarkup('This report already has a dataset with that name. Studio will add a numeric suffix unless you change it.', 'warning') : '')
-                        + (wizard.connection && !scriptDeclaresConnection()
-                            ? guidedNoteMarkup(`This report does not declare <code>${_escapeHtml(wizard.connection)}</code> with a <code>CREATE CONNECTION</code> statement. `
-                                + 'It will preview here, but add the connection to the script before publishing so the report runs anywhere.', 'info')
-                            : '')
-                        + sqlPreviewMarkup(sql),
+                        + `<div class="etlsql-studio-guided-row">
+                            <label class="etlsql-studio-guided-field"><span>Refresh every</span>
+                                <input type="text" data-dataset-refresh value="${_escapeHtml(wizard.refreshInterval)}" placeholder="30m" spellcheck="false"></label>
+                            <label class="etlsql-studio-guided-field"><span>Keep for (TTL)</span>
+                                <input type="text" data-dataset-ttl value="${_escapeHtml(wizard.ttl)}" placeholder="2h" spellcheck="false"></label>
+                          </div>
+                          <p class="etlsql-studio-guided-hint">Durations like <code>30m</code>, <code>2h</code>, <code>1d</code>. Leave both blank to use the host’s defaults — an omitted clause is not the same as a zero one.</p>`
+                        + sqlPreviewMarkup(sql)
+                        + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
                     actions: [
                         { id: 'back', label: 'Back', run: () => { wizard.pane = 'source'; wizard.error = null; paint(); } },
                         { id: 'create', label: 'Create dataset', primary: true, run: create },
                     ],
                     wire: host => {
-                        const input = host.querySelector('[data-dataset-name]');
-                        input?.addEventListener('change', () => { wizard.name = input.value; paint(); });
+                        host.querySelector('[data-dataset-name]')?.addEventListener('change', event => { wizard.name = event.target.value; paint(); });
+                        host.querySelector('[data-dataset-refresh]')?.addEventListener('change', event => { wizard.refreshInterval = event.target.value; paint(); });
+                        host.querySelector('[data-dataset-ttl]')?.addEventListener('change', event => { wizard.ttl = event.target.value; paint(); });
                     },
                 });
             };
 
+            const paintLive = () => {
+                const source = liveSourceClause();
+                return api.render({
+                    lede: 'A <strong>live query</strong> is bound straight to the visuals you build next, as their '
+                        + '<code>SOURCE</code>. Nothing is cached: every run reads the connection again, so readers always '
+                        + 'see current data and every run costs a query.',
+                    body: errorMarkup()
+                        + sqlPreviewMarkup(`CREATE VISUAL … (
+    SOURCE = ${source},
+    …
+);`, 'Visuals will be written with this source')
+                        + guidedNoteMarkup('Nothing is written to the script yet — the source lands on each visual as you add it. '
+                            + 'Switch to a dataset later if the same query starts feeding several visuals.', 'info')
+                        + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
+                    actions: [
+                        { id: 'back', label: 'Back', run: () => { wizard.pane = 'source'; wizard.error = null; paint(); } },
+                        { id: 'use', label: 'Use this live source', primary: true, run: useLiveSource },
+                    ],
+                });
+            };
+
+            // ── Actions ───────────────────────────────────────────────────────────────────────────
+
+            const liveSourceClause = () => (wizard.mode === 'table' && wizard.table
+                ? `${wizard.connection}.${wizard.table}`
+                : `(${wizardQuery()})`);
+
+            const useLiveSource = async () => {
+                api.busy(true);
+                const source = liveSourceClause();
+                const columns = _snapshotColumns(wizard.preview);
+                const rows = wizard.preview?.rows || [];
+                // No script statement is written here. A live source belongs to each visual's SOURCE
+                // clause, so it lands as visuals are added; writing something now would leave a
+                // statement behind if the author never adds one.
+                context.snapshot = {
+                    source,
+                    columns,
+                    rowCount: wizard.preview?.rowCount ?? rows.length,
+                    rows,
+                };
+                context.snapshotCache.set(source, context.snapshot);
+                context.selectedSource = { connection: wizard.connection, table: wizard.table };
+                context.sourceColumns = columns;
+                updateSnapshotPackage(context.snapshot);
+                state.designerInstance?.refreshSnapshot?.();
+                renderSidebarContent(state.activeActivity);
+                _feedback.notify(
+                    `Visuals will read live from ${source}. Nothing is cached — every run queries ${wizard.connection}.`,
+                    { title: 'Live source ready', tone: 'success' });
+                finish(source);
+            };
+
+            const wizardQuery = () => (wizard.mode === 'table'
+                ? (wizard.connection && wizard.table ? `SELECT * FROM ${wizard.connection}.${wizard.table}` : '')
+                : (wizard.queryWorkbench?.getValue?.() ?? wizard.query).trim().replace(/;$/, ''));
+
+            const openConnectionThenReturn = () => {
+                // The connection wizard owns the whole modal surface, so this one steps aside and the
+                // author returns to a data wizard that can now see the connection they just wrote.
+                finish(null);
+                handleOpenConnectionWizard({ onDone: () => openDataWizard() });
+            };
+
+            const openConnection = async alias => {
+                wizard.connection = alias;
+                wizard.tables = null;
+                wizard.table = null;
+                wizard.preview = null;
+                wizard.pane = 'source';
+                wizard.error = null;
+                paint();
+                try {
+                    const response = await authFetch(apiBase + STUDIO_ROUTES.schema
+                        + `?connection=${encodeURIComponent(alias)}&documentUri=${encodeURIComponent(doc.path || 'studio')}`);
+                    if (!response.ok) throw new Error(`The schema for ${alias} could not be read (${response.status}).`);
+                    wizard.tables = (await response.json()).tables || [];
+                } catch (error) {
+                    wizard.tables = [];
+                    wizard.error = error.message;
+                }
+                paint();
+            };
+
+            const previewTable = async () => {
+                if (wizard.mode !== 'table' || !wizard.table) return;
+                try {
+                    wizard.preview = await sampleConnectionTable(wizard.connection, wizard.table);
+                    wizard.error = null;
+                } catch (error) {
+                    wizard.preview = null;
+                    wizard.error = error.message;
+                }
+                paint();
+            };
+
+            const mountQueryWorkbench = async host => {
+                if (wizard.queryWorkbench) return;
+                wizard.queryWorkbench = await createQueryWorkbench(host, {
+                    connection: wizard.connection,
+                    value: wizard.query || `SELECT *\nFROM ${wizard.connection}.`,
+                    onChange: value => {
+                        wizard.query = value;
+                        const next = modalBox.querySelector('[data-dialog-action="next"]');
+                        if (next) next.disabled = !wizardQuery();
+                    },
+                    onSample: sample => { wizard.preview = sample; },
+                });
+                const next = modalBox.querySelector('[data-dialog-action="next"]');
+                if (next) next.disabled = !wizardQuery();
+            };
+
+            const goToName = async () => {
+                wizard.query = wizard.queryWorkbench?.getValue?.() ?? wizard.query;
+                // A live source is bound without ever running through the dataset sampler, so this is
+                // the last chance to prove the query returns columns the visuals can bind to.
+                if (wizard.intent === 'live' && !wizard.preview && wizard.mode === 'table') await previewTable();
+                wizard.pane = 'name';
+                wizard.error = null;
+                wizard.name = wizard.name || datasetBaseName(wizard.mode === 'table' ? wizard.table : `${wizard.connection}_query`);
+                paint();
+            };
+
+            const useExistingDataset = async (name, origin) => {
+                api.busy(true);
+                try {
+                    if (origin === 'registry') {
+                        // USE DATASET is a script statement, not designer state, so it is inserted as
+                        // text ahead of the presentation statements the same way CREATE CONNECTION is.
+                        insertScriptStatement(`USE DATASET ${name};`);
+                    }
+                    const snapshot = await loadDatasetSample(name);
+                    context.selectedSource = { connection: null, table: name };
+                    _feedback.notify(
+                        `Reading from ${name} — ${snapshot.rowCount} row${snapshot.rowCount === 1 ? '' : 's'} sampled.`,
+                        { title: 'Dataset ready', tone: 'success' });
+                    finish(name);
+                } catch (error) {
+                    api.busy(false);
+                    fail(error.message);
+                }
+            };
+
+            const create = async () => {
+                const base = datasetBaseName(wizard.name);
+                const query = wizardQuery();
+                if (!query) return fail('This dataset has no query yet.');
+                api.busy(true);
+                const created = await canonicalDesignerMutation('Create dataset', design => {
+                    design.datasets ||= [];
+                    const taken = new Set(design.datasets.map(item => String(item.name || '').replace(/^&/, '').toLowerCase()));
+                    let name = base;
+                    let suffix = 2;
+                    while (taken.has(name.toLowerCase())) name = `${base}_${suffix++}`;
+                    design.datasets.push({
+                        id: `studio_ds_${Date.now().toString(36)}`,
+                        name: `&${name}`,
+                        query,
+                        refreshInterval: wizard.refreshInterval.trim() || null,
+                        ttl: wizard.ttl.trim() || null,
+                    });
+                    return `&${name}`;
+                });
+                if (!created) { api.busy(false); return; }
+
+                context.selectedSource = { connection: wizard.connection, table: wizard.mode === 'table' ? wizard.table : created };
+                context.sourceColumns = _snapshotColumns(wizard.preview);
+                try {
+                    const snapshot = await loadDatasetSample(created);
+                    _feedback.notify(
+                        `${created} is ready with ${snapshot.rowCount} sampled row${snapshot.rowCount === 1 ? '' : 's'}. Visuals can reference it by name.`,
+                        { title: 'Dataset created', tone: 'success' });
+                } catch (error) {
+                    // The statement is in the script either way; say so rather than implying the step
+                    // failed, because the author's next step depends on knowing it exists.
+                    _feedback.notify(
+                        `${created} was written to the script, but its preview could not run: ${error.message}`,
+                        { title: 'Dataset created without a sample', tone: 'warning' });
+                }
+                finish(created);
+            };
+
             paint();
-            loadConnections();
+            Promise.all([scriptDatasetNames(), registryDatasets()]).then(([scripts, registry]) => {
+                wizard.scriptDatasets = scripts;
+                // A registered dataset this script already declares would be two routes to the same
+                // rows, and only one of them is editable here.
+                const declared = new Set(scripts.map(dataset => dataset.name.toLowerCase()));
+                wizard.registry = registry.filter(dataset => !declared.has(dataset.name.toLowerCase()));
+                if (wizard.pane === 'start' || wizard.pane === 'existing') paint();
+            });
         });
     }
 
-    /** Step 1 for both workflows: create a dataset if there is none, otherwise show the data panel. */
+    /** Inserts a statement ahead of the presentation statements, leaving everything else untouched. */
+    function insertScriptStatement(statement) {
+        const doc = getActiveDoc();
+        if (!doc) return;
+        const script = state.editorInstance?.getValue?.() ?? doc.content ?? '';
+        const match = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON|PAGE)\b/i.exec(script);
+        const at = match ? match.index : script.length;
+        const next = script.slice(0, at) + statement + '\n\n' + script.slice(at);
+        doc.content = next;
+        doc.isDirty = true;
+        state.editorInstance?.setValue?.(next);
+        renderTabs();
+    }
+
+    /** The design-time sample budget both hosts enforce; the grid scrolls rather than truncating. */
+    const STUDIO_SAMPLE_PREVIEW_ROWS = 50;
+
+    /** Samples a connection table through the host's design-time preview budget. */
+    async function sampleConnectionTable(connection, table) {
+        const doc = getActiveDoc();
+        const response = await authFetch(apiBase + STUDIO_ROUTES.dataSample, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sourceKind: 'connection',
+                connection,
+                table,
+                documentUri: doc?.path || 'studio',
+                script: state.editorInstance?.getValue?.() ?? doc?.content ?? '',
+            }),
+        });
+        if (!response.ok) throw new Error(await response.text() || `${table} could not be sampled.`);
+        const sample = await response.json();
+        return {
+            source: sample.source || `${connection}.${table}`,
+            columns: sample.columns || [],
+            rows: sample.rows || [],
+            rowCount: sample.rowCount ?? sample.rows?.length ?? 0,
+        };
+    }
+
+    /**
+     * The full script editor, embedded. Authors building a dataset query get the same completions,
+     * hover, diagnostics, and execution they get in the main editor — a bare textarea cannot tell
+     * them a column name is wrong until the dataset is already in the script.
+     *
+     * Returns { getValue, dispose }.
+     */
+    async function createQueryWorkbench(host, { connection, value = '', onChange = null, onSample = null } = {}) {
+        const doc = getActiveDoc();
+        host.innerHTML = `
+            <div class="etlsql-studio-workbench-toolbar">
+                <span>Query · ${_escapeHtml(connection || 'no connection')}</span>
+                <button type="button" class="etlsql-studio-btn" data-workbench-run>Run and preview</button>
+            </div>
+            <div class="etlsql-studio-workbench-editor" data-workbench-editor></div>
+            <div class="etlsql-studio-workbench-output" data-workbench-output></div>`;
+
+        const editorHostEl = host.querySelector('[data-workbench-editor]');
+        const output = host.querySelector('[data-workbench-output]');
+        const runButton = host.querySelector('[data-workbench-run]');
+
+        let editor = null;
+        try {
+            editor = await createScriptEditor(editorHostEl, {
+                value,
+                analyzeUrl: apiBase + STUDIO_ROUTES.analyze,
+                completeUrl: apiBase + STUDIO_ROUTES.complete,
+                hoverUrl: apiBase + STUDIO_ROUTES.hover,
+                diagnosticsPanel: false,
+                authFetch,
+                // Analysis is scoped to the host document so the connection's schema — and therefore
+                // table and column completion — resolves the same way it does in the main editor.
+                documentUri: () => doc?.path || 'untitled.rptsql',
+                onChange: next => onChange?.(next),
+            });
+        } catch {
+            // Same fallback the main editor uses: a plain textarea still lets the author type a query
+            // when CodeMirror cannot load, rather than leaving the pane empty.
+            const textarea = document.createElement('textarea');
+            textarea.className = 'etlsql-studio-workbench-fallback';
+            textarea.spellcheck = false;
+            textarea.value = value;
+            textarea.addEventListener('input', () => onChange?.(textarea.value));
+            editorHostEl.appendChild(textarea);
+            editor = { getValue: () => textarea.value, dispose: () => {} };
+        }
+
+        const setOutput = markup => { output.innerHTML = markup; };
+
+        runButton.addEventListener('click', async () => {
+            const query = editor.getValue().trim().replace(/;$/, '');
+            if (!query) return setOutput(guidedNoteMarkup('Write a query first.', 'warning'));
+            runButton.disabled = true;
+            setOutput('<div class="etlsql-studio-loading">Running…</div>');
+            try {
+                // The query runs in the report's own context: its CREATE CONNECTION statements come
+                // along, so an alias the script declares resolves exactly as it will at report time.
+                const script = `${connectionPreamble(connection)}${query};`;
+                const response = await authFetch(apiBase + STUDIO_ROUTES.run, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script, connectionRef: connection || null, documentUri: doc?.path || null }),
+                });
+                if (!response.ok) throw new Error(await _readErrorText(response));
+                const sample = firstResultSet(await response.json());
+                if (!sample) throw new Error('The query ran but returned no result set.');
+                onSample?.(sample);
+                setOutput(sampleRowsMarkup(sample));
+            } catch (error) {
+                onSample?.(null);
+                setOutput(guidedNoteMarkup(_escapeHtml(error.message || 'The query failed.'), 'error'));
+            } finally {
+                runButton.disabled = false;
+            }
+        });
+
+        return {
+            getValue: () => editor.getValue(),
+            dispose: () => { editor?.dispose?.(); host.innerHTML = ''; },
+        };
+    }
+
+    /** The report's own CREATE CONNECTION statements, so an embedded run resolves the same aliases. */
+    function connectionPreamble(connection) {
+        if (!connection) return '';
+        const script = state.editorInstance?.getValue?.() ?? getActiveDoc()?.content ?? '';
+        const pattern = new RegExp(
+            `CREATE\\s+(?:OR\\s+REPLACE\\s+)?CONNECTION\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?\\[?${connection}\\]?[\\s\\S]*?;`, 'i');
+        const match = pattern.exec(script);
+        return match ? `${match[0]}\n` : '';
+    }
+
+    /** Both run shapes: a flat { columns, rows } payload, or the first resultset in a trace. */
+    function firstResultSet(result) {
+        if (Array.isArray(result?.rows) && result.rows.length) {
+            return {
+                columns: result.columns || [],
+                rows: result.rows,
+                rowCount: result.rowCount ?? result.rows.length,
+            };
+        }
+        const entry = (result?.trace || []).find(item => item.type === 'resultset' && item.data);
+        if (!entry) return null;
+        const rows = entry.data.rows || [];
+        return { columns: entry.data.columns || [], rows, rowCount: entry.data.rowCount ?? rows.length };
+    }
+
+    /** Step 1 for both workflows. The wizard's first pane already covers reuse vs. create. */
     async function runChooseDataStep() {
         setActivity('catalog');
-        if (hasDataSample()) {
-            const change = await studioDialog({ kicker: 'Step 1 · Choose data', title: 'This report already has data' }, api => api.render({
-                lede: `Visuals are reading from <strong>${_escapeHtml(activeDocumentContext().snapshot.source)}</strong>. `
-                    + 'You can add another dataset, or keep working with this one — the Data panel on the left lists its fields.',
-                actions: [
-                    { id: 'keep', label: 'Keep this dataset', run: () => api.close(null) },
-                    { id: 'add', label: 'Add another dataset', primary: true, run: () => api.close('add') },
-                ],
-            }));
-            if (change !== 'add') return;
-        }
-        await openDataWizard();
+        return await openDataWizard();
     }
 
     /** Every step after the first needs a sample; this is the one place that says so. */
@@ -1188,6 +1562,268 @@ export async function createStudioWorkbench(container, opts = {}) {
             remedyLabel: 'Create a dataset',
             remedy: () => runChooseDataStep(),
         });
+    }
+
+    // --- The chart builder ------------------------------------------------------------------------
+    //
+    // Picking a visual type and assigning fields to its roles, against the real sample, with the
+    // Report-SQL it will write shown before it is written. The same builder serves the dashboard's
+    // "add a visual" step, the paginated report's bands, and the sidebar's Build entry, because they
+    // are the same task: bind columns to a visual's roles and see the result.
+
+    function guidedRailToggleMarkup() {
+        return (state.guidedRailHidden ?? guidedRailHidden())
+            ? `<button type="button" class="etlsql-studio-rail-restore" data-show-rail>${_studioIcon('commands', 13)} Show guided steps</button>`
+            : '';
+    }
+
+    function wireGuidedRailToggle(host) {
+        host.querySelector('[data-show-rail]')?.addEventListener('click', () => setGuidedRailHidden(false));
+    }
+
+    /** Field kind for a column, used to suggest a sensible default per role. */
+    function guidedFieldKind(name) {
+        const context = activeDocumentContext();
+        const column = _snapshotColumns(context.snapshot).find(item => _columnName(item) === name);
+        return column ? _columnType(column, context.snapshot?.rows || []) : 'text';
+    }
+
+    /**
+     * Opens the builder. `seed` may carry a starting type and mappings, so callers that already know
+     * what they want (the paginated detail band, say) open it pre-filled rather than blank.
+     * Resolves with the created visual's name, or null.
+     */
+    async function openChartBuilder(seed = {}) {
+        if (!await requireDataSample(seed.kicker || 'Build a chart')) return null;
+        const context = activeDocumentContext();
+        const columns = _snapshotColumns(context.snapshot).map(_columnName);
+        const draft = {
+            type: (seed.type || 'BAR').toUpperCase(),
+            title: seed.title || '',
+            mappings: { ...(seed.mappings || {}) },
+        };
+        if (!Object.keys(draft.mappings).length) autoAssignRoles(draft, columns);
+
+        return await studioDialog({ kicker: seed.kicker || 'Build a chart', title: 'Build a visual', wide: true }, api => {
+            const previewVisual = () => ({
+                id: 'builder_preview',
+                name: draft.title || `${draft.type.toLowerCase()}_visual`,
+                type: draft.type,
+                title: draft.title,
+                mappings: draft.mappings,
+                options: {},
+            });
+
+            const sql = () => {
+                const binding = visualSourceBinding();
+                const source = binding.dataset || binding.options.inline_source || '&dataset';
+                const entries = Object.entries(draft.mappings).filter(([, value]) => value);
+                return `CREATE VISUAL ${datasetBaseName(draft.title || `${draft.type.toLowerCase()}_visual`)} AS ${draft.type} (\n`
+                    + `    SOURCE = ${source}`
+                    + (entries.length ? `,\n    MAPPINGS (${entries.map(([role, value]) => `${role} = ${value}`).join(', ')})` : '')
+                    + (draft.title ? `,\n    TITLE = '${String(draft.title).replace(/'/g, "''")}'` : '')
+                    + '\n);';
+            };
+
+            const paint = () => api.render({
+                lede: 'Drag a field onto a role, or click a role and pick one. The preview below runs against the '
+                    + `sample from <strong>${_escapeHtml(context.snapshot.source)}</strong>, so it is the real shape of your data.`,
+                body: `
+                    <div class="etlsql-studio-builder">
+                        <div class="etlsql-studio-builder-types">
+                            ${STUDIO_VISUAL_GROUPS.map(group => `<div class="etlsql-studio-builder-group">
+                                <span>${_escapeHtml(group.name)}</span>
+                                <div>${group.types.map(type => `<button type="button" data-builder-type="${type}"
+                                    class="${draft.type === type ? 'active' : ''}">${type}</button>`).join('')}</div>
+                            </div>`).join('')}
+                        </div>
+                        <div class="etlsql-studio-builder-main">
+                            <div class="etlsql-studio-builder-bind">
+                                <div class="etlsql-studio-builder-fields">
+                                    <span>Fields</span>
+                                    ${columns.map(column => `<button type="button" class="etlsql-studio-builder-field"
+                                        draggable="true" data-builder-field="${_escapeHtml(column)}"
+                                        data-field-kind="${guidedFieldKind(column)}">${_escapeHtml(column)}</button>`).join('')}
+                                </div>
+                                <div class="etlsql-studio-builder-roles">
+                                    <span>Roles</span>
+                                    ${rolesForVisualType(draft.type).map(role => roleSlotMarkup(role, draft)).join('')
+                                        || '<p class="etlsql-studio-guided-hint">This visual type takes no field bindings.</p>'}
+                                </div>
+                            </div>
+                            <div class="etlsql-studio-builder-preview" data-builder-preview></div>
+                        </div>
+                    </div>
+                    <label class="etlsql-studio-guided-field"><span>Title</span>
+                        <input type="text" data-builder-title value="${_escapeHtml(draft.title)}"
+                            placeholder="${_escapeHtml(`${draft.type} visual`)}"></label>`
+                    + sqlPreviewMarkup(sql()),
+                actions: [
+                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                    {
+                        id: 'add', label: 'Add to canvas', primary: true,
+                        disabled: missingRequiredRoles(previewVisual()).length > 0,
+                        run: addVisual,
+                    },
+                ],
+                wire: host => {
+                    renderVisualSample(host.querySelector('[data-builder-preview]'), previewVisual(), context.snapshot);
+
+                    host.querySelectorAll('[data-builder-type]').forEach(button => button.addEventListener('click', () => {
+                        draft.type = button.dataset.builderType;
+                        // Roles differ per type, so carry over only the ones the new type accepts and
+                        // fill the rest — an author switching BAR to PIE should not land on a blank.
+                        // A repeatable role is a numbered family, so it is matched by prefix; keeping
+                        // TABLE's COLUMN1..n on a BAR left every column spoken for and no role bound.
+                        const roles = rolesForVisualType(draft.type);
+                        const exact = new Set(roles.filter(role => !role.repeatable).map(role => role.key));
+                        const prefixes = roles.filter(role => role.repeatable).map(role => role.key.replace(/S$/, ''));
+                        draft.mappings = Object.fromEntries(Object.entries(draft.mappings).filter(([role]) =>
+                            exact.has(role) || prefixes.some(prefix => new RegExp(`^${prefix}\\d*$`, 'i').test(role))));
+                        autoAssignRoles(draft, columns);
+                        paint();
+                    }));
+
+                    host.querySelectorAll('[data-builder-field]').forEach(field => {
+                        field.addEventListener('dragstart', event => {
+                            event.dataTransfer.setData('text/plain', field.dataset.builderField);
+                            event.dataTransfer.effectAllowed = 'copy';
+                        });
+                    });
+
+                    host.querySelectorAll('[data-role-slot]').forEach(slot => {
+                        const role = slot.dataset.roleSlot;
+                        slot.addEventListener('dragover', event => {
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = 'copy';
+                            slot.classList.add('is-over');
+                        });
+                        slot.addEventListener('dragleave', () => slot.classList.remove('is-over'));
+                        slot.addEventListener('drop', event => {
+                            event.preventDefault();
+                            slot.classList.remove('is-over');
+                            assignRole(role, event.dataTransfer.getData('text/plain'));
+                        });
+                    });
+
+                    host.querySelectorAll('[data-role-select]').forEach(select => select.addEventListener('change', () =>
+                        assignRole(select.dataset.roleSelect, select.value)));
+                    host.querySelectorAll('[data-role-clear]').forEach(button => button.addEventListener('click', () =>
+                        assignRole(button.dataset.roleClear, '')));
+                    host.querySelectorAll('[data-role-add]').forEach(button => button.addEventListener('click', () => {
+                        const next = nextRepeatableRole(draft, button.dataset.roleAdd);
+                        assignRole(next, columns.find(column => !Object.values(draft.mappings).includes(column)) || columns[0]);
+                    }));
+
+                    host.querySelector('[data-builder-title]')?.addEventListener('input', event => { draft.title = event.target.value; });
+                },
+            });
+
+            const assignRole = (role, column) => {
+                if (!role) return;
+                if (column) draft.mappings[role] = column;
+                else delete draft.mappings[role];
+                paint();
+            };
+
+            const addVisual = async () => {
+                api.busy(true);
+                const binding = visualSourceBinding();
+                const type = draft.type;
+                const added = await canonicalDesignerMutation(`Add ${type} visual`, design => {
+                    const page = design.pages[0];
+                    page.visuals ||= [];
+                    const name = uniqueVisualName(design, datasetBaseName(draft.title || `${type.toLowerCase()}_visual`));
+                    const bottom = page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
+                    const wide = type === 'TABLE' || type === 'MATRIX';
+                    page.visuals.push({
+                        id: `studio_${Date.now().toString(36)}`,
+                        name,
+                        type,
+                        gridCol: 1,
+                        gridRow: bottom + 1,
+                        gridColSpan: wide ? 12 : type === 'CARD' ? 3 : 6,
+                        gridRowSpan: type === 'CARD' ? 2 : wide ? 6 : 4,
+                        title: draft.title || null,
+                        dataset: binding.dataset,
+                        mappings: { ...draft.mappings },
+                        options: { ...binding.options },
+                    });
+                    return name;
+                });
+                api.busy(false);
+                if (added) _feedback.notify(`Added ${type} visual ${added}.`, { title: 'Visual added', tone: 'success' });
+                api.close(added);
+            };
+
+            paint();
+        });
+    }
+
+    function roleSlotMarkup(role, draft) {
+        const columns = _snapshotColumns(activeDocumentContext().snapshot).map(_columnName);
+        const options = column => `<option value="">—</option>${columns.map(item =>
+            `<option ${item === column ? 'selected' : ''}>${_escapeHtml(item)}</option>`).join('')}`;
+
+        if (!role.repeatable) {
+            const value = draft.mappings[role.key] || '';
+            return `<div class="etlsql-studio-role-slot${value ? ' is-bound' : ''}${role.required && !value ? ' is-required' : ''}" data-role-slot="${role.key}">
+                <span>${_escapeHtml(role.label)}${role.required ? ' *' : ''}</span>
+                <div><select data-role-select="${role.key}">${options(value)}</select>
+                ${value ? `<button type="button" data-role-clear="${role.key}" aria-label="Clear ${_escapeHtml(role.label)}">&times;</button>` : ''}</div>
+                <small>${_escapeHtml(role.hint || '')}</small>
+            </div>`;
+        }
+
+        // A repeatable role is a numbered family (COLUMN1, COLUMN2, …); each bound entry gets its own
+        // slot and there is always one more to drop onto.
+        const bound = Object.entries(draft.mappings)
+            .filter(([key, value]) => value && key.toUpperCase().startsWith(role.key.replace(/S$/, '')))
+            .sort((left, right) => Number(left[0].replace(/\D/g, '') || 0) - Number(right[0].replace(/\D/g, '') || 0));
+        return `<div class="etlsql-studio-role-repeat">
+            <span>${_escapeHtml(role.label)}${role.required ? ' *' : ''}</span>
+            ${bound.map(([key, value]) => `<div class="etlsql-studio-role-slot is-bound" data-role-slot="${_escapeHtml(key)}">
+                <div><select data-role-select="${_escapeHtml(key)}">${options(value)}</select>
+                <button type="button" data-role-clear="${_escapeHtml(key)}" aria-label="Remove column">&times;</button></div>
+            </div>`).join('')}
+            <div class="etlsql-studio-role-slot is-empty" data-role-slot="${_escapeHtml(nextRepeatableRole(draft, role.key))}">
+                <span>Drop a field here</span>
+                <button type="button" data-role-add="${role.key}">+ Add column</button>
+            </div>
+            <small>${_escapeHtml(role.hint || '')}</small>
+        </div>`;
+    }
+
+    function nextRepeatableRole(draft, roleKey) {
+        const prefix = roleKey.replace(/S$/, '');
+        let index = 1;
+        while (draft.mappings[`${prefix}${index}`]) index++;
+        return `${prefix}${index}`;
+    }
+
+    /** Fills unbound roles with the first column whose kind suits them, so the preview is never blank. */
+    function autoAssignRoles(draft, columns) {
+        const used = new Set(Object.values(draft.mappings).filter(Boolean));
+        // Reusing a column across two roles is legitimate (count by the same field you group by), so
+        // running out of unused columns must still bind something rather than leave the role empty.
+        const pick = kind => columns.find(column => !used.has(column) && (kind === 'any' || guidedFieldKind(column) === kind))
+            || columns.find(column => !used.has(column))
+            || columns.find(column => kind === 'any' || guidedFieldKind(column) === kind)
+            || columns[0];
+
+        for (const role of rolesForVisualType(draft.type)) {
+            if (role.repeatable) {
+                if (!Object.keys(draft.mappings).some(key => key.toUpperCase().startsWith(role.key.replace(/S$/, '')))) {
+                    columns.slice(0, 6).forEach((column, index) => { draft.mappings[`${role.key.replace(/S$/, '')}${index + 1}`] = column; });
+                }
+                continue;
+            }
+            if (draft.mappings[role.key] || !role.required) continue;
+            const column = pick(role.kind);
+            if (!column) continue;
+            draft.mappings[role.key] = column;
+            used.add(column);
+        }
     }
 
     // --- Steps 2-8 --------------------------------------------------------------------------------
@@ -1533,7 +2169,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                 </ul>`,
             actions: [
                 { id: 'close', label: 'Got it', run: () => api.close(null) },
-                { id: 'bar', label: 'Add a bar chart', primary: true, run: () => { api.close('bar'); addVisualToCanvas('BAR'); } },
+                { id: 'build', label: 'Build a visual', primary: true, run: () => { api.close('build'); openChartBuilder({ kicker: 'Step 2 · Visuals' }); } },
             ],
         }));
     }
@@ -1553,13 +2189,42 @@ export async function createStudioWorkbench(container, opts = {}) {
         }));
     }
 
+    // The rail teaches; it is not the only way in. An author who already knows the shape of a report
+    // dismisses it once and keeps every capability through the sidebar's Build section, so hiding it
+    // costs nothing. The choice is remembered because re-dismissing it on every report is the kind of
+    // friction that makes a teaching surface resented.
+    const STUDIO_RAIL_PREFERENCE = 'etlsql-studio-guided-rail';
+
+    function guidedRailHidden() {
+        try {
+            return localStorage.getItem(STUDIO_RAIL_PREFERENCE) === 'hidden';
+        } catch {
+            // Private browsing and locked-down hosts throw on access; showing the rail is the safe
+            // default because it is discoverable and dismissible again.
+            return false;
+        }
+    }
+
+    function setGuidedRailHidden(hidden) {
+        try {
+            localStorage.setItem(STUDIO_RAIL_PREFERENCE, hidden ? 'hidden' : 'shown');
+        } catch {
+            // A preference that cannot persist still applies for this session.
+        }
+        state.guidedRailHidden = hidden;
+        renderReportWorkflowChrome(getActiveDoc());
+        renderSidebarContent(state.activeActivity);
+        if (!hidden) _feedback.notify('Guided steps are back on the report toolbar.', { title: 'Guided steps', tone: 'info' });
+    }
+
     function renderReportWorkflowChrome(doc, designState = state.designerInstance?.getState?.()) {
         const workflow = doc?.reportWorkflow;
         const isReport = Boolean(doc && (doc.path || '').toLowerCase().endsWith('.rptsql'));
-        workflowBar.hidden = !isReport || !workflow;
+        const hidden = state.guidedRailHidden ?? guidedRailHidden();
+        workflowBar.hidden = !isReport || !workflow || hidden;
         visualStage.classList.toggle('is-dashboard-workflow', isReport && workflow === 'dashboard');
         visualStage.classList.toggle('is-paginated-workflow', isReport && workflow === 'paginated');
-        if (!isReport || !workflow) {
+        if (!isReport || !workflow || hidden) {
             workflowBar.innerHTML = '';
             return;
         }
@@ -1586,6 +2251,16 @@ export async function createStudioWorkbench(container, opts = {}) {
             const page = designState?.pages?.[0] || {};
             workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Paginated Report</span><strong>Physical page authoring</strong><span>Work top-to-bottom: prompts, repeating detail, totals, page furniture, then pagination and export.</span></div><ol class="etlsql-workflow-steps etlsql-paginated-steps"><li><button type="button" data-workflow-step="catalog"${stepClass('catalog')}><b>1</b><span><strong>Choose data</strong><small>Connection, dataset, fields</small></span></button></li><li><button type="button" data-workflow-step="parameter"${stepClass('parameter')}><b>2</b><span><strong>Define parameters</strong><small>Input prompts before execution</small></span></button></li><li><button type="button" data-workflow-step="details"${stepClass('details')}><b>3</b><span><strong>Groups + details</strong><small>Matrix groups and table rows</small></span></button></li><li><button type="button" data-workflow-step="totals"${stepClass('totals')}><b>4</b><span><strong>Add totals</strong><small>Grand total on the detail table</small></span></button></li><li><button type="button" data-workflow-step="furniture"${stepClass('furniture')}><b>5</b><span><strong>Header + footer</strong><small>Text bands and page breaks</small></span></button></li><li><div><b>6</b><span><strong>Page setup + breaks</strong><small>Writes PRINT_LAYOUT through the patcher</small></span>${pageSetupMarkup(page)}</div></li><li><button type="button" data-workflow-step="preview"><b>7</b><span><strong>Preview pagination</strong><small>Run and inspect physical pages</small></span></button></li><li><button type="button" data-workflow-step="export"><b>8</b><span><strong>Export</strong><small>PDF for pages; CSV/Excel for results</small></span></button></li></ol>`;
         }
+
+        const dismiss = document.createElement('button');
+        dismiss.type = 'button';
+        dismiss.className = 'etlsql-workflow-dismiss';
+        dismiss.dataset.dismissRail = '';
+        dismiss.setAttribute('aria-label', 'Hide guided steps');
+        dismiss.title = 'Hide guided steps — the Build section in the sidebar keeps every action';
+        dismiss.textContent = '×';
+        dismiss.addEventListener('click', () => setGuidedRailHidden(true));
+        workflowBar.appendChild(dismiss);
 
         workflowBar.querySelectorAll('[data-page-setup]').forEach(control => control.addEventListener('change', async () => {
             await canonicalDesignerMutation('Update page setup', design => {
@@ -1825,8 +2500,10 @@ export async function createStudioWorkbench(container, opts = {}) {
                         renderTabs();
                         if (state.selectedVisualId) {
                             showVisualProperties();
-                        } else if (state.activeActivity === 'palette' || state.activeActivity === 'catalog' || state.activeActivity === 'filters') {
+                        } else if (state.activeActivity === 'palette' || state.activeActivity === 'catalog') {
                             renderSidebarContent(state.activeActivity);
+                        } else if (state.filterSidebarOpen) {
+                            renderFilterPanel();
                         }
                     }
                 });
@@ -2836,6 +3513,13 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     document.addEventListener('click', () => closeNewTabMenu());
 
+    function setFilterSidebar(open) {
+        state.filterSidebarOpen = Boolean(open);
+        filterSidebar.classList.toggle('collapsed', !state.filterSidebarOpen);
+        shell.querySelector('[data-activity="filters"]')?.classList.toggle('active', state.filterSidebarOpen);
+        if (state.filterSidebarOpen) renderFilterPanel();
+    }
+
     function setContextualRailVisibility() {
         const paletteBtn = shell.querySelector('[data-activity="palette"]');
         const filtersBtn = shell.querySelector('[data-activity="filters"]');
@@ -2844,6 +3528,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (state.activeDocId === '__home__') {
             if (paletteBtn) paletteBtn.style.display = 'none';
             if (filtersBtn) filtersBtn.style.display = 'none';
+            setFilterSidebar(false);
             if (projectionGroup) projectionGroup.style.opacity = '0.4';
             return;
         }
@@ -2859,7 +3544,9 @@ export async function createStudioWorkbench(container, opts = {}) {
             filtersBtn.style.display = isRpt ? 'flex' : 'none';
         }
 
-        if (!isRpt && (state.activeActivity === 'palette' || state.activeActivity === 'filters')) {
+        if (!isRpt) setFilterSidebar(false);
+
+        if (!isRpt && state.activeActivity === 'palette') {
             setActivity('explorer');
         }
     }
@@ -2868,7 +3555,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (state.activeActivity === activity && state.sidebarOpen) {
             state.sidebarOpen = false;
             sidebar.classList.add('collapsed');
-            shell.querySelectorAll('.etlsql-studio-rail-btn').forEach(b => b.classList.remove('active'));
+            shell.querySelectorAll('.etlsql-studio-rail-btn:not([data-activity="filters"])').forEach(b => b.classList.remove('active'));
             return;
         }
 
@@ -2876,7 +3563,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         state.sidebarOpen = true;
         sidebar.classList.remove('collapsed');
 
-        shell.querySelectorAll('.etlsql-studio-rail-btn').forEach(b => {
+        shell.querySelectorAll('.etlsql-studio-rail-btn:not([data-activity="filters"])').forEach(b => {
             b.classList.toggle('active', b.dataset.activity === activity);
         });
 
@@ -2980,7 +3667,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         context.filterFields = context.filterFields.filter(field => field !== col);
         updateSnapshotPackage(context.snapshot);
         state.designerInstance?.refreshSnapshot?.();
-        if (state.activeActivity === 'filters') renderSidebarContent('filters');
+        if (state.filterSidebarOpen) renderFilterPanel();
         _feedback.notify(`Promoted ${col} to a parameter-bound control.`, { title: 'Slicer Promoted', tone: 'success' });
         return slicerName;
     }
@@ -3049,27 +3736,114 @@ export async function createStudioWorkbench(container, opts = {}) {
         return { minimum: iso(start), maximum: iso(end) };
     }
 
-    function wireFilterLane() {
-        const drop = sidebarContent.querySelector('[data-filter-drop]');
+    function openFilterSetupDialog(initialField = null) {
+        const context = activeDocumentContext();
+        const columns = _snapshotColumns(context.snapshot).length ? _snapshotColumns(context.snapshot) : context.sourceColumns;
+        if (!columns.length) {
+            _feedback.notify('Choose a connection and table in Data before creating a filter.', { title: 'Load fields first', tone: 'warning' });
+            if (state.activeActivity !== 'catalog') setActivity('catalog');
+            return;
+        }
+
+        const names = columns.map(_columnName).filter(Boolean);
+        const firstField = names.includes(initialField) ? initialField : names[0];
+        const close = () => {
+            modalBackdrop.hidden = true;
+            modalBox.innerHTML = '';
+            modalBox.classList.remove('etlsql-studio-filter-dialog');
+            modalBox.removeAttribute('role');
+            modalBox.removeAttribute('aria-modal');
+            modalBox.removeAttribute('aria-label');
+            globalThis.document.removeEventListener('keydown', handleKeydown);
+        };
+        const handleKeydown = event => {
+            if (event.key === 'Escape') close();
+        };
+        const render = field => {
+            const column = columns.find(item => _columnName(item) === field) || { name: field };
+            const type = _columnType(column, context.snapshot?.rows || []);
+            const values = (context.snapshot?.rows || []).map(row => row?.[field]).filter(value => value != null);
+            const existing = context.activeFilters[field] || {};
+            let controls = '<div class="etlsql-filter-awaiting-data">Values appear after a sample loads.</div>';
+            if (type === 'number' && values.length) {
+                const numbers = values.map(Number).filter(Number.isFinite);
+                const minimum = Math.min(...numbers);
+                const maximum = Math.max(...numbers);
+                controls = `<div class="etlsql-filter-dialog-range"><label>Minimum<input type="number" data-filter-dialog-min value="${_escapeHtml(existing.minimum ?? minimum)}" min="${minimum}" max="${maximum}"></label><label>Maximum<input type="number" data-filter-dialog-max value="${_escapeHtml(existing.maximum ?? maximum)}" min="${minimum}" max="${maximum}"></label></div>`;
+            } else if (type === 'date' && values.length) {
+                const dates = values.map(value => String(value).slice(0, 10)).filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value)).sort();
+                controls = `<div class="etlsql-filter-dialog-range"><label>Start date<input type="date" data-filter-dialog-min value="${_escapeHtml(existing.minimum || dates[0] || '')}"></label><label>End date<input type="date" data-filter-dialog-max value="${_escapeHtml(existing.maximum || dates.at(-1) || '')}"></label></div>`;
+            } else if (values.length) {
+                const distinct = [...new Set(values.map(String))].slice(0, 12);
+                const selected = existing.values?.length ? existing.values.map(String) : distinct;
+                controls = `<fieldset class="etlsql-filter-dialog-values"><legend>Included values</legend>${distinct.map(value => `<label><input type="checkbox" data-filter-dialog-value value="${_escapeHtml(value)}" ${selected.includes(value) ? 'checked' : ''}><span>${_escapeHtml(value)}</span><small>${values.filter(item => String(item) === value).length}</small></label>`).join('')}</fieldset>`;
+            }
+            const sourceLabel = context.selectedSource?.table
+                ? `${context.selectedSource.connection}.${context.selectedSource.table}`
+                : context.snapshot?.source || 'current dataset';
+            modalBox.innerHTML = `
+                <div class="etlsql-studio-modal-header"><div><strong>New filter</strong><span>${_escapeHtml(sourceLabel)}</span></div><button type="button" class="etlsql-studio-sidebar-close" data-filter-dialog-close aria-label="Close filter setup">${_studioIcon('close', 13)}</button></div>
+                <div class="etlsql-studio-modal-body etlsql-filter-dialog-body">
+                    <label class="etlsql-filter-dialog-field">Field<select data-filter-dialog-field>${names.map(name => `<option value="${_escapeHtml(name)}" ${name === field ? 'selected' : ''}>${_escapeHtml(name)}</option>`).join('')}</select></label>
+                    <div class="etlsql-filter-dialog-kind"><span>${type}</span><small>${values.length ? `${values.length} sampled values` : 'No sample values'}</small></div>
+                    <label class="etlsql-filter-dialog-field">Apply to<select data-filter-dialog-scope><option value="dataset" ${existing.scope !== 'visual' ? 'selected' : ''}>Dataset</option><option value="visual" ${existing.scope === 'visual' ? 'selected' : ''} ${state.selectedVisualId ? '' : 'disabled'}>Selected visual</option></select></label>
+                    ${controls}
+                </div>
+                <div class="etlsql-studio-modal-footer"><button type="button" class="etlsql-studio-btn" data-filter-dialog-close>Cancel</button><button type="button" class="etlsql-studio-btn is-primary" data-filter-dialog-apply>Apply filter</button></div>`;
+            modalBox.querySelectorAll('[data-filter-dialog-close]').forEach(button => button.addEventListener('click', close));
+            modalBox.querySelector('[data-filter-dialog-field]').addEventListener('change', event => render(event.target.value));
+            modalBox.querySelector('[data-filter-dialog-apply]').addEventListener('click', () => {
+                const selectedField = modalBox.querySelector('[data-filter-dialog-field]').value;
+                const selectedColumn = columns.find(item => _columnName(item) === selectedField) || { name: selectedField };
+                const selectedType = _columnType(selectedColumn, context.snapshot?.rows || []);
+                const filter = ensureFilter(selectedField, selectedType === 'text' ? 'categorical' : selectedType);
+                filter.kind = selectedType === 'text' ? 'categorical' : selectedType;
+                filter.scope = modalBox.querySelector('[data-filter-dialog-scope]').value;
+                filter.target = filter.scope === 'visual' ? state.selectedVisualId : null;
+                if (selectedType === 'text') filter.values = [...modalBox.querySelectorAll('[data-filter-dialog-value]:checked')].map(input => input.value);
+                else {
+                    filter.minimum = modalBox.querySelector('[data-filter-dialog-min]')?.value || null;
+                    filter.maximum = modalBox.querySelector('[data-filter-dialog-max]')?.value || null;
+                }
+                if (!context.filterFields.includes(selectedField)) context.filterFields.push(selectedField);
+                updateSnapshotPackage(context.snapshot);
+                state.designerInstance?.refreshSnapshot?.();
+                close();
+                setFilterSidebar(true);
+                void persistFilter(selectedField);
+            });
+            modalBox.querySelector('[data-filter-dialog-field]').focus();
+        };
+
+        modalBox.classList.add('etlsql-studio-filter-dialog');
+        modalBox.setAttribute('role', 'dialog');
+        modalBox.setAttribute('aria-modal', 'true');
+        modalBox.setAttribute('aria-label', 'Create a filter');
+        modalBackdrop.hidden = false;
+        globalThis.document.addEventListener('keydown', handleKeydown);
+        render(firstField);
+    }
+
+    function wireFilterLane(host = filterSidebarContent) {
+        const drop = host.querySelector('[data-filter-drop]');
         drop?.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('application/x-etlsql-field')) { event.preventDefault(); drop.classList.add('drag-over'); } });
         drop?.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
         drop?.addEventListener('drop', event => {
             event.preventDefault();
             const field = event.dataTransfer.getData('application/x-etlsql-field') || event.dataTransfer.getData('text/plain');
-            const context = activeDocumentContext();
-            if (field && !context.filterFields.includes(field)) context.filterFields.push(field);
-            renderSidebarContent(state.activeActivity);
+            drop.classList.remove('drag-over');
+            if (field) openFilterSetupDialog(field);
         });
 
-        sidebarContent.querySelectorAll('[data-remove-filter]').forEach(button => button.addEventListener('click', async () => {
+        host.querySelectorAll('[data-remove-filter]').forEach(button => button.addEventListener('click', async () => {
             const context = activeDocumentContext();
             const removed = context.activeFilters[button.dataset.removeFilter];
             context.filterFields = context.filterFields.filter(field => field !== button.dataset.removeFilter);
             delete context.activeFilters[button.dataset.removeFilter];
-            updateSnapshotPackage(context.snapshot); state.designerInstance?.refreshSnapshot?.(); renderSidebarContent(state.activeActivity);
+            updateSnapshotPackage(context.snapshot); state.designerInstance?.refreshSnapshot?.(); renderFilterPanel();
             if (removed) await persistFilter(button.dataset.removeFilter, removed);
         }));
-        sidebarContent.querySelectorAll('[data-filter-scope]').forEach(select => select.addEventListener('change', async () => {
+        host.querySelectorAll('[data-filter-scope]').forEach(select => select.addEventListener('change', async () => {
             const context = activeDocumentContext();
             const field = select.dataset.filterScope;
             const column = _snapshotColumns(context.snapshot).find(item => _columnName(item) === field) || { name: field };
@@ -3081,7 +3855,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             await persistFilter(field, previous);
             await persistFilter(field);
         }));
-        sidebarContent.querySelectorAll('[data-filter-min], [data-filter-max]').forEach(input => input.addEventListener('change', () => {
+        host.querySelectorAll('[data-filter-min], [data-filter-max]').forEach(input => input.addEventListener('change', () => {
             const context = activeDocumentContext();
             const field = input.dataset.filterMin || input.dataset.filterMax;
             const filter = ensureFilter(field, 'number');
@@ -3090,23 +3864,23 @@ export async function createStudioWorkbench(container, opts = {}) {
             updateSnapshotPackage(context.snapshot); state.designerInstance?.refreshSnapshot?.();
             persistFilter(field);
         }));
-        sidebarContent.querySelectorAll('[data-filter-value]').forEach(input => input.addEventListener('change', () => {
+        host.querySelectorAll('[data-filter-value]').forEach(input => input.addEventListener('change', () => {
             const context = activeDocumentContext();
             const field = input.dataset.filterValue;
-            const values = [...sidebarContent.querySelectorAll('[data-filter-value]:checked')].filter(item => item.dataset.filterValue === field).map(item => item.value);
+            const values = [...host.querySelectorAll('[data-filter-value]:checked')].filter(item => item.dataset.filterValue === field).map(item => item.value);
             const filter = ensureFilter(field, 'categorical');
             filter.values = values;
             updateSnapshotPackage(context.snapshot); state.designerInstance?.refreshSnapshot?.();
             persistFilter(field);
         }));
-        sidebarContent.querySelectorAll('[data-date-preset]').forEach(select => select.addEventListener('change', () => {
+        host.querySelectorAll('[data-date-preset]').forEach(select => select.addEventListener('change', () => {
             if (select.value === 'custom') return;
             const field = select.dataset.datePreset;
             const filter = ensureFilter(field, 'date');
             Object.assign(filter, relativeDateRange(select.value));
-            persistFilter(field).then(() => renderSidebarContent(state.activeActivity));
+            persistFilter(field).then(() => renderFilterPanel());
         }));
-        sidebarContent.querySelectorAll('[data-filter-date-min], [data-filter-date-max]').forEach(input => input.addEventListener('change', () => {
+        host.querySelectorAll('[data-filter-date-min], [data-filter-date-max]').forEach(input => input.addEventListener('change', () => {
             const field = input.dataset.filterDateMin || input.dataset.filterDateMax;
             const filter = ensureFilter(field, 'date');
             if (input.dataset.filterDateMin) filter.minimum = input.value;
@@ -3114,20 +3888,16 @@ export async function createStudioWorkbench(container, opts = {}) {
             updateSnapshotPackage(activeDocumentContext().snapshot); state.designerInstance?.refreshSnapshot?.();
             persistFilter(field);
         }));
-        sidebarContent.querySelectorAll('[data-promote-slicer]').forEach(button => button.addEventListener('click', () => promoteFilterToSlicer(button.dataset.promoteSlicer)));
+        host.querySelectorAll('[data-promote-slicer]').forEach(button => button.addEventListener('click', () => promoteFilterToSlicer(button.dataset.promoteSlicer)));
     }
 
-    function wireFields() {
-        sidebarContent.querySelectorAll('[data-field]').forEach(button => {
+    function wireFields(host = sidebarContent) {
+        host.querySelectorAll('[data-field]').forEach(button => {
             button.addEventListener('dragstart', event => {
                 event.dataTransfer.setData('application/x-etlsql-field', button.dataset.field);
                 event.dataTransfer.setData('text/plain', button.dataset.field);
             });
-            button.addEventListener('click', () => {
-                const context = activeDocumentContext();
-                if (!context.filterFields.includes(button.dataset.field)) context.filterFields.push(button.dataset.field);
-                renderSidebarContent(state.activeActivity);
-            });
+            button.addEventListener('click', () => openFilterSetupDialog(button.dataset.field));
         });
     }
 
@@ -3206,8 +3976,10 @@ export async function createStudioWorkbench(container, opts = {}) {
             context.previewedDatasetSignature = signature;
             updateSnapshotPackage(context.snapshot);
             state.designerInstance?.refreshSnapshot?.();
-            if (state.activeActivity === 'catalog' || state.activeActivity === 'filters' || state.activeActivity === 'palette') {
+            if (state.activeActivity === 'catalog' || state.activeActivity === 'palette') {
                 renderSidebarContent(state.activeActivity);
+            } else if (state.filterSidebarOpen) {
+                renderFilterPanel();
             }
         } catch (error) {
             if (error?.name !== 'AbortError' && !controller.signal.aborted && context.syncRevision === revision) {
@@ -3223,11 +3995,13 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     function renderDataWorkflow() {
         const context = activeDocumentContext();
-        sidebarTitle.textContent = 'Data & Filters';
-        sidebarContent.innerHTML = `<div class="etlsql-studio-data-workflow"><div class="etlsql-studio-workflow-intro"><strong>Build from data</strong><span>A dataset is one named query every visual can read from. Create one, apply optional filters, then assign fields to chart roles.</span><button type="button" class="etlsql-studio-btn is-primary etlsql-studio-new-dataset" data-new-dataset>+ New dataset</button></div><ol class="etlsql-studio-steps"><li class="${context.selectedSource ? 'active' : ''}">Data</li><li class="${context.filterFields.length ? 'active' : ''}">Filter</li><li class="${hasDataSample() ? 'active' : ''}">Visual</li><li>Preview</li></ol><section><div class="etlsql-studio-subhead"><div><strong>Connections</strong><span>${context.selectedSource ? _escapeHtml(context.selectedSource.connection) : 'Choose one to browse tables'}</span></div><button type="button" class="etlsql-sidebar-action" data-action="wizard">+ New</button></div><div class="etlsql-catalog-conn-list"><span class="etlsql-studio-loading">Loading connections…</span></div><div class="etlsql-catalog-table-list" data-table-list></div></section><section><div class="etlsql-studio-subhead"><div><strong>Fields</strong><span>${hasDataSample() ? `${context.snapshot.rowCount} rows cached for previews` : 'Choose a table to create a sample'}</span></div><span class="etlsql-studio-count">${_snapshotColumns(context.snapshot).length || context.sourceColumns.length}</span></div><div class="etlsql-studio-field-list">${fieldListMarkup()}</div></section><section class="etlsql-studio-filter-lane" data-filter-lane><div class="etlsql-studio-subhead"><div><strong>Filters</strong><span>Drop fields here</span></div><span class="etlsql-studio-count">${context.filterFields.length}</span></div><div class="etlsql-studio-filter-drop" data-filter-drop>${context.filterFields.length ? context.filterFields.map(filterCardMarkup).join('') : '<div class="etlsql-studio-empty-guidance"><strong>No filters yet</strong><span>Drag a loaded field here. Filters are created only when you add them.</span></div>'}</div></section></div>`;
-        sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard);
+        sidebarTitle.textContent = 'Data';
+        sidebarContent.innerHTML = `<div class="etlsql-studio-data-workflow"><div class="etlsql-studio-data-actions"><button type="button" class="etlsql-studio-btn is-primary etlsql-studio-new-connection" data-action="wizard">${_studioIcon('plus', 13)} New connection</button><button type="button" class="etlsql-studio-btn etlsql-studio-new-dataset" data-new-dataset>${_studioIcon('plus', 13)} New dataset</button><button type="button" class="etlsql-studio-btn etlsql-studio-build-chart" data-build-chart>${_studioIcon('plus', 13)} Build a chart</button></div>${guidedRailToggleMarkup()}<section><div class="etlsql-studio-subhead"><div><strong>Connections</strong><span>${context.selectedSource ? _escapeHtml(context.selectedSource.connection) : 'Choose one to browse tables'}</span></div></div><div class="etlsql-catalog-conn-list"><span class="etlsql-studio-loading">Loading connections…</span></div><div class="etlsql-catalog-table-list" data-table-list></div></section><section><div class="etlsql-studio-subhead"><div><strong>Fields</strong><span>${hasDataSample() ? `${context.snapshot.rowCount} rows cached · drag into Filters` : 'Choose a table to create a sample'}</span></div><span class="etlsql-studio-count">${_snapshotColumns(context.snapshot).length || context.sourceColumns.length}</span></div><div class="etlsql-studio-field-list">${fieldListMarkup()}</div></section></div>`;
+        sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', () => handleOpenConnectionWizard());
         sidebarContent.querySelector('[data-new-dataset]')?.addEventListener('click', () => openDataWizard());
-        wireFields(); wireFilterLane();
+        sidebarContent.querySelector('[data-build-chart]')?.addEventListener('click', () => openChartBuilder());
+        wireGuidedRailToggle(sidebarContent);
+        wireFields();
         const renderConnections = connections => {
             const list = sidebarContent.querySelector('.etlsql-catalog-conn-list'); if (!list) return;
             list.innerHTML = connections.map(item => { const alias = typeof item === 'string' ? item : item.alias || item.name; return `<button type="button" class="etlsql-studio-source-btn" data-connection="${_escapeHtml(alias)}">${_studioIcon('catalog',14)}<strong>${_escapeHtml(alias)}</strong></button>`; }).join('') || '<div class="etlsql-studio-empty-compact">No connections configured.</div>';
@@ -3241,6 +4015,13 @@ export async function createStudioWorkbench(container, opts = {}) {
             }));
         };
         loadConnectionAliases().then(renderConnections).catch(() => renderConnections([]));
+    }
+
+    function renderFilterPanel() {
+        const context = activeDocumentContext();
+        filterSidebarContent.innerHTML = `<div class="etlsql-studio-filter-workflow"><div class="etlsql-studio-filter-intro"><strong>Filter the report</strong><span>Drop a field from Data or choose one from the current table.</span><button type="button" class="etlsql-studio-btn is-primary etlsql-studio-new-filter" data-new-filter>${_studioIcon('plus', 13)} New filter</button></div><div class="etlsql-studio-subhead"><div><strong>Active filters</strong><span>${context.selectedSource?.table ? _escapeHtml(`${context.selectedSource.connection}.${context.selectedSource.table}`) : 'Current dataset'}</span></div><span class="etlsql-studio-count">${context.filterFields.length}</span></div><div class="etlsql-studio-filter-drop" data-filter-drop>${context.filterFields.length ? context.filterFields.map(filterCardMarkup).join('') : '<div class="etlsql-studio-empty-guidance"><strong>No filters yet</strong><span>Drag a field here or choose New filter. Studio will ask how to apply it.</span></div>'}</div></div>`;
+        filterSidebarContent.querySelector('[data-new-filter]')?.addEventListener('click', () => openFilterSetupDialog());
+        wireFilterLane(filterSidebarContent);
     }
 
     // Connection aliases come from different places per host: the desktop reads the workspace's
@@ -3275,7 +4056,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         sidebarTitle.textContent = 'Visual Components';
         sidebarContent.innerHTML = `<section class="etlsql-studio-library-section"><div class="etlsql-studio-subhead"><div><strong>On this page</strong><span>Report tree</span></div></div><div class="etlsql-studio-report-tree">${reportTreeMarkup()}</div></section><section class="etlsql-studio-library-section"><label class="etlsql-studio-library-search"><span>Add a visual</span><input type="search" data-visual-search placeholder="Search visual types" ${hasDataSample() ? '' : 'disabled'}></label>${hasDataSample() ? '' : '<div class="etlsql-studio-empty-guidance"><strong>Data comes first</strong><span>Create a dataset so every visual can read from one named query.</span><button type="button" class="etlsql-studio-btn is-primary" data-choose-data>Create a dataset</button></div>'}<div data-visual-groups>${STUDIO_VISUAL_GROUPS.map(group => `<div class="etlsql-studio-visual-group" data-visual-group><strong>${group.name}</strong><div>${group.types.map(type => `<button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="${type}" data-visual-name="${type}" ${hasDataSample() ? '' : 'disabled'}>${type}</button>`).join('')}</div></div>`).join('')}</div></section>`;
         sidebarContent.querySelector('[data-choose-data]')?.addEventListener('click', () => runChooseDataStep());
-        sidebarContent.querySelectorAll('[data-add-visual]').forEach(button => { button.draggable = !button.disabled; button.addEventListener('dragstart', event => { event.dataTransfer.setData('application/x-etlsql-visual', button.dataset.addVisual); event.dataTransfer.setData('text/plain', button.dataset.addVisual); }); button.addEventListener('click', () => addVisualToCanvas(button.dataset.addVisual)); });
+        sidebarContent.querySelectorAll('[data-add-visual]').forEach(button => { button.draggable = !button.disabled; button.addEventListener('dragstart', event => { event.dataTransfer.setData('application/x-etlsql-visual', button.dataset.addVisual); event.dataTransfer.setData('text/plain', button.dataset.addVisual); }); button.addEventListener('click', () => openChartBuilder({ type: button.dataset.addVisual })); });
         sidebarContent.querySelectorAll('[data-tree-visual]').forEach(button => button.addEventListener('click', () => state.designerInstance?.selectVisual?.(button.dataset.treeVisual)));
         const search = sidebarContent.querySelector('[data-visual-search]'); search?.addEventListener('input', () => { const query = search.value.trim().toUpperCase(); sidebarContent.querySelectorAll('[data-visual-name]').forEach(button => button.hidden = Boolean(query) && !button.dataset.visualName.includes(query)); });
     }
@@ -3466,9 +4247,11 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     function renderSidebarContent(activity) {
+        if (state.filterSidebarOpen && activity !== 'filters') renderFilterPanel();
         sidebarContent.style.display = '';
         inspector.style.display = 'none';
-        if (activity === 'catalog' || activity === 'filters') { renderDataWorkflow(); return; }
+        if (activity === 'catalog') { renderDataWorkflow(); return; }
+        if (activity === 'filters') { setFilterSidebar(true); return; }
         if (activity === 'palette') { renderVisualLibrary(); return; }
         if (activity === 'explorer') {
             sidebarTitle.textContent = 'Explorer';
@@ -3742,7 +4525,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         return names;
     }
 
-    function handleOpenConnectionWizard() {
+    function handleOpenConnectionWizard({ onDone = null } = {}) {
         createConnectionWizard({
             // Without these the wizard cannot detect a collision or pick a free alias, so it would
             // happily suggest a name the script already uses.
@@ -3764,6 +4547,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                 renderTabs();
                 renderVisualStage();
                 _feedback.notify(`Created connection ${metadata.alias}`, { title: 'Connection Created', tone: 'success' });
+                onDone?.(metadata.alias);
             }
         });
     }
@@ -3854,14 +4638,19 @@ export async function createStudioWorkbench(container, opts = {}) {
     });
 
     shell.querySelectorAll('.etlsql-studio-rail-btn[data-activity]').forEach(btn => {
-        btn.addEventListener('click', () => setActivity(btn.dataset.activity));
+        btn.addEventListener('click', () => {
+            if (btn.dataset.activity === 'filters') setFilterSidebar(!state.filterSidebarOpen);
+            else setActivity(btn.dataset.activity);
+        });
     });
 
     shell.querySelector('[data-sidebar-close]')?.addEventListener('click', () => {
         state.sidebarOpen = false;
         sidebar.classList.add('collapsed');
-        shell.querySelectorAll('.etlsql-studio-rail-btn').forEach(b => b.classList.remove('active'));
+        shell.querySelectorAll('.etlsql-studio-rail-btn:not([data-activity="filters"])').forEach(b => b.classList.remove('active'));
     });
+
+    shell.querySelector('[data-filter-sidebar-close]')?.addEventListener('click', () => setFilterSidebar(false));
 
     shell.querySelectorAll('[data-add-visual]').forEach(btn => {
         btn.addEventListener('click', () => addVisualToCanvas(btn.dataset.addVisual));

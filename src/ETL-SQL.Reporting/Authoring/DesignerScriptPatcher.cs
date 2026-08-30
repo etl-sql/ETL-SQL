@@ -176,16 +176,23 @@ public sealed class DesignerScriptPatcher
             var query = string.IsNullOrWhiteSpace(dataset.Query)
                 ? "SELECT 1 AS Placeholder"
                 : dataset.Query.Trim().TrimEnd(';');
+            var lifespan = DesignerScriptGenerationService.DatasetLifespanClauses(dataset);
             if (existing.TryGetValue(name, out var statement))
             {
-                if (string.Equals(statement.SourceQuery.ToSql().Trim().TrimEnd(';'), query, StringComparison.Ordinal))
+                var sameQuery = string.Equals(statement.SourceQuery.ToSql().Trim().TrimEnd(';'), query, StringComparison.Ordinal);
+                var sameLifespan = string.Equals(
+                    DesignerScriptGenerationService.DatasetLifespanClauses(
+                        dataset with { RefreshInterval = statement.RefreshInterval, Ttl = statement.Ttl }),
+                    lifespan,
+                    StringComparison.Ordinal);
+                if (sameQuery && sameLifespan)
                     continue;
-                var desired = $"CREATE DATASET {name} AS ({lineEnding}  {query}{lineEnding});";
+                var desired = $"CREATE DATASET {name}{lifespan} AS ({lineEnding}  {query}{lineEnding});";
                 AddStatementReplacementIfChanged(script, statement, desired, replacements);
                 continue;
             }
 
-            additions.Add($"CREATE DATASET {name} AS ({lineEnding}  {query}{lineEnding});");
+            additions.Add($"CREATE DATASET {name}{lifespan} AS ({lineEnding}  {query}{lineEnding});");
         }
 
         foreach (var (name, statement) in existing)

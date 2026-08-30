@@ -19,6 +19,8 @@
  * CodeMirror bundle loaded on demand: designer/codemirror/codemirror-bundle.min.js
  */
 
+import { renderVisualSample } from './visual-preview.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 2 — DAG Visualization
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4699,22 +4701,10 @@ export function createDesigner(container, opts = {}) {
             return;
         }
 
-        // Dependency-free SVG preview fallback; production manifests use the same native SVG surface.
-        const sample = rows[0] || [];
-        const catIdx = (Array.isArray(sample) && sample.length >= 3) ? 1 : 0;
-        const valIdx = (Array.isArray(sample) && sample.length >= 2) ? sample.length - 1 : 0;
-        const categories = rows.map(row => String(Array.isArray(row) ? row[catIdx] : row));
-        const values = rows.map(row => Number(Array.isArray(row) ? row[valIdx] : 0) || 0);
-        const maximum = Math.max(1, ...values.map(value => Math.abs(value)));
-        const width = 360, height = 180, pad = 24;
-        const slot = (width - pad * 2) / Math.max(1, values.length);
-        const marks = values.map((value, index) => {
-            const barHeight = Math.abs(value) / maximum * (height - pad * 2);
-            const x = pad + index * slot + slot * .15;
-            const y = height - pad - barHeight;
-            return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(slot * .7).toFixed(1)}" height="${barHeight.toFixed(1)}" rx="2" fill="${VCOLOR[type] || '#3b82f6'}"><title>${esc(categories[index])}: ${esc(value)}</title></rect></g>`;
-        }).join('');
-        bodyEl.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(visual.title || visual.name)}" style="width:100%;height:100%"><line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" stroke="#cbd5e1"/>${marks}</svg>`;
+        // Dependency-free preview fallback; production manifests use the native SVG surface. It reads
+        // the visual's MAPPINGS, so assigning a column to a role changes what the card draws. The
+        // previous fallback chose columns by position and ignored the mapping entirely.
+        renderVisualSample(bodyEl, visual, { columns: snapshotPackage.columns || [], rows });
     }
 
     function renderCanvas() {

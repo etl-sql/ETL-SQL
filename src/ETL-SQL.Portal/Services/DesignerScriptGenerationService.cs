@@ -30,7 +30,9 @@ internal static class DesignerAuthoringStateAdapter
         (state.Datasets ?? []).Select(dataset => new DesignerAuthoringDataset(
             dataset.Id,
             dataset.Name,
-            dataset.Query)).ToList(),
+            dataset.Query,
+            dataset.RefreshInterval,
+            dataset.Ttl)).ToList(),
         state.ReportStyle is null
             ? null
             : new DesignerAuthoringReportStyle(
