@@ -44,6 +44,8 @@ const _TYPE_COLOR = {
     statement:   '#475569',
     conditional: '#f59e0b',
     loop:        '#f97316',
+    parallel:    '#06b6d4',
+    validation:  '#eab308',
     io:          '#14b8a6',
     outbound:    '#0f766e',
     destructive: '#dc2626',
@@ -170,6 +172,7 @@ function _lineageReach(rootId, allEdges, allNodes) {
  * @param {Array}       graph.edges [{ source: string, target: string, label?: string }]
  * @param {Object}      [options]
  * @param {string}      [options.theme='portal']   'portal' | 'vscode' — affects colour palette
+ * @param {string}      [options.orientation='vertical'] 'vertical' | 'horizontal'
  * @param {Function}    [options.onNodeClick]       Called with (nodeId, nodeMeta) on click
  * @returns {{ dispose: Function, resize: Function, showDetail: Function }}
  *   dispose() — removes DOM listeners and clears the rendered graph
@@ -194,7 +197,15 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     let panY = 0;
     let zoom = graphNodes.length > 40 ? 0.45 : 0.75;
     let disposed = false;
-    let positions = _computeLayout(graphNodes, graphEdges);
+    const computePositions = (layoutNodes, layoutEdges) => {
+        const projected = _computeLayout(layoutNodes, layoutEdges);
+        if (options.orientation !== 'horizontal') return projected;
+        return Object.fromEntries(Object.entries(projected).map(([id, point]) => [id, {
+            x: point.y,
+            y: point.x * 0.55,
+        }]));
+    };
+    let positions = computePositions(graphNodes, graphEdges);
     let searchMatches = [];
     let searchIdx = -1;
     const dragRemovers = [];
@@ -266,12 +277,13 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     zoomControls.append(
         zoomButton('+', 'Zoom in', () => setZoom(Math.min(2, zoom * 1.2))),
         zoomButton('-', 'Zoom out', () => setZoom(Math.max(0.1, zoom / 1.2))),
-        zoomButton('Reset', 'Reset view', () => { panX = 0; panY = 0; zoom = graphNodes.length > 40 ? 0.45 : 0.75; updateViewport(); })
+        zoomButton('Reset', 'Fit graph to view', fitToView)
     );
 
     const presentTypes = [...new Set(graphNodes.map(n => n.type))].sort();
     buildChips();
     render();
+    requestAnimationFrame(fitToView);
 
     searchInput.addEventListener('input', () => {
         const term = searchInput.value.trim().toLowerCase();
@@ -360,7 +372,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     function render() {
         if (disposed) return;
         const nodesToRender = visibleNodes();
-        positions = { ...positions, ..._computeLayout(nodesToRender, visibleEdges()) };
+        positions = { ...positions, ...computePositions(nodesToRender, visibleEdges()) };
         cardLayer.replaceChildren();
         for (const node of nodesToRender) renderCard(node);
         updateFocusBadge();
@@ -378,6 +390,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         card.style.width = '260px';
         card.style.border = `1px solid ${_nodeColor(node.type)}`;
         card.dataset.nodeId = node.id;
+        card.dataset.dagNode = node.id;
 
         const header = document.createElement('div');
         header.className = 'etlsql-dag-card-header';
@@ -624,7 +637,10 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const a = centerOf(fromPort, rect);
         const b = centerOf(toPort, rect);
         const inPath = !focusSet || (focusSet.has(edge.source) && focusSet.has(edge.target));
-        drawLink(a.x, a.y, b.x, b.y, inPath ? '#64748b' : 'rgba(71,85,105,0.08)', inPath ? 1.8 : 0.8);
+        const path = drawLink(a.x, a.y, b.x, b.y, inPath ? '#64748b' : 'rgba(71,85,105,0.08)', inPath ? 1.8 : 0.8);
+        path.dataset.dagSource = edge.source;
+        path.dataset.dagTarget = edge.target;
+        if (edge.label) path.dataset.dagLabel = edge.label;
         if (edge.label && inPath) drawEdgeBadge(a.x, a.y, b.x, b.y, edge.label, false, false);
     }
 
@@ -659,6 +675,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         path.setAttribute('fill', 'none');
         if (dashed) path.setAttribute('stroke-dasharray', '4 4');
         svg.appendChild(path);
+        return path;
     }
 
     function drawEdgeBadge(x1, y1, x2, y2, text, inPath, dim) {
@@ -687,6 +704,26 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 
     function setZoom(value) {
         zoom = value;
+        updateViewport();
+    }
+
+    function fitToView() {
+        const visible = visibleNodes();
+        if (!visible.length || !canvas.clientWidth || !canvas.clientHeight) return;
+        const points = visible.map(node => positions[node.id]).filter(Boolean);
+        if (!points.length) return;
+
+        const minX = Math.min(...points.map(point => point.x)) - 150;
+        const maxX = Math.max(...points.map(point => point.x)) + 150;
+        const minY = Math.min(...points.map(point => point.y)) - 45;
+        const maxY = Math.max(...points.map(point => point.y)) + 110;
+        const graphWidth = Math.max(300, maxX - minX);
+        const graphHeight = Math.max(155, maxY - minY);
+        zoom = Math.max(0.2, Math.min(1.1,
+            (canvas.clientWidth - 48) / graphWidth,
+            (canvas.clientHeight - 40) / graphHeight));
+        panX = -((minX + maxX) / 2) * zoom;
+        panY = canvas.clientHeight * 0.1 - ((minY + maxY) / 2) * zoom;
         updateViewport();
     }
 
@@ -754,7 +791,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             for (const remove of dragRemovers) remove();
             container.innerHTML = '';
         },
-        resize() { updateViewport(); },
+        resize() { fitToView(); },
         showDetail(id) { showNodeDetails(nodeById[id]); },
     };
 }

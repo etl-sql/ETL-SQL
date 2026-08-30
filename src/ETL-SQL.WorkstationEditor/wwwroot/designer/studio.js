@@ -13,7 +13,7 @@
  *   createStudioWorkbench(container, options)
  */
 
-import { createScriptEditor, createDesigner, createScriptResultsPanel, normalizeRunTrace } from './designer.js';
+import { createScriptEditor, createDesigner, createScriptResultsPanel, normalizeRunTrace, renderDag } from './designer.js';
 import { createConnectionWizard, encryptClientPassword } from './connection-wizard.js';
 
 const _feedback = globalThis.ETLSQLFeedback || {
@@ -136,6 +136,7 @@ const STUDIO_ROUTES = Object.freeze({
     hover: '/api/designer/hover',
     format: '/api/designer/format',
     run: '/api/designer/run',
+    dag: '/api/designer/dag',
     parse: '/api/designer/parse',
     patch: '/api/designer/patch',
     queryFilter: '/api/designer/query-filter',
@@ -239,33 +240,6 @@ GROUP BY Region;
 `,
 });
 
-function _parseEtlDag(scriptText) {
-    if (!scriptText || typeof scriptText !== 'string') return [];
-    const nodes = [];
-    const connRegex = /CREATE\s+CONNECTION\s+([A-Za-z0-9_]+)\s+AS\s+([A-Za-z0-9_]+)/gi;
-    let m;
-    while ((m = connRegex.exec(scriptText)) !== null) {
-        nodes.push({ id: m[1], label: m[1], kind: 'connection', detail: `Connector (${m[2]})` });
-    }
-
-    const selectIntoRegex = /SELECT\s+[\s\S]*?\s+INTO\s+(#[A-Za-z0-9_]+)\s+FROM\s+([A-Za-z0-9_\.]+)/gi;
-    while ((m = selectIntoRegex.exec(scriptText)) !== null) {
-        nodes.push({ id: m[1], label: m[1], kind: 'dataset', detail: `Staged extract from ${m[2]}` });
-    }
-
-    const transformRegex = /TRANSFORM\s+(#[A-Za-z0-9_]+)\s+FROM\s+(#[A-Za-z0-9_]+)\s+USING\s+([A-Za-z0-9_]+)/gi;
-    while ((m = transformRegex.exec(scriptText)) !== null) {
-        nodes.push({ id: m[1], label: m[1], kind: 'transform', detail: `Algorithm (${m[3]}) on ${m[2]}` });
-    }
-
-    const mergeRegex = /MERGE\s+INTO\s+([A-Za-z0-9_\.]+)\s+USING\s+(#[A-Za-z0-9_]+)/gi;
-    while ((m = mergeRegex.exec(scriptText)) !== null) {
-        nodes.push({ id: m[1], label: m[1], kind: 'target', detail: `Destination write from ${m[2]}` });
-    }
-
-    return nodes;
-}
-
 // Prefer a structured { error } / { message } body over a raw HTML error page.
 async function _readErrorText(response) {
     let body = '';
@@ -330,6 +304,8 @@ export async function createStudioWorkbench(container, opts = {}) {
         sidebarOpen: true,
         editorInstance: null,
         resultsPanel: null,
+        dagInstance: null,
+        dagDocumentId: null,
     };
 
     const homeDocumentContext = createDocumentContext();
@@ -346,6 +322,9 @@ export async function createStudioWorkbench(container, opts = {}) {
             runAbort: null,
             runActive: false,
             previewAbort: null,
+            dagAbort: null,
+            dagRevision: 0,
+            lastValidDag: null,
             syncRevision: 0,
             previewedDatasetSignature: null,
             resultsTrace: []
@@ -694,6 +673,101 @@ export async function createStudioWorkbench(container, opts = {}) {
         }
     }
 
+    function disposePipelineDag() {
+        state.dagInstance?.dispose?.();
+        state.dagInstance = null;
+        state.dagDocumentId = null;
+    }
+
+    function paintPipelineDag(doc, graph, message, tone = 'neutral') {
+        if (getActiveDoc() !== doc) return;
+        disposePipelineDag();
+        const nodes = graph?.nodes ?? graph?.Nodes ?? [];
+        const edges = graph?.edges ?? graph?.Edges ?? [];
+        canvasContainer.innerHTML = `
+            <section class="etlsql-studio-dag-view" data-dag-view>
+                <header class="etlsql-studio-dag-head">
+                    <div>
+                        <strong>Pipeline execution map</strong>
+                        <span>${nodes.length} stage${nodes.length === 1 ? '' : 's'} · ${edges.length} edge${edges.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <span class="etlsql-studio-dag-status is-${_escapeHtml(tone)}" data-dag-status>${_escapeHtml(message)}</span>
+                </header>
+                <div class="etlsql-studio-dag-canvas" data-dag-canvas></div>
+            </section>`;
+        const dagCanvas = canvasContainer.querySelector('[data-dag-canvas]');
+        state.dagInstance = renderDag(dagCanvas, { nodes, edges }, {
+            theme: document.body.classList.contains('theme-dark') ? 'vscode' : 'portal',
+            orientation: 'horizontal',
+            onNodeClick: (_nodeId, meta) => {
+                const line = meta?.line ?? meta?.Line;
+                if (!line) return;
+                if (doc.projection === 'canvas') setProjection('split');
+                state.editorInstance?.gotoLine?.(line);
+            },
+        });
+        state.dagDocumentId = doc.id;
+    }
+
+    function paintPipelineDagMessage(title, detail, tone = 'neutral') {
+        disposePipelineDag();
+        canvasContainer.innerHTML = `
+            <section class="etlsql-studio-dag-view" data-dag-view>
+                <div class="etlsql-studio-dag-message is-${_escapeHtml(tone)}">
+                    <strong>${_escapeHtml(title)}</strong>
+                    <span>${_escapeHtml(detail)}</span>
+                </div>
+            </section>`;
+    }
+
+    async function renderPipelineDag(doc, content) {
+        const context = documentContext(doc);
+        if (context.lastValidDag?.script === content) {
+            paintPipelineDag(doc, context.lastValidDag.graph, 'Engine projection');
+            return;
+        }
+
+        const revision = ++context.dagRevision;
+        context.dagAbort?.abort();
+        const controller = new AbortController();
+        context.dagAbort = controller;
+
+        if (context.lastValidDag) {
+            paintPipelineDag(doc, context.lastValidDag.graph, 'Updating from script…', 'pending');
+        } else {
+            paintPipelineDagMessage('Projecting pipeline…', 'Reading control flow and validation stages from the current script.');
+        }
+
+        try {
+            const response = await authFetch(apiBase + STUDIO_ROUTES.dag, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script: content, documentUri: doc.path || doc.name }),
+                signal: controller.signal,
+            });
+            if (!response.ok) throw new Error(await _readErrorText(response));
+            const projected = await response.json();
+            if (projected?.parsed === false || projected?.error) {
+                throw new Error(projected.error || 'The script could not be projected.');
+            }
+            if (controller.signal.aborted || context.dagRevision !== revision || getActiveDoc() !== doc || doc.content !== content) return;
+
+            const graph = projected?.dag || projected || { nodes: [], edges: [] };
+            context.lastValidDag = { script: content, graph };
+            paintPipelineDag(doc, graph, 'Engine projection');
+        } catch (error) {
+            if (controller.signal.aborted || context.dagRevision !== revision || getActiveDoc() !== doc) return;
+            const detail = error?.message || String(error);
+            if (context.lastValidDag) {
+                paintPipelineDag(doc, context.lastValidDag.graph, `Last valid flow · ${detail}`, 'warning');
+            } else {
+                paintPipelineDagMessage('Pipeline projection failed', detail, 'error');
+            }
+        } finally {
+            if (context.dagAbort === controller) context.dagAbort = null;
+        }
+    }
+
     function renderVisualStage() {
         const doc = getActiveDoc();
         if (!doc) return;
@@ -706,43 +780,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                 state.designerInstance.dispose?.();
                 state.designerInstance = null;
             }
-            const nodes = _parseEtlDag(content);
-            if (nodes.length === 0) {
-                canvasContainer.innerHTML = `
-                    <div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px; text-align:center; color:var(--portal-text-soft,#8b949e);">
-                        <span style="font-size:2rem; margin-bottom:12px;">⚡</span>
-                        <strong style="font-size:0.9375rem; color:var(--portal-text,#f0f6fc); margin-bottom:6px;">Pipeline DAG Flow (0 Stages)</strong>
-                        <p style="font-size:0.8125rem; max-width:380px; margin:0; line-height:1.4;">Add <code>CREATE CONNECTION</code>, <code>SELECT ... INTO #staging</code>, <code>TRANSFORM</code>, or <code>MERGE INTO</code> statements to visualize the data movement DAG.</p>
-                    </div>
-                `;
-            } else {
-                canvasContainer.innerHTML = `
-                    <div class="etlsql-studio-dag-view" data-dag-view style="width:100%; height:100%; overflow-y:auto; display:flex; flex-direction:column; gap:16px; padding:16px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size:0.75rem; font-weight:700; color:var(--portal-text-soft,#8b949e); text-transform:uppercase; letter-spacing:0.05em;">
-                                Pipeline DAG Execution Flow (${nodes.length} Stages)
-                            </span>
-                            <span style="font-size:0.75rem; color:var(--portal-accent,#388bfd);">
-                                ${_studioIcon('git', 12)} Zero-Trust Governed Flow
-                            </span>
-                        </div>
-                        <div class="etlsql-studio-dag-grid" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                            ${nodes.map((n, i) => `
-                                <div class="etlsql-studio-dag-card node-${n.kind}" data-dag-node="${_escapeHtml(n.id)}" style="background:var(--portal-surface,#161b22); border:1px solid var(--portal-border,#30363d); border-radius:8px; padding:12px 16px; min-width:180px; flex:1;">
-                                    <div style="display:flex; align-items:center; justify-content:space-between;">
-                                        <span class="etlsql-card-type-pill" style="font-size:9px;">${n.kind.toUpperCase()}</span>
-                                        <span style="font-size:10px; color:var(--portal-muted,#8b949e);">${i + 1}</span>
-                                    </div>
-                                    <strong style="display:block; margin:8px 0 4px; font-size:0.875rem; color:var(--portal-text,#f0f6fc);">${_escapeHtml(n.label)}</strong>
-                                    <span style="font-size:0.75rem; color:var(--portal-text-soft,#8b949e);">${_escapeHtml(n.detail)}</span>
-                                </div>
-                                ${i < nodes.length - 1 ? '<span style="color:var(--portal-border,#30363d); font-size:1.2rem;">➔</span>' : ''}
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            }
+            void renderPipelineDag(doc, content);
         } else {
+            disposePipelineDag();
             if (!state.designerInstance) {
                 canvasContainer.innerHTML = '';
                 state.designerInstance = createDesigner(canvasContainer, {
@@ -2515,15 +2555,21 @@ export async function createStudioWorkbench(container, opts = {}) {
                     doc.content = newContent;
                     if (!isSettingDocumentContent) doc.isDirty = true;
                     renderTabs();
-                    if (!isSettingDocumentContent && !isSyncingFromDesigner && state.designerInstance) {
-                        context.syncRevision++;
-                        const revision = context.syncRevision;
-                        context.previewAbort?.abort();
-                        state.designerInstance.invalidateScriptApply?.();
+                    if (!isSettingDocumentContent && !isSyncingFromDesigner) {
                         clearTimeout(codeMirrorDebounce);
-                        codeMirrorDebounce = setTimeout(() => {
-                            void synchronizeCodeToCanvas(doc, newContent, revision);
-                        }, 400);
+                        if ((doc.path || '').endsWith('.etlsql')) {
+                            codeMirrorDebounce = setTimeout(() => {
+                                if (getActiveDoc() === doc && doc.content === newContent) renderVisualStage();
+                            }, 400);
+                        } else if (state.designerInstance) {
+                            context.syncRevision++;
+                            const revision = context.syncRevision;
+                            context.previewAbort?.abort();
+                            state.designerInstance.invalidateScriptApply?.();
+                            codeMirrorDebounce = setTimeout(() => {
+                                void synchronizeCodeToCanvas(doc, newContent, revision);
+                            }, 400);
+                        }
                     }
                 }
             }
@@ -2591,8 +2637,12 @@ export async function createStudioWorkbench(container, opts = {}) {
             window.removeEventListener('pagehide', releaseLeasesOnPageHide);
             if (renewLeaseTimer) window.clearInterval(renewLeaseTimer);
             clearTimeout(codeMirrorDebounce);
-            for (const doc of state.documents) documentContext(doc).previewAbort?.abort();
+            for (const doc of state.documents) {
+                documentContext(doc).previewAbort?.abort();
+                documentContext(doc).dagAbort?.abort();
+            }
             tabResizeObserver?.disconnect();
+            disposePipelineDag();
             state.designerInstance?.dispose?.();
             state.designerInstance = null;
             state.resultsPanel?.dispose?.();

@@ -159,10 +159,18 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
     for discovering and controlling local Studio instances.
   - [x] When a fixed `--port` is requested, identify a healthy Studio already owning it and offer to
     open that instance or select another port instead of returning only "address already in use."
-- [ ] **P1 — Replace the placeholder pipeline card list with the engine DAG projection**: Consume
+- [x] **P1 — Replace the placeholder pipeline card list with the engine DAG projection**: Consume
   `ScriptDagProjectionService` output, preserve real edges and branches, represent control flow and
   validation stages, and keep pipeline edits lossless. Do not describe the regex-generated linear
   card sequence as an interactive DAG.
+  - Studio now requests the authenticated `/api/designer/dag` contract on both hosts and renders the
+    response through the canonical `renderDag` canvas. The client-side `_parseEtlDag` regex and flat
+    arrow-card sequence are gone. Node selection navigates to the projected source line without
+    changing the script, and invalid intermediate edits retain the last valid graph.
+  - `ScriptDagBuilder` now projects `IF`/`ELSE IF`/`ELSE`, `PARALLEL`, loops, and `TRY`/`CATCH` as
+    labeled branches that converge on later stages. `ASSERT`, `ASSERT TABLE`, `ASSERT JOB`,
+    `EXPECT SCHEMA`, and validation commands are explicit quality-gate nodes. Focused service and
+    browser tests pin branch edges, host parity, stale-error behavior, and byte preservation.
 - [x] **P1 — Repair and expand round-trip evidence**: No patcher regression was red when this was
   picked up, so the work was the fixture corpus — and the corpus is what found the regressions. There
   is now a checked-in, directory-discovered lane at `tests/fixtures/reporting/designer-round-trip/`

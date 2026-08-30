@@ -50,10 +50,15 @@ INTO #raw_sales
 FROM staging_db.sales_orders
 WHERE sale_date >= DATEADD(DAY, -7, GETDATE());
 
--- 2. Validate clean non-null amounts
-UPDATE #raw_sales SET amount = 0 WHERE amount IS NULL;
+-- 2. Branch clean rows from rows that need review
+IF 1 = 1 BEGIN
+  SELECT * INTO #ready_sales FROM #raw_sales WHERE amount IS NOT NULL;
+END ELSE BEGIN
+  SELECT * INTO #quarantine_sales FROM #raw_sales WHERE amount IS NULL;
+END;
 
-PRINT 'Staging extract & clean complete.';`,
+-- 3. Stop before loading if the quality gate fails
+ASSERT (SELECT COUNT(*) FROM #ready_sales) > 0, 'No clean sales rows were staged.';`,
     isDirty: false,
     projection: 'split',
   },

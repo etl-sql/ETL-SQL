@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Replaced Studio's regex-generated pipeline cards with the shared engine DAG projection. `.etlsql`
+  canvases now show real sequential and branching edges, including `IF`, `PARALLEL`, loop,
+  `TRY`/`CATCH`, and validation stages. The canonical graph opens as a fitted left-to-right execution
+  map, node selection navigates to source, and invalid edits keep the last valid topology without
+  rewriting the script.
+
 - Added the desktop Studio host lifecycle. `etlsql studio <project>` now reconnects to a healthy
   per-project host, while `studio list`, `studio open`, `studio stop`, `--new-window`, and the
   advanced `--new-instance` option manage local instances explicitly. Authenticated session records

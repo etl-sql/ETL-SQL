@@ -218,25 +218,28 @@ To prevent clobbering hand-crafted SQL queries, CTEs, or custom procedural logic
 
 ---
 
-## 7. Pipeline Studio Foundational DAG (Visual ETL Placeholder)
+## 7. Pipeline execution-map projection
 
-When opening an `.etlsql` script, the Canvas View projects the pipeline's execution flow into an interactive node DAG:
+When opening an `.etlsql` script, Canvas View sends the current bytes to the host-neutral
+`ScriptDagProjectionService` and renders its nodes and edges through the canonical `renderDag`
+component. Both desktop and Portal expose the same authenticated `/api/designer/dag` contract.
 
-- **Source Nodes (`EXTRACT / READ`)**: Connections, Gateway resources, files (`CSV`, `Parquet`, `JSON`), REST endpoints.
-- **Staging Nodes (`#temp tables`)**: Memory-staged intermediate tables.
-- **Transform Recipe Nodes (`TRANSFORM`)**: Visual step-builder for rolling averages, period-over-period delta %, pivots, date gap filling, and deduplication.
-- **Data Quality Gate Nodes (`VALIDATE / CHECK`)**: Zero-Trust assertion rules (`EXPECT NOT NULL`, `ASSERT UNIQUE`, range limits, drift rules).
-- **Destination Nodes (`MERGE / LOAD / EXPORT`)**: Target database tables, SFTP destinations, S3/Azure object storage buckets.
+- **Execution stages** — connections, statements, transforms, procedures, file movement, writes,
+  exports, datasets, and report-authoring statements retain their parser-derived source line.
+- **Control flow** — `IF` chains, `PARALLEL` blocks, loops, and `TRY`/`CATCH` produce labeled branch
+  edges. Branch exits converge on the next sequential stage instead of being flattened.
+- **Quality gates** — assertions, schema expectations, and validation commands use a distinct
+  `validation` node type.
+- **Navigation** — selecting a node reveals its source line. Search, stage-type filters, focus mode,
+  pan, zoom, and fit-to-view are graph interactions only.
 
-All nodes and connections map losslessly to statements in the underlying `.etlsql` file.
+The script remains authoritative. Projection requests never patch it, and graph interactions do not
+write to it. A parse failure leaves the last valid graph visible with an error state while the editor
+keeps the exact invalid intermediate bytes. Any future add/connect editing must use a canonical
+parser/patcher contract and prove byte preservation before it is enabled.
 
-> **Implementation status.** The current Canvas View for `.etlsql` is **not** an interactive DAG. It
-> recognises four statement shapes by regular expression (`CREATE CONNECTION`, `SELECT ... INTO
-> #temp`, `TRANSFORM ... USING`, `MERGE INTO`) and renders them as a flat, read-only row of cards
-> joined by arrows. Nodes are not clickable, draggable, or editable; branches, conditional edges,
-> validation gates, file/REST sources, and object-storage destinations are not parsed. Replacing this
-> with the real engine projection from `ScriptDagProjectionService` is tracked work — do not describe
-> the current card sequence as an interactive DAG.
+The projection is intentionally read-only. It is an accurate execution map, not yet a visual pipeline
+editor, and the UI does not claim that nodes can be added, connected, or reordered on the canvas.
 
 ---
 
@@ -334,7 +337,8 @@ To ensure zero regression risk and maintain business continuity:
 - **Slice 4 — Property Inspector & Smart Defaults**: Field role assignment (Measure/Category/Breakdown), aggregation selectors (`SUM`, `AVG`, `COUNT`, `MIN`, `MAX`), 1-click number formatting (currency, percent, compact), and design token themes.
 - **Slice 5 — Collapsible Code Drawer & Bi-Directional Sync**: Slide-up CodeMirror 6 editor (`Alt+C`), surgical AST text patching, debounced code-to-canvas synchronization, and inline lint diagnostics.
 - **Slice 6 — Governed Data Preview & Multi-Surface Packaging**: Interactive preview execution under caller RLS and memory arbiters; shared asset packaging across Portal Studio (`/studio/index.html`), VS Code Webview, and Workstation Editor.
-- **Slice 7 — Pipeline Studio Foundational DAG (Future)**: Visual node-graph canvas for multi-stage ETL pipelines emitting `.etlsql` scripts.
+- **Slice 7 — Pipeline Studio Foundational DAG**: Parser-derived execution-map canvas for multi-stage
+  ETL pipelines; visual add/connect authoring remains future work behind a lossless patcher contract.
 - **Slice 8 — Stabilization & Legacy Retirement**: Full parity certification, deprecation notices, and clean retirement of legacy `ReportBuilder` and `WorkstationEditor`.
 
 ---

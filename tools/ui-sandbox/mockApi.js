@@ -7,6 +7,7 @@
 //   POST /api/designer/analyze  {script}       -> { diagnostics }
 //   POST /api/designer/complete {script,line,column,connectionRef} -> { items }
 //   POST /api/designer/run      {script,selection,connectionRef} -> { columns, rows }
+//   POST /api/designer/dag      {script,documentUri} -> { parsed, dag }
 //   GET  /api/designer/schema?connection=demo -> { tables }
 //   (save endpoints are bypassed via opts.onSaveScript in the story)
 //
@@ -46,6 +47,33 @@ export function makeMockApi(seedState) {
         if (datasets.length) designState.datasets = datasets;
         data = { designState };
       }
+    } else if (path.endsWith('/api/designer/dag')) {
+      data = (body.script || '').includes('>>> INVALID <<<') ? {
+        parsed: false,
+        error: 'Syntax error: Unexpected token in pipeline script',
+        dag: { nodes: [], edges: [] },
+      } : {
+        parsed: true,
+        error: null,
+        dag: {
+          nodes: [
+            { id: 'staging_db', label: 'CONNECT staging_db', type: 'connection', meta: { line: 1 } },
+            { id: '#raw_sales', label: 'SELECT INTO #raw_sales', type: 'io', meta: { line: 8 } },
+            { id: 'quality_branch', label: 'IF', type: 'conditional', meta: { line: 15 } },
+            { id: '#ready_sales', label: 'SELECT INTO #ready_sales', type: 'io', meta: { line: 16 } },
+            { id: '#quarantine_sales', label: 'SELECT INTO #quarantine_sales', type: 'io', meta: { line: 19 } },
+            { id: 'quality_gate', label: 'ASSERT', type: 'validation', meta: { line: 22 } },
+          ],
+          edges: [
+            { source: 'staging_db', target: '#raw_sales' },
+            { source: '#raw_sales', target: 'quality_branch' },
+            { source: 'quality_branch', target: '#ready_sales', label: 'TRUE' },
+            { source: 'quality_branch', target: '#quarantine_sales', label: 'ELSE' },
+            { source: '#ready_sales', target: 'quality_gate' },
+            { source: '#quarantine_sales', target: 'quality_gate' },
+          ],
+        },
+      };
     } else if (path.endsWith('/api/designer/analyze')) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
     } else if (path.endsWith('/api/designer/complete')) {

@@ -322,8 +322,10 @@ public sealed class WorkstationEditorTests
         Assert.DoesNotContain(result!.Diagnostics, d => d.Code == "AvoidSelectStar");
     }
 
-    [Fact]
-    public async Task ScriptDag_ReturnsDesignTimeFlow()
+    [Theory]
+    [InlineData("/api/script/dag")]
+    [InlineData("/api/designer/dag")]
+    public async Task ScriptDag_ReturnsDesignTimeFlow(string route)
     {
         using var temp = new TempWorkspace();
         await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
@@ -331,10 +333,19 @@ public sealed class WorkstationEditorTests
         await app.StartAsync();
 
         using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
-        using var dag = new HttpRequestMessage(HttpMethod.Post, "/api/script/dag");
+        using var dag = new HttpRequestMessage(HttpMethod.Post, route);
         dag.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
         dag.Content = JsonContent.Create(new ScriptDagRequest(
-            "CREATE CONNECTION m AS MOCKDB();\nSELECT UserID INTO #staging FROM m.Users;",
+            """
+            CREATE CONNECTION m AS MOCKDB();
+            SELECT UserID INTO #staging FROM m.Users;
+            IF 1 = 1 BEGIN
+              SELECT UserID INTO #accepted FROM #staging;
+            END ELSE BEGIN
+              SELECT UserID INTO #rejected FROM #staging;
+            END;
+            ASSERT (SELECT COUNT(*) FROM #accepted) > 0;
+            """,
             "pipeline.etlsql"));
 
         var response = await client.SendAsync(dag);
@@ -344,6 +355,10 @@ public sealed class WorkstationEditorTests
         Assert.Contains("\"parsed\":true", body, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("CONNECT m", body, StringComparison.Ordinal);
         Assert.Contains("SELECT INTO #staging", body, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"conditional\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"type\":\"validation\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"label\":\"TRUE\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"label\":\"ELSE\"", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

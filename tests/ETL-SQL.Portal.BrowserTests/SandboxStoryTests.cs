@@ -956,6 +956,66 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_PipelineCanvasUsesEngineDagAndPreservesScriptBytes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
+
+        var status = page.Locator("[data-dag-status]");
+        await status.WaitForAsync();
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
+
+        var sourceBefore = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content");
+        var dagNodes = page.Locator("[data-dag-node]");
+        Assert.Equal(6, await dagNodes.CountAsync());
+        Assert.Contains("IF", await page.Locator("[data-dag-node='quality_branch']").InnerTextAsync());
+        Assert.Contains("ASSERT", await page.Locator("[data-dag-node='quality_gate']").InnerTextAsync());
+
+        var canvasBox = await page.Locator(".etlsql-dag-canvas").BoundingBoxAsync();
+        Assert.NotNull(canvasBox);
+        for (var i = 0; i < await dagNodes.CountAsync(); i++)
+        {
+            var nodeBox = await dagNodes.Nth(i).BoundingBoxAsync();
+            Assert.NotNull(nodeBox);
+            Assert.True(nodeBox!.X >= canvasBox!.X - 1 && nodeBox.Y >= canvasBox.Y - 1);
+            Assert.True(nodeBox.X + nodeBox.Width <= canvasBox.X + canvasBox.Width + 1);
+            Assert.True(nodeBox.Y + nodeBox.Height <= canvasBox.Y + canvasBox.Height + 1);
+        }
+
+        var trueEdge = page.Locator("[data-dag-source='quality_branch'][data-dag-target='#ready_sales'][data-dag-label='TRUE']");
+        var elseEdge = page.Locator("[data-dag-source='quality_branch'][data-dag-target='#quarantine_sales'][data-dag-label='ELSE']");
+        await trueEdge.WaitForAsync();
+        await elseEdge.WaitForAsync();
+
+        await page.Locator("[data-dag-node='quality_branch']").ClickAsync();
+        var sourceAfterNavigation = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content");
+        Assert.Equal(sourceBefore, sourceAfterNavigation);
+
+        var requestScript = await page.EvaluateAsync<string>("""
+            () => [...window.__STUDIO_API_REQUESTS__]
+              .reverse()
+              .find(request => request.url.endsWith('/api/designer/dag'))
+              ?.body?.script
+            """);
+        Assert.Equal(sourceBefore, requestScript);
+
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.setValue('>>> INVALID <<<')");
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Last valid flow')");
+        Assert.Equal(6, await page.Locator("[data-dag-node]").CountAsync());
+        Assert.Contains("Unexpected token", await status.InnerTextAsync());
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_Mounts_SwitchesProjections_AndScansSecrets()
     {
         await using var session = await fixture.NewSessionAsync();

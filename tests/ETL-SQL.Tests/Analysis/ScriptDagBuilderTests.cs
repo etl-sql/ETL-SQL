@@ -36,6 +36,70 @@ SELECT UserID FROM #staging;");
     }
 
     [Fact]
+    public void PreservesConditionalBranchesAndTheirConvergence()
+    {
+        var dag = Build("""
+            IF 1 = 1 BEGIN
+              SELECT 1;
+            END
+            ELSE BEGIN
+              SELECT 2;
+            END;
+            ASSERT 1 = 1;
+            """);
+
+        Assert.Collection(
+            dag.Nodes,
+            n => Assert.Equal(("IF", "conditional"), (n.Label, n.Type)),
+            n => Assert.Equal(("SELECT", "statement"), (n.Label, n.Type)),
+            n => Assert.Equal(("SELECT", "statement"), (n.Label, n.Type)),
+            n => Assert.Equal(("ASSERT", "validation"), (n.Label, n.Type)));
+
+        var conditionalId = dag.Nodes[0].Id;
+        var validationId = dag.Nodes[3].Id;
+        Assert.Contains(dag.Edges, e => e.Source == conditionalId && e.Target == dag.Nodes[1].Id && e.Label == "TRUE");
+        Assert.Contains(dag.Edges, e => e.Source == conditionalId && e.Target == dag.Nodes[2].Id && e.Label == "ELSE");
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[1].Id && e.Target == validationId);
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[2].Id && e.Target == validationId);
+    }
+
+    [Fact]
+    public void PreservesParallelBranchesAndJoinsAtTheNextStage()
+    {
+        var dag = Build("""
+            PARALLEL BEGIN
+              SELECT 1 INTO #north;
+              SELECT 2 INTO #south;
+            END;
+            EXPECT SCHEMA #north (Value INT);
+            """);
+
+        Assert.Equal(("PARALLEL", "parallel"), (dag.Nodes[0].Label, dag.Nodes[0].Type));
+        Assert.Equal("validation", dag.Nodes[3].Type);
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[0].Id && e.Target == dag.Nodes[1].Id && e.Label == "BRANCH 1");
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[0].Id && e.Target == dag.Nodes[2].Id && e.Label == "BRANCH 2");
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[1].Id && e.Target == dag.Nodes[3].Id);
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[2].Id && e.Target == dag.Nodes[3].Id);
+    }
+
+    [Fact]
+    public void ProjectsLoopBodyAndCompletionPathsWithoutCreatingACycle()
+    {
+        var dag = Build("""
+            WHILE 1 = 1 BEGIN
+              SELECT 1;
+            END;
+            SELECT 2;
+            """);
+
+        Assert.Equal("loop", dag.Nodes[0].Type);
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[0].Id && e.Target == dag.Nodes[1].Id && e.Label == "BODY");
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[0].Id && e.Target == dag.Nodes[2].Id && e.Label == "DONE");
+        Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[1].Id && e.Target == dag.Nodes[2].Id);
+        Assert.DoesNotContain(dag.Edges, e => e.Source == dag.Nodes[1].Id && e.Target == dag.Nodes[0].Id);
+    }
+
+    [Fact]
     public void ClassifiesConnectionsAndTargets()
     {
         var dag = Build(@"

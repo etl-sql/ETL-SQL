@@ -3823,6 +3823,107 @@ body.vscode-dark .etlsql-cw-missing-hint {
     font-family: var(--portal-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
 }
 
+.etlsql-studio-dag-view {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background:
+        linear-gradient(rgba(88, 166, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(88, 166, 255, 0.035) 1px, transparent 1px),
+        var(--portal-bg, #0d1117);
+    background-size: 24px 24px;
+}
+
+.etlsql-studio-dag-head {
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--portal-border, #30363d);
+    background: var(--portal-surface, #161b22);
+}
+
+.etlsql-studio-dag-head > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.etlsql-studio-dag-head strong {
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.8125rem;
+    letter-spacing: 0.01em;
+}
+
+.etlsql-studio-dag-head span {
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+}
+
+.etlsql-studio-dag-status {
+    max-width: 48%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+}
+
+.etlsql-studio-dag-status.is-pending {
+    color: var(--portal-accent, #58a6ff);
+}
+
+.etlsql-studio-dag-status.is-warning {
+    color: var(--portal-warning, #d29922);
+}
+
+.etlsql-studio-dag-canvas {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0;
+}
+
+.etlsql-studio-dag-canvas > .etlsql-dag-toolbar {
+    position: absolute !important;
+    inset: 0 0 auto 0 !important;
+    z-index: 6;
+}
+
+.etlsql-studio-dag-canvas > .etlsql-dag-body {
+    position: absolute;
+    inset: 52px 0 0 0;
+}
+
+.etlsql-studio-dag-message {
+    width: min(460px, calc(100% - 48px));
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 18px 20px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-left: 3px solid var(--portal-accent, #58a6ff);
+    border-radius: 6px;
+    background: var(--portal-surface, #161b22);
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+
+.etlsql-studio-dag-message strong {
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.875rem;
+}
+
+.etlsql-studio-dag-message.is-error {
+    border-left-color: var(--portal-danger, #f85149);
+}
+
 .etlsql-studio-header {
     height: 42px;
     min-height: 42px;
