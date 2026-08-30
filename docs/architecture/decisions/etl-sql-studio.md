@@ -26,6 +26,26 @@ An initial exploration proposed separate top-level application tabs ("Script Tab
   - `[ 🌓 Split View ]` (Visual canvas + live CodeMirror 6 code panel with bi-directional AST sync).
   - `[ ⌨️ Code View ]` (Full-screen script editor with real-time server lint diagnostics & results grid).
 
+### 1.2 Desktop project-host lifecycle
+
+Desktop Studio uses one loopback host per project by default. Each host owns its workspace boundary,
+port, execution state, connection metadata, and Git state. A local session record under the current
+user's application-data directory stores the normalized workspace root, instance ID, PID, assigned
+port, start time, and authentication metadata. CLI discovery accepts a record only when both its
+process and authenticated health endpoint are live; failed probes remove stale crash records.
+
+`etlsql studio <project>` reconnects to the existing healthy host or starts a host on an OS-assigned
+port. `studio list`, `studio open`, and `studio stop` expose the same registry contract. Additional
+browser windows share the project host. `--new-instance` deliberately creates an independent host
+for the same project, with content-revision checks preventing one host from overwriting external
+changes made by another.
+
+Browser clients renew authenticated heartbeats. Tab-close signals are advisory; the host also
+expires missed heartbeats and may apply a configured idle timeout once all clients are gone, no run
+is active, and no server draft is pending. The explicit **Exit Studio** flow checks dirty documents
+and active runs, requests graceful application shutdown, and polls for a bounded period so the UI
+can report whether the host actually stopped.
+
 ---
 
 ## 2. Modern Workbench Architecture & UI Layout

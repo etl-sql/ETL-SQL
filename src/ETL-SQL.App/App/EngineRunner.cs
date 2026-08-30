@@ -20,6 +20,7 @@ using ETL_SQL.Core.Profiling;
 using ETL_SQL.Data;
 using ETL_SQL.Reporting;
 using ETL_SQL.Services;
+using ETL_SQL.WorkstationEditor;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -94,7 +95,7 @@ namespace ETL_SQL.App
                 return await ServeReport(ctx, logger);
             }
 
-            if (ctx.Command == "studio")
+            if (ctx.Command.StartsWith("studio", StringComparison.Ordinal))
             {
                 return await RunStudio(ctx, logger);
             }
@@ -1923,37 +1924,171 @@ CREATE PAGE Main AS DASHBOARD (
 
         private static async Task<int> RunStudio(CliContext ctx, ILogger logger)
         {
+            var sessionRegistry = new StudioSessionRegistry();
+            var sessions = await sessionRegistry.ListHealthyAsync();
+
+            if (ctx.StudioAction == "list")
+            {
+                if (sessions.Count == 0)
+                {
+                    logger.WriteLine("No healthy local Studio instances.", ConsoleColor.Yellow);
+                    return 0;
+                }
+                foreach (var session in sessions)
+                {
+                    logger.WriteLine(
+                        $"{session.InstanceId}  PID {session.ProcessId}  port {session.Port}  {session.WorkspaceRoot}",
+                        ConsoleColor.Cyan);
+                }
+                return 0;
+            }
+
+            var requestedPath = string.IsNullOrWhiteSpace(ctx.StudioProjectPath)
+                ? Directory.GetCurrentDirectory()
+                : Path.GetFullPath(ctx.StudioProjectPath, Directory.GetCurrentDirectory());
+            if (!File.Exists(requestedPath) && !Directory.Exists(requestedPath))
+            {
+                logger.WriteLine($"Studio project path does not exist: {requestedPath}", ConsoleColor.Red);
+                return 1;
+            }
+            var workspaceRoot = File.Exists(requestedPath)
+                ? Path.GetDirectoryName(requestedPath) ?? Directory.GetCurrentDirectory()
+                : requestedPath;
+            workspaceRoot = StudioSessionRegistry.NormalizeWorkspace(workspaceRoot);
+
+            var projectSessions = sessions.Where(session => string.Equals(
+                session.WorkspaceRoot,
+                workspaceRoot,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)).ToList();
+
+            if (ctx.StudioAction == "stop")
+            {
+                if (projectSessions.Count == 0)
+                {
+                    logger.WriteLine($"No healthy Studio host is serving {workspaceRoot}.", ConsoleColor.Yellow);
+                    return 0;
+                }
+                var allStopped = true;
+                foreach (var session in projectSessions)
+                {
+                    var stopped = await sessionRegistry.RequestStopAsync(session, force: false, TimeSpan.FromSeconds(8));
+                    logger.WriteLine(
+                        stopped ? $"Stopped Studio instance {session.InstanceId}." : $"Studio instance {session.InstanceId} did not stop.",
+                        stopped ? ConsoleColor.Green : ConsoleColor.Red);
+                    allStopped &= stopped;
+                }
+                return allStopped ? 0 : 1;
+            }
+
+            var existing = projectSessions.FirstOrDefault();
+            if (existing is not null && !ctx.StudioNewInstance)
+            {
+                logger.WriteLine($"Reconnecting to Studio for {workspaceRoot} on port {existing.Port}.", ConsoleColor.Green);
+                if (!ctx.ServeNoBrowser || ctx.StudioNewWindow || ctx.StudioAction == "open")
+                    TryOpenStudioWindow(existing.StudioUrl, logger);
+                return 0;
+            }
+
+            var requestedPort = ctx.ServePort;
+            if (requestedPort is > 0)
+            {
+                var portOwner = sessions.FirstOrDefault(session => session.Port == requestedPort.Value);
+                if (portOwner is not null)
+                {
+                    logger.WriteLine(
+                        $"Port {requestedPort} belongs to healthy Studio instance {portOwner.InstanceId} for {portOwner.WorkspaceRoot}; selecting an OS-assigned port for the new host.",
+                        ConsoleColor.Yellow);
+                    requestedPort = null;
+                }
+                else if (!IsPortAvailable(requestedPort.Value))
+                {
+                    logger.WriteLine(
+                        $"Port {requestedPort} is in use by another process. Retry without --port to select an OS-assigned port.",
+                        ConsoleColor.Red);
+                    return 1;
+                }
+            }
+
             var (exe, prefixArgs) = FindWorkstationEditor();
             var psi = new ProcessStartInfo(exe) { UseShellExecute = false };
             foreach (var arg in prefixArgs) psi.ArgumentList.Add(arg);
             psi.ArgumentList.Add("--studio");
-            if (ctx.ScriptFile != null)
-                psi.ArgumentList.Add(ctx.ScriptFile.FullName);
-            if (ctx.ServePort.HasValue)
+            psi.ArgumentList.Add(requestedPath);
+            var instanceId = Guid.NewGuid().ToString("D");
+            psi.ArgumentList.Add("--instance-id");
+            psi.ArgumentList.Add(instanceId);
+            if (requestedPort.HasValue)
             {
                 psi.ArgumentList.Add("--port");
-                psi.ArgumentList.Add(ctx.ServePort.Value.ToString());
+                psi.ArgumentList.Add(requestedPort.Value.ToString());
             }
-            if (!ctx.ServeNoBrowser)
+            if (ctx.StudioIdleShutdownMinutes > 0)
+            {
+                psi.ArgumentList.Add("--idle-timeout-minutes");
+                psi.ArgumentList.Add(ctx.StudioIdleShutdownMinutes.ToString());
+            }
+            if (!ctx.ServeNoBrowser || ctx.StudioNewWindow || ctx.StudioAction == "open")
                 psi.ArgumentList.Add("--open");
 
-            logger.WriteLine("Starting ETL-SQL Studio...", ConsoleColor.Cyan);
+            logger.WriteLine($"Starting ETL-SQL Studio for {workspaceRoot}...", ConsoleColor.Cyan);
 
-            using var proc = Process.Start(psi);
+            var proc = Process.Start(psi);
             if (proc == null)
             {
                 logger.WriteLine("Failed to start the ETL-SQL Studio process.", ConsoleColor.Red);
                 return 1;
             }
 
-            Console.CancelKeyPress += (_, e) =>
+            var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+            while (DateTimeOffset.UtcNow < deadline)
             {
-                e.Cancel = true;
-                if (!proc.HasExited) proc.Kill(entireProcessTree: true);
-            };
+                if (proc.HasExited)
+                {
+                    var exitCode = proc.ExitCode;
+                    proc.Dispose();
+                    logger.WriteLine($"Studio host exited during startup with code {exitCode}.", ConsoleColor.Red);
+                    return exitCode == 0 ? 1 : exitCode;
+                }
+                var started = (await sessionRegistry.ListHealthyAsync()).FirstOrDefault(session => session.InstanceId == instanceId);
+                if (started is not null)
+                {
+                    logger.WriteLine($"Studio is running on port {started.Port} (PID {started.ProcessId}).", ConsoleColor.Green);
+                    proc.Dispose();
+                    return 0;
+                }
+                await Task.Delay(200);
+            }
 
-            await proc.WaitForExitAsync();
-            return proc.ExitCode;
+            proc.Dispose();
+            logger.WriteLine("Studio did not become healthy before the 30 second startup timeout.", ConsoleColor.Red);
+            return 1;
+        }
+
+        private static bool IsPortAvailable(int port)
+        {
+            try
+            {
+                var listener = new TcpListener(System.Net.IPAddress.Loopback, port);
+                listener.Start();
+                listener.Stop();
+                return true;
+            }
+            catch (SocketException)
+            {
+                return false;
+            }
+        }
+
+        private static void TryOpenStudioWindow(string url, ILogger logger)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                logger.WriteLine($"Could not open a browser window: {ex.Message}", ConsoleColor.Yellow);
+            }
         }
 
         private static (string exe, string[] prefixArgs) FindWorkstationEditor()

@@ -10,7 +10,9 @@ public sealed record WorkstationEditorOptions(
     bool ReadOnly,
     string SessionToken,
     bool OpenBrowser = false,
-    bool StudioMode = false)
+    bool StudioMode = false,
+    string? InstanceId = null,
+    int IdleShutdownMinutes = 0)
 {
     public static WorkstationEditorOptions Parse(string[] args, string invocationDirectory)
     {
@@ -20,6 +22,8 @@ public sealed record WorkstationEditorOptions(
         bool openBrowser = false;
         bool studioMode = false;
         string? token = null;
+        string? instanceId = null;
+        var idleShutdownMinutes = 0;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -42,6 +46,17 @@ public sealed record WorkstationEditorOptions(
             else if (args[i] == "--token" && i + 1 < args.Length)
             {
                 token = args[++i];
+            }
+            else if (args[i] == "--instance-id" && i + 1 < args.Length)
+            {
+                instanceId = Guid.TryParse(args[++i], out var parsedInstanceId)
+                    ? parsedInstanceId.ToString("D")
+                    : throw new ArgumentException("--instance-id must be a GUID.");
+            }
+            else if (args[i] == "--idle-timeout-minutes" && i + 1 < args.Length)
+            {
+                if (!int.TryParse(args[++i], out idleShutdownMinutes) || idleShutdownMinutes < 0)
+                    throw new ArgumentException("--idle-timeout-minutes must be zero or a positive integer.");
             }
             else if (args[i].StartsWith("-", StringComparison.Ordinal))
             {
@@ -80,7 +95,9 @@ public sealed record WorkstationEditorOptions(
             readOnly,
             string.IsNullOrWhiteSpace(token) ? GenerateToken() : token,
             openBrowser,
-            studioMode);
+            studioMode,
+            instanceId ?? Guid.NewGuid().ToString("D"),
+            idleShutdownMinutes);
     }
 
     internal string LocalhostUrl => $"http://{IPAddress.Loopback}:{Port}";

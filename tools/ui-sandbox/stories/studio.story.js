@@ -104,6 +104,7 @@ export default {
     const studioMod = await importFresh(STUDIO_JS);
     const api = makeMockApi(STUDIO_DESIGN_STATE);
     const apiRequests = [];
+    const exitRequests = [];
     const authFetch = async (url, init) => {
       let body = null;
       try { body = init?.body ? JSON.parse(init.body) : null; } catch { /* test instrumentation only */ }
@@ -134,6 +135,10 @@ export default {
           { order_date: '2026-08-27', total_amount: 2760, region: 'East' },
         ],
       },
+      onExit: async state => {
+        exitRequests.push(state);
+        return true;
+      },
       onSave: async (content, path) => {
         console.log(`[Studio Save] Saved ${path} (${content.length} chars)`);
       },
@@ -141,10 +146,12 @@ export default {
 
     window.__STUDIO_INSTANCE__ = workbench;
     window.__STUDIO_API_REQUESTS__ = apiRequests;
+    window.__STUDIO_EXIT_REQUESTS__ = exitRequests;
 
     return () => {
       window.__STUDIO_INSTANCE__ = null;
       window.__STUDIO_API_REQUESTS__ = null;
+      window.__STUDIO_EXIT_REQUESTS__ = null;
       window.__STUDIO_API_DELAY__ = null;
       workbench?.dispose?.();
     };

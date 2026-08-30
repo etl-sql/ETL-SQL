@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added the desktop Studio host lifecycle. `etlsql studio <project>` now reconnects to a healthy
+  per-project host, while `studio list`, `studio open`, `studio stop`, `--new-window`, and the
+  advanced `--new-instance` option manage local instances explicitly. Authenticated session records
+  retain normalized workspace, PID, assigned port, start time, and local authentication metadata;
+  stale records are removed after health checks. Browser heartbeats, active-run tracking,
+  configurable idle shutdown, a bounded **Exit Studio** flow, and revision-checked saves prevent
+  orphan hosts and same-project overwrite conflicts.
+
 - Finished Studio code-to-canvas data synchronization. A valid `CREATE DATASET` query edit now
   reparses the canvas and refreshes that document's `__ETLSNAP__` rows through the bounded,
   read-only preview contract on both Portal and desktop hosts. Parse failures retain the last valid

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using ETL_SQL.Services;
 
 namespace ETL_SQL.WorkstationEditor;
@@ -46,14 +47,42 @@ public sealed class WorkstationWorkspace
         return await File.ReadAllTextAsync(path, cancellationToken);
     }
 
+    public async Task<WorkspaceFileContent> ReadFileAsync(string relativePath, CancellationToken cancellationToken)
+    {
+        var content = await ReadTextAsync(relativePath, cancellationToken);
+        return new WorkspaceFileContent(relativePath, content, ComputeRevision(content));
+    }
+
     public async Task WriteTextAsync(string relativePath, string content, CancellationToken cancellationToken)
+        => await WriteTextAsync(relativePath, content, null, cancellationToken);
+
+    public async Task<string> WriteTextAsync(
+        string relativePath,
+        string content,
+        string? baseRevision,
+        CancellationToken cancellationToken)
     {
         if (ReadOnly)
             throw new InvalidOperationException("Workspace is read-only.");
 
         var path = ResolveEditablePath(relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        if (!string.IsNullOrWhiteSpace(baseRevision) && File.Exists(path))
+        {
+            var current = await File.ReadAllTextAsync(path, cancellationToken);
+            if (!string.Equals(baseRevision, ComputeRevision(current), StringComparison.OrdinalIgnoreCase))
+            {
+                throw new WorkspaceSaveConflictException("The file changed outside this Studio instance. Reopen it before saving.");
+            }
+        }
         await File.WriteAllTextAsync(path, content, cancellationToken);
+        return ComputeRevision(content);
+    }
+
+    public async Task<string> GetRevisionAsync(string relativePath, CancellationToken cancellationToken)
+    {
+        var content = await ReadTextAsync(relativePath, cancellationToken);
+        return ComputeRevision(content);
     }
 
     public string? InitialRelativeFile(string? initialFile) =>
@@ -90,6 +119,11 @@ public sealed class WorkstationWorkspace
 
     private static bool IsEditableScript(string path) =>
         EditableExtensions.Contains(Path.GetExtension(path));
+
+    private static string ComputeRevision(string content) =>
+        Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
 }
 
 public sealed record WorkspaceFileDto(string Path, long Size);
+public sealed record WorkspaceFileContent(string Path, string Content, string SourceRevision);
+public sealed class WorkspaceSaveConflictException(string message) : Exception(message);

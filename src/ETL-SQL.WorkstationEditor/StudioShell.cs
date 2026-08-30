@@ -45,6 +45,63 @@ internal static class StudioShell
     const readOnly = {{readonlyAttr}};
     const authFetch = (url, opts = {}) =>
       fetch(url, { ...opts, headers: { 'X-ETLSQL-EDITOR-TOKEN': token, ...(opts.headers || {}) } });
+    const clientId = crypto.randomUUID();
+    let heartbeatTimer = null;
+
+    function hasDirtyDocuments() {
+      return Boolean(window.__STUDIO__?.state?.documents?.some(document => document.isDirty));
+    }
+
+    async function sendHeartbeat() {
+      await authFetch('/api/studio/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, dirty: hasDirtyDocuments() })
+      });
+    }
+
+    async function checkExternalChanges() {
+      for (const document of window.__STUDIO__?.state?.documents || []) {
+        if (!document.sourceRevision || document.externalChange) continue;
+        const response = await authFetch('/api/files/revision?path=' + encodeURIComponent(document.path));
+        if (!response.ok) continue;
+        const current = await response.json();
+        if (current.sourceRevision && current.sourceRevision !== document.sourceRevision) {
+          document.externalChange = true;
+          document.canSave = false;
+          document.readOnlyReason = 'This file changed outside Studio. Close and reopen it before saving.';
+          window.ETLSQLFeedback?.notify(document.readOnlyReason, {
+            title: 'External Change Detected',
+            tone: 'warning'
+          });
+        }
+      }
+    }
+
+    async function exitStudio(state) {
+      await sendHeartbeat();
+      const response = await authFetch('/api/studio/shutdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: Boolean(state?.force) })
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'The Studio host refused the shutdown request.');
+      }
+
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        try {
+          const health = await authFetch('/api/studio/lifecycle');
+          if (!health.ok) return true;
+        } catch {
+          return true;
+        }
+      }
+      return false;
+    }
 
     async function boot() {
       let workspaceFiles = [];
@@ -62,11 +119,13 @@ internal static class StudioShell
       let activeDocId = '__home__';
       if (initialFile) {
         let initialContent = '';
+        let initialSourceRevision = null;
         try {
           const res = await authFetch('/api/files?path=' + encodeURIComponent(initialFile));
           if (res.ok) {
             const data = await res.json();
             initialContent = data.content || '';
+            initialSourceRevision = data.sourceRevision || null;
           }
         } catch (e) {
           console.error('Failed to load primary file:', e);
@@ -77,6 +136,7 @@ internal static class StudioShell
           name: initialFile.split('/').pop().split('\\').pop(),
           content: initialContent || '',
           isDirty: false,
+          sourceRevision: initialSourceRevision,
           projection: 'split'
         });
         activeDocId = 'doc-primary';
@@ -88,17 +148,33 @@ internal static class StudioShell
         workspaceFiles: workspaceFiles,
         apiBase: '',
         authFetch,
+        onExit: exitStudio,
         onSave: async (content, filePath) => {
           if (readOnly) return;
           const res = await authFetch('/api/files', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: filePath, content })
+            body: JSON.stringify({ path: filePath, content, baseRevision: window.__STUDIO__?.state?.documents?.find(document => document.path === filePath)?.sourceRevision || null })
           });
-          if (!res.ok) throw new Error(await res.text());
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.error || 'The file could not be saved.');
+          }
+          const saved = await res.json();
+          return { sourceRevision: saved.sourceRevision, canSave: true, readOnlyReason: null, externalChange: false };
         }
       });
+      await sendHeartbeat();
+      heartbeatTimer = window.setInterval(() => {
+        Promise.all([sendHeartbeat(), checkExternalChanges()]).catch(() => window.clearInterval(heartbeatTimer));
+      }, 10000);
     }
+
+    window.addEventListener('pagehide', () => {
+      if (heartbeatTimer) window.clearInterval(heartbeatTimer);
+      const body = new Blob([JSON.stringify({ clientId, dirty: hasDirtyDocuments() })], { type: 'application/json' });
+      navigator.sendBeacon('/api/studio/disconnect?token=' + encodeURIComponent(token), body);
+    });
 
     boot().catch(err => console.error('Failed to boot ETL-SQL Studio:', err));
   </script>

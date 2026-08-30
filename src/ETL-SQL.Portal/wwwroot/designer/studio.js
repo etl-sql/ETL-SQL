@@ -344,6 +344,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             sourceColumns: [],
             diagnostics: [],
             runAbort: null,
+            runActive: false,
             previewAbort: null,
             syncRevision: 0,
             previewedDatasetSignature: null,
@@ -414,6 +415,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                     <button type="button" class="etlsql-studio-btn btn-primary" data-action="run" title="Run Script (Ctrl+Shift+Enter)">
                         ${_studioIcon('run', 14)} Run
                     </button>
+                    ${opts.onExit ? `<button type="button" class="etlsql-studio-btn" data-action="exit" title="Exit Studio and stop this project host">
+                        ${_studioIcon('close', 14)} Exit Studio
+                    </button>` : ''}
                 </div>
             </header>
 
@@ -575,12 +579,18 @@ export async function createStudioWorkbench(container, opts = {}) {
     // performance all flow into the shared results panel as a trace, so a failure lands on the
     // Messages tab with the real reason instead of being painted as a success.
     async function executeRun(doc, { script, selection = null, label }) {
+        const context = documentContext(doc);
+        context.runAbort?.abort();
+        const controller = new AbortController();
+        context.runAbort = controller;
+        context.runActive = true;
         setDocumentTrace(doc, runStatusTrace(`Running ${label}…`, 'running'));
         state.resultsPanel?.startElapsed();
         try {
             const response = await authFetch(apiBase + STUDIO_ROUTES.run, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
                 body: JSON.stringify(selection === null ? { script } : { script, selection }),
             });
 
@@ -598,6 +608,15 @@ export async function createStudioWorkbench(container, opts = {}) {
             const data = await response.json();
             setDocumentTrace(doc, normalizeRunTrace(data, selection ?? script));
         } catch (error) {
+            if (error?.name === 'AbortError') {
+                setDocumentTrace(doc, [
+                    { type: 'clear', resetHistory: true },
+                    { type: 'status', status: 'failed' },
+                    { type: 'message', level: 'warning', text: 'Run cancelled.' },
+                    { type: 'done', exitCode: 1, status: 'Cancelled' },
+                ]);
+                return;
+            }
             // A transport failure is a failed run. This once rendered a green
             // "In-Memory Run Completed" over stale sample rows, so a script that never executed
             // looked like it had succeeded.
@@ -608,6 +627,8 @@ export async function createStudioWorkbench(container, opts = {}) {
                 { type: 'done', exitCode: 1, status: 'Failed' },
             ]);
         } finally {
+            context.runActive = false;
+            if (context.runAbort === controller) context.runAbort = null;
             state.resultsPanel?.stopElapsed();
         }
     }
@@ -1390,6 +1411,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         let path = '';
         let content = '';
+        let sourceRevision = null;
         let proj = 'split';
 
         if (type === 'report') {
@@ -1465,6 +1487,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             if (res.ok) {
                 const data = await res.json();
                 content = data.content || '';
+                sourceRevision = data.sourceRevision || null;
             }
         } catch (e) {
             console.error('Failed to load file:', e);
@@ -1475,6 +1498,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             path: filePath,
             name: filePath.split('/').pop().split('\\').pop(),
             content: content,
+            sourceRevision,
             isDirty: false,
             projection: proj
         };
@@ -2331,6 +2355,49 @@ export async function createStudioWorkbench(container, opts = {}) {
         }
     }
 
+    async function handleExitStudio() {
+        if (!opts.onExit) return;
+        const activeRuns = state.documents.filter(doc => documentContext(doc).runActive);
+        const dirtyDocuments = state.documents.filter(doc => doc.isDirty);
+        if (activeRuns.length) {
+            const cancelRuns = await _feedback.confirm(
+                `Cancel ${activeRuns.length} active run${activeRuns.length === 1 ? '' : 's'} and exit Studio?`,
+                { title: 'Active Runs', confirmLabel: 'Cancel Runs & Exit', cancelLabel: 'Stay' });
+            if (!cancelRuns) return;
+            activeRuns.forEach(doc => documentContext(doc).runAbort?.abort());
+        }
+        if (dirtyDocuments.length) {
+            const discard = await _feedback.confirm(
+                `${dirtyDocuments.length} document${dirtyDocuments.length === 1 ? ' has' : 's have'} unsaved changes. Exit without saving?`,
+                { title: 'Unsaved Documents', confirmLabel: 'Exit Without Saving', cancelLabel: 'Stay' });
+            if (!discard) return;
+        }
+
+        const exitButton = shell.querySelector('[data-action="exit"]');
+        if (exitButton) {
+            exitButton.disabled = true;
+            exitButton.setAttribute('aria-busy', 'true');
+        }
+        try {
+            const stopped = await opts.onExit({
+                force: activeRuns.length > 0 || dirtyDocuments.length > 0,
+                activeRuns: activeRuns.length,
+                dirtyDocuments: dirtyDocuments.length,
+            });
+            _feedback.notify(stopped ? 'The Studio host stopped.' : 'The Studio host did not stop before the timeout.', {
+                title: stopped ? 'Studio Stopped' : 'Shutdown Incomplete',
+                tone: stopped ? 'success' : 'warning',
+            });
+        } catch (error) {
+            _feedback.notify(error.message || 'Studio shutdown failed.', { title: 'Exit Failed', tone: 'error' });
+        } finally {
+            if (exitButton) {
+                exitButton.disabled = false;
+                exitButton.removeAttribute('aria-busy');
+            }
+        }
+    }
+
     shell.querySelectorAll('[data-projection]').forEach(btn => {
         btn.addEventListener('click', () => setProjection(btn.dataset.projection));
     });
@@ -2350,6 +2417,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     });
 
     shell.querySelector('[data-action="save"]')?.addEventListener('click', handleSave);
+    shell.querySelector('[data-action="exit"]')?.addEventListener('click', handleExitStudio);
     shell.querySelector('[data-action="code-format"]')?.addEventListener('click', handleFormatDocument);
     shell.querySelector('[data-action="code-run"]')?.addEventListener('click', () => shell.querySelector('[data-action="run"]')?.click());
     shell.querySelector('[data-action="run-selected"]')?.addEventListener('click', async () => {

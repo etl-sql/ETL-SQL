@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using ETL_SQL.Data;
 using ETL_SQL.WorkstationEditor;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace ETL_SQL.Tests.WorkstationEditor;
@@ -39,6 +40,21 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public void Options_ParseStudioLifecycleFlags()
+    {
+        using var temp = new TempWorkspace();
+        var instanceId = Guid.NewGuid();
+
+        var options = WorkstationEditorOptions.Parse(
+            [temp.Root, "--studio", "--instance-id", instanceId.ToString(), "--idle-timeout-minutes", "12"],
+            Directory.GetCurrentDirectory());
+
+        Assert.True(options.StudioMode);
+        Assert.Equal(instanceId.ToString("D"), options.InstanceId);
+        Assert.Equal(12, options.IdleShutdownMinutes);
+    }
+
+    [Fact]
     public void Workspace_RejectsTraversalAndNonScriptFiles()
     {
         using var temp = new TempWorkspace();
@@ -58,6 +74,148 @@ public sealed class WorkstationEditorTests
 
         Assert.Equal("SELECT 1;", await workspace.ReadTextAsync("nested/pipeline.etlsql", CancellationToken.None));
         Assert.Contains(workspace.ListFiles(), file => file.Path == "nested/pipeline.etlsql");
+    }
+
+    [Fact]
+    public async Task Workspace_SaveRejectsAnExternalRevisionChange()
+    {
+        using var temp = new TempWorkspace();
+        var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+        await workspace.WriteTextAsync("pipeline.etlsql", "SELECT 1;", CancellationToken.None);
+        var opened = await workspace.ReadFileAsync("pipeline.etlsql", CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 2;");
+
+        var error = await Assert.ThrowsAsync<WorkspaceSaveConflictException>(() =>
+            workspace.WriteTextAsync("pipeline.etlsql", "SELECT 3;", opened.SourceRevision, CancellationToken.None));
+
+        Assert.Contains("changed outside", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("SELECT 2;", await File.ReadAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql")));
+    }
+
+    [Fact]
+    public void Lifecycle_TracksHeartbeatsDirtyDocumentsAndRuns()
+    {
+        using var temp = new TempWorkspace();
+        var lifetime = new TestHostApplicationLifetime();
+        var service = new StudioHostLifecycleService(
+            new WorkstationEditorOptions(temp.Root, null, 0, false, "token", StudioMode: true),
+            lifetime);
+
+        service.Heartbeat(new StudioHeartbeatRequest("browser-1", Dirty: true));
+        using var run = service.BeginRun();
+
+        Assert.Equal(1, service.ConnectedClients);
+        Assert.Equal(1, service.DirtyClients);
+        Assert.Equal(1, service.ActiveRuns);
+        Assert.False(service.TryRequestShutdown(force: false, out var reason));
+        Assert.Contains("active run", reason, StringComparison.OrdinalIgnoreCase);
+        Assert.False(lifetime.StopRequested);
+    }
+
+    [Fact]
+    public async Task Lifecycle_IdleShutdownWaitsUntilTheLastClientDisconnects()
+    {
+        using var temp = new TempWorkspace();
+        var lifetime = new TestHostApplicationLifetime();
+        var service = new StudioHostLifecycleService(
+            new WorkstationEditorOptions(temp.Root, null, 0, false, "token", StudioMode: true),
+            lifetime,
+            TimeSpan.FromMilliseconds(30));
+        await service.StartAsync(CancellationToken.None);
+        service.Heartbeat(new StudioHeartbeatRequest("browser-1", Dirty: false));
+        await Task.Delay(60);
+        Assert.False(lifetime.StopRequested);
+
+        service.Disconnect("browser-1");
+        await Task.Delay(100);
+
+        Assert.True(lifetime.StopRequested);
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task SessionRegistry_DiscoversHealthyProjectsAndRemovesStaleRecords()
+    {
+        using var workspace = new TempWorkspace();
+        using var registryStorage = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            workspace.Root, null, 0, false, "registry-token", StudioMode: true));
+        await app.StartAsync();
+        var port = new Uri(WorkstationEditorApp.GetListeningUrl(app)).Port;
+        var registry = new StudioSessionRegistry(registryStorage.Root);
+        var healthyRecord = new StudioSessionRecord(
+            Guid.NewGuid().ToString("D"), workspace.Root, Environment.ProcessId, port, DateTimeOffset.UtcNow,
+            new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "registry-token"));
+        await registry.WriteAsync(healthyRecord);
+        await registry.WriteAsync(new StudioSessionRecord(
+            Guid.NewGuid().ToString("D"), workspace.Root, int.MaxValue, port + 1, DateTimeOffset.UtcNow,
+            new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "stale")));
+
+        var sessions = await registry.ListHealthyAsync();
+
+        var discovered = Assert.Single(sessions);
+        Assert.Equal(healthyRecord.InstanceId, discovered.InstanceId);
+        Assert.Equal(StudioSessionRegistry.NormalizeWorkspace(workspace.Root), discovered.WorkspaceRoot);
+        Assert.Single(Directory.EnumerateFiles(registryStorage.Root, "*.json"));
+    }
+
+    [Fact]
+    public async Task SessionRegistry_KeepsDifferentProjectsAndSameProjectInstancesSeparate()
+    {
+        using var firstWorkspace = new TempWorkspace();
+        using var secondWorkspace = new TempWorkspace();
+        using var registryStorage = new TempWorkspace();
+        using var httpClient = new HttpClient(new AlwaysHealthyHandler());
+        var registry = new StudioSessionRegistry(registryStorage.Root, httpClient);
+        var firstProject = new StudioSessionRecord(
+            Guid.NewGuid().ToString("D"), firstWorkspace.Root, Environment.ProcessId, 41001, DateTimeOffset.UtcNow,
+            new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "first"));
+        var independentInstance = firstProject with
+        {
+            InstanceId = Guid.NewGuid().ToString("D"),
+            Port = 41002,
+            Authentication = new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "independent")
+        };
+        var secondProject = firstProject with
+        {
+            InstanceId = Guid.NewGuid().ToString("D"),
+            WorkspaceRoot = secondWorkspace.Root,
+            Port = 41003,
+            Authentication = new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "second")
+        };
+        await registry.WriteAsync(firstProject);
+        await registry.WriteAsync(independentInstance);
+        await registry.WriteAsync(secondProject);
+
+        var sessions = await registry.ListHealthyAsync();
+
+        Assert.Equal(3, sessions.Count);
+        Assert.Equal(2, sessions.Count(record => record.WorkspaceRoot == StudioSessionRegistry.NormalizeWorkspace(firstWorkspace.Root)));
+        Assert.Single(sessions, record => record.WorkspaceRoot == StudioSessionRegistry.NormalizeWorkspace(secondWorkspace.Root));
+        Assert.Equal(3, sessions.Select(record => record.Port).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task LifecycleApi_RefusesOrdinaryShutdownWhileClientIsDirty()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token", StudioMode: true));
+        await app.StartAsync();
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var heartbeat = new HttpRequestMessage(HttpMethod.Post, "/api/studio/heartbeat");
+        heartbeat.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        heartbeat.Content = JsonContent.Create(new StudioHeartbeatRequest("browser-1", Dirty: true));
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(heartbeat)).StatusCode);
+
+        using var shutdown = new HttpRequestMessage(HttpMethod.Post, "/api/studio/shutdown");
+        shutdown.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        shutdown.Content = JsonContent.Create(new StudioShutdownRequest());
+        var response = await client.SendAsync(shutdown);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("unsaved", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1002,5 +1160,29 @@ public sealed class WorkstationEditorTests
                 Directory.Delete(Root, recursive: true);
             }
         }
+    }
+
+    private sealed class TestHostApplicationLifetime : IHostApplicationLifetime
+    {
+        private readonly CancellationTokenSource _started = new();
+        private readonly CancellationTokenSource _stopping = new();
+        private readonly CancellationTokenSource _stopped = new();
+
+        public bool StopRequested { get; private set; }
+        public CancellationToken ApplicationStarted => _started.Token;
+        public CancellationToken ApplicationStopping => _stopping.Token;
+        public CancellationToken ApplicationStopped => _stopped.Token;
+
+        public void StopApplication()
+        {
+            StopRequested = true;
+            _stopping.Cancel();
+        }
+    }
+
+    private sealed class AlwaysHealthyHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
     }
 }
