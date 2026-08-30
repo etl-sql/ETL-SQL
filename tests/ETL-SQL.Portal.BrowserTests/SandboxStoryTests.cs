@@ -806,6 +806,64 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_DatasetEdits_RefreshTheRightSampleAndIgnoreStaleOrInvalidResults()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var result = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+            """
+            async () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const editor = studio.state.editorInstance;
+                window.__STUDIO_API_DELAY__ = ({ url, body }) =>
+                    url.endsWith('/api/designer/data-sample') && body?.script?.includes('stale_metric') ? 1400 : 0;
+
+                editor.setValue(editor.getValue().replace(
+                    'SELECT order_date, total_amount, region',
+                    'SELECT order_date, total_amount AS stale_metric, region'));
+                await new Promise(resolve => setTimeout(resolve, 650));
+                editor.setValue(editor.getValue().replace('stale_metric', 'fresh_metric'));
+                await new Promise(resolve => setTimeout(resolve, 2200));
+
+                const document = studio.state.documents.find(item => item.id === 'doc-report');
+                const sampleRequestsBeforeInvalid = window.__STUDIO_API_REQUESTS__.filter(request =>
+                    request.url.endsWith('/api/designer/data-sample') && request.body?.sourceKind === 'dataset').length;
+                const validSnapshot = JSON.stringify(document.studioContext.snapshot);
+                const visualCount = document.querySelectorAll?.('.designer-card')?.length
+                    ?? window.document.querySelectorAll('.designer-card').length;
+
+                editor.setValue(editor.getValue() + String.fromCharCode(10) + '>>> INVALID <<<');
+                await new Promise(resolve => setTimeout(resolve, 1100));
+
+                const sampleRequestsAfterInvalid = window.__STUDIO_API_REQUESTS__.filter(request =>
+                    request.url.endsWith('/api/designer/data-sample') && request.body?.sourceKind === 'dataset').length;
+                return {
+                    sampleRequestsBeforeInvalid,
+                    sampleRequestsAfterInvalid,
+                    columns: document.studioContext.snapshot.columns,
+                    snapshotPreserved: JSON.stringify(document.studioContext.snapshot) === validSnapshot,
+                    visualCount,
+                    visualCountAfterInvalid: window.document.querySelectorAll('.designer-card').length,
+                };
+            }
+            """);
+
+        Assert.Equal(2, result.GetProperty("sampleRequestsBeforeInvalid").GetInt32());
+        Assert.Equal(2, result.GetProperty("sampleRequestsAfterInvalid").GetInt32());
+        var columns = result.GetProperty("columns").EnumerateArray().Select(item => item.GetString()).ToList();
+        Assert.Contains("fresh_metric", columns);
+        Assert.DoesNotContain("stale_metric", columns);
+        Assert.True(result.GetProperty("snapshotPreserved").GetBoolean());
+        Assert.Equal(result.GetProperty("visualCount").GetInt32(), result.GetProperty("visualCountAfterInvalid").GetInt32());
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task Studio_ConnectionWizard_OffersMockDbUnderTestData()
     {
         // MOCKDB is the only connector a new author can use with no database, and it backs Studio

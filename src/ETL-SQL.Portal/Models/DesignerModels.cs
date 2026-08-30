@@ -82,7 +82,8 @@ public record DesignerDataPreviewRequest(
     string? Table = null,
     string? TempTable = null,
     string? Script = null,
-    string? DocumentUri = null);
+    string? DocumentUri = null,
+    string? Dataset = null);
 
 public record DesignerDataPreviewResponse(
     string SourceKind,

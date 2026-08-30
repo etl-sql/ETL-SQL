@@ -103,11 +103,20 @@ export default {
     // Import canonical studio module
     const studioMod = await importFresh(STUDIO_JS);
     const api = makeMockApi(STUDIO_DESIGN_STATE);
+    const apiRequests = [];
+    const authFetch = async (url, init) => {
+      let body = null;
+      try { body = init?.body ? JSON.parse(init.body) : null; } catch { /* test instrumentation only */ }
+      apiRequests.push({ url: String(url), body });
+      const delay = Number(window.__STUDIO_API_DELAY__?.({ url: String(url), body }) || 0);
+      if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+      return api(url, init);
+    };
 
     const workbench = await studioMod.createStudioWorkbench(stage, {
       documents: JSON.parse(JSON.stringify(SAMPLE_DOCS)),
       workspaceFiles: JSON.parse(JSON.stringify(STUDIO_DESIGN_STATE.files)),
-      authFetch: api,
+      authFetch,
       apiBase: '',
       initialSnapshot: {
         source: '&orders',
@@ -131,9 +140,12 @@ export default {
     });
 
     window.__STUDIO_INSTANCE__ = workbench;
+    window.__STUDIO_API_REQUESTS__ = apiRequests;
 
     return () => {
       window.__STUDIO_INSTANCE__ = null;
+      window.__STUDIO_API_REQUESTS__ = null;
+      window.__STUDIO_API_DELAY__ = null;
       workbench?.dispose?.();
     };
   }

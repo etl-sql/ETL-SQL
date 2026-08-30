@@ -344,6 +344,9 @@ export async function createStudioWorkbench(container, opts = {}) {
             sourceColumns: [],
             diagnostics: [],
             runAbort: null,
+            previewAbort: null,
+            syncRevision: 0,
+            previewedDatasetSignature: null,
             resultsTrace: []
         };
     }
@@ -1230,7 +1233,10 @@ export async function createStudioWorkbench(container, opts = {}) {
         const currentDoc = getActiveDoc();
         if (currentDoc && state.editorInstance) {
             currentDoc.content = state.editorInstance.getValue();
+            documentContext(currentDoc).previewAbort?.abort();
         }
+        clearTimeout(codeMirrorDebounce);
+        state.designerInstance?.invalidateScriptApply?.();
 
         state.activeDocId = docId;
         state.selectedVisualId = null;
@@ -1984,6 +1990,73 @@ export async function createStudioWorkbench(container, opts = {}) {
         _feedback.notify(`Created a reusable sample with ${context.snapshot.rowCount} rows from ${table}.`, { title: 'Data ready', tone: 'success' });
     }
 
+    function datasetForPreview(designState, context) {
+        const datasets = designState?.datasets || [];
+        if (!datasets.length) return null;
+        const snapshotName = String(context.snapshot?.source || '').replace(/^[&]/, '');
+        const visualDataset = (designState.pages || [])
+            .flatMap(page => page.visuals || [])
+            .map(visual => visual.dataset)
+            .find(Boolean);
+        return datasets.find(dataset => String(dataset.name || '').replace(/^[&]/, '') === snapshotName)
+            || datasets.find(dataset => dataset.name === visualDataset)
+            || datasets[0];
+    }
+
+    async function synchronizeCodeToCanvas(document, script, revision) {
+        if (getActiveDoc() !== document || documentContext(document).syncRevision !== revision) return;
+        const result = await state.designerInstance?.applyScriptText?.(script);
+        const context = documentContext(document);
+        if (!result?.applied || getActiveDoc() !== document || context.syncRevision !== revision) return;
+
+        const dataset = datasetForPreview(result.designState, context);
+        if (!dataset?.name || !dataset?.query) return;
+        const signature = `${dataset.name}\n${dataset.query}`;
+        if (context.previewedDatasetSignature === signature) return;
+
+        context.previewAbort?.abort();
+        const controller = new AbortController();
+        context.previewAbort = controller;
+        try {
+            const response = await authFetch(apiBase + STUDIO_ROUTES.dataSample, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    sourceKind: 'dataset',
+                    dataset: dataset.name,
+                    documentUri: document.path || 'studio',
+                    script,
+                }),
+            });
+            if (!response.ok) throw new Error(await _readErrorText(response));
+            const sample = await response.json();
+            if (controller.signal.aborted || getActiveDoc() !== document || context.syncRevision !== revision) return;
+            context.snapshot = {
+                source: sample.source || dataset.name,
+                columns: sample.columns || [],
+                rowCount: sample.rowCount ?? sample.rows?.length ?? 0,
+                rows: sample.rows || [],
+            };
+            context.snapshotCache.set(`dataset:${dataset.name}`, context.snapshot);
+            context.previewedDatasetSignature = signature;
+            updateSnapshotPackage(context.snapshot);
+            state.designerInstance?.refreshSnapshot?.();
+            if (state.activeActivity === 'catalog' || state.activeActivity === 'filters' || state.activeActivity === 'palette') {
+                renderSidebarContent(state.activeActivity);
+            }
+        } catch (error) {
+            if (error?.name !== 'AbortError' && !controller.signal.aborted && context.syncRevision === revision) {
+                _feedback.notify(error.message || 'The dataset preview could not be refreshed.', {
+                    title: 'Preview kept previous data',
+                    tone: 'warning',
+                });
+            }
+        } finally {
+            if (context.previewAbort === controller) context.previewAbort = null;
+        }
+    }
+
     function renderDataWorkflow() {
         const context = activeDocumentContext();
         sidebarTitle.textContent = 'Data & Filters';
@@ -2370,13 +2443,18 @@ export async function createStudioWorkbench(container, opts = {}) {
             onChange: (newContent) => {
                 const doc = getActiveDoc();
                 if (doc) {
+                    const context = documentContext(doc);
                     doc.content = newContent;
                     if (!isSettingDocumentContent) doc.isDirty = true;
                     renderTabs();
-                    if (!isSyncingFromDesigner && state.designerInstance) {
+                    if (!isSettingDocumentContent && !isSyncingFromDesigner && state.designerInstance) {
+                        context.syncRevision++;
+                        const revision = context.syncRevision;
+                        context.previewAbort?.abort();
+                        state.designerInstance.invalidateScriptApply?.();
                         clearTimeout(codeMirrorDebounce);
                         codeMirrorDebounce = setTimeout(() => {
-                            state.designerInstance.applyScriptText(newContent);
+                            void synchronizeCodeToCanvas(doc, newContent, revision);
                         }, 400);
                     }
                 }
@@ -2444,6 +2522,8 @@ export async function createStudioWorkbench(container, opts = {}) {
             window.removeEventListener('beforeunload', onBeforeUnload);
             window.removeEventListener('pagehide', releaseLeasesOnPageHide);
             if (renewLeaseTimer) window.clearInterval(renewLeaseTimer);
+            clearTimeout(codeMirrorDebounce);
+            for (const doc of state.documents) documentContext(doc).previewAbort?.abort();
             tabResizeObserver?.disconnect();
             state.designerInstance?.dispose?.();
             state.designerInstance = null;

@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Finished Studio code-to-canvas data synchronization. A valid `CREATE DATASET` query edit now
+  reparses the canvas and refreshes that document's `__ETLSNAP__` rows through the bounded,
+  read-only preview contract on both Portal and desktop hosts. Parse failures retain the last valid
+  canvas and sample. Per-document cancellation and revision checks prevent late parse or preview
+  responses from overwriting a newer edit or another tab's data.
+
 - Fixed the Studio script pane erasing what you typed. The canvas regenerates its script from the
   design state alone, and updating the canvas *from* the editor let that regeneration run and
   overwrite the buffer ~800ms later — so anything the design state does not model, most visibly a

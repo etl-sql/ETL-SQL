@@ -2,6 +2,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Security;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.WorkstationEditor;
@@ -28,8 +29,10 @@ public sealed class WorkstationDataSampleService(
     public async Task<DataSampleResponse> SampleAsync(DataSampleRequest request, CancellationToken cancellationToken = default)
     {
         var sourceKind = request.SourceKind?.Trim().ToLowerInvariant();
+        if (sourceKind == "dataset")
+            return await SampleDatasetAsync(request, cancellationToken);
         if (sourceKind is not (null or "connection"))
-            throw new ArgumentException("Only 'connection' samples are supported on the desktop host.");
+            throw new ArgumentException("SourceKind must be 'connection' or 'dataset' on the desktop host.");
 
         var connection = Require(request.Connection, "connection");
         var table = Require(request.Table, "table");
@@ -72,6 +75,52 @@ public sealed class WorkstationDataSampleService(
         return new DataSampleResponse(
             "connection",
             $"{connection}.{resolved}",
+            result.Columns,
+            result.Rows,
+            result.RowCount,
+            result.Capped,
+            false,
+            result.ElapsedMs,
+            result.Message);
+    }
+
+    private async Task<DataSampleResponse> SampleDatasetAsync(
+        DataSampleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var datasetName = Require(request.Dataset, "dataset");
+        var scriptText = request.Script ?? throw new ArgumentException("The current script is required for dataset preview.");
+        var parsed = new CoreParser(new Lexer(scriptText).Tokenize(), scriptText).Parse();
+        var error = parsed.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        if (error is not null)
+            throw new ArgumentException(error.Message);
+
+        var dataset = parsed.Statements.OfType<CreateDatasetStatement>().FirstOrDefault(candidate =>
+            string.Equals(candidate.TempTableName.TrimStart('&'), datasetName.TrimStart('&'), StringComparison.OrdinalIgnoreCase));
+        if (dataset is null)
+            throw new KeyNotFoundException("The selected dataset is not defined by the current script.");
+        if (dataset.SourceQuery is not SelectStatement { IntoTable: null }
+            && (dataset.SourceQuery is not SetOperationStatement setOperation || !ReadOnlyQueryPolicy.IsReadOnly(setOperation)))
+            throw new ArgumentException("Dataset preview accepts only a read-only query.");
+
+        await metadataRegistration.RegisterScriptMetadataAsync(scriptText, request.DocumentUri ?? "studio");
+        var aliases = dataset.SourceQuery.GetSourceTables()
+            .Where(source => source.Contains('.', StringComparison.Ordinal))
+            .Select(source => source.Split('.', 2)[0])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var definitions = parsed.Statements.OfType<CreateConnectionStatement>()
+            .Where(statement => aliases.Contains(statement.name))
+            .Select(AstSerializer.Format);
+        var previewScript = string.Join(Environment.NewLine, definitions.Append(dataset.SourceQuery.ToSql().Trim().TrimEnd(';') + ";"));
+        var result = await runService.RunAsync(
+            new RunRequest(previewScript, DocumentUri: request.DocumentUri, RowLimit: SampleRowLimit),
+            cancellationToken);
+        if (!result.Success)
+            throw new InvalidOperationException(SecretRedactor.Redact(result.Message));
+
+        return new DataSampleResponse(
+            "dataset",
+            datasetName,
             result.Columns,
             result.Rows,
             result.RowCount,
@@ -136,7 +185,8 @@ public sealed record DataSampleRequest(
     string? Table,
     string? DocumentUri = null,
     /// <summary>Current editor text, so the connection can be registered without a prior analyze.</summary>
-    string? Script = null);
+    string? Script = null,
+    string? Dataset = null);
 
 public sealed record DataSampleResponse(
     string SourceKind,

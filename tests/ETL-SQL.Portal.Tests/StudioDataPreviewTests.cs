@@ -61,6 +61,40 @@ public sealed class StudioDataPreviewTests
     }
 
     [Fact]
+    public void DatasetPreview_ExtractsTheCurrentReadOnlyQueryAndConnection()
+    {
+        const string script = """
+            CREATE CONNECTION sales AS MSSQL('SHARED:sales');
+            CREATE DATASET &orders AS (
+                SELECT Region, SUM(Total) AS Revenue
+                FROM sales.Orders
+                GROUP BY Region
+            );
+            """;
+
+        var (query, connection) = PortalDesignerDataPreviewService.BuildDatasetPreviewScript(script, "&orders");
+
+        Assert.Equal("sales", connection);
+        Assert.Contains("SUM(Total)", query, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CREATE CONNECTION", query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DatasetPreview_RejectsCrossConnectionQueries()
+    {
+        const string script = """
+            CREATE DATASET &combined AS (
+                SELECT a.Id FROM sales.Orders a JOIN crm.Customers c ON a.Id = c.Id
+            );
+            """;
+
+        var error = Assert.Throws<ArgumentException>(() =>
+            PortalDesignerDataPreviewService.BuildDatasetPreviewScript(script, "combined"));
+
+        Assert.Contains("one governed catalog connection", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Response_RedactsSecretsAndEnforcesRowCap()
     {
         var table = new DataTable();

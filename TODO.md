@@ -88,7 +88,7 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [x] **P1 — Complete filter and slicer semantics**: Persist dataset-global `WHERE` and visual-local
   filters in the script, support type-aware categorical, numeric, and date controls, and implement
   slicer promotion with a real parameter binding, option source, action, and dependent query update.
-- [ ] **P1 — Finish code-to-canvas data synchronization**: Dataset query edits must call the governed
+- [x] **P1 — Finish code-to-canvas data synchronization**: Dataset query edits call the governed
   preview path after successful parsing, refresh the correct document's sample, preserve the last
   valid canvas on errors, and cancel or ignore stale responses.
   - [x] **Stop the canvas clobbering the script pane.** Typing erased itself: editor text updated the
@@ -97,6 +97,10 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
     text no longer triggers the write-back; genuine canvas edits still do. Covered by
     `Studio_ScriptPane_KeepsHandAuthoredTextAndInsertedConnections` and, guarding the other
     direction, `Studio_CanvasEdits_StillWriteBackToTheScript`.
+  - [x] Valid dataset edits now refresh the active document's bounded sample on both hosts. Parse
+    errors retain the last valid canvas and sample, while per-document aborts and revision checks
+    discard stale parse/preview responses and prevent tab-crossing updates. Covered by
+    `Studio_DatasetEdits_RefreshTheRightSampleAndIgnoreStaleOrInvalidResults` and host service tests.
 - [x] **P2 — Full editor feature-parity groundwork**: Canvas mutations now apply as ranged CodeMirror
   transactions (`replaceAll`) instead of a whole-document `setValue`, so the author keeps cursor and
   scroll position and the generated span is scrolled into view. Because the edit is a normal

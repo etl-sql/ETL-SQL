@@ -427,6 +427,37 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task DataSample_RefreshesAParsedDatasetQuery()
+    {
+        using var temp = new TempWorkspace();
+        var scriptPath = Path.Combine(temp.Root, "report.rptsql");
+        const string script = """
+            CREATE CONNECTION m AS MOCKDB();
+            CREATE DATASET &users AS (SELECT UserId, Name FROM m.Users);
+            """;
+        await File.WriteAllTextAsync(scriptPath, script);
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, scriptPath, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/designer/data-sample");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        request.Content = JsonContent.Create(new DataSampleRequest(
+            "dataset", null, null, "report.rptsql", script, "&users"));
+
+        var response = await client.SendAsync(request);
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        var result = await response.Content.ReadFromJsonAsync<DataSampleResponse>();
+        Assert.NotNull(result);
+        Assert.Equal("dataset", result!.SourceKind);
+        Assert.Equal(["UserId", "Name"], result.Columns);
+        Assert.NotEmpty(result.Rows);
+    }
+
+    [Fact]
     public async Task Format_UsesSharedSqlFormatter()
     {
         using var temp = new TempWorkspace();

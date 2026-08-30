@@ -6423,9 +6423,17 @@ export function createDesigner(container, opts = {}) {
         await applyScriptText(scriptEditor.getValue());
     }
 
+    let scriptApplySequence = 0;
+
+    function invalidateScriptApply() {
+        scriptApplySequence++;
+    }
+
     async function applyScriptText(script) {
+        const sequence = ++scriptApplySequence;
         try {
             const r = await apiJson('/api/designer/parse', 'POST', { script });
+            if (sequence !== scriptApplySequence) return { applied: false, stale: true };
             if (r?.designState?.pages?.length) {
                 setScriptDiagnosticBadge(null);
                 Object.assign(state, r.designState);
@@ -6438,17 +6446,21 @@ export function createDesigner(container, opts = {}) {
                     closeScript();
                 }
                 renderAllFromScript();
+                return { applied: true, designState: r.designState };
             } else {
                 setScriptDiagnosticBadge(r?.error || 'Script syntax error');
                 if (!isSplitActive) {
                     _feedback.notify(r?.error || 'Could not parse script.', { title: 'Script not parsed', tone: 'error' });
                 }
+                return { applied: false, error: r?.error || 'Script syntax error' };
             }
         } catch (e) {
+            if (sequence !== scriptApplySequence) return { applied: false, stale: true };
             setScriptDiagnosticBadge(e.message);
             if (!isSplitActive) {
                 _feedback.notify(e.message, { title: 'Script not parsed', tone: 'error' });
             }
+            return { applied: false, error: e.message };
         }
     }
 
@@ -7257,6 +7269,7 @@ export function createDesigner(container, opts = {}) {
 
     return {
         applyScriptText,
+        invalidateScriptApply,
         addVisual,
         selectVisual,
         refreshSnapshot: renderCanvas,

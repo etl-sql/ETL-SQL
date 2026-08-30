@@ -36,7 +36,15 @@ export function makeMockApi(seedState) {
       if (scriptText.includes('SYNTAX_ERROR') || scriptText.includes('>>> INVALID <<<') || body._mockParseError) {
         data = { error: 'Syntax error: Unexpected token in script', designState: null };
       } else {
-        data = { designState: seedState };
+        const designState = JSON.parse(JSON.stringify(seedState));
+        const datasetPattern = /CREATE\s+DATASET\s+(&?[A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(([\s\S]*?)\)\s*;/gi;
+        const datasets = [];
+        let match;
+        while ((match = datasetPattern.exec(scriptText)) !== null) {
+          datasets.push({ id: `ds_${datasets.length}`, name: match[1], query: match[2].trim() });
+        }
+        if (datasets.length) designState.datasets = datasets;
+        data = { designState };
       }
     } else if (path.endsWith('/api/designer/analyze')) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
@@ -55,11 +63,17 @@ export function makeMockApi(seedState) {
         .then(r => r.json())
         .catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
     } else if (path.endsWith('/api/designer/data-preview') || path.endsWith('/api/designer/data-sample')) {
-      const source = body.sourceKind === 'temp' ? body.tempTable : `${body.connection}.${body.table}`;
-      const tableName = body.sourceKind === 'temp' ? body.tempTable : body.table;
+      const source = body.sourceKind === 'temp' ? body.tempTable
+        : body.sourceKind === 'dataset' ? body.dataset
+        : `${body.connection}.${body.table}`;
+      const datasetQuery = body.sourceKind === 'dataset' ? extractDatasetQuery(body.script || '', body.dataset) : '';
+      const tableName = body.sourceKind === 'temp' ? body.tempTable
+        : body.sourceKind === 'dataset' ? selectTargetTable(datasetQuery)
+        : body.table;
       const table = mockSchemaTables().find((t) => t.name.toLowerCase() === String(tableName || '').replace(/^#/, '').toLowerCase())
         || mockSchemaTables()[0];
-      const columns = table.columns.map((c) => c.name);
+      const select = body.sourceKind === 'dataset' ? datasetQuery : null;
+      const columns = select ? resolveSelectColumns(select, table) : table.columns.map((c) => c.name);
       const rows = mockRowsForColumns(columns, table);
       data = {
         sourceKind: body.sourceKind,
@@ -299,6 +313,16 @@ function extractSelectStatement(text) {
   if (selects.length) return selects[selects.length - 1];
   const bare = text.trim().replace(/;+\s*$/, '');
   return /^SELECT\b/i.test(bare) ? bare : '';
+}
+
+function extractDatasetQuery(text, datasetName) {
+  const wanted = String(datasetName || '').replace(/^&/, '').toLowerCase();
+  const pattern = /CREATE\s+DATASET\s+(&?[A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(([\s\S]*?)\)\s*;/gi;
+  let match;
+  while ((match = pattern.exec(String(text || ''))) !== null) {
+    if (match[1].replace(/^&/, '').toLowerCase() === wanted) return match[2].trim();
+  }
+  return '';
 }
 
 // Resolve the FROM target, dropping any connection/schema qualifier and alias:
@@ -760,4 +784,3 @@ function generateMockScript(state) {
   }
   return out.join('\n');
 }
-
