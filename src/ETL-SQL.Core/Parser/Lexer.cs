@@ -13,6 +13,12 @@ namespace ETL_SQL.Core.Parser;
 public class Lexer
 {
     private readonly string _source;
+
+    /// <summary>
+    /// The text being lexed. Callers that build a parser from these tokens pass it through so
+    /// constructs that quote themselves back report the source as written.
+    /// </summary>
+    public string Source => _source;
     private int _position;
     private int _line;
     private int _column;

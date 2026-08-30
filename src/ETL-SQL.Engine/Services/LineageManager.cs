@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Quality;
 
 namespace ETL_SQL.Engine.Services;
 
@@ -54,13 +55,19 @@ public class LineageManager(ILineageTracker tracker)
                     if (!col.Metadata.ContainsKey(m.Key)) col.Metadata[m.Key] = m.Value;
                 }
 
+                // The column's EXPECT clauses are published as expect/fail stewardship tags on the
+                // lineage record. Rules are grammar, not tags, but the catalog, Portal, and
+                // SHOW DATA QUALITY RULES all read them from lineage — projecting keeps those
+                // surfaces unchanged without giving rules a second authoring form.
+                var recordedMetadata = ColumnExpectProjection.WithProjectedTags(col, col.Metadata);
+
                 _tracker.Record(
                     intoName,
                     resolvedSources,
                     "SELECT INTO",
                     targetColumn: targetCol,
                     sourceColumns: sourceCols,
-                    metadata: col.Metadata,
+                    metadata: recordedMetadata,
                     derivedFromDescriptions: col.DerivedFromDescriptions,
                     line: select.Line,
                     column: select.Column);
@@ -79,7 +86,7 @@ public class LineageManager(ILineageTracker tracker)
                         leftSelect.GetSourceTables(),
                         $"SELECT INTO ({setOp.Operation})",
                         targetColumn: targetCol,
-                        metadata: col.Metadata,
+                        metadata: ColumnExpectProjection.WithProjectedTags(col, col.Metadata),
                         derivedFromDescriptions: col.DerivedFromDescriptions,
                         line: statement.Line,
                         column: statement.Column);
@@ -150,7 +157,7 @@ public class LineageManager(ILineageTracker tracker)
                     "CREATE DATASET",
                     targetColumn: targetCol,
                     sourceColumns: sourceCols,
-                    metadata: col.Metadata,
+                    metadata: ColumnExpectProjection.WithProjectedTags(col, col.Metadata),
                     derivedFromDescriptions: col.DerivedFromDescriptions,
                     line: col.Line,
                     column: col.Column);

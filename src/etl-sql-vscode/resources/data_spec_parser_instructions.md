@@ -211,12 +211,12 @@ Evaluate column names, classifications, and descriptions to assign metadata tags
     *   "Confidential" -> `confidential`
     *   "Restricted", "Highly Confidential", or containing PII/PHI -> `restricted`
 
-### 4. DATA QUALITY RULES (@expect, @fail, and ON FAILURE)
+### 4. DATA QUALITY RULES (EXPECT and ON FAILURE)
 
 Scan descriptions, business rules, and constraints to generate declarative validation rules:
 
 *   **Format regexes:**
-    *   *Format: SKU-XXXXX* -> `validation_regex`: `^SKU-\\d{5}$` or `expect_rules`: `["MATCHES ^SKU-\\d{5}$"]`
+    *   *Format: SKU-XXXXX* -> `validation_regex`: `^SKU-\\d{5}$` or `expect_rules`: `[\"MATCHES '^SKU-\\d{5}$'\"]` (a MATCHES pattern is a quoted string literal in the generated clause)
     *   *SSN Format: 999-99-9999* -> `validation_regex`: `^\\d{3}-\\d{2}-\\d{4}$`
     *   *Postal Code Format* -> `validation_regex`: `^\\d{5}(-\\d{4})?$`
     *   *Email Format* -> `validation_regex`: `^[^@]+@[^@]+\\.[^@]+$`
@@ -225,7 +225,12 @@ Scan descriptions, business rules, and constraints to generate declarative valid
     *   *Must be positive / > 0* -> `expect_rules`: `["> 0"]`
     *   *Must be non-negative / >= 0* -> `expect_rules`: `[">= 0"]`
     *   *Range 1 to 100* -> `expect_rules`: `["BETWEEN 1 AND 100"]`
-    *   *Allowed values (e.g. ACTIVE, INACTIVE)* -> `allowed_values`: `["ACTIVE", "INACTIVE"]` or `expect_rules`: `["IN (''ACTIVE'', ''INACTIVE'')"]`
+    *   *Allowed values (e.g. ACTIVE, INACTIVE)* -> `allowed_values`: `["ACTIVE", "INACTIVE"]` or `expect_rules`: `["IN ('ACTIVE', 'INACTIVE')"]` (single quotes, not doubled — rules are ordinary SQL tokens)
+Every `expect_rules` entry becomes one rule inside a generated `EXPECT` clause, combined with
+`AND`; the column's action becomes `ON FAILURE <action>` on that clause. Rules are grammar, not
+comment tags — the generator never emits `@expect`/`@fail`, because a rule written in a comment
+would look enforced and do nothing.
+
 *   **Fail conditions & actions:**
     *   *If invalid must quarantine* -> `source.reject_policy = "quarantine"` (compiles to statement-level `ON FAILURE QUARANTINE TO #rejected_data;`)
     *   *If invalid must abort batch* -> `source.reject_policy = "fail_batch"` (compiles to `ON FAILURE THROW;`)

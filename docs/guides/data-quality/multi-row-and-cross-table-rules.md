@@ -1,6 +1,6 @@
 # Multi-Row and Cross-Table Quality Rules
 
-While standard `@expect` rules evaluate columns in isolation, many data quality checks require evaluating relationships across multiple rows, across different columns, or against reference dimension tables.
+While standard `EXPECT` rules evaluate columns in isolation, many data quality checks require evaluating relationships across multiple rows, across different columns, or against reference dimension tables.
 
 ETL-SQL provides native predicates for uniqueness, relationship lookups, and whole-row expressions.
 
@@ -12,12 +12,12 @@ ETL-SQL provides native predicates for uniqueness, relationship lookups, and who
 
 | Category | Predicate Syntax | Description |
 | :--- | :--- | :--- |
-| **Strict Uniqueness** | `@expect: 'UNIQUE'` | Quarantines *all* rows in any duplicate group. |
-| **Deduplicated Uniqueness** | `@expect: 'UNIQUE_FIRST BY col'` | Keeps the first row ordered by `col`; quarantines subsequent duplicates. |
-| **Composite Uniqueness** | `@expect: 'UNIQUE WITH (col1, col2)'` | Enforces uniqueness across a tuple of columns. |
-| **Foreign Key / Exists** | `@expect: 'EXISTS IN dim_table(id)'` | Verifies the value exists in a reference table. |
-| **Scoped Multi-Tenant Exists** | `@expect: 'EXISTS WITH (t_id, c_id) IN dim(t_id, c_id)'` | Verifies existence scoped to a tenant boundary. |
-| **Row Expression** | `@expect: 'EXPR StartDate <= EndDate'` | Evaluates a custom Boolean expression across multiple columns in the row. |
+| **Strict Uniqueness** | `EXPECT UNIQUE` | Quarantines *all* rows in any duplicate group. |
+| **Deduplicated Uniqueness** | `EXPECT UNIQUE_FIRST BY col` | Keeps the first row ordered by `col`; quarantines subsequent duplicates. |
+| **Composite Uniqueness** | `EXPECT UNIQUE WITH (col1, col2)` | Enforces uniqueness across a tuple of columns. |
+| **Foreign Key / Exists** | `EXPECT EXISTS IN dim_table(id)` | Verifies the value exists in a reference table. |
+| **Scoped Multi-Tenant Exists** | `EXPECT EXISTS WITH (t_id, c_id) IN dim(t_id, c_id)` | Verifies existence scoped to a tenant boundary. |
+| **Row Expression** | `EXPECT EXPR StartDate <= EndDate` | Evaluates a custom Boolean expression across multiple columns in the row. |
 
 ---
 
@@ -30,7 +30,7 @@ CREATE CONNECTION raw_stream AS FLATFILE('data/events.json');
 
 load_events:
 SELECT
-    EventId   /* @expect: 'UNIQUE_FIRST BY EventTime'; @fail: 'QUARANTINE'; */,
+    EventId   EXPECT UNIQUE_FIRST BY EventTime ON FAILURE QUARANTINE,
     EventTime,
     EventType,
     Payload
@@ -52,10 +52,9 @@ In multi-tenant systems, checking a single foreign key (like `CustomerId`) can a
 CREATE CONNECTION src AS FLATFILE('data/invoices.csv');
 
 SELECT
-    TenantId   /* @expect: 'NOT NULL'; @fail: 'THROW'; */,
-    CustomerId /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN dim_customers(TenantId, CustomerId)'; 
-                  @fail: 'QUARANTINE'; */,
-    InvoiceAmount /* @expect: '> 0'; @fail: 'QUARANTINE'; */
+    TenantId   EXPECT NOT NULL ON FAILURE THROW,
+    CustomerId EXPECT EXISTS WITH (TenantId, CustomerId) IN dim_customers(TenantId, CustomerId) ON FAILURE QUARANTINE,
+    InvoiceAmount EXPECT > 0 ON FAILURE QUARANTINE
 INTO clean_invoices
 FROM src
 ON FAILURE QUARANTINE TO quarantine_invoices WITH (RETENTION = '30 DAYS')
@@ -74,7 +73,7 @@ CREATE CONNECTION src AS FLATFILE('data/contracts.csv');
 SELECT
     ContractId,
     StartDate,
-    EndDate /* @expect: 'EXPR StartDate <= EndDate'; @fail: 'QUARANTINE'; */,
+    EndDate EXPECT EXPR StartDate <= EndDate ON FAILURE QUARANTINE,
     MonthlyValue
 INTO #valid_contracts
 FROM src
@@ -92,6 +91,6 @@ ON FAILURE QUARANTINE TO #invalid_dates WITH (HANDLING = SCRIPT);
 
 ## Related Topics
 
-- [Column Quality Rules](column-quality-rules.md) — Single-column `@expect` and `@fail` predicates.
+- [Column Quality Rules](column-quality-rules.md) — Single-column `EXPECT` predicates.
 - [Quarantine and Remediation](quarantine-and-remediation.md) — Managing diverted records.
 - [Run-Level Assertions](run-level-assertions.md) — Validating batch-level metrics with `ASSERT JOB`.

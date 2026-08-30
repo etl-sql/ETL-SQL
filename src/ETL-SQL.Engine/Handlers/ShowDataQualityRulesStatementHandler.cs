@@ -10,7 +10,7 @@ using ETL_SQL.Data;
 namespace ETL_SQL.Engine.Handlers;
 
 /// <summary>
-/// Handles <c>SHOW DATA QUALITY RULES</c>: lists the <c>@expect</c>/<c>@fail</c> rules protecting
+/// Handles <c>SHOW DATA QUALITY RULES</c>: lists the <c>EXPECT</c> rules protecting
 /// each column, read from the lineage the run recorded.
 /// <para>
 /// Rules are declared as governance tags precisely so a steward can see what protects a column
@@ -29,7 +29,7 @@ public class ShowDataQualityRulesStatementHandler(ILogger logger) : IStatementHa
 
         var table = new DataTable();
         table.SetColumns([
-            "TargetTable", "TargetColumn", "RuleTag", "Rule", "Action",
+            "TargetTable", "TargetColumn", "RuleClause", "Rule", "Action",
             "SourceFile", "Line"
         ]);
 
@@ -50,7 +50,7 @@ public class ShowDataQualityRulesStatementHandler(ILogger logger) : IStatementHa
         {
             context.Log(
                 "No data-quality rules recorded for this session. Rules are captured when a statement "
-                + "carrying @expect tags runs; nothing has run yet in this session, or the filters matched nothing.",
+                + "carrying EXPECT rules runs; nothing has run yet in this session, or the filters matched nothing.",
                 ConsoleColor.Cyan);
         }
         else if (!context.RedirectOutput)
@@ -115,7 +115,7 @@ public class ShowDataQualityRulesStatementHandler(ILogger logger) : IStatementHa
                         var row = owner.NewRow();
                         row["TargetTable"] = captured.TargetTable;
                         row["TargetColumn"] = captured.TargetColumn;
-                        row["RuleTag"] = "@" + capturedBinding.ExpectKey;
+                        row["RuleClause"] = capturedBinding.ClauseLabel;
                         row["Rule"] = capturedRule.Text;
                         row["Action"] = capturedBinding.Action.ToString().ToUpperInvariant()
                             + (capturedBinding.ActionExplicit ? "" : " (default)");

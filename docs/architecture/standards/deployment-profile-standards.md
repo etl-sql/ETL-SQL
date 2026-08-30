@@ -38,7 +38,7 @@ The status is current implementation evidence, not a roadmap promise. The deploy
 | Scheduling | OS scheduler; optional local SQLite Orchestrator | Shared scheduler, fencing, HA ownership, tenant queues |
 | Connections/secrets | Machine-protected secret store and `SECRET:name`; never raw export | Shared catalog ACLs, external providers, rotation/audit, tenant key separation |
 | Reports | Local Report Player over the same `.rptsql` | Shared catalog, access control, refresh, metering, safe embeds |
-| Quality/stewardship | `@expect`, `ASSERT JOB`, workspace policy, `eng.*`, scanner, local reports | Durable workflow, assignments, organization policy, tenant-isolated evidence |
+| Quality/stewardship | `EXPECT`, `ASSERT JOB`, workspace policy, `eng.*`, scanner, local reports | Durable workflow, assignments, organization policy, tenant-isolated evidence |
 | Identity | OS/process identity for one trusted operator | Local roles, OIDC/groups/service accounts, delegated tenant administration |
 | Policy | Checked-in `etlsql-policy.json` | Signed organization authority, approvals, tenant-specific policy |
 | Audit | Local counts-only execution/security evidence | Durable remote outbox, fail-closed mutation, tenant/platform dual audit |

@@ -51,7 +51,7 @@ ELT is attractive because it centralizes execution in a warehouse, but it often 
 | :--- | :--- |
 | Cross-source staging | Join, cleanse, validate, and enrich data from 25+ unrelated systems in engine-managed `#temp` tables. |
 | Transform-centered ETL | Stage data before load so validation, masking, enrichment, dedupe, lineage tagging, and quality gates happen before downstream systems are mutated. |
-| Native data quality & routing | Declare column rules (`@expect`, `@fail`) directly in `SELECT` queries with automated `ON FAILURE QUARANTINE / WARN / ABORT` routing. |
+| Native data quality & routing | Declare column rules (`EXPECT … ON FAILURE …`) directly in `SELECT` queries with automated `ON FAILURE QUARANTINE / WARN / ABORT` routing. |
 | Stateful incremental watermarks | Persist atomic high-water mark cursors across scheduled job runs using `GET_JOB_STATE` and `SET_JOB_STATE`. |
 | Source-control native pipelines | Plain-text `.etlsql` and `.rptsql` files are diffable, reviewable, testable, and runnable unchanged in CLI, VS Code, notebooks, Orchestrator, and CI/CD. |
 | Built-in lineage and tags | Attach metadata where transformations happen, then query, diagram, or export lineage instead of reconstructing it after the fact. |
@@ -256,7 +256,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 - Read and write across 25+ connectors: relational databases (`MSSQL`, `POSTGRES`, `ORACLE`, `MYSQL`, `SQLITE`, `ODBC`), cloud warehouses (`SNOWFLAKE`, `BIGQUERY`), storage & files (`FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `S3`, `AZURE_BLOB`), NoSQL & messaging (`KAFKA`, `MONGODB`, `NEO4J`), and services (`API`/`REST`, `SFTP`, `FTP`, `SMTP`, `WEBHOOK`, `SHAREPOINT`, `ACTIVE_DIRECTORY`).
 - Stage rows in engine-managed `#temp` tables for cross-source joins, validation, filtering, enrichment, lineage, and reporting.
-- Apply inline data quality validation gates with `@expect` / `@fail` column rules and `ON FAILURE` routing (Quarantine, Warn, Abort).
+- Apply inline data quality validation gates with `EXPECT` column rules and `ON FAILURE` routing (Quarantine, Warn, Abort).
 - Manage atomic incremental watermarks across scheduled executions (`GET_JOB_STATE` / `SET_JOB_STATE`).
 - Run external Python scripts or hardened OCI containers with schema guarantees via `CREATE TOOL` and `EXECUTE TOOL`.
 - Use procedural control flow: variables, `IF`, `WHILE`, `FOR`, `FOREACH`, `TRY...CATCH`, transactions, and `PARALLEL`.
@@ -324,7 +324,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | [5-Minute Quickstart](docs/guides/onboarding/QUICKSTART.md) | Fast terminal setup and zero-dependency `MOCKDB` starter pipeline. |
 | [Getting Started](docs/guides/onboarding/getting-started.md) | Pipeline mental model, connections, variables, control flow, and debugging. |
 | [Report-SQL & Dashboards](docs/guides/reporting/README.md) | Focused guides: authoring dashboards, parameters, cascading slicers, RLS, and themes. |
-| [Data Quality & Governance](docs/guides/data-quality/README.md) | Value rules (`@expect`), quarantine remediation, cross-table checks, and impact analysis. |
+| [Data Quality & Governance](docs/guides/data-quality/README.md) | Value rules (`EXPECT`), quarantine remediation, cross-table checks, and impact analysis. |
 | [ETL Pipelines & Orchestration](docs/guides/pipelines/README.md) | Staged vs. streaming ingestion, modular scripts, parallel runs, DAGs, and unit testing. |
 | [Pattern Cookbook](docs/cookbooks/etl/README.md) | Self-contained ETL recipes for common production workflows. |
 | [Sample Guide](docs/guides/patterns/sample-guide.md) | Inventory of 160+ sample scripts in the `samples/` folder. |

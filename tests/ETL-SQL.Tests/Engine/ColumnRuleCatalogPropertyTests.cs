@@ -14,7 +14,7 @@ using Xunit;
 namespace ETL_SQL.Tests.Engine
 {
     /// <summary>
-    /// Every <c>@expect</c> rule must be able to <b>fail</b>.
+    /// Every rule form must be able to <b>fail</b>.
     ///
     /// <para>The suite is thorough at "does this rule catch bad data" and was thin at "is this rule
     /// wired up at all" — and those look identical from the outside, because a rule that never runs
@@ -40,7 +40,7 @@ namespace ETL_SQL.Tests.Engine
             [typeof(NotNullRule)] = new("NOT NULL", "Id", "(NULL, 'a')"),
             [typeof(NotBlankRule)] = new("NOT BLANK", "Name", "(1, '   ')"),
             [typeof(LengthRule)] = new("LENGTH BETWEEN 5 AND 10", "Name", "(1, 'abc')"),
-            [typeof(MatchesRule)] = new("MATCHES ^v[0-9]+$", "Name", "(1, 'nope')"),
+            [typeof(MatchesRule)] = new("MATCHES '^v[0-9]+$'", "Name", "(1, 'nope')"),
             [typeof(InListRule)] = new("IN ('a','b')", "Name", "(1, 'z')"),
             [typeof(ComparisonRule)] = new(">= 0", "Id", "(-1, 'a')"),
             [typeof(CastableRule)] = new("CASTABLE AS DATE", "Name", "(1, 'not a date')"),
@@ -65,7 +65,7 @@ namespace ETL_SQL.Tests.Engine
             var uncovered = declared.Except(Cases.Keys).Select(t => t.Name).OrderBy(n => n).ToList();
 
             Assert.True(uncovered.Count == 0,
-                "These @expect rules have no case proving they can fail:\n  "
+                "These rules have no case proving they can fail:\n  "
                 + string.Join("\n  ", uncovered)
                 + "\n\nA rule that never fires reports what clean data reports, so an unenforced one "
                 + "is invisible rather than wrong. Add a row that violates it.");
@@ -88,7 +88,7 @@ namespace ETL_SQL.Tests.Engine
 
             var tagged = new[] { "Id", "Name" }
                 .Select(c => c == ruleCase.Column
-                    ? $"{c} /* @expect: \"{ruleCase.Expect}\"; @fail: 'WARN'; */"
+                    ? $"{c} EXPECT {ruleCase.Expect} ON FAILURE WARN"
                     : c);
 
             await Run(eval, $@"

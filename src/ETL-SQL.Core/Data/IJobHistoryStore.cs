@@ -136,7 +136,7 @@ public record JobHistoryEntry(
     double CpuTimeSeconds = 0,
     string? ScriptHashAtRunTime = null,
     bool? HashMatched = null,
-    /// <summary>Rows removed from output by an <c>@expect</c> QUARANTINE action during this run.</summary>
+    /// <summary>Rows removed from output by an <c>EXPECT … ON FAILURE QUARANTINE</c> rule during this run.</summary>
     long RowsQuarantined = 0,
     /// <summary>Rows that failed a WARN rule but still reached the target during this run.</summary>
     long RowsWarned = 0,

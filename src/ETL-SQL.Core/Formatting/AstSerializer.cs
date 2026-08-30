@@ -312,7 +312,8 @@ public static class AstSerializer
         SetTemplatePathStatement s => s.ToSql(),
         AssertStatement s => $"ASSERT {s.Condition.ToSql()}{(s.Message != null ? $", {s.Message.ToSql()}" : "")};",
         AssertTableStatement s => FormatAssertTable(s),
-        AssertJobStatement s => $"ASSERT JOB {s.JobName} ({string.Join(", ", s.Predicates.Select(p => p.Describe()))})" + (s.FailOnWarn ? " WITH (FAIL_ON_WARN = TRUE)" : "") + (s.FailureNotification != null ? $" ON FAILURE NOTIFY {s.FailureNotification}" : "") + (s.ThrowOnCritical ? " ON CRITICAL_FAILURE THROW" : "") + ";",
+        AssertJobStatement s => $"ASSERT JOB {s.JobName} ({string.Join(", ", s.Predicates.Select(p => p.Describe()))})"
+            + FormatOnFailureClauses(s.OnFailureActions) + ";",
         SetReportMetadataStatement s => $"SET REPORT {s.Key} = '{s.Value.Replace("'", "''")}';",
         UseDatasetStatement s => $"USE DATASET {s.DatasetName};",
         ShowDatasetsStatement s => "SHOW DATASETS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
@@ -371,7 +372,8 @@ public static class AstSerializer
         AtTimeZoneExpression e => $"{e.Left.ToSql()} AT TIME ZONE {e.TimeZone.ToSql()}",
 
         // ── AstNode helpers ──
-        SelectColumn n => n.Alias != null ? $"{n.Expression.ToSql()} AS {n.Alias}" : n.Expression.ToSql(),
+        SelectColumn n => (n.Alias != null ? $"{n.Expression.ToSql()} AS {n.Alias}" : n.Expression.ToSql())
+            + FormatExpectClauses(n.Expectations),
         TableReference n => FormatTableReference(n),
         PivotClause n => $"PIVOT ({n.AggregateFunction}({n.AggregateColumn}) FOR {n.PivotColumn} IN ({string.Join(", ", n.PivotValues.Select(v => v.ToSql()))}))" + (n.Alias != null ? $" AS {n.Alias}" : ""),
         UnpivotClause n => n.AllColumnsExcept
@@ -486,10 +488,9 @@ public static class AstSerializer
     }
 
     /// <summary>
-    /// Re-emits the trailing <c>ON FAILURE</c> routing blocks. Dropping them would produce a script
-    /// whose <c>@fail: 'QUARANTINE'</c> tags have nowhere to route — the mirror image of the
-    /// comment-stripping failure the symmetric check exists to catch, and equally silent at the
-    /// point where it happens.
+    /// Re-emits the trailing <c>ON FAILURE</c> blocks — row routing on a SELECT, declared actions on
+    /// an <c>ASSERT JOB</c>. Dropping them would produce a script whose columns elect an action with
+    /// nowhere to route, or a job assertion that quietly stopped failing the run.
     /// </summary>
     private static string FormatOnFailureClauses(IReadOnlyList<FailureActionClause>? clauses)
     {
@@ -499,7 +500,10 @@ public static class AstSerializer
         foreach (var clause in clauses)
         {
             var text = $" ON FAILURE {clause.Action.ToString().ToUpperInvariant()}";
-            if (clause.Target != null) text += $" TO {clause.Target}";
+            // NOTIFY names its notification directly; TO introduces a row-routing target, which a
+            // job-level action never has.
+            if (clause.Target != null)
+                text += clause.Action == FailAction.Notify ? $" {clause.Target}" : $" TO {clause.Target}";
 
             var options = new List<string>();
             if (clause.Retention != null) options.Add($"RETENTION = '{clause.Retention}'");
@@ -507,6 +511,29 @@ public static class AstSerializer
                 options.Add($"HANDLING = {clause.Handling.ToString().ToUpperInvariant()}");
             if (options.Count > 0) text += $" WITH ({string.Join(", ", options)})";
 
+            parts.Add(text);
+        }
+        return string.Concat(parts);
+    }
+
+    /// <summary>
+    /// Re-emits a column's <c>EXPECT &lt;rule&gt; [ON FAILURE &lt;action&gt;]</c> clauses. Rules are
+    /// grammar now, so the formatter owns them: a serializer that dropped them would silently
+    /// disable enforcement in every tool-formatted script — the failure mode moving rules out of
+    /// comments was meant to end. The rule text is re-emitted as written.
+    /// </summary>
+    private static string FormatExpectClauses(IReadOnlyList<ColumnExpectClause>? clauses)
+    {
+        if (clauses is not { Count: > 0 }) return "";
+
+        var parts = new List<string>();
+        foreach (var clause in clauses)
+        {
+            var text = $" EXPECT {clause.Text}";
+            // An omitted action means WARN. Re-emitting it would be harmless but noisy, and it
+            // would make a formatter pass rewrite scripts it had no reason to touch.
+            if (clause.ActionExplicit)
+                text += $" ON FAILURE {clause.Action.ToString().ToUpperInvariant()}";
             parts.Add(text);
         }
         return string.Concat(parts);

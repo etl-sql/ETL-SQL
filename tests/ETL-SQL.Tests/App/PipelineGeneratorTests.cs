@@ -216,11 +216,12 @@ namespace ETL_SQL.Tests.App
             Assert.Contains("Email                     VARCHAR(150)", code);
 
             // Assert Data Quality Rules & Tagging
-            Assert.Contains("@expect: 'NOT NULL, UNIQUE'", code);
-            Assert.Contains("@fail: 'QUARANTINE'", code);
+            // Rules are grammar in generated pipelines too: a generator that emitted them as
+            // comment tags would produce scripts whose quality rules silently do nothing.
+            Assert.Contains("EXPECT NOT NULL AND UNIQUE ON FAILURE QUARANTINE", code);
             Assert.Contains("@d: 'Unique customer ID'", code);
             Assert.Contains("@pii", code);
-            Assert.Contains("@expect: 'MATCHES ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$, IN (''valid_email_format'')'", code);
+            Assert.Contains("EXPECT MATCHES '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$' AND IN ('valid_email_format')", code);
             Assert.Contains("@d: 'Email address'", code);
 
             // Assert Quarantine Routing
@@ -702,13 +703,11 @@ namespace ETL_SQL.Tests.App
             var code = await File.ReadAllTextAsync(outputPath);
 
             // Assert Column 1 Rules
-            Assert.Contains("@expect: 'NOT NULL, UNIQUE, MATCHES ^TRD-[0-9]+$'", code);
-            Assert.Contains("@fail: 'THROW'", code);
+            Assert.Contains("EXPECT NOT NULL AND UNIQUE AND MATCHES '^TRD-[0-9]+$' ON FAILURE THROW", code);
             Assert.Contains("@d: 'Primary trade identifier'", code);
 
             // Assert Column 2 Rules
-            Assert.Contains("@expect: '> 0, < 1000000000'", code);
-            Assert.Contains("@fail: '<= 0'", code);
+            Assert.Contains("EXPECT > 0 AND < 1000000000", code);
             Assert.Contains("@financial", code);
 
             // Assert Statement ON FAILURE WARN routing

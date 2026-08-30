@@ -590,7 +590,7 @@ public class LineageTracker : ILineageTracker
                             lastSeenDescription = kv.Value;
                             derivedList.Add($"{sc}: {kv.Value}");
                         }
-                        // @expect/@fail are enforcement directives scoped to the declaring
+                        // expect/fail are enforcement directives scoped to the declaring
                         // statement, not descriptive metadata — they must not be inherited.
                         else if (!Quality.ColumnRuleParser.IsRuleTagKey(kv.Key))
                         {

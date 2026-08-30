@@ -1,4 +1,4 @@
-# @expect rules and ON FAILURE routing — engine surface, not SQL semantics.
+# EXPECT rules and ON FAILURE routing — engine surface, not SQL semantics.
 #
 # Where a failing row goes is the whole feature, and it is invisible to a corpus that
 # only checks query results: a rule that never fires reports exactly what clean data
@@ -22,8 +22,8 @@ INSERT INTO #incoming (id, email) VALUES
 statement ok
 quality_load:
 SELECT
-  id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */,
-  email /* @expect: 'MATCHES ^[^@]+@[^@]+\.[^@]+$'; @fail: 'QUARANTINE'; */
+  id EXPECT NOT NULL ON FAILURE QUARANTINE,
+  email EXPECT MATCHES '^[^@]+@[^@]+\.[^@]+$' ON FAILURE QUARANTINE
 INTO #clean
 FROM #incoming
 ON FAILURE QUARANTINE TO #quarantined;
@@ -50,7 +50,7 @@ SELECT (SELECT COUNT(*) FROM #clean) + (SELECT COUNT(*) FROM #quarantined);
 statement ok
 warn_load:
 SELECT
-  id /* @expect: 'NOT NULL'; @fail: 'WARN'; */,
+  id EXPECT NOT NULL ON FAILURE WARN,
   email
 INTO #warned
 FROM #incoming
@@ -69,7 +69,7 @@ CREATE TABLE #thrown (id INT, email VARCHAR(100));
 statement error
 throw_load:
 SELECT
-  id /* @expect: 'NOT NULL'; @fail: 'THROW'; */,
+  id EXPECT NOT NULL ON FAILURE THROW,
   email
 INTO #thrown_out
 FROM #incoming
@@ -87,8 +87,7 @@ statement ok
 age_load:
 SELECT
   id,
-  age /* @expect_1: 'NOT NULL'; @fail_1: 'QUARANTINE';
-         @expect_2: 'BETWEEN 0 AND 120'; @fail_2: 'QUARANTINE'; */
+  age EXPECT NOT NULL ON FAILURE QUARANTINE EXPECT BETWEEN 0 AND 120 ON FAILURE QUARANTINE
 INTO #ages_clean
 FROM #ages
 ON FAILURE QUARANTINE TO #ages_bad;
@@ -114,7 +113,7 @@ INSERT INTO #all_good (id) VALUES (1), (2);
 
 statement ok
 good_load:
-SELECT id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+SELECT id EXPECT NOT NULL ON FAILURE QUARANTINE
 INTO #good_clean
 FROM #all_good
 ON FAILURE QUARANTINE TO #good_quarantine;

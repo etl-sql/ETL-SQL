@@ -22,6 +22,19 @@ public interface IParser
     Statement ParseDuckPivotStatement();
     Statement ParseDuckUnpivotStatement();
     Expression ParseExpression();
+
+    /// <summary>Parses at comparison precedence, stopping below <c>AND</c>/<c>OR</c>.</summary>
+    Expression ParseExpressionNoLogical();
+
+    /// <summary>Parses at additive precedence, the level SQL <c>BETWEEN</c> bounds use.</summary>
+    Expression ParseExpressionTerm();
+
+    /// <summary>
+    /// The text spanned by a token range, as written. Falls back to rebuilding from the tokens
+    /// themselves when the parser was handed tokens with no source, so a construct that quotes
+    /// itself back (a data-quality rule, for one) still reads correctly.
+    /// </summary>
+    string SliceSource(Token start, Token end);
     string ParseType();
     TableReference ParseTableReference(bool allowFunction = true, bool allowWithClause = true, bool allowAlias = true);
     SelectColumn ParseSelectColumn();

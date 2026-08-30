@@ -13,8 +13,9 @@ namespace ETL_SQL.Analysis.Linting.Rules;
 /// <list type="bullet">
 /// <item>QUARANTINE is legal only at a sink/materialization boundary (top-level SELECT,
 /// <c>INSERT … SELECT</c>, <c>SELECT … INTO</c>) — Error on nested subquery/CTE/set-operation columns.</item>
-/// <item><c>@fail: 'QUARANTINE'</c> without a matching <c>ON FAILURE QUARANTINE TO</c> clause — Error.</item>
-/// <item>An <c>ON FAILURE</c> clause with zero matching <c>@fail</c> rules — Error (the
+/// <item>A column electing <c>ON FAILURE QUARANTINE</c> without a matching statement-level
+/// <c>ON FAILURE QUARANTINE TO</c> clause — Error.</item>
+/// <item>An <c>ON FAILURE</c> clause elected by no column — Error (the
 /// comment-stripping tripwire: a tool that strips comment tags breaks the script loudly).</item>
 /// <item>A quarantining statement with no enclosing section label — Error (the label is the
 /// v2 replay re-entry point, required from v1).</item>
@@ -106,15 +107,16 @@ public class QuarantineBoundaryRule : ILintRule
             && !clauses.Any(c => c.Action == FailAction.Quarantine))
         {
             Report(results, LintSeverity.Error, select,
-                "@fail: 'QUARANTINE' requires a matching ON FAILURE QUARANTINE TO <table> clause on the statement — quarantined rows have nowhere else to go.");
+                "A column electing ON FAILURE QUARANTINE requires a matching ON FAILURE QUARANTINE TO <table> clause on the statement — quarantined rows have nowhere else to go.");
         }
 
         foreach (var clause in clauses)
         {
             if (hasRules && actions.Contains(clause.Action)) continue;
             Report(results, LintSeverity.Error, select,
-                $"ON FAILURE {ActionName(clause.Action)} clause has no matching @fail rule on any column. " +
-                "If a tool stripped the comment tags, the data-quality rules are gone — restore them or remove the clause.");
+                $"ON FAILURE {ActionName(clause.Action)} clause is elected by no column in this statement. " +
+                "Either a column should declare EXPECT … ON FAILURE " + ActionName(clause.Action) +
+                ", or the routing clause should be removed — routing that nothing uses reads as enforcement that is not happening.");
         }
 
         // Both requirements below exist to serve remediation *after* the run: the label is the
@@ -171,7 +173,7 @@ public class QuarantineBoundaryRule : ILintRule
                         {
                             if (binding.Action != FailAction.Quarantine) continue;
                             Report(results, LintSeverity.Error, column,
-                                "@fail: 'QUARANTINE' is only legal at a sink/materialization boundary (top-level SELECT, INSERT ... SELECT, SELECT ... INTO) — it is a filter with a side effect that would silently change downstream row counts here.");
+                                "ON FAILURE QUARANTINE is only legal at a sink/materialization boundary (top-level SELECT, INSERT ... SELECT, SELECT ... INTO) — it is a filter with a side effect that would silently change downstream row counts here.");
                         }
                     }
                     if (select.FromTable?.Subquery != null) CheckNonSinkQuery(select.FromTable.Subquery, results);
@@ -203,19 +205,9 @@ public class QuarantineBoundaryRule : ILintRule
         return actions;
     }
 
-    // Malformed rules are ColumnRuleValidationRule's report; this rule skips them quietly.
-    private static IReadOnlyList<ColumnRuleBinding> SafeBindings(SelectColumn column)
-    {
-        if (column.Metadata == null || !ColumnRuleParser.HasRuleTags(column.Metadata)) return [];
-        try
-        {
-            return ColumnRuleParser.ParseBindings(column.Metadata);
-        }
-        catch (ColumnRuleParseException)
-        {
-            return [];
-        }
-    }
+    // Rules are parsed with the statement, so anything malformed failed before lint ran.
+    private static IReadOnlyList<ColumnRuleBinding> SafeBindings(SelectColumn column) =>
+        ColumnExpectProjection.ToBindings(column);
 
     private static string ActionName(FailAction action) => action.ToString().ToUpperInvariant();
 

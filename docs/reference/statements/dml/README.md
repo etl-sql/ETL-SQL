@@ -4,7 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
-| [Data Quality Rules (@expect / @fail / ON FAILURE)](data-quality-rules.md) | Column-value validation declared inline on SELECT columns as governance tags, with pluggable |
+| [Data Quality Rules (EXPECT / ON FAILURE)](data-quality-rules.md) | Column-value validation declared inline on SELECT columns, with pluggable |
 | [DELETE](delete.md) | DELETE removes rows from a target table. Without WHERE, all rows are removed; prefer TRUNCATE in that case, as it is faster. |
 | [EXECUTE TOOL](execute-tool.md) | Executes a previously registered custom executable tool. Data is streamed into the process's standard input in JSON Lines format and read from its ... |
 | [insert](insert.md) | INSERT adds new rows to a target table from a SELECT result or a literal VALUES list. |

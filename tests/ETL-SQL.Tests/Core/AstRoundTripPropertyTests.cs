@@ -13,7 +13,7 @@ namespace ETL_SQL.Tests.Core
     /// <para>The round-trip tests that existed were written per feature, by whoever added the
     /// feature — so a clause added later had none. That is how <c>ON FAILURE</c> came to be dropped
     /// entirely by <c>ToSql()</c>: the statement still parsed, and the resulting script routed its
-    /// <c>@fail: 'QUARANTINE'</c> rows nowhere. Silent behaviour loss, found by reading the code
+    /// quarantined rows nowhere. Silent behaviour loss, found by reading the code
     /// rather than by any test.</para>
     ///
     /// <para>Rather than compare ASTs — which differ in source positions and would need a bespoke

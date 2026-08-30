@@ -740,7 +740,7 @@ public class SelectExecutionEngine
         bool hasPreEvaluatedColumns,
         bool canDeferWhere)
     {
-        // Data-quality rules (@expect/@fail): null when no column carries them, so a rule-free
+        // Data-quality rules (EXPECT clauses): null when no column carries them, so a rule-free
         // statement pays nothing. Rules validate the projected value; QUARANTINE captures the
         // pre-projection input row, which the pair stream keeps alongside it.
         var qualityValidator = ColumnQualityValidator.TryCreate(_context, _logger, stmt, colNames);

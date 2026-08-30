@@ -20,7 +20,7 @@ etl-sql gen-script `
 The generated template includes:
 * `EXPECT SCHEMA #staging (...)` from the JSON contract.
 * `INSERT TAG FOR TABLE #cleaned_data (...)` lineage metadata.
-* Inline `@expect: '...'`, `@fail: '...'`, and `@d: '...'` data quality rules and tags.
+* Inline `EXPECT <rule> ON FAILURE <action>` data-quality rules, plus `@d: '...'` description tags.
 * `ON FAILURE QUARANTINE TO #rejected_data;` when `source.reject_policy` is `quarantine`.
 
 ### Step 3: Complete the extraction block

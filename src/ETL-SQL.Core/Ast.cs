@@ -96,6 +96,16 @@ public sealed record SelectColumn(Expression expression, string? alias = null, D
 {
     public Expression Expression { get; } = expression;
     public string? Alias { get; } = alias;
+
+    /// <summary>
+    /// Data-quality expectations declared on this column as
+    /// <c>EXPECT &lt;rule&gt; [ON FAILURE &lt;action&gt;]</c>, in written order; null when the
+    /// column declares none (the overwhelmingly common case, so nothing is allocated for it).
+    /// A column may carry several — repetition is how distinct rule/action pairs are expressed.
+    /// These are grammar, not <see cref="Metadata"/>: a rule changes which rows leave the
+    /// statement, so it must not be something a comment stripper can remove.
+    /// </summary>
+    public IReadOnlyList<Quality.ColumnExpectClause>? Expectations { get; init; }
     // Lazily allocated: most select columns carry no metadata, so the dictionary is created on
     // first use. Description reads the backing field directly to avoid allocating just to look up.
     private Dictionary<string, string>? _metadata = metadata;
@@ -369,7 +379,7 @@ public sealed record SelectStatement : Statement
     public SampleClause? Sample { get; init; }
     /// <summary>
     /// Trailing <c>ON FAILURE &lt;ACTION&gt; [TO &lt;table&gt;] [WITH (RETENTION = '…')]</c> blocks
-    /// routing <c>@fail</c> data-quality actions (at most one clause per action). Null when absent.
+    /// routing the data-quality actions columns elect (at most one clause per action). Null when absent.
     /// </summary>
     public IReadOnlyList<FailureActionClause>? OnFailureActions { get; init; }
 
@@ -428,10 +438,10 @@ public sealed record SampleClause(decimal Count, bool IsPercent, int? Seed) : As
 
 /// <summary>
 /// One trailing <c>ON FAILURE &lt;ACTION&gt; [TO &lt;table&gt;] [WITH (RETENTION = '…')]</c> block on a
-/// SELECT carrying <c>@expect</c>/<c>@fail</c> rules. <c>QUARANTINE</c> requires a <see cref="Target"/>;
+/// SELECT carrying <c>EXPECT</c> rules. <c>QUARANTINE</c> requires a <see cref="Target"/>;
 /// <c>WARN</c> optionally takes one (none = diagnostic-only); <c>THROW</c> never does. Validation is
-/// symmetric (design decision 5): a <c>@fail</c> action without its clause and a clause without any
-/// matching <c>@fail</c> rule are both hard errors.
+/// symmetric (design decision 5): an action no clause routes, and a clause no column elects, are
+/// both hard errors.
 /// </summary>
 /// <param name="Handling">
 /// QUARANTINE only: who owns the diverted rows. Defaults to <see cref="QuarantineHandling.Steward"/>,
@@ -1578,16 +1588,31 @@ public sealed record JobMetricPredicate(
 
 /// <summary>
 /// <c>ASSERT JOB &lt;name&gt; (&lt;predicates&gt;) [ON FAILURE NOTIFY &lt;notification&gt;]
-/// [ON CRITICAL_FAILURE THROW]</c> — asserts on the run's own metrics, collected in-stream during
+/// [ON FAILURE &lt;action&gt;]…</c> — asserts on the run's own metrics, collected in-stream during
 /// execution rather than by a post-run re-scan.
 /// </summary>
 public sealed record AssertJobStatement(
     string JobName,
     IReadOnlyList<JobMetricPredicate> Predicates,
-    string? FailureNotification = null,
-    bool ThrowOnCritical = false,
-    /// <summary>Fails the run with a non-zero exit when any row triggered a WARN quality action.</summary>
-    bool FailOnWarn = false) : Statement;
+    IReadOnlyList<FailureActionClause>? OnFailureActions = null) : Statement
+{
+    /// <summary>
+    /// The declared actions, in the order the engine applies them: notify first, then throw, so a
+    /// failing run always alerts before it aborts. An empty declaration means <c>WARN</c> —
+    /// recorded to the log and run diagnostics, script continues.
+    /// </summary>
+    public IReadOnlyList<FailureActionClause> Actions { get; } = OnFailureActions ?? [];
+
+    /// <summary>The notification named by <c>ON FAILURE NOTIFY</c>, or null when none is declared.</summary>
+    public string? FailureNotification =>
+        Actions.FirstOrDefault(a => a.Action == FailAction.Notify)?.Target;
+
+    /// <summary>
+    /// True when <c>ON FAILURE THROW</c> is declared. This is the <b>only</b> thing that fails the
+    /// run: severity is an action, not a clause name, and not an option hidden in a WITH() bag.
+    /// </summary>
+    public bool ThrowOnFailure => Actions.Any(a => a.Action == FailAction.Throw);
+}
 
 public sealed record ExpectedSchemaColumn
 {
@@ -2116,7 +2141,7 @@ public sealed record LineageStatement : Statement
 
 /// <summary>
 /// <c>SHOW DATA QUALITY RULES [FOR [TABLE] &lt;table&gt;] [COLUMN &lt;col&gt;] [INTO #t]</c> — lists the
-/// <c>@expect</c>/<c>@fail</c> rules protecting each column, so a steward can answer "is this column
+/// the <c>EXPECT</c> rules protecting each column, so a steward can answer "is this column
 /// protected, and by what?" without reading the load script. Rules are steward-facing governance
 /// metadata; this is the surface that makes them visible.
 /// </summary>

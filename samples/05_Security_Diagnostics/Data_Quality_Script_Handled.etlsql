@@ -42,13 +42,12 @@ INSERT INTO #raw_orders (TenantId, CustomerId, Status, RawAmount, PostalCode, No
 -- two things HANDLING = SCRIPT stops requiring, because each exists to serve a
 -- remediation step that will not happen here.
 SELECT
-    TenantId   /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN #dim_customer(TenantId, CustomerId)';
-                  @fail: 'QUARANTINE'; */,
+    TenantId   EXPECT EXISTS WITH (TenantId, CustomerId) IN #dim_customer(TenantId, CustomerId) ON FAILURE QUARANTINE,
     CustomerId,
-    Status     /* @expect: "NOT BLANK, NOT IN ('UNKNOWN', 'N/A')"; @fail: 'QUARANTINE'; */,
-    RawAmount  /* @expect: 'CASTABLE AS DECIMAL(10,2)'; @fail: 'QUARANTINE'; */,
-    PostalCode /* @expect: 'LENGTH BETWEEN 5 AND 10'; @fail: 'QUARANTINE'; */,
-    Notes      /* @expect: 'NOT MATCHES <script[^>]*>'; @fail: 'QUARANTINE'; */
+    Status     EXPECT NOT BLANK AND NOT IN ('UNKNOWN', 'N/A') ON FAILURE QUARANTINE,
+    RawAmount  EXPECT CASTABLE AS DECIMAL(10,2) ON FAILURE QUARANTINE,
+    PostalCode EXPECT LENGTH BETWEEN 5 AND 10 ON FAILURE QUARANTINE,
+    Notes      EXPECT NOT MATCHES '<script[^>]*>' ON FAILURE QUARANTINE
 INTO #clean_orders
 FROM #raw_orders
 ON FAILURE QUARANTINE TO #diverted WITH (HANDLING = SCRIPT);

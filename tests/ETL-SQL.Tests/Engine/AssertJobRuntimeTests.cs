@@ -41,7 +41,7 @@ namespace ETL_SQL.Tests.Engine
             await LoadWithQuarantine(eval, rows: 4, badRows: 3); // 75% quarantined
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
-                "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON CRITICAL_FAILURE THROW;"));
+                "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE THROW;"));
 
             Assert.Contains("QUARANTINE_PERCENT < 0.1", ex.Message);
             Assert.Contains("actual 0.75", ex.Message);
@@ -53,7 +53,7 @@ namespace ETL_SQL.Tests.Engine
             var eval = NewEvaluator();
             await LoadWithQuarantine(eval, rows: 4, badRows: 3);
 
-            // No ON CRITICAL_FAILURE THROW: the failure is reported, the run continues.
+            // No ON FAILURE THROW: the failure is reported, the run continues.
             await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1);");
         }
 
@@ -65,7 +65,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, "ASSERT JOB import (ROW_COUNT >= 6);");
             await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
-                "ASSERT JOB import (ROW_COUNT > 100) ON CRITICAL_FAILURE THROW;"));
+                "ASSERT JOB import (ROW_COUNT > 100) ON FAILURE THROW;"));
         }
 
         [Fact]
@@ -76,7 +76,7 @@ namespace ETL_SQL.Tests.Engine
                 CREATE TABLE #src (Id INT);
                 INSERT INTO #src (Id) VALUES (1), (2), (3);
                 SELECT Id INTO #clean FROM #src;
-                ASSERT JOB import (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW;");
+                ASSERT JOB import (ROW_COUNT > 0) ON FAILURE THROW;");
         }
 
         [Fact]
@@ -87,7 +87,7 @@ namespace ETL_SQL.Tests.Engine
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
                 CREATE TABLE #src (Id INT);
                 SELECT Id INTO #clean FROM #src;
-                ASSERT JOB import (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW;"));
+                ASSERT JOB import (ROW_COUNT > 0) ON FAILURE THROW;"));
 
             Assert.Contains("ROW_COUNT > 0", ex.Message);
             Assert.Contains("actual 0", ex.Message);
@@ -108,7 +108,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
                 SELECT Id, Email INTO #clean2 FROM #src;
-                ASSERT JOB import (NULL_PERCENT(Email) < 0.1) ON CRITICAL_FAILURE THROW;"));
+                ASSERT JOB import (NULL_PERCENT(Email) < 0.1) ON FAILURE THROW;"));
         }
 
         [Fact]
@@ -142,7 +142,7 @@ namespace ETL_SQL.Tests.Engine
             await Run(passing, @"
                 SELECT Email INTO #out_a FROM #a;
                 SELECT Email INTO #out_b FROM #b;
-                ASSERT JOB import (NULL_PERCENT(out_a.Email) < 0.5) ON CRITICAL_FAILURE THROW;");
+                ASSERT JOB import (NULL_PERCENT(out_a.Email) < 0.5) ON FAILURE THROW;");
 
             var failing = NewEvaluator();
             await Run(failing, @"
@@ -154,7 +154,7 @@ namespace ETL_SQL.Tests.Engine
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(failing, @"
                 SELECT Email INTO #out_a FROM #a;
                 SELECT Email INTO #out_b FROM #b;
-                ASSERT JOB import (NULL_PERCENT(out_b.Email) < 0.5) ON CRITICAL_FAILURE THROW;"));
+                ASSERT JOB import (NULL_PERCENT(out_b.Email) < 0.5) ON FAILURE THROW;"));
 
             Assert.Contains("NULL_PERCENT(out_b.Email)", ex.Message);
             Assert.Contains("actual 1", ex.Message);
@@ -172,7 +172,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 SELECT Id, Email INTO #clean FROM #mid;
-                ASSERT JOB import (NULL_PERCENT(Email) < 0.5) ON CRITICAL_FAILURE THROW;");
+                ASSERT JOB import (NULL_PERCENT(Email) < 0.5) ON FAILURE THROW;");
         }
 
         [Fact]
@@ -191,7 +191,7 @@ namespace ETL_SQL.Tests.Engine
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
                 SELECT Email INTO #clean FROM #src;
-                ASSERT JOB import (NULL_PERCENT(clean.Email) WITHIN 0.05 OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
+                ASSERT JOB import (NULL_PERCENT(clean.Email) WITHIN 0.05 OF HISTORICAL) ON FAILURE THROW;"));
 
             Assert.Contains("NULL_PERCENT(clean.Email)", ex.Message);
             Assert.Contains("baseline 0.1", ex.Message);
@@ -211,7 +211,7 @@ namespace ETL_SQL.Tests.Engine
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
                 SELECT Email INTO #clean FROM #src;
-                ASSERT JOB import (NULL_PERCENT(clean.Email) WITHIN 2 SIGMA OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
+                ASSERT JOB import (NULL_PERCENT(clean.Email) WITHIN 2 SIGMA OF HISTORICAL) ON FAILURE THROW;"));
 
             Assert.Contains("sigma", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("NULL_PERCENT(clean.Email)", ex.Message);
@@ -230,8 +230,8 @@ namespace ETL_SQL.Tests.Engine
             await Run(eval, @"
                 import_rows:
                 SELECT Id,
-                       Email /* @steward: alice@example.com; @expect: 'MATCHES ^ok$'; @fail: 'QUARANTINE'; */,
-                       Ssn   /* @pii: true; @owner: bob@example.com; @expect: 'MATCHES ^ok$'; @fail: 'QUARANTINE'; */
+                       Email EXPECT MATCHES '^ok$' ON FAILURE QUARANTINE /* @steward: alice@example.com; */,
+                       Ssn   EXPECT MATCHES '^ok$' ON FAILURE QUARANTINE /* @pii: true; @owner: bob@example.com; */
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -269,13 +269,13 @@ namespace ETL_SQL.Tests.Engine
             // allows. Under the old equality behavior this failed on any deviation at all.
             var tolerated = NewEvaluatorWithHistory(new FakeMetricsProvider(flatHistory));
             await LoadWithQuarantine(tolerated, rows: 1004, badRows: 0);
-            await Run(tolerated, "ASSERT JOB import (ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
+            await Run(tolerated, "ASSERT JOB import (ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL) ON FAILURE THROW;");
 
             // A genuine collapse still fails.
             var breached = NewEvaluatorWithHistory(new FakeMetricsProvider(flatHistory));
             await LoadWithQuarantine(breached, rows: 400, badRows: 0);
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(breached,
-                "ASSERT JOB import (ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
+                "ASSERT JOB import (ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL) ON FAILURE THROW;"));
             Assert.Contains("sigma 0", ex.Message);
         }
 
@@ -290,13 +290,13 @@ namespace ETL_SQL.Tests.Engine
                 CREATE TABLE #src (Id INT, EventTime VARCHAR(40));
                 INSERT INTO #src (Id, EventTime) VALUES (1, '{stale}'), (2, '{recent}');
                 SELECT Id, EventTime INTO #clean FROM #src;
-                ASSERT JOB import (FRESHNESS(clean.EventTime) < '1 HOURS') ON CRITICAL_FAILURE THROW;");
+                ASSERT JOB import (FRESHNESS(clean.EventTime) < '1 HOURS') ON FAILURE THROW;");
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
                 CREATE TABLE #old_src (Id INT, EventTime VARCHAR(40));
                 INSERT INTO #old_src (Id, EventTime) VALUES (1, '2020-01-01T00:00:00Z');
                 SELECT Id, EventTime INTO #old_clean FROM #old_src;
-                ASSERT JOB import (FRESHNESS(old_clean.EventTime) < '1 HOURS') ON CRITICAL_FAILURE THROW;"));
+                ASSERT JOB import (FRESHNESS(old_clean.EventTime) < '1 HOURS') ON FAILURE THROW;"));
 
             Assert.Contains("FRESHNESS(old_clean.EventTime)", ex.Message);
         }
@@ -306,7 +306,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = NewEvaluator();
             // No sink statement ran, so QUARANTINE_PERCENT has no denominator.
-            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT > 0.9) ON CRITICAL_FAILURE THROW;");
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT > 0.9) ON FAILURE THROW;");
         }
 
         // ── HISTORICAL ─────────────────────────────────────────────────────
@@ -332,7 +332,7 @@ namespace ETL_SQL.Tests.Engine
             var eval = NewEvaluator();
             await LoadWithQuarantine(eval, rows: 5, badRows: 0);
 
-            await Run(eval, "ASSERT JOB never_ran_before (ROW_COUNT WITHIN 0.2 OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
+            await Run(eval, "ASSERT JOB never_ran_before (ROW_COUNT WITHIN 0.2 OF HISTORICAL) ON FAILURE THROW;");
         }
 
         [Fact]
@@ -342,7 +342,7 @@ namespace ETL_SQL.Tests.Engine
             await LoadWithQuarantine(eval, rows: 4, badRows: 3);
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
-                "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON CRITICAL_FAILURE THROW;"));
+                "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE THROW;"));
             Assert.Contains("QUARANTINE_PERCENT", ex.Message);
         }
 
@@ -356,7 +356,7 @@ namespace ETL_SQL.Tests.Engine
             await LoadWithQuarantine(eval, rows: 5, badRows: 0); // wildly off any baseline
 
             // Skipped, not failed — a job's first deployments must not alert-storm.
-            await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 0.05 OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
+            await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 0.05 OF HISTORICAL) ON FAILURE THROW;");
         }
 
         [Fact]
@@ -370,7 +370,7 @@ namespace ETL_SQL.Tests.Engine
 
             // Baseline 100, actual 18 (insert + select rows in this harness) → drift 0.82,
             // tolerance 1.0 ⇒ inside the band.
-            await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 1.0 OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
+            await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 1.0 OF HISTORICAL) ON FAILURE THROW;");
         }
 
         [Fact]
@@ -383,7 +383,7 @@ namespace ETL_SQL.Tests.Engine
             await LoadWithQuarantine(eval, rows: 5, badRows: 0);
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
-                "ASSERT JOB import (ROW_COUNT WITHIN 0.2 OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
+                "ASSERT JOB import (ROW_COUNT WITHIN 0.2 OF HISTORICAL) ON FAILURE THROW;"));
 
             Assert.Contains("baseline 100", ex.Message);
             Assert.Contains("drift 0.9", ex.Message);
@@ -398,7 +398,7 @@ namespace ETL_SQL.Tests.Engine
                 new JobRunMetrics(22, 0, 0)));
             await LoadWithQuarantine(eval, rows: 10, badRows: 0); // mean is 20 → zero drift
 
-            await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 0.01 OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
+            await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 0.01 OF HISTORICAL) ON FAILURE THROW;");
         }
 
         [Fact]
@@ -505,12 +505,12 @@ namespace ETL_SQL.Tests.Engine
             await ConfigureNotification(eval, new ThrowingSink());
             await LoadWithQuarantine(eval, rows: 4, badRows: 3);
 
-            // The notification sink is broken; without ON CRITICAL_FAILURE the run still succeeds.
+            // The notification sink is broken; without ON FAILURE THROW the run still succeeds.
             await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts;");
 
             // ...and with it, the assert's own failure is what throws — not the delivery error.
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
-                "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts ON CRITICAL_FAILURE THROW;"));
+                "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts ON FAILURE THROW;"));
             Assert.Contains("QUARANTINE_PERCENT", ex.Message);
             Assert.DoesNotContain("webhook exploded", ex.Message);
         }
@@ -525,24 +525,38 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task FailOnWarn_ProducesExecutionFailureOnlyWhenWarnRowsExist()
+        public async Task AnyWarnedRow_FailsTheRun_ViaWarnPercentAndThrow()
         {
+            // The replacement for WITH (FAIL_ON_WARN = TRUE): a predicate the language already had,
+            // plus the action that already means "fail the run". One clause decides the outcome.
             var clean = NewEvaluator();
             await Run(clean, @"
                 CREATE TABLE #clean_src (Id INT);
                 INSERT INTO #clean_src (Id) VALUES (1);
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */ INTO #clean FROM #clean_src;
-                ASSERT JOB import (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE);");
+                SELECT Id EXPECT NOT NULL ON FAILURE WARN INTO #clean FROM #clean_src;
+                ASSERT JOB import (WARN_PERCENT = 0) ON FAILURE THROW;");
 
             var warned = NewEvaluator();
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(warned, @"
                 CREATE TABLE #warn_src (Id INT);
                 INSERT INTO #warn_src (Id) VALUES (NULL);
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */ INTO #warned FROM #warn_src;
-                ASSERT JOB import (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE);"));
+                SELECT Id EXPECT NOT NULL ON FAILURE WARN INTO #warned FROM #warn_src;
+                ASSERT JOB import (WARN_PERCENT = 0) ON FAILURE THROW;"));
 
-            Assert.Contains("FAIL_ON_WARN = TRUE", ex.Message);
-            Assert.Contains("1 warned row", ex.Message);
+            Assert.Contains("WARN_PERCENT = 0", ex.Message);
+        }
+
+        [Fact]
+        public async Task WarnedRows_WithoutThrow_DoNotFailTheRun()
+        {
+            // Severity is written, never implied: the same predicate without THROW reports and
+            // the script continues.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #warn_src2 (Id INT);
+                INSERT INTO #warn_src2 (Id) VALUES (NULL);
+                SELECT Id EXPECT NOT NULL ON FAILURE WARN INTO #warned2 FROM #warn_src2;
+                ASSERT JOB import (WARN_PERCENT = 0);");
         }
 
         [Fact]
@@ -557,7 +571,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #src (Id, Ssn) VALUES (1, '123-45-6789'), (2, '987-65-4321');");
             await Run(eval, @"
                 import_rows:
-                SELECT Id, Ssn /* @pii: true; @expect: 'MATCHES ^ok$'; @fail: 'QUARANTINE'; */
+                SELECT Id, Ssn EXPECT MATCHES '^ok$' ON FAILURE QUARANTINE /* @pii: true; */
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -603,7 +617,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
         }

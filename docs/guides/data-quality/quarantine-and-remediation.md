@@ -62,10 +62,10 @@ CREATE CONNECTION src AS FLATFILE('data/customers.csv');
 
 import_customers:
 SELECT
-    CustomerId /* @expect: 'NOT NULL'; @fail: 'THROW'; */,
-    Email      /* @expect: 'MATCHES ^[^@]+@[^@]+$'; @fail: 'QUARANTINE'; */,
-    Age        /* @expect: '>= 0, <= 120'; @fail: 'QUARANTINE'; */,
-    Region     /* @expect: "IN ('NA', 'EMEA', 'APAC')"; @fail: 'QUARANTINE'; */
+    CustomerId EXPECT NOT NULL ON FAILURE THROW,
+    Email      EXPECT MATCHES '^[^@]+@[^@]+$' ON FAILURE QUARANTINE,
+    Age        EXPECT >= 0 AND <= 120 ON FAILURE QUARANTINE,
+    Region     EXPECT IN ('NA', 'EMEA', 'APAC') ON FAILURE QUARANTINE
 INTO clean_customers
 FROM src
 ON FAILURE QUARANTINE TO quarantine_customers WITH (RETENTION = '30 DAYS')
@@ -122,7 +122,7 @@ If a pipeline already knows how to fix bad rows programmatically in the same run
 
 ```sql
 SELECT 
-    CustomerId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */,
+    CustomerId EXPECT NOT NULL ON FAILURE QUARANTINE,
     Region
 INTO clean_orders
 FROM raw_orders
@@ -148,6 +148,6 @@ WHERE __dq_rule = 'NOT NULL';
 
 ## Related Topics
 
-- [Column Quality Rules](column-quality-rules.md) — Declaring `@expect` and `@fail` predicates.
+- [Column Quality Rules](column-quality-rules.md) — Declaring `EXPECT` predicates.
 - [Multi-Row and Cross-Table Rules](multi-row-and-cross-table-rules.md) — Checking uniqueness and foreign key existence.
 - [Data Stewardship and Impact Analysis](data-stewardship-and-impact.md) — Portal steward workflows.

@@ -50,21 +50,21 @@ namespace ETL_SQL.Tests.Analysis
         [Fact]
         public void TestSemicolonInsideQuotedValueIsLiteral()
         {
-            var script = Parse("SELECT col1 /* @expect: 'IN (''a;b'', ''c'')'; @fail: 'THROW'; */ FROM src;");
+            var script = Parse("SELECT col1 /* @example: 'IN (''a;b'', ''c'')'; @owner: Bob; */ FROM src;");
             var col = ((SelectStatement)script.Statements[0]).Columns[0];
 
-            Assert.Equal("'IN (''a;b'', ''c'')'", col.Metadata["expect"]);
-            Assert.Equal("'THROW'", col.Metadata["fail"]);
+            Assert.Equal("'IN (''a;b'', ''c'')'", col.Metadata["example"]);
+            Assert.Equal("Bob", col.Metadata["owner"]);
         }
 
         [Fact]
         public void TestCommaBetweenTagsDoesNotSwallowNextTag()
         {
-            var script = Parse("SELECT col1 /* @expect: 'NOT NULL', @fail: 'WARN' */ FROM src;");
+            var script = Parse("SELECT col1 /* @unit: 'USD', @format: 'n2' */ FROM src;");
             var col = ((SelectStatement)script.Statements[0]).Columns[0];
 
-            Assert.Equal("'NOT NULL'", col.Metadata["expect"]);
-            Assert.Equal("'WARN'", col.Metadata["fail"]);
+            Assert.Equal("'USD'", col.Metadata["unit"]);
+            Assert.Equal("'n2'", col.Metadata["format"]);
         }
 
         [Fact]
@@ -80,21 +80,21 @@ namespace ETL_SQL.Tests.Analysis
         [Fact]
         public void TestRegexValueKeepsAtSignAndBackslashLiteral()
         {
-            var script = Parse(@"SELECT col1 /* @expect: 'MATCHES ^[^@]+@[^@]+\.com$'; @fail: 'QUARANTINE'; */ FROM src;");
+            var script = Parse(@"SELECT col1 /* @format: '^[^@]+@[^@]+\.com$'; @owner: Bob; */ FROM src;");
             var col = ((SelectStatement)script.Statements[0]).Columns[0];
 
-            Assert.Equal(@"'MATCHES ^[^@]+@[^@]+\.com$'", col.Metadata["expect"]);
-            Assert.Equal("'QUARANTINE'", col.Metadata["fail"]);
+            Assert.Equal(@"'^[^@]+@[^@]+\.com$'", col.Metadata["format"]);
+            Assert.Equal("Bob", col.Metadata["owner"]);
         }
 
         [Fact]
         public void TestDoubleQuotedValueWithCommasIsLiteral()
         {
-            var script = Parse("SELECT col1 /* @expect: \"IN ('NA','EMEA','APAC')\"; @fail: 'QUARANTINE'; */ FROM src;");
+            var script = Parse("SELECT col1 /* @example: \"IN ('NA','EMEA','APAC')\"; @owner: Bob; */ FROM src;");
             var col = ((SelectStatement)script.Statements[0]).Columns[0];
 
-            Assert.Equal("\"IN ('NA','EMEA','APAC')\"", col.Metadata["expect"]);
-            Assert.Equal("'QUARANTINE'", col.Metadata["fail"]);
+            Assert.Equal("\"IN ('NA','EMEA','APAC')\"", col.Metadata["example"]);
+            Assert.Equal("Bob", col.Metadata["owner"]);
         }
 
         [Fact]
@@ -130,11 +130,11 @@ namespace ETL_SQL.Tests.Analysis
         [Fact]
         public void TestUnterminatedQuoteSwallowsToEndWithoutCrash()
         {
-            var script = Parse("SELECT col1 /* @expect: 'NOT NULL; @fail: THROW */ FROM src;");
+            var script = Parse("SELECT col1 /* @example: 'abc; @owner: Bob */ FROM src;");
             var col = ((SelectStatement)script.Statements[0]).Columns[0];
 
-            Assert.Equal("'NOT NULL; @fail: THROW", col.Metadata["expect"]);
-            Assert.False(col.Metadata.ContainsKey("fail"));
+            Assert.Equal("'abc; @owner: Bob", col.Metadata["example"]);
+            Assert.False(col.Metadata.ContainsKey("owner"));
         }
 
         [Fact]

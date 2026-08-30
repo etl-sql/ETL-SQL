@@ -1128,7 +1128,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `eng.job_history` | Orch | Queryable virtual table for job execution history |
 | `eng.data_quality_status` | Orch | Current/local/remote counts-only run quality summary |
 | `eng.data_quality_failures` | Orch | Normalized rule-failure counts by run and target |
-| `eng.data_quality_rules` | Orch | Current-session `@expect`/`@fail` rules; `eng.data_quality_rules(job)` over a `PORTAL` connection for another job's |
+| `eng.data_quality_rules` | Orch | Current-session `EXPECT` rules; `eng.data_quality_rules(job)` over a `PORTAL` connection for another job's |
 | `eng.job_state` | Orch | Queryable virtual table for saved job-state key/value pairs |
 | `eng.host_metrics` | Orch | Queryable virtual table for recent host-utilization samples |
 | `eng.lineage_history` | Lineage | Cross-run catalog of lineage entries; qualify with a connection for remote Orchestrators |
@@ -2026,7 +2026,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `CONNECTION_PREVIEW_LIMIT` | General | Canonical language token |
 | `CONNECTIONS` | General | Canonical language token |
 | `CONVERT` | General | Canonical language token |
-| `CRITICAL_FAILURE` | General | Canonical language token |
+| `EXPECT` | General | Canonical language token |
 | `DATA_QUALITY_DRY_RUN` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
@@ -2447,8 +2447,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `@domain` | Tag | Standard governance tag |
 | `@encrypted_at_rest` | Tag | Standard governance tag |
 | `@example` | Tag | Standard governance tag |
-| `@expect` | Tag | Standard governance tag |
-| `@fail` | Tag | Standard governance tag |
+| `@expect` | Tag | Projected from `EXPECT` clauses onto lineage; not written by hand |
+| `@fail` | Tag | Projected from `EXPECT … ON FAILURE`; not written by hand |
 | `@format` | Tag | Standard governance tag |
 | `@freshness` | Tag | Standard governance tag |
 | `@load_pattern` | Tag | Standard governance tag |

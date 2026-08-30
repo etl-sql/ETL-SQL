@@ -205,7 +205,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
         private static void CopyDataQualityOutcomes(Evaluator evaluator, ExecutionResult result)
         {
-            // Data-quality outcomes accumulated by @expect rule enforcement; empty (and free)
+            // Data-quality outcomes accumulated by EXPECT rule enforcement; empty (and free)
             // when no statement carried rules. Copy this even for failed runs because THROW rules
             // record their failure immediately before aborting the statement.
             var dataQuality = evaluator.DataQuality;

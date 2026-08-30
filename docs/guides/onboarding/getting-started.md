@@ -201,7 +201,7 @@ Why stage in `#temp` tables?
 3. **Multi-Pass Updates** — Perform multiple sequential operations (such as indexing, secondary updates, or complex multi-statement checks) on the local workspace before inserting.
 
 > [!NOTE]
-> **Staged vs. Direct Streaming:** You do **not** need a `#temp` table to apply engine-only functions (like `REGEX`, `HASHBYTES`, or date functions) or enforce data-quality rules (`@expect`). You can stream data directly from source to target in a single statement (e.g. `INSERT INTO dest SELECT HASHBYTES('SHA2_256', email) FROM src`), which runs in a single high-performance pass without local storage overhead. Choose `#temp` when you need connection isolation, recovery checkpoints, or multi-pass staging.
+> **Staged vs. Direct Streaming:** You do **not** need a `#temp` table to apply engine-only functions (like `REGEX`, `HASHBYTES`, or date functions) or enforce data-quality rules (`EXPECT`). You can stream data directly from source to target in a single statement (e.g. `INSERT INTO dest SELECT HASHBYTES('SHA2_256', email) FROM src`), which runs in a single high-performance pass without local storage overhead. Choose `#temp` when you need connection isolation, recovery checkpoints, or multi-pass staging.
 
 You can define a `#temp` table explicitly (`CREATE TABLE #Summary (...)`), build it with `SELECT ... INTO`, and reshape it with `ALTER TABLE`; it is auto-dropped at session end. Full DDL is in the [Statement Reference](../../reference/statements/README.md).
 

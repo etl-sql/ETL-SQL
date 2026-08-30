@@ -65,15 +65,18 @@ public static class StewardshipTagCatalog
         new("source_system", StewardshipTagValueKind.String, ["table"], [], []),
         new("source_table", StewardshipTagValueKind.String, ["table"], [], []),
         new("source_column", StewardshipTagValueKind.String, ["column"], [], []),
-        // Data-quality rule pair (numbered variants @expect_1/@fail_1 resolve to these base
-        // definitions). The @expect rule grammar is too rich for the value-kind validator —
-        // ColumnRuleValidationRule in Analysis runs the real ColumnRuleParser.
+        // Data-quality rule pair. These are PROJECTED, never authored: a column's rules are the
+        // EXPECT clauses in its grammar, and the engine publishes them here so the catalog,
+        // lineage read side, Portal, and SHOW DATA QUALITY RULES keep rendering them as tags.
+        // They stay registered so those surfaces resolve a definition for what they read back;
+        // writing them by hand in a comment is a lint Error (ColumnRuleValidationRule), not an
+        // unknown tag, because a hand-written rule tag is inert and would look enforced.
         new("expect", StewardshipTagValueKind.String, ["column"], [], []),
         new("fail", StewardshipTagValueKind.Enum, ["column"], ["THROW", "WARN", "QUARANTINE"], [])
     ];
 
-    // @expect_1/@fail_1 … pair numbered rules with numbered actions on one column; they share
-    // the base tag's definition so catalog lookups, lint, and the stewardship read side treat
+    // expect_1/fail_1 … are the projection keys for a column's second and later EXPECT clauses;
+    // they share the base tag's definition so catalog lookups and the stewardship read side treat
     // them as first-class.
     private static readonly Regex NumberedRuleTagPattern =
         new(@"^(expect|fail)_\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -132,7 +135,7 @@ public static class StewardshipTagCatalog
                 IsDeprecated: true);
         }
 
-        // The comment-tag layer preserves outer quotes on values (@fail: 'THROW'); strip one
+        // The comment-tag layer preserves outer quotes on values (@d: 'text'); strip one
         // matching pair before kind validation so quoted and bare values validate identically.
         value = ETL_SQL.Core.Quality.ColumnRuleParser.Unquote(value ?? string.Empty);
         return definition.ValueKind switch

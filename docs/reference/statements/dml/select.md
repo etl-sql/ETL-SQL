@@ -33,7 +33,7 @@ SELECT [DISTINCT] [TOP n [PERCENT] [WITH TIES]]
 | `INTO @variable` | Assigns a scalar query result (single row, single column) directly to a script variable. |
 | `WINDOW name AS (...)` | Defines a reusable named window clause for multiple `OVER name` function projections. |
 | `QUALIFY <cond>` | Filters calculated window function outputs without wrapping in a subquery or CTE. |
-| `ON FAILURE ...` | Routes records violating inline `@expect` / `@fail` data quality rules (e.g. `QUARANTINE` or `WARN`). |
+| `ON FAILURE ...` | Routes records violating inline `EXPECT` data quality rules (e.g. `QUARANTINE` or `WARN`). |
 
 ---
 
@@ -93,16 +93,16 @@ WINDOW regional_window AS (PARTITION BY region ORDER BY quarterly_sales DESC)
 QUALIFY sales_rank <= 3;
 ```
 
-### 4. Production Data Quality Gate (`@expect` & `ON FAILURE`)
+### 4. Production Data Quality Gate (`EXPECT` & `ON FAILURE`)
 
 Enforce strict schema validation rules during ingestion; invalid rows are automatically diverted to a quarantine store:
 
 ```sql
 import_customers:
 SELECT 
-    customer_id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */,
-    email       /* @expect: 'MATCHES ^[^@]+@[^@]+$'; @fail: 'QUARANTINE'; */,
-    credit_score /* @expect: 'BETWEEN 300 AND 850'; @fail: 'WARN'; */,
+    customer_id EXPECT NOT NULL ON FAILURE QUARANTINE,
+    email       EXPECT MATCHES '^[^@]+@[^@]+$' ON FAILURE QUARANTINE,
+    credit_score EXPECT BETWEEN 300 AND 850 ON FAILURE WARN,
     registered_at
 INTO #clean_customers
 FROM source_feed.raw_customers
@@ -123,7 +123,7 @@ FROM #departments;
 
 ## Pushdown vs. Engine Execution
 
-- **Engine Context**: Queries against `#temp` tables, files, or multi-source cross-joins execute inside the ETL-SQL engine. Features like star modifiers (`* EXCLUDE`), `QUALIFY`, and `@expect` annotations are evaluated in-engine.
+- **Engine Context**: Queries against `#temp` tables, files, or multi-source cross-joins execute inside the ETL-SQL engine. Features like star modifiers (`* EXCLUDE`), `QUALIFY`, and `EXPECT` rules are evaluated in-engine.
 - **Remote Pushdown**: Single-source queries against database connections (`MSSQL`, `POSTGRES`, `ORACLE`, `SNOWFLAKE`) are pushed down to the target database when syntax is compatible. Use `EXECUTE <conn> BEGIN ... END` for vendor-proprietary SQL statements.
 
 ---

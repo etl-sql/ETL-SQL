@@ -52,7 +52,7 @@ public sealed class SharedBackupAndRecoveryTests : IDisposable
         await store.LogJobEndAsync(alphaHistoryId, "SUCCESS");
         await store.SaveJobDataQualityFailuresAsync(alphaHistoryId,
         [
-            new DataQualityRuleFailureMetric("customers", "email", "@expect IS_EMAIL", "WARN", 3, "data-eng")
+            new DataQualityRuleFailureMetric("customers", "email", "MATCHES '^[^@]+@[^@]+$'", "WARN", 3, "data-eng")
         ]);
 
         await store.SaveLineageAsync(alpha,

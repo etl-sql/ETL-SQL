@@ -12,7 +12,7 @@ using Xunit.Abstractions;
 namespace ETL_SQL.Tests.Hardening.Performance
 {
     /// <summary>
-    /// Measures what attaching <c>@expect</c> rules costs a statement, per rule shape, against the
+    /// Measures what attaching <c>EXPECT</c> rules costs a statement, per rule shape, against the
     /// same statement with no rules. Reports rather than asserts a budget: the point is to know
     /// which shapes are expensive and why, and to catch a change that makes one of them much worse.
     ///
@@ -34,16 +34,16 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var shapes = new (string Name, string Column, string Rules)[]
             {
                 ("(no rules)", "Id", ""),
-                ("NOT NULL", "Id", "/* @expect: 'NOT NULL'; @fail: 'WARN'; */"),
-                ("NOT BLANK", "Code", "/* @expect: 'NOT BLANK'; @fail: 'WARN'; */"),
-                ("LENGTH BETWEEN", "Code", "/* @expect: 'LENGTH BETWEEN 1 AND 40'; @fail: 'WARN'; */"),
-                ("IN (list)", "Bucket", "/* @expect: \"IN ('a','b','c')\"; @fail: 'WARN'; */"),
-                ("MATCHES", "Code", "/* @expect: 'MATCHES ^v[0-9]+$'; @fail: 'WARN'; */"),
-                ("CASTABLE AS DECIMAL", "Id", "/* @expect: 'CASTABLE AS DECIMAL(18,2)'; @fail: 'WARN'; */"),
-                ("BETWEEN (expr)", "Id", "/* @expect: 'BETWEEN 0 AND 999999999'; @fail: 'WARN'; */"),
-                ("EXPR", "Id", "/* @expect: 'EXPR Id >= 0'; @fail: 'WARN'; */"),
-                ("UNIQUE", "Id", "/* @expect: 'UNIQUE'; @fail: 'WARN'; */"),
-                ("UNIQUE_FIRST BY", "Id", "/* @expect: 'UNIQUE_FIRST BY Id'; @fail: 'WARN'; */"),
+                ("NOT NULL", "Id", "EXPECT NOT NULL ON FAILURE WARN"),
+                ("NOT BLANK", "Code", "EXPECT NOT BLANK ON FAILURE WARN"),
+                ("LENGTH BETWEEN", "Code", "EXPECT LENGTH BETWEEN 1 AND 40 ON FAILURE WARN"),
+                ("IN (list)", "Bucket", "EXPECT IN ('a','b','c') ON FAILURE WARN"),
+                ("MATCHES", "Code", "EXPECT MATCHES '^v[0-9]+$' ON FAILURE WARN"),
+                ("CASTABLE AS DECIMAL", "Id", "EXPECT CASTABLE AS DECIMAL(18,2) ON FAILURE WARN"),
+                ("BETWEEN (expr)", "Id", "EXPECT BETWEEN 0 AND 999999999 ON FAILURE WARN"),
+                ("EXPR", "Id", "EXPECT EXPR Id >= 0 ON FAILURE WARN"),
+                ("UNIQUE", "Id", "EXPECT UNIQUE ON FAILURE WARN"),
+                ("UNIQUE_FIRST BY", "Id", "EXPECT UNIQUE_FIRST BY Id ON FAILURE WARN"),
             };
 
             // One evaluator and one source table for every shape: building a service provider costs
@@ -88,13 +88,13 @@ namespace ETL_SQL.Tests.Hardening.Performance
         }
 
         private static async Task<(TimeSpan Elapsed, long Allocated)> MeasureAsync(
-            Evaluator eval, string ruledColumn, string ruleTag, int index)
+            Evaluator eval, string ruledColumn, string expectClause, int index)
         {
             string Project() => string.Join(", ",
                 new[] { "Id", "Code", "Pad1", "Pad2", "Doubled", "Bucket" }
-                    .Select(c => c == ruledColumn ? $"{c} {ruleTag}" : c));
+                    .Select(c => c == ruledColumn ? $"{c} {expectClause}" : c));
 
-            string Sql(string target) => ruleTag.Length == 0
+            string Sql(string target) => expectClause.Length == 0
                 ? $"measure:\nSELECT Id, Code, Pad1, Pad2, Doubled, Bucket INTO {target} FROM #src;"
                 : $"measure:\nSELECT {Project()} INTO {target} FROM #src\nON FAILURE WARN;";
 

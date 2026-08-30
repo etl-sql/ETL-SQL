@@ -515,7 +515,7 @@ LintStatementHandler.Execute(LintStatement, IExecutionContext)
 
 ## Data-Quality Rules in the Row Pipeline
 
-Column rules are declared as tag comments (`/* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */`) and
+Column rules are declared as tag comments (`EXPECT NOT NULL ON FAILURE QUARANTINE`) and
 enforced by the engine, not by any host. A CLI run on a workstation enforces them exactly as the
 Portal does. Full rule and clause syntax lives in
 [DataQualityRules.md](decisions/data-quality-rules.md); this section covers only where they sit in
@@ -745,7 +745,7 @@ cases: the fast path skips the per-row pipeline where the feature lives.**
   `!HasDataQualityRules(...)` — the early raw-statement pushdown, the streaming pushdown for
   `SELECT … INTO`, and the streaming pushdown path. Rules are evaluated row by row by
   `ColumnQualityValidator`; work pushed to a remote database never passes through that validator, so
-  a statement carrying `@expect` is kept local. See [Data-quality rules in the row
+  a statement carrying `EXPECT` rules is kept local. See [Data-quality rules in the row
   pipeline](#data-quality-rules-in-the-row-pipeline).
 - **Null-count metric tracking disqualifies the native columnar `SELECT … INTO`.** That path is
   guarded on `!context.DataQuality.TracksNullCounts`, because counting nulls per column requires

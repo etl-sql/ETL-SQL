@@ -61,7 +61,7 @@ namespace ETL_SQL.Tests.Engine
             var mock = new MockDatabaseSource();
             ev.Connections["MyDb"] = mock;
 
-            await ev.Evaluate(Parse("SELECT UserID /* @expect: 'NOT NULL'; @fail: 'WARN'; */, UserName FROM MyDb.Users ON FAILURE WARN;"));
+            await ev.Evaluate(Parse("SELECT UserID EXPECT NOT NULL ON FAILURE WARN, UserName FROM MyDb.Users ON FAILURE WARN;"));
 
             Assert.Empty(mock.ExecutedSql);
             Assert.Contains(ev.Telemetry.PlanDecisions,
@@ -251,7 +251,7 @@ namespace ETL_SQL.Tests.Engine
 
             await ev.Evaluate(Parse(@"
                 CREATE TABLE #Target (UserID INT, UserName STRING);
-                SELECT UserID /* @expect: 'NOT NULL'; @fail: 'WARN'; */, UserName
+                SELECT UserID EXPECT NOT NULL ON FAILURE WARN, UserName
                 INTO #Target
                 FROM MyDb.Users
                 ON FAILURE WARN;"));

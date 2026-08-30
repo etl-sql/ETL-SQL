@@ -1971,15 +1971,27 @@ public class Parser : IParser
                 throw new SyntaxException($"Expected alias after AS", Current.Line, Current.Column);
             }
         }
-        else if (IsIdentifier(Current))
+        else if (IsIdentifier(Current) && Current.Type != TokenType.EXPECT)
         {
+            // EXPECT starts a data-quality clause, never an implicit alias. IsIdentifier is
+            // permissive by design (it lets most keywords be aliases), so the clause keyword has to
+            // be excluded here explicitly — otherwise `SELECT c EXPECT NOT NULL` would silently
+            // alias the column "EXPECT" and drop the rule. `SELECT c AS EXPECT` still works.
             alias = Advance().Value;
         }
 
         CollectTags();
 
+        // Data-quality expectations sit after the alias: `<expr> [AS <name>] EXPECT <rule>
+        // [ON FAILURE <action>]`, repeatable. EXPECT is a reserved token, so it can never be read
+        // as the implicit alias above — `SELECT c EXPECT NOT NULL` needs no AS.
+        var expectations = new Quality.ColumnExpectClauseParser(this).ParseClauses();
+
+        CollectTags();
+
         var col = new SelectColumn(expr, alias, metadata)
         {
+            Expectations = expectations,
             Line = expr.Line,
             Column = expr.Column,
             EndLine = LastTokenEndLine,
@@ -2124,6 +2136,36 @@ public class Parser : IParser
     }
 
     public Expression ParseExpression() => _expressionParser.ParseExpression();
+
+    /// <inheritdoc />
+    public Expression ParseExpressionNoLogical() => _expressionParser.ParseExpressionNoLogical();
+
+    /// <inheritdoc />
+    public Expression ParseExpressionTerm() => _expressionParser.ParseExpressionTerm();
+
+    /// <inheritdoc />
+    public string SliceSource(Token start, Token end)
+    {
+        if (!string.IsNullOrEmpty(_source) &&
+            start.Offset >= 0 && end.EndOffset <= _source.Length && start.Offset < end.EndOffset)
+            return _source[start.Offset..end.EndOffset].Trim();
+
+        // No source (the parser was handed tokens alone): rebuild from the tokens, re-quoting
+        // string literals so the result is still valid script text rather than a lossy summary.
+        var startIndex = _tokens.IndexOf(start);
+        var endIndex = _tokens.IndexOf(end);
+        if (startIndex < 0 || endIndex < startIndex) return start.Value;
+
+        var parts = new List<string>(endIndex - startIndex + 1);
+        for (var i = startIndex; i <= endIndex; i++)
+        {
+            var token = _tokens[i];
+            parts.Add(token.Type == TokenType.STRING_LITERAL
+                ? $"'{token.Value.Replace("'", "''")}'"
+                : token.Value);
+        }
+        return string.Join(' ', parts);
+    }
 
     public List<JoinClause> ParseJoins()
     {

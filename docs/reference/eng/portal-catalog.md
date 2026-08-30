@@ -32,7 +32,7 @@ FROM prod_portal.eng.report_history('Monthly Sales');
 - **`eng.saved_views(report)`** — Saved parameter views for a report.
 - **`eng.alerts(report)`** — Alerts for a report.
 - **`eng.effective_permissions(target)`** or **`eng.effective_permissions(type, target)`** — Resolved user, folder, or report access.
-- **`eng.data_quality_rules(job)`** — `@expect`/`@fail` rules protecting each target and column in the named job's script. Requires data-quality steward access; the job name is required because rules bind to the statement that declares them.
+- **`eng.data_quality_rules(job)`** — the `EXPECT` rules protecting each target and column in the named job's script. Requires data-quality steward access; the job name is required because rules bind to the statement that declares them.
 
 ## References
 

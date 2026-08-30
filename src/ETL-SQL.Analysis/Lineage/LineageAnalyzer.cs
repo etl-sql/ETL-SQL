@@ -294,6 +294,12 @@ public class LineageAnalyzer
                 // Merge static tags from the column itself (e.g. /* @d: ... */)
                 foreach (var m in col.Metadata) inherited[m.Key] = m.Value;
 
+                // Publish the column's EXPECT clauses as expect/fail stewardship tags. Rules are
+                // grammar, but the catalog, Portal, and SHOW DATA QUALITY RULES all read them off
+                // lineage — and this analyzer is the path that answers "what rules protect this
+                // column?" for a script that has not been run.
+                ETL_SQL.Core.Quality.ColumnExpectProjection.ProjectTags(col, inherited);
+
                 // @pii: true wins — if any source carries pii=true, propagate it
                 if (!inherited.ContainsKey("pii") || !inherited["pii"].Equals("true", StringComparison.OrdinalIgnoreCase))
                 {

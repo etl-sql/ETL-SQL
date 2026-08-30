@@ -27,7 +27,7 @@ FROM ProdOrchestrator.eng.stewardship_score;
 | `evaluated_at_utc` | UTC evaluation timestamp. |
 | `definition_version` | Calculation contract version. |
 
-Weights and required-tag rules come from the nearest `etlsql-policy.json`. Without a workspace policy, the standard required tags are `@owner`, `@steward`, `@contact`, `@classification`, and `@quality`; a checked-in policy is authoritative and may replace that list. Protected-data coverage checks ownership (`@owner`, `@steward`, or `@contact`) and `@classification`; quality-rule coverage checks column `@expect` metadata.
+Weights and required-tag rules come from the nearest `etlsql-policy.json`. Without a workspace policy, the standard required tags are `@owner`, `@steward`, `@contact`, `@classification`, and `@quality`; a checked-in policy is authoritative and may replace that list. Protected-data coverage checks ownership (`@owner`, `@steward`, or `@contact`) and `@classification`; quality-rule coverage checks the `EXPECT` rules projected onto each column.
 
 For any matching `scope_type`, `scope_name`, and `component`, `denominator - numerator` equals the number of rows in [`eng.stewardship_gaps`](stewardship-gaps.md).
 

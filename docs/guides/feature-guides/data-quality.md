@@ -6,14 +6,14 @@ For full statement syntax and options, see the [Data Quality Rules Reference](..
 
 ## The Data Quality Model
 
-Data quality rules are declared as inline metadata tags (`/* @expect: '...'; @fail: '...'; */`) on columns or tables during `SELECT ... INTO` or insert pipelines.
+Data quality rules are declared as inline metadata tags (`EXPECT ... ON FAILURE ...`) on columns or tables during `SELECT ... INTO` or insert pipelines.
 
 ```sql
 SELECT
-    user_id     /* @expect: 'NOT NULL'; @fail: 'THROW'; */,
-    email       /* @expect: 'MATCHES ^[^@]+@[^@]+$'; @fail: 'QUARANTINE'; */,
-    age         /* @expect: '>= 0, <= 120'; @fail: 'WARN'; */,
-    status      /* @expect: "IN ('ACTIVE', 'PENDING', 'CLOSED')"; @fail: 'WARN'; */
+    user_id     EXPECT NOT NULL ON FAILURE THROW,
+    email       EXPECT MATCHES '^[^@]+@[^@]+$' ON FAILURE QUARANTINE,
+    age         EXPECT >= 0 AND <= 120 ON FAILURE WARN,
+    status      EXPECT IN ('ACTIVE', 'PENDING', 'CLOSED') ON FAILURE WARN
 INTO #clean_users
 FROM raw_users
 ON FAILURE QUARANTINE INTO #quarantined_users;

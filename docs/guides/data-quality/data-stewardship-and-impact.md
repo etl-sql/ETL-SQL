@@ -95,6 +95,6 @@ The response returns all affected reports, datasets, subscriptions, and steward-
 
 ## Related Topics
 
-- [Column Quality Rules](column-quality-rules.md) — Declaring `@expect` rules.
+- [Column Quality Rules](column-quality-rules.md) — Declaring `EXPECT` rules.
 - [Lineage Reference](../../reference/statements/session-control/lineage.md) — Complete `TAG` and `LINEAGE` statement syntax.
 - [Governance Core](../../administration/platform/governance.md) — Organization-wide governance policies.

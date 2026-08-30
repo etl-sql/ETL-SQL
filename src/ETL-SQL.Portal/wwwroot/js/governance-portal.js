@@ -497,7 +497,7 @@ export function createGovernancePortal(opts = {}) {
               <div style="font-size: 11px; color: var(--portal-muted, #9ca3af); margin-top: 2px;">Column: <code>${esc(rule.targetColumn || '—')}</code></div>
             </td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); vertical-align: middle;">
-              <span class="gov-badge gov-badge-auto">${esc(rule.ruleTag || '—')}</span>
+              <span class="gov-badge gov-badge-auto">${esc(rule.ruleClause || '—')}</span>
             </td>
             <td style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft, #374151); vertical-align: middle;">
               <code>${esc(rule.rule || '—')}</code>
@@ -556,7 +556,7 @@ export function createGovernancePortal(opts = {}) {
               <tr>
                 <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151); color: var(--portal-muted,#9ca3af); font-weight: 600; width: 150px;">Job</th>
                 <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151); color: var(--portal-muted,#9ca3af); font-weight: 600; width: 220px;">Protected Target</th>
-                <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151); color: var(--portal-muted,#9ca3af); font-weight: 600; width: 100px;">Tag</th>
+                <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151); color: var(--portal-muted,#9ca3af); font-weight: 600; width: 100px;">Clause</th>
                 <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151); color: var(--portal-muted,#9ca3af); font-weight: 600;">Rule Expression</th>
                 <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151); color: var(--portal-muted,#9ca3af); font-weight: 600; width: 120px;">Action</th>
                 <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151); color: var(--portal-muted,#9ca3af); font-weight: 600;">Source File</th>
@@ -830,11 +830,11 @@ export function createGovernancePortal(opts = {}) {
               
               <h4 style="margin: 20px 0 10px 0; font-size: 15px; font-weight: 600; border-bottom: 1px solid var(--portal-border,#374151); padding-bottom: 6px;">Rules protecting columns</h4>
               ${rules.length ? `<table class="dq-rows-table" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-                <thead><tr><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Target Table</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Column</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Tag</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Rule</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Action</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Source</th></tr></thead>
+                <thead><tr><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Target Table</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Column</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Clause</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Rule</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Action</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--portal-border,#374151);">Source</th></tr></thead>
                 <tbody>${rules.map(rule => `<tr>
                   <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.targetTable || '—')}</td>
                   <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.targetColumn || '—')}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(rule.ruleTag || '—')}</code></td>
+                  <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(rule.ruleClause || '—')}</code></td>
                   <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(rule.rule || '—')}</code></td>
                   <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.action || '—')}</td>
                   <td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);">${esc(rule.sourceFile || '—')}:${esc(rule.line || '0')}</td>

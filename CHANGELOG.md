@@ -21,6 +21,33 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   implicit reports ask without touching source bytes. Physical page settings and visual print-break
   clauses now round-trip through the shared authoring contract.
 
+- **Breaking:** data-quality rules moved out of comment tags into first-class syntax. A column now
+  declares rules with `EXPECT <rule> [ON FAILURE THROW | WARN | QUARANTINE]`, repeated as needed,
+  replacing `/* @expect: '…'; @fail: '…'; */` and the numbered `@expect_N`/`@fail_N` pairing. A rule
+  decides which rows leave a statement, so it must not be something a formatter or comment stripper
+  can silently remove; comments keep carrying the tags that describe data (`@d`, `@owner`, `@pii`).
+  Rules combine with `AND`/`OR` — the comma separates columns in a select list — and a `MATCHES`
+  pattern is now a quoted string literal, so the outer quoting and doubled quotes the tag layer
+  forced are gone. Writing a rule as a tag is a lint error naming the clause to use instead.
+
+- **Breaking:** `ASSERT JOB` folds onto the same failure-action vocabulary. `ON CRITICAL_FAILURE
+  THROW` and `WITH (FAIL_ON_WARN = TRUE)` are replaced by stacked `ON FAILURE WARN | NOTIFY
+  <notification> | THROW` blocks: severity is an action, not a clause name, and not an option
+  hidden in a `WITH()` bag that could fail a run without the severity clause saying so. `WARN` is
+  the default on both surfaces, `NOTIFY` alone is non-fatal, and "any warned row fails the run" is
+  now the predicate `WARN_PERCENT = 0` with `ON FAILURE THROW`.
+
+- Fixed an `ASSERT JOB` predicate naming a column no sink in the script writes reporting green
+  forever. The runtime skipped the unobserved metric and the assertion passed, so a typo such as
+  `NULL_PERCENT(clean_users.Emial)` was a guard that could never fire; it is now a lint error at
+  author time. Skip-with-warning remains for what is genuinely unknowable until runtime — a run
+  that observed no rows, and historical cold start.
+
+- Renamed the data-quality rule catalog's `rule_tag` column to `rule_clause`, and its values from
+  `@expect`/`@expect_1` to `EXPECT`/`EXPECT #2`, so the catalog names a form that can still be
+  written. This affects `eng.data_quality_rules`, `SHOW DATA QUALITY RULES`, and the Portal's
+  data-quality views.
+
 - Fixed `||` string concatenation across the full expression grammar. Concatenations now retain
   explicit aliases, work inside parentheses and larger expressions, preserve SQL-style `NULL`
   propagation in engine execution, and compile to the target dialect's concatenation operator.

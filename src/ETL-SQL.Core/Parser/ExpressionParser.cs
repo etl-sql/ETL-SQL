@@ -71,6 +71,22 @@ public partial class ExpressionParser
     /// <c>a OR b => x : y</c> means <c>(a OR b) => x : y</c>. The final else branch is REQUIRED:
     /// a dangling <c>expr => val</c> is a syntax error, never an implicit NULL.
     /// </summary>
+    /// <summary>
+    /// Parses an expression at comparison precedence — everything below <c>AND</c>/<c>OR</c>.
+    /// Data-quality rules need this: inside an <c>EXPECT</c> clause <c>AND</c> combines *rules*
+    /// (<c>EXPECT EXPR a &lt;= b AND NOT NULL</c>), so a predicate that greedily consumed the
+    /// <c>AND</c> would swallow the next rule. A compound predicate is written parenthesized,
+    /// <c>EXPR (a &lt;= b AND c &gt; d)</c>, which reaches the full expression grammar again.
+    /// </summary>
+    public Expression ParseExpressionNoLogical() => ParseComparison();
+
+    /// <summary>
+    /// Parses an expression at additive precedence — the level SQL's own
+    /// <c>BETWEEN &lt;a&gt; AND &lt;b&gt;</c> uses for its bounds, so a bound cannot swallow the
+    /// <c>AND</c> that separates it from the upper bound.
+    /// </summary>
+    public Expression ParseExpressionTerm() => ParseTerm();
+
     private Expression ParseArrow()
     {
         var operand = ParseOr();

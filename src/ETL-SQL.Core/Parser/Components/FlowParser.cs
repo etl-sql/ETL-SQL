@@ -394,9 +394,11 @@ public class FlowParser : ParserComponent
     }
 
     /// <summary>
-    /// Parses <c>ASSERT JOB &lt;name&gt; (&lt;predicate&gt;, …) [ON FAILURE NOTIFY &lt;notification&gt;]
-    /// [ON CRITICAL_FAILURE THROW];</c>. <c>NOTIFY</c>, <c>FAILURE</c>, and <c>CRITICAL_FAILURE</c> are
-    /// matched as contextual identifiers, mirroring the other trailing action clauses.
+    /// Parses <c>ASSERT JOB &lt;name&gt; (&lt;predicate&gt;, …) [ON FAILURE &lt;action&gt;]…;</c> where an
+    /// action is <c>WARN</c>, <c>NOTIFY &lt;notification&gt;</c>, or <c>THROW</c> — the same stacked
+    /// <c>ON FAILURE</c> blocks a rule-carrying SELECT takes, drawn from the same vocabulary.
+    /// <c>NOTIFY</c>, <c>FAILURE</c>, and <c>WARN</c> are matched as contextual identifiers,
+    /// mirroring the other trailing action clauses.
     /// </summary>
     private Statement ParseAssertJob(Token startToken)
     {
@@ -417,74 +419,90 @@ public class FlowParser : ParserComponent
             throw new SyntaxException("ASSERT JOB requires at least one metric predicate",
                 startToken.Line, startToken.Column);
 
-        bool failOnWarn = false;
         if (IsContextualWord(_parser.Current, "WITH"))
-        {
-            Advance();
-            Consume(TokenType.LPAREN, "Expected '(' after ASSERT JOB ... WITH");
-            var option = ConsumeIdentifier("Expected FAIL_ON_WARN inside ASSERT JOB ... WITH");
-            if (!option.Value.Equals("FAIL_ON_WARN", StringComparison.OrdinalIgnoreCase))
-                throw new SyntaxException($"Unknown ASSERT JOB option '{option.Value}'. Supported: FAIL_ON_WARN",
-                    option.Line, option.Column);
-            Consume(TokenType.EQUALS, "Expected '=' after FAIL_ON_WARN");
-            if (_parser.Current.Type == TokenType.TRUE)
-            {
-                failOnWarn = true;
-                Advance();
-            }
-            else if (_parser.Current.Type == TokenType.FALSE)
-            {
-                Advance();
-            }
-            else
-            {
-                throw new SyntaxException("FAIL_ON_WARN must be TRUE or FALSE",
-                    _parser.Current.Line, _parser.Current.Column);
-            }
-            Consume(TokenType.RPAREN, "Expected ')' after ASSERT JOB options");
-        }
+            throw new SyntaxException(
+                "ASSERT JOB takes no WITH options. WITH (FAIL_ON_WARN = TRUE) is now the predicate "
+                + "WARN_PERCENT = 0 with ON FAILURE THROW, so exactly one clause decides whether the "
+                + "run fails.",
+                _parser.Current.Line, _parser.Current.Column);
 
-        string? failureNotification = null;
-        bool throwOnCritical = false;
-        while (_parser.Current.Type == TokenType.ON)
-        {
-            if (IsContextualWord(_parser.Peek, "FAILURE"))
-            {
-                Advance(); // ON
-                Advance(); // FAILURE
-                if (IsContextualWord(_parser.Current, "ALERT"))
-                    throw new SyntaxException(
-                        "ASSERT JOB ... ON FAILURE ALERT <connection> has been retired. " +
-                        "Create a NOTIFICATION on the Orchestrator and use ON FAILURE NOTIFY <notification>.",
-                        _parser.Current.Line, _parser.Current.Column);
-                if (!IsContextualWord(_parser.Current, "NOTIFY"))
-                    throw new SyntaxException("Expected NOTIFY after ASSERT JOB ... ON FAILURE",
-                        _parser.Current.Line, _parser.Current.Column);
-                Advance(); // NOTIFY
-                if (failureNotification != null)
-                    throw new SyntaxException("Duplicate ON FAILURE NOTIFY clause on ASSERT JOB",
-                        _parser.Current.Line, _parser.Current.Column);
-                failureNotification = ConsumeIdentifier("Expected a notification name after ON FAILURE NOTIFY").Value;
-            }
-            else if (IsContextualWord(_parser.Peek, "CRITICAL_FAILURE"))
-            {
-                Advance(); // ON
-                Advance(); // CRITICAL_FAILURE
-                Consume(TokenType.THROW, "Expected THROW after ON CRITICAL_FAILURE");
-                throwOnCritical = true;
-            }
-            else
-            {
-                break;
-            }
-        }
+        var actions = ParseAssertJobActions();
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new AssertJobStatement(jobName, predicates, failureNotification, throwOnCritical, failOnWarn)
+        return new AssertJobStatement(jobName, predicates, actions)
         {
             Line = startToken.Line,
             Column = startToken.Column
         };
+    }
+
+    /// <summary>
+    /// Parses the stacked <c>ON FAILURE &lt;action&gt;</c> blocks after an <c>ASSERT JOB</c> predicate
+    /// list. <c>QUARANTINE</c> is rejected with a pointer to the SELECT clause — a job metric has no
+    /// row to divert. Declaration order does not matter: the handler always notifies before it
+    /// throws, because that is the only useful order.
+    /// </summary>
+    private List<FailureActionClause> ParseAssertJobActions()
+    {
+        var actions = new List<FailureActionClause>();
+        while (_parser.Current.Type == TokenType.ON && IsContextualWord(_parser.Peek, "FAILURE"))
+        {
+            var onToken = Advance(); // ON
+            Advance();               // FAILURE
+
+            var actionToken = _parser.Current;
+            FailAction action;
+            string? target = null;
+
+            if (IsContextualWord(actionToken, "ALERT"))
+                throw new SyntaxException(
+                    "ASSERT JOB ... ON FAILURE ALERT <connection> has been retired. " +
+                    "Create a NOTIFICATION on the Orchestrator and use ON FAILURE NOTIFY <notification>.",
+                    actionToken.Line, actionToken.Column);
+
+            if (IsContextualWord(actionToken, "NOTIFY"))
+            {
+                Advance();
+                action = FailAction.Notify;
+                target = ConsumeIdentifier("Expected a notification name after ON FAILURE NOTIFY").Value;
+            }
+            else if (_parser.Current.Type == TokenType.THROW || IsContextualWord(actionToken, "THROW"))
+            {
+                Advance();
+                action = FailAction.Throw;
+            }
+            else if (IsContextualWord(actionToken, "WARN"))
+            {
+                Advance();
+                action = FailAction.Warn;
+            }
+            else if (IsContextualWord(actionToken, "QUARANTINE"))
+            {
+                throw new SyntaxException(
+                    "QUARANTINE routes a failing row, and a job metric has no row to divert. "
+                    + "Quarantine is declared on a SELECT: ON FAILURE QUARANTINE TO <table>.",
+                    actionToken.Line, actionToken.Column);
+            }
+            else
+            {
+                throw new SyntaxException(
+                    $"'{actionToken.Value}' is not an ASSERT JOB failure action. "
+                    + "Expected WARN, NOTIFY <notification>, or THROW.",
+                    actionToken.Line, actionToken.Column);
+            }
+
+            if (actions.Any(a => a.Action == action))
+                throw new SyntaxException(
+                    $"Duplicate ON FAILURE {action.ToString().ToUpperInvariant()} clause on ASSERT JOB",
+                    onToken.Line, onToken.Column);
+
+            actions.Add(new FailureActionClause(action, target, null)
+            {
+                Line = onToken.Line,
+                Column = onToken.Column
+            });
+        }
+        return actions;
     }
 
     /// <summary>

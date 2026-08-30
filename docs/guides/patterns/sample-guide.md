@@ -83,7 +83,7 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 
 ### [quality-loop/customer_quality.etlsql](../../../samples/quality-loop/customer_quality.etlsql)
 **Purpose**: Copy-pasteable one-person quality workflow.
-- Pairs a checked-in workspace policy with stewardship tags, `@expect` rules, quarantine routing, and `ASSERT JOB`.
+- Pairs a checked-in workspace policy with stewardship tags, `EXPECT` rules, quarantine routing, and `ASSERT JOB`.
 - Includes a local SQLite Orchestrator registration script and uses the two operator reports above.
 - See the [One-person quality loop guide](one-person-quality-loop.md) for CLI, scheduling, report, and optional notification steps.
 
