@@ -59,7 +59,27 @@ public sealed class DesignerScriptPatcher
         PatchPages(script, ast, state.Pages ?? [], lineEnding, replacements);
         PatchBookmarks(script, ast, state.Bookmarks, lineEnding, replacements);
 
-        return ApplyReplacements(script, replacements);
+        var patched = ApplyReplacements(script, replacements);
+
+        // Last line of defence. Clause spans are found by balancing parentheses, so a script the
+        // parser accepted but that has an unbalanced parenthesis inside a clause — the shape a
+        // split-screen author produces mid-keystroke — can hand back a span that runs past the
+        // statement's own closing paren. Replacing it then deletes the terminator and writes a broken
+        // document over a working one. Refusing the edit is always better than corrupting the file.
+        return ParsesWithoutError(patched) ? patched : script;
+    }
+
+    private static bool ParsesWithoutError(string script)
+    {
+        try
+        {
+            var ast = new CoreParser(new Lexer(script).Tokenize(), script).Parse();
+            return !ast.Diagnostics.Any(d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void PatchParameters(
@@ -353,9 +373,38 @@ public sealed class DesignerScriptPatcher
     private static string PatchPageStatement(string original, string desired)
     {
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PAGE\s+[^\s]+\s+AS\s+(?:DASHBOARD|PAGINATED)");
-        patched = PatchClause(patched, desired, "STRUCTURE");
+        // STRUCTURE is regenerated from grid coordinates, so it comes back in the canonical
+        // slash-separated form even when the author wrote the same grid across several lines. Compare
+        // the grids rather than the text so an untouched layout keeps the author's formatting.
+        if (!DescribesTheSameGrid(FindClause(patched, "STRUCTURE"), FindClause(desired, "STRUCTURE")))
+            patched = PatchClause(patched, desired, "STRUCTURE");
         patched = PatchClause(patched, desired, "MAP");
         return patched;
+    }
+
+    private static bool DescribesTheSameGrid(ClauseSpan? existing, ClauseSpan? desired)
+    {
+        if (existing is null || desired is null) return false;
+
+        var left = StructureGrid(existing.Value.Text);
+        var right = StructureGrid(desired.Value.Text);
+        if (left is null || right is null || left.Count != right.Count) return false;
+
+        return left.Zip(right).All(pair => pair.First.SequenceEqual(pair.Second, StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Rows of slots, split the way the runtime page compiler splits them.</summary>
+    private static List<List<string>>? StructureGrid(string clause)
+    {
+        var literal = Regex.Match(clause, @"'((?:[^']|'')*)'", RegexOptions.CultureInvariant);
+        if (!literal.Success) return null;
+
+        return literal.Groups[1].Value
+            .Split(['/', '\n', '\r'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(row => row
+                .Split([' ', '\t'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .ToList())
+            .ToList();
     }
 
     private static string PatchHeader(string original, string desired, string pattern)

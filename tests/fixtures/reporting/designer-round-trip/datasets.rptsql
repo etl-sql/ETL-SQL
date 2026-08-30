@@ -1,0 +1,17 @@
+-- Named datasets, including one the report never binds a visual to.
+CREATE DATASET &sales AS (
+  SELECT region, amount FROM pg.sales
+);
+
+CREATE DATASET &unused_reference AS (
+  SELECT category, margin FROM pg.products
+);
+
+CREATE VISUAL v_sales AS TABLE (
+    TITLE = 'Sales',
+    SOURCE = &sales
+);
+
+CREATE PAGE [Data] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = v_sales))
+);

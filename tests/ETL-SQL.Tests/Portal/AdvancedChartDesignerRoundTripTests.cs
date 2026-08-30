@@ -197,6 +197,10 @@ public sealed class AdvancedChartDesignerRoundTripTests
         Assert.Contains("CREATE VISUAL myChart AS CUSTOM", patched);
         Assert.Contains("CHART (", patched);
         Assert.Contains("layer1 = RECT", patched);
+        // A CUSTOM visual encodes through CHART; keeping the old MAPPINGS clause alongside it produced
+        // a script the parser rejects, which only went unnoticed because the reparse below ignored
+        // recovered error diagnostics.
+        Assert.DoesNotContain("MAPPINGS", patched);
 
         var reparsed = analysis.Parse(patched, 100);
         Assert.Null(reparsed.Error);

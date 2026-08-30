@@ -313,15 +313,26 @@ public sealed class DesignerScriptParsingService
             1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
     }
 
-    private static List<List<string>> ParseStructure(string structure)
+    /// <summary>
+    /// Splits a LAYOUT STRUCTURE into rows of slots the same way the runtime does. Rows separate on
+    /// <c>/</c> or a newline — an author who writes the grid across several lines means several rows,
+    /// and reading it as one row put every visual in the same cell, which the patcher then wrote back
+    /// as a collapsed single-slot layout.
+    /// </summary>
+    internal static List<List<string>> ParseStructure(string structure)
     {
-        var rows = structure.Split('/', StringSplitOptions.TrimEntries);
+        var rows = structure.Split(
+            StructureRowSeparators,
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return rows.Select(r =>
-            r.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            r.Split(StructureSlotSeparators, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
              .Select(s => s.Trim('"', '\'', '[', ']'))
              .ToList()
         ).ToList();
     }
+
+    private static readonly char[] StructureRowSeparators = ['/', '\n', '\r'];
+    private static readonly char[] StructureSlotSeparators = [' ', '\t'];
 
     private static (int col, int row, int colSpan, int rowSpan) FindSlotBounds(
         List<List<string>> grid, string slot)

@@ -189,16 +189,23 @@ public sealed class DesignerScriptGenerationService
         else if (!string.IsNullOrWhiteSpace(visual.Dataset))
             AppendLine(sb, $"    SOURCE = {NormalizeDatasetName(visual.Dataset)},", nl);
 
+        // A CUSTOM visual carries its encodings inside CHART; the parser rejects a visual that also
+        // declares MAPPINGS. Converting BAR -> CUSTOM used to emit both and produce a script that did
+        // not parse, so track whether a CHART clause was written and drop MAPPINGS when one was.
+        var emittedChartClause = false;
+
         if (visual.Options.TryGetValue("advanced_chart", out var advancedChart) && !string.IsNullOrWhiteSpace(advancedChart))
         {
             var chartBlock = advancedChart.Trim().TrimEnd(',');
             if (!chartBlock.StartsWith("CHART", StringComparison.OrdinalIgnoreCase))
                 chartBlock = $"CHART ({nl}        {chartBlock}{nl}    )";
             AppendLine(sb, $"    {chartBlock},", nl);
+            emittedChartClause = true;
         }
         else if (isScaffold && string.Equals(visual.Type, "CUSTOM", StringComparison.OrdinalIgnoreCase))
         {
             AppendLine(sb, $"    CHART ({nl}        COORDINATE (TYPE = CARTESIAN),{nl}        LAYERS ({nl}            main = RECT ({nl}                ENCODINGS ({nl}                    X = category (TYPE = NOMINAL),{nl}                    Y = value (TYPE = QUANTITATIVE){nl}                ){nl}            ){nl}        ){nl}    ),", nl);
+            emittedChartClause = true;
         }
 
         if (string.Equals(visual.Type, "HTML", StringComparison.OrdinalIgnoreCase) || visual.Options.ContainsKey("html_template"))
@@ -222,7 +229,7 @@ public sealed class DesignerScriptGenerationService
             .Where(mapping => !string.IsNullOrWhiteSpace(mapping.Value))
             .Select(mapping => $"{mapping.Key.ToUpperInvariant()} = {mapping.Value}")
             .ToList();
-        if (mappings.Count > 0)
+        if (mappings.Count > 0 && !emittedChartClause)
             AppendLine(sb, $"    MAPPINGS ({string.Join(", ", mappings)}),", nl);
 
         var regularOptions = visual.Options

@@ -1,0 +1,25 @@
+SELECT region, amount, category INTO #stage FROM pg.sales;
+
+CREATE VISUAL v_a AS BAR (
+    TITLE = 'A', SOURCE = #stage, MAPPINGS (X = region, Y = amount)
+);
+
+CREATE VISUAL v_b AS LINE (
+    TITLE = 'B', SOURCE = #stage, MAPPINGS (X = category, Y = amount)
+);
+
+CREATE VISUAL v_c AS PIE (
+    TITLE = 'C', SOURCE = #stage, MAPPINGS (LABEL = category, VALUE = amount)
+);
+
+CREATE PAGE [First] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = v_a))
+);
+
+CREATE PAGE [Second] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A B', MAP ('A' = v_b, 'B' = v_c))
+);
+
+CREATE PAGE [Third] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = v_c))
+);

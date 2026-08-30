@@ -23,6 +23,16 @@ public sealed class DesignerAnalysisService
         {
             var ast = ParseScript(script);
             ValidateAstLimit(ast, maxAstStatements);
+
+            // The parser recovers from most syntax errors instead of throwing, so an exception is not
+            // the only way a script can be broken. Reporting Error == null for a recovered parse handed
+            // the caller a design state built from a damaged AST — the canvas would render it, and the
+            // "keep the last valid canvas" guard never fired. Gate on the same condition the patcher
+            // does, so a script the patcher refuses to touch is a script the canvas refuses to adopt.
+            var firstError = ast.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+            if (firstError is not null)
+                return new ParseDesignerResponse(EmptyState(), FormatDiagnostic(firstError));
+
             return new ParseDesignerResponse(ScriptToState(ast, script), null);
         }
         catch (DesignerAstLimitExceededException)
@@ -86,6 +96,11 @@ public sealed class DesignerAnalysisService
             .ToList();
         return new AnalyzeDesignerResponse(ordered);
     }
+
+    private static string FormatDiagnostic(Diagnostic diagnostic) =>
+        diagnostic.Line > 0
+            ? $"Line {diagnostic.Line}, column {diagnostic.Column}: {diagnostic.Message}"
+            : diagnostic.Message;
 
     private static Script ParseScript(string script)
     {
@@ -380,15 +395,27 @@ public sealed class DesignerAnalysisService
             1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
     }
 
+    /// <summary>
+    /// Splits a LAYOUT STRUCTURE into rows of slots the same way the runtime page compiler does. Rows
+    /// separate on <c>/</c> or a newline: an author who writes the grid across several lines means
+    /// several rows, and reading it as one row put every visual in the same cell.
+    /// Kept in step with <see cref="ETL_SQL.Reporting.Authoring.DesignerScriptParsingService"/>, which
+    /// carries the same logic for the host-neutral path.
+    /// </summary>
     private static List<List<string>> ParseStructure(string structure)
     {
-        var rows = structure.Split('/', StringSplitOptions.TrimEntries);
+        var rows = structure.Split(
+            StructureRowSeparators,
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return rows.Select(r =>
-            r.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            r.Split(StructureSlotSeparators, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
              .Select(s => s.Trim('"', '\'', '[', ']'))
              .ToList()
         ).ToList();
     }
+
+    private static readonly char[] StructureRowSeparators = ['/', '\n', '\r'];
+    private static readonly char[] StructureSlotSeparators = [' ', '\t'];
 
     private static (int col, int row, int colSpan, int rowSpan) FindSlotBounds(
         List<List<string>> grid, string slot)

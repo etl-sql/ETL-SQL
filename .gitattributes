@@ -22,3 +22,9 @@ feedback.js         text eol=lf
 # Reporting golden artifacts are compared and hashed byte for byte across Windows and Linux runners.
 # Pin them to LF so a Windows checkout (core.autocrlf=true) cannot change what the lane is comparing.
 tests/fixtures/reporting/goldens/**  text eol=lf
+
+# Designer round-trip byte-preservation fixtures. The lane asserts the patcher returns the file
+# byte for byte, so the checkout must not touch the bytes either. Everything is pinned to LF except
+# the deliberate CRLF fixture, which pins CRLF so both line-ending shapes are actually exercised.
+tests/fixtures/reporting/designer-round-trip/**            text eol=lf
+tests/fixtures/reporting/designer-round-trip/line-endings-crlf.rptsql  text eol=crlf

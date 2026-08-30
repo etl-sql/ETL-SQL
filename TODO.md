@@ -163,9 +163,49 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   `ScriptDagProjectionService` output, preserve real edges and branches, represent control flow and
   validation stages, and keep pipeline edits lossless. Do not describe the regex-generated linear
   card sequence as an interactive DAG.
-- [ ] **P1 — Repair and expand round-trip evidence**: Fix the failing report-style patcher regression
-  and require byte-preservation fixtures for comments, CTEs, datasets, pages, visuals, filters,
-  bookmarks, line endings, and invalid intermediate edits.
+- [x] **P1 — Repair and expand round-trip evidence**: No patcher regression was red when this was
+  picked up, so the work was the fixture corpus — and the corpus is what found the regressions. There
+  is now a checked-in, directory-discovered lane at `tests/fixtures/reporting/designer-round-trip/`
+  covering comments, CTEs, datasets, pages, visuals, filters, bookmarks, LF and CRLF line endings, and
+  invalid intermediate edits, driven by `DesignerRoundTripFixtureTests`. Every fixture must parse, must
+  come back byte for byte from a no-op patch, must survive ten repeated cycles without drift, and must
+  return to the original bytes after an edit is applied and reverted. Fixture line endings are pinned
+  in `.gitattributes` so a Windows checkout cannot change what the lane compares, and a required-file
+  list makes a dropped fixture a failure instead of a quietly smaller run. Four real defects it caught:
+  - **A layout grid written across lines was collapsed.** The designer split STRUCTURE rows only on
+    `/`, while the runtime page compiler splits on `/` *and* newlines. A grid authored across several
+    lines was read as one row, every visual landed in the same cell, and the next patch wrote the page
+    back as a single collapsed slot — `'A B / C D'` became `'B'`. Fixed in both copies of the parsing
+    logic (`Reporting.Authoring.DesignerScriptParsingService` and the Portal's duplicate).
+  - **An untouched layout was reformatted.** STRUCTURE is regenerated from grid coordinates, so it came
+    back in canonical `/` form even when nothing changed. The patcher now compares the grids, not the
+    text, and leaves the author's formatting alone.
+  - **`DesignerAnalysisService.Parse` reported success on a broken parse.** It only set `Error` when
+    parsing *threw*, but the parser recovers from most syntax errors and returns diagnostics instead.
+    The canvas therefore adopted design state built from a damaged AST and the "keep the last valid
+    canvas" guard never fired. It now gates on the same condition the patcher does. This is the fifth
+    instance of the silent-failure shape recorded against the Portal.
+  - **The patcher could write a broken document over a working one.** Clause spans are found by
+    balancing parentheses, so a script the parser accepted but that has an unbalanced paren inside a
+    clause — ordinary mid-keystroke text — produced a span running past the statement's closing paren,
+    and the replacement deleted the terminator. The patcher now verifies its own output and returns the
+    input unchanged rather than corrupting it. Covered by the `recovered/` fixture.
+
+  Converting a visual to `CUSTOM` also emitted `MAPPINGS` alongside `CHART`, which the parser rejects;
+  the existing test passed only because `Parse` was ignoring the diagnostic. Generation now drops
+  `MAPPINGS` whenever it writes a `CHART` clause.
+- [ ] **P2 — Accept an alias after a `||` concatenation**: `SELECT 'Dept ' || id AS cat FROM t` fails
+  with "Unexpected token AS", and `SELECT ('Dept ' || id) AS cat FROM t` fails with "Expected ')' after
+  group expression" — `||` is not in the general expression precedence chain, so it works only in the
+  bare top-level select-item position. Found while repairing round-trip evidence; the fuzz generator's
+  script was silently invalid because of it and now uses `CONCAT`. Fix the expression parser, then
+  restore the `||` form in `ReportDesignerLosslessFuzzTests.GenerateRandomReportScript`.
+- [ ] **P2 — Collapse the duplicated designer parsing service**: `ETL-SQL.Portal`'s
+  `DesignerAnalysisService` carries its own ~300-line copy of the host-neutral
+  `Reporting.Authoring.DesignerScriptParsingService`, including `ParseStructure`, `FindSlotBounds`, and
+  the grid constants. A one-line fix to the shared copy did not reach the Portal at all, which is
+  exactly the failure mode a duplicate invites. Fold the Portal onto the shared service. Belongs with
+  the module-split item below.
 - [ ] **P1 — Add distinct Dashboard and Paginated Report creation workflows**: Studio Home must show
   separate **New Dashboard** and **New Paginated Report** actions. Both create standard `.rptsql`
   documents and reuse shared connection, dataset, expression, formatting, preview, parser, and

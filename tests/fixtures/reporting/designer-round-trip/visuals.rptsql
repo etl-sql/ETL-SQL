@@ -1,0 +1,38 @@
+SELECT region, category, amount, rate INTO #stage FROM pg.sales;
+
+CREATE VISUAL v_bar AS BAR (
+    TITLE = 'Bar', SOURCE = #stage, MAPPINGS (X = region, Y = amount)
+);
+
+CREATE VISUAL v_line AS LINE (
+    TITLE = 'Line', SOURCE = #stage, MAPPINGS (X = category, Y = amount)
+);
+
+CREATE VISUAL v_pie AS PIE (
+    TITLE = 'Pie', SOURCE = #stage, MAPPINGS (LABEL = category, VALUE = amount)
+);
+
+CREATE VISUAL v_combo AS COMBO (
+    TITLE = 'Combo', SOURCE = #stage, MAPPINGS (X = category, Y = amount, Y2 = rate)
+);
+
+CREATE VISUAL v_card AS CARD (
+    TITLE = 'Card',
+    SOURCE = (SELECT SUM(amount) AS val FROM #stage),
+    MAPPINGS (VALUE = val)
+);
+
+CREATE VISUAL v_table AS TABLE (
+    TITLE = 'Detail',
+    SOURCE = #stage
+);
+
+CREATE PAGE [Visuals] AS DASHBOARD (
+    LAYOUT (
+        -- Rows written across lines, the way an author lays out a grid.
+        STRUCTURE = 'A B
+                     C D
+                     E F',
+        MAP ('A' = v_bar, 'B' = v_line, 'C' = v_pie, 'D' = v_combo, 'E' = v_card, 'F' = v_table)
+    )
+);
