@@ -240,6 +240,24 @@ GROUP BY Region;
 `,
 });
 
+const REPORT_WORKFLOW_TEMPLATES = Object.freeze({
+    dashboard: `-- Dashboard canvas: add data, then arrange charts, KPIs, tables, and slicers.
+CREATE PAGE [Dashboard] AS DASHBOARD ( LAYOUT ( STRUCTURE = '.' ) );
+`,
+    paginated: `-- Paginated report: build detail bands for a fixed physical page.
+CREATE PAGE [Paginated Report] AS PAGINATED (
+  LAYOUT ( STRUCTURE = '.' ),
+  PRINT_LAYOUT (
+    PAGE_SIZE = 'Letter',
+    ORIENTATION = 'PORTRAIT',
+    MARGINS = (0.75, 0.75, 0.75, 0.75),
+    UNITS = 'in',
+    OVERFLOW = 'SPLIT'
+  )
+);
+`,
+});
+
 // Prefer a structured { error } / { message } body over a raw HTML error page.
 async function _readErrorText(response) {
     let body = '';
@@ -446,6 +464,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
                     <!-- Visual Stage Area (Report Builder Canvas & Pipeline DAG) -->
                     <div class="etlsql-studio-visual-stage" data-visual-stage style="display:flex; flex-direction:column; flex:1; height:100%; overflow:hidden; position:relative;">
+                        <div class="etlsql-studio-workflow-bar" data-workflow-bar hidden></div>
                         <div class="etlsql-studio-designer-container" data-canvas-grid-container style="flex:1; width:100%; height:100%; overflow:hidden; position:relative;"></div>
                     </div>
 
@@ -489,6 +508,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     const propertyFields = shell.querySelector('[data-property-fields]');
     const homeStage = shell.querySelector('[data-home-stage]');
     const visualStage = shell.querySelector('[data-visual-stage]');
+    const workflowBar = shell.querySelector('[data-workflow-bar]');
     const codeStage = shell.querySelector('[data-code-stage]');
     const resizer = shell.querySelector('[data-stage-resizer]');
     const editorHost = shell.querySelector('[data-editor-host]');
@@ -640,6 +660,165 @@ export async function createStudioWorkbench(container, opts = {}) {
         return state.documents.find(d => d.id === state.activeDocId) || state.documents[0] || null;
     }
 
+    function explicitReportWorkflow(script, designState) {
+        const declaredModes = [];
+        const pattern = /\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PAGE\b[\s\S]*?\bAS\s+(DASHBOARD|PAGINATED)\b/gi;
+        let match;
+        while ((match = pattern.exec(script || '')) !== null) declaredModes.push(match[1].toLowerCase());
+        if (!declaredModes.length) return null;
+        const parsedModes = (designState?.pages || []).map(page => String(page.mode || '').toLowerCase());
+        if (parsedModes.length !== declaredModes.length) return null;
+        return declaredModes.every(mode => mode === declaredModes[0]) ? declaredModes[0] : null;
+    }
+
+    async function promptForReportWorkflow(doc) {
+        return await new Promise(resolve => {
+            modalBox.innerHTML = `
+                <div class="etlsql-studio-modal-header">
+                    <div><span class="etlsql-studio-kicker">Choose an authoring surface</span><h2>${_escapeHtml(doc.name)}</h2></div>
+                </div>
+                <div class="etlsql-studio-modal-body etlsql-workflow-choice" role="group" aria-label="Report workflow">
+                    <p>This Report-SQL file does not declare one clear page mode. Choosing a surface changes only Studio's tools; the script stays byte-for-byte unchanged.</p>
+                    <button type="button" data-choose-workflow="dashboard"><strong>Dashboard</strong><span>Responsive canvas for charts, KPIs, tables, slicers, and cross-filtering.</span></button>
+                    <button type="button" data-choose-workflow="paginated"><strong>Paginated Report</strong><span>Physical pages for parameters, detail rows, totals, headers, footers, and export.</span></button>
+                </div>`;
+            modalBackdrop.hidden = false;
+            const finish = workflow => {
+                modalBackdrop.hidden = true;
+                modalBox.innerHTML = '';
+                resolve(workflow);
+            };
+            modalBox.querySelectorAll('[data-choose-workflow]').forEach(button => {
+                button.addEventListener('click', () => finish(button.dataset.chooseWorkflow));
+            });
+            modalBox.querySelector('[data-choose-workflow]')?.focus();
+        });
+    }
+
+    async function ensureReportWorkflow(doc, { askWhenAmbiguous = true } = {}) {
+        if (!doc || !(doc.path || '').toLowerCase().endsWith('.rptsql')) return null;
+        if (doc.reportWorkflow) return doc.reportWorkflow;
+        const parsed = await designerApiJson(STUDIO_ROUTES.parse, { script: doc.content || '' });
+        if (parsed.error) return null;
+        const inferred = explicitReportWorkflow(doc.content, parsed.designState);
+        doc.reportWorkflow = inferred || (askWhenAmbiguous ? await promptForReportWorkflow(doc) : null);
+        return doc.reportWorkflow;
+    }
+
+    function pageSetupMarkup(page = {}) {
+        const layout = page.printLayout || {};
+        const detailTable = (page.visuals || []).find(visual => visual.type === 'TABLE');
+        const breaksAfterDetails = /PAGE_BREAK_AFTER\s*=\s*ON/i.test(detailTable?.options?.print_layout || '');
+        const size = layout.pageSize || 'Letter';
+        const orientation = layout.orientation || 'PORTRAIT';
+        const margin = layout.marginTop ?? 0.75;
+        return `<div class="etlsql-paginated-setup">
+            <label>Page size<select data-page-setup="pageSize"><option ${size === 'Letter' ? 'selected' : ''}>Letter</option><option ${size === 'A4' ? 'selected' : ''}>A4</option><option ${size === 'Legal' ? 'selected' : ''}>Legal</option></select></label>
+            <label>Orientation<select data-page-setup="orientation"><option value="PORTRAIT" ${orientation === 'PORTRAIT' ? 'selected' : ''}>Portrait</option><option value="LANDSCAPE" ${orientation === 'LANDSCAPE' ? 'selected' : ''}>Landscape</option></select></label>
+            <label>Margins (in)<input type="number" min="0" max="3" step="0.125" value="${_escapeHtml(margin)}" data-page-setup="margin"></label>
+            <label class="etlsql-page-break-toggle"><input type="checkbox" data-page-break-after ${breaksAfterDetails ? 'checked' : ''}>Break after details</label>
+        </div>`;
+    }
+
+    function renderReportWorkflowChrome(doc, designState = state.designerInstance?.getState?.()) {
+        const workflow = doc?.reportWorkflow;
+        const isReport = Boolean(doc && (doc.path || '').toLowerCase().endsWith('.rptsql'));
+        workflowBar.hidden = !isReport || !workflow;
+        visualStage.classList.toggle('is-dashboard-workflow', isReport && workflow === 'dashboard');
+        visualStage.classList.toggle('is-paginated-workflow', isReport && workflow === 'paginated');
+        if (!isReport || !workflow) {
+            workflowBar.innerHTML = '';
+            return;
+        }
+
+        if (workflow === 'dashboard') {
+            workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Dashboard</span><strong>Responsive visual canvas</strong><span>Build the story with chart, KPI, table, and slicer tiles. Use filters for cross-visual interaction; use Format on the selected tile for presentation.</span></div><nav aria-label="Dashboard workflow"><button type="button" data-workflow-activity="catalog">1 Data</button><button type="button" data-workflow-activity="palette">2 Visuals</button><button type="button" data-workflow-activity="filters">3 Cross-filters</button><button type="button" data-workflow-projection="canvas">4 Layout</button><button type="button" data-workflow-projection="split">5 Format + code</button></nav>`;
+        } else {
+            const page = designState?.pages?.[0] || {};
+            workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Paginated Report</span><strong>Physical page authoring</strong><span>Work top-to-bottom: prompts, repeating detail, totals, page furniture, then pagination and export.</span></div><ol class="etlsql-paginated-steps"><li><button type="button" data-workflow-activity="catalog"><b>1</b><span><strong>Choose data</strong><small>Connection, dataset, fields</small></span></button></li><li><button type="button" data-paginated-action="parameter"><b>2</b><span><strong>Define parameters</strong><small>Input prompts before execution</small></span></button></li><li><button type="button" data-paginated-action="details"><b>3</b><span><strong>Groups + details</strong><small>Matrix groups and table rows</small></span></button></li><li><button type="button" data-paginated-action="totals"><b>4</b><span><strong>Add totals</strong><small>Grand total on the detail table</small></span></button></li><li><button type="button" data-paginated-action="furniture"><b>5</b><span><strong>Header + footer</strong><small>Text bands and page breaks</small></span></button></li><li><div><b>6</b><span><strong>Page setup + breaks</strong><small>Writes PRINT_LAYOUT through the patcher</small></span>${pageSetupMarkup(page)}</div></li><li><button type="button" data-paginated-action="preview"><b>7</b><span><strong>Preview pagination</strong><small>Run and inspect physical pages</small></span></button></li><li><button type="button" data-paginated-action="export"><b>8</b><span><strong>Export</strong><small>PDF for pages; CSV/Excel for results</small></span></button></li></ol>`;
+        }
+
+        workflowBar.querySelectorAll('[data-workflow-activity]').forEach(button => button.addEventListener('click', () => setActivity(button.dataset.workflowActivity)));
+        workflowBar.querySelectorAll('[data-workflow-projection]').forEach(button => button.addEventListener('click', () => setProjection(button.dataset.workflowProjection)));
+        workflowBar.querySelectorAll('[data-page-setup]').forEach(control => control.addEventListener('change', async () => {
+            await canonicalDesignerMutation('Update page setup', design => {
+                const page = design.pages[0];
+                page.mode = 'Paginated';
+                page.printLayout ||= { pageSize: 'Letter', orientation: 'PORTRAIT', marginTop: 0.75, marginRight: 0.75, marginBottom: 0.75, marginLeft: 0.75, units: 'in', overflow: 'SPLIT' };
+                const value = control.value;
+                if (control.dataset.pageSetup === 'margin') {
+                    const margin = Number(value);
+                    page.printLayout.marginTop = margin; page.printLayout.marginRight = margin; page.printLayout.marginBottom = margin; page.printLayout.marginLeft = margin;
+                } else page.printLayout[control.dataset.pageSetup] = value;
+                return true;
+            });
+        }));
+        workflowBar.querySelector('[data-page-break-after]')?.addEventListener('change', async event => {
+            await canonicalDesignerMutation('Update detail page break', design => {
+                const table = (design.pages || []).flatMap(page => page.visuals || []).find(visual => visual.type === 'TABLE');
+                if (!table) throw new Error('Add a detail table before configuring its page break.');
+                table.options ||= {};
+                if (event.target.checked) table.options.print_layout = 'PRINT_LAYOUT (PAGE_BREAK_AFTER = ON, KEEP_TOGETHER = ON)';
+                else delete table.options.print_layout;
+                return true;
+            });
+        });
+        workflowBar.querySelectorAll('[data-paginated-action]').forEach(button => button.addEventListener('click', async () => {
+            const action = button.dataset.paginatedAction;
+            if (action === 'parameter') {
+                await canonicalDesignerMutation('Add report parameter', design => {
+                    design.parameters ||= [];
+                    let suffix = design.parameters.length + 1;
+                    let name = `@report_parameter_${suffix}`;
+                    while (design.parameters.some(parameter => parameter.name.toLowerCase() === name)) name = `@report_parameter_${++suffix}`;
+                    design.parameters.push({ name, dataType: 'VARCHAR', initialValue: "'All'", isInput: true, isOutput: false, isRequired: false, isSensitive: false });
+                    return true;
+                });
+            } else if (action === 'details') {
+                if (!hasDataSample()) {
+                    setActivity('catalog');
+                    _feedback.notify('Choose data before adding group and detail bands.', { title: 'Data required', tone: 'info' });
+                    return;
+                }
+                const snapshotSource = activeDocumentContext().snapshot?.source;
+                await canonicalDesignerMutation('Add group and detail bands', design => {
+                    const page = design.pages[0];
+                    page.visuals ||= [];
+                    const maxRow = page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
+                    page.visuals.push({ id: `studio_group_${Date.now().toString(36)}`, name: uniqueVisualName(design, 'group_summary'), type: 'MATRIX', gridCol: 1, gridRow: maxRow + 1, gridColSpan: 12, gridRowSpan: 4, title: 'Group summary', dataset: null, mappings: {}, options: { inline_source: snapshotSource } });
+                    page.visuals.push({ id: `studio_detail_${Date.now().toString(36)}`, name: uniqueVisualName(design, 'detail_rows'), type: 'TABLE', gridCol: 1, gridRow: maxRow + 5, gridColSpan: 12, gridRowSpan: 7, title: 'Detail rows', dataset: null, mappings: {}, options: { inline_source: snapshotSource, PAGE_SIZE: '0' } });
+                    return true;
+                });
+            } else if (action === 'totals') {
+                await canonicalDesignerMutation('Add report totals', design => {
+                    const table = (design.pages || []).flatMap(page => page.visuals || []).find(visual => visual.type === 'TABLE');
+                    if (!table) throw new Error('Add a detail table before configuring totals.');
+                    table.options ||= {}; table.options.GRAND_TOTAL = 'SUM'; return true;
+                });
+            } else if (action === 'furniture') {
+                if (!hasDataSample()) {
+                    setActivity('catalog');
+                    _feedback.notify('Choose data before adding page header and footer bands.', { title: 'Data required', tone: 'info' });
+                    return;
+                }
+                const snapshotSource = activeDocumentContext().snapshot?.source;
+                await canonicalDesignerMutation('Add page header and footer', design => {
+                    const page = design.pages[0];
+                    page.visuals ||= [];
+                    const maxRow = page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
+                    page.visuals.push({ id: `studio_header_${Date.now().toString(36)}`, name: uniqueVisualName(design, 'page_header'), type: 'TEXT', gridCol: 1, gridRow: maxRow + 1, gridColSpan: 12, gridRowSpan: 2, title: 'Page header', dataset: null, mappings: {}, options: { inline_source: snapshotSource, print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)' } });
+                    page.visuals.push({ id: `studio_footer_${Date.now().toString(36)}`, name: uniqueVisualName(design, 'page_footer'), type: 'TEXT', gridCol: 1, gridRow: maxRow + 3, gridColSpan: 12, gridRowSpan: 2, title: 'Page footer', dataset: null, mappings: {}, options: { inline_source: snapshotSource, print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)' } });
+                    return true;
+                });
+            } else if (action === 'preview') {
+                shell.querySelector('[data-action="run"]')?.click();
+            } else if (action === 'export') {
+                setProjection('split');
+                _feedback.notify('Run the report, then use the Results export buttons for CSV or Excel. Use the Report-SQL PDF export for physical pages.', { title: 'Export ready', tone: 'info' });
+            }
+        }));
+    }
+
     function setProjection(mode) {
         if (state.activeDocId === '__home__') return;
         homeStage.style.display = 'none';
@@ -776,6 +955,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         const isEtl = (doc.path || '').endsWith('.etlsql') || content.includes('TRANSFORM ') || content.includes('MERGE INTO');
 
         if (isEtl) {
+            renderReportWorkflowChrome(null);
             if (state.designerInstance) {
                 state.designerInstance.dispose?.();
                 state.designerInstance = null;
@@ -835,6 +1015,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             } else {
                 state.designerInstance.applyScriptText(content);
             }
+            renderReportWorkflowChrome(doc);
         }
     }
 
@@ -1322,6 +1503,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         const newDoc = getActiveDoc();
         if (newDoc) {
+            await ensureReportWorkflow(newDoc);
             const context = documentContext(newDoc);
             homeStage.style.display = 'none';
             paintResults(context);
@@ -1418,8 +1600,10 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     async function createNewFile(type, { seed = false } = {}) {
+        const reportWorkflow = type === 'paginated' ? 'paginated' : type === 'dashboard' || type === 'report' ? 'dashboard' : null;
+        const isReportType = Boolean(reportWorkflow);
         if (opts.onCreateDocument) {
-            if (type !== 'report') {
+            if (!isReportType) {
                 _feedback.notify('Catalog creation currently supports Report-SQL documents.', { title: 'Create Document', tone: 'warning' });
                 return;
             }
@@ -1437,7 +1621,9 @@ export async function createStudioWorkbench(container, opts = {}) {
             const request = await promptForCatalogReport();
             if (!request) return;
             try {
-                const created = await opts.onCreateDocument({ ...request, type, scriptText: seed ? STUDIO_STARTER_SCRIPTS.report : '' });
+                const scriptText = seed ? STUDIO_STARTER_SCRIPTS.report : REPORT_WORKFLOW_TEMPLATES[reportWorkflow];
+                const created = await opts.onCreateDocument({ ...request, type: 'report', workflow: reportWorkflow, scriptText });
+                created.reportWorkflow = reportWorkflow;
                 state.catalogReports.push(created);
                 await openCatalogReport(created, 'split');
             } catch (error) {
@@ -1454,9 +1640,9 @@ export async function createStudioWorkbench(container, opts = {}) {
         let sourceRevision = null;
         let proj = 'split';
 
-        if (type === 'report') {
-            path = `untitled_${rptCount}.rptsql`;
-            content = seed ? STUDIO_STARTER_SCRIPTS.report : '';
+        if (isReportType) {
+            path = reportWorkflow === 'paginated' ? `untitled_paginated_${rptCount}.rptsql` : `untitled_dashboard_${rptCount}.rptsql`;
+            content = seed ? STUDIO_STARTER_SCRIPTS.report : REPORT_WORKFLOW_TEMPLATES[reportWorkflow];
             proj = 'split';
         } else if (type === 'etl') {
             path = `untitled_pipeline_${etlCount}.etlsql`;
@@ -1473,8 +1659,9 @@ export async function createStudioWorkbench(container, opts = {}) {
             path: path,
             name: path,
             content: content,
-            isDirty: Boolean(seed),
-            projection: proj
+            isDirty: isReportType || Boolean(seed),
+            projection: proj,
+            reportWorkflow
         };
 
         state.documents.push(newDoc);
@@ -1570,18 +1757,25 @@ export async function createStudioWorkbench(container, opts = {}) {
                         <p>Design interactive report dashboards, author cross-source data pipelines, and manage database connections in a portable, zero-trust workspace.</p>
                     </div>
                     <div class="etlsql-studio-home-quick-actions">
-                        <button type="button" class="etlsql-home-action-card primary" data-create-from-home="report" data-seed-sample>
+                        <button type="button" class="etlsql-home-action-card primary" data-create-from-home="dashboard" data-seed-sample>
                             <span class="etlsql-home-card-icon">${_studioIcon('canvas', 24)}</span>
                             <div class="etlsql-home-card-info">
                                 <strong>Start with sample data</strong>
                                 <span>Opens a working dashboard on the built-in MOCKDB sample connector &mdash; no database or connection needed. The best place to start.</span>
                             </div>
                         </button>
-                        <button type="button" class="etlsql-home-action-card secondary" data-create-from-home="report">
-                            <span class="etlsql-home-card-icon">${_studioIcon('canvas', 24)}</span>
+                        <button type="button" class="etlsql-home-action-card workflow-dashboard" data-create-from-home="dashboard">
+                            <span class="etlsql-home-card-icon"><span class="etlsql-home-dashboard-glyph" aria-hidden="true"><i></i><i></i><i></i></span></span>
                             <div class="etlsql-home-card-info">
-                                <strong>Blank report (.rptsql)</strong>
-                                <span>Drag-and-drop dashboard canvas with charts, cards, and slicers. Needs a connection before visuals can be added.</span>
+                                <strong>New Dashboard</strong>
+                                <span>Responsive visual board for charts, KPI cards, tables, slicers, cross-filters, and freeform layout.</span>
+                            </div>
+                        </button>
+                        <button type="button" class="etlsql-home-action-card workflow-paginated" data-create-from-home="paginated">
+                            <span class="etlsql-home-card-icon"><span class="etlsql-home-page-glyph" aria-hidden="true"><i></i><i></i><i></i></span></span>
+                            <div class="etlsql-home-card-info">
+                                <strong>New Paginated Report</strong>
+                                <span>Physical pages with parameters, groups, detail rows, totals, headers, footers, breaks, preview, and export.</span>
                             </div>
                         </button>
                         <button type="button" class="etlsql-home-action-card secondary" data-create-from-home="etl">
@@ -1609,7 +1803,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                     ${files.length === 0 ? `
                         <div style="padding:24px; text-align:center; color:var(--portal-text-soft,#8b949e); background:var(--portal-surface,#161b22); border:1px dashed var(--portal-border,#30363d); border-radius:8px;">
                             <p style="margin:0 0 12px; font-size:0.875rem;">No existing ${catalogMode ? 'reports are available in the catalog' : 'scripts found in this workspace directory'}.</p>
-                            <p style="margin:0; font-size:0.75rem; color:var(--portal-muted,#8b949e);">Click <strong>New Report</strong> or <strong>New ETL Pipeline</strong> above to start building.</p>
+                            <p style="margin:0; font-size:0.75rem; color:var(--portal-muted,#8b949e);">Choose <strong>New Dashboard</strong>, <strong>New Paginated Report</strong>, or <strong>New ETL Pipeline</strong> above.</p>
                         </div>
                     ` : `
                         <div class="etlsql-studio-recent-grid">
@@ -1703,11 +1897,18 @@ export async function createStudioWorkbench(container, opts = {}) {
         newMenuEl.style.left = `${Math.max(10, Math.min(window.innerWidth - 270, rect.left))}px`;
         newMenuEl.style.zIndex = '999999';
         newMenuEl.innerHTML = `
-            <button type="button" class="etlsql-tab-new-item" data-new-type="report">
+            <button type="button" class="etlsql-tab-new-item" data-new-type="dashboard">
                 <span style="color:var(--portal-accent,#388bfd);">${_studioIcon('canvas', 16)}</span>
                 <div>
-                    <strong>New Report (.rptsql)</strong>
-                    <small>Visual Drag-and-Drop Designer</small>
+                    <strong>New Dashboard (.rptsql)</strong>
+                    <small>Responsive visual canvas</small>
+                </div>
+            </button>
+            <button type="button" class="etlsql-tab-new-item" data-new-type="paginated">
+                <span style="color:var(--portal-warning,#d29922);">${_studioIcon('table', 16)}</span>
+                <div>
+                    <strong>New Paginated Report (.rptsql)</strong>
+                    <small>Physical page designer</small>
                 </div>
             </button>
             <button type="button" class="etlsql-tab-new-item" data-new-type="etl">
@@ -2072,6 +2273,10 @@ export async function createStudioWorkbench(container, opts = {}) {
         const result = await state.designerInstance?.applyScriptText?.(script);
         const context = documentContext(document);
         if (!result?.applied || getActiveDoc() !== document || context.syncRevision !== revision) return;
+
+        const inferredWorkflow = explicitReportWorkflow(script, result.designState);
+        if (inferredWorkflow) document.reportWorkflow = inferredWorkflow;
+        renderReportWorkflowChrome(document, result.designState);
 
         const dataset = datasetForPreview(result.designState, context);
         if (!dataset?.name || !dataset?.query) return;
@@ -2609,6 +2814,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         renderStudioHome();
         setContextualRailVisibility();
     } else {
+        await ensureReportWorkflow(getActiveDoc());
         setProjection(getActiveDoc()?.projection || 'split');
         renderVisualStage();
         setContextualRailVisibility();

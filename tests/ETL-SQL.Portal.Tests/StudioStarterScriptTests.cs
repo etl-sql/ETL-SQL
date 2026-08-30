@@ -74,6 +74,36 @@ public sealed class StudioStarterScriptTests
         Assert.DoesNotContain("PASSWORD", script, StringComparison.OrdinalIgnoreCase);
         Assert.False(string.IsNullOrWhiteSpace(name));
     }
+
+    [Fact]
+    public void DashboardAndPaginatedWorkflowTemplates_AreParserValidAndDeclareTheirMode()
+    {
+        var studioJs = File.ReadAllText(Path.Combine(
+            RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio.js"));
+        var table = Regex.Match(
+            studioJs,
+            @"const\s+REPORT_WORKFLOW_TEMPLATES\s*=\s*Object\.freeze\(\{(?<body>.*?)\}\);",
+            RegexOptions.Singleline);
+        Assert.True(table.Success, "REPORT_WORKFLOW_TEMPLATES was not found in studio.js.");
+
+        var templates = Regex.Matches(
+                table.Groups["body"].Value,
+                @"(?<name>dashboard|paginated):\s*`(?<script>[^`]*)`",
+                RegexOptions.Singleline)
+            .ToDictionary(match => match.Groups["name"].Value, match => match.Groups["script"].Value);
+        Assert.Equal(2, templates.Count);
+
+        foreach (var (name, script) in templates)
+        {
+            var parsed = new CoreParser(new Lexer(script).Tokenize(), script).Parse();
+            var errors = parsed.Diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error).ToList();
+            Assert.True(errors.Count == 0, $"Workflow template '{name}' does not parse: {string.Join("; ", errors.Select(error => error.Message))}");
+            Assert.Contains($"AS {name.ToUpperInvariant()}", script, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("PRINT_LAYOUT", templates["paginated"], StringComparison.Ordinal);
+        Assert.DoesNotContain("PRINT_LAYOUT", templates["dashboard"], StringComparison.Ordinal);
+    }
 }
 
 /// <summary>

@@ -150,7 +150,18 @@ public sealed class DesignerScriptParsingService
                 $"p{pageNum}",
                 stmt.Name,
                 stmt.PageMode.ToString(),
-                pageVisuals));
+                pageVisuals,
+                stmt.PrintLayout is null ? null : new DesignerAuthoringPageLayout(
+                    stmt.PrintLayout.PageSize,
+                    stmt.PrintLayout.Orientation,
+                    stmt.PrintLayout.MarginTop,
+                    stmt.PrintLayout.MarginRight,
+                    stmt.PrintLayout.MarginBottom,
+                    stmt.PrintLayout.MarginLeft,
+                    stmt.PrintLayout.Units,
+                    stmt.PrintLayout.Overflow,
+                    stmt.PrintLayout.CustomWidth,
+                    stmt.PrintLayout.CustomHeight)));
         }
 
         if (pages.Count == 0 && elements.Count > 0)
@@ -251,6 +262,15 @@ public sealed class DesignerScriptParsingService
         if (v.Cascade != null)
         {
             options["cascade"] = v.Cascade.ToSql();
+        }
+        if (v.PrintLayout != null)
+        {
+            var parts = new List<string>();
+            if (v.PrintLayout.PageBreakBefore.HasValue) parts.Add($"PAGE_BREAK_BEFORE = {(v.PrintLayout.PageBreakBefore.Value ? "ON" : "OFF")}");
+            if (v.PrintLayout.PageBreakAfter.HasValue) parts.Add($"PAGE_BREAK_AFTER = {(v.PrintLayout.PageBreakAfter.Value ? "ON" : "OFF")}");
+            if (v.PrintLayout.KeepTogether.HasValue) parts.Add($"KEEP_TOGETHER = {(v.PrintLayout.KeepTogether.Value ? "ON" : "OFF")}");
+            if (v.PrintLayout.ExcludeFromPrint.HasValue) parts.Add($"EXCLUDE_FROM_PRINT = {(v.PrintLayout.ExcludeFromPrint.Value ? "ON" : "OFF")}");
+            options["print_layout"] = $"PRINT_LAYOUT ({string.Join(", ", parts)})";
         }
         if (v.AdvancedChart != null)
         {

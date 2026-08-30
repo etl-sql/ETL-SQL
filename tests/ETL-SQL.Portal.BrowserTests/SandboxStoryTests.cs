@@ -4,6 +4,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using System.Text.Json;
 
 namespace ETL_SQL.Portal.BrowserTests;
 
@@ -1172,6 +1173,113 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Contains("untitled_query_", await activeTab.InnerTextAsync());
         Assert.Contains(".etlsql", await activeTab.InnerTextAsync());
         Assert.DoesNotContain(".sql", await activeTab.InnerTextAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_Home_CreatesDistinctDashboardAndPaginatedReportWorkflows()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
+
+        var dashboardAction = page.Locator("[data-create-from-home='dashboard']:not([data-seed-sample])");
+        var paginatedAction = page.Locator("[data-create-from-home='paginated']");
+        Assert.Contains("New Dashboard", await dashboardAction.InnerTextAsync());
+        Assert.Contains("New Paginated Report", await paginatedAction.InnerTextAsync());
+
+        await paginatedAction.ClickAsync();
+        await page.Locator(".etlsql-studio-visual-stage.is-paginated-workflow").WaitForAsync();
+        Assert.Contains("Physical page authoring", await page.Locator("[data-workflow-bar]").InnerTextAsync());
+        Assert.Equal(8, await page.Locator(".etlsql-paginated-steps > li").CountAsync());
+        var paginated = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const doc = window.__STUDIO_INSTANCE__.state.documents.find(item => item.id === window.__STUDIO_INSTANCE__.state.activeDocId);
+                return { name: doc.name, content: doc.content, workflow: doc.reportWorkflow };
+            }
+            """);
+        Assert.EndsWith(".rptsql", paginated.GetProperty("name").GetString(), StringComparison.Ordinal);
+        Assert.Equal("paginated", paginated.GetProperty("workflow").GetString());
+        Assert.Contains("AS PAGINATED", paginated.GetProperty("content").GetString(), StringComparison.Ordinal);
+        Assert.Contains("PRINT_LAYOUT", paginated.GetProperty("content").GetString(), StringComparison.Ordinal);
+
+        await page.SelectOptionAsync("[data-page-setup='orientation']", "LANDSCAPE");
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_API_REQUESTS__.some(request =>
+                request.url.endsWith('/api/designer/patch') &&
+                request.body?.designState?.pages?.[0]?.printLayout?.orientation === 'LANDSCAPE')
+            """);
+
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
+        await dashboardAction.ClickAsync();
+        await page.Locator(".etlsql-studio-visual-stage.is-dashboard-workflow").WaitForAsync();
+        Assert.Contains("Responsive visual canvas", await page.Locator("[data-workflow-bar]").InnerTextAsync());
+        var dashboard = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const doc = window.__STUDIO_INSTANCE__.state.documents.find(item => item.id === window.__STUDIO_INSTANCE__.state.activeDocId);
+                return { name: doc.name, content: doc.content, workflow: doc.reportWorkflow };
+            }
+            """);
+        Assert.EndsWith(".rptsql", dashboard.GetProperty("name").GetString(), StringComparison.Ordinal);
+        Assert.Equal("dashboard", dashboard.GetProperty("workflow").GetString());
+        Assert.Contains("AS DASHBOARD", dashboard.GetProperty("content").GetString(), StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_ExistingReportWorkflowInference_PreservesAmbiguousAndInvalidScriptBytes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        Assert.Equal("dashboard", await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(doc => doc.id === 'doc-report').reportWorkflow"));
+        var validCanvasCount = await page.Locator(".designer-card").CountAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.setValue('>>> INVALID <<<')");
+        await page.WaitForTimeoutAsync(550);
+        Assert.Equal("dashboard", await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(doc => doc.id === 'doc-report').reportWorkflow"));
+        Assert.Equal(validCanvasCount, await page.Locator(".designer-card").CountAsync());
+        Assert.Equal(">>> INVALID <<<", await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()"));
+
+        const string ambiguous = "-- hand-authored report\nCREATE VISUAL note AS TEXT (TITLE = 'Keep me', SOURCE = #rows);";
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'ambiguous-report', path: 'ambiguous.rptsql', name: 'ambiguous.rptsql', content: script, isDirty: false, projection: 'split' });
+                void studio.switchDoc('ambiguous-report');
+            }
+            """, ambiguous);
+        await page.Locator("[data-choose-workflow='dashboard']").WaitForAsync();
+        Assert.Contains("byte-for-byte unchanged", await page.Locator(".etlsql-workflow-choice").InnerTextAsync());
+        await page.Locator("[data-choose-workflow='paginated']").ClickAsync();
+        await page.Locator(".etlsql-studio-visual-stage.is-paginated-workflow").WaitForAsync();
+
+        var selected = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const doc = window.__STUDIO_INSTANCE__.state.documents.find(item => item.id === 'ambiguous-report');
+                return { content: doc.content, workflow: doc.reportWorkflow, dirty: doc.isDirty };
+            }
+            """);
+        Assert.Equal(ambiguous, selected.GetProperty("content").GetString());
+        Assert.Equal("paginated", selected.GetProperty("workflow").GetString());
+        Assert.False(selected.GetProperty("dirty").GetBoolean());
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }

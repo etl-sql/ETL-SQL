@@ -171,7 +171,20 @@ public record DesignerPageDto(
     string Id,
     string Name,
     string Mode,
-    List<DesignerVisualDto> Visuals);
+    List<DesignerVisualDto> Visuals,
+    DesignerPageLayoutDto? PrintLayout = null);
+
+public record DesignerPageLayoutDto(
+    string? PageSize = null,
+    string? Orientation = null,
+    decimal? MarginTop = null,
+    decimal? MarginRight = null,
+    decimal? MarginBottom = null,
+    decimal? MarginLeft = null,
+    string? Units = null,
+    string? Overflow = null,
+    decimal? CustomWidth = null,
+    decimal? CustomHeight = null);
 
 public record DesignerVisualDto(
     string Id,

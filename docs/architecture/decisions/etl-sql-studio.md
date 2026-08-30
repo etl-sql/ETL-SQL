@@ -153,6 +153,27 @@ The Studio automatically adapts its visual stage based on the file extension of 
                        └─────────────────────────────────────┘
 ```
 
+### 3.1 Dashboard and paginated report workflows
+
+Studio Home exposes **New Dashboard** and **New Paginated Report** as separate creation paths. Both
+produce standard `.rptsql` documents and use the same data catalog, dataset sampling, expression and
+formatting controls, preview service, script editor, parser, and range patcher. The workflow is UI
+state derived from the document; it is not a second file format or hidden manifest.
+
+- **Dashboard** uses the responsive visual board and guides the author through data, visuals,
+  cross-filters, layout, and formatting. Charts, cards, tables, slicers, and other visuals continue
+  to use the shared designer.
+- **Paginated Report** presents the canvas as a physical sheet and guides the author through data,
+  input parameters, group/detail bands, totals, header/footer bands, `PRINT_LAYOUT`, visual page
+  breaks, pagination preview, and export. Page size, orientation, margins, overflow, and break rules
+  are carried by the shared authoring DTOs and changed through `DesignerScriptPatcher`.
+
+When every explicit `CREATE PAGE` declaration has the same mode, Studio selects that workflow. A
+mixed-mode report, or a script without an explicit page, opens a two-choice prompt. The choice does
+not modify the script or dirty the document. A valid code edit may update the inferred workflow; an
+invalid intermediate edit retains both the last valid canvas and its workflow while keeping the
+editor bytes unchanged.
+
 ---
 
 ## 4. Live Data Ingestion via `__ETLSNAP__`

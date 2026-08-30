@@ -54,7 +54,20 @@ public sealed record DesignerAuthoringPage(
     string Id,
     string Name,
     string Mode,
-    List<DesignerAuthoringVisual> Visuals);
+    List<DesignerAuthoringVisual> Visuals,
+    DesignerAuthoringPageLayout? PrintLayout = null);
+
+public sealed record DesignerAuthoringPageLayout(
+    string? PageSize = null,
+    string? Orientation = null,
+    decimal? MarginTop = null,
+    decimal? MarginRight = null,
+    decimal? MarginBottom = null,
+    decimal? MarginLeft = null,
+    string? Units = null,
+    string? Overflow = null,
+    decimal? CustomWidth = null,
+    decimal? CustomHeight = null);
 
 public sealed record DesignerAuthoringVisual(
     string Id,

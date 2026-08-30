@@ -59,7 +59,7 @@ public sealed class DesignerScriptGenerationService
                 AppendLine(sb, string.Empty, nl);
             }
 
-            AppendLine(sb, GeneratePage(pageName, page.Mode, visuals, nl), nl);
+            AppendLine(sb, GeneratePage(pageName, page.Mode, visuals, page.PrintLayout, nl), nl);
             AppendLine(sb, string.Empty, nl);
         }
 
@@ -256,6 +256,9 @@ public sealed class DesignerScriptGenerationService
         if (visual.Options.TryGetValue("cascade", out var cascade) && !string.IsNullOrWhiteSpace(cascade))
             AppendLine(sb, $"    {cascade.Trim().TrimEnd(',')},", nl);
 
+        if (visual.Options.TryGetValue("print_layout", out var printLayout) && !string.IsNullOrWhiteSpace(printLayout))
+            AppendLine(sb, $"    {printLayout.Trim().TrimEnd(',')},", nl);
+
         var styleOptions = new List<string>();
         if (visual.Options.TryGetValue("WIDTH", out var width) && !string.IsNullOrWhiteSpace(width))
             styleOptions.Add($"WIDTH = '{EscapeStr(width)}'");
@@ -293,12 +296,13 @@ public sealed class DesignerScriptGenerationService
         string pageName,
         string mode,
         IReadOnlyList<DesignerAuthoringVisual> visuals,
+        DesignerAuthoringPageLayout? printLayout,
         string nl)
     {
         var modeKeyword = string.Equals(mode, "Paginated", StringComparison.OrdinalIgnoreCase)
             ? "PAGINATED"
             : "DASHBOARD";
-        if (visuals.Count == 0)
+        if (visuals.Count == 0 && printLayout is null)
             return $"CREATE PAGE [{pageName}] AS {modeKeyword} ( LAYOUT ( STRUCTURE = '.' ) );";
 
         var sb = new StringBuilder();
@@ -313,7 +317,20 @@ public sealed class DesignerScriptGenerationService
                 $"            '{GetSlotLetter(index)}' = {SanitizeName(visuals[index].Name, visuals[index].Id)}{suffix}", nl);
         }
         AppendLine(sb, "        )", nl);
-        AppendLine(sb, "    )", nl);
+        AppendLine(sb, printLayout is null ? "    )" : "    ),", nl);
+        if (printLayout is not null)
+        {
+            var options = new List<string>();
+            if (!string.IsNullOrWhiteSpace(printLayout.PageSize)) options.Add($"PAGE_SIZE = '{EscapeStr(printLayout.PageSize)}'");
+            if (!string.IsNullOrWhiteSpace(printLayout.Orientation)) options.Add($"ORIENTATION = '{EscapeStr(printLayout.Orientation)}'");
+            if (printLayout.CustomWidth.HasValue) options.Add($"CUSTOM_WIDTH = {printLayout.CustomWidth.Value}");
+            if (printLayout.CustomHeight.HasValue) options.Add($"CUSTOM_HEIGHT = {printLayout.CustomHeight.Value}");
+            if (printLayout.MarginTop.HasValue && printLayout.MarginRight.HasValue && printLayout.MarginBottom.HasValue && printLayout.MarginLeft.HasValue)
+                options.Add($"MARGINS = ({printLayout.MarginTop.Value}, {printLayout.MarginRight.Value}, {printLayout.MarginBottom.Value}, {printLayout.MarginLeft.Value})");
+            if (!string.IsNullOrWhiteSpace(printLayout.Units)) options.Add($"UNITS = '{EscapeStr(printLayout.Units)}'");
+            if (!string.IsNullOrWhiteSpace(printLayout.Overflow)) options.Add($"OVERFLOW = '{EscapeStr(printLayout.Overflow)}'");
+            AppendLine(sb, $"    PRINT_LAYOUT ({string.Join(", ", options)})", nl);
+        }
         sb.Append(");");
         return sb.ToString();
     }
@@ -422,6 +439,7 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "cascade", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "print_layout", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "advanced_chart", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "html_template", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "html_mode", StringComparison.OrdinalIgnoreCase)

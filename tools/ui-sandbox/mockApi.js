@@ -45,6 +45,29 @@ export function makeMockApi(seedState) {
           datasets.push({ id: `ds_${datasets.length}`, name: match[1], query: match[2].trim() });
         }
         if (datasets.length) designState.datasets = datasets;
+        const pagePattern = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PAGE\s+(?:\[([^\]]+)\]|([A-Za-z_][A-Za-z0-9_]*))\s+AS\s+(DASHBOARD|PAGINATED)/gi;
+        const pages = [];
+        while ((match = pagePattern.exec(scriptText)) !== null) {
+          const mode = match[3][0] + match[3].slice(1).toLowerCase();
+          const seedPage = designState.pages?.[pages.length];
+          pages.push({
+            id: `p${pages.length + 1}`,
+            name: match[1] || match[2],
+            mode,
+            visuals: /CREATE\s+VISUAL/i.test(scriptText) ? (seedPage?.visuals || []) : [],
+            printLayout: mode === 'Paginated' ? {
+              pageSize: scriptText.match(/PAGE_SIZE\s*=\s*'([^']+)'/i)?.[1] || 'Letter',
+              orientation: scriptText.match(/ORIENTATION\s*=\s*'([^']+)'/i)?.[1] || 'PORTRAIT',
+              marginTop: Number(scriptText.match(/MARGINS\s*=\s*\(\s*([0-9.]+)/i)?.[1] || 0.75),
+              marginRight: Number(scriptText.match(/MARGINS\s*=\s*\(\s*[0-9.]+\s*,\s*([0-9.]+)/i)?.[1] || 0.75),
+              marginBottom: 0.75,
+              marginLeft: 0.75,
+              units: 'in',
+              overflow: 'SPLIT',
+            } : null,
+          });
+        }
+        if (pages.length) designState.pages = pages;
         data = { designState };
       }
     } else if (path.endsWith('/api/designer/dag')) {

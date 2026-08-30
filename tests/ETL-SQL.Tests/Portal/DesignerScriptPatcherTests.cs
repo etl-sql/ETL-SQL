@@ -475,6 +475,72 @@ public class DesignerScriptPatcherTests
     }
 
     [Fact]
+    public void PaginatedPageSetup_RoundTripsThroughSharedParserAndPatcher()
+    {
+        const string original = """
+            -- hand-authored data preparation must survive page setup changes
+            SELECT * INTO #detail_rows FROM &orders;
+
+            CREATE PAGE [Invoice] AS PAGINATED (
+                LAYOUT (STRUCTURE = '.'),
+                PRINT_LAYOUT (
+                    PAGE_SIZE = 'Letter',
+                    ORIENTATION = 'PORTRAIT',
+                    MARGINS = (0.75, 0.75, 0.75, 0.75),
+                    UNITS = 'in',
+                    OVERFLOW = 'SPLIT'
+                )
+            );
+            """;
+        var parsed = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService().Parse(original);
+        var page = Assert.Single(parsed.Pages);
+
+        Assert.Equal("Paginated", page.Mode);
+        Assert.Equal("Letter", page.PrintLayout?.PageSize);
+        Assert.Equal(0.75m, page.PrintLayout?.MarginTop);
+
+        var state = new DesignerStateDto(
+            [new DesignerPageDto("p1", "Invoice", "Paginated", [],
+                new DesignerPageLayoutDto("A4", "LANDSCAPE", 0.5m, 0.5m, 0.5m, 0.5m, "in", "SPLIT"))],
+            []);
+        var patched = _patcher.Patch(original, state);
+
+        Assert.StartsWith("-- hand-authored data preparation", patched, StringComparison.Ordinal);
+        Assert.Contains("PAGE_SIZE = 'A4'", patched, StringComparison.Ordinal);
+        Assert.Contains("ORIENTATION = 'LANDSCAPE'", patched, StringComparison.Ordinal);
+        Assert.Contains("MARGINS = (0.5, 0.5, 0.5, 0.5)", patched, StringComparison.Ordinal);
+        Assert.DoesNotContain("PAGE_SIZE = 'Letter'", patched, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PaginatedDetailBreak_RoundTripsWithoutRewritingHandAuthoredSql()
+    {
+        const string original = """
+            -- preserve this preparation exactly
+            SELECT * INTO #detail_rows FROM &orders;
+
+            CREATE VISUAL detail_rows AS TABLE (
+                SOURCE = #detail_rows,
+                OPTIONS (PAGE_SIZE = 0)
+            );
+
+            CREATE PAGE [Invoice] AS PAGINATED (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = detail_rows))
+            );
+            """;
+        var parsed = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService().Parse(original);
+        var visual = Assert.Single(Assert.Single(parsed.Pages).Visuals);
+        visual.Options["print_layout"] = "PRINT_LAYOUT (PAGE_BREAK_AFTER = ON, KEEP_TOGETHER = ON)";
+
+        var patched = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher().Patch(original, parsed);
+        var roundTripped = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService().Parse(patched);
+
+        Assert.StartsWith("-- preserve this preparation exactly", patched, StringComparison.Ordinal);
+        Assert.Contains("PRINT_LAYOUT (PAGE_BREAK_AFTER = ON, KEEP_TOGETHER = ON)", patched, StringComparison.Ordinal);
+        Assert.Contains("PAGE_BREAK_AFTER = ON", Assert.Single(Assert.Single(roundTripped.Pages).Visuals).Options["print_layout"], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PatchesVisualFormattingStyleOptions_WhenPropertiesPanelUpdated()
     {
         const string original = """

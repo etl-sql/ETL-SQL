@@ -56,18 +56,18 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   propagation, SQL Server compiles the node as `+`, and PostgreSQL/Oracle compile it as `||`.
   `ReportDesignerLosslessFuzzTests.GenerateRandomReportScript` exercises the operator again, with
   focused parser, runtime, formatter, dialect, and documentation coverage.
-- [ ] **P1 — Add distinct Dashboard and Paginated Report creation workflows**: Studio Home must show
+- [x] **P1 — Add distinct Dashboard and Paginated Report creation workflows**: Studio Home must show
   separate **New Dashboard** and **New Paginated Report** actions. Both create standard `.rptsql`
   documents and reuse shared connection, dataset, expression, formatting, preview, parser, and
   patcher components.
-  - [ ] The Dashboard workflow opens the freeform/responsive visual canvas with chart, KPI, table,
+  - [x] The Dashboard workflow opens the freeform/responsive visual canvas with chart, KPI, table,
     slicer, cross-filter, layout, and visual-formatting guidance.
-  - [ ] The Paginated Report workflow opens a page-oriented design surface with a guided sequence:
+  - [x] The Paginated Report workflow opens a page-oriented design surface with a guided sequence:
     choose data, define parameters, add groups/details/totals, configure headers and footers, set
     page size/orientation/margins and breaks, preview pagination, then export.
-  - [ ] Opening an existing `.rptsql` selects the appropriate workflow from its report structure
+  - [x] Opening an existing `.rptsql` selects the appropriate workflow from its report structure
     when unambiguous and otherwise asks the author without changing the script.
-  - [ ] Switching between code and either report workflow must preserve unsupported hand-authored
+  - [x] Switching between code and either report workflow must preserve unsupported hand-authored
     syntax and the last valid canvas while an edit is temporarily invalid.
 - [ ] **P2 — Add production-host browser journeys**: Keep fast UI-sandbox stories, but add real
   authenticated Portal and desktop journeys for open, connect, sample, filter, edit, run, save,

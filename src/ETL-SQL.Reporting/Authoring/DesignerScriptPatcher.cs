@@ -310,7 +310,7 @@ public sealed class DesignerScriptPatcher
             var page = pages[index];
             var name = DesignerScriptGenerationService.SanitizeName(
                 string.IsNullOrWhiteSpace(page.Name) ? $"Page{index + 1}" : page.Name);
-            var desired = DesignerScriptGenerationService.GeneratePage(name, page.Mode, page.Visuals ?? [], lineEnding);
+            var desired = DesignerScriptGenerationService.GeneratePage(name, page.Mode, page.Visuals ?? [], page.PrintLayout, lineEnding);
 
             CreatePageStatement? statement = null;
             if (byName.TryGetValue(name, out var named))
@@ -340,7 +340,7 @@ public sealed class DesignerScriptPatcher
     private static string PatchElementStatement(string original, string desired)
     {
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON)\s+[^\s]+(?:\s+AS\s+[^\s(]+)?");
-        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "MAPPINGS", "OPTIONS", "ACTIONS", "INTERACTIONS", "STYLE", "FALLBACK", "LAYOUT" })
+        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "MAPPINGS", "OPTIONS", "ACTIONS", "INTERACTIONS", "STYLE", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
         {
             // If the desired state does not specify a CHART clause, keep existing CHART trivia intact
             if (clause == "CHART" && FindClause(original, clause) is not null && FindClause(desired, clause) is null)
@@ -379,6 +379,7 @@ public sealed class DesignerScriptPatcher
         if (!DescribesTheSameGrid(FindClause(patched, "STRUCTURE"), FindClause(desired, "STRUCTURE")))
             patched = PatchClause(patched, desired, "STRUCTURE");
         patched = PatchClause(patched, desired, "MAP");
+        patched = PatchClause(patched, desired, "PRINT_LAYOUT");
         return patched;
     }
 

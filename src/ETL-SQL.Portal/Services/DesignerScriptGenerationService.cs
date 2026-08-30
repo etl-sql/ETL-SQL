@@ -20,7 +20,13 @@ internal static class DesignerAuthoringStateAdapter
             page.Id,
             page.Name,
             page.Mode,
-            (page.Visuals ?? []).Select(ToAuthoringVisual).ToList())).ToList(),
+            (page.Visuals ?? []).Select(ToAuthoringVisual).ToList(),
+            page.PrintLayout is null ? null : new DesignerAuthoringPageLayout(
+                page.PrintLayout.PageSize, page.PrintLayout.Orientation,
+                page.PrintLayout.MarginTop, page.PrintLayout.MarginRight,
+                page.PrintLayout.MarginBottom, page.PrintLayout.MarginLeft,
+                page.PrintLayout.Units, page.PrintLayout.Overflow,
+                page.PrintLayout.CustomWidth, page.PrintLayout.CustomHeight))).ToList(),
         (state.Datasets ?? []).Select(dataset => new DesignerAuthoringDataset(
             dataset.Id,
             dataset.Name,
@@ -55,7 +61,13 @@ internal static class DesignerAuthoringStateAdapter
             page.Id,
             page.Name,
             page.Mode,
-            (page.Visuals ?? []).Select(ToVisualDto).ToList())).ToList(),
+            (page.Visuals ?? []).Select(ToVisualDto).ToList(),
+            page.PrintLayout is null ? null : new DesignerPageLayoutDto(
+                page.PrintLayout.PageSize, page.PrintLayout.Orientation,
+                page.PrintLayout.MarginTop, page.PrintLayout.MarginRight,
+                page.PrintLayout.MarginBottom, page.PrintLayout.MarginLeft,
+                page.PrintLayout.Units, page.PrintLayout.Overflow,
+                page.PrintLayout.CustomWidth, page.PrintLayout.CustomHeight))).ToList(),
         (state.Datasets ?? []).Select(dataset => new DesignerDatasetDto(
             dataset.Id,
             dataset.Name,

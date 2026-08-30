@@ -12,6 +12,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Split Studio report authoring into distinct **Dashboard** and **Paginated Report** workflows. Both
+  create ordinary `.rptsql` files and keep the shared parser, patcher, data, expression, formatting,
+  preview, and code surfaces. Dashboard opens a responsive tile board with data, visual,
+  cross-filter, layout, and formatting guidance. Paginated Report opens a physical-page surface with
+  an eight-step path through parameters, group/detail bands, totals, headers/footers, page setup,
+  breaks, preview, and export. Existing files select a workflow from explicit page modes; mixed or
+  implicit reports ask without touching source bytes. Physical page settings and visual print-break
+  clauses now round-trip through the shared authoring contract.
+
 - Fixed `||` string concatenation across the full expression grammar. Concatenations now retain
   explicit aliases, work inside parentheses and larger expressions, preserve SQL-style `NULL`
   propagation in engine execution, and compile to the target dialect's concatenation operator.
