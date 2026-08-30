@@ -340,7 +340,7 @@ public sealed class DesignerScriptPatcher
     private static string PatchElementStatement(string original, string desired)
     {
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON)\s+[^\s]+(?:\s+AS\s+[^\s(]+)?");
-        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "MAPPINGS", "OPTIONS", "ACTIONS", "INTERACTIONS", "STYLE", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
+        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "DEFAULT", "MAPPINGS", "OPTIONS", "ACTIONS", "INTERACTIONS", "STYLE", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
         {
             // If the desired state does not specify a CHART clause, keep existing CHART trivia intact
             if (clause == "CHART" && FindClause(original, clause) is not null && FindClause(desired, clause) is null)
@@ -441,8 +441,17 @@ public sealed class DesignerScriptPatcher
             if (close < 0) return original;
             var lineEnding = DetectLineEnding(original);
             var indent = DetectBodyIndent(original);
-            var prefix = close > 0 && original[close - 1] is not '\n' and not '\r' ? "," + lineEnding : string.Empty;
-            return original.Insert(close, prefix + indent + desired.Value.Text + lineEnding);
+            // The separator depends on whether a sibling clause already precedes this one, not on how
+            // the author wrapped their lines. Looking only at the character immediately before the
+            // closing paren reads the newline of a multi-line statement and drops the comma, splicing
+            // two clauses together with nothing between them.
+            var previous = close - 1;
+            while (previous >= 0 && char.IsWhiteSpace(original[previous])) previous--;
+            var needsSeparator = previous >= 0 && original[previous] is not '(' and not ',';
+            // Insert the clause first, then the comma, so the later offset stays valid. The comma
+            // goes right after the preceding clause rather than onto a line of its own.
+            var patched = original.Insert(close, indent + desired.Value.Text + lineEnding);
+            return needsSeparator ? patched.Insert(previous + 1, ",") : patched;
         }
 
         var replacement = PreserveComments(existing!.Value.Text, desired!.Value.Text, DetectLineEnding(original));

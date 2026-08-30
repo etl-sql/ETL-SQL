@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a full desktop Studio workspace Explorer. It now creates, renames, and deletes files and
+  folders, moves files into folders or back to the workspace root by drag-and-drop, keeps open tabs
+  aligned with moved paths, blocks deletion of dirty documents, and enforces the workspace boundary.
+
 - Added inline file rename to desktop Studio tabs. Double-clicking a tab name now opens a keyboard-
   accessible editor that renames the underlying workspace file, preserves its extension when omitted,
   updates the open document and Explorer paths, and rejects read-only, unsafe, or colliding targets.

@@ -110,6 +110,15 @@ export default {
     const api = makeMockApi(STUDIO_DESIGN_STATE);
     const apiRequests = [];
     const exitRequests = [];
+    const sandboxWorkspace = {
+      files: JSON.parse(JSON.stringify(STUDIO_DESIGN_STATE.files)),
+      folders: [{ path: 'reports' }, { path: 'etl' }, { path: 'scripts' }],
+    };
+    const workspaceSnapshot = result => ({
+      files: JSON.parse(JSON.stringify(sandboxWorkspace.files)),
+      folders: JSON.parse(JSON.stringify(sandboxWorkspace.folders)),
+      result,
+    });
     const authFetch = async (url, init) => {
       let body = null;
       try { body = init?.body ? JSON.parse(init.body) : null; } catch { /* test instrumentation only */ }
@@ -121,7 +130,8 @@ export default {
 
     const workbench = await studioMod.createStudioWorkbench(stage, {
       documents: JSON.parse(JSON.stringify(SAMPLE_DOCS)),
-      workspaceFiles: JSON.parse(JSON.stringify(STUDIO_DESIGN_STATE.files)),
+      workspaceFiles: JSON.parse(JSON.stringify(sandboxWorkspace.files)),
+      workspaceFolders: JSON.parse(JSON.stringify(sandboxWorkspace.folders)),
       authFetch,
       apiBase: '',
       initialSnapshot: {
@@ -152,7 +162,40 @@ export default {
         const directory = slash >= 0 ? document.path.slice(0, slash + 1) : '';
         const extension = name.includes('.') ? '' : document.name.slice(document.name.lastIndexOf('.'));
         const path = `${directory}${name}${extension}`;
+        const file = sandboxWorkspace.files.find(item => item.path === document.path);
+        if (file) file.path = path;
         return { path, name: path.slice(directory.length) };
+      },
+      onCreateWorkspaceFolder: async path => {
+        const folder = { path };
+        sandboxWorkspace.folders.push(folder);
+        return workspaceSnapshot(folder);
+      },
+      onRenameWorkspaceEntry: async (entry, name) => {
+        const slash = entry.path.lastIndexOf('/');
+        const directory = slash >= 0 ? entry.path.slice(0, slash + 1) : '';
+        const extension = !entry.isDirectory && !name.includes('.') ? entry.path.slice(entry.path.lastIndexOf('.')) : '';
+        const path = `${directory}${name}${extension}`;
+        if (entry.isDirectory) {
+          sandboxWorkspace.folders.forEach(folder => { if (folder.path === entry.path || folder.path.startsWith(`${entry.path}/`)) folder.path = path + folder.path.slice(entry.path.length); });
+          sandboxWorkspace.files.forEach(file => { if (file.path.startsWith(`${entry.path}/`)) file.path = path + file.path.slice(entry.path.length); });
+        } else {
+          const file = sandboxWorkspace.files.find(item => item.path === entry.path);
+          if (file) file.path = path;
+        }
+        return workspaceSnapshot({ path, isDirectory: entry.isDirectory });
+      },
+      onDeleteWorkspaceEntry: async entry => {
+        sandboxWorkspace.files = sandboxWorkspace.files.filter(file => file.path !== entry.path && !(entry.isDirectory && file.path.startsWith(`${entry.path}/`)));
+        sandboxWorkspace.folders = sandboxWorkspace.folders.filter(folder => folder.path !== entry.path && !(entry.isDirectory && folder.path.startsWith(`${entry.path}/`)));
+        return workspaceSnapshot(null);
+      },
+      onMoveWorkspaceFile: async (path, destinationFolder) => {
+        const file = sandboxWorkspace.files.find(item => item.path === path);
+        const name = path.slice(path.lastIndexOf('/') + 1);
+        const movedPath = destinationFolder ? `${destinationFolder}/${name}` : name;
+        if (file) file.path = movedPath;
+        return workspaceSnapshot({ path: movedPath, isDirectory: false });
       },
     });
 

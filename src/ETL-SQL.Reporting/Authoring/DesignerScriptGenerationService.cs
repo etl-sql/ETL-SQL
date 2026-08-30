@@ -225,6 +225,12 @@ public sealed class DesignerScriptGenerationService
                 AppendLine(sb, $"    FALLBACK = '{EscapeStr(fallback)}',", nl);
         }
 
+        // Carried verbatim: the parser hands back the authored expression, which may be a literal,
+        // a concatenation, or a parameter reference. Re-quoting it would turn an expression into a
+        // string.
+        if (visual.Options.TryGetValue("text_default", out var textDefault) && !string.IsNullOrWhiteSpace(textDefault))
+            AppendLine(sb, $"    DEFAULT = {textDefault.Trim().TrimEnd(',')},", nl);
+
         var mappings = visual.Mappings
             .Where(mapping => !string.IsNullOrWhiteSpace(mapping.Value))
             .Select(mapping => $"{mapping.Key.ToUpperInvariant()} = {mapping.Value}")
@@ -308,15 +314,25 @@ public sealed class DesignerScriptGenerationService
         var sb = new StringBuilder();
         AppendLine(sb, $"CREATE PAGE [{pageName}] AS {modeKeyword} (", nl);
         AppendLine(sb, "    LAYOUT (", nl);
-        AppendLine(sb, $"        STRUCTURE = '{EscapeStr(BuildStructure(visuals))}',", nl);
-        AppendLine(sb, "        MAP (", nl);
-        for (var index = 0; index < visuals.Count; index++)
+        // A page with no visuals has nothing to map. Emitting an empty MAP () is not just noise: the
+        // patcher copies desired clauses into the author's statement one by one, so it would write a
+        // meaningless empty clause into a page that never had one.
+        if (visuals.Count == 0)
         {
-            var suffix = index < visuals.Count - 1 ? "," : string.Empty;
-            AppendLine(sb,
-                $"            '{GetSlotLetter(index)}' = {SanitizeName(visuals[index].Name, visuals[index].Id)}{suffix}", nl);
+            AppendLine(sb, $"        STRUCTURE = '{EscapeStr(BuildStructure(visuals))}'", nl);
         }
-        AppendLine(sb, "        )", nl);
+        else
+        {
+            AppendLine(sb, $"        STRUCTURE = '{EscapeStr(BuildStructure(visuals))}',", nl);
+            AppendLine(sb, "        MAP (", nl);
+            for (var index = 0; index < visuals.Count; index++)
+            {
+                var suffix = index < visuals.Count - 1 ? "," : string.Empty;
+                AppendLine(sb,
+                    $"            '{GetSlotLetter(index)}' = {SanitizeName(visuals[index].Name, visuals[index].Id)}{suffix}", nl);
+            }
+            AppendLine(sb, "        )", nl);
+        }
         AppendLine(sb, printLayout is null ? "    )" : "    ),", nl);
         if (printLayout is not null)
         {
@@ -439,6 +455,7 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "cascade", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "text_default", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "print_layout", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "advanced_chart", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "html_template", StringComparison.OrdinalIgnoreCase)

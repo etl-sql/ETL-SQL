@@ -103,13 +103,32 @@ internal static class StudioShell
       return false;
     }
 
+    async function mutateWorkspace(route, body) {
+      const response = await authFetch(route, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `The workspace operation failed (${response.status}).`);
+      }
+      const result = response.status === 204 ? null : await response.json();
+      const workspaceResponse = await authFetch('/api/workspace');
+      if (!workspaceResponse.ok) throw new Error('The workspace changed, but Explorer could not be refreshed.');
+      const workspace = await workspaceResponse.json();
+      return { ...workspace, result };
+    }
+
     async function boot() {
       let workspaceFiles = [];
+      let workspaceFolders = [];
       try {
         const wsRes = await authFetch('/api/workspace');
         if (wsRes.ok) {
           const wsData = await wsRes.json();
           workspaceFiles = wsData.files || [];
+          workspaceFolders = wsData.folders || [];
         }
       } catch (e) {
         console.error('Failed to fetch workspace files:', e);
@@ -146,6 +165,7 @@ internal static class StudioShell
         documents: docs,
         activeDocId: activeDocId,
         workspaceFiles: workspaceFiles,
+        workspaceFolders: workspaceFolders,
         apiBase: '',
         authFetch,
         onExit: exitStudio,
@@ -174,7 +194,21 @@ internal static class StudioShell
             throw new Error(error.error || 'The file could not be renamed.');
           }
           return res.json();
-        }
+        },
+        onCreateWorkspaceFolder: readOnly ? null : path => mutateWorkspace('/api/workspace/folders', { path }),
+        onRenameWorkspaceEntry: readOnly ? null : (entry, name) => mutateWorkspace('/api/workspace/rename', {
+          path: entry.path,
+          name,
+          isDirectory: entry.isDirectory
+        }),
+        onDeleteWorkspaceEntry: readOnly ? null : entry => mutateWorkspace('/api/workspace/delete', {
+          path: entry.path,
+          isDirectory: entry.isDirectory
+        }),
+        onMoveWorkspaceFile: readOnly ? null : (path, destinationFolder) => mutateWorkspace('/api/workspace/move', {
+          path,
+          destinationFolder
+        })
       });
       await sendHeartbeat();
       heartbeatTimer = window.setInterval(() => {

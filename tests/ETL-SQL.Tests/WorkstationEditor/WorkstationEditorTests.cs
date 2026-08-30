@@ -99,8 +99,30 @@ public sealed class WorkstationEditorTests
         await workspace.WriteTextAsync("existing.etlsql", "SELECT 2;", CancellationToken.None);
 
         Assert.Throws<ArgumentException>(() => workspace.RenameFile("pipeline.etlsql", "nested/moved.etlsql"));
-        Assert.Throws<WorkspaceRenameConflictException>(() => workspace.RenameFile("pipeline.etlsql", "existing.etlsql"));
+        Assert.Throws<WorkspaceEntryConflictException>(() => workspace.RenameFile("pipeline.etlsql", "existing.etlsql"));
         Assert.Equal("SELECT 1;", await workspace.ReadTextAsync("pipeline.etlsql", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Workspace_FolderLifecycleAndFileMove_StayInsideRoot()
+    {
+        using var temp = new TempWorkspace();
+        var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+        await workspace.WriteTextAsync("pipeline.etlsql", "SELECT 1;", CancellationToken.None);
+
+        var folder = workspace.CreateFolder("archive");
+        var moved = workspace.MoveFile("pipeline.etlsql", folder.Path);
+        var renamed = workspace.RenameEntry(folder.Path, "completed", isDirectory: true);
+
+        Assert.Equal("archive/pipeline.etlsql", moved.Path);
+        Assert.Equal("completed", renamed.Path);
+        Assert.Contains(workspace.ListFolders(), item => item.Path == "completed");
+        Assert.Equal("SELECT 1;", await workspace.ReadTextAsync("completed/pipeline.etlsql", CancellationToken.None));
+
+        workspace.DeleteEntry("completed", isDirectory: true);
+        Assert.DoesNotContain(workspace.ListFolders(), item => item.Path == "completed");
+        Assert.Empty(workspace.ListFiles());
+        Assert.Throws<UnauthorizedAccessException>(() => workspace.CreateFolder("../outside"));
     }
 
     [Fact]
@@ -946,9 +968,11 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
-    public void Guard_IgnoresUnparseableText() =>
+    public void Guard_IgnoresUnparseableText()
+    {
         // The run itself surfaces the parse error; the guard must not throw on the way there.
         Assert.Empty(WorkstationRunGuard.FindDestructiveStatements("this is not a script ("));
+    }
 
     [Fact]
     public async Task Run_RefusesDestructiveScriptUntilConfirmed()

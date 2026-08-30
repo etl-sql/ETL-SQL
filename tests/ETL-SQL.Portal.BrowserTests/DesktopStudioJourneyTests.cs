@@ -81,6 +81,31 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         Assert.False(File.Exists(firstFile));
         Assert.True(File.Exists(renamedFile));
 
+        await firstPage.Locator("[data-explorer-new-folder='']").ClickAsync();
+        await firstPage.Locator(".etlsql-feedback-field input").FillAsync("archive");
+        await firstPage.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        var archiveFolder = firstPage.Locator("[data-explorer-folder='archive']");
+        await archiveFolder.WaitForAsync();
+        await firstPage.Locator("[data-explorer-file='renamed-users.rptsql']").DragToAsync(archiveFolder);
+        await firstPage.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].path === 'archive/renamed-users.rptsql'");
+        Assert.True(File.Exists(Path.Combine(firstWorkspace.Root, "archive", "renamed-users.rptsql")));
+
+        await archiveFolder.HoverAsync();
+        await archiveFolder.Locator("[data-explorer-rename='archive']").ClickAsync();
+        await firstPage.Locator(".etlsql-feedback-field input").FillAsync("completed");
+        await firstPage.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        var completedFolder = firstPage.Locator("[data-explorer-folder='completed']");
+        await completedFolder.WaitForAsync();
+        await firstPage.Locator("[data-explorer-file='completed/renamed-users.rptsql']")
+            .DragToAsync(firstPage.Locator("[data-explorer-root-drop]"));
+        await firstPage.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].path === 'renamed-users.rptsql'");
+        await completedFolder.HoverAsync();
+        await completedFolder.Locator("[data-explorer-delete='completed']").ClickAsync();
+        await firstPage.Locator(".etlsql-feedback-btn-danger").ClickAsync();
+        await firstPage.WaitForFunctionAsync("() => !window.__STUDIO__.state.workspaceFolders.some(folder => folder.path === 'completed')");
+        Assert.True(File.Exists(renamedFile));
+        Assert.False(Directory.Exists(Path.Combine(firstWorkspace.Root, "completed")));
+
         await using var secondHost = WorkstationEditorApp.Create([], Options(secondWorkspace.Root, secondFile, "second-token"));
         await secondHost.StartAsync();
         await using var secondWindow = await fixture.NewSessionAsync();

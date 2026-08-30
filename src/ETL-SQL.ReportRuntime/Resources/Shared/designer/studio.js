@@ -311,6 +311,8 @@ export async function createStudioWorkbench(container, opts = {}) {
         deploymentMode: opts.deploymentMode || 'Desktop',
         sourceControlEnabled: Boolean(opts.sourceControlEnabled),
         documents: documents,
+        workspaceFolders: [...(opts.workspaceFolders || [])],
+        explorerExpanded: new Set((opts.workspaceFolders || []).map(folder => folder.path)),
         activeDocId: opts.activeDocId || (documents.length > 0 ? documents[0].id : '__home__'),
         activeActivity: 'explorer',
         selectedVisualId: null,
@@ -717,6 +719,835 @@ export async function createStudioWorkbench(container, opts = {}) {
         </div>`;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Guided workflow steps
+    //
+    // A numbered step is a teaching surface, not a shortcut. Clicking one opens a dialog that names
+    // the concept, collects the inputs, shows the exact Report-SQL it is about to write, and only
+    // then patches the script. A step that cannot run yet says what is missing and offers the control
+    // that fixes it, rather than writing a half-formed statement or failing into a toast the author
+    // has no way to act on.
+    // ---------------------------------------------------------------------------------------------
+
+    const STUDIO_PARAMETER_TYPES = ['VARCHAR', 'INT', 'DECIMAL', 'DATE', 'DATETIME', 'BOOLEAN'];
+    const STUDIO_TOTAL_AGGREGATES = ['SUM', 'AVG', 'COUNT'];
+
+    /**
+     * Opens a Studio dialog and resolves with whatever `api.close(value)` is given, or null when the
+     * author dismisses it. `controller(api)` drives the content: `api.render({ lede, body, actions,
+     * wire })` paints the body and footer, so a multi-pane step just calls `render` again.
+     */
+    function studioDialog({ kicker, title, wide = false }, controller) {
+        return new Promise(resolve => {
+            let settled = false;
+            const close = value => {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener('keydown', onKeyDown, true);
+                modalBackdrop.hidden = true;
+                modalBox.innerHTML = '';
+                modalBox.classList.remove('etlsql-studio-dialog-wide');
+                resolve(value === undefined ? null : value);
+            };
+            const onKeyDown = event => {
+                if (event.key !== 'Escape') return;
+                event.stopPropagation();
+                close(null);
+            };
+
+            modalBox.innerHTML = `
+                <div class="etlsql-studio-modal-header">
+                    <div><span class="etlsql-studio-kicker">${_escapeHtml(kicker)}</span><h2 data-dialog-title>${_escapeHtml(title)}</h2></div>
+                    <button type="button" class="etlsql-studio-dialog-dismiss" data-dialog-dismiss aria-label="Close">&times;</button>
+                </div>
+                <div class="etlsql-studio-modal-body etlsql-studio-guided-body" data-dialog-body></div>
+                <footer class="etlsql-studio-dialog-actions" data-dialog-actions></footer>`;
+            if (wide) modalBox.classList.add('etlsql-studio-dialog-wide');
+            modalBackdrop.hidden = false;
+            document.addEventListener('keydown', onKeyDown, true);
+            modalBox.querySelector('[data-dialog-dismiss]').addEventListener('click', () => close(null));
+
+            const bodyHost = modalBox.querySelector('[data-dialog-body]');
+            const actionHost = modalBox.querySelector('[data-dialog-actions]');
+            const api = {
+                close,
+                setTitle(next) { modalBox.querySelector('[data-dialog-title]').textContent = next; },
+                // Every footer button is disabled while a request is in flight, so a slow schema read
+                // cannot be double-submitted into two datasets.
+                busy(flag) { actionHost.querySelectorAll('button').forEach(button => { button.disabled = flag; }); },
+                render({ lede = '', body = '', actions = [], wire } = {}) {
+                    bodyHost.innerHTML = (lede ? `<p class="etlsql-studio-guided-lede">${lede}</p>` : '') + body;
+                    actionHost.innerHTML = actions.map(action => `<button type="button"
+                        class="etlsql-studio-btn${action.primary ? ' is-primary' : ''}"
+                        data-dialog-action="${_escapeHtml(action.id)}"${action.disabled ? ' disabled' : ''}
+                        >${_escapeHtml(action.label)}</button>`).join('');
+                    actionHost.querySelectorAll('[data-dialog-action]').forEach(button => button.addEventListener('click', () => {
+                        actions.find(action => action.id === button.dataset.dialogAction)?.run?.();
+                    }));
+                    wire?.(bodyHost);
+                    bodyHost.querySelector('input:not([type=hidden]), select, textarea')?.focus();
+                },
+            };
+            controller(api);
+        });
+    }
+
+    function sqlPreviewMarkup(sql, label = 'Writes this Report-SQL') {
+        return `<div class="etlsql-studio-sql-preview"><span>${_escapeHtml(label)}</span><pre>${_escapeHtml(sql)}</pre></div>`;
+    }
+
+    function guidedNoteMarkup(text, tone = 'info') {
+        return `<div class="etlsql-studio-guided-note is-${_escapeHtml(tone)}">${text}</div>`;
+    }
+
+    /**
+     * Explains why a step cannot run and offers the control that unblocks it. Returns true when the
+     * author took the remedy, so the caller can retry the step.
+     */
+    async function guidedBlocker({ kicker, title, lede, remedyLabel, remedy }) {
+        const choice = await studioDialog({ kicker, title }, api => api.render({
+            lede,
+            actions: [
+                { id: 'cancel', label: 'Not now', run: () => api.close(null) },
+                { id: 'fix', label: remedyLabel, primary: true, run: () => api.close('fix') },
+            ],
+        }));
+        if (choice !== 'fix') return false;
+        await remedy();
+        return true;
+    }
+
+    /**
+     * How a new visual should point at the current sample. A dataset-backed sample is referenced by
+     * name so every visual shares one query; a connection-backed sample still has to inline its
+     * SELECT, because there is no named query to reference yet.
+     */
+    function visualSourceBinding() {
+        const source = activeDocumentContext().snapshot?.source || null;
+        if (source && String(source).startsWith('&')) return { dataset: source, options: {} };
+        return { dataset: null, options: source ? { inline_source: source } : {} };
+    }
+
+    function guidedColumnNames() {
+        return _snapshotColumns(activeDocumentContext().snapshot).map(_columnName);
+    }
+
+    function guidedNumericColumns() {
+        const context = activeDocumentContext();
+        const rows = context.snapshot?.rows || [];
+        return _snapshotColumns(context.snapshot)
+            .filter(column => _columnType(column, rows) === 'number')
+            .map(_columnName);
+    }
+
+    /** Samples a named dataset so the canvas, field list, and filters all read from the same rows. */
+    async function loadDatasetSample(datasetName) {
+        const doc = getActiveDoc();
+        const context = documentContext(doc);
+        const response = await authFetch(apiBase + STUDIO_ROUTES.dataSample, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sourceKind: 'dataset',
+                dataset: datasetName,
+                documentUri: doc?.path || 'studio',
+                script: state.editorInstance?.getValue?.() ?? doc?.content ?? '',
+            }),
+        });
+        if (!response.ok) throw new Error(await response.text() || 'The dataset could not be sampled.');
+        const sample = await response.json();
+        context.snapshot = {
+            source: sample.source || datasetName,
+            columns: sample.columns || [],
+            rowCount: sample.rowCount ?? sample.rows?.length ?? 0,
+            rows: sample.rows || [],
+        };
+        context.snapshotCache.set(datasetName, context.snapshot);
+        if (getActiveDoc() === doc) {
+            updateSnapshotPackage(context.snapshot);
+            state.designerInstance?.refreshSnapshot?.();
+            renderSidebarContent(state.activeActivity);
+        }
+        return context.snapshot;
+    }
+
+    function sampleRowsMarkup(snapshot, limit = 5) {
+        const columns = _snapshotColumns(snapshot).map(_columnName);
+        if (!columns.length) return guidedNoteMarkup('The sample came back with no columns.', 'warning');
+        const rows = (snapshot.rows || []).slice(0, limit);
+        return `<div class="etlsql-studio-sample-grid"><table>
+            <thead><tr>${columns.map(column => `<th>${_escapeHtml(column)}</th>`).join('')}</tr></thead>
+            <tbody>${rows.map(row => `<tr>${columns.map(column => `<td>${_escapeHtml(String(row?.[column] ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody>
+            </table></div>
+            <p class="etlsql-studio-guided-hint">${snapshot.rowCount} row${snapshot.rowCount === 1 ? '' : 's'} sampled · ${columns.length} field${columns.length === 1 ? '' : 's'}</p>`;
+    }
+
+    // --- Step 1: the data wizard ------------------------------------------------------------------
+
+    function datasetBaseName(seed) {
+        const cleaned = String(seed || 'dataset').replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+/, '').toLowerCase();
+        return /^[a-z]/.test(cleaned) ? cleaned : `data_${cleaned || 'set'}`;
+    }
+
+    /**
+     * Connection -> table or query -> name -> CREATE DATASET. This is the only path that produces a
+     * named, reusable query without writing code, which is what every later step depends on.
+     * Resolves with the dataset name when one was created.
+     */
+    async function openDataWizard() {
+        const doc = getActiveDoc();
+        if (!doc) return null;
+        const context = documentContext(doc);
+        const wizard = {
+            pane: 'connection',
+            connections: null,
+            connection: context.selectedSource?.connection || null,
+            tables: null,
+            table: null,
+            mode: 'table',
+            query: '',
+            name: '',
+            preview: null,
+            error: null,
+            existingNames: [],
+        };
+
+        return await studioDialog({ kicker: 'Step 1 · Choose data', title: 'Create a dataset', wide: true }, api => {
+            const fail = message => { wizard.error = message; paint(); };
+
+            const loadConnections = async () => {
+                try {
+                    wizard.connections = await loadConnectionAliases();
+                } catch {
+                    wizard.connections = [];
+                }
+                paint();
+            };
+
+            const openConnection = async alias => {
+                wizard.connection = alias;
+                wizard.tables = null;
+                wizard.table = null;
+                wizard.pane = 'source';
+                wizard.error = null;
+                paint();
+                try {
+                    const documentUri = doc.path || 'studio';
+                    const response = await authFetch(apiBase + STUDIO_ROUTES.schema
+                        + `?connection=${encodeURIComponent(alias)}&documentUri=${encodeURIComponent(documentUri)}`);
+                    if (!response.ok) throw new Error(`The schema for ${alias} could not be read (${response.status}).`);
+                    wizard.tables = (await response.json()).tables || [];
+                } catch (error) {
+                    wizard.tables = [];
+                    wizard.error = error.message;
+                }
+                paint();
+            };
+
+            const goToName = async () => {
+                wizard.pane = 'name';
+                wizard.error = null;
+                wizard.name = wizard.name || datasetBaseName(wizard.mode === 'table' ? wizard.table : `${wizard.connection}_query`);
+                paint();
+                try {
+                    const parsed = await designerApiJson(STUDIO_ROUTES.parse, {
+                        script: state.editorInstance?.getValue?.() ?? doc.content ?? '',
+                    });
+                    wizard.existingNames = (parsed.designState?.datasets || [])
+                        .map(dataset => String(dataset.name || '').replace(/^&/, '').toLowerCase());
+                } catch {
+                    // A document that does not parse yet cannot report its datasets; the mutation
+                    // below still de-duplicates against the real design state before writing.
+                    wizard.existingNames = [];
+                }
+                paint();
+            };
+
+            const previewSource = async () => {
+                if (wizard.mode !== 'table' || !wizard.table) return;
+                api.busy(true);
+                try {
+                    const response = await authFetch(apiBase + STUDIO_ROUTES.dataSample, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            sourceKind: 'connection',
+                            connection: wizard.connection,
+                            table: wizard.table,
+                            documentUri: doc.path || 'studio',
+                            script: state.editorInstance?.getValue?.() ?? doc.content ?? '',
+                        }),
+                    });
+                    if (!response.ok) throw new Error(await response.text() || 'The preview failed.');
+                    const sample = await response.json();
+                    wizard.preview = {
+                        columns: sample.columns || [],
+                        rows: sample.rows || [],
+                        rowCount: sample.rowCount ?? sample.rows?.length ?? 0,
+                    };
+                    wizard.error = null;
+                } catch (error) {
+                    wizard.preview = null;
+                    wizard.error = error.message;
+                }
+                api.busy(false);
+                paint();
+            };
+
+            const create = async () => {
+                const base = datasetBaseName(wizard.name);
+                const query = wizardQuery();
+                if (!query) return fail('This dataset has no query yet.');
+                api.busy(true);
+                const created = await canonicalDesignerMutation('Create dataset', design => {
+                    design.datasets ||= [];
+                    const taken = new Set(design.datasets.map(item => String(item.name || '').replace(/^&/, '').toLowerCase()));
+                    let name = base;
+                    let suffix = 2;
+                    while (taken.has(name.toLowerCase())) name = `${base}_${suffix++}`;
+                    design.datasets.push({ id: `studio_ds_${Date.now().toString(36)}`, name: `&${name}`, query });
+                    return `&${name}`;
+                });
+                if (!created) { api.busy(false); return; }
+
+                context.selectedSource = { connection: wizard.connection, table: wizard.mode === 'table' ? wizard.table : created };
+                context.sourceColumns = wizard.preview?.columns || context.sourceColumns;
+                try {
+                    const snapshot = await loadDatasetSample(created);
+                    _feedback.notify(
+                        `${created} is ready with ${snapshot.rowCount} sampled row${snapshot.rowCount === 1 ? '' : 's'}. Visuals can reference it by name.`,
+                        { title: 'Dataset created', tone: 'success' });
+                } catch (error) {
+                    // The statement is in the script either way; say so rather than implying the step
+                    // failed, because the author's next step depends on knowing it exists.
+                    _feedback.notify(
+                        `${created} was written to the script, but its preview could not run: ${error.message}`,
+                        { title: 'Dataset created without a sample', tone: 'warning' });
+                }
+                api.close(created);
+            };
+
+            const wizardQuery = () => (wizard.mode === 'table'
+                ? (wizard.connection && wizard.table ? `SELECT * FROM ${wizard.connection}.${wizard.table}` : '')
+                : wizard.query.trim().replace(/;$/, ''));
+
+            const scriptDeclaresConnection = () => {
+                const script = state.editorInstance?.getValue?.() ?? doc.content ?? '';
+                return new RegExp(`CREATE\\s+CONNECTION\\s+${wizard.connection}\\b`, 'i').test(script);
+            };
+
+            const paint = () => {
+                if (wizard.pane === 'connection') return paintConnection();
+                if (wizard.pane === 'source') return paintSource();
+                return paintName();
+            };
+
+            const errorMarkup = () => (wizard.error ? guidedNoteMarkup(_escapeHtml(wizard.error), 'error') : '');
+
+            const paintConnection = () => api.render({
+                lede: 'A <strong>dataset</strong> is a named query this report can reuse. Every visual points at one, '
+                    + 'so the report runs the query once. Start with the connection Studio should read.',
+                body: errorMarkup() + (wizard.connections === null
+                    ? '<div class="etlsql-studio-loading">Loading connections…</div>'
+                    : wizard.connections.length
+                        ? `<div class="etlsql-studio-choice-list">${wizard.connections.map(item => {
+                            const alias = typeof item === 'string' ? item : item.alias || item.name;
+                            const detail = typeof item === 'string' ? 'Connection' : item.description || item.connectorType || 'Connection';
+                            return `<button type="button" data-pick-connection="${_escapeHtml(alias)}">
+                                <strong>${_escapeHtml(alias)}</strong><span>${_escapeHtml(detail)}</span></button>`;
+                        }).join('')}</div>`
+                        : guidedNoteMarkup('This document has no connections yet. Create one first — the dataset needs somewhere to read from.', 'info')),
+                actions: [
+                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                    { id: 'new', label: 'New connection…', primary: !wizard.connections?.length, run: () => { api.close(null); handleOpenConnectionWizard(); } },
+                ],
+                wire: host => host.querySelectorAll('[data-pick-connection]').forEach(button =>
+                    button.addEventListener('click', () => openConnection(button.dataset.pickConnection))),
+            });
+
+            const paintSource = () => api.render({
+                lede: `Reading from <strong>${_escapeHtml(wizard.connection)}</strong>. Pick a table to read whole, or write the query yourself.`,
+                body: errorMarkup() + `
+                    <div class="etlsql-studio-segmented" role="group" aria-label="Dataset source">
+                        <button type="button" data-source-mode="table" class="${wizard.mode === 'table' ? 'active' : ''}">Pick a table</button>
+                        <button type="button" data-source-mode="query" class="${wizard.mode === 'query' ? 'active' : ''}">Write a query</button>
+                    </div>`
+                    + (wizard.mode === 'table'
+                        ? (wizard.tables === null
+                            ? '<div class="etlsql-studio-loading">Loading tables…</div>'
+                            : wizard.tables.length
+                                ? `<label class="etlsql-studio-guided-field"><span>Filter</span>
+                                    <input type="search" data-table-filter placeholder="Search tables"></label>
+                                   <div class="etlsql-studio-choice-list is-compact" data-table-list>${wizard.tables.map(table => `
+                                    <button type="button" data-pick-table="${_escapeHtml(table.name)}" class="${wizard.table === table.name ? 'active' : ''}">
+                                        <strong>${_escapeHtml(table.name)}</strong>
+                                        <span>${table.columns?.length || 0} field${table.columns?.length === 1 ? '' : 's'}</span>
+                                    </button>`).join('')}</div>`
+                                : guidedNoteMarkup('This connection reported no tables you can read.', 'warning'))
+                        : `<label class="etlsql-studio-guided-field"><span>Query</span>
+                            <textarea data-dataset-query rows="6" spellcheck="false"
+                                placeholder="SELECT region, SUM(total_amount) AS revenue&#10;FROM ${_escapeHtml(wizard.connection)}.orders&#10;GROUP BY region">${_escapeHtml(wizard.query)}</textarea></label>
+                           <p class="etlsql-studio-guided-hint">Qualify tables with the connection alias, the way the script does.</p>`)
+                    + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
+                actions: [
+                    { id: 'back', label: 'Back', run: () => { wizard.pane = 'connection'; wizard.error = null; paint(); } },
+                    ...(wizard.mode === 'table' && wizard.table ? [{ id: 'preview', label: 'Preview rows', run: previewSource }] : []),
+                    { id: 'next', label: 'Next', primary: true, disabled: !wizardQuery(), run: goToName },
+                ],
+                wire: host => {
+                    host.querySelectorAll('[data-source-mode]').forEach(button => button.addEventListener('click', () => {
+                        wizard.mode = button.dataset.sourceMode;
+                        wizard.preview = null;
+                        paint();
+                    }));
+                    host.querySelectorAll('[data-pick-table]').forEach(button => button.addEventListener('click', () => {
+                        wizard.table = button.dataset.pickTable;
+                        wizard.preview = null;
+                        paint();
+                    }));
+                    const filter = host.querySelector('[data-table-filter]');
+                    filter?.addEventListener('input', () => {
+                        const query = filter.value.trim().toLowerCase();
+                        host.querySelectorAll('[data-pick-table]').forEach(button => {
+                            button.hidden = Boolean(query) && !button.dataset.pickTable.toLowerCase().includes(query);
+                        });
+                    });
+                    const textarea = host.querySelector('[data-dataset-query]');
+                    // Re-rendering on every keystroke would steal the caret, so only the footer's
+                    // enabled state is refreshed while the author types.
+                    textarea?.addEventListener('input', () => {
+                        wizard.query = textarea.value;
+                        const next = modalBox.querySelector('[data-dialog-action="next"]');
+                        if (next) next.disabled = !wizardQuery();
+                    });
+                },
+            });
+
+            const paintName = () => {
+                const base = datasetBaseName(wizard.name);
+                const collides = wizard.existingNames.includes(base);
+                const sql = `CREATE DATASET &${base} AS (\n  ${wizardQuery()}\n);`;
+                return api.render({
+                    lede: 'Name the dataset. Visuals reference it as <code>&amp;name</code>, and the report runs its query once no matter how many visuals read from it.',
+                    body: errorMarkup()
+                        + `<label class="etlsql-studio-guided-field"><span>Dataset name</span>
+                            <div class="etlsql-studio-prefixed-input"><span>&amp;</span>
+                            <input type="text" data-dataset-name value="${_escapeHtml(base)}" spellcheck="false"></div></label>`
+                        + (collides ? guidedNoteMarkup('This report already has a dataset with that name. Studio will add a numeric suffix unless you change it.', 'warning') : '')
+                        + (wizard.connection && !scriptDeclaresConnection()
+                            ? guidedNoteMarkup(`This report does not declare <code>${_escapeHtml(wizard.connection)}</code> with a <code>CREATE CONNECTION</code> statement. `
+                                + 'It will preview here, but add the connection to the script before publishing so the report runs anywhere.', 'info')
+                            : '')
+                        + sqlPreviewMarkup(sql),
+                    actions: [
+                        { id: 'back', label: 'Back', run: () => { wizard.pane = 'source'; wizard.error = null; paint(); } },
+                        { id: 'create', label: 'Create dataset', primary: true, run: create },
+                    ],
+                    wire: host => {
+                        const input = host.querySelector('[data-dataset-name]');
+                        input?.addEventListener('change', () => { wizard.name = input.value; paint(); });
+                    },
+                });
+            };
+
+            paint();
+            loadConnections();
+        });
+    }
+
+    /** Step 1 for both workflows: create a dataset if there is none, otherwise show the data panel. */
+    async function runChooseDataStep() {
+        setActivity('catalog');
+        if (hasDataSample()) {
+            const change = await studioDialog({ kicker: 'Step 1 · Choose data', title: 'This report already has data' }, api => api.render({
+                lede: `Visuals are reading from <strong>${_escapeHtml(activeDocumentContext().snapshot.source)}</strong>. `
+                    + 'You can add another dataset, or keep working with this one — the Data panel on the left lists its fields.',
+                actions: [
+                    { id: 'keep', label: 'Keep this dataset', run: () => api.close(null) },
+                    { id: 'add', label: 'Add another dataset', primary: true, run: () => api.close('add') },
+                ],
+            }));
+            if (change !== 'add') return;
+        }
+        await openDataWizard();
+    }
+
+    /** Every step after the first needs a sample; this is the one place that says so. */
+    async function requireDataSample(stepLabel) {
+        if (hasDataSample()) return true;
+        return await guidedBlocker({
+            kicker: stepLabel,
+            title: 'Choose data first',
+            lede: 'This step writes report items that read from a dataset, so Studio needs one before it can write anything useful. '
+                + 'Creating a dataset takes a connection, a table or query, and a name.',
+            remedyLabel: 'Create a dataset',
+            remedy: () => runChooseDataStep(),
+        });
+    }
+
+    // --- Steps 2-8 --------------------------------------------------------------------------------
+
+    async function runParameterStep() {
+        const draft = { name: 'region', type: 'VARCHAR', initial: "'All'", prompt: true };
+        const sql = () => {
+            const initial = draft.initial.trim() ? ` = ${draft.initial.trim()}` : '';
+            return `DECLARE @${datasetBaseName(draft.name)} ${draft.type}${initial}${draft.prompt ? ' INPUT' : ''};`;
+        };
+        await studioDialog({ kicker: 'Step 2 · Define parameters', title: 'Add a report parameter' }, api => {
+            const paint = () => api.render({
+                lede: 'A <strong>parameter</strong> is a value the reader supplies before the report runs. '
+                    + 'Marked as an input prompt, it appears as a field on the report; either way the query can filter on it.',
+                body: `
+                    <label class="etlsql-studio-guided-field"><span>Name</span>
+                        <div class="etlsql-studio-prefixed-input"><span>@</span>
+                        <input type="text" data-parameter-name value="${_escapeHtml(draft.name)}" spellcheck="false"></div></label>
+                    <label class="etlsql-studio-guided-field"><span>Type</span>
+                        <select data-parameter-type>${STUDIO_PARAMETER_TYPES.map(type =>
+                            `<option ${draft.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select></label>
+                    <label class="etlsql-studio-guided-field"><span>Default value</span>
+                        <input type="text" data-parameter-initial value="${_escapeHtml(draft.initial)}" spellcheck="false"
+                            placeholder="'All'"></label>
+                    <label class="etlsql-studio-guided-check">
+                        <input type="checkbox" data-parameter-prompt ${draft.prompt ? 'checked' : ''}>
+                        Prompt the reader for this value (INPUT)</label>
+                    <p class="etlsql-studio-guided-hint">Text defaults need quotes, the way they appear in the script.</p>`
+                    + sqlPreviewMarkup(sql()),
+                actions: [
+                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                    {
+                        id: 'add', label: 'Add parameter', primary: true, run: async () => {
+                            api.busy(true);
+                            const added = await canonicalDesignerMutation('Add report parameter', design => {
+                                design.parameters ||= [];
+                                const base = datasetBaseName(draft.name);
+                                const taken = new Set(design.parameters.map(item => String(item.name).replace(/^@/, '').toLowerCase()));
+                                let name = base;
+                                let suffix = 2;
+                                while (taken.has(name.toLowerCase())) name = `${base}_${suffix++}`;
+                                design.parameters.push({
+                                    name: `@${name}`,
+                                    dataType: draft.type,
+                                    initialValue: draft.initial.trim() || null,
+                                    isInput: draft.prompt,
+                                    isOutput: false,
+                                    isRequired: false,
+                                    isSensitive: false,
+                                });
+                                return `@${name}`;
+                            });
+                            api.busy(false);
+                            if (added) _feedback.notify(`${added} is declared. Reference it in a dataset query to filter on it.`, { title: 'Parameter added', tone: 'success' });
+                            api.close(added);
+                        },
+                    },
+                ],
+                wire: host => {
+                    host.querySelector('[data-parameter-name]').addEventListener('change', event => { draft.name = event.target.value; paint(); });
+                    host.querySelector('[data-parameter-type]').addEventListener('change', event => { draft.type = event.target.value; paint(); });
+                    host.querySelector('[data-parameter-initial]').addEventListener('change', event => { draft.initial = event.target.value; paint(); });
+                    host.querySelector('[data-parameter-prompt]').addEventListener('change', event => { draft.prompt = event.target.checked; paint(); });
+                },
+            });
+            paint();
+        });
+    }
+
+    async function runDetailsStep() {
+        if (!await requireDataSample('Step 3 · Groups + details')) return;
+        const columns = guidedColumnNames();
+        const numeric = guidedNumericColumns();
+        const draft = {
+            group: columns[0] || '',
+            measure: numeric[0] || columns[0] || '',
+            includeMatrix: true,
+            detail: columns.slice(0, 8),
+        };
+        await studioDialog({ kicker: 'Step 3 · Groups + details', title: 'Add group and detail bands', wide: true }, api => {
+            const paint = () => api.render({
+                lede: 'A paginated report repeats a <strong>detail</strong> row per record, optionally under a <strong>group</strong> summary. '
+                    + 'The matrix pivots one field against a measure; the table lists the rows themselves.',
+                body: `
+                    <label class="etlsql-studio-guided-check">
+                        <input type="checkbox" data-details-matrix ${draft.includeMatrix ? 'checked' : ''}>
+                        Add a group summary (MATRIX) above the detail rows</label>
+                    ${draft.includeMatrix ? `
+                    <div class="etlsql-studio-guided-row">
+                        <label class="etlsql-studio-guided-field"><span>Group by</span>
+                            <select data-details-group>${columns.map(column =>
+                                `<option ${draft.group === column ? 'selected' : ''}>${_escapeHtml(column)}</option>`).join('')}</select></label>
+                        <label class="etlsql-studio-guided-field"><span>Summarise</span>
+                            <select data-details-measure>${columns.map(column =>
+                                `<option ${draft.measure === column ? 'selected' : ''}>${_escapeHtml(column)}</option>`).join('')}</select></label>
+                    </div>` : ''}
+                    <div class="etlsql-studio-guided-field"><span>Detail columns</span>
+                        <div class="etlsql-studio-check-grid">${columns.map(column => `
+                            <label><input type="checkbox" data-detail-column="${_escapeHtml(column)}"
+                                ${draft.detail.includes(column) ? 'checked' : ''}>${_escapeHtml(column)}</label>`).join('')}</div></div>`
+                    + (draft.detail.length ? '' : guidedNoteMarkup('Pick at least one detail column, or the table has nothing to print.', 'warning')),
+                actions: [
+                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                    {
+                        id: 'add', label: 'Add bands', primary: true, disabled: !draft.detail.length, run: async () => {
+                            api.busy(true);
+                            const binding = visualSourceBinding();
+                            const added = await canonicalDesignerMutation('Add group and detail bands', design => {
+                                const page = design.pages[0];
+                                page.mode = 'Paginated';
+                                page.visuals ||= [];
+                                const bottom = () => page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
+                                if (draft.includeMatrix) {
+                                    page.visuals.push({
+                                        id: `studio_group_${Date.now().toString(36)}`,
+                                        name: uniqueVisualName(design, 'group_summary'),
+                                        type: 'MATRIX', gridCol: 1, gridRow: bottom() + 1, gridColSpan: 12, gridRowSpan: 4,
+                                        title: `${draft.group} summary`,
+                                        dataset: binding.dataset,
+                                        mappings: { ROW: draft.group, VALUE: draft.measure },
+                                        options: { ...binding.options, AGGREGATE: 'SUM' },
+                                    });
+                                }
+                                page.visuals.push({
+                                    id: `studio_detail_${Date.now().toString(36)}`,
+                                    name: uniqueVisualName(design, 'detail_rows'),
+                                    type: 'TABLE', gridCol: 1, gridRow: bottom() + 1, gridColSpan: 12, gridRowSpan: 7,
+                                    title: 'Detail rows',
+                                    dataset: binding.dataset,
+                                    // A TABLE prints one column per mapping entry, keyed by position.
+                                    mappings: Object.fromEntries(draft.detail.map((column, index) => [`COLUMN${index + 1}`, column])),
+                                    // PAGE_SIZE = 0 prints every row instead of paging in the browser,
+                                    // which is what a physical page needs.
+                                    options: { ...binding.options, PAGE_SIZE: '0' },
+                                });
+                                return true;
+                            });
+                            api.busy(false);
+                            if (added) _feedback.notify('Detail rows added. Step 4 puts a total under them.', { title: 'Bands added', tone: 'success' });
+                            api.close(added);
+                        },
+                    },
+                ],
+                wire: host => {
+                    host.querySelector('[data-details-matrix]').addEventListener('change', event => { draft.includeMatrix = event.target.checked; paint(); });
+                    host.querySelector('[data-details-group]')?.addEventListener('change', event => { draft.group = event.target.value; });
+                    host.querySelector('[data-details-measure]')?.addEventListener('change', event => { draft.measure = event.target.value; });
+                    host.querySelectorAll('[data-detail-column]').forEach(box => box.addEventListener('change', () => {
+                        const column = box.dataset.detailColumn;
+                        draft.detail = box.checked
+                            ? [...draft.detail, column]
+                            : draft.detail.filter(item => item !== column);
+                        const add = modalBox.querySelector('[data-dialog-action="add"]');
+                        if (add) add.disabled = !draft.detail.length;
+                    }));
+                },
+            });
+            paint();
+        });
+    }
+
+    async function runTotalsStep() {
+        const designState = state.designerInstance?.getState?.();
+        const tables = (designState?.pages || []).flatMap(page => page.visuals || []).filter(visual => visual.type === 'TABLE');
+        if (!tables.length) {
+            await guidedBlocker({
+                kicker: 'Step 4 · Add totals',
+                title: 'There is no detail table yet',
+                lede: 'A grand total is a footer row under a detail table, so the table has to exist first. '
+                    + 'Step 3 creates one from the fields you choose.',
+                remedyLabel: 'Add detail bands',
+                remedy: () => runDetailsStep(),
+            });
+            return;
+        }
+
+        const draft = { target: tables[0].name, aggregate: 'SUM' };
+        await studioDialog({ kicker: 'Step 4 · Add totals', title: 'Add a grand total' }, api => {
+            const paint = () => api.render({
+                lede: 'A <strong>grand total</strong> appends one footer row to a detail table, aggregating every numeric column it prints.',
+                body: `
+                    <label class="etlsql-studio-guided-field"><span>Detail table</span>
+                        <select data-total-target>${tables.map(table =>
+                            `<option value="${_escapeHtml(table.name)}" ${draft.target === table.name ? 'selected' : ''}>${_escapeHtml(table.title || table.name)}</option>`).join('')}</select></label>
+                    <label class="etlsql-studio-guided-field"><span>Aggregate</span>
+                        <select data-total-aggregate>${STUDIO_TOTAL_AGGREGATES.map(aggregate =>
+                            `<option ${draft.aggregate === aggregate ? 'selected' : ''}>${aggregate}</option>`).join('')}</select></label>`
+                    + sqlPreviewMarkup(`OPTIONS (GRAND_TOTAL = ${draft.aggregate})`, 'Adds this option to the table'),
+                actions: [
+                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                    {
+                        id: 'add', label: 'Add total', primary: true, run: async () => {
+                            api.busy(true);
+                            const added = await canonicalDesignerMutation('Add report totals', design => {
+                                const table = (design.pages || []).flatMap(page => page.visuals || [])
+                                    .find(visual => visual.name === draft.target);
+                                if (!table) throw new Error(`The detail table ${draft.target} is no longer in the script.`);
+                                table.options ||= {};
+                                table.options.GRAND_TOTAL = draft.aggregate;
+                                return true;
+                            });
+                            api.busy(false);
+                            if (added) _feedback.notify(`${draft.target} now prints a ${draft.aggregate} total row.`, { title: 'Total added', tone: 'success' });
+                            api.close(added);
+                        },
+                    },
+                ],
+                wire: host => {
+                    host.querySelector('[data-total-target]').addEventListener('change', event => { draft.target = event.target.value; paint(); });
+                    host.querySelector('[data-total-aggregate]').addEventListener('change', event => { draft.aggregate = event.target.value; paint(); });
+                },
+            });
+            paint();
+        });
+    }
+
+    async function runFurnitureStep() {
+        const doc = getActiveDoc();
+        const draft = {
+            header: doc?.name?.replace(/\.rptsql$/i, '').replace(/[_-]+/g, ' ') || 'Report',
+            footer: 'Page {{PAGE}} of {{PAGES}}',
+            addHeader: true,
+            addFooter: true,
+            breakAfterDetails: false,
+        };
+        await studioDialog({ kicker: 'Step 5 · Header + footer', title: 'Add page furniture' }, api => {
+            const paint = () => api.render({
+                lede: 'Page <strong>furniture</strong> is the text that frames every printed page. '
+                    + 'These are TEXT bands with a <code>KEEP_TOGETHER</code> print rule, so they never split across a page boundary.',
+                body: `
+                    <label class="etlsql-studio-guided-check">
+                        <input type="checkbox" data-furniture-header ${draft.addHeader ? 'checked' : ''}> Add a page header</label>
+                    ${draft.addHeader ? `<label class="etlsql-studio-guided-field"><span>Header text</span>
+                        <input type="text" data-header-text value="${_escapeHtml(draft.header)}"></label>` : ''}
+                    <label class="etlsql-studio-guided-check">
+                        <input type="checkbox" data-furniture-footer ${draft.addFooter ? 'checked' : ''}> Add a page footer</label>
+                    ${draft.addFooter ? `<label class="etlsql-studio-guided-field"><span>Footer text</span>
+                        <input type="text" data-footer-text value="${_escapeHtml(draft.footer)}"></label>` : ''}
+                    <label class="etlsql-studio-guided-check">
+                        <input type="checkbox" data-furniture-break ${draft.breakAfterDetails ? 'checked' : ''}>
+                        Start a new page after the detail table</label>`
+                    + (draft.addHeader || draft.addFooter ? '' : guidedNoteMarkup('Nothing selected — pick a header, a footer, or both.', 'warning')),
+                actions: [
+                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                    {
+                        id: 'add', label: 'Add furniture', primary: true, disabled: !draft.addHeader && !draft.addFooter, run: async () => {
+                            api.busy(true);
+                            const added = await canonicalDesignerMutation('Add page header and footer', design => {
+                                const page = design.pages[0];
+                                page.mode = 'Paginated';
+                                page.visuals ||= [];
+                                const bottom = () => page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
+                                // A TEXT band carries its content in DEFAULT and reads no data, so it
+                                // gets no SOURCE — one with a source and no text prints nothing.
+                                const band = (slug, title, text) => ({
+                                    id: `studio_${slug}_${Date.now().toString(36)}`,
+                                    name: uniqueVisualName(design, `page_${slug}`),
+                                    type: 'TEXT', gridCol: 1, gridRow: bottom() + 1, gridColSpan: 12, gridRowSpan: 2,
+                                    title,
+                                    dataset: null,
+                                    mappings: {},
+                                    options: {
+                                        text_default: `'${String(text).replace(/'/g, "''")}'`,
+                                        print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)',
+                                    },
+                                });
+                                if (draft.addHeader) page.visuals.push(band('header', 'Page header', draft.header));
+                                if (draft.addFooter) page.visuals.push(band('footer', 'Page footer', draft.footer));
+                                if (draft.breakAfterDetails) {
+                                    const table = page.visuals.find(visual => visual.type === 'TABLE');
+                                    if (table) {
+                                        table.options ||= {};
+                                        table.options.print_layout = 'PRINT_LAYOUT (PAGE_BREAK_AFTER = ON, KEEP_TOGETHER = ON)';
+                                    }
+                                }
+                                return true;
+                            });
+                            api.busy(false);
+                            if (added) _feedback.notify('Page bands added.', { title: 'Furniture added', tone: 'success' });
+                            api.close(added);
+                        },
+                    },
+                ],
+                wire: host => {
+                    host.querySelector('[data-furniture-header]').addEventListener('change', event => { draft.addHeader = event.target.checked; paint(); });
+                    host.querySelector('[data-furniture-footer]').addEventListener('change', event => { draft.addFooter = event.target.checked; paint(); });
+                    host.querySelector('[data-furniture-break]').addEventListener('change', event => { draft.breakAfterDetails = event.target.checked; });
+                    host.querySelector('[data-header-text]')?.addEventListener('input', event => { draft.header = event.target.value; });
+                    host.querySelector('[data-footer-text]')?.addEventListener('input', event => { draft.footer = event.target.value; });
+                },
+            });
+            paint();
+        });
+    }
+
+    async function runPreviewStep() {
+        const designState = state.designerInstance?.getState?.();
+        const visuals = (designState?.pages || []).flatMap(page => page.visuals || []);
+        if (!visuals.length) {
+            await guidedBlocker({
+                kicker: 'Step 7 · Preview pagination',
+                title: 'There is nothing to paginate yet',
+                lede: 'A preview runs the report and lays its visuals onto physical pages. This report has no visuals, so every page would be blank.',
+                remedyLabel: 'Add detail bands',
+                remedy: () => runDetailsStep(),
+            });
+            return;
+        }
+        setProjection('split');
+        _feedback.notify('Running the report. Physical pages appear in the canvas; rows and messages appear below the script.',
+            { title: 'Preview running', tone: 'info' });
+        shell.querySelector('[data-action="run"]')?.click();
+    }
+
+    async function runExportStep() {
+        await studioDialog({ kicker: 'Step 8 · Export', title: 'Export this report' }, api => api.render({
+            lede: 'A paginated report exports two different things. <strong>PDF</strong> keeps the physical pages, margins, and breaks you configured. '
+                + '<strong>CSV and Excel</strong> export the result rows only, with no page layout.',
+            body: `<ul class="etlsql-studio-guided-list">
+                    <li><strong>PDF</strong> — use the Report-SQL PDF export, which renders the same page setup as the preview.</li>
+                    <li><strong>CSV / Excel</strong> — run the report, then use the export buttons on the Results pane below the script.</li>
+                </ul>`
+                + guidedNoteMarkup('Export runs the report again against live data, so parameter prompts apply at export time too.', 'info'),
+            actions: [
+                { id: 'close', label: 'Close', run: () => api.close(null) },
+                { id: 'run', label: 'Run the report now', primary: true, run: () => { api.close('run'); runPreviewStep(); } },
+            ],
+        }));
+    }
+
+    // --- Dashboard steps --------------------------------------------------------------------------
+
+    async function runVisualsStep() {
+        if (!await requireDataSample('Step 2 · Visuals')) return;
+        setActivity('palette');
+        await studioDialog({ kicker: 'Step 2 · Visuals', title: 'Add visuals to the canvas' }, api => api.render({
+            lede: `The Visual Components panel is now open on the left, listing every visual type this report can use. `
+                + `They all read from <strong>${_escapeHtml(activeDocumentContext().snapshot.source)}</strong>.`,
+            body: `<ul class="etlsql-studio-guided-list">
+                    <li>Click a type to drop it on the canvas, or drag it where you want it.</li>
+                    <li>Select a tile, then use the Fields list to assign columns to its chart roles.</li>
+                    <li>Every tile you add is written to the script as a <code>CREATE VISUAL</code> statement.</li>
+                </ul>`,
+            actions: [
+                { id: 'close', label: 'Got it', run: () => api.close(null) },
+                { id: 'bar', label: 'Add a bar chart', primary: true, run: () => { api.close('bar'); addVisualToCanvas('BAR'); } },
+            ],
+        }));
+    }
+
+    async function runCrossFilterStep() {
+        if (!await requireDataSample('Step 3 · Cross-filters')) return;
+        setActivity('filters');
+        await studioDialog({ kicker: 'Step 3 · Cross-filters', title: 'Filter across visuals' }, api => api.render({
+            lede: 'A <strong>filter</strong> narrows the rows every visual sees. Promoting one to a viewer control turns it into a slicer '
+                + 'the reader can change, backed by a report parameter.',
+            body: `<ul class="etlsql-studio-guided-list">
+                    <li>Drag a field from the Fields list into the Filters lane on the left.</li>
+                    <li>Choose <em>Dataset global</em> to filter every visual, or <em>Selected visual</em> for just one.</li>
+                    <li>Use <em>Promote to viewer control</em> to give the reader a slicer for that field.</li>
+                </ul>`,
+            actions: [{ id: 'close', label: 'Got it', primary: true, run: () => api.close(null) }],
+        }));
+    }
+
     function renderReportWorkflowChrome(doc, designState = state.designerInstance?.getState?.()) {
         const workflow = doc?.reportWorkflow;
         const isReport = Boolean(doc && (doc.path || '').toLowerCase().endsWith('.rptsql'));
@@ -728,15 +1559,29 @@ export async function createStudioWorkbench(container, opts = {}) {
             return;
         }
 
+        // Every step reports whether it is already satisfied, so the rail doubles as a checklist of
+        // what this report still needs rather than eight identical buttons.
+        const visuals = (designState?.pages || []).flatMap(page => page.visuals || []);
+        const hasParameters = Boolean(designState?.parameters?.length);
+        const detailTable = visuals.find(visual => visual.type === 'TABLE');
+        const done = {
+            catalog: hasDataSample(),
+            parameter: hasParameters,
+            details: Boolean(detailTable),
+            totals: Boolean(detailTable?.options?.GRAND_TOTAL),
+            furniture: visuals.some(visual => visual.type === 'TEXT'),
+            palette: visuals.length > 0,
+            filters: Object.keys(activeDocumentContext().activeFilters || {}).length > 0,
+        };
+        const stepClass = key => (done[key] ? ' class="is-done"' : '');
+
         if (workflow === 'dashboard') {
-            workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Dashboard</span><strong>Responsive visual canvas</strong><span>Build the story with chart, KPI, table, and slicer tiles. Use filters for cross-visual interaction; use Format on the selected tile for presentation.</span></div><nav aria-label="Dashboard workflow"><button type="button" data-workflow-activity="catalog">1 Data</button><button type="button" data-workflow-activity="palette">2 Visuals</button><button type="button" data-workflow-activity="filters">3 Cross-filters</button><button type="button" data-workflow-projection="canvas">4 Layout</button><button type="button" data-workflow-projection="split">5 Format + code</button></nav>`;
+            workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Dashboard</span><strong>Responsive visual canvas</strong><span>Build the story with chart, KPI, table, and slicer tiles. Use filters for cross-visual interaction; use Format on the selected tile for presentation.</span></div><ol class="etlsql-workflow-steps" aria-label="Dashboard workflow"><li><button type="button" data-workflow-step="catalog"${stepClass('catalog')}><b>1</b><span><strong>Data</strong><small>Connection, dataset, fields</small></span></button></li><li><button type="button" data-workflow-step="palette"${stepClass('palette')}><b>2</b><span><strong>Visuals</strong><small>Charts, KPIs, tables, slicers</small></span></button></li><li><button type="button" data-workflow-step="filters"${stepClass('filters')}><b>3</b><span><strong>Cross-filters</strong><small>Narrow every visual at once</small></span></button></li><li><button type="button" data-workflow-step="layout"><b>4</b><span><strong>Layout</strong><small>Arrange tiles on the canvas</small></span></button></li><li><button type="button" data-workflow-step="format"><b>5</b><span><strong>Format + code</strong><small>Style the selection beside the script</small></span></button></li></ol>`;
         } else {
             const page = designState?.pages?.[0] || {};
-            workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Paginated Report</span><strong>Physical page authoring</strong><span>Work top-to-bottom: prompts, repeating detail, totals, page furniture, then pagination and export.</span></div><ol class="etlsql-paginated-steps"><li><button type="button" data-workflow-activity="catalog"><b>1</b><span><strong>Choose data</strong><small>Connection, dataset, fields</small></span></button></li><li><button type="button" data-paginated-action="parameter"><b>2</b><span><strong>Define parameters</strong><small>Input prompts before execution</small></span></button></li><li><button type="button" data-paginated-action="details"><b>3</b><span><strong>Groups + details</strong><small>Matrix groups and table rows</small></span></button></li><li><button type="button" data-paginated-action="totals"><b>4</b><span><strong>Add totals</strong><small>Grand total on the detail table</small></span></button></li><li><button type="button" data-paginated-action="furniture"><b>5</b><span><strong>Header + footer</strong><small>Text bands and page breaks</small></span></button></li><li><div><b>6</b><span><strong>Page setup + breaks</strong><small>Writes PRINT_LAYOUT through the patcher</small></span>${pageSetupMarkup(page)}</div></li><li><button type="button" data-paginated-action="preview"><b>7</b><span><strong>Preview pagination</strong><small>Run and inspect physical pages</small></span></button></li><li><button type="button" data-paginated-action="export"><b>8</b><span><strong>Export</strong><small>PDF for pages; CSV/Excel for results</small></span></button></li></ol>`;
+            workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Paginated Report</span><strong>Physical page authoring</strong><span>Work top-to-bottom: prompts, repeating detail, totals, page furniture, then pagination and export.</span></div><ol class="etlsql-workflow-steps etlsql-paginated-steps"><li><button type="button" data-workflow-step="catalog"${stepClass('catalog')}><b>1</b><span><strong>Choose data</strong><small>Connection, dataset, fields</small></span></button></li><li><button type="button" data-workflow-step="parameter"${stepClass('parameter')}><b>2</b><span><strong>Define parameters</strong><small>Input prompts before execution</small></span></button></li><li><button type="button" data-workflow-step="details"${stepClass('details')}><b>3</b><span><strong>Groups + details</strong><small>Matrix groups and table rows</small></span></button></li><li><button type="button" data-workflow-step="totals"${stepClass('totals')}><b>4</b><span><strong>Add totals</strong><small>Grand total on the detail table</small></span></button></li><li><button type="button" data-workflow-step="furniture"${stepClass('furniture')}><b>5</b><span><strong>Header + footer</strong><small>Text bands and page breaks</small></span></button></li><li><div><b>6</b><span><strong>Page setup + breaks</strong><small>Writes PRINT_LAYOUT through the patcher</small></span>${pageSetupMarkup(page)}</div></li><li><button type="button" data-workflow-step="preview"><b>7</b><span><strong>Preview pagination</strong><small>Run and inspect physical pages</small></span></button></li><li><button type="button" data-workflow-step="export"><b>8</b><span><strong>Export</strong><small>PDF for pages; CSV/Excel for results</small></span></button></li></ol>`;
         }
 
-        workflowBar.querySelectorAll('[data-workflow-activity]').forEach(button => button.addEventListener('click', () => setActivity(button.dataset.workflowActivity)));
-        workflowBar.querySelectorAll('[data-workflow-projection]').forEach(button => button.addEventListener('click', () => setProjection(button.dataset.workflowProjection)));
         workflowBar.querySelectorAll('[data-page-setup]').forEach(control => control.addEventListener('change', async () => {
             await canonicalDesignerMutation('Update page setup', design => {
                 const page = design.pages[0];
@@ -760,58 +1605,29 @@ export async function createStudioWorkbench(container, opts = {}) {
                 return true;
             });
         });
-        workflowBar.querySelectorAll('[data-paginated-action]').forEach(button => button.addEventListener('click', async () => {
-            const action = button.dataset.paginatedAction;
-            if (action === 'parameter') {
-                await canonicalDesignerMutation('Add report parameter', design => {
-                    design.parameters ||= [];
-                    let suffix = design.parameters.length + 1;
-                    let name = `@report_parameter_${suffix}`;
-                    while (design.parameters.some(parameter => parameter.name.toLowerCase() === name)) name = `@report_parameter_${++suffix}`;
-                    design.parameters.push({ name, dataType: 'VARCHAR', initialValue: "'All'", isInput: true, isOutput: false, isRequired: false, isSensitive: false });
-                    return true;
-                });
-            } else if (action === 'details') {
-                if (!hasDataSample()) {
-                    setActivity('catalog');
-                    _feedback.notify('Choose data before adding group and detail bands.', { title: 'Data required', tone: 'info' });
-                    return;
-                }
-                const snapshotSource = activeDocumentContext().snapshot?.source;
-                await canonicalDesignerMutation('Add group and detail bands', design => {
-                    const page = design.pages[0];
-                    page.visuals ||= [];
-                    const maxRow = page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
-                    page.visuals.push({ id: `studio_group_${Date.now().toString(36)}`, name: uniqueVisualName(design, 'group_summary'), type: 'MATRIX', gridCol: 1, gridRow: maxRow + 1, gridColSpan: 12, gridRowSpan: 4, title: 'Group summary', dataset: null, mappings: {}, options: { inline_source: snapshotSource } });
-                    page.visuals.push({ id: `studio_detail_${Date.now().toString(36)}`, name: uniqueVisualName(design, 'detail_rows'), type: 'TABLE', gridCol: 1, gridRow: maxRow + 5, gridColSpan: 12, gridRowSpan: 7, title: 'Detail rows', dataset: null, mappings: {}, options: { inline_source: snapshotSource, PAGE_SIZE: '0' } });
-                    return true;
-                });
-            } else if (action === 'totals') {
-                await canonicalDesignerMutation('Add report totals', design => {
-                    const table = (design.pages || []).flatMap(page => page.visuals || []).find(visual => visual.type === 'TABLE');
-                    if (!table) throw new Error('Add a detail table before configuring totals.');
-                    table.options ||= {}; table.options.GRAND_TOTAL = 'SUM'; return true;
-                });
-            } else if (action === 'furniture') {
-                if (!hasDataSample()) {
-                    setActivity('catalog');
-                    _feedback.notify('Choose data before adding page header and footer bands.', { title: 'Data required', tone: 'info' });
-                    return;
-                }
-                const snapshotSource = activeDocumentContext().snapshot?.source;
-                await canonicalDesignerMutation('Add page header and footer', design => {
-                    const page = design.pages[0];
-                    page.visuals ||= [];
-                    const maxRow = page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
-                    page.visuals.push({ id: `studio_header_${Date.now().toString(36)}`, name: uniqueVisualName(design, 'page_header'), type: 'TEXT', gridCol: 1, gridRow: maxRow + 1, gridColSpan: 12, gridRowSpan: 2, title: 'Page header', dataset: null, mappings: {}, options: { inline_source: snapshotSource, print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)' } });
-                    page.visuals.push({ id: `studio_footer_${Date.now().toString(36)}`, name: uniqueVisualName(design, 'page_footer'), type: 'TEXT', gridCol: 1, gridRow: maxRow + 3, gridColSpan: 12, gridRowSpan: 2, title: 'Page footer', dataset: null, mappings: {}, options: { inline_source: snapshotSource, print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)' } });
-                    return true;
-                });
-            } else if (action === 'preview') {
-                shell.querySelector('[data-action="run"]')?.click();
-            } else if (action === 'export') {
-                setProjection('split');
-                _feedback.notify('Run the report, then use the Results export buttons for CSV or Excel. Use the Report-SQL PDF export for physical pages.', { title: 'Export ready', tone: 'info' });
+
+        const steps = {
+            catalog: runChooseDataStep,
+            parameter: runParameterStep,
+            details: runDetailsStep,
+            totals: runTotalsStep,
+            furniture: runFurnitureStep,
+            preview: runPreviewStep,
+            export: runExportStep,
+            palette: runVisualsStep,
+            filters: runCrossFilterStep,
+            layout: async () => setProjection('canvas'),
+            format: async () => setProjection('split'),
+        };
+        workflowBar.querySelectorAll('[data-workflow-step]').forEach(button => button.addEventListener('click', async () => {
+            const step = steps[button.dataset.workflowStep];
+            if (!step) return;
+            try {
+                await step();
+            } catch (error) {
+                // A step that throws must say so. Swallowing it here is what made these buttons look
+                // dead in the first place.
+                _feedback.notify(error?.message || 'The step could not be completed.', { title: 'Step failed', tone: 'error' });
             }
         }));
     }
@@ -973,7 +1789,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                     snapshotPackage: activeDocumentContext().snapshotPackage,
                     requireDataFirst: true,
                     canAddVisual: hasDataSample,
-                    onRequestData: () => setActivity('catalog'),
+                    onRequestData: () => { runChooseDataStep(); },
                     onAddVisualBlocked: () => {
                         setActivity('catalog');
                         _feedback.notify('Choose a connection and table before adding a visual.', { title: 'Data required', tone: 'info' });
@@ -1164,8 +1980,12 @@ export async function createStudioWorkbench(container, opts = {}) {
                 // learns what the canvas just wrote, so it must not silently swap underneath them.
                 const changed = state.editorInstance?.replaceAll?.(patched.script);
                 if (changed) state.editorInstance?.revealRange?.(changed.from, changed.to);
-                await state.designerInstance?.applyScriptText?.(patched.script);
+                const applied = await state.designerInstance?.applyScriptText?.(patched.script);
                 renderVisualStage();
+                // Repaint the workflow rail from the state this mutation just produced. Waiting for
+                // the editor's debounced sync left the step checklist describing the document as it
+                // was before the click that changed it.
+                renderReportWorkflowChrome(doc, applied?.designState);
             }
             renderTabs();
             return mutationResult;
@@ -1183,7 +2003,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             _feedback.notify('Choose a connection and table before adding a visual.', { title: 'Data required', tone: 'info' });
             return;
         }
-        const snapshotSource = activeDocumentContext().snapshot?.source || null;
+        const binding = visualSourceBinding();
         const addedName = await canonicalDesignerMutation(`Add ${uType} visual`, designState => {
             const page = designState.pages[0];
             page.visuals ||= [];
@@ -1198,9 +2018,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                 gridColSpan: uType === 'CARD' ? 3 : uType === 'TABLE' ? 12 : 6,
                 gridRowSpan: uType === 'CARD' ? 2 : uType === 'TABLE' ? 5 : 4,
                 title: `New ${uType} Visual`,
-                dataset: null,
+                dataset: binding.dataset,
                 mappings: {},
-                options: snapshotSource ? { inline_source: snapshotSource } : {}
+                options: { ...binding.options }
             });
             return name;
         });
@@ -1778,6 +2598,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         }
 
         let content = '';
+        let sourceRevision = null;
         try {
             const res = await authFetch(apiBase + STUDIO_WORKSPACE_ROUTES.files + '?path=' + encodeURIComponent(filePath));
             if (res.ok) {
@@ -2398,8 +3219,10 @@ export async function createStudioWorkbench(container, opts = {}) {
     function renderDataWorkflow() {
         const context = activeDocumentContext();
         sidebarTitle.textContent = 'Data & Filters';
-        sidebarContent.innerHTML = `<div class="etlsql-studio-data-workflow"><div class="etlsql-studio-workflow-intro"><strong>Build from data</strong><span>Choose a source once, apply optional filters, then assign fields to chart roles. The sample is reused across this report.</span></div><ol class="etlsql-studio-steps"><li class="${context.selectedSource ? 'active' : ''}">Data</li><li class="${context.filterFields.length ? 'active' : ''}">Filter</li><li class="${hasDataSample() ? 'active' : ''}">Visual</li><li>Preview</li></ol><section><div class="etlsql-studio-subhead"><div><strong>Connections</strong><span>${context.selectedSource ? _escapeHtml(context.selectedSource.connection) : 'Choose one to browse tables'}</span></div><button type="button" class="etlsql-sidebar-action" data-action="wizard">+ New</button></div><div class="etlsql-catalog-conn-list"><span class="etlsql-studio-loading">Loading connections…</span></div><div class="etlsql-catalog-table-list" data-table-list></div></section><section><div class="etlsql-studio-subhead"><div><strong>Fields</strong><span>${hasDataSample() ? `${context.snapshot.rowCount} rows cached for previews` : 'Choose a table to create a sample'}</span></div><span class="etlsql-studio-count">${_snapshotColumns(context.snapshot).length || context.sourceColumns.length}</span></div><div class="etlsql-studio-field-list">${fieldListMarkup()}</div></section><section class="etlsql-studio-filter-lane" data-filter-lane><div class="etlsql-studio-subhead"><div><strong>Filters</strong><span>Drop fields here</span></div><span class="etlsql-studio-count">${context.filterFields.length}</span></div><div class="etlsql-studio-filter-drop" data-filter-drop>${context.filterFields.length ? context.filterFields.map(filterCardMarkup).join('') : '<div class="etlsql-studio-empty-guidance"><strong>No filters yet</strong><span>Drag a loaded field here. Filters are created only when you add them.</span></div>'}</div></section></div>`;
-        sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard); wireFields(); wireFilterLane();
+        sidebarContent.innerHTML = `<div class="etlsql-studio-data-workflow"><div class="etlsql-studio-workflow-intro"><strong>Build from data</strong><span>A dataset is one named query every visual can read from. Create one, apply optional filters, then assign fields to chart roles.</span><button type="button" class="etlsql-studio-btn is-primary etlsql-studio-new-dataset" data-new-dataset>+ New dataset</button></div><ol class="etlsql-studio-steps"><li class="${context.selectedSource ? 'active' : ''}">Data</li><li class="${context.filterFields.length ? 'active' : ''}">Filter</li><li class="${hasDataSample() ? 'active' : ''}">Visual</li><li>Preview</li></ol><section><div class="etlsql-studio-subhead"><div><strong>Connections</strong><span>${context.selectedSource ? _escapeHtml(context.selectedSource.connection) : 'Choose one to browse tables'}</span></div><button type="button" class="etlsql-sidebar-action" data-action="wizard">+ New</button></div><div class="etlsql-catalog-conn-list"><span class="etlsql-studio-loading">Loading connections…</span></div><div class="etlsql-catalog-table-list" data-table-list></div></section><section><div class="etlsql-studio-subhead"><div><strong>Fields</strong><span>${hasDataSample() ? `${context.snapshot.rowCount} rows cached for previews` : 'Choose a table to create a sample'}</span></div><span class="etlsql-studio-count">${_snapshotColumns(context.snapshot).length || context.sourceColumns.length}</span></div><div class="etlsql-studio-field-list">${fieldListMarkup()}</div></section><section class="etlsql-studio-filter-lane" data-filter-lane><div class="etlsql-studio-subhead"><div><strong>Filters</strong><span>Drop fields here</span></div><span class="etlsql-studio-count">${context.filterFields.length}</span></div><div class="etlsql-studio-filter-drop" data-filter-drop>${context.filterFields.length ? context.filterFields.map(filterCardMarkup).join('') : '<div class="etlsql-studio-empty-guidance"><strong>No filters yet</strong><span>Drag a loaded field here. Filters are created only when you add them.</span></div>'}</div></section></div>`;
+        sidebarContent.querySelector('[data-action="wizard"]')?.addEventListener('click', handleOpenConnectionWizard);
+        sidebarContent.querySelector('[data-new-dataset]')?.addEventListener('click', () => openDataWizard());
+        wireFields(); wireFilterLane();
         const renderConnections = connections => {
             const list = sidebarContent.querySelector('.etlsql-catalog-conn-list'); if (!list) return;
             list.innerHTML = connections.map(item => { const alias = typeof item === 'string' ? item : item.alias || item.name; return `<button type="button" class="etlsql-studio-source-btn" data-connection="${_escapeHtml(alias)}">${_studioIcon('catalog',14)}<strong>${_escapeHtml(alias)}</strong></button>`; }).join('') || '<div class="etlsql-studio-empty-compact">No connections configured.</div>';
@@ -2445,11 +3268,196 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     function renderVisualLibrary() {
         sidebarTitle.textContent = 'Visual Components';
-        sidebarContent.innerHTML = `<section class="etlsql-studio-library-section"><div class="etlsql-studio-subhead"><div><strong>On this page</strong><span>Report tree</span></div></div><div class="etlsql-studio-report-tree">${reportTreeMarkup()}</div></section><section class="etlsql-studio-library-section"><label class="etlsql-studio-library-search"><span>Add a visual</span><input type="search" data-visual-search placeholder="Search visual types" ${hasDataSample() ? '' : 'disabled'}></label>${hasDataSample() ? '' : '<div class="etlsql-studio-empty-guidance"><strong>Data comes first</strong><span>Choose a source so Studio can create a reusable preview sample.</span><button type="button" class="etlsql-studio-btn" data-choose-data>Choose data</button></div>'}<div data-visual-groups>${STUDIO_VISUAL_GROUPS.map(group => `<div class="etlsql-studio-visual-group" data-visual-group><strong>${group.name}</strong><div>${group.types.map(type => `<button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="${type}" data-visual-name="${type}" ${hasDataSample() ? '' : 'disabled'}>${type}</button>`).join('')}</div></div>`).join('')}</div></section>`;
-        sidebarContent.querySelector('[data-choose-data]')?.addEventListener('click', () => setActivity('catalog'));
+        sidebarContent.innerHTML = `<section class="etlsql-studio-library-section"><div class="etlsql-studio-subhead"><div><strong>On this page</strong><span>Report tree</span></div></div><div class="etlsql-studio-report-tree">${reportTreeMarkup()}</div></section><section class="etlsql-studio-library-section"><label class="etlsql-studio-library-search"><span>Add a visual</span><input type="search" data-visual-search placeholder="Search visual types" ${hasDataSample() ? '' : 'disabled'}></label>${hasDataSample() ? '' : '<div class="etlsql-studio-empty-guidance"><strong>Data comes first</strong><span>Create a dataset so every visual can read from one named query.</span><button type="button" class="etlsql-studio-btn is-primary" data-choose-data>Create a dataset</button></div>'}<div data-visual-groups>${STUDIO_VISUAL_GROUPS.map(group => `<div class="etlsql-studio-visual-group" data-visual-group><strong>${group.name}</strong><div>${group.types.map(type => `<button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="${type}" data-visual-name="${type}" ${hasDataSample() ? '' : 'disabled'}>${type}</button>`).join('')}</div></div>`).join('')}</div></section>`;
+        sidebarContent.querySelector('[data-choose-data]')?.addEventListener('click', () => runChooseDataStep());
         sidebarContent.querySelectorAll('[data-add-visual]').forEach(button => { button.draggable = !button.disabled; button.addEventListener('dragstart', event => { event.dataTransfer.setData('application/x-etlsql-visual', button.dataset.addVisual); event.dataTransfer.setData('text/plain', button.dataset.addVisual); }); button.addEventListener('click', () => addVisualToCanvas(button.dataset.addVisual)); });
         sidebarContent.querySelectorAll('[data-tree-visual]').forEach(button => button.addEventListener('click', () => state.designerInstance?.selectVisual?.(button.dataset.treeVisual)));
         const search = sidebarContent.querySelector('[data-visual-search]'); search?.addEventListener('input', () => { const query = search.value.trim().toUpperCase(); sidebarContent.querySelectorAll('[data-visual-name]').forEach(button => button.hidden = Boolean(query) && !button.dataset.visualName.includes(query)); });
+    }
+
+    function normalizeWorkspacePath(path) {
+        return String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    }
+
+    function workspaceParentPath(path) {
+        const normalized = normalizeWorkspacePath(path);
+        const slash = normalized.lastIndexOf('/');
+        return slash < 0 ? '' : normalized.slice(0, slash);
+    }
+
+    function workspaceBaseName(path) {
+        const normalized = normalizeWorkspacePath(path);
+        return normalized.slice(normalized.lastIndexOf('/') + 1);
+    }
+
+    function applyWorkspaceSnapshot(snapshot) {
+        state.workspaceFiles = [...(snapshot?.files || [])];
+        state.workspaceFolders = [...(snapshot?.folders || [])];
+    }
+
+    function updateOpenDocumentPaths(oldPath, newPath, isDirectory) {
+        const normalizedOld = normalizeWorkspacePath(oldPath);
+        const prefix = `${normalizedOld}/`;
+        state.documents.forEach(doc => {
+            const path = normalizeWorkspacePath(doc.path);
+            if (path !== normalizedOld && !(isDirectory && path.startsWith(prefix))) return;
+            doc.path = isDirectory ? `${newPath}${path.slice(normalizedOld.length)}` : newPath;
+            doc.name = workspaceBaseName(doc.path);
+        });
+    }
+
+    function workspaceTreeMarkup(parentPath = '', depth = 0) {
+        const folders = state.workspaceFolders
+            .map(folder => normalizeWorkspacePath(folder.path))
+            .filter(path => workspaceParentPath(path) === parentPath)
+            .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+        const files = state.workspaceFiles
+            .filter(file => workspaceParentPath(file.path) === parentPath)
+            .sort((left, right) => left.path.localeCompare(right.path, undefined, { sensitivity: 'base' }));
+        const canMutate = Boolean(opts.onRenameWorkspaceEntry && opts.onDeleteWorkspaceEntry);
+
+        return [
+            ...folders.map(path => {
+                const expanded = state.explorerExpanded.has(path);
+                return `<div class="etlsql-explorer-node" data-explorer-node="${_escapeHtml(path)}">
+                    <div class="etlsql-studio-file-item etlsql-explorer-folder" data-explorer-folder="${_escapeHtml(path)}" data-depth="${depth}" style="--explorer-depth:${depth}">
+                        <button type="button" class="etlsql-explorer-toggle" data-explorer-toggle="${_escapeHtml(path)}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${_escapeHtml(workspaceBaseName(path))}" aria-expanded="${expanded}">${expanded ? '▾' : '▸'}</button>
+                        <span class="etlsql-file-icon">${_studioIcon('explorer', 14)}</span>
+                        <span class="etlsql-file-name">${_escapeHtml(workspaceBaseName(path))}</span>
+                        ${canMutate ? `<span class="etlsql-explorer-actions"><button type="button" data-explorer-new-folder="${_escapeHtml(path)}" title="New subfolder" aria-label="New folder in ${_escapeHtml(path)}">${_studioIcon('plus', 11)}</button><button type="button" data-explorer-rename="${_escapeHtml(path)}" data-entry-directory="true" title="Rename folder" aria-label="Rename ${_escapeHtml(path)}">${_studioIcon('edit', 11)}</button><button type="button" data-explorer-delete="${_escapeHtml(path)}" data-entry-directory="true" title="Delete folder" aria-label="Delete ${_escapeHtml(path)}">${_studioIcon('trash', 11)}</button></span>` : ''}
+                    </div>
+                    ${expanded ? `<div class="etlsql-explorer-children">${workspaceTreeMarkup(path, depth + 1)}</div>` : ''}
+                </div>`;
+            }),
+            ...files.map(file => {
+                const path = normalizeWorkspacePath(file.path);
+                const active = state.documents.some(doc => doc.id === state.activeDocId && normalizeWorkspacePath(doc.path) === path);
+                return `<div class="etlsql-studio-file-item etlsql-explorer-file ${active ? 'active' : ''}" data-explorer-file="${_escapeHtml(path)}" draggable="${Boolean(opts.onMoveWorkspaceFile)}" style="--explorer-depth:${depth}">
+                    <span class="etlsql-explorer-spacer" aria-hidden="true"></span>
+                    <span class="etlsql-file-icon">${_fileIcon(path)}</span>
+                    <span class="etlsql-file-name" title="${_escapeHtml(path)}">${_escapeHtml(workspaceBaseName(path))}</span>
+                    ${canMutate ? `<span class="etlsql-explorer-actions"><button type="button" data-explorer-rename="${_escapeHtml(path)}" data-entry-directory="false" title="Rename file" aria-label="Rename ${_escapeHtml(path)}">${_studioIcon('edit', 11)}</button><button type="button" data-explorer-delete="${_escapeHtml(path)}" data-entry-directory="false" title="Delete file" aria-label="Delete ${_escapeHtml(path)}">${_studioIcon('trash', 11)}</button></span>` : ''}
+                </div>`;
+            })
+        ].join('');
+    }
+
+    async function createWorkspaceFolder(parentPath) {
+        const name = await _feedback.prompt('Choose a name for the new folder.', { title: 'New Folder', label: 'Folder name', required: true, confirmLabel: 'Create' });
+        if (!name?.trim()) return;
+        const path = [normalizeWorkspacePath(parentPath), name.trim()].filter(Boolean).join('/');
+        try {
+            const snapshot = await opts.onCreateWorkspaceFolder(path);
+            applyWorkspaceSnapshot(snapshot);
+            state.explorerExpanded.add(normalizeWorkspacePath(parentPath));
+            state.explorerExpanded.add(normalizeWorkspacePath(snapshot?.result?.path || path));
+            renderSidebarContent('explorer');
+            _feedback.notify(`Created folder ${snapshot?.result?.path || path}`, { title: 'Folder Created', tone: 'success' });
+        } catch (error) {
+            _feedback.notify(error?.message || 'The folder could not be created.', { title: 'Create Folder Failed', tone: 'error' });
+        }
+    }
+
+    async function renameWorkspaceEntry(entry) {
+        const currentName = workspaceBaseName(entry.path);
+        const name = await _feedback.prompt(`Rename ${currentName}.`, { title: entry.isDirectory ? 'Rename Folder' : 'Rename File', label: 'Name', value: currentName, required: true, confirmLabel: 'Rename' });
+        if (!name?.trim() || name.trim() === currentName) return;
+        try {
+            const snapshot = await opts.onRenameWorkspaceEntry(entry, name.trim());
+            const newPath = normalizeWorkspacePath(snapshot?.result?.path);
+            if (!newPath) throw new Error('The host did not return the renamed path.');
+            updateOpenDocumentPaths(entry.path, newPath, entry.isDirectory);
+            if (entry.isDirectory && state.explorerExpanded.delete(normalizeWorkspacePath(entry.path))) state.explorerExpanded.add(newPath);
+            applyWorkspaceSnapshot(snapshot);
+            renderTabs();
+            renderSidebarContent('explorer');
+            if (state.activeDocId === '__home__') renderStudioHome();
+            _feedback.notify(`Renamed ${entry.path} to ${newPath}`, { title: 'Workspace Entry Renamed', tone: 'success' });
+        } catch (error) {
+            _feedback.notify(error?.message || 'The workspace entry could not be renamed.', { title: 'Rename Failed', tone: 'error' });
+        }
+    }
+
+    async function deleteWorkspaceEntry(entry) {
+        const normalized = normalizeWorkspacePath(entry.path);
+        const affected = state.documents.filter(doc => normalizeWorkspacePath(doc.path) === normalized || (entry.isDirectory && normalizeWorkspacePath(doc.path).startsWith(`${normalized}/`)));
+        if (affected.some(doc => doc.isDirty)) {
+            _feedback.notify('Save or close modified files before deleting them from the workspace.', { title: 'Delete Blocked', tone: 'warning' });
+            return;
+        }
+        const confirmed = await _feedback.confirm(`Delete ${entry.path}${entry.isDirectory ? ' and everything inside it' : ''}? This cannot be undone.`, { title: entry.isDirectory ? 'Delete Folder' : 'Delete File', confirmLabel: 'Delete', danger: true });
+        if (!confirmed) return;
+        try {
+            const snapshot = await opts.onDeleteWorkspaceEntry(entry);
+            const removedIds = new Set(affected.map(doc => doc.id));
+            state.documents = state.documents.filter(doc => !removedIds.has(doc.id));
+            applyWorkspaceSnapshot(snapshot);
+            if (removedIds.has(state.activeDocId)) await switchDoc('__home__');
+            else {
+                renderTabs();
+                renderSidebarContent('explorer');
+            }
+            if (state.activeDocId === '__home__') renderStudioHome();
+            _feedback.notify(`Deleted ${entry.path}`, { title: entry.isDirectory ? 'Folder Deleted' : 'File Deleted', tone: 'success' });
+        } catch (error) {
+            _feedback.notify(error?.message || 'The workspace entry could not be deleted.', { title: 'Delete Failed', tone: 'error' });
+        }
+    }
+
+    async function moveWorkspaceFile(filePath, destinationFolder) {
+        if (workspaceParentPath(filePath) === normalizeWorkspacePath(destinationFolder)) return;
+        try {
+            const snapshot = await opts.onMoveWorkspaceFile(filePath, normalizeWorkspacePath(destinationFolder));
+            const newPath = normalizeWorkspacePath(snapshot?.result?.path);
+            if (!newPath) throw new Error('The host did not return the moved file path.');
+            updateOpenDocumentPaths(filePath, newPath, false);
+            applyWorkspaceSnapshot(snapshot);
+            renderTabs();
+            renderSidebarContent('explorer');
+            if (state.activeDocId === '__home__') renderStudioHome();
+            _feedback.notify(`Moved ${filePath} to ${newPath}`, { title: 'File Moved', tone: 'success' });
+        } catch (error) {
+            _feedback.notify(error?.message || 'The file could not be moved.', { title: 'Move Failed', tone: 'error' });
+        }
+    }
+
+    function bindWorkspaceExplorer() {
+        sidebarContent.querySelectorAll('[data-explorer-toggle]').forEach(button => button.addEventListener('click', event => {
+            event.stopPropagation();
+            const path = normalizeWorkspacePath(button.dataset.explorerToggle);
+            if (state.explorerExpanded.has(path)) state.explorerExpanded.delete(path);
+            else state.explorerExpanded.add(path);
+            renderSidebarContent('explorer');
+        }));
+        sidebarContent.querySelectorAll('[data-explorer-file]').forEach(row => {
+            row.addEventListener('click', event => {
+                if (!event.target.closest('.etlsql-explorer-actions')) void openWorkspaceFile(row.dataset.explorerFile);
+            });
+            row.addEventListener('dragstart', event => {
+                event.dataTransfer.setData('application/x-etlsql-workspace-file', row.dataset.explorerFile);
+                event.dataTransfer.effectAllowed = 'move';
+            });
+        });
+        sidebarContent.querySelectorAll('[data-explorer-folder], [data-explorer-root-drop]').forEach(target => {
+            target.addEventListener('dragover', event => {
+                if (!event.dataTransfer.types.includes('application/x-etlsql-workspace-file')) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+                target.classList.add('drag-over');
+            });
+            target.addEventListener('dragleave', () => target.classList.remove('drag-over'));
+            target.addEventListener('drop', event => {
+                const filePath = event.dataTransfer.getData('application/x-etlsql-workspace-file');
+                if (!filePath) return;
+                event.preventDefault();
+                event.stopPropagation();
+                target.classList.remove('drag-over');
+                void moveWorkspaceFile(filePath, target.dataset.explorerFolder || '');
+            });
+        });
+        sidebarContent.querySelectorAll('[data-explorer-new-folder]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void createWorkspaceFolder(button.dataset.explorerNewFolder || ''); }));
+        sidebarContent.querySelectorAll('[data-explorer-rename]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void renameWorkspaceEntry({ path: button.dataset.explorerRename, isDirectory: button.dataset.entryDirectory === 'true' }); }));
+        sidebarContent.querySelectorAll('[data-explorer-delete]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void deleteWorkspaceEntry({ path: button.dataset.explorerDelete, isDirectory: button.dataset.entryDirectory === 'true' }); }));
     }
 
     function renderSidebarContent(activity) {
@@ -2459,23 +3467,22 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (activity === 'palette') { renderVisualLibrary(); return; }
         if (activity === 'explorer') {
             sidebarTitle.textContent = 'Explorer';
-            sidebarContent.innerHTML = `
-                <div class="etlsql-sidebar-section-header">
-                    <span>Open Documents</span>
+            const workspaceMarkup = hasWorkspaceHost ? `
+                <div class="etlsql-sidebar-section-header etlsql-explorer-header">
+                    <span>Workspace</span>
+                    ${opts.onCreateWorkspaceFolder ? `<button type="button" class="etlsql-explorer-header-action" data-explorer-new-folder="" title="New folder" aria-label="New folder">${_studioIcon('plus', 12)}</button>` : ''}
                 </div>
+                <div class="etlsql-studio-file-item etlsql-explorer-root" data-explorer-root-drop aria-label="Workspace root drop target"><span class="etlsql-explorer-spacer" aria-hidden="true"></span><span class="etlsql-file-icon">${_studioIcon('explorer', 14)}</span><span class="etlsql-file-name">Workspace root</span></div>
+                <div class="etlsql-studio-explorer-tree" aria-label="Workspace files">
+                    ${workspaceTreeMarkup() || '<div class="etlsql-studio-empty-guidance"><strong>Empty workspace</strong><span>Create a folder or save a script to get started.</span></div>'}
+                </div>` : '';
+            sidebarContent.innerHTML = `${workspaceMarkup}
+                <div class="etlsql-sidebar-section-header"><span>Open Documents</span></div>
                 <div class="etlsql-studio-explorer-list">
-                    <div class="etlsql-studio-file-item ${state.activeDocId === '__home__' ? 'active' : ''}" data-open-doc="__home__">
-                        <span class="etlsql-file-icon">${_studioIcon('explorer', 14)}</span>
-                        <span class="etlsql-file-name">Home</span>
-                    </div>
-                    ${state.documents.map(d => `
-                        <div class="etlsql-studio-file-item ${d.id === state.activeDocId ? 'active' : ''}" data-open-doc="${d.id}">
-                            <span class="etlsql-file-icon">${_fileIcon(d.path)}</span>
-                            <span class="etlsql-file-name">${_escapeHtml(d.name)}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
+                    <div class="etlsql-studio-file-item ${state.activeDocId === '__home__' ? 'active' : ''}" data-open-doc="__home__"><span class="etlsql-file-icon">${_studioIcon('explorer', 14)}</span><span class="etlsql-file-name">Home</span></div>
+                    ${state.documents.map(d => `<div class="etlsql-studio-file-item ${d.id === state.activeDocId ? 'active' : ''}" data-open-doc="${d.id}"><span class="etlsql-file-icon">${_fileIcon(d.path)}</span><span class="etlsql-file-name">${_escapeHtml(d.name)}</span></div>`).join('')}
+                </div>`;
+            if (hasWorkspaceHost) bindWorkspaceExplorer();
             sidebarContent.querySelectorAll('[data-open-doc]').forEach(el => {
                 el.addEventListener('click', () => switchDoc(el.dataset.openDoc));
             });

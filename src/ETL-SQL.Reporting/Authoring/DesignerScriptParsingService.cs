@@ -263,6 +263,13 @@ public sealed class DesignerScriptParsingService
         {
             options["cascade"] = v.Cascade.ToSql();
         }
+        // A TEXT band's content lives in its own DEFAULT clause, not in OPTIONS. Without this the
+        // designer cannot see the text an author wrote, so a round-trip through the canvas would
+        // hand the patcher a band with no content and delete it.
+        if (v.DefaultValue != null)
+        {
+            options["text_default"] = v.DefaultValue.ToSql();
+        }
         if (v.PrintLayout != null)
         {
             var parts = new List<string>();

@@ -78,25 +78,30 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P2 — Split the canonical Studio module by responsibility**: Separate document/session state,
   host adapters, API contracts, SQL mutations, data sampling, workbench rendering, and lifecycle
   handling while retaining the canonical shared-asset distribution model.
-- [ ] **P3 - Explorer tab needs delete, rename, new folder**  The File explorer tab needs the ability to add
-  new folder, rename file or folder, delete file or folder.  Drag and drop files into folders or back to the root.
+- [x] **P3 - Explorer tab needs delete, rename, new folder**  Desktop Studio now renders the workspace as
+  a folder tree with create, rename, and confirmed delete actions for files and folders. Files drag into
+  folders or onto an explicit workspace-root target, open document paths follow moves and folder renames,
+  dirty documents block deletion, and every mutation stays inside the authenticated workspace boundary.
 - [ ] **P3 - Sidebar: Data button and Filter button show the same thing** Instead separate so data only shows data and filters
   only show filters.  Make the data screen new connection button bigger and at the top.  The filters button should
   also have a new filters button with dialog to choose what to filter based on the tables.  We need a mechanism so that
   both filters and data sidebars can be open at the same time to be able to drag columns from data to filters and that
   would be the trigger to filter on that column and open the dialog on how to filter.
+- [ ] **P3 — Restore Studio canvas card width at the 1024px breakpoint.** The combined Studio sandbox
+  lane currently measures a visual card at 34px wide at 1024x768; restore the 200px minimum without
+  introducing shell overflow, then keep the existing multi-resolution layout audit green.
 - [ ] **P4 - Pipeline DAG needs draggable items**  Similar to report we need a way to drag and drop items onto the DAG.
   A execution box added should open a dialog to label name (auto but changeable), pick connection, add query (query window should reuse script editor window with full suggest, colors, run, messages, results).  In the created script it should be label  execute_sql: EXECUTE BEGIN <script> END;  There should be a way to connect the boxes to each and form a flow.  If
   work must run concurrently, the canvas creates an explicit PARALLEL container and the script reflects it. Multiple incoming
   dependency edges form a join and must not silently imply parallel execution. Other boxes include FILE operations, loops,
   validation, notifications, and control flow. Verify every emitted statement form against the canonical parser and focused
   statement reference before exposing it in the palette.
-  - [x] **P4 - Double-clicking on the name in the top tab should allow you to rename the file.**
-    Desktop Studio tabs now open an accessible inline filename editor on double-click. Enter or blur
-    renames the workspace file through the authenticated host API, Escape cancels, omitted extensions
-    are preserved, and path traversal, read-only workspaces, and destination collisions are rejected.
-    The open document and Explorer path update in place, with production-browser coverage proving the
-    renamed file survives reload and host relaunch.
+- [x] **P4 - Double-clicking on the name in the top tab should allow you to rename the file.**
+  Desktop Studio tabs now open an accessible inline filename editor on double-click. Enter or blur
+  renames the workspace file through the authenticated host API, Escape cancels, omitted extensions
+  are preserved, and path traversal, read-only workspaces, and destination collisions are rejected.
+  The open document and Explorer path update in place, with production-browser coverage proving the
+  renamed file survives reload and host relaunch.
 - [ ] **P4 — Pipeline DAG Conditional Precedence & Container Scopes (SSIS Parity)**:
   - Support conditional connector edges on the DAG: `On Success` (green), `On Failure` (red), `On Completion` (blue), and custom expressions (`@Rows > 0`), lowering to `TRY...CATCH` and `IF/ELSE` branches in the script.
   - Add draggable container bounding boxes for `LOOP FOREACH (@item IN c_source)` and `TRANSACTION BEGIN ... COMMIT` where child tasks live inside the container box.
@@ -138,6 +143,7 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 
 ### Connection Catalog & Gateway Resource Discovery
 - [ ] **TUI Filters VISUALS (SLICER, DATEPICKER, etc)**  These can be changed now but how do you navigate between them.  Can we hook up the mouse to interact?
+- [ ] **ETL-SQL Studio create dataset needed**  THe workflow is broken and needs to be streamlined.  1. Create connection (works but is clunky) 2. In order to start adding report items you need a DATASET but there is no way to create one without code.  The parts are in place just not working correctly.
 
 - [ ] **`constrained_html_components.rptsql` fails the sample gate on a Card lint error.**
   `Test-AllSamples.ps1` reports `Line 14, Col 1: Visual 'EnvironmentMetric' of type Card is missing

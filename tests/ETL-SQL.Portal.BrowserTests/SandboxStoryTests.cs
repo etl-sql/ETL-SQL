@@ -1044,6 +1044,58 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_Explorer_ManagesFoldersAndMovesFiles()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        await page.Locator("[data-explorer-new-folder='']").ClickAsync();
+        await page.Locator(".etlsql-feedback-field input").FillAsync("archive-new");
+        await page.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        var archive = page.Locator("[data-explorer-folder='archive-new']");
+        await archive.WaitForAsync();
+
+        await page.Locator("[data-explorer-file='reports/sales_overview.rptsql']").DragToAsync(archive);
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'archive-new/sales_overview.rptsql')");
+        await page.Locator("[data-explorer-file='archive-new/sales_overview.rptsql']")
+            .DragToAsync(page.Locator("[data-explorer-root-drop]"));
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'sales_overview.rptsql')");
+
+        var etlFile = page.Locator("[data-explorer-file='etl/ingest_orders.etlsql']");
+        await etlFile.HoverAsync();
+        await etlFile.Locator("[data-explorer-rename]").ClickAsync();
+        var prompt = page.Locator(".etlsql-feedback-field input");
+        await prompt.FillAsync("import_orders");
+        await page.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'etl/import_orders.etlsql')");
+
+        etlFile = page.Locator("[data-explorer-file='etl/import_orders.etlsql']");
+        await etlFile.HoverAsync();
+        await etlFile.Locator("[data-explorer-delete]").ClickAsync();
+        await page.Locator(".etlsql-feedback-btn-danger").ClickAsync();
+        await page.WaitForFunctionAsync("() => !window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'etl/import_orders.etlsql')");
+
+        archive = page.Locator("[data-explorer-folder='archive-new']");
+        await archive.HoverAsync();
+        await archive.Locator("[data-explorer-rename]").ClickAsync();
+        await page.Locator(".etlsql-feedback-field input").FillAsync("archive-final");
+        await page.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        var renamedArchive = page.Locator("[data-explorer-folder='archive-final']");
+        await renamedArchive.WaitForAsync();
+        await renamedArchive.HoverAsync();
+        await renamedArchive.Locator("[data-explorer-delete]").ClickAsync();
+        await page.Locator(".etlsql-feedback-btn-danger").ClickAsync();
+        await page.WaitForFunctionAsync("() => !window.__STUDIO_INSTANCE__.state.workspaceFolders.some(folder => folder.path === 'archive-final')");
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_Mounts_SwitchesProjections_AndScansSecrets()
     {
         await using var session = await fixture.NewSessionAsync();
