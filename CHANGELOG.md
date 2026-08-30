@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fixed narrow desktop Studio layouts collapsing dashboard cards below a usable width. The authored
+  12-column canvas now scrolls internally while the outer Studio shell remains overflow-free.
+
 - Added a full desktop Studio workspace Explorer. It now creates, renames, and deletes files and
   folders, moves files into folders or back to the workspace root by drag-and-drop, keeps open tabs
   aligned with moved paths, blocks deletion of dirty documents, and enforces the workspace boundary.

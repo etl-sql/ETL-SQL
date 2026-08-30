@@ -5278,6 +5278,13 @@ body.vscode-dark .etlsql-cw-missing-hint {
     box-shadow: 0 14px 36px rgba(0,0,0,.32);
 }
 
+/* A dashboard keeps its authored 12-column geometry on narrow desktop windows. The inner designer
+   canvas owns horizontal scrolling, so cards remain usable without widening the Studio shell. */
+.is-dashboard-workflow .etlsql-studio-designer-container .etlsql-dsgn-grid {
+    min-width: 840px;
+    box-sizing: border-box;
+}
+
 .etlsql-workflow-choice p { grid-column: 1 / -1; color: var(--portal-text-soft, #8b949e); }
 .etlsql-workflow-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .etlsql-workflow-choice button {

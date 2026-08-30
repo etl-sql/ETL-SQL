@@ -87,9 +87,10 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   also have a new filters button with dialog to choose what to filter based on the tables.  We need a mechanism so that
   both filters and data sidebars can be open at the same time to be able to drag columns from data to filters and that
   would be the trigger to filter on that column and open the dialog on how to filter.
-- [ ] **P3 — Restore Studio canvas card width at the 1024px breakpoint.** The combined Studio sandbox
-  lane currently measures a visual card at 34px wide at 1024x768; restore the 200px minimum without
-  introducing shell overflow, then keep the existing multi-resolution layout audit green.
+- [x] **P3 — Restore Studio canvas card width at the 1024px breakpoint.** Dashboard Studio now keeps
+  the authored 12-column canvas at an 840px working width inside its existing scroll container. Visual
+  cards stay above the 200px usability floor at 1024x768 without widening the Studio shell, and the
+  focused layout audit passes through 4K.
 - [ ] **P4 - Pipeline DAG needs draggable items**  Similar to report we need a way to drag and drop items onto the DAG.
   A execution box added should open a dialog to label name (auto but changeable), pick connection, add query (query window should reuse script editor window with full suggest, colors, run, messages, results).  In the created script it should be label  execute_sql: EXECUTE BEGIN <script> END;  There should be a way to connect the boxes to each and form a flow.  If
   work must run concurrently, the canvas creates an explicit PARALLEL container and the script reflects it. Multiple incoming
