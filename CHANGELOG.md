@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a side-by-side Git diff viewer to desktop Studio. The Source Control rail now compares the
+  live editor buffer with `HEAD` or a selected local commit, including unsaved changes, aligned line
+  numbers, and added/deleted line highlighting.
+
 - Fixed narrow desktop Studio layouts collapsing dashboard cards below a usable width. The authored
   12-column canvas now scrolls internally while the outer Studio shell remains overflow-free.
 

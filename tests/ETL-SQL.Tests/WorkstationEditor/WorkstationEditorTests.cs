@@ -1107,6 +1107,54 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task GitHistoryAndDiff_CompareUnsavedContentWithLocalRevision()
+    {
+        using var temp = new TempWorkspace();
+        RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
+        RunGit(temp.Root, "config", "user.name", "Workstation Tests");
+        await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 1 AS Value;\n");
+        RunGit(temp.Root, "add", "pipeline.etlsql");
+        RunGit(temp.Root, "commit", "-m", "Add pipeline");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var historyRequest = new HttpRequestMessage(HttpMethod.Get, "/api/git/history?path=pipeline.etlsql");
+        historyRequest.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        var historyResponse = await client.SendAsync(historyRequest);
+        var history = await historyResponse.Content.ReadFromJsonAsync<GitHistoryResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+        Assert.NotNull(history);
+        Assert.True(history!.IsGitRepository);
+        var entry = Assert.Single(history.Entries);
+        Assert.Equal("Add pipeline", entry.Subject);
+
+        using var diffRequest = new HttpRequestMessage(HttpMethod.Post, "/api/git/diff");
+        diffRequest.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        diffRequest.Content = JsonContent.Create(new GitDiffRequest(
+            "pipeline.etlsql",
+            "SELECT 2 AS Value;\n-- unsaved\n",
+            entry.Revision));
+        var diffResponse = await client.SendAsync(diffRequest);
+        var diff = await diffResponse.Content.ReadFromJsonAsync<GitDiffResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, diffResponse.StatusCode);
+        Assert.NotNull(diff);
+        Assert.Equal("pipeline.etlsql", diff!.Path);
+        Assert.Equal("SELECT 1 AS Value;\n", diff.BaselineContent);
+        Assert.Contains("-- unsaved", diff.WorkingContent, StringComparison.Ordinal);
+
+        using var invalidRequest = new HttpRequestMessage(HttpMethod.Post, "/api/git/diff");
+        invalidRequest.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        invalidRequest.Content = JsonContent.Create(new GitDiffRequest("pipeline.etlsql", "SELECT 2;", "HEAD~1"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(invalidRequest)).StatusCode);
+    }
+
+    [Fact]
     public async Task GitCommit_WithTrailingBackslashMessage_CommitsSuccessfully()
     {
         using var temp = new TempWorkspace();

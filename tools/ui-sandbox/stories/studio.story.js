@@ -197,6 +197,27 @@ export default {
         if (file) file.path = movedPath;
         return workspaceSnapshot({ path: movedPath, isDirectory: false });
       },
+      onLoadGitStatus: async () => ({
+        branch: 'feature/studio-diff',
+        modified: ['reports/sales_overview.rptsql'],
+        untracked: [],
+        staged: [],
+        isGitRepository: true,
+      }),
+      onLoadGitHistory: async () => ({
+        isGitRepository: true,
+        entries: [
+          { revision: 'a12bc34def567890123456789012345678901234', shortRevision: 'a12bc34d', authoredAt: '2026-08-28T14:20:00Z', author: 'Studio Author', subject: 'Add sales overview' },
+          { revision: '91fe230abc456789012345678901234567890123', shortRevision: '91fe230a', authoredAt: '2026-08-26T09:10:00Z', author: 'Studio Author', subject: 'Start report workspace' },
+        ],
+      }),
+      onLoadGitDiff: async (document, revision, content) => ({
+        path: document.path,
+        revision,
+        baselineLabel: revision === 'HEAD' ? 'HEAD a12bc34d' : revision.slice(0, 8),
+        baselineContent: document.content.replace("TITLE = 'Total Revenue'", "TITLE = 'Revenue'"),
+        workingContent: content,
+      }),
     });
 
     window.__STUDIO_INSTANCE__ = workbench;

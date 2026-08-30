@@ -696,6 +696,34 @@ public static class WorkstationEditorApp
         app.MapGet("/api/git/status", (WorkstationGitService git) =>
             Results.Json(git.GetStatus(), JsonOptions));
 
+        app.MapGet("/api/git/history", (string? path, int? limit, WorkstationGitService git) =>
+        {
+            try
+            {
+                return Results.Json(git.GetHistory(path, limit ?? 20), JsonOptions);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+        });
+
+        app.MapPost("/api/git/diff", (GitDiffRequest request, WorkstationGitService git) =>
+        {
+            try
+            {
+                return Results.Json(git.GetDiff(request), JsonOptions);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         app.MapPost("/api/git/commit", (GitCommitRequest request, WorkstationGitService git) =>
         {
             try

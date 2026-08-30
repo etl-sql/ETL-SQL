@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace ETL_SQL.WorkstationEditor;
 
 public sealed class WorkstationGitService(WorkstationWorkspace workspace)
 {
+    private static readonly Regex RevisionPattern = new("^[0-9a-fA-F]{7,40}$", RegexOptions.CultureInvariant);
     private static readonly HashSet<string> CommitExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".etlsql",
@@ -99,6 +101,86 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         return new GitCommitResponse(true, revOutput.Trim(), "Committed successfully.");
     }
 
+    public GitHistoryResponse GetHistory(string? path, int limit = 20)
+    {
+        var root = workspace.Root;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            return new GitHistoryResponse(false, []);
+
+        var relativePath = ResolveGitPath(path);
+        var boundedLimit = Math.Clamp(limit, 1, 50).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var (exitCode, output, _) = RunGitCommand(
+            root,
+            "log",
+            $"--max-count={boundedLimit}",
+            "--format=%H%x1f%h%x1f%aI%x1f%an%x1f%s",
+            "--",
+            relativePath);
+        if (exitCode != 0)
+            return new GitHistoryResponse(false, []);
+
+        var entries = new List<GitHistoryEntry>();
+        foreach (var line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = line.Split('\u001f');
+            if (fields.Length < 5 || !RevisionPattern.IsMatch(fields[0])) continue;
+            entries.Add(new GitHistoryEntry(fields[0], fields[1], fields[2], fields[3], string.Join('\u001f', fields[4..])));
+        }
+
+        return new GitHistoryResponse(true, entries);
+    }
+
+    public GitDiffResponse GetDiff(GitDiffRequest request)
+    {
+        var root = workspace.Root;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            throw new InvalidOperationException("Workspace directory does not exist.");
+
+        var relativePath = ResolveGitPath(request.Path);
+        var requestedRevision = string.IsNullOrWhiteSpace(request.Revision) ? "HEAD" : request.Revision.Trim();
+        if (!string.Equals(requestedRevision, "HEAD", StringComparison.OrdinalIgnoreCase)
+            && !RevisionPattern.IsMatch(requestedRevision))
+        {
+            throw new ArgumentException("The Git revision is invalid.", nameof(request));
+        }
+
+        var (revisionExit, fullRevision, _) = RunGitCommand(root, "rev-parse", "--verify", requestedRevision);
+        if (revisionExit != 0 || string.IsNullOrWhiteSpace(fullRevision))
+            throw new ArgumentException("The requested Git revision does not exist.", nameof(request));
+
+        var resolvedRevision = fullRevision.Trim();
+        var (showExit, baseline, showError) = RunGitCommand(root, "show", $"{resolvedRevision}:{relativePath}");
+        if (showExit != 0)
+        {
+            // A valid revision can legitimately predate a newly added script. Treat that as an
+            // empty baseline; other failures remain visible without returning raw git diagnostics.
+            var (treeExit, _, _) = RunGitCommand(root, "cat-file", "-e", $"{resolvedRevision}^{{tree}}");
+            if (treeExit != 0 || (!showError.Contains("does not exist", StringComparison.OrdinalIgnoreCase)
+                && !showError.Contains("exists on disk", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException("Git could not read the requested script revision.");
+            }
+            baseline = string.Empty;
+        }
+
+        var shortRevision = resolvedRevision[..Math.Min(8, resolvedRevision.Length)];
+        return new GitDiffResponse(
+            relativePath,
+            resolvedRevision,
+            string.Equals(requestedRevision, "HEAD", StringComparison.OrdinalIgnoreCase) ? $"HEAD {shortRevision}" : shortRevision,
+            baseline,
+            request.Content ?? string.Empty);
+    }
+
+    private string ResolveGitPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("A script path is required.", nameof(path));
+
+        var fullPath = workspace.ResolveEditablePath(path);
+        return Path.GetRelativePath(workspace.Root, fullPath).Replace('\\', '/');
+    }
+
     private IEnumerable<string> GetCommitCandidateFiles()
     {
         var root = workspace.Root;
@@ -185,3 +267,21 @@ public sealed record GitStatusResponse(
 public sealed record GitCommitRequest(string? Comment);
 
 public sealed record GitCommitResponse(bool Committed, string? SourceRevision, string Message);
+
+public sealed record GitHistoryResponse(bool IsGitRepository, IReadOnlyList<GitHistoryEntry> Entries);
+
+public sealed record GitHistoryEntry(
+    string Revision,
+    string ShortRevision,
+    string AuthoredAt,
+    string Author,
+    string Subject);
+
+public sealed record GitDiffRequest(string? Path, string? Content, string? Revision);
+
+public sealed record GitDiffResponse(
+    string Path,
+    string Revision,
+    string BaselineLabel,
+    string BaselineContent,
+    string WorkingContent);

@@ -208,7 +208,29 @@ internal static class StudioShell
         onMoveWorkspaceFile: readOnly ? null : (path, destinationFolder) => mutateWorkspace('/api/workspace/move', {
           path,
           destinationFolder
-        })
+        }),
+        onLoadGitStatus: async () => {
+          const response = await authFetch('/api/git/status');
+          if (!response.ok) throw new Error('Git status could not be loaded.');
+          return response.json();
+        },
+        onLoadGitHistory: async document => {
+          const response = await authFetch('/api/git/history?path=' + encodeURIComponent(document.path));
+          if (!response.ok) throw new Error('Git history could not be loaded for this script.');
+          return response.json();
+        },
+        onLoadGitDiff: async (document, revision, content) => {
+          const response = await authFetch('/api/git/diff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: document.path, revision, content })
+          });
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Git could not build this comparison.');
+          }
+          return response.json();
+        }
       });
       await sendHeartbeat();
       heartbeatTimer = window.setInterval(() => {

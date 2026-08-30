@@ -120,7 +120,7 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P4 — Live Engine State Watch & Visual EXPLAIN Plan (Workstation Editor Parity)**:
   - Live session watch inspector tab showing active `@variables` and allocated `#temp` tables (with live row counts and RAM/spill disk footprint).
   - Visual EXPLAIN plan tab showing operator tree, remote pushdown status, and spill alerts.
-- [ ] **P4 — Side-by-Side Git Diff Viewer (VS Code Parity)**:
+- [x] **P4 — Side-by-Side Git Diff Viewer (VS Code Parity)**:
   - Side-by-side visual diff against Git HEAD and local history snapshots before committing or saving.
 - [ ] **P4 — Print Layout & Page Setup (SSRS Parity)**:
   - Implement this inside the Paginated Report workflow, including page size, Portrait/Landscape

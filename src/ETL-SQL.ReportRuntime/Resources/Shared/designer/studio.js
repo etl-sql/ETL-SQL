@@ -10,6 +10,7 @@
 
 import { createScriptEditor, createDesigner, createScriptResultsPanel, normalizeRunTrace, renderDag } from './designer.js';
 import { createConnectionWizard, encryptClientPassword } from './connection-wizard.js';
+import { buildSideBySideDiff } from './studio-git-diff.js';
 
 const _feedback = globalThis.ETLSQLFeedback || {
     notify: (msg, opts) => console.log(`[Notification ${opts?.tone || 'info'}] ${msg}`),
@@ -288,6 +289,9 @@ export async function createStudioWorkbench(container, opts = {}) {
     // Workstation Editor does; the Portal serves the report catalog instead. Callers should say so
     // explicitly. Inferred for older callers: a host that passed a deploymentMode is the Portal.
     const hasWorkspaceHost = opts.hasWorkspaceHost ?? !opts.deploymentMode;
+    const hasGitHost = typeof opts.onLoadGitStatus === 'function'
+        && typeof opts.onLoadGitHistory === 'function'
+        && typeof opts.onLoadGitDiff === 'function';
 
     const workspaceFiles = opts.workspaceFiles || [];
     const documents = opts.documents ? [...opts.documents] : [];
@@ -359,6 +363,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     let isSyncingFromDesigner = false;
     let isSettingDocumentContent = false;
     let codeMirrorDebounce = null;
+    let gitRenderRevision = 0;
 
     container.innerHTML = `
         <div class="etlsql-studio-shell">
@@ -3487,14 +3492,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                 el.addEventListener('click', () => switchDoc(el.dataset.openDoc));
             });
         } else if (activity === 'git') {
-            sidebarTitle.textContent = 'Source Control';
-            sidebarContent.innerHTML = `
-                <div class="etlsql-studio-capability-state" data-capability-state="git" role="status">
-                    <span class="etlsql-studio-capability-label">Host capability</span>
-                    <strong>Source control is unavailable</strong>
-                    <p>This Studio host does not provide Git status or source-control actions.</p>
-                </div>
-            `;
+            void renderGitSidebar();
         } else if (activity === 'settings') {
             sidebarTitle.textContent = 'Settings';
             sidebarContent.innerHTML = `
@@ -3504,6 +3502,130 @@ export async function createStudioWorkbench(container, opts = {}) {
                     <p>This Studio host does not expose editable workspace settings.</p>
                 </div>
             `;
+        }
+    }
+
+    async function renderGitSidebar() {
+        sidebarTitle.textContent = 'Source Control';
+        const document = getActiveDoc();
+        const revision = ++gitRenderRevision;
+        if (!hasGitHost) {
+            sidebarContent.innerHTML = `
+                <div class="etlsql-studio-capability-state" data-capability-state="git" role="status">
+                    <span class="etlsql-studio-capability-label">Host capability</span>
+                    <strong>Source control is unavailable</strong>
+                    <p>This Studio host does not provide Git status or source-control actions.</p>
+                </div>`;
+            return;
+        }
+        if (!document || _isUntitledPath(document.path)) {
+            sidebarContent.innerHTML = `
+                <div class="etlsql-studio-capability-state" role="status">
+                    <span class="etlsql-studio-capability-label">Git diff</span>
+                    <strong>Open a saved script</strong>
+                    <p>Select a workspace script to compare it with Git history.</p>
+                </div>`;
+            return;
+        }
+
+        sidebarContent.innerHTML = '<div class="etlsql-studio-git-loading" role="status">Reading local Git history…</div>';
+        try {
+            const [status, history] = await Promise.all([
+                opts.onLoadGitStatus(),
+                opts.onLoadGitHistory(document),
+            ]);
+            if (revision !== gitRenderRevision || state.activeActivity !== 'git') return;
+            if (!status?.isGitRepository || !history?.isGitRepository) {
+                sidebarContent.innerHTML = `
+                    <div class="etlsql-studio-capability-state" role="status">
+                        <span class="etlsql-studio-capability-label">Git diff</span>
+                        <strong>No Git repository found</strong>
+                        <p>Initialize Git and commit this script to enable revision comparisons.</p>
+                    </div>`;
+                return;
+            }
+
+            const changes = (status.modified?.length || 0) + (status.untracked?.length || 0) + (status.staged?.length || 0);
+            sidebarContent.innerHTML = `
+                <div class="etlsql-studio-git-summary">
+                    <span class="etlsql-studio-git-branch">${_studioIcon('git', 13)} ${_escapeHtml(status.branch || 'detached HEAD')}</span>
+                    <span>${changes} change${changes === 1 ? '' : 's'}</span>
+                </div>
+                <div class="etlsql-sidebar-section-header"><span>Compare ${_escapeHtml(document.name)}</span></div>
+                <button type="button" class="etlsql-studio-git-revision is-head" data-git-revision="HEAD">
+                    <span class="etlsql-studio-git-revision-title">Working tree vs HEAD</span>
+                    <span>Includes unsaved editor changes</span>
+                </button>
+                <div class="etlsql-sidebar-section-header"><span>Local history</span></div>
+                <div class="etlsql-studio-git-history">
+                    ${(history.entries || []).map(entry => `
+                        <button type="button" class="etlsql-studio-git-revision" data-git-revision="${_escapeHtml(entry.revision)}">
+                            <span class="etlsql-studio-git-revision-title"><code>${_escapeHtml(entry.shortRevision)}</code> ${_escapeHtml(entry.subject)}</span>
+                            <span>${_escapeHtml(entry.author)} · ${_escapeHtml(formatGitDate(entry.authoredAt))}</span>
+                        </button>`).join('') || '<p class="etlsql-studio-git-empty">No commits contain this script yet.</p>'}
+                </div>`;
+            sidebarContent.querySelectorAll('[data-git-revision]').forEach(button => {
+                button.addEventListener('click', () => void openGitDiff(document, button.dataset.gitRevision));
+            });
+        } catch (error) {
+            if (revision !== gitRenderRevision) return;
+            sidebarContent.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>Git history could not be loaded</strong><p>${_escapeHtml(error?.message || 'Try the comparison again.')}</p></div>`;
+        }
+    }
+
+    function formatGitDate(value) {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    }
+
+    async function openGitDiff(document, revision) {
+        const currentContent = state.editorInstance && getActiveDoc() === document
+            ? state.editorInstance.getValue()
+            : document.content;
+        const closeGitDiff = () => {
+            modalBackdrop.hidden = true;
+            modalBox.innerHTML = '';
+            modalBox.classList.remove('etlsql-studio-git-diff-modal');
+            modalBox.removeAttribute('role');
+            modalBox.removeAttribute('aria-modal');
+            modalBox.removeAttribute('aria-label');
+            globalThis.document.removeEventListener('keydown', handleGitDiffKeydown);
+        };
+        const handleGitDiffKeydown = event => {
+            if (event.key === 'Escape') closeGitDiff();
+        };
+        modalBox.classList.add('etlsql-studio-git-diff-modal');
+        modalBox.setAttribute('role', 'dialog');
+        modalBox.setAttribute('aria-modal', 'true');
+        modalBox.setAttribute('aria-label', `Git comparison for ${document.name}`);
+        modalBox.innerHTML = '<div class="etlsql-studio-git-loading" role="status">Building comparison…</div>';
+        modalBackdrop.hidden = false;
+        globalThis.document.addEventListener('keydown', handleGitDiffKeydown);
+        try {
+            const comparison = await opts.onLoadGitDiff(document, revision, currentContent);
+            const rows = buildSideBySideDiff(comparison.baselineContent, comparison.workingContent);
+            modalBox.innerHTML = `
+                <div class="etlsql-studio-modal-header etlsql-studio-git-diff-header">
+                    <div><strong>${_escapeHtml(comparison.path)}</strong><span>${rows.filter(row => row.kind !== 'equal').length} changed line${rows.filter(row => row.kind !== 'equal').length === 1 ? '' : 's'}</span></div>
+                    <button type="button" class="etlsql-studio-sidebar-close" data-git-diff-close aria-label="Close Git comparison">${_studioIcon('close', 14)}</button>
+                </div>
+                <div class="etlsql-studio-git-diff-labels" aria-hidden="true">
+                    <span>${_escapeHtml(comparison.baselineLabel)}</span><span>Working tree${document.isDirty ? ' · unsaved' : ''}</span>
+                </div>
+                <div class="etlsql-studio-git-diff-grid" role="table" aria-label="Side-by-side Git comparison">
+                    ${rows.map(row => `<div class="etlsql-studio-git-diff-row is-${row.kind}" role="row">
+                        <div class="etlsql-studio-git-diff-cell is-left" role="cell"><span class="etlsql-studio-git-line-number">${row.leftNumber ?? ''}</span><code>${_escapeHtml(row.leftText)}</code></div>
+                        <div class="etlsql-studio-git-diff-cell is-right" role="cell"><span class="etlsql-studio-git-line-number">${row.rightNumber ?? ''}</span><code>${_escapeHtml(row.rightText)}</code></div>
+                    </div>`).join('')}
+                </div>`;
+            modalBox.querySelector('[data-git-diff-close]').addEventListener('click', closeGitDiff);
+            modalBox.querySelector('[data-git-diff-close]').focus();
+        } catch (error) {
+            modalBox.innerHTML = `
+                <div class="etlsql-studio-modal-header"><strong>Comparison unavailable</strong><button type="button" class="etlsql-studio-sidebar-close" data-git-diff-close aria-label="Close">${_studioIcon('close', 14)}</button></div>
+                <div class="etlsql-studio-modal-body"><p>${_escapeHtml(error?.message || 'Git could not build this comparison.')}</p></div>`;
+            modalBox.querySelector('[data-git-diff-close]').addEventListener('click', closeGitDiff);
+            modalBox.querySelector('[data-git-diff-close]').focus();
         }
     }
 

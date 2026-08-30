@@ -4378,6 +4378,85 @@ body.vscode-dark .etlsql-cw-missing-hint {
     text-transform: uppercase;
 }
 
+.etlsql-studio-git-loading,
+.etlsql-studio-git-empty {
+    margin: 12px;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.etlsql-studio-git-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--portal-border-soft, #21262d);
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+}
+
+.etlsql-studio-git-branch {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etlsql-studio-git-history {
+    display: flex;
+    flex-direction: column;
+}
+
+.etlsql-studio-git-revision {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    padding: 8px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--portal-border-soft, #21262d);
+    background: transparent;
+    color: var(--portal-text-soft, #8b949e);
+    font: inherit;
+    font-size: 0.6875rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.etlsql-studio-git-revision:hover,
+.etlsql-studio-git-revision:focus-visible {
+    background: var(--portal-surface-subtle, rgba(255, 255, 255, 0.04));
+    outline: 1px solid var(--portal-accent, #388bfd);
+    outline-offset: -1px;
+}
+
+.etlsql-studio-git-revision.is-head {
+    border-left: 3px solid var(--portal-accent, #388bfd);
+}
+
+.etlsql-studio-git-revision-title {
+    overflow: hidden;
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etlsql-studio-git-revision-title code {
+    margin-right: 4px;
+    color: var(--portal-accent, #58a6ff);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.6875rem;
+}
+
 .etlsql-studio-file-item {
     display: flex;
     align-items: center;
@@ -4653,6 +4732,113 @@ body.vscode-dark .etlsql-cw-missing-hint {
     padding: 12px 16px;
     border-top: 1px solid var(--portal-border, #30363d);
     background: var(--portal-surface-subtle, rgba(255, 255, 255, 0.02));
+}
+
+.etlsql-studio-modal.etlsql-studio-git-diff-modal {
+    display: flex;
+    flex-direction: column;
+    width: min(1400px, 94vw);
+    height: min(860px, 90vh);
+    max-width: none;
+}
+
+.etlsql-studio-git-diff-header > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.etlsql-studio-git-diff-header strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etlsql-studio-git-diff-header span {
+    margin-top: 2px;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    font-weight: 400;
+}
+
+.etlsql-studio-git-diff-labels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-bottom: 1px solid var(--portal-border, #30363d);
+    background: var(--portal-surface-subtle, rgba(255, 255, 255, 0.02));
+    color: var(--portal-text-soft, #8b949e);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.6875rem;
+    font-weight: 600;
+}
+
+.etlsql-studio-git-diff-labels span {
+    padding: 7px 10px;
+}
+
+.etlsql-studio-git-diff-labels span + span {
+    border-left: 1px solid var(--portal-border, #30363d);
+}
+
+.etlsql-studio-git-diff-grid {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--portal-bg, #0d1117);
+}
+
+.etlsql-studio-git-diff-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(max-content, 1fr));
+    min-width: 900px;
+}
+
+.etlsql-studio-git-diff-cell {
+    display: grid;
+    grid-template-columns: 48px minmax(max-content, 1fr);
+    min-height: 20px;
+    border-bottom: 1px solid rgba(125, 133, 144, 0.08);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.75rem;
+    line-height: 20px;
+    white-space: pre;
+}
+
+.etlsql-studio-git-diff-cell.is-right {
+    border-left: 1px solid var(--portal-border, #30363d);
+}
+
+.etlsql-studio-git-line-number {
+    padding: 0 8px;
+    border-right: 1px solid rgba(125, 133, 144, 0.16);
+    color: var(--portal-muted, #7d8590);
+    text-align: right;
+    user-select: none;
+}
+
+.etlsql-studio-git-diff-cell code {
+    padding: 0 10px;
+    color: var(--portal-text, #f0f6fc);
+    font: inherit;
+}
+
+.etlsql-studio-git-diff-row.is-delete .is-left,
+.etlsql-studio-git-diff-row.is-change .is-left {
+    background: rgba(248, 81, 73, 0.12);
+    box-shadow: inset 3px 0 var(--portal-danger, #f85149);
+}
+
+.etlsql-studio-git-diff-row.is-add .is-right,
+.etlsql-studio-git-diff-row.is-change .is-right {
+    background: rgba(46, 160, 67, 0.14);
+    box-shadow: inset 3px 0 var(--portal-success, #2ea043);
+}
+
+@media (max-width: 720px) {
+    .etlsql-studio-modal.etlsql-studio-git-diff-modal {
+        width: 96vw;
+        height: 92vh;
+    }
 }
 
 /* Slicer Visuals on Canvas */

@@ -1206,6 +1206,39 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_SourceControl_ShowsLocalHistoryAndSideBySideDiff()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.Locator("button[data-activity='git']").ClickAsync();
+
+        var headComparison = page.Locator("[data-git-revision='HEAD']");
+        await headComparison.WaitForAsync();
+        Assert.Contains("Includes unsaved editor changes", await headComparison.InnerTextAsync());
+        Assert.Equal(2, await page.Locator(".etlsql-studio-git-history [data-git-revision]").CountAsync());
+
+        await headComparison.ClickAsync();
+        var diff = page.Locator(".etlsql-studio-git-diff-modal");
+        await diff.WaitForAsync();
+        Assert.Contains("HEAD a12bc34d", await diff.InnerTextAsync());
+        Assert.Contains("Working tree", await diff.InnerTextAsync());
+        Assert.Equal(1, await diff.Locator(".etlsql-studio-git-diff-row.is-change").CountAsync());
+        Assert.Contains(await diff.Locator(".etlsql-studio-git-diff-cell.is-left").AllInnerTextsAsync(),
+            text => text.Contains("TITLE = 'Revenue'", StringComparison.Ordinal));
+        Assert.Contains(await diff.Locator(".etlsql-studio-git-diff-cell.is-right").AllInnerTextsAsync(),
+            text => text.Contains("TITLE = 'Total Revenue'", StringComparison.Ordinal));
+
+        await diff.Locator("[data-git-diff-close]").ClickAsync();
+        Assert.True(await diff.IsHiddenAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_FilterPane_RendersCategoricalNumericAndDateControls()
     {
         await using var session = await fixture.NewSessionAsync();

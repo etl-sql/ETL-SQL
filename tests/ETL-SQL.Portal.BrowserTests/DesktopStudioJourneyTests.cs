@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using ETL_SQL.WorkstationEditor;
 using Microsoft.Playwright;
@@ -29,6 +30,11 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         var secondFile = Path.Combine(secondWorkspace.Root, "other.etlsql");
         await File.WriteAllTextAsync(firstFile, InitialScript);
         await File.WriteAllTextAsync(secondFile, "SELECT 2 AS ProjectTwo;");
+        RunGit(firstWorkspace.Root, "init");
+        RunGit(firstWorkspace.Root, "config", "user.email", "studio-browser@example.invalid");
+        RunGit(firstWorkspace.Root, "config", "user.name", "Studio Browser");
+        RunGit(firstWorkspace.Root, "add", "users.rptsql");
+        RunGit(firstWorkspace.Root, "commit", "-m", "Add users report");
 
         await using var firstHost = WorkstationEditorApp.Create([], Options(firstWorkspace.Root, firstFile, "first-token"));
         await firstHost.StartAsync();
@@ -60,6 +66,20 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         await firstPage.EvaluateAsync(
             "marker => window.__STUDIO__.state.editorInstance.setValue(window.__STUDIO__.state.editorInstance.getValue() + `\n${marker}\n`)",
             editMarker);
+        await firstPage.Locator("[data-activity='git']").ClickAsync();
+        var headComparison = firstPage.Locator("[data-git-revision='HEAD']");
+        await headComparison.WaitForAsync();
+        await headComparison.ClickAsync();
+        var gitDiff = firstPage.Locator(".etlsql-studio-git-diff-modal");
+        await gitDiff.WaitForAsync();
+        await gitDiff.Locator("[role='table']").WaitForAsync();
+        var workingDiffCells = gitDiff.Locator(".etlsql-studio-git-diff-cell.is-right");
+        Assert.True(await workingDiffCells.CountAsync() > 0, await gitDiff.InnerTextAsync());
+        Assert.DoesNotContain(await gitDiff.Locator(".etlsql-studio-git-diff-cell.is-left").AllInnerTextsAsync(),
+            text => text.Contains(editMarker, StringComparison.Ordinal));
+        Assert.Contains(await workingDiffCells.AllInnerTextsAsync(),
+            text => text.Contains(editMarker, StringComparison.Ordinal));
+        await gitDiff.Locator("[data-git-diff-close]").ClickAsync();
         await firstPage.Locator("[data-action='run']").ClickAsync();
         await firstPage.WaitForFunctionAsync(
             "() => window.__STUDIO__.state.documents[0].studioContext.resultsTrace.some(item => item.type === 'results')");
@@ -186,6 +206,31 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
             return response.json();
         }
         """);
+
+    private static void RunGit(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start git.");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(5000))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new InvalidOperationException("Git command timed out.");
+        }
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"Git command failed: {output.GetAwaiter().GetResult()}{error.GetAwaiter().GetResult()}");
+    }
 
     private sealed class TempWorkspace : IDisposable
     {
