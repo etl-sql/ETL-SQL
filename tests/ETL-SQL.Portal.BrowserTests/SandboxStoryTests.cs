@@ -1049,10 +1049,11 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         // 3. Test Activity Rail switching and Filter Pane
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
-        Assert.Contains("Published Connections", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Build from data", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Connections", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
 
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
-        Assert.Contains("Filter Pane", await page.Locator("[data-sidebar-title]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Data & Filters", await page.Locator("[data-sidebar-title]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Region", await page.Locator(".etlsql-filter-card", new() { HasText = "Region" }).InnerTextAsync());
 
         // 4. Assert Phase 2 Live In-Memory Visual Canvas calculations
@@ -1110,7 +1111,10 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await modalBackdrop.WaitForAsync();
         Assert.False(await modalBackdrop.IsHiddenAsync());
         Assert.Contains("Plaintext Secret Detected", await page.Locator("[data-modal-box]").InnerTextAsync());
-        Assert.Contains("SuperSecretPassword123!", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.Contains("(value hidden)", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.DoesNotContain("SuperSecretPassword123!", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.False(await page.Locator("[data-modal-box]").EvaluateAsync<bool>(
+            "element => element.innerHTML.includes('SuperSecretPassword123!')"));
 
         // Cancel modal
         await page.Locator("[data-modal-box] button[data-modal-close]").First.ClickAsync();
