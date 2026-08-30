@@ -581,6 +581,14 @@ internal sealed class PlotPlanSvgRenderer
         var slot = plotWidth / Math.Max(1, categoryCount);
         var groupWidth = slot * layer.BandSize;
         var barWidth = stacked ? groupWidth : groupWidth / layerCount;
+        // Loop-invariant: style lookups are linear scans over the token array and the extent
+        // attributes depend only on the layer, so both resolve once per layer, not once per mark.
+        var dataFormat = DataFormat(plan);
+        var extentAttributes = ExtentAttributes(layer);
+        var labelPosition = showLabels ? Style(plan, "DATA_LABELS:POSITION") ?? "OUTSIDE" : "OUTSIDE";
+        var labelColorToken = showLabels ? Style(plan, "DATA_LABELS:COLOR") : null;
+        var labelSize = showLabels ? Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9" : "9";
+        var labelWeight = showLabels ? Style(plan, "DATA_LABELS:FONT_WEIGHT") : null;
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
@@ -618,19 +626,17 @@ internal sealed class PlotPlanSvgRenderer
             var opacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m;
             var top = Math.Min(startY, endY);
             var barHeight = Math.Max(1m, Math.Abs(startY - endY));
-            var label = FormatDataLabel(rangedY ? end : value!.Value, DataFormat(plan));
+            var label = FormatDataLabel(rangedY ? end : value!.Value, dataFormat);
             var title = rangedY
-                ? $"{FormatDataLabel(start, DataFormat(plan))} to {FormatDataLabel(end, DataFormat(plan))}"
+                ? $"{FormatDataLabel(start, dataFormat)} to {FormatDataLabel(end, dataFormat)}"
                 : label;
             var rangedClass = rangedY || rangedX ? " class='plot-range-rect'" : string.Empty;
-            var extent = rangedY || rangedX ? string.Empty : ExtentAttributes(layer);
+            var extent = rangedY || rangedX ? string.Empty : extentAttributes;
             builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'{extent}><title>{Esc(title)}</title></rect>");
             if (showLabels)
             {
-                var position = Style(plan, "DATA_LABELS:POSITION") ?? "OUTSIDE";
-                var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444");
-                var labelSize = Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9";
-                var labelWeight = Style(plan, "DATA_LABELS:FONT_WEIGHT");
+                var position = labelPosition;
+                var labelColor = SafePaint(labelColorToken, "#444");
                 var labelX = x + width / 2m;
                 var labelY = top - 3m;
                 var anchor = "middle";
@@ -643,7 +649,7 @@ internal sealed class PlotPlanSvgRenderer
                 else if (position.Contains("INSIDE", StringComparison.OrdinalIgnoreCase))
                 {
                     labelY = end >= start ? top + 13m : top + barHeight - 4m;
-                    labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "white");
+                    labelColor = SafePaint(labelColorToken, "white");
                 }
                 builder.AppendLine($"<text x='{N(labelX)}' y='{N(labelY)}' text-anchor='{anchor}' font-size='{Esc(labelSize)}' fill='{Esc(labelColor)}'{(string.IsNullOrWhiteSpace(labelWeight) ? string.Empty : $" font-weight='{Esc(labelWeight)}'")}>{Esc(label)}</text>");
             }
@@ -785,10 +791,28 @@ internal sealed class PlotPlanSvgRenderer
         ICollection<SmartLabel> smartLabels)
     {
         if (xScale is null || yScale is null) return;
-        var sizes = layer.Data.Select(datum => PlotPlanResolver.Number(Channel(datum, FieldChannel.Size) ?? ChartValue.Null()))
-            .Where(value => value.HasValue).Select(value => value!.Value).ToList();
-        var minimumSize = sizes.DefaultIfEmpty(0m).Min();
-        var maximumSize = sizes.DefaultIfEmpty(0m).Max();
+        // One pass for both bounds: the LINQ chain here materialised a list of every size value and
+        // then enumerated it twice more.
+        var minimumSize = 0m;
+        var maximumSize = 0m;
+        var sawSize = false;
+        for (var i = 0; i < layer.Data.Length; i++)
+        {
+            if (PlotPlanResolver.Number(Channel(layer.Data[i], FieldChannel.Size) ?? ChartValue.Null()) is not { } size) continue;
+            if (!sawSize)
+            {
+                minimumSize = maximumSize = size;
+                sawSize = true;
+                continue;
+            }
+            if (size < minimumSize) minimumSize = size;
+            if (size > maximumSize) maximumSize = size;
+        }
+        // Loop-invariant style lookups, resolved once per layer rather than once per point.
+        var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
+        var labelFormat = showLabels ? Style(plan, "DATA_LABELS:FORMAT") : null;
+        var labelColor = showLabels ? SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444") : "#444";
+        var labelFontSize = showLabels ? FontSize(Style(plan, "DATA_LABELS:FONT_SIZE")) : 9m;
         foreach (var datum in layer.Data.Where(item => !item.IsGap))
         {
             var xChannel = Channel(datum, FieldChannel.X) ?? ChartValue.Null();
@@ -818,12 +842,12 @@ internal sealed class PlotPlanSvgRenderer
             x += datum.DisplayOffsetX;
             var y = MapY(yValue.Value, yScale, plotHeight) + datum.DisplayOffsetY;
             builder.AppendLine($"<circle class='plot-point' cx='{N(x)}' cy='{N(y)}' r='{N(Math.Clamp(radius, 1m, 30m))}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' stroke='white' stroke-width='1.5' data-row-index='{datum.RowIndex}'>{(string.IsNullOrWhiteSpace(label) ? string.Empty : $"<title>{Esc(label)}</title>")}</circle>");
-            if (IsEnabled(plan.Style, "DATA_LABELS"))
+            if (showLabels)
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
-                    label ?? FormatDataLabel(yValue.Value, Style(plan, "DATA_LABELS:FORMAT")),
-                    SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"),
+                    label ?? FormatDataLabel(yValue.Value, labelFormat),
+                    labelColor,
                     100 + layer.ZIndex,
-                    FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"))));
+                    labelFontSize));
         }
     }
 

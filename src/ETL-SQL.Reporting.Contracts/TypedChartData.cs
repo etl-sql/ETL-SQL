@@ -28,7 +28,12 @@ public sealed record ChartValue(
     DateTimeOffset? OffsetDateTime = null,
     bool? Boolean = null)
 {
-    public static ChartValue Null() => new(ChartValueKind.Null);
+    /// <summary>The single shared null value. <see cref="ChartValue"/> is an immutable record with
+    /// value equality, so one instance serves every null channel; the resolver and renderers use
+    /// <see cref="Null"/> as a per-mark coalesce fallback, which allocated on every call.</summary>
+    private static readonly ChartValue NullValue = new(ChartValueKind.Null);
+
+    public static ChartValue Null() => NullValue;
     public static ChartValue From(long value) => new(ChartValueKind.Integer, Integer: value);
     public static ChartValue From(double value) => new(ChartValueKind.FloatingPoint, FloatingPoint: value);
     public static ChartValue From(decimal value) => new(ChartValueKind.Decimal, Decimal: value);
@@ -41,18 +46,18 @@ public sealed record ChartValue(
 
     public void Validate()
     {
-        var populated = new[]
-        {
-            Integer.HasValue,
-            FloatingPoint.HasValue,
-            Decimal.HasValue,
-            Text is not null,
-            Date.HasValue,
-            Time.HasValue,
-            LocalDateTime.HasValue,
-            OffsetDateTime.HasValue,
-            Boolean.HasValue
-        }.Count(value => value);
+        // Counted without an array or LINQ: PlotPlan.Validate() calls this for every channel of
+        // every datum, so a 5,000-row plan allocated 15,000 arrays and enumerators per pass.
+        var populated = 0;
+        if (Integer.HasValue) populated++;
+        if (FloatingPoint.HasValue) populated++;
+        if (Decimal.HasValue) populated++;
+        if (Text is not null) populated++;
+        if (Date.HasValue) populated++;
+        if (Time.HasValue) populated++;
+        if (LocalDateTime.HasValue) populated++;
+        if (OffsetDateTime.HasValue) populated++;
+        if (Boolean.HasValue) populated++;
 
         if (Kind == ChartValueKind.Null && populated != 0)
             throw new InvalidDataException("A null chart value cannot carry a raw value.");

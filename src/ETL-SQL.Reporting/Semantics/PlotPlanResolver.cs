@@ -37,10 +37,19 @@ public sealed class PlotPlanResolver
         var facets = ResolveFacets(spec, columns, scales, plotBounds, formatter);
         layers = ResolveDisplayOffsets(spec, data, columns, layers, scales, facets, plotBounds);
         layers = ResolveMarkExtents(spec, layers);
-        var sourceLayers = layers.Where(layer => layer.Style.IsDefault || !layer.Style.Any(token => token.Name == "overlayType"));
-        var gapRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => datum.IsGap).Select(datum => datum.RowIndex).Distinct().Order().ToImmutableArray();
-        var usedRows = sourceLayers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap).Select(datum => datum.RowIndex).ToHashSet();
-        var skippedRows = Enumerable.Range(0, data.RowCount).Where(index => !usedRows.Contains(index) && !gapRows.Contains(index)).ToImmutableArray();
+        // One pass over the source layers. `sourceLayers` was a lazy query enumerated twice, and
+        // `gapRows.Contains` on an ImmutableArray made the skipped-row scan O(rows x gap rows).
+        var gapRowSet = new HashSet<int>();
+        var usedRows = new HashSet<int>();
+        foreach (var layer in layers)
+        {
+            if (!layer.Style.IsDefault && layer.Style.Any(token => token.Name == "overlayType")) continue;
+            foreach (var datum in layer.Data)
+                (datum.IsGap ? gapRowSet : usedRows).Add(datum.RowIndex);
+        }
+        var gapRows = gapRowSet.Order().ToImmutableArray();
+        var skippedRows = Enumerable.Range(0, data.RowCount)
+            .Where(index => !usedRows.Contains(index) && !gapRowSet.Contains(index)).ToImmutableArray();
         var fallback = BuildFallback(spec, layers, categories, formatter);
         var summary = BuildSummary(spec, data, series, layers, scales, facets, gapRows, skippedRows);
 
@@ -429,10 +438,19 @@ public sealed class PlotPlanResolver
         var yBinding = spec.Bindings.First(binding => binding.Channel == FieldChannel.Y);
         var xColumn = columns[xBinding.Field!];
         var yColumn = columns[yBinding.Field!];
+        // Grouped in one pass. Each category used to rescan the whole X column, allocating a
+        // ValueKey string per row per category.
+        var rowsByCategory = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        for (var index = 0; index < xColumn.Values.Length; index++)
+        {
+            if (ValueKey(xColumn.Values[index]) is not { } categoryKey) continue;
+            if (!rowsByCategory.TryGetValue(categoryKey, out var bucket))
+                rowsByCategory[categoryKey] = bucket = [];
+            bucket.Add(index);
+        }
         var resolvedData = categories.Select((category, categoryIndex) =>
         {
-            var rowIndices = Enumerable.Range(0, xColumn.Values.Length)
-                .Where(index => ValueKey(xColumn.Values[index]) == category).ToList();
+            var rowIndices = rowsByCategory.TryGetValue(category, out var matched) ? matched : [];
             var values = rowIndices.Select(index => Number(yColumn.Values[index])).Where(value => value.HasValue)
                 .Select(value => value!.Value).OrderBy(value => value).ToArray();
             var low = values.Length == 0 ? 0m : values[0];
@@ -530,6 +548,8 @@ public sealed class PlotPlanResolver
         var layerBindings = layer.Bindings.IsDefaultOrEmpty ? spec.Bindings : layer.Bindings
             .AddRange(spec.Bindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap &&
                 !layer.Bindings.Any(existing => existing.Channel == binding.Channel)));
+        // The condition grouping is identical for every row of a layer; it used to be rebuilt per row.
+        var conditionGroups = GroupConditions(layer.Conditions);
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
         var preserveRows = layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
@@ -541,32 +561,47 @@ public sealed class PlotPlanResolver
                 .Where(binding => binding.Field is not null && columns.ContainsKey(binding.Field)).ToList();
             if (facetBindings.Count > 0)
             {
-                var facetKeys = Enumerable.Range(0, data.RowCount).Where(include)
-                    .Select(index => string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field!].Values[index]) ?? string.Empty)))
-                    .Distinct(StringComparer.Ordinal).ToList();
+                // Indexed in one pass. This previously rescanned every row for each
+                // (facet key, category) pair, rebuilding the joined facet key and a ValueKey string
+                // per candidate row, so the work grew as facets x categories x rows.
+                var facetColumns = facetBindings.Select(binding => columns[binding.Field!]).ToArray();
+                var facetKeys = new List<string>();
+                var seenFacetKeys = new HashSet<string>(StringComparer.Ordinal);
+                var firstRowByFacetCategory = new Dictionary<(string Facet, string Category), int>();
+                for (var index = 0; index < data.RowCount; index++)
+                {
+                    if (!include(index)) continue;
+                    var facetKey = FacetKey(facetColumns, index);
+                    if (seenFacetKeys.Add(facetKey)) facetKeys.Add(facetKey);
+                    if (ValueKey(categoryColumn.Values[index]) is not { } categoryKey) continue;
+                    firstRowByFacetCategory.TryAdd((facetKey, categoryKey), index);
+                }
                 foreach (var facetKey in facetKeys)
                     foreach (var category in categories)
-                    {
-                        var rowIndex = Enumerable.Range(0, data.RowCount).FirstOrDefault(index => include(index)
-                            && ValueKey(categoryColumn.Values[index]) == category
-                            && string.Join("\u001f", facetBindings.Select(binding => ValueKey(columns[binding.Field!].Values[index]) ?? string.Empty)) == facetKey, -1);
-                        if (rowIndex >= 0) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions, formatter));
-                    }
+                        if (firstRowByFacetCategory.TryGetValue((facetKey, category), out var rowIndex))
+                            rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, conditionGroups, formatter));
                 return rows.ToImmutableArray();
+            }
+            // The same one-pass indexing for the unfaceted category path.
+            var firstRowByCategory = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (var index = 0; index < data.RowCount; index++)
+            {
+                if (!include(index)) continue;
+                if (ValueKey(categoryColumn.Values[index]) is { } categoryKey)
+                    firstRowByCategory.TryAdd(categoryKey, index);
             }
             for (var categoryIndex = 0; categoryIndex < categories.Length; categoryIndex++)
             {
                 var category = categories[categoryIndex];
-                var rowIndex = Enumerable.Range(0, data.RowCount).FirstOrDefault(index => include(index) && ValueKey(categoryColumn.Values[index]) == category, -1);
-                rows.Add(rowIndex < 0
-                    ? GapDatum(categoryIndex, layerBindings, categoryBinding, category)
-                    : Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions, formatter));
+                rows.Add(firstRowByCategory.TryGetValue(category, out var rowIndex)
+                    ? Datum(rowIndex, layerBindings, columns, spec.NullHandling, conditionGroups, formatter)
+                    : GapDatum(categoryIndex, layerBindings, categoryBinding, category));
             }
             return rows.ToImmutableArray();
         }
 
         for (var rowIndex = 0; rowIndex < data.RowCount; rowIndex++)
-            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, layer.Conditions, formatter));
+            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, conditionGroups, formatter));
         return rows.ToImmutableArray();
     }
 
@@ -575,7 +610,7 @@ public sealed class PlotPlanResolver
         ImmutableArray<FieldBinding> bindings,
         IReadOnlyDictionary<string, ChartColumn> columns,
         NullHandlingSpec nulls,
-        ImmutableArray<EncodingConditionSpec> conditions,
+        ImmutableArray<ImmutableArray<EncodingConditionSpec>> conditionGroups,
         ChartValueFormatter formatter)
     {
         var channels = bindings.Where(binding => binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field)).Select(binding =>
@@ -594,7 +629,7 @@ public sealed class PlotPlanResolver
         return new ResolvedDatum(rowIndex, channels, requiredNull && nulls.Default == NullValuePolicy.Gap,
             string.Join(", ", channels.Select(channel => $"{channel.Channel}: {channel.DisplayValue ?? formatter.Format(channel.Value)}")))
         {
-            Encodings = ResolveConditions(conditions, rowIndex, columns)
+            Encodings = ResolveConditions(conditionGroups, rowIndex, columns)
         };
     }
 
@@ -606,14 +641,39 @@ public sealed class PlotPlanResolver
         return new ResolvedDatum(index, channels, true, null);
     }
 
+    /// <summary>
+    /// Groups a layer's encoding conditions by channel, preserving first-appearance channel order and
+    /// declaration order within each channel — the ordering <c>GroupBy</c> gave, hoisted out of the
+    /// per-row path so it is computed once per layer.
+    /// </summary>
+    private static ImmutableArray<ImmutableArray<EncodingConditionSpec>> GroupConditions(
+        ImmutableArray<EncodingConditionSpec> conditions)
+    {
+        if (conditions.IsDefaultOrEmpty) return [];
+        var order = new List<ConditionalEncodingChannel>();
+        var byChannel = new Dictionary<ConditionalEncodingChannel, List<EncodingConditionSpec>>();
+        foreach (var condition in conditions)
+        {
+            if (!byChannel.TryGetValue(condition.Channel, out var group))
+            {
+                byChannel[condition.Channel] = group = [];
+                order.Add(condition.Channel);
+            }
+            group.Add(condition);
+        }
+        var groups = ImmutableArray.CreateBuilder<ImmutableArray<EncodingConditionSpec>>(order.Count);
+        foreach (var channel in order) groups.Add([.. byChannel[channel]]);
+        return groups.MoveToImmutable();
+    }
+
     private static ImmutableArray<ResolvedEncodingValue> ResolveConditions(
-        ImmutableArray<EncodingConditionSpec> conditions,
+        ImmutableArray<ImmutableArray<EncodingConditionSpec>> conditionGroups,
         int rowIndex,
         IReadOnlyDictionary<string, ChartColumn> columns)
     {
-        if (conditions.IsDefaultOrEmpty) return [];
+        if (conditionGroups.IsDefaultOrEmpty) return [];
         var result = new List<ResolvedEncodingValue>();
-        foreach (var group in conditions.GroupBy(condition => condition.Channel))
+        foreach (var group in conditionGroups)
         {
             foreach (var condition in group)
             {
@@ -847,15 +907,15 @@ public sealed class PlotPlanResolver
         var panels = new List<ResolvedFacetPanel>();
         var panelWidth = bounds.Width / columnValues.Count;
         var panelHeight = bounds.Height / rowValues.Count;
+        var sourceRowCount = columns.Values.FirstOrDefault()?.Values.Length ?? 0;
+        var rowFacetKeys = FacetRowKeys(spec.Facet.RowField, columns);
+        var columnFacetKeys = FacetRowKeys(spec.Facet.ColumnField, columns);
         for (var rowIndex = 0; rowIndex < rowValues.Count; rowIndex++)
             for (var columnIndex = 0; columnIndex < columnValues.Count; columnIndex++)
             {
                 var rowLabel = rowValues[rowIndex];
                 var columnLabel = columnValues[columnIndex];
-                var indices = Enumerable.Range(0, columns.Values.FirstOrDefault()?.Values.Length ?? 0)
-                    .Where(index => MatchesFacet(spec.Facet.RowField, rowLabel, columns, index) &&
-                        MatchesFacet(spec.Facet.ColumnField, columnLabel, columns, index))
-                    .ToImmutableArray();
+                var indices = FacetIndices(sourceRowCount, rowFacetKeys, rowLabel, columnFacetKeys, columnLabel);
                 if (indices.IsDefaultOrEmpty) continue;
                 var scales = globalScales.Select(scale => Independent(scale, spec.Facet.Resolution, spec, columns, indices, formatter)).ToImmutableArray();
                 var panelBounds = new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight);
@@ -888,14 +948,13 @@ public sealed class PlotPlanResolver
         var panelWidth = bounds.Width / columnCount;
         var panelHeight = bounds.Height / rowCount;
         var panels = new List<ResolvedFacetPanel>(values.Count);
+        var wrapFacetKeys = FacetRowKeys(facet.WrapField, columns);
         for (var index = 0; index < values.Count; index++)
         {
             var rowIndex = index / columnCount;
             var columnIndex = index % columnCount;
             var label = values[index];
-            var indices = Enumerable.Range(0, sourceRowCount)
-                .Where(row => MatchesFacet(facet.WrapField, label, columns, row))
-                .ToImmutableArray();
+            var indices = FacetIndices(sourceRowCount, wrapFacetKeys, label, null, null);
             var scales = globalScales.Select(scale => Independent(scale, facet.Resolution, spec, columns, indices, formatter)).ToImmutableArray();
             var panelBounds = new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight);
             panels.Add(new ResolvedFacetPanel(
@@ -969,8 +1028,34 @@ public sealed class PlotPlanResolver
             ? []
             : column.Values.Select(ValueKey).Distinct(StringComparer.Ordinal).Cast<string?>().ToList();
 
-    private static bool MatchesFacet(string? field, string? value, IReadOnlyDictionary<string, ChartColumn> columns, int index) =>
-        field is null || columns.TryGetValue(field, out var column) && ValueKey(column.Values[index]) == value;
+    /// <summary>
+    /// Per-row keys for one facet field. <c>null</c> means the field is unset, so every row matches;
+    /// an empty array means the field was declared but is absent from the data, which no row matches.
+    /// Resolved once per field so panel membership costs a string comparison rather than a fresh
+    /// <see cref="ValueKey"/> allocation for every panel-row pair.
+    /// </summary>
+    private static string?[]? FacetRowKeys(string? field, IReadOnlyDictionary<string, ChartColumn> columns)
+    {
+        if (field is null) return null;
+        if (!columns.TryGetValue(field, out var column)) return [];
+        var keys = new string?[column.Values.Length];
+        for (var i = 0; i < keys.Length; i++) keys[i] = ValueKey(column.Values[i]);
+        return keys;
+    }
+
+    private static bool MatchesFacet(string?[]? keys, string? value, int index) =>
+        keys is null || (index < keys.Length && keys[index] == value);
+
+    /// <summary>Row indices belonging to one panel, collected without a LINQ pipeline per panel.</summary>
+    private static ImmutableArray<int> FacetIndices(
+        int rowCount, string?[]? rowKeys, string? rowValue, string?[]? columnKeys, string? columnValue)
+    {
+        var indices = ImmutableArray.CreateBuilder<int>();
+        for (var index = 0; index < rowCount; index++)
+            if (MatchesFacet(rowKeys, rowValue, index) && MatchesFacet(columnKeys, columnValue, index))
+                indices.Add(index);
+        return indices.ToImmutable();
+    }
 
     private static ResolvedScale Independent(
         ResolvedScale scale,
@@ -1228,4 +1313,14 @@ public sealed class PlotPlanResolver
     }
 
     private static string? ValueKey(ChartValue value) => value.Kind == ChartValueKind.Null ? null : Display(value);
+
+    /// <summary>The unit-separator-joined facet key for one row across a layer's facet columns.</summary>
+    private static string FacetKey(ChartColumn[] facetColumns, int rowIndex)
+    {
+        if (facetColumns.Length == 1) return ValueKey(facetColumns[0].Values[rowIndex]) ?? string.Empty;
+        var parts = new string[facetColumns.Length];
+        for (var i = 0; i < facetColumns.Length; i++)
+            parts[i] = ValueKey(facetColumns[i].Values[rowIndex]) ?? string.Empty;
+        return string.Join("\u001f", parts);
+    }
 }

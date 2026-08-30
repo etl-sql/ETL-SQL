@@ -139,6 +139,60 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 ### Connection Catalog & Gateway Resource Discovery
 - [ ] **TUI Filters VISUALS (SLICER, DATEPICKER, etc)**  These can be changed now but how do you navigate between them.  Can we hook up the mouse to interact?
 
+- [ ] **`constrained_html_components.rptsql` fails the sample gate on a Card lint error.**
+  `Test-AllSamples.ps1` reports `Line 14, Col 1: Visual 'EnvironmentMetric' of type Card is missing
+  the required mapping role: 'VALUE'`, and the script exits 1. Reproduced against a clean `HEAD`
+  worktree, so it is not caused by any in-flight work. The linter looks correct and the sample looks
+  wrong: every other CARD in `samples/` (`daily_sales_report.rptsql`, `data_quality_health.rptsql`,
+  `protected_data_audit.rptsql`, `lineage_cookbook_02_report.rptsql`) declares
+  `MAPPINGS (VALUE = <column>)`, and this one declares none — so the fix is likely
+  `MAPPINGS (VALUE = Environment)` on the `SOURCE = (SELECT @environment AS Environment)` card.
+  Confirm that is the intent rather than a missing single-column inference for CARD before editing.
+  Added 2026-08-27 in `a5564d84`; it has been red since, which is the same shape as the earlier
+  silent `MAPPINGS` role defect and worth a quick check for sibling samples that were never green.
+
+
+## Grammar of Graphics (GoG) Performance — Remaining Work
+
+The v0.19.0 native GoG pipeline was reviewed for performance on 2026-08-30. The allocation and
+complexity fixes that do not change rendered output or the wire contract are done: the shared
+`ChartValue.Null()` instance, allocation-free `ChartValue.Validate()`, loop-invariant style/extent
+hoists in `RenderPoints`/`RenderRects`, single-pass row indexing in `ResolveLayerData`,
+`ResolveFacets`, `ResolveWrappedFacets` and the box-plot resolve, the set-based `skippedRows` scan,
+and per-layer `GroupConditions`. The items below were deliberately left out of that pass because
+each changes checked-in goldens, the serialized contract, or needs a measurement first.
+
+- [ ] **Verify the resolver changes against the golden lane.** The batch is build-verified and
+  sample-verified only; `dotnet test` and `Test-ReportingGoldens.ps1` could not run because an
+  unrelated in-flight rename (`WorkspaceRenameConflictException` -> `WorkspaceEntryConflictException`)
+  was breaking the shared test project's build at the time. Re-run the reporting suite and the
+  golden lane; no plan or SVG hash should move.
+- [ ] **Drop `ResolvedDatum.Tooltip`.** The resolver builds a joined, per-channel interpolated string
+  for every row (`PlotPlanResolver.Datum`), and no production renderer reads it — native SVG and
+  terminal both build titles from the `Text`/`Tooltip` *channels*. It is serialized into the plan, so
+  removing it needs a `ChartContractVersions.PlotPlanCurrent` bump, a `COMPAT_BREAK` note, and a
+  golden re-bless.
+- [ ] **Slim the native SVG payload.** Each mark repeats constant attributes
+  (`stroke='white' stroke-width='1.5'`, `fill-opacity='1'`, `class='plot-point'`), roughly 50 of the
+  ~158 bytes per mark — about 30% of a scatter payload, on the one representation that actually
+  crosses the wire. Hoisting `stroke`/`stroke-width` to the parent `<g>` and omitting a unit
+  `fill-opacity` is runtime-safe (the client keys interaction off `[data-row-index]`, not the class);
+  hoisting `class='plot-point'` additionally rewrites the per-mark count assertions in
+  `StandardCatalogCartesianMigrationTests`. Requires a golden re-bless either way.
+- [ ] **Split `PlotPlanResolver.Resolve` into bounds-independent and bounds-dependent passes.**
+  `NativeChartLayoutResolver.Resolve` re-runs the entire resolver when only the container width band
+  changed, but `bounds` feeds only `ResolveFacets`, `ResolveDisplayOffsets`,
+  `ResolveCartesianViewport` and the facet part of `BuildSummary`. Categories, series, palette,
+  scale inference, per-row datum construction and the fallback are all bounds-independent and are
+  the expensive part, so a tier change currently pays 100% of resolve cost for a layout change.
+- [ ] **Hoist the color-scale lookup out of `ResolveDatumColor`.** It rescans `plan.Scales` for the
+  colour scale on every datum; only the value-to-colour mapping is genuinely per-datum. Needs a
+  signature change to the helper, which is why it was left out of the mechanical hoist pass.
+- [ ] **Tighten the GoG regression budgets.** `RepresentativeRefinementWorkload_HasBoundedResolverAndRendererWork`
+  gates at `< 5,000 ms` resolve/render and `< 256 MB` allocation against measured values of 65 ms,
+  35 ms and 14.7 MB, so it would not catch a 10x regression. Re-measure after the changes above and
+  set the allocation and payload-size budgets near the observed numbers; leave the timing bounds
+  loose, as they are already marked `flaky-time-bound-ok`.
 
 ## v0.19.0 Release Evidence Gates
 
