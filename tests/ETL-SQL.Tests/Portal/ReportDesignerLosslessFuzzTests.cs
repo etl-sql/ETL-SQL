@@ -354,9 +354,7 @@ public class ReportDesignerLosslessFuzzTests
         sb.AppendLine("DECLARE @Threshold INT = 100;");
         sb.AppendLine();
         sb.AppendLine("WITH cte_orders AS (");
-        // CONCAT, not `||`: the parser does not accept an alias after a `||` expression, and this
-        // generator's job is to produce scripts that genuinely parse. See the `||` item in TODO.md.
-        sb.AppendLine("    SELECT CONCAT('Dept ', id) AS cat, amount * 10 AS val FROM main_db.orders WHERE amount > @Threshold");
+        sb.AppendLine("    SELECT 'Dept ' || id AS cat, amount * 10 AS val FROM main_db.orders WHERE amount > @Threshold");
         sb.AppendLine("), cte_ranked AS (");
         sb.AppendLine("    SELECT cat, val, ROW_NUMBER() OVER (ORDER BY val DESC) AS rn FROM cte_orders");
         sb.AppendLine(")");

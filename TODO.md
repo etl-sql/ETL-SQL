@@ -50,12 +50,12 @@ The final user-acceptance gate must prove three representative outcomes without 
 the common path: an SSIS-like ETL pipeline, an SSRS-like paginated report, and a Power BI-like
 interactive dashboard. The script editor remains the escape hatch for advanced or uncommon work.
 
-- [ ] **P2 — Accept an alias after a `||` concatenation**: `SELECT 'Dept ' || id AS cat FROM t` fails
-  with "Unexpected token AS", and `SELECT ('Dept ' || id) AS cat FROM t` fails with "Expected ')' after
-  group expression" — `||` is not in the general expression precedence chain, so it works only in the
-  bare top-level select-item position. Found while repairing round-trip evidence; the fuzz generator's
-  script was silently invalid because of it and now uses `CONCAT`. Fix the expression parser, then
-  restore the `||` form in `ReportDesignerLosslessFuzzTests.GenerateRandomReportScript`.
+- [x] **P2 — Accept an alias after a `||` concatenation**: The lexer now emits an explicit
+  concatenation token, and the expression parser handles it between arithmetic and shift/comparison
+  precedence. Aliased and parenthesized forms parse correctly, engine execution preserves `NULL`
+  propagation, SQL Server compiles the node as `+`, and PostgreSQL/Oracle compile it as `||`.
+  `ReportDesignerLosslessFuzzTests.GenerateRandomReportScript` exercises the operator again, with
+  focused parser, runtime, formatter, dialect, and documentation coverage.
 - [ ] **P1 — Add distinct Dashboard and Paginated Report creation workflows**: Studio Home must show
   separate **New Dashboard** and **New Paginated Report** actions. Both create standard `.rptsql`
   documents and reuse shared connection, dataset, expression, formatting, preview, parser, and

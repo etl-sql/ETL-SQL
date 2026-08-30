@@ -1207,6 +1207,19 @@ public class ExpressionEvaluator
         var leftVal = await EvaluateInternal(bin.Left, context, decryptSensitive);
         var rightVal = await EvaluateInternal(bin.Right, context, decryptSensitive);
 
+        if (bin.Operator == TokenType.CONCAT)
+        {
+            if (leftVal.IsNull() || rightVal.IsNull()) return null;
+            var leftText = leftVal?.ToString() ?? "";
+            var rightText = rightVal?.ToString() ?? "";
+            _context.SecurityService.ValidateStringSize(
+                (long)leftText.Length + rightText.Length,
+                _context.MaxStringResultSize,
+                _context.AllowLargeStringResults,
+                _context.CurrentScriptPath);
+            return leftText + rightText;
+        }
+
         // Use the registry for arithmetic and simple logical operators
         var result = BinaryOperatorFactory.Execute(bin.Operator, leftVal, rightVal);
         if (result != null) return result;
@@ -1215,6 +1228,7 @@ public class ExpressionEvaluator
         if (bin.Operator == TokenType.PLUS || bin.Operator == TokenType.MINUS ||
             bin.Operator == TokenType.STAR || bin.Operator == TokenType.SLASH ||
             bin.Operator == TokenType.MODULO ||
+            bin.Operator == TokenType.CONCAT ||
             bin.Operator == TokenType.LSHIFT || bin.Operator == TokenType.RSHIFT) return null;
 
         return bin.Operator switch

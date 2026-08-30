@@ -49,6 +49,7 @@ namespace ETL_SQL.Tests.Engine
         [InlineData("SELECT LENGTH(c1) FROM t1;", "SELECT LEN(c1) FROM [t1]", "SELECT LENGTH(c1) FROM t1", "SELECT LENGTH(c1) FROM T1")]
         // D. Substrings
         [InlineData("SELECT SUBSTRING(c1, 1, 3) FROM t1;", "SELECT SUBSTRING(c1, @p0, @p1) FROM [t1]", "SELECT SUBSTRING(c1, @p0, @p1) FROM t1", "SELECT SUBSTR(c1, @p0, @p1) FROM T1")]
+        [InlineData("SELECT 'Dept ' || id AS cat FROM t1;", "SELECT (@p0 + id) AS cat FROM [t1]", "SELECT (@p0 || id) AS cat FROM t1", "SELECT (@p0 || id) AS cat FROM T1")]
         public void VerifyDialectFunctionRewriting(string inputSql, string expectedMssql, string expectedPostgres, string expectedOracle)
         {
             var mssqlResult = Compile(inputSql, "MSSQL");

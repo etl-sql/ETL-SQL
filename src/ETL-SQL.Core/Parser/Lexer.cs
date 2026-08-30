@@ -568,6 +568,19 @@ public class Lexer
                     tokens.Add(new Token(TokenType.MODULO, "%", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
                     Advance();
                     break;
+                case '|':
+                    if (Peek() == '|')
+                    {
+                        Advance();
+                        Advance();
+                        tokens.Add(new Token(TokenType.CONCAT, "||", startLine, startColumn, _line, _column, startOffset, _position));
+                    }
+                    else
+                    {
+                        // Keep the lexer's resilient handling for an otherwise unknown single pipe.
+                        Advance();
+                    }
+                    break;
                 case '?':
                     Advance();
                     if (CurrentChar == '?')

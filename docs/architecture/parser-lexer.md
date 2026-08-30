@@ -28,7 +28,7 @@ Source text (.etlsql / .rptsql)
                               ▼
 ┌─────────────────────────────────────────────────┐
 │  ExpressionParser  (ExpressionParser.cs)         │
-│  7-level operator precedence chain              │
+│  Explicit operator precedence chain             │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -213,13 +213,18 @@ The expression parser is a classic **recursive descent** implementation with exp
 
 ```
 ParseExpression()
-  └─ ParseOr()
-       └─ ParseAnd()
-            └─ ParseNot()
-                 └─ ParseComparison()    = <> < > <= >= IN LIKE IS [NOT NULL]
-                      └─ ParseTerm()     + -
-                           └─ ParseFactor()   * / %
-                                └─ ParsePrimary()
+  └─ ParseArrow()          => ... : ...
+       └─ ParseOr()        OR
+            └─ ParseAnd()  AND
+                 └─ ParseNot()
+                      └─ ParseComparison()  = <> < > <= >= IN LIKE IS [NOT NULL]
+                           └─ ParseCoalesce()  ??
+                                └─ ParseShift()  << >>
+                                     └─ ParseConcat()  ||
+                                          └─ ParseTerm()  + -
+                                               └─ ParseFactor()  * / %
+                                                    └─ ParseJsonAccess()  -> ->>
+                                                         └─ ParsePrimary()
 ```
 
 ### 4.1 ParsePrimary
@@ -253,14 +258,18 @@ Stored as `FunctionCallExpression.Window: WindowClause`.
 
 | Level | Operators |
 |-------|-----------|
-| 9 (lowest) | `OR` |
-| 8 | `AND` |
-| 7 | `NOT` (unary) |
-| 6 | `=`, `<>`, `<`, `>`, `<=`, `>=`, `IN`, `NOT IN`, `LIKE`, `NOT LIKE`, `IS NULL`, `IS NOT NULL` |
+| 13 (lowest) | `=> ... : ...` |
+| 12 | `OR` |
+| 11 | `AND` |
+| 10 | `NOT` (unary) |
+| 9 | `=`, `<>`, `<`, `>`, `<=`, `>=`, `IN`, `NOT IN`, `LIKE`, `NOT LIKE`, `IS NULL`, `IS NOT NULL` |
+| 8 | `??` |
+| 7 | `<<`, `>>` |
+| 6 | `||` |
 | 5 | `+`, `-` |
 | 4 | `*`, `/`, `%` |
-| 3 | Unary `-` |
-| 2 | `EXISTS`, `CAST`, `CASE`, special forms |
+| 3 | `->`, `->>` |
+| 2 | Unary `-`; `EXISTS`, `CAST`, `CASE`, and other special forms |
 | 1 (highest) | Literals, function calls, parentheses |
 
 ---

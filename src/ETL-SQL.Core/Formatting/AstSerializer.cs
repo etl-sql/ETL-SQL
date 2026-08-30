@@ -1060,6 +1060,7 @@ public static class AstSerializer
         TokenType.STAR => "*",
         TokenType.SLASH => "/",
         TokenType.MODULO => "%",
+        TokenType.CONCAT => "||",
         TokenType.EQUALS => "=",
         TokenType.NOT_EQUALS => "<>",
         TokenType.LESS_THAN => "<",

@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fixed `||` string concatenation across the full expression grammar. Concatenations now retain
+  explicit aliases, work inside parentheses and larger expressions, preserve SQL-style `NULL`
+  propagation in engine execution, and compile to the target dialect's concatenation operator.
+  Report designer fuzz scripts again exercise the operator directly.
+
 - Replaced Studio's regex-generated pipeline cards with the shared engine DAG projection. `.etlsql`
   canvases now show real sequential and branching edges, including `IF`, `PARALLEL`, loop,
   `TRY`/`CATCH`, and validation stages. The canonical graph opens as a fitted left-to-right execution

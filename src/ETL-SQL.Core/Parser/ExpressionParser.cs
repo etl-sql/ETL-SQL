@@ -322,13 +322,36 @@ public partial class ExpressionParser
 
     private Expression ParseShift()
     {
-        var left = ParseTerm();
+        var left = ParseConcat();
         while (_parser.Current.Type == TokenType.LSHIFT || _parser.Current.Type == TokenType.RSHIFT)
         {
             var opToken = _parser.Advance();
             var op = opToken.Type;
-            var right = ParseTerm();
+            var right = ParseConcat();
             left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+        }
+        return left;
+    }
+
+    /// <summary>
+    /// SQL string concatenation binds less tightly than arithmetic and more tightly than shifts and
+    /// comparisons. The token value check keeps the <c>CONCAT(...)</c> function keyword from being
+    /// accepted as an infix operator.
+    /// </summary>
+    private Expression ParseConcat()
+    {
+        var left = ParseTerm();
+        while (_parser.Current.Type == TokenType.CONCAT && _parser.Current.Value == "||")
+        {
+            _parser.Advance();
+            var right = ParseTerm();
+            left = new BinaryExpression(left, TokenType.CONCAT, right)
+            {
+                Line = left.Line,
+                Column = left.Column,
+                EndLine = _parser.LastTokenEndLine,
+                EndColumn = _parser.LastTokenEndColumn
+            };
         }
         return left;
     }

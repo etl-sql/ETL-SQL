@@ -109,6 +109,16 @@ FROM source_feed.raw_customers
 ON FAILURE QUARANTINE TO #quarantine_customers;
 ```
 
+### 5. String Concatenation with an Alias
+
+Use `||` inside any scalar expression. Arithmetic binds more tightly than concatenation, and
+concatenation binds more tightly than comparisons. If either operand is `NULL`, the result is `NULL`.
+
+```sql
+SELECT 'Dept ' || department_id AS department_label
+FROM #departments;
+```
+
 ---
 
 ## Pushdown vs. Engine Execution
