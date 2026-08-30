@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -148,6 +149,12 @@ public static class SqlFormatter
         // Normalize line endings and cleanup
         string input = script.Replace("\r\n", "\n").Replace("\r", "\n");
 
+        // A data-quality rule is one expression, not a list to reflow: without this the paren
+        // formatter reads EXPECT IN ('NA','EMEA') as a value list and explodes it across lines,
+        // and the rule text that reaches __dq_rule and the rule catalog comes back with newlines
+        // embedded in it.
+        input = MaskExpectClauses(input, out var maskedExpectClauses);
+
         // Extract clauses (ignoring those inside nested scopes/parentheses)
         var clauses = ParseClauses(input);
 
@@ -186,7 +193,163 @@ public static class SqlFormatter
             FormatClause(sb, name, content, options, baseIndentLevel);
         }
 
-        return sb.ToString().TrimEnd();
+        return RestoreExpectClauses(sb.ToString().TrimEnd(), maskedExpectClauses);
+    }
+
+    /// <summary>
+    /// Replaces each column-level <c>EXPECT …</c> clause with an opaque placeholder so the rest of
+    /// the formatter cannot reach inside it. The clause is a single expression the author wrote;
+    /// reflowing its parentheses would be like breaking a string literal across lines.
+    /// </summary>
+    private static string MaskExpectClauses(string input, out List<string> masked)
+    {
+        masked = new List<string>();
+        if (input.IndexOf("EXPECT", StringComparison.OrdinalIgnoreCase) < 0) return input;
+
+        var sb = new StringBuilder(input.Length);
+        int i = 0;
+        while (i < input.Length)
+        {
+            if (!StartsWordAt(input, i, "EXPECT"))
+            {
+                sb.Append(input[i]);
+                i++;
+                continue;
+            }
+
+            // EXPECT SCHEMA is a statement, not a column clause — leave it to the normal path.
+            int afterKeyword = SkipWhitespace(input, i + "EXPECT".Length);
+            if (StartsWordAt(input, afterKeyword, "SCHEMA"))
+            {
+                sb.Append(input[i]);
+                i++;
+                continue;
+            }
+
+            int end = FindExpectClauseEnd(input, afterKeyword);
+            var clause = CollapseWhitespace(input[i..end]);
+            sb.Append('\uE000').Append(masked.Count.ToString(CultureInfo.InvariantCulture)).Append('\uE001');
+            masked.Add(clause);
+            // The clause text is trimmed, so a clause ending exactly where the next token begins
+            // (EXPECT … EXPECT …) would fuse the two back together on restore.
+            if (end < input.Length && !char.IsWhiteSpace(input[end])) sb.Append(' ');
+            i = end;
+        }
+        return sb.ToString();
+    }
+
+    private static string RestoreExpectClauses(string formatted, List<string> masked)
+    {
+        if (masked.Count == 0) return formatted;
+
+        for (int index = 0; index < masked.Count; index++)
+        {
+            formatted = formatted.Replace(
+                $"\uE000{index.ToString(CultureInfo.InvariantCulture)}\uE001", masked[index]);
+        }
+        return formatted;
+    }
+
+    /// <summary>
+    /// The end of an <c>EXPECT</c> clause: a depth-zero comma or semicolon, the query body, or the
+    /// start of the next clause. Its optional <c>ON FAILURE &lt;action&gt;</c> is part of it.
+    /// </summary>
+    private static int FindExpectClauseEnd(string input, int start)
+    {
+        int depth = 0;
+        char quote = '\0';
+        int i = start;
+
+        while (i < input.Length)
+        {
+            char c = input[i];
+
+            if (quote != '\0')
+            {
+                if (c == quote)
+                {
+                    if (i + 1 < input.Length && input[i + 1] == quote) { i += 2; continue; }
+                    quote = '\0';
+                }
+                i++;
+                continue;
+            }
+
+            if (c is '\'' or '"') { quote = c; i++; continue; }
+            if (c == '(') { depth++; i++; continue; }
+            if (c == ')')
+            {
+                if (depth == 0) return i;   // closing a paren the clause sits inside
+                depth--;
+                i++;
+                continue;
+            }
+            if (depth == 0)
+            {
+                if (c == ',' || c == ';') return i;
+                if (StartsWordAt(input, i, "EXPECT")) return i;
+                if (StartsWordAt(input, i, "INTO") || StartsWordAt(input, i, "FROM")) return i;
+                if (StartsWordAt(input, i, "ON"))
+                {
+                    // A column's own ON FAILURE <action> belongs to the clause; the statement's
+                    // trailing ON FAILURE (which takes a target) does not.
+                    int afterOn = SkipWhitespace(input, i + "ON".Length);
+                    if (StartsWordAt(input, afterOn, "FAILURE"))
+                    {
+                        int afterFailure = SkipWhitespace(input, afterOn + "FAILURE".Length);
+                        int actionEnd = afterFailure;
+                        while (actionEnd < input.Length && char.IsLetter(input[actionEnd])) actionEnd++;
+                        int afterAction = SkipWhitespace(input, actionEnd);
+                        bool routed = StartsWordAt(input, afterAction, "TO") || StartsWordAt(input, afterAction, "WITH");
+                        if (routed) return i;
+                        i = actionEnd;
+                        continue;
+                    }
+                    return i;
+                }
+            }
+            i++;
+        }
+        return input.Length;
+    }
+
+    private static bool StartsWordAt(string text, int index, string word)
+    {
+        if (index < 0 || index + word.Length > text.Length) return false;
+        if (string.Compare(text, index, word, 0, word.Length, StringComparison.OrdinalIgnoreCase) != 0) return false;
+        if (index > 0 && (char.IsLetterOrDigit(text[index - 1]) || text[index - 1] == '_')) return false;
+        int after = index + word.Length;
+        return after >= text.Length || !(char.IsLetterOrDigit(text[after]) || text[after] == '_');
+    }
+
+    private static int SkipWhitespace(string text, int index)
+    {
+        while (index < text.Length && char.IsWhiteSpace(text[index])) index++;
+        return index;
+    }
+
+    private static string CollapseWhitespace(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        char quote = '\0';
+        bool pendingSpace = false;
+
+        foreach (char c in text.Trim())
+        {
+            if (quote != '\0')
+            {
+                sb.Append(c);
+                if (c == quote) quote = '\0';
+                continue;
+            }
+            // A pending space is flushed before a quoted literal too: MATCHES '…' must keep the
+            // space that separates the keyword from its pattern.
+            if (char.IsWhiteSpace(c)) { pendingSpace = sb.Length > 0; continue; }
+            if (pendingSpace) { sb.Append(' '); pendingSpace = false; }
+            if (c is '\'' or '"') quote = c;
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     private static List<(string Name, string Content)> ParseClauses(string input)

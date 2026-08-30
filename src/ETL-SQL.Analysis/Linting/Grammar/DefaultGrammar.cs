@@ -441,6 +441,11 @@ public static class DefaultGrammar
         var joinSource = new StateNode("SELECT_JOIN_SOURCE");
         var joinOnNode = new StateNode("SELECT_JOIN_ON");
 
+        var expectNode = new StateNode("SELECT_EXPECT");
+        var expectRule = new StateNode("SELECT_EXPECT_RULE");
+        var expectOn = new StateNode("SELECT_EXPECT_ON");
+        var expectFailure = new StateNode("SELECT_EXPECT_FAILURE");
+
         var whereNode = new StateNode("SELECT_WHERE");
         var groupKey = new StateNode("SELECT_GROUP");
         var groupBy = new StateNode("SELECT_GROUP_BY");
@@ -459,6 +464,12 @@ public static class DefaultGrammar
         ));
         selectExpr.AddTransitionTo("INTO", intoNode, SuggestionType.Keyword);
         selectExpr.AddTransitionTo("FROM", fromNode, SuggestionType.Keyword);
+
+        // Data-quality rules: <column> [AS <alias>] EXPECT <rule> [ON FAILURE <action>], repeatable.
+        // The tree has to model this even though the parser owns the real grammar, because the
+        // completion path narrows the base service's suggestions to what the tree offers here — a
+        // clause the tree does not know is a clause no editor ever suggests.
+        ConfigureColumnExpectClause(selectExpr, expectNode, expectRule, expectOn, expectFailure, intoNode, fromNode);
 
         // INTO
         intoNode.AddWildcardTransition(intoTable, "<temp_table>");
@@ -916,6 +927,57 @@ public static class DefaultGrammar
                val.Equals("RIGHT", StringComparison.OrdinalIgnoreCase) ||
                val.Equals("FULL", StringComparison.OrdinalIgnoreCase) ||
                val.Equals("CROSS", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Models a column's <c>EXPECT &lt;rule&gt; [ON FAILURE &lt;action&gt;]</c> clause well enough to
+    /// complete it: the rule vocabulary after <c>EXPECT</c>, the three column actions after
+    /// <c>ON FAILURE</c>, and the ways out — another clause, the next column, or the query body.
+    /// Rule bodies are free-form (a quoted regex, an expression, a literal list), so the rule node
+    /// also accepts anything that is not one of those exits.
+    /// </summary>
+    private static void ConfigureColumnExpectClause(
+        StateNode selectExpr,
+        StateNode expectNode,
+        StateNode expectRule,
+        StateNode expectOn,
+        StateNode expectFailure,
+        StateNode intoNode,
+        StateNode fromNode)
+    {
+        selectExpr.AddTransitionTo("EXPECT", expectNode, SuggestionType.Keyword);
+
+        foreach (var starter in ETL_SQL.Core.Quality.ColumnExpectVocabulary.RuleStarters)
+        {
+            expectNode.AddTransitionTo(starter, expectRule, SuggestionType.Keyword);
+        }
+
+        // The wildcard both accepts a rule body the starters above do not spell out and marks this
+        // an expression position, which is what keeps functions and operator keywords available
+        // inside EXPR predicates and BETWEEN bounds.
+        expectNode.AddWildcardTransition(expectRule, "<expression>");
+        expectRule.AddTransition(new StateTransition(
+            t => !t.Value.Equals("ON", StringComparison.OrdinalIgnoreCase) &&
+                 !t.Value.Equals("EXPECT", StringComparison.OrdinalIgnoreCase) &&
+                 !t.Value.Equals("INTO", StringComparison.OrdinalIgnoreCase) &&
+                 !t.Value.Equals("FROM", StringComparison.OrdinalIgnoreCase) &&
+                 t.Type != TokenType.COMMA && t.Type != TokenType.SEMICOLON,
+            expectRule,
+            "<expression_token>"
+        ));
+
+        expectRule.AddTransitionTo("ON", expectOn, SuggestionType.Keyword);
+        expectOn.AddTransitionTo("FAILURE", expectFailure, SuggestionType.Keyword);
+        foreach (var action in ETL_SQL.Core.Quality.ColumnExpectVocabulary.ColumnActions)
+        {
+            expectFailure.AddTransitionTo(action, selectExpr, SuggestionType.Keyword);
+        }
+
+        // Ways out of a clause: another clause on the same column, the next column, or the body.
+        expectRule.AddTransitionTo("EXPECT", expectNode, SuggestionType.Keyword);
+        expectRule.AddTokenTransition(TokenType.COMMA, selectExpr, ",");
+        expectRule.AddTransitionTo("INTO", intoNode, SuggestionType.Keyword);
+        expectRule.AddTransitionTo("FROM", fromNode, SuggestionType.Keyword);
     }
 
     private static void ConfigureControlFlow(GrammarStateTree tree)

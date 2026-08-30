@@ -302,7 +302,7 @@ public class LanguageService : ILanguageService
         {
             // Only inside a select list: after the query body ON FAILURE is the routing clause,
             // which takes a target as well and is completed by the statement-level path.
-            foreach (var value in new[] { "THROW", "WARN", "QUARANTINE" })
+            foreach (var value in ColumnExpectVocabulary.ColumnActions)
                 Add(results, value, action.Groups["partial"].Value);
             return results;
         }
@@ -311,13 +311,7 @@ public class LanguageService : ILanguageService
             scriptBefore, @"\bEXPECT\s+(?<partial>[\w>=<]*)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         if (!expect.Success) return results;
 
-        foreach (var value in new[]
-                 {
-                     "NOT NULL", "NOT BLANK", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ",
-                     "UNIQUE_LAST BY ", "MATCHES ", "NOT MATCHES ", "IN (", "NOT IN (",
-                     "EXISTS IN ", "EXISTS WITH (", "LENGTH BETWEEN ", "LENGTH >= ", "LENGTH <= ",
-                     "CASTABLE AS ", "BETWEEN ", "EXPR ", ">= ", "<= ", "> ", "< ", "= "
-                 })
+        foreach (var value in ColumnExpectVocabulary.RuleStarters)
             Add(results, value, expect.Groups["partial"].Value);
 
         return results;
