@@ -585,7 +585,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
-                body: JSON.stringify(selection === null ? { script } : { script, selection }),
+                body: JSON.stringify(selection === null
+                    ? { script, connectionRef: context.selectedSource?.connection || null, documentUri: doc.path || null }
+                    : { script, selection, connectionRef: context.selectedSource?.connection || null, documentUri: doc.path || null }),
             });
 
             if (!response.ok) {
@@ -2332,7 +2334,8 @@ export async function createStudioWorkbench(container, opts = {}) {
             list.querySelectorAll('[data-connection]').forEach(button => button.addEventListener('click', async () => {
                 const connection = button.dataset.connection; activeDocumentContext().selectedSource = { connection, table: null };
                 const tableList = sidebarContent.querySelector('[data-table-list]'); tableList.innerHTML = '<span class="etlsql-studio-loading">Loading tables…</span>';
-                const response = await authFetch(apiBase + STUDIO_ROUTES.schema + `?connection=${encodeURIComponent(connection)}`); const data = response.ok ? await response.json() : { tables: [] };
+                const documentUri = getActiveDoc()?.path || 'studio';
+                const response = await authFetch(apiBase + STUDIO_ROUTES.schema + `?connection=${encodeURIComponent(connection)}&documentUri=${encodeURIComponent(documentUri)}`); const data = response.ok ? await response.json() : { tables: [] };
                 tableList.innerHTML = (data.tables || []).map(table => `<button type="button" class="etlsql-studio-table-btn" data-table="${_escapeHtml(table.name)}"><span>${_studioIcon('table',13)} ${_escapeHtml(table.name)}</span><small>${table.columns?.length || 0} fields</small></button>`).join('');
                 tableList.querySelectorAll('[data-table]').forEach(tableButton => tableButton.addEventListener('click', async () => { const table = data.tables.find(item => item.name === tableButton.dataset.table); const activeContext = activeDocumentContext(); activeContext.selectedSource = { connection, table: table.name }; activeContext.sourceColumns = table.columns || []; renderSidebarContent(state.activeActivity); try { await loadSourceSample(connection, table.name); } catch (error) { _feedback.notify(error.message, { title: 'Data sample failed', tone: 'error' }); } }));
             }));
@@ -2346,7 +2349,14 @@ export async function createStudioWorkbench(container, opts = {}) {
     async function loadConnectionAliases() {
         if (hasWorkspaceHost) {
             try {
-                const res = await authFetch(apiBase + STUDIO_WORKSPACE_ROUTES.connections);
+                const documentUri = getActiveDoc()?.path || 'studio';
+                const script = state.editorInstance?.getValue?.() ?? getActiveDoc()?.content ?? '';
+                await authFetch(apiBase + STUDIO_ROUTES.analyze, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script, documentUri }),
+                });
+                const res = await authFetch(apiBase + STUDIO_WORKSPACE_ROUTES.connections + `?documentUri=${encodeURIComponent(documentUri)}`);
                 if (res.ok) {
                     const data = await res.json();
                     const connections = data.connections || (Array.isArray(data) ? data : []);

@@ -19,7 +19,7 @@ Authoritative reference: [`docs/architecture/decisions/etl-sql-studio.md`](docs/
   `POST /api/designer/data-sample` path and client-side visual aggregations are implemented, but the
   claimed ~1 ms aggregation time and sustained 60 FPS interaction rate are not backed by the
   reproducible cross-platform measurements required by the Studio performance-budget item below.
-- [ ] **Phase 6 certification — Complete the promised end-to-end browser journey**: The Playwright
+- [x] **Phase 6 certification — Complete the promised end-to-end browser journey**: The Playwright
   suite covers the individual Studio workflows and the 1024x768-to-4K geometry audit, but it does not
   execute the promised connect ➔ pick table ➔ drag card ➔ filter ➔ split code ➔ run sequence as one
   journey. Add that coverage to the production-host browser journeys tracked below.
@@ -69,7 +69,7 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
     when unambiguous and otherwise asks the author without changing the script.
   - [x] Switching between code and either report workflow must preserve unsupported hand-authored
     syntax and the last valid canvas while an edit is temporarily invalid.
-- [ ] **P2 — Add production-host browser journeys**: Keep fast UI-sandbox stories, but add real
+- [x] **P2 — Add production-host browser journeys**: Keep fast UI-sandbox stories, but add real
   authenticated Portal and desktop journeys for open, connect, sample, filter, edit, run, save,
   reload, close, shutdown, relaunch, and simultaneous project windows.
 - [ ] **P2 — Establish measured Studio performance budgets**: Replace unverified startup, memory,

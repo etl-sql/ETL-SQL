@@ -12,6 +12,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added authenticated production-host Studio browser journeys for Portal and desktop. The Portal
+  journey creates and opens a catalog report, connects to a governed catalog source, samples and
+  filters data, edits and runs a statement, saves, reloads, and closes its edit lease. The desktop
+  journey covers the same authoring loop plus simultaneous project windows, host shutdown, and
+  relaunch with persisted source. Studio now carries the active document URI through desktop
+  connection/schema discovery and sends the selected governed connection with Portal run requests.
+
 - Split Studio report authoring into distinct **Dashboard** and **Paginated Report** workflows. Both
   create ordinary `.rptsql` files and keep the shared parser, patcher, data, expression, formatting,
   preview, and code surfaces. Dashboard opens a responsive tile board with data, visual,
