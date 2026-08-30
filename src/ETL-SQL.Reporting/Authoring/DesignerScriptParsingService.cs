@@ -32,6 +32,16 @@ public sealed class DesignerScriptParsingService
         }
     }
 
+    /// <summary>
+    /// Reads design state from an AST the caller has already parsed. Hosts that need the diagnostics or
+    /// enforce their own statement limits parse once and call this, rather than parsing a second time.
+    /// </summary>
+    public DesignerAuthoringState Parse(Script ast, string? script)
+    {
+        ArgumentNullException.ThrowIfNull(ast);
+        return ScriptToState(ast, script);
+    }
+
     public static DesignerAuthoringState EmptyState() =>
         new([new DesignerAuthoringPage("p1", "Page 1", "Dashboard", [])], []);
 
@@ -407,18 +417,10 @@ public sealed class DesignerScriptParsingService
         return (startCol, startRow, colSpan, rowSpan);
     }
 
-    private static string NormalizeDatasetName(string name)
-    {
-        var trimmed = (name ?? "").Trim();
-        if (trimmed.StartsWith('&') || trimmed.StartsWith('#'))
-            trimmed = trimmed[1..];
-        return "&" + SanitizeName(trimmed);
-    }
-
-    private static string SanitizeName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return "visual1";
-        var clean = new string(name.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
-        return char.IsDigit(clean[0]) ? "v_" + clean : clean;
-    }
+    // Naming belongs to the side that writes names into the script. This used to be a third private
+    // copy of the rule, and it disagreed with generation on two cases: it kept Unicode letters, and it
+    // prefixed only a leading digit rather than anything that is not a letter. A dataset read back
+    // under a name generation would never write stops matching the visual SOURCE that refers to it.
+    private static string NormalizeDatasetName(string name) =>
+        DesignerScriptGenerationService.NormalizeDatasetName(name);
 }

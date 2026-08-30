@@ -200,12 +200,23 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   bare top-level select-item position. Found while repairing round-trip evidence; the fuzz generator's
   script was silently invalid because of it and now uses `CONCAT`. Fix the expression parser, then
   restore the `||` form in `ReportDesignerLosslessFuzzTests.GenerateRandomReportScript`.
-- [ ] **P2 — Collapse the duplicated designer parsing service**: `ETL-SQL.Portal`'s
-  `DesignerAnalysisService` carries its own ~300-line copy of the host-neutral
-  `Reporting.Authoring.DesignerScriptParsingService`, including `ParseStructure`, `FindSlotBounds`, and
-  the grid constants. A one-line fix to the shared copy did not reach the Portal at all, which is
-  exactly the failure mode a duplicate invites. Fold the Portal onto the shared service. Belongs with
-  the module-split item below.
+- [x] **P2 — Collapse the duplicated designer parsing service**: `ETL-SQL.Portal`'s
+  `DesignerAnalysisService` is now a thin host adapter (514 → 135 lines) over the host-neutral
+  `Reporting.Authoring.DesignerScriptParsingService`, keeping only what is genuinely the Portal's: the
+  AST statement ceiling, the diagnostic contract, and the DTO shape the browser consumes. The shared
+  service gained a `Parse(Script, string?)` overload so the Portal parses once rather than twice, and
+  `DesignerAuthoringStateAdapter` gained the return leg (`ToStateDto`) to match the existing
+  `ToAuthoringState`. `DesignerParsingParityTests` pins the behaviours that actually differed rather
+  than the happy path. The duplicates were not equivalent, and both differences were defects:
+  - **A third, disagreeing copy of the naming rule.** The parser's `SanitizeName` kept Unicode letters
+    and prefixed only a leading digit, while generation — the side that actually writes names into the
+    script — replaces every non-ASCII character and prefixes anything not starting with a letter. A
+    dataset like `&_private` was therefore read back under a name generation would never write, so a
+    visual's `SOURCE` stopped matching the dataset it referred to. Parsing now delegates to generation.
+    (The byte-preservation lane confirms the patcher still leaves the author's spelling alone.)
+  - **Disagreeing empty states.** The Portal returned zero pages where the shared service returns one
+    blank page — and `studio.js` was quietly synthesising that page itself when the server sent none.
+    All three now agree, so the client's workaround is defensive rather than load-bearing.
 - [ ] **P1 — Add distinct Dashboard and Paginated Report creation workflows**: Studio Home must show
   separate **New Dashboard** and **New Paginated Report** actions. Both create standard `.rptsql`
   documents and reuse shared connection, dataset, expression, formatting, preview, parser, and

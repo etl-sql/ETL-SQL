@@ -7,6 +7,12 @@ CREATE DATASET &unused_reference AS (
   SELECT category, margin FROM pg.products
 );
 
+-- A name that does not start with a letter. Generation would write this as &v___private, so the
+-- round trip must recognise the two as the same dataset and leave the author's spelling alone.
+CREATE DATASET &_private AS (
+  SELECT sku, cost FROM pg.inventory
+);
+
 CREATE VISUAL v_sales AS TABLE (
     TITLE = 'Sales',
     SOURCE = &sales
