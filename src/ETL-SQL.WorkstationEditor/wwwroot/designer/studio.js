@@ -1297,13 +1297,27 @@ export async function createStudioWorkbench(container, opts = {}) {
             `;
 
             tab.addEventListener('click', (e) => {
+                if (e.target.closest('.etlsql-tab-rename-input')) {
+                    e.stopPropagation();
+                    return;
+                }
                 if (e.target.closest('.etlsql-tab-close')) {
                     e.stopPropagation();
                     closeDoc(doc.id);
-                } else {
+                } else if (doc.id !== state.activeDocId) {
                     switchDoc(doc.id);
                 }
             });
+
+            const title = tab.querySelector('.etlsql-tab-title');
+            if (opts.onRenameDocument && title) {
+                title.title = `Double-click to rename ${doc.path}`;
+                title.addEventListener('dblclick', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    beginTabRename(tab, doc);
+                });
+            }
 
             tabsContainer.appendChild(tab);
         });
@@ -1315,6 +1329,64 @@ export async function createStudioWorkbench(container, opts = {}) {
             }
             updateTabOverflowState();
         });
+    }
+
+    function beginTabRename(tab, doc) {
+        if (!opts.onRenameDocument || tab.querySelector('.etlsql-tab-rename-input')) return;
+
+        const title = tab.querySelector('.etlsql-tab-title');
+        if (!title) return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'etlsql-tab-rename-input';
+        input.value = doc.name;
+        input.setAttribute('aria-label', `Rename ${doc.name}`);
+        input.spellcheck = false;
+        title.replaceWith(input);
+
+        let settled = false;
+        const finish = async (commit) => {
+            if (settled) return;
+            settled = true;
+            const requestedName = input.value.trim();
+            if (!commit || !requestedName || requestedName === doc.name) {
+                renderTabs();
+                return;
+            }
+
+            input.disabled = true;
+            const oldPath = doc.path;
+            try {
+                const renamed = await opts.onRenameDocument(doc, requestedName);
+                if (!renamed?.path) throw new Error('The host did not return the renamed file path.');
+                doc.path = renamed.path;
+                doc.name = renamed.name || renamed.path.split('/').pop().split('\\').pop();
+                const workspaceFile = state.workspaceFiles.find(file => file.path === oldPath);
+                if (workspaceFile) workspaceFile.path = doc.path;
+                renderTabs();
+                renderSidebarContent(state.activeActivity);
+                _feedback.notify(`Renamed ${oldPath} to ${doc.path}`, { title: 'File Renamed', tone: 'success' });
+            } catch (error) {
+                renderTabs();
+                _feedback.notify(error?.message || 'The file could not be renamed.', { title: 'Rename Failed', tone: 'error' });
+            }
+        };
+
+        input.addEventListener('click', event => event.stopPropagation());
+        input.addEventListener('dblclick', event => event.stopPropagation());
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                void finish(true);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                void finish(false);
+            }
+        });
+        input.addEventListener('blur', () => void finish(true));
+        input.focus();
+        const extensionIndex = input.value.lastIndexOf('.');
+        input.setSelectionRange(0, extensionIndex > 0 ? extensionIndex : input.value.length);
     }
 
     function updateTabOverflowState() {

@@ -72,6 +72,15 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
             await firstPage.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()"),
             StringComparison.Ordinal);
 
+        await firstPage.Locator(".etlsql-studio-tab.active .etlsql-tab-title").DblClickAsync();
+        var renameInput = firstPage.Locator(".etlsql-tab-rename-input");
+        await renameInput.FillAsync("renamed-users");
+        await renameInput.PressAsync("Enter");
+        await firstPage.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].path === 'renamed-users.rptsql'");
+        var renamedFile = Path.Combine(firstWorkspace.Root, "renamed-users.rptsql");
+        Assert.False(File.Exists(firstFile));
+        Assert.True(File.Exists(renamedFile));
+
         await using var secondHost = WorkstationEditorApp.Create([], Options(secondWorkspace.Root, secondFile, "second-token"));
         await secondHost.StartAsync();
         await using var secondWindow = await fixture.NewSessionAsync();
@@ -95,7 +104,7 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         await firstStopping.WaitAsync(TimeSpan.FromSeconds(10));
         await firstHost.StopAsync();
 
-        await using var relaunchedHost = WorkstationEditorApp.Create([], Options(firstWorkspace.Root, firstFile, "relaunch-token"));
+        await using var relaunchedHost = WorkstationEditorApp.Create([], Options(firstWorkspace.Root, renamedFile, "relaunch-token"));
         await relaunchedHost.StartAsync();
         await using var relaunchedWindow = await fixture.NewSessionAsync();
         await relaunchedWindow.Page.GotoAsync(StudioUrl(relaunchedHost, "relaunch-token"));

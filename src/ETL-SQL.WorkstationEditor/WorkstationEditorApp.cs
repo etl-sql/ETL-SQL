@@ -380,6 +380,35 @@ public static class WorkstationEditorApp
             }
         });
 
+        app.MapPost("/api/files/rename", (RenameFileRequest request, WorkstationWorkspace workspace) =>
+        {
+            try
+            {
+                var renamed = workspace.RenameFile(request.Path ?? string.Empty, request.Name ?? string.Empty);
+                return Results.Json(new
+                {
+                    path = renamed.Path,
+                    name = Path.GetFileName(renamed.Path)
+                }, JsonOptions);
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (WorkspaceRenameConflictException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         app.MapPost("/api/analyze", async (AnalyzeRequest request, WorkstationAnalysisService analysis) =>
             Results.Json(await analysis.AnalyzeAsync(request), JsonOptions));
 
@@ -750,6 +779,7 @@ public static class WorkstationEditorApp
 }
 
 public sealed record SaveFileRequest(string? Path, string? Content, string? BaseRevision = null);
+public sealed record RenameFileRequest(string? Path, string? Name);
 public sealed record ParseConnectionStringRequest(string? ConnectionString, string? HintProvider);
 public sealed record TestConnectionRequest(string? Alias, string? ConnectorType, string? Target, Dictionary<string, string>? Options, int ProbeTimeoutSeconds = 5);
 public sealed record GenerateDesignerAuthoringRequest(ETL_SQL.Reporting.Authoring.DesignerAuthoringState DesignState, string? Script = null);

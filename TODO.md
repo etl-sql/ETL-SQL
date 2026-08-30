@@ -91,7 +91,12 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   dependency edges form a join and must not silently imply parallel execution. Other boxes include FILE operations, loops,
   validation, notifications, and control flow. Verify every emitted statement form against the canonical parser and focused
   statement reference before exposing it in the palette.
-- [ ] **P4 - Double-clicking on the name in the top tab should allow you to rename the file.**
+  - [x] **P4 - Double-clicking on the name in the top tab should allow you to rename the file.**
+    Desktop Studio tabs now open an accessible inline filename editor on double-click. Enter or blur
+    renames the workspace file through the authenticated host API, Escape cancels, omitted extensions
+    are preserved, and path traversal, read-only workspaces, and destination collisions are rejected.
+    The open document and Explorer path update in place, with production-browser coverage proving the
+    renamed file survives reload and host relaunch.
 - [ ] **P4 — Pipeline DAG Conditional Precedence & Container Scopes (SSIS Parity)**:
   - Support conditional connector edges on the DAG: `On Success` (green), `On Failure` (red), `On Completion` (blue), and custom expressions (`@Rows > 0`), lowering to `TRY...CATCH` and `IF/ELSE` branches in the script.
   - Add draggable container bounding boxes for `LOOP FOREACH (@item IN c_source)` and `TRANSACTION BEGIN ... COMMIT` where child tasks live inside the container box.

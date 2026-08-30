@@ -4024,6 +4024,19 @@ body.vscode-dark .etlsql-cw-missing-hint {
     min-width: 0;
 }
 
+.etlsql-tab-rename-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 110px;
+    padding: 1px 4px;
+    border: 1px solid var(--portal-accent, #388bfd);
+    border-radius: 3px;
+    outline: none;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font: inherit;
+}
+
 .etlsql-tab-close,
 .etlsql-studio-tab-close {
     border: none;

@@ -162,6 +162,18 @@ internal static class StudioShell
           }
           const saved = await res.json();
           return { sourceRevision: saved.sourceRevision, canSave: true, readOnlyReason: null, externalChange: false };
+        },
+        onRenameDocument: readOnly ? null : async (document, name) => {
+          const res = await authFetch('/api/files/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: document.path, name })
+          });
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.error || 'The file could not be renamed.');
+          }
+          return res.json();
         }
       });
       await sendHeartbeat();

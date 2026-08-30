@@ -1017,6 +1017,33 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_TabName_DoubleClickRenamesAndEscapeCancels()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var activeTitle = page.Locator(".etlsql-studio-tab.active .etlsql-tab-title");
+        await activeTitle.DispatchEventAsync("dblclick");
+        var input = page.Locator(".etlsql-tab-rename-input");
+        await input.FillAsync("discarded-name");
+        await input.PressAsync("Escape");
+        Assert.Contains("sales_overview.rptsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
+
+        await page.Locator(".etlsql-studio-tab.active .etlsql-tab-title").DispatchEventAsync("dblclick");
+        input = page.Locator(".etlsql-tab-rename-input");
+        await input.FillAsync("quarterly_sales");
+        await input.PressAsync("Enter");
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.documents[0].name === 'quarterly_sales.rptsql'");
+        Assert.Contains("quarterly_sales.rptsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_Mounts_SwitchesProjections_AndScansSecrets()
     {
         await using var session = await fixture.NewSessionAsync();

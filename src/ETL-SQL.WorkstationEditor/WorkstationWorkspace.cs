@@ -85,6 +85,39 @@ public sealed class WorkstationWorkspace
         return ComputeRevision(content);
     }
 
+    public WorkspaceFileDto RenameFile(string relativePath, string newName)
+    {
+        if (ReadOnly)
+            throw new InvalidOperationException("Workspace is read-only.");
+
+        var sourcePath = ResolveEditablePath(relativePath);
+        if (!File.Exists(sourcePath))
+            throw new FileNotFoundException("Script file was not found.", relativePath);
+
+        var trimmedName = newName?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedName))
+            throw new ArgumentException("A file name is required.", nameof(newName));
+        if (!string.Equals(Path.GetFileName(trimmedName), trimmedName, StringComparison.Ordinal) ||
+            trimmedName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException("Enter a file name without a folder path.", nameof(newName));
+        }
+
+        if (string.IsNullOrEmpty(Path.GetExtension(trimmedName)))
+            trimmedName += Path.GetExtension(sourcePath);
+
+        var sourceDirectory = Path.GetDirectoryName(relativePath.Replace('/', Path.DirectorySeparatorChar)) ?? string.Empty;
+        var targetRelativePath = Path.Combine(sourceDirectory, trimmedName);
+        var targetPath = ResolveEditablePath(targetRelativePath);
+        if (string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase))
+            return new WorkspaceFileDto(ToRelativePath(sourcePath), new FileInfo(sourcePath).Length);
+        if (File.Exists(targetPath))
+            throw new WorkspaceRenameConflictException($"A file named '{trimmedName}' already exists.");
+
+        File.Move(sourcePath, targetPath);
+        return new WorkspaceFileDto(ToRelativePath(targetPath), new FileInfo(targetPath).Length);
+    }
+
     public string? InitialRelativeFile(string? initialFile) =>
         string.IsNullOrWhiteSpace(initialFile) ? null : ToRelativePath(initialFile);
 
@@ -127,3 +160,4 @@ public sealed class WorkstationWorkspace
 public sealed record WorkspaceFileDto(string Path, long Size);
 public sealed record WorkspaceFileContent(string Path, string Content, string SourceRevision);
 public sealed class WorkspaceSaveConflictException(string message) : Exception(message);
+public sealed class WorkspaceRenameConflictException(string message) : Exception(message);

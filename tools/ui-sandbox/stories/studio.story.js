@@ -147,6 +147,13 @@ export default {
       onSave: async (content, path) => {
         console.log(`[Studio Save] Saved ${path} (${content.length} chars)`);
       },
+      onRenameDocument: async (document, name) => {
+        const slash = Math.max(document.path.lastIndexOf('/'), document.path.lastIndexOf('\\'));
+        const directory = slash >= 0 ? document.path.slice(0, slash + 1) : '';
+        const extension = name.includes('.') ? '' : document.name.slice(document.name.lastIndexOf('.'));
+        const path = `${directory}${name}${extension}`;
+        return { path, name: path.slice(directory.length) };
+      },
     });
 
     window.__STUDIO_INSTANCE__ = workbench;

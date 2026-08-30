@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added inline file rename to desktop Studio tabs. Double-clicking a tab name now opens a keyboard-
+  accessible editor that renames the underlying workspace file, preserves its extension when omitted,
+  updates the open document and Explorer paths, and rejects read-only, unsafe, or colliding targets.
+
 - Added authenticated production-host Studio browser journeys for Portal and desktop. The Portal
   journey creates and opens a catalog report, connects to a governed catalog source, samples and
   filters data, edits and runs a statement, saves, reloads, and closes its edit lease. The desktop

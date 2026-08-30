@@ -77,6 +77,33 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task Workspace_RenameFile_PreservesFolderAndExtension()
+    {
+        using var temp = new TempWorkspace();
+        var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+        await workspace.WriteTextAsync("nested/pipeline.etlsql", "SELECT 1;", CancellationToken.None);
+
+        var renamed = workspace.RenameFile("nested/pipeline.etlsql", "daily_load");
+
+        Assert.Equal("nested/daily_load.etlsql", renamed.Path);
+        Assert.False(File.Exists(Path.Combine(temp.Root, "nested", "pipeline.etlsql")));
+        Assert.Equal("SELECT 1;", await workspace.ReadTextAsync(renamed.Path, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Workspace_RenameFile_RejectsFolderPathsAndCollisions()
+    {
+        using var temp = new TempWorkspace();
+        var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+        await workspace.WriteTextAsync("pipeline.etlsql", "SELECT 1;", CancellationToken.None);
+        await workspace.WriteTextAsync("existing.etlsql", "SELECT 2;", CancellationToken.None);
+
+        Assert.Throws<ArgumentException>(() => workspace.RenameFile("pipeline.etlsql", "nested/moved.etlsql"));
+        Assert.Throws<WorkspaceRenameConflictException>(() => workspace.RenameFile("pipeline.etlsql", "existing.etlsql"));
+        Assert.Equal("SELECT 1;", await workspace.ReadTextAsync("pipeline.etlsql", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Workspace_SaveRejectsAnExternalRevisionChange()
     {
         using var temp = new TempWorkspace();
