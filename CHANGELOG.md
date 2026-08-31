@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a reproducible Studio performance-budget gate for full workbench startup, post-GC browser
+  heap, CodeMirror keystroke latency, 250-row visual aggregation, and canvas redraw/layout. The
+  checked-in Windows, Linux, and macOS ceilings run in a dedicated CI matrix and publish JSON
+  evidence, replacing the earlier unverified startup, memory, keystroke, and sustained-frame claims.
+
 - Split the canonical Studio browser implementation into responsibility-owned modules for host
   contracts, document state, data sampling, Report-SQL mutations, save security, and lease
   lifecycle. `studio.js` now composes those services with the workbench UI, and Portal-only dataset

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "fixture": "ui-sandbox/studio default: 3 documents, 2 dashboard visuals, 250-row aggregation sample",
+  "profiles": {
+    "windows": {
+      "startupMs": 5000,
+      "jsHeapMiB": 64,
+      "keystrokeP95Ms": 50,
+      "aggregationP95Ms": 16.7,
+      "canvasRedrawP95Ms": 16.7
+    },
+    "linux": {
+      "startupMs": 6000,
+      "jsHeapMiB": 64,
+      "keystrokeP95Ms": 50,
+      "aggregationP95Ms": 16.7,
+      "canvasRedrawP95Ms": 16.7
+    },
+    "macos": {
+      "startupMs": 6000,
+      "jsHeapMiB": 72,
+      "keystrokeP95Ms": 50,
+      "aggregationP95Ms": 16.7,
+      "canvasRedrawP95Ms": 16.7
+    }
+  }
+}

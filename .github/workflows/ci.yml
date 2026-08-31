@@ -213,6 +213,57 @@ jobs:
         shell: pwsh
         run: .\scripts\test-lane.ps1 -Lane browser -Configuration Release -NoRestore -NoBuild
 
+  studio-performance-budgets:
+    name: Studio Performance Budgets (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/ms-playwright
+          key: playwright-chromium-${{ matrix.platform }}-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: playwright-chromium-${{ matrix.platform }}-
+
+      - name: Build Studio performance gate
+        run: dotnet build tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj --configuration Release
+
+      - name: Measure Studio performance
+        shell: pwsh
+        run: >-
+          ./scripts/Measure-StudioPerformance.ps1
+          -Configuration Release
+          -NoBuild
+          -OutputPath "artifacts/studio-performance/${{ matrix.platform }}.json"
+
+      - name: Upload Studio performance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: studio-performance-${{ matrix.platform }}
+          path: artifacts/studio-performance/${{ matrix.platform }}.json
+          if-no-files-found: error
+
   enterprise-certification:
     name: Enterprise Certification (${{ matrix.platform }})
     if: github.event_name != 'pull_request'

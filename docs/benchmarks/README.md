@@ -10,6 +10,7 @@ This directory contains execution baseline reports and test result datasets for 
 
 | Document | Description |
 | :--- | :--- |
+| [Studio Performance Budgets](studio-performance-budgets.md) | Cross-platform browser fixture, checked-in regression ceilings, and measurement workflow for Studio startup, heap, editing, aggregation, and canvas redraw. |
 | [Reporting Phase 2 Baselines](reporting-phase2-baselines.md) | Initial baseline timings for core reporting components. |
 | [Reporting Phase 4 Native Render Baseline](reporting-phase4-native-render-baseline.md) | Benchmarks for native SVG vector chart generation vs. server-side rendering. |
 | [Reporting Phase 4 Payload Crossover](reporting-phase4-payload-crossover.md) | Memory and network payload benchmarks across dataset size boundaries. |

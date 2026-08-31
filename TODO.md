@@ -72,9 +72,13 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [x] **P2 — Add production-host browser journeys**: Keep fast UI-sandbox stories, but add real
   authenticated Portal and desktop journeys for open, connect, sample, filter, edit, run, save,
   reload, close, shutdown, relaunch, and simultaneous project windows.
-- [ ] **P2 — Establish measured Studio performance budgets**: Replace unverified startup, memory,
-  keystroke, aggregation, and 60 FPS claims with reproducible cross-platform measurements and
-  checked-in thresholds for Windows, Linux, and macOS.
+- [ ] **P2 — Establish measured Studio performance budgets**: The canonical browser fixture now
+  measures full workbench startup, post-GC JavaScript heap, CodeMirror input-to-frame p95, 250-row
+  visual aggregation/rendering p95, and full-canvas redraw/layout p95 against checked-in Windows,
+  Linux, and macOS ceilings. The unverified architecture claims have been removed, the initial
+  Windows baseline is recorded, and CI publishes a JSON artifact from each OS. Close this item after
+  the first green Linux and macOS artifacts are reviewed; thresholds without those runs are not
+  cross-platform evidence.
 - [x] **P2 — Split the canonical Studio module by responsibility**: `studio.js` is now the workbench
   rendering and composition layer. Dedicated canonical modules own route/template contracts,
   document/session state, host capability adaptation, snapshot filtering and sampling, serialized

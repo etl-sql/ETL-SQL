@@ -318,17 +318,17 @@ editor, and the UI does not claim that nodes can be added, connected, or reorder
 
 ---
 
-## 8. Performance Architecture: Web vs. Heavy Desktop Benchmark
+## 8. Measured Performance Contract
 
-ETL-SQL Studio avoids the memory bloat and latency common to Electron-based desktop wrappers by leveraging native web standards and lightweight server processes:
+Studio performance is governed by the reproducible Chromium fixture and OS-specific ceilings in
+[`docs/benchmarks/studio-performance-budgets.md`](../../benchmarks/studio-performance-budgets.md).
+The gate measures full workbench mount, post-GC JavaScript heap, real CodeMirror input-to-frame p95,
+250-row visual aggregation/rendering, and full-canvas redraw/layout p95 on Windows, Linux, and macOS.
 
-| Performance Metric | Traditional Electron / Heavy UI | ETL-SQL Studio (Vanilla JS + CM6 + Kestrel) |
-| :--- | :--- | :--- |
-| **Process Startup** | 2.5 – 5.0 s (Chromium boots whole process tree) | **< 80 ms** (ASP.NET Core Minimal API loopback) |
-| **Working Set RAM** | 350 MB – 800 MB | **~35 MB** (Runs in existing browser or native webview) |
-| **Keystroke Input Latency** | 20 – 50 ms (Virtual DOM reconciler) | **< 4 ms** (CodeMirror 6 chunked virtual line renderer) |
-| **Visual Redraw Rate** | 100 – 300 ms (IPC serialization lag) | **1 ms @ 60 FPS** (In-memory `__ETLSNAP__` JS evaluation) |
-| **Framework Overhead** | 2.5 MB React/Angular bundle + runtime | **Zero framework bloat** (Native ES Modules & CSS Grid) |
+The former Kestrel-only startup estimate, process-memory estimate, sub-4 ms keystroke claim, and
+unqualified sustained-60-FPS claim were not comparable measurements and are no longer product
+claims. Canvas work instead has a checked 16.7 ms p95 budget: that proves Studio's redraw work fits
+inside one 60 Hz frame on the fixture without pretending a headless runner controls display cadence.
 
 ---
 
@@ -386,7 +386,7 @@ ETL-SQL Studio leverages autonomous agent testing to continuously evaluate and p
 2. **DOM Geometry & Bounding Box Audits**:
    - Automated checks measure element bounding boxes (`getBoundingClientRect()`) to detect overlapping elements, text clipping, cramped margins, or broken responsive breakpoints across 1024x768 to 4K resolutions.
 3. **Performance Profiling**:
-   - Measures sub-millisecond timings for keystrokes, filter clicks, and canvas redraws to prevent performance regressions.
+   - The Studio performance matrix publishes startup, heap, keystroke, aggregation, and canvas-redraw measurements from the same named fixture on every supported desktop OS.
 
 ---
 
