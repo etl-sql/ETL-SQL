@@ -29,6 +29,14 @@ public sealed class StudioAuthoringContractTests
 
     private static string AuthoringJs() => DesignerAsset("studio-authoring.js");
 
+    /// <summary>Every module bound by the authoring component contract.</summary>
+    public static TheoryData<string> AuthoringModules() => new()
+    {
+        "studio-authoring.js",
+        "studio-query-workbench.js",
+        "studio-authoring-ui.js",
+    };
+
     /// <summary>
     /// Strips comments so a rule documented in prose is not mistaken for a rule being broken in code.
     /// Deliberately simple: the module is authored with no regex or string literal containing the
@@ -40,13 +48,14 @@ public sealed class StudioAuthoringContractTests
         return Regex.Replace(withoutBlocks, @"^\s*//.*$", string.Empty, RegexOptions.Multiline);
     }
 
-    [Fact]
-    public void AuthoringModule_IsHostNeutral()
+    [Theory]
+    [MemberData(nameof(AuthoringModules))]
+    public void EveryAuthoringModule_IsHostNeutral(string module)
     {
-        var code = CodeOnly(AuthoringJs());
+        var code = CodeOnly(DesignerAsset(module));
 
-        // Rule 1. Everything a surface needs arrives through createStudioAuthoringSurfaces. A wizard
-        // that reads localStorage or the global document is making an assumption about one host.
+        // Rule 1. Everything a surface needs arrives through its factory. A component that reads
+        // localStorage or queries the shell is making an assumption about one host.
         Assert.DoesNotContain("localStorage", code, StringComparison.Ordinal);
         Assert.DoesNotContain("sessionStorage", code, StringComparison.Ordinal);
         Assert.DoesNotContain("window.", code, StringComparison.Ordinal);
@@ -57,13 +66,14 @@ public sealed class StudioAuthoringContractTests
         Assert.DoesNotContain("document.getElementById", code, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void AuthoringModule_PerformsNoNetworkIoOfItsOwn()
+    [Theory]
+    [MemberData(nameof(AuthoringModules))]
+    public void EveryAuthoringModule_PerformsNoNetworkIoOfItsOwn(string module)
     {
-        var code = CodeOnly(AuthoringJs());
+        var code = CodeOnly(DesignerAsset(module));
 
         // Rule 2. All I/O goes through the injected `request`. `editorTransport.authFetch` is handed
-        // to createScriptEditor, which owns its own transport; this module never calls it.
+        // to createScriptEditor, which owns its own transport; no authoring module calls it.
         Assert.DoesNotContain("fetch(", code.Replace("editorTransport.authFetch", string.Empty), StringComparison.Ordinal);
         Assert.DoesNotContain("XMLHttpRequest", code, StringComparison.Ordinal);
 
@@ -74,10 +84,9 @@ public sealed class StudioAuthoringContractTests
             .Distinct()
             .ToList();
         Assert.True(literalRoutes.Count == 0,
-            "studio-authoring.js hardcodes API paths instead of using the injected route tables: "
+            $"{module} hardcodes API paths instead of using the injected route tables: "
             + string.Join(", ", literalRoutes));
     }
-
     [Fact]
     public void AuthoringModule_WritesScriptOnlyThroughTheCanonicalMutation()
     {

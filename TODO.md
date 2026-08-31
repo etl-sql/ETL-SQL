@@ -195,11 +195,15 @@ uncached query), the guided report workflow rail, and the report page designer.
 **Stage 1 — Finish the authoring core.** Cheap, and it unblocks the SSRS-style certification
 journey. Two of the four are migrations of code that already works.
 
-- [ ] **W1.1 — Promote the query creator to a shared component**: Extract the embedded script
-  editor, run, and result preview out of the dataset wizard. The pipeline DAG's query task needs
-  exactly this surface and must not grow its own. Scope is settled: the script editor with
-  completions, hover, lint, run, and schema browsing is sufficient — no join inference, no visual
-  query building. Blocks W2.2.
+- [x] **W1.1 — Promote the query creator to a shared component**: `studio-query-workbench.js` is now
+  a standalone authoring component — a real script editor with completions, hover, and diagnostics,
+  a run that carries the document's own `CREATE CONNECTION` so an alias resolves as it will at run
+  time, and the returned rows. It takes its connection, routes, transport, and script accessor as
+  parameters, so the DAG's execution task (W2.2) configures the same surface instead of growing its
+  own. Presentation primitives every surface shares — the SQL preview, the sample grid, inline notes —
+  moved to `studio-authoring-ui.js` so a second implementation cannot drift. The contract tests now
+  run against all three authoring modules, verified by injecting violations into the new one.
+  Scope stayed settled: no join inference, no visual query building.
 - [ ] **W1.2 — Parameters wizard**: Create, edit, reorder, and delete declarations; input, required,
   and sensitive flags; and cascade authoring, which `DesignerScriptPatcher` already supports through
   the `cascade` option that nothing currently writes. Today there is a single "add a parameter"

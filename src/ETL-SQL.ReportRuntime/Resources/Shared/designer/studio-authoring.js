@@ -40,8 +40,9 @@
  * belong to the wizard test lane.
  */
 
-import { createScriptEditor } from './designer.js';
 import { columnName, columnType, snapshotColumns, updateSnapshotPackage as writeSnapshotPackage } from './studio-data.js';
+import { escapeHtml, noteMarkup as guidedNoteMarkup, sampleGridMarkup as sampleRowsMarkup, sqlPreviewMarkup } from './studio-authoring-ui.js';
+import { createQueryWorkbench } from './studio-query-workbench.js';
 import { STUDIO_VISUAL_GROUPS, missingRequiredRoles, renderVisualSample, rolesForVisualType } from './visual-preview.js';
 
 /** Connection aliases the script itself declares. Host-registered aliases deliberately do not count. */
@@ -58,14 +59,6 @@ const STUDIO_PARAMETER_TYPES = ['VARCHAR', 'INT', 'DECIMAL', 'DATE', 'DATETIME',
 
 /** Aggregates a TABLE's GRAND_TOTAL accepts. */
 const STUDIO_TOTAL_AGGREGATES = ['SUM', 'AVG', 'COUNT'];
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
 
 /**
  * Builds the guided authoring surfaces against one Studio workbench.
@@ -154,14 +147,6 @@ export function createStudioAuthoringSurfaces({
         });
     }
 
-    function sqlPreviewMarkup(sql, label = 'Writes this Report-SQL') {
-        return `<div class="etlsql-studio-sql-preview"><span>${escapeHtml(label)}</span><pre>${escapeHtml(sql)}</pre></div>`;
-    }
-
-    function guidedNoteMarkup(text, tone = 'info') {
-        return `<div class="etlsql-studio-guided-note is-${escapeHtml(tone)}">${text}</div>`;
-    }
-
     /**
      * Explains why a step cannot run and offers the control that unblocks it. Returns true when the
      * author took the remedy, so the caller can retry the step.
@@ -228,17 +213,6 @@ export function createStudioAuthoringSurfaces({
             shell.renderSidebar();
         }
         return context.snapshot;
-    }
-
-    function sampleRowsMarkup(snapshot, limit = STUDIO_SAMPLE_PREVIEW_ROWS) {
-        const columns = snapshotColumns(snapshot).map(columnName);
-        if (!columns.length) return guidedNoteMarkup('The sample came back with no columns.', 'warning');
-        const rows = (snapshot.rows || []).slice(0, limit);
-        return `<div class="etlsql-studio-sample-grid"><table>
-            <thead><tr>${columns.map(column => `<th>${escapeHtml(column)}</th>`).join('')}</tr></thead>
-            <tbody>${rows.map(row => `<tr>${columns.map(column => `<td>${escapeHtml(String(row?.[column] ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody>
-            </table></div>
-            <p class="etlsql-studio-guided-hint">${snapshot.rowCount} row${snapshot.rowCount === 1 ? '' : 's'} sampled · ${columns.length} field${columns.length === 1 ? '' : 's'}</p>`;
     }
 
     // --- Step 1: the data wizard ------------------------------------------------------------------
@@ -635,6 +609,11 @@ export function createStudioAuthoringSurfaces({
                 if (wizard.queryWorkbench) return;
                 wizard.queryWorkbench = await createQueryWorkbench(host, {
                     connection: wizard.connection,
+                    routes,
+                    request,
+                    editorTransport,
+                    documentUri: () => getActiveDocument()?.path || 'untitled.rptsql',
+                    scriptText: () => shell.getScriptText(),
                     value: wizard.query || `SELECT *\nFROM ${wizard.connection}.`,
                     onChange: value => {
                         wizard.query = value;
@@ -742,9 +721,6 @@ export function createStudioAuthoringSurfaces({
         shell.renderTabs();
     }
 
-    /** The design-time sample budget both hosts enforce; the grid scrolls rather than truncating. */
-    const STUDIO_SAMPLE_PREVIEW_ROWS = 50;
-
     /** Samples a connection table through the host's design-time preview budget. */
     async function sampleConnectionTable(connection, table) {
         const doc = getActiveDocument();
@@ -766,109 +742,6 @@ export function createStudioAuthoringSurfaces({
         };
     }
 
-    /**
-     * The full script editor, embedded. Authors building a dataset query get the same completions,
-     * hover, diagnostics, and execution they get in the main editor — a bare textarea cannot tell
-     * them a column name is wrong until the dataset is already in the script.
-     *
-     * Returns { getValue, dispose }.
-     */
-    async function createQueryWorkbench(host, { connection, value = '', onChange = null, onSample = null } = {}) {
-        const doc = getActiveDocument();
-        host.innerHTML = `
-            <div class="etlsql-studio-workbench-toolbar">
-                <span>Query · ${escapeHtml(connection || 'no connection')}</span>
-                <button type="button" class="etlsql-studio-btn" data-workbench-run>Run and preview</button>
-            </div>
-            <div class="etlsql-studio-workbench-editor" data-workbench-editor></div>
-            <div class="etlsql-studio-workbench-output" data-workbench-output></div>`;
-
-        const editorHostEl = host.querySelector('[data-workbench-editor]');
-        const output = host.querySelector('[data-workbench-output]');
-        const runButton = host.querySelector('[data-workbench-run]');
-
-        let editor = null;
-        try {
-            editor = await createScriptEditor(editorHostEl, {
-                value,
-                analyzeUrl: editorTransport.url(routes.analyze),
-                completeUrl: editorTransport.url(routes.complete),
-                hoverUrl: editorTransport.url(routes.hover),
-                diagnosticsPanel: false,
-                authFetch: editorTransport.authFetch,
-                // Analysis is scoped to the host document so the connection's schema — and therefore
-                // table and column completion — resolves the same way it does in the main editor.
-                documentUri: () => doc?.path || 'untitled.rptsql',
-                onChange: next => onChange?.(next),
-            });
-        } catch {
-            // Same fallback the main editor uses: a plain textarea still lets the author type a query
-            // when CodeMirror cannot load, rather than leaving the pane empty.
-            const textarea = document.createElement('textarea');
-            textarea.className = 'etlsql-studio-workbench-fallback';
-            textarea.spellcheck = false;
-            textarea.value = value;
-            textarea.addEventListener('input', () => onChange?.(textarea.value));
-            editorHostEl.appendChild(textarea);
-            editor = { getValue: () => textarea.value, dispose: () => {} };
-        }
-
-        const setOutput = markup => { output.innerHTML = markup; };
-
-        runButton.addEventListener('click', async () => {
-            const query = editor.getValue().trim().replace(/;$/, '');
-            if (!query) return setOutput(guidedNoteMarkup('Write a query first.', 'warning'));
-            runButton.disabled = true;
-            setOutput('<div class="etlsql-studio-loading">Running…</div>');
-            try {
-                // The query runs in the report's own context: its CREATE CONNECTION statements come
-                // along, so an alias the script declares resolves exactly as it will at report time.
-                const script = `${connectionPreamble(connection)}${query};`;
-                const sample = firstResultSet(await request(routes.run, {
-                    body: { script, connectionRef: connection || null, documentUri: doc?.path || null },
-                    fallbackError: 'The query could not be run.',
-                }));
-                if (!sample) throw new Error('The query ran but returned no result set.');
-                onSample?.(sample);
-                setOutput(sampleRowsMarkup(sample));
-            } catch (error) {
-                onSample?.(null);
-                setOutput(guidedNoteMarkup(escapeHtml(error.message || 'The query failed.'), 'error'));
-            } finally {
-                runButton.disabled = false;
-            }
-        });
-
-        return {
-            getValue: () => editor.getValue(),
-            dispose: () => { editor?.dispose?.(); host.innerHTML = ''; },
-        };
-    }
-
-    /** The report's own CREATE CONNECTION statements, so an embedded run resolves the same aliases. */
-    function connectionPreamble(connection) {
-        if (!connection) return '';
-        const script = shell.getScriptText();
-        const pattern = new RegExp(
-            `CREATE\\s+(?:OR\\s+REPLACE\\s+)?CONNECTION\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?\\[?${connection}\\]?[\\s\\S]*?;`, 'i');
-        const match = pattern.exec(script);
-        return match ? `${match[0]}\n` : '';
-    }
-
-    /** Both run shapes: a flat { columns, rows } payload, or the first resultset in a trace. */
-    function firstResultSet(result) {
-        if (Array.isArray(result?.rows) && result.rows.length) {
-            return {
-                columns: result.columns || [],
-                rows: result.rows,
-                rowCount: result.rowCount ?? result.rows.length,
-            };
-        }
-        const entry = (result?.trace || []).find(item => item.type === 'resultset' && item.data);
-        if (!entry) return null;
-        const rows = entry.data.rows || [];
-        return { columns: entry.data.columns || [], rows, rowCount: entry.data.rowCount ?? rows.length };
-    }
 
     /** Step 1 for both workflows. The wizard's first pane already covers reuse vs. create. */
     async function runChooseDataStep() {

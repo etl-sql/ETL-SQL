@@ -1,0 +1,147 @@
+/* GENERATED FILE - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-query-workbench.js
+ * Edit the canonical source, then run: node .\scripts\sync-assets.js
+ */
+
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * The embedded query builder: a real script editor, a run, and the rows it returned.
+ *
+ * This is a standalone authoring component, not a part of the dataset wizard, because the same
+ * surface is needed wherever an author writes a query by hand without leaving the thing they are
+ * building — the dataset wizard's "write a query" pane today, and the pipeline DAG's execution task
+ * next. A second copy would drift: one would get completions and the other a textarea.
+ *
+ * It obeys the authoring component contract (see studio-authoring.js): host-neutral, no network of
+ * its own beyond the injected `request`, and it never writes to the document. It returns the query
+ * text; deciding what statement to build from it belongs to the caller.
+ */
+
+import { createScriptEditor } from './designer.js';
+import { escapeHtml, noteMarkup, sampleGridMarkup } from './studio-authoring-ui.js';
+
+/**
+ * Mounts the workbench into `host`.
+ *
+ * @param connection      Alias the query runs against, or null. Used for the run and for the
+ *                        `CREATE CONNECTION` preamble so an alias resolves as it will at run time.
+ * @param value           Starting query text.
+ * @param routes          Route table; never a literal path.
+ * @param request         `(route, { body, fallbackError }) => Promise<json>`, the only network path.
+ * @param editorTransport `{ url(route), authFetch }` handed to the embedded editor, which owns its
+ *                        own transport. This module never calls it.
+ * @param documentUri     `() => string`, so analysis and completion resolve the host document's
+ *                        schema exactly as the main editor does.
+ * @param scriptText      `() => string`, the current buffer, read only to find the connection's
+ *                        declaration. The workbench never writes to it.
+ * @param label           Toolbar caption, so a pipeline task can say what this query is for.
+ * @param runLabel        Run button caption.
+ * @returns `{ getValue, focus, dispose }`
+ */
+export async function createQueryWorkbench(host, {
+    connection = null,
+    value = '',
+    routes,
+    request,
+    editorTransport,
+    documentUri = () => 'untitled.rptsql',
+    scriptText = () => '',
+    label = null,
+    runLabel = 'Run and preview',
+    onChange = null,
+    onSample = null,
+} = {}) {
+    host.innerHTML = `
+        <div class="etlsql-studio-workbench-toolbar">
+            <span>${escapeHtml(label ?? `Query · ${connection || 'no connection'}`)}</span>
+            <button type="button" class="etlsql-studio-btn" data-workbench-run>${escapeHtml(runLabel)}</button>
+        </div>
+        <div class="etlsql-studio-workbench-editor" data-workbench-editor></div>
+        <div class="etlsql-studio-workbench-output" data-workbench-output></div>`;
+
+    const editorHostEl = host.querySelector('[data-workbench-editor]');
+    const output = host.querySelector('[data-workbench-output]');
+    const runButton = host.querySelector('[data-workbench-run]');
+
+    let editor = null;
+    try {
+        editor = await createScriptEditor(editorHostEl, {
+            value,
+            analyzeUrl: editorTransport.url(routes.analyze),
+            completeUrl: editorTransport.url(routes.complete),
+            hoverUrl: editorTransport.url(routes.hover),
+            diagnosticsPanel: false,
+            authFetch: editorTransport.authFetch,
+            documentUri,
+            onChange: next => onChange?.(next),
+        });
+    } catch {
+        // The same fallback the main editor uses: a plain textarea still lets the author type a query
+        // when CodeMirror cannot load, rather than leaving the pane empty.
+        const textarea = document.createElement('textarea');
+        textarea.className = 'etlsql-studio-workbench-fallback';
+        textarea.spellcheck = false;
+        textarea.value = value;
+        textarea.addEventListener('input', () => onChange?.(textarea.value));
+        editorHostEl.appendChild(textarea);
+        editor = { getValue: () => textarea.value, focus: () => textarea.focus(), dispose: () => {} };
+    }
+
+    const setOutput = markup => { output.innerHTML = markup; };
+
+    runButton.addEventListener('click', async () => {
+        const query = editor.getValue().trim().replace(/;$/, '');
+        if (!query) return setOutput(noteMarkup('Write a query first.', 'warning'));
+        runButton.disabled = true;
+        setOutput('<div class="etlsql-studio-loading">Running…</div>');
+        try {
+            // The query runs in the document's own context: its CREATE CONNECTION statements come
+            // along, so an alias the script declares resolves exactly as it will at run time.
+            const script = `${connectionPreamble(connection, scriptText())}${query};`;
+            const sample = firstResultSet(await request(routes.run, {
+                body: { script, connectionRef: connection || null, documentUri: documentUri() || null },
+                fallbackError: 'The query could not be run.',
+            }));
+            if (!sample) throw new Error('The query ran but returned no result set.');
+            onSample?.(sample);
+            setOutput(sampleGridMarkup(sample));
+        } catch (error) {
+            onSample?.(null);
+            setOutput(noteMarkup(escapeHtml(error.message || 'The query failed.'), 'error'));
+        } finally {
+            runButton.disabled = false;
+        }
+    });
+
+    return {
+        getValue: () => editor.getValue(),
+        focus: () => editor.focus?.(),
+        dispose: () => { editor?.dispose?.(); host.innerHTML = ''; },
+    };
+}
+
+/** The document's own CREATE CONNECTION statement, so an embedded run resolves the same alias. */
+export function connectionPreamble(connection, script) {
+    if (!connection) return '';
+    const pattern = new RegExp(
+        `CREATE\\s+(?:OR\\s+REPLACE\\s+)?CONNECTION\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?\\[?${connection}\\]?[\\s\\S]*?;`, 'i');
+    const match = pattern.exec(String(script || ''));
+    return match ? `${match[0]}\n` : '';
+}
+
+/** Both run shapes: a flat `{ columns, rows }` payload, or the first resultset inside a trace. */
+export function firstResultSet(result) {
+    if (Array.isArray(result?.rows) && result.rows.length) {
+        return {
+            columns: result.columns || [],
+            rows: result.rows,
+            rowCount: result.rowCount ?? result.rows.length,
+        };
+    }
+    const entry = (result?.trace || []).find(item => item.type === 'resultset' && item.data);
+    if (!entry) return null;
+    const rows = entry.data.rows || [];
+    return { columns: entry.data.columns || [], rows, rowCount: entry.data.rowCount ?? rows.length };
+}
