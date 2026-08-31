@@ -89,18 +89,7 @@ internal static class StudioShell
         const error = await response.json().catch(() => ({}));
         throw new Error(error.error || 'The Studio host refused the shutdown request.');
       }
-
-      const deadline = Date.now() + 5000;
-      while (Date.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-        try {
-          const health = await authFetch('/api/studio/lifecycle');
-          if (!health.ok) return true;
-        } catch {
-          return true;
-        }
-      }
-      return false;
+      return true;
     }
 
     async function mutateWorkspace(route, body) {

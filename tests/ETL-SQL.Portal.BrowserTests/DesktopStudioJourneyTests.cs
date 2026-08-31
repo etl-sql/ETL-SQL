@@ -142,11 +142,16 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
             await secondPage.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()"),
             StringComparison.Ordinal);
 
-        await firstPage.Locator(".etlsql-tab-close").ClickAsync();
-        await firstPage.WaitForFunctionAsync("() => window.__STUDIO__.state.documents.length === 0");
+        await firstPage.EvaluateAsync(
+            "() => window.__STUDIO__.state.editorInstance.setValue(window.__STUDIO__.state.editorInstance.getValue() + '\\n-- unsaved exit check\\n')");
+        await firstPage.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].isDirty === true");
 
         var firstStopping = ApplicationStoppingAsync(firstHost);
         await firstPage.Locator("[data-action='exit']").ClickAsync();
+        var exitConfirmation = firstPage.Locator(".etlsql-feedback-dialog");
+        await exitConfirmation.WaitForAsync();
+        Assert.Contains("unsaved changes", await exitConfirmation.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        await exitConfirmation.GetByRole(AriaRole.Button, new() { Name = "Exit Without Saving" }).ClickAsync();
         await firstStopping.WaitAsync(TimeSpan.FromSeconds(10));
         await firstHost.StopAsync();
 

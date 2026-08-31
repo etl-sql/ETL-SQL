@@ -12,7 +12,8 @@ UNION ALL SELECT 'Billing Worker', 'Warning', 98.72, '[99.10,98.94,98.72]'
 UNION ALL SELECT 'Primary Database', 'Critical', 96.10, '[98.20,97.05,96.10]';
 
 CREATE VISUAL EnvironmentMetric AS CARD (
-  SOURCE = (SELECT @environment AS Environment)
+  SOURCE = (SELECT @environment AS Environment),
+  MAPPINGS (VALUE = Environment)
 );
 
 CREATE VISUAL EnvironmentBanner AS HTML (

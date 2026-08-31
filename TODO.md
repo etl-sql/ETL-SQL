@@ -301,18 +301,14 @@ the W2.1 spike is *not* a safe substitution; avoiding that rework is why this or
 
 - [x] **TUI filter visuals (SLICER, DATEPICKER, etc.)**  Report Preview exposes every parameter-bound control through `Tab`/`Shift+Tab` and a clickable previous/change/next header navigator. `Enter` or the mouse change button uses the same typed interaction path, page navigation remains separate, and the header has a clickable `Run` button even before the first manifest exists.
 - [x] **ETL-SQL Studio create dataset needed**  Step 1 of the report workflow is now a data wizard covering the three states a report can be in: reuse a dataset this script declares or a registered one the user has permission to (`USE DATASET`), create a cached dataset with a `TTL` saying how long its rows stay valid, or bind a live uncached query read from the connection on every run. Creating or living off a connection requires one the script itself declares — a host-registered alias is refused, because a dataset built on an undeclared alias previews correctly and fails for every other reader — and the connection wizard runs inline when there is none. Table picks show the host's real design-time sample; "write a query" embeds the full script editor with completions, hover, lint, and run. Follow-on wizard work is sequenced under "Authoring Wizard Build Order" above.
-- [ ] **ETL-SQL exit doesn't work very well** It hangs and does actually exit after asking the save confirmation.
-- [ ] **`constrained_html_components.rptsql` fails the sample gate on a Card lint error.**
-  `Test-AllSamples.ps1` reports `Line 14, Col 1: Visual 'EnvironmentMetric' of type Card is missing
-  the required mapping role: 'VALUE'`, and the script exits 1. Reproduced against a clean `HEAD`
-  worktree, so it is not caused by any in-flight work. The linter looks correct and the sample looks
-  wrong: every other CARD in `samples/` (`daily_sales_report.rptsql`, `data_quality_health.rptsql`,
-  `protected_data_audit.rptsql`, `lineage_cookbook_02_report.rptsql`) declares
-  `MAPPINGS (VALUE = <column>)`, and this one declares none — so the fix is likely
-  `MAPPINGS (VALUE = Environment)` on the `SOURCE = (SELECT @environment AS Environment)` card.
-  Confirm that is the intent rather than a missing single-column inference for CARD before editing.
-  Added 2026-08-27 in `a5564d84`; it has been red since, which is the same shape as the earlier
-  silent `MAPPINGS` role defect and worth a quick check for sibling samples that were never green.
+- [x] **ETL-SQL Studio exit no longer hangs after unsaved-change confirmation.** Once the local host
+  accepts `/api/studio/shutdown`, the browser stops polling that same host while it terminates. The
+  desktop Studio browser journey now dirties an open document, confirms `Exit Without Saving`, and
+  verifies that the host enters `ApplicationStopping`.
+- [x] **`constrained_html_components.rptsql` passes the CARD mapping contract.** `EnvironmentMetric`
+  now declares `MAPPINGS (VALUE = Environment)`, matching the required CARD role and every sibling
+  CARD sample. The sample passes `Test-AllSamples.ps1`; the full gate continues past it and reports
+  only the unrelated `Docker_Orchestration.etlsql` SQL Server schema failure.
 
 
 ## Grammar of Graphics (GoG) Performance — Remaining Work
