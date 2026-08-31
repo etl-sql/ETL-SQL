@@ -182,10 +182,15 @@ uncached query), the guided report workflow rail, and the report page designer.
   two module-level constants stayed behind in `studio.js`, so the parameter dialog opened with a
   header and an empty body. Both classes are now also caught statically by
   `StudioAuthoringContractTests`, and each guard was verified to fail when its rule is violated.
-- [ ] **W0.3 — The escape-hatch rule**: Every wizard writes SQL the author may then hand-edit.
-  Decide and apply one rule uniformly: a wizard reads its starting state from the canonical parse,
-  never from what it wrote last time, and never replaces a clause it did not author. The dataset
-  wizard already behaves this way; nothing obliges the others to.
+- [x] **W0.3 — The escape-hatch rule**: Stated as contract rule 5 and now asserted. A wizard reads
+  its starting state from the canonical parse, never from what it wrote last time, and never rewrites
+  a statement it did not author. `DesignerAuthoringEmissionTests` proves a wizard write leaves
+  hand-authored preparation and unmodelled dataset clauses (`COMPRESS`, `ENCRYPT`) untouched, and that
+  round-tripping an unchanged parse is a byte-for-byte no-op — which is what makes it safe for every
+  wizard to send the whole design state back. One limitation is asserted rather than left to be
+  discovered: *rewriting* a dataset drops clauses the authoring model cannot represent. Nothing edits
+  an existing dataset today, but W4.1 must either carry those clauses through the model or refuse the
+  rewrite before dataset editing ships.
 
 **Stage 1 — Finish the authoring core.** Cheap, and it unblocks the SSRS-style certification
 journey. Two of the four are migrations of code that already works.
