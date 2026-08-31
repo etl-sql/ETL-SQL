@@ -4937,6 +4937,308 @@ export function createDesigner(container, opts = {}) {
         return Math.min(100, Math.max(0, Math.round(floatVal)));
     }
 
+    const FORMAT_INSPECTOR_CHARTS = new Set([
+        'BAR', 'HBAR', 'LINE', 'AREA', 'PIE', 'DONUT', 'SCATTER', 'BUBBLE', 'GAUGE',
+        'RADAR', 'HEATMAP', 'FUNNEL', 'WATERFALL', 'TREEMAP', 'BOXPLOT', 'COMBO',
+        'CANDLESTICK', 'GANTT', 'MAP', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX'
+    ]);
+
+    function visualFormatting(v) {
+        v.formatting ||= {};
+        v.formatting.title ||= { text: v.title || '' };
+        v.formatting.xAxis ||= {};
+        v.formatting.yAxis ||= {};
+        v.formatting.palette ||= [];
+        v.formatting.conditionalRules ||= [];
+        v.formatting.fields ||= {};
+        return v.formatting;
+    }
+
+    function splitRuleCondition(condition, fallbackField) {
+        const match = String(condition || '').trim().match(/^(.+?)\s*(<=|>=|<>|!=|=|<|>)\s*(.+)$/);
+        return match
+            ? { field: match[1].trim(), operator: match[2], value: match[3].trim() }
+            : { field: fallbackField || 'value', operator: '<', value: '0' };
+    }
+
+    function renderVisualFormatInspectorHtml(v, columns) {
+        const formatting = v.formatting || {};
+        const title = formatting.title || {};
+        const subtitle = formatting.subtitle || {};
+        const xAxis = formatting.xAxis || {};
+        const yAxis = formatting.yAxis || {};
+        const palette = formatting.palette || [];
+        const rules = formatting.conditionalRules || [];
+        const fields = formatting.fields || {};
+        const isChart = FORMAT_INSPECTOR_CHARTS.has(v.type);
+        const isTable = v.type === 'TABLE';
+        const supportsRules = isTable || v.type === 'CARD' || v.type === 'KPI';
+        const availableFields = [...new Set([
+            ...Object.values(v.mappings || {}).filter(Boolean),
+            ...(columns || [])
+        ])];
+        const palettePreview = palette.length ? palette : ['#2563eb', '#16a34a', '#f59e0b', '#dc2626'];
+        const formatValue = v.options?.FORMAT || '';
+        const fieldOptions = value => availableFields.map(field =>
+            `<option value="${esc(field)}"${field === value ? ' selected' : ''}>${esc(field)}</option>`).join('');
+
+        const tableFields = isTable ? [...new Set([
+            ...Object.keys(v.mappings || {}),
+            ...availableFields
+        ])] : [];
+
+        return `
+            <section class="etlsql-format-inspector" aria-label="Visual formatting">
+                <div class="etlsql-format-profile">
+                    <div><span>Format profile</span><strong>${esc(v.type)} · ${esc(formatValue || 'Auto')}</strong></div>
+                    <div class="etlsql-format-profile-palette" aria-label="${palette.length ? 'Authored palette' : 'Default palette'}">
+                        ${palettePreview.slice(0, 5).map(color => `<i style="--format-color:${esc(toHexColor(color, '#64748b'))}"></i>`).join('')}
+                    </div>
+                </div>
+
+                <details class="etlsql-format-group" open>
+                    <summary>Title & number</summary>
+                    <div class="etlsql-format-group-body">
+                        <label class="etlsql-dsgn-label">Subtitle
+                            <input id="pp-format-subtitle" class="form-control" value="${esc(subtitle.text || '')}" placeholder="Optional context line">
+                        </label>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Title font
+                                <select id="pp-title-font" class="form-control">
+                                    <option value="">Default</option>
+                                    <option value="Segoe UI"${title.font === 'Segoe UI' ? ' selected' : ''}>Segoe UI</option>
+                                    <option value="Inter"${title.font === 'Inter' ? ' selected' : ''}>Inter</option>
+                                    <option value="Georgia"${title.font === 'Georgia' ? ' selected' : ''}>Georgia</option>
+                                    <option value="Cascadia Code"${title.font === 'Cascadia Code' ? ' selected' : ''}>Cascadia Code</option>
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Size
+                                <input id="pp-title-size" class="form-control" value="${esc(title.size || '')}" placeholder="14px">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Weight
+                                <select id="pp-title-weight" class="form-control">
+                                    <option value="">Default</option>
+                                    ${['NORMAL', '500', 'SEMIBOLD', 'BOLD'].map(value => `<option${title.weight === value ? ' selected' : ''}>${value}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Align
+                                <select id="pp-title-align" class="form-control">
+                                    ${['LEFT', 'CENTER', 'RIGHT'].map(value => `<option${(title.align || 'LEFT') === value ? ' selected' : ''}>${value}</option>`).join('')}
+                                </select>
+                            </label>
+                        </div>
+                        <label class="etlsql-dsgn-label">Title color
+                            <div class="etlsql-dsgn-color-picker-row">
+                                <input type="color" id="pp-title-color-picker" value="${toHexColor(title.color, '#e6edf3')}">
+                                <input id="pp-title-color" class="form-control" value="${esc(title.color || '')}" placeholder="#e6edf3">
+                            </div>
+                        </label>
+                        ${!isTable ? `<label class="etlsql-dsgn-label">Number format
+                            <input id="pp-number-format" class="form-control" list="pp-number-format-list" value="${esc(formatValue)}" placeholder="$#,##0.00">
+                            <datalist id="pp-number-format-list"><option value="C2"></option><option value="N0"></option><option value="P1"></option><option value="$#,##0.00"></option></datalist>
+                        </label>` : ''}
+                    </div>
+                </details>
+
+                ${isChart ? `<details class="etlsql-format-group">
+                    <summary>Axes & legend</summary>
+                    <div class="etlsql-format-group-body">
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-legend" ${(v.options?.LEGEND || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show legend</span></label>
+                        <div class="etlsql-format-axis-grid">
+                            <strong>X axis</strong><strong>Y axis</strong>
+                            <input data-axis="x" data-axis-key="LABEL" class="form-control" value="${esc(xAxis.LABEL || xAxis.label || '')}" placeholder="Label">
+                            <input data-axis="y" data-axis-key="LABEL" class="form-control" value="${esc(yAxis.LABEL || yAxis.label || '')}" placeholder="Label">
+                            <input data-axis="x" data-axis-key="MIN" class="form-control" value="${esc(xAxis.MIN || xAxis.min || '')}" placeholder="Min · Auto">
+                            <input data-axis="y" data-axis-key="MIN" class="form-control" value="${esc(yAxis.MIN || yAxis.min || '')}" placeholder="Min · Auto">
+                            <input data-axis="x" data-axis-key="MAX" class="form-control" value="${esc(xAxis.MAX || xAxis.max || '')}" placeholder="Max · Auto">
+                            <input data-axis="y" data-axis-key="MAX" class="form-control" value="${esc(yAxis.MAX || yAxis.max || '')}" placeholder="Max · Auto">
+                            <input data-axis="x" data-axis-key="FORMAT" class="form-control" value="${esc(xAxis.FORMAT || xAxis.format || '')}" placeholder="Format">
+                            <input data-axis="y" data-axis-key="FORMAT" class="form-control" value="${esc(yAxis.FORMAT || yAxis.format || '')}" placeholder="Format">
+                        </div>
+                    </div>
+                </details>` : ''}
+
+                ${isChart ? `<details class="etlsql-format-group">
+                    <summary>Series palette <span>${palette.length || 'Theme'}</span></summary>
+                    <div class="etlsql-format-group-body">
+                        <p class="etlsql-format-hint">Colors are written to the visual STYLE palette in series order.</p>
+                        <div class="etlsql-format-palette-list">
+                            ${palette.map((color, index) => `<div>
+                                <input type="color" data-palette-color="${index}" value="${toHexColor(color, '#2563eb')}">
+                                <input class="form-control" data-palette-text="${index}" value="${esc(color)}" aria-label="Palette color ${index + 1}">
+                                <button type="button" data-palette-remove="${index}" aria-label="Remove palette color">×</button>
+                            </div>`).join('')}
+                        </div>
+                        <button type="button" class="etlsql-format-add" data-palette-add>+ Add series color</button>
+                    </div>
+                </details>` : ''}
+
+                ${isTable ? `<details class="etlsql-format-group">
+                    <summary>Table cells <span>${tableFields.length}</span></summary>
+                    <div class="etlsql-format-group-body etlsql-format-field-list">
+                        ${tableFields.map(field => {
+                            const key = Object.keys(v.mappings || {}).find(role => role.toUpperCase() === field.toUpperCase()) || field;
+                            const value = fields[key] || fields[key.toUpperCase()] || {};
+                            return `<div class="etlsql-format-field" data-format-field="${esc(key)}">
+                                <strong>${esc(field)}</strong>
+                                <input class="form-control" data-field-format value="${esc(value.format || '')}" placeholder="Format · C2">
+                                <label class="etlsql-format-toggle"><input type="checkbox" data-field-data-bar ${value.dataBar ? 'checked' : ''}><span>Data bar</span></label>
+                                <input type="color" data-field-data-bar-color value="${toHexColor(value.dataBarColor, '#4472c4')}" aria-label="Data bar color">
+                            </div>`;
+                        }).join('') || '<p class="etlsql-format-hint">Map or sample a column to format table cells.</p>'}
+                    </div>
+                </details>` : ''}
+
+                ${supportsRules ? `<details class="etlsql-format-group" ${rules.length ? 'open' : ''}>
+                    <summary>${isTable ? 'Conditional formatting' : 'Alert states'} <span>${rules.length}</span></summary>
+                    <div class="etlsql-format-group-body">
+                        <div class="etlsql-format-rule-list">
+                            ${rules.map((rule, index) => {
+                                const condition = splitRuleCondition(rule.condition, availableFields[0]);
+                                return `<div class="etlsql-format-rule" data-rule-index="${index}">
+                                    <div class="etlsql-format-rule-line"><span>IF</span>
+                                        <select data-rule-field class="form-control">${fieldOptions(condition.field)}${availableFields.includes(condition.field) ? '' : `<option selected>${esc(condition.field)}</option>`}</select>
+                                        <select data-rule-operator class="form-control">${['<', '<=', '=', '!=', '>=', '>'].map(operator => `<option${operator === condition.operator ? ' selected' : ''}>${operator}</option>`).join('')}</select>
+                                        <input data-rule-value class="form-control" value="${esc(condition.value)}" aria-label="Comparison value">
+                                    </div>
+                                    <div class="etlsql-format-rule-result"><span>THEN</span><label>Fill <input type="color" data-rule-background value="${toHexColor(rule.backgroundColor, '#fee2e2')}"></label><label>Text <input type="color" data-rule-font value="${toHexColor(rule.fontColor, '#991b1b')}"></label><button type="button" data-rule-remove aria-label="Remove rule">Remove</button></div>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                        <button type="button" class="etlsql-format-add" data-rule-add>+ Add rule</button>
+                    </div>
+                </details>` : ''}
+            </section>`;
+    }
+
+    function bindVisualFormatInspector(panel, v, columns, rerender) {
+        const formatting = visualFormatting(v);
+        const sync = () => { renderCanvas(); syncScriptFromGridDebounced(); };
+        const bindValue = (selector, target, key) => panel.querySelector(selector)?.addEventListener('change', event => {
+            const value = event.target.value.trim();
+            if (value) target[key] = value;
+            else delete target[key];
+            sync();
+        });
+
+        panel.querySelector('#pp-format-subtitle')?.addEventListener('change', event => {
+            formatting.subtitle ||= {};
+            const value = event.target.value.trim();
+            if (value) formatting.subtitle.text = value;
+            else delete formatting.subtitle.text;
+            sync();
+        });
+        bindValue('#pp-title-font', formatting.title, 'font');
+        bindValue('#pp-title-size', formatting.title, 'size');
+        bindValue('#pp-title-weight', formatting.title, 'weight');
+        bindValue('#pp-title-align', formatting.title, 'align');
+        bindValue('#pp-title-color', formatting.title, 'color');
+        panel.querySelector('#pp-title-color-picker')?.addEventListener('input', event => {
+            formatting.title.color = event.target.value;
+            const text = panel.querySelector('#pp-title-color');
+            if (text) text.value = event.target.value;
+            sync();
+        });
+        panel.querySelector('#pp-number-format')?.addEventListener('change', event => {
+            v.options ||= {};
+            const value = event.target.value.trim();
+            if (value) v.options.FORMAT = value;
+            else delete v.options.FORMAT;
+            sync();
+            rerender();
+        });
+        panel.querySelector('#pp-format-legend')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.LEGEND = event.target.checked ? 'ON' : 'OFF';
+            sync();
+        });
+        panel.querySelectorAll('[data-axis]').forEach(input => input.addEventListener('change', () => {
+            const axis = input.dataset.axis === 'x' ? formatting.xAxis : formatting.yAxis;
+            const key = input.dataset.axisKey;
+            const value = input.value.trim();
+            if (value) axis[key] = value;
+            else delete axis[key];
+            sync();
+        }));
+        panel.querySelectorAll('[data-palette-color]').forEach(input => input.addEventListener('input', () => {
+            const index = Number(input.dataset.paletteColor);
+            formatting.palette[index] = input.value;
+            const text = panel.querySelector(`[data-palette-text="${index}"]`);
+            if (text) text.value = input.value;
+            sync();
+        }));
+        panel.querySelectorAll('[data-palette-text]').forEach(input => input.addEventListener('change', () => {
+            formatting.palette[Number(input.dataset.paletteText)] = input.value.trim();
+            sync();
+            rerender();
+        }));
+        panel.querySelectorAll('[data-palette-remove]').forEach(button => button.addEventListener('click', () => {
+            formatting.palette.splice(Number(button.dataset.paletteRemove), 1);
+            sync();
+            rerender();
+        }));
+        panel.querySelector('[data-palette-add]')?.addEventListener('click', () => {
+            formatting.palette.push(['#2563eb', '#16a34a', '#f59e0b', '#dc2626'][formatting.palette.length % 4]);
+            sync();
+            rerender();
+        });
+
+        const ensureTableMappings = () => {
+            if (Object.keys(v.mappings || {}).length) return;
+            v.mappings ||= {};
+            for (const column of columns || []) v.mappings[column] = column;
+        };
+        panel.querySelectorAll('[data-format-field]').forEach(row => {
+            const key = row.dataset.formatField;
+            const field = formatting.fields[key] ||= {};
+            row.querySelector('[data-field-format]')?.addEventListener('change', event => {
+                ensureTableMappings();
+                const value = event.target.value.trim();
+                if (value) field.format = value;
+                else delete field.format;
+                sync();
+            });
+            row.querySelector('[data-field-data-bar]')?.addEventListener('change', event => {
+                ensureTableMappings();
+                field.dataBar = event.target.checked;
+                sync();
+            });
+            row.querySelector('[data-field-data-bar-color]')?.addEventListener('input', event => {
+                ensureTableMappings();
+                field.dataBar = true;
+                field.dataBarColor = event.target.value;
+                const checkbox = row.querySelector('[data-field-data-bar]');
+                if (checkbox) checkbox.checked = true;
+                sync();
+            });
+        });
+
+        const updateRule = row => {
+            const rule = formatting.conditionalRules[Number(row.dataset.ruleIndex)];
+            if (!rule) return;
+            rule.condition = `${row.querySelector('[data-rule-field]').value} ${row.querySelector('[data-rule-operator]').value} ${row.querySelector('[data-rule-value]').value.trim()}`;
+            rule.backgroundColor = row.querySelector('[data-rule-background]').value;
+            rule.fontColor = row.querySelector('[data-rule-font]').value;
+            sync();
+        };
+        panel.querySelectorAll('[data-rule-index]').forEach(row => {
+            row.querySelectorAll('select,input').forEach(input => input.addEventListener('change', () => updateRule(row)));
+            row.querySelector('[data-rule-remove]')?.addEventListener('click', () => {
+                formatting.conditionalRules.splice(Number(row.dataset.ruleIndex), 1);
+                sync();
+                rerender();
+            });
+        });
+        panel.querySelector('[data-rule-add]')?.addEventListener('click', () => {
+            const fallback = Object.values(v.mappings || {}).find(Boolean) || columns?.[0] || 'value';
+            formatting.conditionalRules.push({ condition: `${fallback} < 0`, backgroundColor: '#fee2e2', fontColor: '#991b1b' });
+            sync();
+            rerender();
+        });
+    }
+
     function renderFormattingSectionHtml(v) {
         const bg = v.options?.BACKGROUND || '';
         const color = v.options?.COLOR || '';
@@ -5683,6 +5985,7 @@ export function createDesigner(container, opts = {}) {
                     <input type="text" id="pp-interaction-on-select" class="form-control" placeholder="e.g., HIGHLIGHT" value="${esc(v.options?.['interaction:ON_SELECT'] || '')}">
                 </label>
             </div>
+            ${renderVisualFormatInspectorHtml(v, colOptions)}
             ${renderFormattingSectionHtml(v)}
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Grid Position</div>
@@ -5717,7 +6020,11 @@ export function createDesigner(container, opts = {}) {
         if (isTabbedParent) {
             on('#pp-container-section', e => { if(!v.options) v.options = {}; if (e.target.value.trim()) v.options.CONTAINER_SECTION = e.target.value.trim(); else delete v.options.CONTAINER_SECTION; syncScriptFromGridDebounced(); });
         }
-        on('#pp-title',        e => { v.title = e.target.value; renderCanvas(); });
+        on('#pp-title',        e => {
+            v.title = e.target.value;
+            if (v.formatting?.title) v.formatting.title.text = e.target.value;
+            renderCanvas();
+        });
         on('#pp-ds',           e => { v.dataset = e.target.value || null; });
         on('#pp-width',        e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.WIDTH = e.target.value.trim(); else delete v.options.WIDTH; });
         on('#pp-height',       e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.HEIGHT = e.target.value.trim(); else delete v.options.HEIGHT; });
@@ -5852,6 +6159,7 @@ export function createDesigner(container, opts = {}) {
             }
         }
         bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
+        bindVisualFormatInspector(propsPanel, v, colOptions, renderProps);
         propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
     }
 
@@ -6287,9 +6595,26 @@ export function createDesigner(container, opts = {}) {
         }, 100);
     }
 
+    /**
+     * The script as it is *now*.
+     *
+     * The host owns the buffer in Studio — the designer has no editor of its own there — so it must be
+     * asked, not remembered. Falling back to `opts.script` meant every canvas write-back patched the
+     * text as it stood when the designer mounted, silently discarding anything added since: the
+     * CREATE CONNECTION the connection wizard wrote, the CREATE DATASET the data wizard wrote, and any
+     * hand edit. Adding a visual then handed that stale result back as the new buffer.
+     */
+    function currentScriptText() {
+        if (typeof opts.getScript === 'function') {
+            const live = opts.getScript();
+            if (typeof live === 'string') return live;
+        }
+        return scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || '');
+    }
+
     async function syncScriptFromGrid() {
         try {
-            const currentScript = scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || '');
+            const currentScript = currentScriptText();
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             if (r?.script) {
                 if (typeof opts.onScriptChange === 'function') {
@@ -6346,7 +6671,7 @@ export function createDesigner(container, opts = {}) {
     async function openScript() {
         let text = '';
         try {
-            const currentScript = opts.script || opts.initialScript || null;
+            const currentScript = currentScriptText() || null;
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             text = r?.script ?? '';
         } catch { text = '-- Failed to generate script\n'; }
@@ -6425,7 +6750,7 @@ export function createDesigner(container, opts = {}) {
     async function refreshPreview() {
         setPreviewStatus('Building preview…', 'pending');
         try {
-            const currentScript = scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || null);
+            const currentScript = currentScriptText() || null;
             const gen = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             const script = gen?.script ?? '';
             if (!script.trim()) { setPreviewStatus('Nothing to preview yet.', 'neutral'); return; }
@@ -6506,7 +6831,7 @@ export function createDesigner(container, opts = {}) {
         }
         reportName = topbar.querySelector('#dsgn-name').value.trim() || reportName;
         try {
-            const currentScript = scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || null);
+            const currentScript = currentScriptText() || null;
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             const script = r?.script ?? '';
             if (opts.onSaveScript) {

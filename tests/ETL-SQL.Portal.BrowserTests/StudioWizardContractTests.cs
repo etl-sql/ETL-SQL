@@ -253,6 +253,51 @@ public sealed class StudioWizardContractTests(PortalBrowserFixture fixture) : IA
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task ACanvasEdit_KeepsStatementsAddedAfterTheDesignerMounted()
+    {
+        // Reported from a real session: create a connection and a dataset through the wizards, add a
+        // visual from the canvas, and both statements vanish — the report then fails because the
+        // dataset it references no longer exists.
+        //
+        // The designer is constructed once per Studio session and captured the script text it was
+        // built with. Studio owns the editor, so the designer had no live source, and every canvas
+        // write-back patched that stale snapshot — discarding everything written since.
+        await using var session = await fixture.NewSessionAsync();
+        var page = await OpenStudioAsync(session);
+
+        var result = await page.EvaluateAsync<JsonElement>(
+            """
+            async () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const editor = studio.state.editorInstance;
+                const nl = String.fromCharCode(10);
+
+                // Stands in for the wizards: statements the designer did not know about at mount.
+                editor.setValue(
+                    'CREATE CONNECTION late_db AS MOCKDB();' + nl
+                    + 'CREATE DATASET &late_rows AS (SELECT 1 AS a);' + nl
+                    + editor.getValue());
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                studio.state.designerInstance.addVisual('BAR');
+                await new Promise(resolve => setTimeout(resolve, 2500));
+
+                const after = editor.getValue();
+                return {
+                    keptConnection: after.includes('CREATE CONNECTION late_db'),
+                    keptDataset: after.includes('CREATE DATASET &late_rows'),
+                };
+            }
+            """);
+
+        Assert.True(result.GetProperty("keptConnection").GetBoolean(),
+            "A canvas edit erased a CREATE CONNECTION added after the designer mounted.");
+        Assert.True(result.GetProperty("keptDataset").GetBoolean(),
+            "A canvas edit erased a CREATE DATASET added after the designer mounted.");
+        Assert.Empty(session.PageErrors);
+    }
+
     /// <summary>Creates a blank paginated report, which is where the numbered report steps live.</summary>
     private static async Task NewPaginatedReportAsync(IPage page)
     {

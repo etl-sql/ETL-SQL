@@ -25,7 +25,13 @@ export function makeMockApi(seedState) {
 
     let data = UNMATCHED;
     if (path.endsWith('/api/designer/generate')) {
-      data = { script: generateMockScript(body.designState ?? seedState) };
+      // Matches the hosts: with a script in hand this patches it, and generates from scratch only
+      // when there is nothing to patch. Regenerating unconditionally meant the sandbox destroyed
+      // CREATE CONNECTION on every canvas write-back, so the one bug this endpoint can cause was
+      // both guaranteed here and indistinguishable from correct behaviour.
+      data = body.script && body.script.trim()
+        ? { script: mockPatchScript(body.script, body.designState ?? seedState) }
+        : { script: generateMockScript(body.designState ?? seedState) };
     } else if (path.endsWith('/api/designer/patch')) {
       data = body.script
         ? { script: mockPatchScript(body.script, body.designState ?? seedState) }

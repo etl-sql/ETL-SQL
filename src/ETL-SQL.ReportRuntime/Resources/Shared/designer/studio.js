@@ -776,6 +776,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                     reportName: doc.name,
                     script: content,
                     initialScript: content,
+                    // The designer is constructed once per session but the buffer keeps changing, so
+                    // it must ask for the current text rather than keep the text it was built with.
+                    getScript: () => activeScriptText(),
                     hideTopbar: true,
                     hideSidebar: true,
                     propertiesHost,
