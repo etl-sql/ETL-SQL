@@ -75,9 +75,12 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P2 — Establish measured Studio performance budgets**: Replace unverified startup, memory,
   keystroke, aggregation, and 60 FPS claims with reproducible cross-platform measurements and
   checked-in thresholds for Windows, Linux, and macOS.
-- [ ] **P2 — Split the canonical Studio module by responsibility**: Separate document/session state,
-  host adapters, API contracts, SQL mutations, data sampling, workbench rendering, and lifecycle
-  handling while retaining the canonical shared-asset distribution model.
+- [x] **P2 — Split the canonical Studio module by responsibility**: `studio.js` is now the workbench
+  rendering and composition layer. Dedicated canonical modules own route/template contracts,
+  document/session state, host capability adaptation, snapshot filtering and sampling, serialized
+  Report-SQL mutations, save security, and edit-lease lifecycle. The asset sync distributes the
+  complete module graph to every host, and boundary tests prevent these responsibilities from
+  collapsing back into the composition file.
 - [x] **P3 - Explorer tab needs delete, rename, new folder**  Desktop Studio now renders the workspace as
   a folder tree with create, rename, and confirmed delete actions for files and folders. Files drag into
   folders or onto an explicit workspace-root target, open document paths follow moves and folder renames,
@@ -139,12 +142,143 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
     canvas without changing untouched script text.
 
 
+### Authoring Wizard Build Order
+
+Studio's premise is that the common path needs no code, which makes every authoring concept in
+Report-SQL a surface that either has a wizard or does not. This is the dependency-ordered plan for
+the rest of them, drafted 2026-08-30 against the parser's statement set, Studio's rail
+configuration, and the open items above. Full write-up with per-item rationale and the current-state
+inventory: <https://claude.ai/code/artifact/85eeac3a-9362-45c5-b65b-399336c00393>.
+
+`W#.#` identifiers are sequence positions, not priorities. Stages are gated — each assumes the
+previous has landed; items inside a stage can run in parallel. The ordering principle is that
+nothing gets polished before the thing most likely to change it has landed. Entries marked
+*cross-reference* are existing P4 items listed to make the sequence readable, not duplicate tracking.
+
+Already shipped and not repeated below: the connection creator, the dataset creator (all three
+states — reuse an existing dataset, create a cached one with `REFRESH EVERY`/`TTL`, or bind a live
+uncached query), the guided report workflow rail, and the report page designer.
+
+**Stage 0 — Foundations.** Every later wizard either uses these or duplicates them.
+
+- [ ] **W0.1 — Shared authoring component contract**: The canonical module split landed (P2 above),
+  but the contract a shared authoring component must satisfy is not written down. State it: a
+  component is host-neutral, receives a sample and a document context, returns a statement or a
+  designer-state mutation, and never reaches the network itself. Without this, `studio.js` forks the
+  same wizard scaffolding once per surface — it grew 48 KB adding two of them.
+- [ ] **W0.2 — Wizard test lane**: One required assertion per wizard: clicking the confirm button
+  writes the statement the dialog previewed. The guided steps sat broken because nothing checked
+  this, and the UI sandbox actively concealed it by echoing the script back unchanged from
+  `/api/designer/patch`.
+- [ ] **W0.3 — The escape-hatch rule**: Every wizard writes SQL the author may then hand-edit.
+  Decide and apply one rule uniformly: a wizard reads its starting state from the canonical parse,
+  never from what it wrote last time, and never replaces a clause it did not author. The dataset
+  wizard already behaves this way; nothing obliges the others to.
+
+**Stage 1 — Finish the authoring core.** Cheap, and it unblocks the SSRS-style certification
+journey. Two of the four are migrations of code that already works.
+
+- [ ] **W1.1 — Promote the query creator to a shared component**: Extract the embedded script
+  editor, run, and result preview out of the dataset wizard. The pipeline DAG's query task needs
+  exactly this surface and must not grow its own. Scope is settled: the script editor with
+  completions, hover, lint, run, and schema browsing is sufficient — no join inference, no visual
+  query building. Blocks W2.2.
+- [ ] **W1.2 — Parameters wizard**: Create, edit, reorder, and delete declarations; input, required,
+  and sensitive flags; and cascade authoring, which `DesignerScriptPatcher` already supports through
+  the `cascade` option that nothing currently writes. Today there is a single "add a parameter"
+  dialog and no way to edit an existing one. This is the most-used concept after data and spans both
+  report and pipeline documents. Needed by the paginated certification journey; overlaps the P4
+  cascading-slicers item.
+- [ ] **W1.3 — Surface bookmarks, themes, and styles in Studio**: All three have complete authoring
+  UI in `designer.js` and no entry in Studio's rail, which exposes only explorer, catalog, filters,
+  palette, git, and settings. The bookmarks icon is already in Studio's icon set, unused. Migration
+  rather than construction, and it closes a visible capability gap between the two shells.
+- [ ] **W1.4 — Chart creator polish**: Aggregation control per measure role, number and date
+  formatting, and a handoff to the properties inspector rather than a second implementation of it.
+  Deliberately sequenced after the W2.1 spike, which may change the role model.
+
+**Stage 2 — Pipeline DAG authoring.** The largest item, and the one most likely to demand changes
+from the shared components. Doing it before the remaining polish means the polish is built once.
+
+- [ ] **W2.1 — Spike: node/edge model with lossless script round-trip**: Before any palette work,
+  prove one task round-trips: drag a node, get `label: EXECUTE BEGIN ... END;`, hand-edit the script,
+  and watch the canvas follow without losing the edit. Verify every emitted form against the
+  canonical parser first. This spike is what tells us whether W1.4 and the P4 properties inspector
+  need to change, so treat a surprise here as a reason to re-order rather than push through.
+  *Cross-reference: P4 pipeline DAG draggable items.*
+- [ ] **W2.2 — Task palette and query task**: Execution boxes with auto-but-editable labels,
+  connection selection, and the W1.1 query creator as the task body. File operations, validation, and
+  notification tasks follow the same shape. *Cross-reference: P4 pipeline DAG draggable items.*
+- [ ] **W2.3 — Control flow and precedence edges**: On-success, on-failure, on-completion, and
+  expression edges lowering to `TRY...CATCH` and `IF/ELSE`. Multiple incoming edges form a join and
+  must never silently imply parallel execution. *Cross-reference: P4 DAG conditional precedence.*
+- [ ] **W2.4 — Containers: parallel, loop, transaction**: Concurrency stays explicit — the canvas
+  creates a `PARALLEL` container and the script shows it. *Cross-reference: P4 container scopes.*
+- [ ] **W2.5 — Scope inspector**: Variables, variable sets, and temp tables are the pipeline's type
+  system, and the question about them is always positional — what is in scope at *this* node — so
+  this is an inspector, not a wizard. Extends the P4 live engine state watch, which covers
+  `@variables` and `#temp` tables but not `CREATE SETS`/`USE SETS`; those have no surface anywhere
+  today.
+- [ ] **W2.6 — Run to selected node**: Pause execution at a node and populate intermediate temp
+  tables and variables in the Results pane. This is what makes W2.5 worth reading.
+  *Cross-reference: P4 run-to-selected-node.*
+
+**Stage 3 — Governance and metadata.** Both attach to pipeline steps and queries; built before the
+DAG they would need re-placing once tasks become first-class objects. Both are small forms over
+engine features that already work.
+
+- [ ] **W3.1 — Tags and metadata authoring**: `CREATE TAG` / `DELETE TAG` on tables, datasets, and
+  pipeline steps; currently unsurfaced anywhere in Studio. Lineage is genuinely free once this
+  exists, but only if tagging is easy — the engine already ships
+  `SHOW LINEAGE HISTORY FOR MISSING TAGS`, which says untagged objects are an expected failure mode
+  rather than an edge case.
+- [ ] **W3.2 — Data quality rule authoring**: `EXPECT` clauses attached to a query or table; zero
+  references in either Studio module today. The form is small, the surfaces it must link to are not:
+  a rule implies a quarantine and a replay path, and both need to be reachable from where the rule
+  was written or authors will never see the rows they rejected.
+- [ ] **W3.3 — Row-level security preview-as**: A control to view the report as another user, group,
+  or role. The engine already supports impersonation and preview-as; without a surface, authoring a
+  row-filtered report is unverifiable from inside Studio until someone else opens it.
+
+**Stage 4 — Lifecycle and delivery.** Nothing else depends on these, and the Studio-versus-Portal
+boundary question is easier to answer once the authoring surfaces have settled.
+
+- [ ] **W4.1 — Dataset lifecycle from the authoring side**: Refresh, export, publish, and share a
+  dataset without leaving the document that created it. `REFRESH DATASET`, `EXPORT DATASET`,
+  `PUBLISH DATASET`, and dataset ACLs exist as statements and as Portal admin UI; an author who
+  creates a dataset has no path to publishing it.
+- [ ] **W4.2 — Scheduling and delivery handoff**: Decide first whether Studio hosts schedules and
+  subscriptions or hands off to the Orchestrator. Either is defensible; the current answer — an
+  unmarked application switch between "my report works" and "it runs nightly and emails Finance" —
+  is not.
+
+**Cross-cutting decisions.** Not build items; each gets harder to change as more wizards exist.
+
+- [ ] **W-D1 — Lazy-load wizard bundles, or keep re-blessing the payload budget**: The browser
+  payload budget was re-blessed to 2,353,317 raw bytes on 2026-08-30 after the Git diff viewer and
+  the guided-workflow work together pushed it 9.9% past the previous baseline. That instance was
+  targeted and accepted. The open question is the next five wizards; decide before Stage 2, which is
+  the largest single addition on this list.
+- [ ] **W-D2 — Wizard versus inspector**: A wizard suits something being *created* from nothing in a
+  sequence with prerequisites; an inspector suits a property of something *already selected*. Themes,
+  styles, formatting, drillthrough, and scope are all inspector-shaped. Building them as wizards is
+  the most likely way this plan goes wrong.
+
+**Deliberately out of scope**: join inference and visual query building (the script editor is
+sufficient); lineage authoring (lineage is derived — it needs W3.1 and nothing else); the P4 ER
+diagram and outline tree, which are viewers rather than authoring surfaces and gate nothing here.
+
+**Re-ordering note**: Stage 3 may move ahead of Stage 2 if tag and lineage value is wanted sooner
+than pipeline authoring — the cost is revisiting where tags and quality rules attach once DAG tasks
+become first-class, which is real but bounded. Pulling W1.4 or the P4 properties inspector ahead of
+the W2.1 spike is *not* a safe substitution; avoiding that rework is why this ordering exists.
+
 
 ## Bugs & Triage
 
 ### Connection Catalog & Gateway Resource Discovery
 - [ ] **TUI Filters VISUALS (SLICER, DATEPICKER, etc)**  These can be changed now but how do you navigate between them.  Can we hook up the mouse to interact?
-- [ ] **ETL-SQL Studio create dataset needed**  THe workflow is broken and needs to be streamlined.  1. Create connection (works but is clunky) 2. In order to start adding report items you need a DATASET but there is no way to create one without code.  The parts are in place just not working correctly.
+- [x] **ETL-SQL Studio create dataset needed**  Step 1 of the report workflow is now a data wizard covering the three states a report can be in: reuse a dataset this script declares or a registered one the user has permission to (`USE DATASET`), create a cached dataset with `REFRESH EVERY`/`TTL` rules, or bind a live uncached query read from the connection on every run. Creating or living off a connection requires one the script itself declares — a host-registered alias is refused, because a dataset built on an undeclared alias previews correctly and fails for every other reader — and the connection wizard runs inline when there is none. Table picks show the host's real design-time sample; "write a query" embeds the full script editor with completions, hover, lint, and run. Follow-on wizard work is sequenced under "Authoring Wizard Build Order" above.
 - [ ] **ETL-SQL exit doesn't work very well** It hangs and does actually exit after asking the save confirmation.
 - [ ] **`constrained_html_components.rptsql` fails the sample gate on a Card lint error.**
   `Test-AllSamples.ps1` reports `Line 14, Col 1: Visual 'EnvironmentMetric' of type Card is missing
