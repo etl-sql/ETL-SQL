@@ -76,7 +76,9 @@ namespace ETL_SQL.Tests.Core
     {
         public static Script TokenizeToScript(this Lexer lexer)
         {
-            return new Parser(lexer.Tokenize()).Parse();
+            // Pass the source through: constructs that quote themselves back (data-quality rules)
+            // report the text as written when it is available.
+            return new Parser(lexer.Tokenize(), lexer.Source).Parse();
         }
     }
 }

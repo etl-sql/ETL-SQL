@@ -28,8 +28,10 @@ import { getSessionIdentity, renderSessionIdentity } from '/js/session-identity.
 import { applyNavigationSafely } from '/js/portal-nav.js?v=0.18.0';
 import { createStudioWorkbench } from '/designer/studio.js?v=0.18.0';
 import { renderPortalHeader } from '/js/portal-header.js?v=0.18.0';
+import { installDialogAccessibility } from '/js/dialog-a11y.js?v=0.18.0';
 
 renderPortalHeader();
+installDialogAccessibility();
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 initTheme();
 applyPortalBranding();

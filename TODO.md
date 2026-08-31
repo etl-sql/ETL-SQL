@@ -1,4 +1,4 @@
-# ETL-SQL Development TODO List
+﻿# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for all unfinished product and release work. All remaining
 product work is active for the current planning horizon. Work top to bottom unless a dependency or
@@ -15,26 +15,14 @@ Authoritative reference: [`docs/architecture/decisions/etl-sql-studio.md`](docs/
 
 > **Parallel Construction & Transition Policy:** `ReportBuilder` (`ETL-SQL.ReportBuilder`) and `WorkstationEditor` (`ETL-SQL.WorkstationEditor`) remain fully operational, tested, and untouched during Studio construction. `ETL-SQL Studio` is built as an independent, side-by-side flagship component. Once Studio is certified and stabilized across desktop and Portal, legacy surfaces will be gracefully deprecated and retired.
 
-- [x] **Phase 1 — Modern Studio Shell, Dual Projections & Editor Usability**:
-  - Build the **ETL-SQL Studio** layout featuring a top document tab bar, left Activity Rail icons (Files, Connections, Filters, Git, Settings), and view projection toggles (`[ 🎨 Canvas | 🌓 Split | ⌨️ Code ]` + `[ ▶ Run ]`).
-  - Fix single/sub-line text selection execution in CodeMirror 6 (`Ctrl+Enter` / `Run Selection` must execute the exact character selection range when text is highlighted rather than expanding to the full line).
-  - Implement a polished Save / Save-As modal dialog prompting for file name and directory; inspect script content for raw secrets/passwords and prompt for passphrase encryption (`ENC:`) or catalog reference (`SECRET:`/`SHARED:`).
-- [x] **Phase 2 — Live Data `__ETLSNAP__` Ingestion & 60 FPS Visual Canvas**:
-  - Implement `POST /api/designer/data-sample` executing a bounded `TOP 250` sample query under caller RLS and populating in-memory `window.__ETLSNAP__`.
-  - Build responsive WYSIWYG card stage in `Shared/designer/` computing real-time client-side aggregations (KPI `reduce()`, Bar/Donut `group-by`, Line chronological bucketing, Table sorting) in ~1 ms at 60 FPS without remote DB latency per visual edit.
-- [x] **Phase 3 — Type-Aware Filter Pane & 1-Click Slicer Promotion**:
-  - Implement the dedicated Filter Pane supporting Dataset Global (`WHERE`) and Visual Local (`FILTERS`) scopes.
-  - Provide type-aware controls: distinct value checkbox lists from `__ETLSNAP__` sample rows, numeric comparison sliders, and relative date presets (`Last 7/30 Days`, `This Quarter`, `YTD`).
-  - Add 1-click **"Promote to Slicer"** converting static `WHERE` clauses into `@parameter` declarations and canvas Slicer visuals.
-- [x] **Phase 4 — Surgical AST Synchronization & Split-View CodeMirror**:
-  - Enhance `DesignerScriptPatcher` to patch only targeted `VISUAL`, `PAGE`, or `WHERE` AST clauses, preserving hand-crafted CTEs, custom transformations, comments, and whitespace.
-  - Implement debounced code-to-canvas synchronization refreshing `__ETLSNAP__` sample rows when dataset SQL queries are edited in CodeMirror.
-- [x] **Phase 5 — Multi-Surface Packaging (Desktop CLI & SaaS Portal Studio)**:
-  - Package desktop distribution under `etlsql studio` (`ETL-SQL.WorkstationEditor` / `ETL-SQL.Studio` running over local loopback).
-  - Host identical canonical assets in Portal SaaS (`/studio/index.html`) with Zero-Trust connection catalog and Gateway routing.
-- [x] **Phase 6 — Agent-Driven Usability Audits & Playwright Browser Automation**:
-  - Implement autonomous Playwright browser tests in `tests/ETL-SQL.Portal.BrowserTests` and `tools/ui-sandbox` verifying end-to-end user journeys (connect ➔ pick table ➔ drag cards ➔ filter ➔ split code ➔ run).
-  - Automate bounding-box geometry and layout shift audits across screen resolutions (1024x768 to 4K).
+- [ ] **Phase 2 certification — Measure the live-sample canvas performance claim**: The bounded
+  `POST /api/designer/data-sample` path and client-side visual aggregations are implemented, but the
+  claimed ~1 ms aggregation time and sustained 60 FPS interaction rate are not backed by the
+  reproducible cross-platform measurements required by the Studio performance-budget item below.
+- [x] **Phase 6 certification — Complete the promised end-to-end browser journey**: The Playwright
+  suite covers the individual Studio workflows and the 1024x768-to-4K geometry audit, but it does not
+  execute the promised connect ➔ pick table ➔ drag card ➔ filter ➔ split code ➔ run sequence as one
+  journey. Add that coverage to the production-host browser journeys tracked below.
 - [ ] **Phase 7 — Stabilization & Legacy Retirement**:
   - Complete user acceptance and performance benchmarking.
   - Gracefully deprecate and retire legacy `ReportBuilder` dialogs and legacy `WorkstationEditor` entry points in favor of ETL-SQL Studio.
@@ -62,86 +50,26 @@ The final user-acceptance gate must prove three representative outcomes without 
 the common path: an SSIS-like ETL pipeline, an SSRS-like paginated report, and a Power BI-like
 interactive dashboard. The script editor remains the escape hatch for advanced or uncommon work.
 
-- [x] **P0 — Fix Portal save correctness and prove persistence**: `studio.html` sends `{ name,
-  script }` to `/api/designer/save`, while the endpoint requires report identity, script text, and
-  optimistic-concurrency state. A failed save must keep the document dirty, show the server error,
-  and block close. Add a browser journey that saves a real catalog report, reloads it, and verifies
-  the exact persisted content.
-- [x] **P0 — Fix Studio Save encryption and raw-secret handling**: Asking for a passphrase before
-  saving a script with plaintext connection credentials is the intended behavior and should match
-  VS Code, TUI, and the Connection Wizard. The current Studio Save modal is not equivalent: it
-  renders detected secret values in the DOM, checks only that a passphrase is non-empty, and emits
-  Base64 text labeled as `ENC:AES256_...` without using the passphrase. Reuse the engine-compatible
-  PBKDF2 + AES-GCM encryption contract already used by the Connection Wizard, or route the value to
-  the write-only secret catalog. Never render the raw value, and emit only valid `ENC:`, `SECRET:`,
-  or `SHARED:` references. Add cross-surface compatibility tests proving Studio-created ciphertext
-  can be decrypted by the engine and that cancel/failure leaves the document dirty and unchanged.
-- [x] **P1 — Connect Portal Studio to real catalog documents**: Replace hardcoded sample documents
-  with `api/studio` report and folder workflows. Carry report IDs, versions, edit leases, source
-  revisions, permissions, and deployment-mode capabilities through open, save, publish, and close.
-- [x] **P1 — Make Studio state document-scoped**: Move snapshots, filters, selected source, source
-  columns, diagnostics, run state, and preview cache ownership out of shared globals. Switching tabs
-  must restore the active document's data context and must never render another document's sample.
-- [x] **P1 — Use canonical parser and patcher services for every script mutation**: Remove regex SQL
-  generation from add-visual, filter, slicer, and pipeline workflows. Generated output must match the
-  focused Report-SQL references and pass parser, formatter, lint, and lossless round-trip tests.
-- [x] **P1 — Complete filter and slicer semantics**: Persist dataset-global `WHERE` and visual-local
-  filters in the script, support type-aware categorical, numeric, and date controls, and implement
-  slicer promotion with a real parameter binding, option source, action, and dependent query update.
-- [ ] **P1 — Finish code-to-canvas data synchronization**: Dataset query edits must call the governed
-  preview path after successful parsing, refresh the correct document's sample, preserve the last
-  valid canvas on errors, and cancel or ignore stale responses.
-- [ ] **P1 — Restore desktop and Portal feature parity**: Add the governed desktop data-sample route
-  or define and surface an explicit reduced desktop capability set. Run the same contract suite
-  against both hosts instead of assuming identical assets provide identical behavior.
-- [ ] **P1 — Add a desktop host lifecycle and multi-project session contract**: Keep automatic
-  ephemeral-port allocation and isolate each project host from every other project host.
-  - [ ] Add an explicit **Exit Studio** action that checks for dirty documents and active runs,
-    requests graceful host shutdown, waits for a bounded timeout, and reports whether the process
-    actually stopped.
-  - [ ] Track connected browser windows with renewable heartbeats. Treat `pagehide` or `sendBeacon`
-    as advisory only; an ordinary tab close or browser crash must not be the sole shutdown signal.
-  - [ ] Add configurable idle shutdown after the last client disconnects when no run is active and
-    no unsaved server-side draft remains.
-  - [ ] Persist a per-project local session record containing the normalized workspace root, PID,
-    assigned port, start time, and authentication metadata. Remove stale records safely and recover
-    cleanly after crashes or forced termination.
-  - [ ] Make `etlsql studio <project>` reconnect to the healthy host already serving that project or
-    start a new host on an OS-assigned port when none exists.
-  - [ ] Support simultaneous windows for different projects with separate hosts, ports, execution
-    state, connection state, Git state, and filesystem boundaries. Closing or stopping one project
-    must not affect another.
-  - [ ] Add `etlsql studio --new-window` to open another browser window against the existing project
-    host. Reserve an explicit advanced `--new-instance` option for a fully independent host serving
-    the same project, with external-change detection and save-conflict protection.
-  - [ ] Add `etlsql studio list`, `etlsql studio open`, and `etlsql studio stop` lifecycle commands
-    for discovering and controlling local Studio instances.
-  - [ ] When a fixed `--port` is requested, identify a healthy Studio already owning it and offer to
-    open that instance or select another port instead of returning only "address already in use."
-- [ ] **P1 — Replace the placeholder pipeline card list with the engine DAG projection**: Consume
-  `ScriptDagProjectionService` output, preserve real edges and branches, represent control flow and
-  validation stages, and keep pipeline edits lossless. Do not describe the regex-generated linear
-  card sequence as an interactive DAG.
-- [ ] **P1 — Repair and expand round-trip evidence**: Fix the failing report-style patcher regression
-  and require byte-preservation fixtures for comments, CTEs, datasets, pages, visuals, filters,
-  bookmarks, line endings, and invalid intermediate edits.
-- [ ] **P1 — Add distinct Dashboard and Paginated Report creation workflows**: Studio Home must show
+- [x] **P2 — Accept an alias after a `||` concatenation**: The lexer now emits an explicit
+  concatenation token, and the expression parser handles it between arithmetic and shift/comparison
+  precedence. Aliased and parenthesized forms parse correctly, engine execution preserves `NULL`
+  propagation, SQL Server compiles the node as `+`, and PostgreSQL/Oracle compile it as `||`.
+  `ReportDesignerLosslessFuzzTests.GenerateRandomReportScript` exercises the operator again, with
+  focused parser, runtime, formatter, dialect, and documentation coverage.
+- [x] **P1 — Add distinct Dashboard and Paginated Report creation workflows**: Studio Home must show
   separate **New Dashboard** and **New Paginated Report** actions. Both create standard `.rptsql`
   documents and reuse shared connection, dataset, expression, formatting, preview, parser, and
   patcher components.
-  - [ ] The Dashboard workflow opens the freeform/responsive visual canvas with chart, KPI, table,
+  - [x] The Dashboard workflow opens the freeform/responsive visual canvas with chart, KPI, table,
     slicer, cross-filter, layout, and visual-formatting guidance.
-  - [ ] The Paginated Report workflow opens a page-oriented design surface with a guided sequence:
+  - [x] The Paginated Report workflow opens a page-oriented design surface with a guided sequence:
     choose data, define parameters, add groups/details/totals, configure headers and footers, set
     page size/orientation/margins and breaks, preview pagination, then export.
-  - [ ] Opening an existing `.rptsql` selects the appropriate workflow from its report structure
+  - [x] Opening an existing `.rptsql` selects the appropriate workflow from its report structure
     when unambiguous and otherwise asks the author without changing the script.
-  - [ ] Switching between code and either report workflow must preserve unsupported hand-authored
+  - [x] Switching between code and either report workflow must preserve unsupported hand-authored
     syntax and the last valid canvas while an edit is temporarily invalid.
-- [x] **P2 — Replace decorative workbench controls with honest capability states**: Wire Git and
-  settings to their host services or mark them unavailable. Do not display a hardcoded branch,
-  clean-tree status, formatter preference, or security setting.
-- [ ] **P2 — Add production-host browser journeys**: Keep fast UI-sandbox stories, but add real
+- [x] **P2 — Add production-host browser journeys**: Keep fast UI-sandbox stories, but add real
   authenticated Portal and desktop journeys for open, connect, sample, filter, edit, run, save,
   reload, close, shutdown, relaunch, and simultaneous project windows.
 - [ ] **P2 — Establish measured Studio performance budgets**: Replace unverified startup, memory,
@@ -150,34 +78,31 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P2 — Split the canonical Studio module by responsibility**: Separate document/session state,
   host adapters, API contracts, SQL mutations, data sampling, workbench rendering, and lifecycle
   handling while retaining the canonical shared-asset distribution model.
-- [x] **P3 - Replace New Script (.sql) button wth New script (.etlsql)**: The only change is the extension.
-- [x] **P3 - Need a way to remove the opening workspace files**  The opening screen shows recent files
-  it needs an x - close button added so we can clear them out if a user wants to.
-- [ ] **P3 - Explorer tab needs delete, rename, new folder**  The File explorer tab needs the ability to add
-  new folder, rename file or folder, delete file or folder.  Drag and drop files into folders or back to the root.
-- [x] **P3 - Verify MOCKDB is visible as a connection type**: Source and sandbox coverage are not
-  sufficient. Confirm that both production Portal Studio and desktop Studio return MOCKDB from the
-  real connector registry, display it under **Test Data**, allow it to be selected without an
-  external server, and insert parser-valid connection syntax.
-- [ ] **P3 - Sidebar: Data button and Filter button show the same thing** Instead separate so data only shows data and filters
-  only show filters.  Make the data screen new connection button bigger and at the top.  The filters button should
-  also have a new filters button with dialog to choose what to filter based on the tables.  We need a mechanism so that
-  both filters and data sidebars can be open at the same time to be able to drag columns from data to filters and that
-  would be the trigger to filter on that column and open the dialog on how to filter.
-- [ ] **P4 - Script editor missing the results pane**  This exists in the current Workstation Editor but needs
-  Results, Messages, Performance but the Pipeline DAG should instead go up on top.  More on the next item.
+- [x] **P3 - Explorer tab needs delete, rename, new folder**  Desktop Studio now renders the workspace as
+  a folder tree with create, rename, and confirmed delete actions for files and folders. Files drag into
+  folders or onto an explicit workspace-root target, open document paths follow moves and folder renames,
+  dirty documents block deletion, and every mutation stays inside the authenticated workspace boundary.
+- [x] **P3 - Sidebar: Data button and Filter button show the same thing** Studio now gives Data and
+  Filters independent sidebars that can stay open together. Data owns connection, dataset, table, and
+  field discovery, with New connection promoted to the primary action. Filters owns active rules and a
+  type-aware New filter dialog; clicking a field or dragging it from Data into Filters opens the same
+  categorical, numeric, or date setup flow before the filter is applied to the dataset or selected visual.
+- [x] **P3 — Restore Studio canvas card width at the 1024px breakpoint.** Dashboard Studio now keeps
+  the authored 12-column canvas at an 840px working width inside its existing scroll container. Visual
+  cards stay above the 200px usability floor at 1024x768 without widening the Studio shell, and the
+  focused layout audit passes through 4K.
 - [ ] **P4 - Pipeline DAG needs draggable items**  Similar to report we need a way to drag and drop items onto the DAG.
   A execution box added should open a dialog to label name (auto but changeable), pick connection, add query (query window should reuse script editor window with full suggest, colors, run, messages, results).  In the created script it should be label  execute_sql: EXECUTE BEGIN <script> END;  There should be a way to connect the boxes to each and form a flow.  If
   work must run concurrently, the canvas creates an explicit PARALLEL container and the script reflects it. Multiple incoming
   dependency edges form a join and must not silently imply parallel execution. Other boxes include FILE operations, loops,
   validation, notifications, and control flow. Verify every emitted statement form against the canonical parser and focused
   statement reference before exposing it in the palette.
-- [x] **P4 - Connection and format button from the top toolbar can be removed**  Format is with the script so the top one is
-  redundant.  The New connection should live in the sidebar instead.
-- [ ] **P4 - Double-clicking on the name in the top tab should allow you to rename the file.**
-- [x] **P4 - Script editor cannot use the mouse to highlight unless multi line**  Need to be able to grab however much of the
-  string as needed with the mouse.  Double-clicking left mouse button highlights the whole word.  Making sure special characters
-  are grabbed like in the case of #temp, @declare, etc.  Double-click should include those but not commas.
+- [x] **P4 - Double-clicking on the name in the top tab should allow you to rename the file.**
+  Desktop Studio tabs now open an accessible inline filename editor on double-click. Enter or blur
+  renames the workspace file through the authenticated host API, Escape cancels, omitted extensions
+  are preserved, and path traversal, read-only workspaces, and destination collisions are rejected.
+  The open document and Explorer path update in place, with production-browser coverage proving the
+  renamed file survives reload and host relaunch.
 - [ ] **P4 — Pipeline DAG Conditional Precedence & Container Scopes (SSIS Parity)**:
   - Support conditional connector edges on the DAG: `On Success` (green), `On Failure` (red), `On Completion` (blue), and custom expressions (`@Rows > 0`), lowering to `TRY...CATCH` and `IF/ELSE` branches in the script.
   - Add draggable container bounding boxes for `LOOP FOREACH (@item IN c_source)` and `TRANSACTION BEGIN ... COMMIT` where child tasks live inside the container box.
@@ -195,7 +120,7 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 - [ ] **P4 — Live Engine State Watch & Visual EXPLAIN Plan (Workstation Editor Parity)**:
   - Live session watch inspector tab showing active `@variables` and allocated `#temp` tables (with live row counts and RAM/spill disk footprint).
   - Visual EXPLAIN plan tab showing operator tree, remote pushdown status, and spill alerts.
-- [ ] **P4 — Side-by-Side Git Diff Viewer (VS Code Parity)**:
+- [x] **P4 — Side-by-Side Git Diff Viewer (VS Code Parity)**:
   - Side-by-side visual diff against Git HEAD and local history snapshots before committing or saving.
 - [ ] **P4 — Print Layout & Page Setup (SSRS Parity)**:
   - Implement this inside the Paginated Report workflow, including page size, Portrait/Landscape
@@ -214,16 +139,67 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
     canvas without changing untouched script text.
 
 
+
 ## Bugs & Triage
 
 ### Connection Catalog & Gateway Resource Discovery
-- [x] **Gateway Connection Verification Probe**: `POST /api/admin/connections/{alias}/verify` now checks live liveness, approval, connector compatibility, and allowed operations against `GatewaySessionRegistry` for gateway-bound shared connections.
-- [x] **Connection Wizard Resource Unbind Action**: The selected gateway resource card now exposes a "Clear selection" action that returns to direct connection entry without changing the gateway cluster dropdown.
-- [x] **Connection Wizard Resource Refresh Trigger**: The resource picker header now exposes a manual refresh action that re-fetches live published resources on demand.
-- [x] **TUI slicers not working** Report Preview now supports keyboard selection and parameter updates for slicers, date pickers, sliders, multi-select, search, checkbox, textbox, and number controls, then refreshes affected visuals.
-- [x] **Connection wizard sources** MOCKDB now has its own Test Data category in the connection wizard.
 - [ ] **TUI Filters VISUALS (SLICER, DATEPICKER, etc)**  These can be changed now but how do you navigate between them.  Can we hook up the mouse to interact?
+- [ ] **ETL-SQL Studio create dataset needed**  THe workflow is broken and needs to be streamlined.  1. Create connection (works but is clunky) 2. In order to start adding report items you need a DATASET but there is no way to create one without code.  The parts are in place just not working correctly.
+- [ ] **ETL-SQL exit doesn't work very well** It hangs and does actually exit after asking the save confirmation.
+- [ ] **`constrained_html_components.rptsql` fails the sample gate on a Card lint error.**
+  `Test-AllSamples.ps1` reports `Line 14, Col 1: Visual 'EnvironmentMetric' of type Card is missing
+  the required mapping role: 'VALUE'`, and the script exits 1. Reproduced against a clean `HEAD`
+  worktree, so it is not caused by any in-flight work. The linter looks correct and the sample looks
+  wrong: every other CARD in `samples/` (`daily_sales_report.rptsql`, `data_quality_health.rptsql`,
+  `protected_data_audit.rptsql`, `lineage_cookbook_02_report.rptsql`) declares
+  `MAPPINGS (VALUE = <column>)`, and this one declares none — so the fix is likely
+  `MAPPINGS (VALUE = Environment)` on the `SOURCE = (SELECT @environment AS Environment)` card.
+  Confirm that is the intent rather than a missing single-column inference for CARD before editing.
+  Added 2026-08-27 in `a5564d84`; it has been red since, which is the same shape as the earlier
+  silent `MAPPINGS` role defect and worth a quick check for sibling samples that were never green.
 
+
+## Grammar of Graphics (GoG) Performance — Remaining Work
+
+The v0.19.0 native GoG pipeline was reviewed for performance on 2026-08-30. The allocation and
+complexity fixes that do not change rendered output or the wire contract are done: the shared
+`ChartValue.Null()` instance, allocation-free `ChartValue.Validate()`, loop-invariant style/extent
+hoists in `RenderPoints`/`RenderRects`, single-pass row indexing in `ResolveLayerData`,
+`ResolveFacets`, `ResolveWrappedFacets` and the box-plot resolve, the set-based `skippedRows` scan,
+and per-layer `GroupConditions`. The items below were deliberately left out of that pass because
+each changes checked-in goldens, the serialized contract, or needs a measurement first.
+
+- [ ] **Verify the resolver changes against the golden lane.** The batch is build-verified and
+  sample-verified only; `dotnet test` and `Test-ReportingGoldens.ps1` could not run because an
+  unrelated in-flight rename (`WorkspaceRenameConflictException` -> `WorkspaceEntryConflictException`)
+  was breaking the shared test project's build at the time. Re-run the reporting suite and the
+  golden lane; no plan or SVG hash should move.
+- [ ] **Drop `ResolvedDatum.Tooltip`.** The resolver builds a joined, per-channel interpolated string
+  for every row (`PlotPlanResolver.Datum`), and no production renderer reads it — native SVG and
+  terminal both build titles from the `Text`/`Tooltip` *channels*. It is serialized into the plan, so
+  removing it needs a `ChartContractVersions.PlotPlanCurrent` bump, a `COMPAT_BREAK` note, and a
+  golden re-bless.
+- [ ] **Slim the native SVG payload.** Each mark repeats constant attributes
+  (`stroke='white' stroke-width='1.5'`, `fill-opacity='1'`, `class='plot-point'`), roughly 50 of the
+  ~158 bytes per mark — about 30% of a scatter payload, on the one representation that actually
+  crosses the wire. Hoisting `stroke`/`stroke-width` to the parent `<g>` and omitting a unit
+  `fill-opacity` is runtime-safe (the client keys interaction off `[data-row-index]`, not the class);
+  hoisting `class='plot-point'` additionally rewrites the per-mark count assertions in
+  `StandardCatalogCartesianMigrationTests`. Requires a golden re-bless either way.
+- [ ] **Split `PlotPlanResolver.Resolve` into bounds-independent and bounds-dependent passes.**
+  `NativeChartLayoutResolver.Resolve` re-runs the entire resolver when only the container width band
+  changed, but `bounds` feeds only `ResolveFacets`, `ResolveDisplayOffsets`,
+  `ResolveCartesianViewport` and the facet part of `BuildSummary`. Categories, series, palette,
+  scale inference, per-row datum construction and the fallback are all bounds-independent and are
+  the expensive part, so a tier change currently pays 100% of resolve cost for a layout change.
+- [ ] **Hoist the color-scale lookup out of `ResolveDatumColor`.** It rescans `plan.Scales` for the
+  colour scale on every datum; only the value-to-colour mapping is genuinely per-datum. Needs a
+  signature change to the helper, which is why it was left out of the mechanical hoist pass.
+- [ ] **Tighten the GoG regression budgets.** `RepresentativeRefinementWorkload_HasBoundedResolverAndRendererWork`
+  gates at `< 5,000 ms` resolve/render and `< 256 MB` allocation against measured values of 65 ms,
+  35 ms and 14.7 MB, so it would not catch a 10x regression. Re-measure after the changes above and
+  set the allocation and payload-size budgets near the observed numbers; leave the timing bounds
+  loose, as they are already marked `flaky-time-bound-ok`.
 
 ## v0.19.0 Release Evidence Gates
 

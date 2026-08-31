@@ -36,9 +36,9 @@ BEGIN TRY
 
     -- 4. Cast, trim, attach data quality rules and governance tags.
     SELECT
-        TRY_CAST(CustomerId AS INT)                        AS CustomerId                /* @expect: 'NOT NULL, UNIQUE'; @fail: 'QUARANTINE'; @d: 'Vendor customer identifier.'; @pii */,
-        SUBSTRING(TRY_CAST(Email AS VARCHAR), 1, 150)      AS Email                     /* @expect: 'MATCHES ^[^@]+@[^@]+\.[^@]+$'; @fail: 'QUARANTINE'; @d: 'Customer email address.'; @pii */,
-        SUBSTRING(ISNULL(TRY_CAST(Status AS VARCHAR), ''), 1, 20) AS Status                    /* @expect: 'NOT NULL, IN (''ACTIVE'', ''INACTIVE'', ''PENDING'')'; @fail: 'QUARANTINE'; @d: 'Customer lifecycle status.' */,
+        TRY_CAST(CustomerId AS INT)                        AS CustomerId                EXPECT NOT NULL AND UNIQUE ON FAILURE QUARANTINE /* @d: 'Vendor customer identifier.'; @pii; */,
+        SUBSTRING(TRY_CAST(Email AS VARCHAR), 1, 150)      AS Email                     EXPECT MATCHES '^[^@]+@[^@]+\.[^@]+$' ON FAILURE QUARANTINE /* @d: 'Customer email address.'; @pii; */,
+        SUBSTRING(ISNULL(TRY_CAST(Status AS VARCHAR), ''), 1, 20) AS Status                    EXPECT NOT NULL AND IN ('ACTIVE', 'INACTIVE', 'PENDING') ON FAILURE QUARANTINE /* @d: 'Customer lifecycle status.'; */,
         TRY_CAST(SignupDate AS DATE)                       AS SignupDate                /* @d: 'Date the customer first registered.' */
     INTO #cleaned_data
     FROM #staging

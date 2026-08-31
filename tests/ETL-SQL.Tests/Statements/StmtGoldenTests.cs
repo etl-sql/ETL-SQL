@@ -78,6 +78,15 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task Select_ConcatenationSupportsAliasAndNumericCoercion()
+        {
+            var ev = Ev();
+            var r = await Q(ev, "SELECT 'Dept ' || 7 AS cat;");
+
+            Assert.Equal("Dept 7", r.Rows[0]["cat"]);
+        }
+
+        [Fact]
         public async Task Select_StringFunctions_UpperLowerLen()
         {
             var ev = Ev();

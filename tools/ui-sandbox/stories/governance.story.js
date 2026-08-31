@@ -272,8 +272,8 @@ export default {
         }),
         qualityRules: async () => [],
         qualityRulesAll: async () => [
-          { jobName: 'nightly_import', targetTable: 'staging_users', targetColumn: 'email', ruleTag: '@expect', rule: 'LIKE %_@_%._%', action: 'QUARANTINE', sourceFile: 'import.etlsql', line: 12 },
-          { jobName: 'finance_load', targetTable: 'prod_transactions', targetColumn: 'amount', ruleTag: '@fail', rule: '> 0', action: 'WARN', sourceFile: 'finance.etlsql', line: 45 }
+          { jobName: 'nightly_import', targetTable: 'staging_users', targetColumn: 'email', ruleClause: 'EXPECT', rule: "MATCHES '^[^@]+@[^@]+$'", action: 'QUARANTINE', sourceFile: 'import.etlsql', line: 12 },
+          { jobName: 'finance_load', targetTable: 'prod_transactions', targetColumn: 'amount', ruleClause: 'EXPECT', rule: '> 0', action: 'WARN', sourceFile: 'finance.etlsql', line: 45 }
         ],
         quarantineQueue: async () => []
       },

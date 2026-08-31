@@ -33,7 +33,7 @@ ETL-SQL supports two primary ingestion patterns. Selecting the correct pattern d
 | **Staged Ingestion** (Scenario A) | Extract to `#temp` first, then insert/merge into destination in a separate statement. | • Isolates the source system (minimized connection hold time).<br>• Fully supports checkpoint-resume recovery.<br>• Allows multi-pass updates and indexes on staged data. | • I/O double-tax (data is written locally, then read back).<br>• Higher disk space usage. | • Source database is busy and connections must be closed quickly.<br>• Loading takes a long time, and you want rollback/resume capabilities. |
 | **Direct Streaming** (Scenario B) | Stream directly from source to destination in a single statement (e.g., `INSERT INTO dest SELECT FROM src`). | • High performance (zero local write/read I/O overhead).<br>• Low local disk/memory footprint. | • Both source and target connections must remain open concurrently.<br>• No checkpoint-resume possible; failures require full restarts. | • Working with very large datasets where I/O double-tax is prohibitive.<br>• Source and target databases can handle prolonged concurrent connections. |
 
-*Note: Lineage tracking, data-quality rules (`@expect`), and inline transformations (like regex or `HASHBYTES`) are fully supported in **both** patterns. The engine processes them on each 10k batch as it streams.*
+*Note: Lineage tracking, data-quality rules (`EXPECT`), and inline transformations (like regex or `HASHBYTES`) are fully supported in **both** patterns. The engine processes them on each 10k batch as it streams.*
 
 ---
 
@@ -61,16 +61,17 @@ ETL-SQL supports two primary ingestion patterns. Selecting the correct pattern d
 * When querying a **file connector** or a **#temp table**, use the ETL-SQL engine standard library functions (e.g., `COALESCE`, `GETDATE()`) rather than database-specific ones (like `ISNULL` or `NOW()`).
 
 ### C. Data Quality (DQ) Gates
-* Enforce rules on incoming columns using `@expect` or `@fail` attributes.
+* Enforce rules on incoming columns with an `EXPECT` clause.
 * Use `ON FAILURE` routing to prevent dirty data from corrupting your target table while allowing the script to finish:
   ```sql
-  SELECT 
+  quarantine_orders:
+  SELECT
       id,
-      email @expect(LIKE '%@%'),
-      amount @expect(>= 0)
+      email  EXPECT MATCHES '@' ON FAILURE QUARANTINE,
+      amount EXPECT >= 0 ON FAILURE QUARANTINE
   INTO #clean_orders
   FROM SrcDb.orders
-  ON FAILURE ROUTE TO #quarantine_orders;
+  ON FAILURE QUARANTINE TO quarantine_orders WITH (RETENTION = '30 DAYS');
   ```
 
 ### D. Checkpoint & Session Lifecycle
@@ -113,15 +114,16 @@ Extract:
 -- 3. Data Quality Gate (Transform & Cleanse)
 Transform:
   -- Filter and validate input formats; route failures to quarantine
-  SELECT 
+  SELECT
       order_id,
       customer_id,
-      email @expect(LIKE '%_@_%._%') @fail(action = WARN),
-      order_total @expect(> 0) @fail(action = QUARANTINE),
+      email       EXPECT MATCHES '^[^@]+@[^@]+\.[^@]+$' ON FAILURE WARN,
+      order_total EXPECT > 0 ON FAILURE QUARANTINE,
       order_date
   INTO #validated_orders
   FROM #staged_orders
-  ON FAILURE ROUTE TO #quarantine_orders;
+  ON FAILURE QUARANTINE TO quarantine_orders WITH (RETENTION = '30 DAYS')
+  ON FAILURE WARN;
 
 -- 4. Load (Merge into Target)
 Load:

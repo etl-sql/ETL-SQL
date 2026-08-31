@@ -12,7 +12,7 @@
 | [eng.connection_config](connection-config.md) | - Engine Catalog |
 | [eng.connections](connections.md) | - Engine Catalog |
 | [eng.data_quality_failures](data-quality-failures.md) | Orchestrator history. Failed sample values are never persisted or returned. |
-| [`eng.data_quality_rules`](data-quality-rules.md) | Data-quality rules captured from `@expect` and `@fail` metadata in the current session. |
+| [`eng.data_quality_rules`](data-quality-rules.md) | Data-quality rules captured from `EXPECT` clauses metadata in the current session. |
 | [eng.data_quality_status](data-quality-status.md) | configured Orchestrator history. Qualify it with an `ORCHESTRATOR` connection to query a remote |
 | [`eng.effective_permissions`](effective-permissions.md) | Computed access rights, roles, and administrative scopes for the active principal. |
 | [ENG](eng.md) | - **eng.connections** - Active session connections. |

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
@@ -741,6 +742,360 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_ScriptPane_KeepsHandAuthoredTextAndInsertedConnections()
+    {
+        // Typing into the script pane used to erase itself. The canvas regenerates its script from
+        // the design state alone, and updating the canvas *from* the editor let that regeneration
+        // run and overwrite the author's text ~800ms later -- so anything the design state does not
+        // model, most visibly a CREATE CONNECTION, vanished as it was typed. That made the
+        // Connection Wizard look broken too: its inserted statement disappeared moments later.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var survived = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+            """
+            async () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const editor = studio.state.editorInstance;
+                const marker = 'CREATE CONNECTION demo AS MOCKDB();';
+                editor.setValue(marker + String.fromCharCode(10) + editor.getValue());
+
+                // Long enough for both debounces to fire: editor->canvas (400ms) and the
+                // canvas->script regeneration (400ms) that used to clobber the buffer.
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return { keptConnection: editor.getValue().includes(marker) };
+            }
+            """);
+
+        Assert.True(survived.GetProperty("keptConnection").GetBoolean(),
+            "The script pane discarded a hand-authored CREATE CONNECTION after the canvas re-rendered.");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_CanvasEdits_StillWriteBackToTheScript()
+    {
+        // The guard above must stay surgical: suppressing the write-back only while ingesting
+        // script text, never for a genuine canvas edit. Without this, fixing the clobber would
+        // silently sever canvas-to-code sync.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var result = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+            """
+            async () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const editor = studio.state.editorInstance;
+                const before = editor.getValue();
+                studio.state.designerInstance.addVisual('BAR');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return { grew: editor.getValue().length > before.length };
+            }
+            """);
+
+        Assert.True(result.GetProperty("grew").GetBoolean(),
+            "A canvas edit no longer writes back to the script.");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_DatasetEdits_RefreshTheRightSampleAndIgnoreStaleOrInvalidResults()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var result = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+            """
+            async () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const editor = studio.state.editorInstance;
+                window.__STUDIO_API_DELAY__ = ({ url, body }) =>
+                    url.endsWith('/api/designer/data-sample') && body?.script?.includes('stale_metric') ? 1400 : 0;
+
+                editor.setValue(editor.getValue().replace(
+                    'SELECT order_date, total_amount, region',
+                    'SELECT order_date, total_amount AS stale_metric, region'));
+                await new Promise(resolve => setTimeout(resolve, 650));
+                editor.setValue(editor.getValue().replace('stale_metric', 'fresh_metric'));
+                await new Promise(resolve => setTimeout(resolve, 2200));
+
+                const document = studio.state.documents.find(item => item.id === 'doc-report');
+                const sampleRequestsBeforeInvalid = window.__STUDIO_API_REQUESTS__.filter(request =>
+                    request.url.endsWith('/api/designer/data-sample') && request.body?.sourceKind === 'dataset').length;
+                const validSnapshot = JSON.stringify(document.studioContext.snapshot);
+                const visualCount = document.querySelectorAll?.('.designer-card')?.length
+                    ?? window.document.querySelectorAll('.designer-card').length;
+
+                editor.setValue(editor.getValue() + String.fromCharCode(10) + '>>> INVALID <<<');
+                await new Promise(resolve => setTimeout(resolve, 1100));
+
+                const sampleRequestsAfterInvalid = window.__STUDIO_API_REQUESTS__.filter(request =>
+                    request.url.endsWith('/api/designer/data-sample') && request.body?.sourceKind === 'dataset').length;
+                return {
+                    sampleRequestsBeforeInvalid,
+                    sampleRequestsAfterInvalid,
+                    columns: document.studioContext.snapshot.columns,
+                    snapshotPreserved: JSON.stringify(document.studioContext.snapshot) === validSnapshot,
+                    visualCount,
+                    visualCountAfterInvalid: window.document.querySelectorAll('.designer-card').length,
+                };
+            }
+            """);
+
+        Assert.Equal(2, result.GetProperty("sampleRequestsBeforeInvalid").GetInt32());
+        Assert.Equal(2, result.GetProperty("sampleRequestsAfterInvalid").GetInt32());
+        var columns = result.GetProperty("columns").EnumerateArray().Select(item => item.GetString()).ToList();
+        Assert.Contains("fresh_metric", columns);
+        Assert.DoesNotContain("stale_metric", columns);
+        Assert.True(result.GetProperty("snapshotPreserved").GetBoolean());
+        Assert.Equal(result.GetProperty("visualCount").GetInt32(), result.GetProperty("visualCountAfterInvalid").GetInt32());
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_ExitActionReportsThatTheProjectHostStopped()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator("[data-action='exit']").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.documents.forEach(document => document.isDirty = false)");
+        await page.Locator("[data-action='exit']").ClickAsync();
+
+        await page.WaitForFunctionAsync("() => window.__STUDIO_EXIT_REQUESTS__?.length === 1");
+        var request = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+            "() => window.__STUDIO_EXIT_REQUESTS__[0]");
+
+        Assert.False(request.GetProperty("force").GetBoolean());
+        Assert.Equal(0, request.GetProperty("activeRuns").GetInt32());
+        Assert.Equal(0, request.GetProperty("dirtyDocuments").GetInt32());
+        Assert.Contains("Studio host stopped", await page.Locator("body").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_ConnectionWizard_OffersMockDbUnderTestData()
+    {
+        // MOCKDB is the only connector a new author can use with no database, and it backs Studio
+        // Home's "Start with sample data". The wizard falls back to a built-in connector list when
+        // discovery fails, and that list had no MOCKDB -- so the zero-dependency on-ramp went
+        // missing exactly when the environment could not reach a real server.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        await page.ClickAsync(".etlsql-studio-rail-btn[data-activity='catalog']");
+        await page.ClickAsync("[data-action='wizard']");
+        await page.Locator(".etlsql-cw-overlay").WaitForAsync();
+        await page.ClickAsync(".etlsql-cw-overlay [data-cat='testdata']");
+
+        await page.Locator(".etlsql-cw-overlay [data-type='MOCKDB']").WaitForAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_ConnectionWizard_PrefillsAUsableAliasAndBlocksInvalidOnes()
+    {
+        // The alias was marked required but nothing enforced it, and generateSql substitutes the
+        // literal `<alias>` placeholder when it is blank -- so confirming the dialog wrote
+        // `CREATE CONNECTION <alias> AS ...` into the script, which does not parse. It is also the
+        // one field a newcomer has no basis to fill in before knowing what the connection is for,
+        // so it is prefilled with a free name rather than left as a wall.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        await page.ClickAsync(".etlsql-studio-rail-btn[data-activity='catalog']");
+        await page.ClickAsync("[data-action='wizard']");
+        await page.Locator(".etlsql-cw-overlay").WaitForAsync();
+
+        var alias = page.Locator("#etlsql-cw-alias-input");
+        var submit = page.Locator("#etlsql-cw-submit-btn");
+
+        // Prefilled and immediately usable.
+        Assert.False(string.IsNullOrWhiteSpace(await alias.InputValueAsync()));
+        Assert.True(await submit.IsEnabledAsync());
+
+        // The generated SQL shows a real alias, never the placeholder.
+        Assert.DoesNotContain("<alias>", await page.Locator(".etlsql-cw-overlay").InnerTextAsync(), StringComparison.Ordinal);
+
+        // Cleared: blocked.
+        await alias.FillAsync("");
+        Assert.True(await submit.IsDisabledAsync());
+
+        // Not an identifier: blocked, and the hint says why rather than just "required".
+        await alias.FillAsync("9 bad-name");
+        Assert.True(await submit.IsDisabledAsync());
+        Assert.Contains("must start with a letter",
+            await page.Locator(".etlsql-cw-missing-hint").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+
+        // Valid again: re-enabled.
+        await alias.FillAsync("good_name");
+        Assert.True(await submit.IsEnabledAsync());
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_PipelineCanvasUsesEngineDagAndPreservesScriptBytes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
+
+        var status = page.Locator("[data-dag-status]");
+        await status.WaitForAsync();
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
+
+        var sourceBefore = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content");
+        var dagNodes = page.Locator("[data-dag-node]");
+        Assert.Equal(6, await dagNodes.CountAsync());
+        Assert.Contains("IF", await page.Locator("[data-dag-node='quality_branch']").InnerTextAsync());
+        Assert.Contains("ASSERT", await page.Locator("[data-dag-node='quality_gate']").InnerTextAsync());
+
+        var canvasBox = await page.Locator(".etlsql-dag-canvas").BoundingBoxAsync();
+        Assert.NotNull(canvasBox);
+        for (var i = 0; i < await dagNodes.CountAsync(); i++)
+        {
+            var nodeBox = await dagNodes.Nth(i).BoundingBoxAsync();
+            Assert.NotNull(nodeBox);
+            Assert.True(nodeBox!.X >= canvasBox!.X - 1 && nodeBox.Y >= canvasBox.Y - 1);
+            Assert.True(nodeBox.X + nodeBox.Width <= canvasBox.X + canvasBox.Width + 1);
+            Assert.True(nodeBox.Y + nodeBox.Height <= canvasBox.Y + canvasBox.Height + 1);
+        }
+
+        var trueEdge = page.Locator("[data-dag-source='quality_branch'][data-dag-target='#ready_sales'][data-dag-label='TRUE']");
+        var elseEdge = page.Locator("[data-dag-source='quality_branch'][data-dag-target='#quarantine_sales'][data-dag-label='ELSE']");
+        await trueEdge.WaitForAsync();
+        await elseEdge.WaitForAsync();
+
+        await page.Locator("[data-dag-node='quality_branch']").ClickAsync();
+        var sourceAfterNavigation = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content");
+        Assert.Equal(sourceBefore, sourceAfterNavigation);
+
+        var requestScript = await page.EvaluateAsync<string>("""
+            () => [...window.__STUDIO_API_REQUESTS__]
+              .reverse()
+              .find(request => request.url.endsWith('/api/designer/dag'))
+              ?.body?.script
+            """);
+        Assert.Equal(sourceBefore, requestScript);
+
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.setValue('>>> INVALID <<<')");
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Last valid flow')");
+        Assert.Equal(6, await page.Locator("[data-dag-node]").CountAsync());
+        Assert.Contains("Unexpected token", await status.InnerTextAsync());
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_TabName_DoubleClickRenamesAndEscapeCancels()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var activeTitle = page.Locator(".etlsql-studio-tab.active .etlsql-tab-title");
+        await activeTitle.DispatchEventAsync("dblclick");
+        var input = page.Locator(".etlsql-tab-rename-input");
+        await input.FillAsync("discarded-name");
+        await input.PressAsync("Escape");
+        Assert.Contains("sales_overview.rptsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
+
+        await page.Locator(".etlsql-studio-tab.active .etlsql-tab-title").DispatchEventAsync("dblclick");
+        input = page.Locator(".etlsql-tab-rename-input");
+        await input.FillAsync("quarterly_sales");
+        await input.PressAsync("Enter");
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.documents[0].name === 'quarterly_sales.rptsql'");
+        Assert.Contains("quarterly_sales.rptsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_Explorer_ManagesFoldersAndMovesFiles()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        await page.Locator("[data-explorer-new-folder='']").ClickAsync();
+        await page.Locator(".etlsql-feedback-field input").FillAsync("archive-new");
+        await page.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        var archive = page.Locator("[data-explorer-folder='archive-new']");
+        await archive.WaitForAsync();
+
+        await page.Locator("[data-explorer-file='reports/sales_overview.rptsql']").DragToAsync(archive);
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'archive-new/sales_overview.rptsql')");
+        await page.Locator("[data-explorer-file='archive-new/sales_overview.rptsql']")
+            .DragToAsync(page.Locator("[data-explorer-root-drop]"));
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'sales_overview.rptsql')");
+
+        var etlFile = page.Locator("[data-explorer-file='etl/ingest_orders.etlsql']");
+        await etlFile.HoverAsync();
+        await etlFile.Locator("[data-explorer-rename]").ClickAsync();
+        var prompt = page.Locator(".etlsql-feedback-field input");
+        await prompt.FillAsync("import_orders");
+        await page.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'etl/import_orders.etlsql')");
+
+        etlFile = page.Locator("[data-explorer-file='etl/import_orders.etlsql']");
+        await etlFile.HoverAsync();
+        await etlFile.Locator("[data-explorer-delete]").ClickAsync();
+        await page.Locator(".etlsql-feedback-btn-danger").ClickAsync();
+        await page.WaitForFunctionAsync("() => !window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'etl/import_orders.etlsql')");
+
+        archive = page.Locator("[data-explorer-folder='archive-new']");
+        await archive.HoverAsync();
+        await archive.Locator("[data-explorer-rename]").ClickAsync();
+        await page.Locator(".etlsql-feedback-field input").FillAsync("archive-final");
+        await page.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        var renamedArchive = page.Locator("[data-explorer-folder='archive-final']");
+        await renamedArchive.WaitForAsync();
+        await renamedArchive.HoverAsync();
+        await renamedArchive.Locator("[data-explorer-delete]").ClickAsync();
+        await page.Locator(".etlsql-feedback-btn-danger").ClickAsync();
+        await page.WaitForFunctionAsync("() => !window.__STUDIO_INSTANCE__.state.workspaceFolders.some(folder => folder.path === 'archive-final')");
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_Mounts_SwitchesProjections_AndScansSecrets()
     {
         await using var session = await fixture.NewSessionAsync();
@@ -752,6 +1107,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         // Wait for studio shell to mount
         var studioShell = page.Locator(".etlsql-studio-shell");
         await studioShell.WaitForAsync();
+        await page.Locator(".etlsql-studio-tab").First.WaitForAsync();
 
         // 1. Verify tabs rendered (Home + 3 documents)
         Assert.Equal(4, await page.Locator(".etlsql-studio-tab").CountAsync());
@@ -774,11 +1130,19 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         // 3. Test Activity Rail switching and Filter Pane
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
-        Assert.Contains("Published Connections", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("New connection", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Connections", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
 
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
-        Assert.Contains("Filter Pane", await page.Locator("[data-sidebar-title]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Region", await page.Locator(".etlsql-filter-card", new() { HasText = "Region" }).InnerTextAsync());
+        Assert.Equal("Data", await page.Locator("[data-sidebar-title]").InnerTextAsync(), ignoreCase: true);
+        Assert.True(await page.Locator("[data-studio-sidebar]").IsVisibleAsync());
+        Assert.True(await page.Locator("[data-filter-sidebar]").IsVisibleAsync());
+        await page.Locator("[data-studio-sidebar] [data-field='region']").ClickAsync();
+        var filterDialog = page.Locator(".etlsql-studio-filter-dialog");
+        await filterDialog.WaitForAsync();
+        Assert.Equal("region", await filterDialog.Locator("[data-filter-dialog-field]").InputValueAsync());
+        await filterDialog.Locator("[data-filter-dialog-field]").PressAsync("Escape");
+        Assert.True(await page.Locator("[data-modal-backdrop]").IsHiddenAsync());
 
         // 4. Assert Phase 2 Live In-Memory Visual Canvas calculations
         var kpiCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='rev_kpi']");
@@ -835,13 +1199,49 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await modalBackdrop.WaitForAsync();
         Assert.False(await modalBackdrop.IsHiddenAsync());
         Assert.Contains("Plaintext Secret Detected", await page.Locator("[data-modal-box]").InnerTextAsync());
-        Assert.Contains("SuperSecretPassword123!", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.Contains("(value hidden)", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.DoesNotContain("SuperSecretPassword123!", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.False(await page.Locator("[data-modal-box]").EvaluateAsync<bool>(
+            "element => element.innerHTML.includes('SuperSecretPassword123!')"));
 
         // Cancel modal
         await page.Locator("[data-modal-box] button[data-modal-close]").First.ClickAsync();
         await page.WaitForTimeoutAsync(100);
         Assert.True(await modalBackdrop.IsHiddenAsync());
 
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_SourceControl_ShowsLocalHistoryAndSideBySideDiff()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.Locator("button[data-activity='git']").ClickAsync();
+
+        var headComparison = page.Locator("[data-git-revision='HEAD']");
+        await headComparison.WaitForAsync();
+        Assert.Contains("Includes unsaved editor changes", await headComparison.InnerTextAsync());
+        Assert.Equal(2, await page.Locator(".etlsql-studio-git-history [data-git-revision]").CountAsync());
+
+        await headComparison.ClickAsync();
+        var diff = page.Locator(".etlsql-studio-git-diff-modal");
+        await diff.WaitForAsync();
+        Assert.Contains("HEAD a12bc34d", await diff.InnerTextAsync());
+        Assert.Contains("Working tree", await diff.InnerTextAsync());
+        Assert.Equal(1, await diff.Locator(".etlsql-studio-git-diff-row.is-change").CountAsync());
+        Assert.Contains(await diff.Locator(".etlsql-studio-git-diff-cell.is-left").AllInnerTextsAsync(),
+            text => text.Contains("TITLE = 'Revenue'", StringComparison.Ordinal));
+        Assert.Contains(await diff.Locator(".etlsql-studio-git-diff-cell.is-right").AllInnerTextsAsync(),
+            text => text.Contains("TITLE = 'Total Revenue'", StringComparison.Ordinal));
+
+        await diff.Locator("[data-git-diff-close]").ClickAsync();
+        Assert.True(await diff.IsHiddenAsync());
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
@@ -855,21 +1255,38 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
 
-        var fields = page.Locator("[data-field]");
-        Assert.Equal(3, await fields.CountAsync());
-        for (var index = 0; index < await fields.CountAsync(); index++)
-            await fields.Nth(index).ClickAsync();
+        var dataSidebar = page.Locator("[data-studio-sidebar]");
+        var filterSidebar = page.Locator("[data-filter-sidebar]");
+        Assert.True(await dataSidebar.IsVisibleAsync());
+        Assert.True(await filterSidebar.IsVisibleAsync());
+        Assert.DoesNotContain("Active filters", await dataSidebar.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Connections", await filterSidebar.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
 
-        Assert.Equal(3, await page.Locator(".etlsql-filter-card").CountAsync());
-        Assert.True(await page.Locator("[data-date-preset='order_date']").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-date-min='order_date']").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-date-max='order_date']").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-min='total_amount']").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-max='total_amount']").IsVisibleAsync());
-        Assert.Equal(4, await page.Locator("[data-filter-value='region']").CountAsync());
-        Assert.Equal(3, await page.Locator("[data-filter-scope]").CountAsync());
+        await dataSidebar.Locator("[data-field='region']").DragToAsync(filterSidebar.Locator("[data-filter-drop]"));
+        var setup = page.Locator(".etlsql-studio-filter-dialog");
+        await setup.WaitForAsync();
+        Assert.Equal("region", await setup.Locator("[data-filter-dialog-field]").InputValueAsync());
+        await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
+
+        await filterSidebar.Locator("[data-new-filter]").ClickAsync();
+        await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("total_amount");
+        await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
+
+        await filterSidebar.Locator("[data-new-filter]").ClickAsync();
+        await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("order_date");
+        await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
+
+        Assert.Equal(3, await filterSidebar.Locator(".etlsql-filter-card").CountAsync());
+        Assert.True(await filterSidebar.Locator("[data-date-preset='order_date']").IsVisibleAsync());
+        Assert.True(await filterSidebar.Locator("[data-filter-date-min='order_date']").IsVisibleAsync());
+        Assert.True(await filterSidebar.Locator("[data-filter-date-max='order_date']").IsVisibleAsync());
+        Assert.True(await filterSidebar.Locator("[data-filter-min='total_amount']").IsVisibleAsync());
+        Assert.True(await filterSidebar.Locator("[data-filter-max='total_amount']").IsVisibleAsync());
+        Assert.Equal(4, await filterSidebar.Locator("[data-filter-value='region']").CountAsync());
+        Assert.Equal(3, await filterSidebar.Locator("[data-filter-scope]").CountAsync());
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
@@ -893,6 +1310,113 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Contains("untitled_query_", await activeTab.InnerTextAsync());
         Assert.Contains(".etlsql", await activeTab.InnerTextAsync());
         Assert.DoesNotContain(".sql", await activeTab.InnerTextAsync());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_Home_CreatesDistinctDashboardAndPaginatedReportWorkflows()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
+
+        var dashboardAction = page.Locator("[data-create-from-home='dashboard']:not([data-seed-sample])");
+        var paginatedAction = page.Locator("[data-create-from-home='paginated']");
+        Assert.Contains("New Dashboard", await dashboardAction.InnerTextAsync());
+        Assert.Contains("New Paginated Report", await paginatedAction.InnerTextAsync());
+
+        await paginatedAction.ClickAsync();
+        await page.Locator(".etlsql-studio-visual-stage.is-paginated-workflow").WaitForAsync();
+        Assert.Contains("Physical page authoring", await page.Locator("[data-workflow-bar]").InnerTextAsync());
+        Assert.Equal(8, await page.Locator(".etlsql-paginated-steps > li").CountAsync());
+        var paginated = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const doc = window.__STUDIO_INSTANCE__.state.documents.find(item => item.id === window.__STUDIO_INSTANCE__.state.activeDocId);
+                return { name: doc.name, content: doc.content, workflow: doc.reportWorkflow };
+            }
+            """);
+        Assert.EndsWith(".rptsql", paginated.GetProperty("name").GetString(), StringComparison.Ordinal);
+        Assert.Equal("paginated", paginated.GetProperty("workflow").GetString());
+        Assert.Contains("AS PAGINATED", paginated.GetProperty("content").GetString(), StringComparison.Ordinal);
+        Assert.Contains("PRINT_LAYOUT", paginated.GetProperty("content").GetString(), StringComparison.Ordinal);
+
+        await page.SelectOptionAsync("[data-page-setup='orientation']", "LANDSCAPE");
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_API_REQUESTS__.some(request =>
+                request.url.endsWith('/api/designer/patch') &&
+                request.body?.designState?.pages?.[0]?.printLayout?.orientation === 'LANDSCAPE')
+            """);
+
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
+        await dashboardAction.ClickAsync();
+        await page.Locator(".etlsql-studio-visual-stage.is-dashboard-workflow").WaitForAsync();
+        Assert.Contains("Responsive visual canvas", await page.Locator("[data-workflow-bar]").InnerTextAsync());
+        var dashboard = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const doc = window.__STUDIO_INSTANCE__.state.documents.find(item => item.id === window.__STUDIO_INSTANCE__.state.activeDocId);
+                return { name: doc.name, content: doc.content, workflow: doc.reportWorkflow };
+            }
+            """);
+        Assert.EndsWith(".rptsql", dashboard.GetProperty("name").GetString(), StringComparison.Ordinal);
+        Assert.Equal("dashboard", dashboard.GetProperty("workflow").GetString());
+        Assert.Contains("AS DASHBOARD", dashboard.GetProperty("content").GetString(), StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_ExistingReportWorkflowInference_PreservesAmbiguousAndInvalidScriptBytes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        Assert.Equal("dashboard", await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(doc => doc.id === 'doc-report').reportWorkflow"));
+        var validCanvasCount = await page.Locator(".designer-card").CountAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.setValue('>>> INVALID <<<')");
+        await page.WaitForTimeoutAsync(550);
+        Assert.Equal("dashboard", await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(doc => doc.id === 'doc-report').reportWorkflow"));
+        Assert.Equal(validCanvasCount, await page.Locator(".designer-card").CountAsync());
+        Assert.Equal(">>> INVALID <<<", await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()"));
+
+        const string ambiguous = "-- hand-authored report\nCREATE VISUAL note AS TEXT (TITLE = 'Keep me', SOURCE = #rows);";
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'ambiguous-report', path: 'ambiguous.rptsql', name: 'ambiguous.rptsql', content: script, isDirty: false, projection: 'split' });
+                void studio.switchDoc('ambiguous-report');
+            }
+            """, ambiguous);
+        await page.Locator("[data-choose-workflow='dashboard']").WaitForAsync();
+        Assert.Contains("byte-for-byte unchanged", await page.Locator(".etlsql-workflow-choice").InnerTextAsync());
+        await page.Locator("[data-choose-workflow='paginated']").ClickAsync();
+        await page.Locator(".etlsql-studio-visual-stage.is-paginated-workflow").WaitForAsync();
+
+        var selected = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const doc = window.__STUDIO_INSTANCE__.state.documents.find(item => item.id === 'ambiguous-report');
+                return { content: doc.content, workflow: doc.reportWorkflow, dirty: doc.isDirty };
+            }
+            """);
+        Assert.Equal(ambiguous, selected.GetProperty("content").GetString());
+        Assert.Equal("paginated", selected.GetProperty("workflow").GetString());
+        Assert.False(selected.GetProperty("dirty").GetBoolean());
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }

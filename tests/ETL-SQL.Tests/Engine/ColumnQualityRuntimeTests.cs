@@ -18,7 +18,7 @@ using Xunit;
 namespace ETL_SQL.Tests.Engine
 {
     /// <summary>
-    /// End-to-end runtime enforcement of @expect column rules: THROW / WARN / QUARANTINE routing,
+    /// End-to-end runtime enforcement of EXPECT column rules: THROW / WARN / QUARANTINE routing,
     /// the __dq_* capture schema (pre-projection input row, reserved replay columns), NULL-skip
     /// semantics, decimal compares, EXISTS IN key sets, PII masking, and the local-path pin.
     /// Numeric assertions use the m suffix — INT/BIGINT store as decimal at runtime.
@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a'), (NULL, 'b')");
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'THROW'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE THROW, Name
                 INTO #clean FROM #src;"));
 
             Assert.Contains("NOT NULL", ex.Message);
@@ -48,7 +48,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a'), (2, 'b')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL, >= 0'; @fail: 'THROW'; */, Name
+                SELECT Id EXPECT NOT NULL AND >= 0 ON FAILURE THROW, Name
                 INTO #clean FROM #src;");
 
             Assert.Equal(2, await CountRows(eval, "#clean"));
@@ -64,7 +64,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a'), (-5, 'b'), (-7, 'c')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: '>= 0'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT >= 0 ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -88,7 +88,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, values);
 
             await Run(eval, @"
-                SELECT Id /* @expect: '>= 0'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT >= 0 ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -104,7 +104,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a'), (-5, 'b')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: '>= 0'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT >= 0 ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN TO #warn_log WITH (RETENTION = '30 DAYS');");
 
@@ -125,7 +125,7 @@ namespace ETL_SQL.Tests.Engine
             eval.Connections["#warn_log"] = target;
 
             await Run(eval, @"
-                SELECT Id /* @expect: '>= 0'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT >= 0 ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN TO #warn_log WITH (RETENTION = '30 DAYS');");
 
@@ -148,7 +148,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -180,7 +180,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, UPPER(Name) AS CleanName
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, UPPER(Name) AS CleanName
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -209,7 +209,7 @@ namespace ETL_SQL.Tests.Engine
                 CREATE TABLE #dim (Name VARCHAR(100));
                 INSERT INTO #dim (Name) VALUES ('divert');
                 import_joined_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 JOIN #dim ON #src.Name = #dim.Name
                 ON FAILURE QUARANTINE TO #q;");
@@ -261,7 +261,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -279,7 +279,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -303,7 +303,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
             await Run(eval, "UPDATE #q SET Id = 10, __dq_status = 'released' WHERE __dq_status = 'quarantined';");
@@ -343,7 +343,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'first'), (NULL, 'second')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -373,7 +373,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 SET DATA_QUALITY_DRY_RUN = ON;
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src;");
 
             // Nothing was diverted or thrown: the load behaves exactly as it would without rules.
@@ -398,7 +398,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 SET DATA_QUALITY_DRY_RUN = ON;
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'THROW'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE THROW, Name
                 INTO #clean FROM #src;");
 
             Assert.Equal(1, await CountRows(eval, "#clean"));
@@ -415,7 +415,7 @@ namespace ETL_SQL.Tests.Engine
                 SET DATA_QUALITY_DRY_RUN = ON;
                 SET DATA_QUALITY_DRY_RUN = OFF;
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -431,9 +431,8 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL, >= 0'; @fail: 'THROW';
-                            @expect_1: 'UNIQUE'; @fail_1: 'QUARANTINE'; */,
-                       Name /* @expect: 'NOT NULL'; */
+                SELECT Id EXPECT NOT NULL AND >= 0 ON FAILURE THROW EXPECT UNIQUE ON FAILURE QUARANTINE,
+                       Name EXPECT NOT NULL
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q
                 ON FAILURE WARN;");
@@ -441,16 +440,16 @@ namespace ETL_SQL.Tests.Engine
             await Run(eval, "SELECT * FROM eng.data_quality_rules;");
             var rows = eval.LastResult!.Rows;
 
-            // One row per individual rule, not per tag: 'NOT NULL, >= 0' reads as two protections.
+            // One row per individual rule, not per clause: 'NOT NULL AND >= 0' reads as two protections.
             Assert.Equal(4, rows.Count);
             Assert.Contains(rows, r => (string?)r["target_column"] == "Id"
                 && (string?)r["rule"] == "NOT NULL" && (string?)r["action"] == "THROW");
             Assert.Contains(rows, r => (string?)r["target_column"] == "Id"
                 && (string?)r["rule"] == ">= 0" && (string?)r["action"] == "THROW");
             Assert.Contains(rows, r => (string?)r["target_column"] == "Id"
-                && (string?)r["rule"] == "UNIQUE" && (string?)r["rule_tag"] == "@expect_1");
+                && (string?)r["rule"] == "UNIQUE" && (string?)r["rule_clause"] == "EXPECT #2");
 
-            // A rule with no @fail is WARN, and the listing says so rather than leaving it blank.
+            // A clause with no action is WARN, and the listing says so rather than leaving it blank.
             Assert.Contains(rows, r => (string?)r["target_column"] == "Name"
                 && (string?)r["action"] == "WARN (default)");
         }
@@ -462,8 +461,8 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */,
-                       Name /* @expect: 'NOT NULL'; @fail: 'WARN'; */
+                SELECT Id EXPECT NOT NULL ON FAILURE WARN,
+                       Name EXPECT NOT NULL ON FAILURE WARN
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -492,7 +491,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -551,7 +550,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'keep'), (NULL, 'divert')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
 
@@ -582,7 +581,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
 
@@ -603,7 +602,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
             await Run(eval,
@@ -623,7 +622,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
 
@@ -641,7 +640,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q WITH (RETENTION = '30 DAYS', HANDLING = STEWARD);");
 
@@ -660,7 +659,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
             await Run(eval,
@@ -691,7 +690,7 @@ namespace ETL_SQL.Tests.Engine
                 CREATE TABLE #dim (Name VARCHAR(100), Region VARCHAR(10));
                 INSERT INTO #dim (Name, Region) VALUES ('divert', 'NA');
                 import_joined_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, #src.Name, #dim.Region
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, #src.Name, #dim.Region
                 INTO #clean FROM #src
                 INNER HASH JOIN #dim ON #src.Name = #dim.Name
                 ON FAILURE QUARANTINE TO #q;");
@@ -730,7 +729,7 @@ namespace ETL_SQL.Tests.Engine
                 CREATE TABLE #dim (Name VARCHAR(100), Region VARCHAR(10));
                 import_joined_rows:
                 SELECT #src.Id, #src.Name,
-                       #dim.Region /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+                       #dim.Region EXPECT NOT NULL ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 LEFT HASH JOIN #dim ON #src.Name = #dim.Name
                 ON FAILURE QUARANTINE TO #q;");
@@ -776,7 +775,7 @@ namespace ETL_SQL.Tests.Engine
                 CREATE TABLE #dim (Name VARCHAR(100));
                 INSERT INTO #dim (Name) VALUES ('divert');
                 import_joined_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 JOIN #dim ON #src.Name = #dim.Name
                 ON FAILURE QUARANTINE TO #q;");
@@ -796,7 +795,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
             await Run(eval, "UPDATE #q SET Id = 10, __dq_status = 'released' WHERE __dq_status = 'quarantined';");
@@ -814,7 +813,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -832,7 +831,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'divert')");
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -849,7 +848,7 @@ namespace ETL_SQL.Tests.Engine
             var eval = NewEvaluator();
             await Seed(eval, "(-5, 'warned')");
             await Run(eval, @"
-                SELECT Id /* @expect: '>= 0'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT >= 0 ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN TO #warn_log WITH (RETENTION = '30 DAYS');");
 
@@ -867,7 +866,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(NULL, 'a')");
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */ INTO #clean FROM #src;"));
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE INTO #clean FROM #src;"));
             Assert.Contains("ON FAILURE QUARANTINE", ex.Message);
         }
 
@@ -881,7 +880,7 @@ namespace ETL_SQL.Tests.Engine
 
             // A NULL Id must NOT trip the >= 0 rule (SQL CHECK-constraint convention).
             await Run(eval, @"
-                SELECT Id /* @expect: '>= 0'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT >= 0 ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -896,7 +895,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'user@example.com'), (2, 'bad-address')");
 
             await Run(eval, @"
-                SELECT Id, UPPER(Name) AS Email /* @expect: 'MATCHES ^[A-Z0-9._%+-]+@[A-Z0-9.-]+$'; @fail: 'WARN'; */
+                SELECT Id, UPPER(Name) AS Email EXPECT MATCHES '^[A-Z0-9._%+-]+@[A-Z0-9.-]+$' ON FAILURE WARN
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -913,7 +912,7 @@ namespace ETL_SQL.Tests.Engine
             var insensitive = NewEvaluator();
             await Seed(insensitive, "(1, 'na')");
             await Run(insensitive, @"
-                SELECT Id, Name /* @expect: ""IN ('NA','EMEA')""; @fail: 'WARN'; */
+                SELECT Id, Name EXPECT IN ('NA','EMEA') ON FAILURE WARN
                 INTO #clean FROM #src ON FAILURE WARN;");
             Assert.Equal(0, insensitive.DataQuality.TotalFailures);
 
@@ -921,7 +920,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(sensitive, "(1, 'na')");
             await Run(sensitive, @"
                 SET CASE_SENSITIVE = ON;
-                SELECT Id, Name /* @expect: ""IN ('NA','EMEA')""; @fail: 'WARN'; */
+                SELECT Id, Name EXPECT IN ('NA','EMEA') ON FAILURE WARN
                 INTO #clean FROM #src ON FAILURE WARN;");
             Assert.Equal(1, sensitive.DataQuality.TotalFailures);
         }
@@ -936,7 +935,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #dim_region (Id) VALUES (1), (2);");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'EXISTS IN #dim_region(Id)'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT EXISTS IN #dim_region(Id) ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -959,8 +958,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #dim_customer (TenantId, CustomerId) VALUES (1, 7), (1, 8), (2, 9);");
 
             await Run(eval, @"
-                SELECT TenantId /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN #dim_customer(TenantId, CustomerId)';
-                                   @fail: 'QUARANTINE'; */,
+                SELECT TenantId EXPECT EXISTS WITH (TenantId, CustomerId) IN #dim_customer(TenantId, CustomerId) ON FAILURE QUARANTINE,
                        CustomerId
                 INTO #clean FROM #orders
                 ON FAILURE QUARANTINE TO #bad;");
@@ -984,7 +982,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #dim_customer (TenantId, CustomerId) VALUES (1, 7);");
 
             await Run(eval, @"
-                SELECT TenantId, CustomerId /* @expect: 'EXISTS IN #dim_customer(CustomerId)'; @fail: 'WARN'; */
+                SELECT TenantId, CustomerId EXPECT EXISTS IN #dim_customer(CustomerId) ON FAILURE WARN
                 INTO #clean FROM #orders
                 ON FAILURE WARN;");
 
@@ -1004,8 +1002,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #dim_customer (TenantId, CustomerId) VALUES (1, 7);");
 
             await Run(eval, @"
-                SELECT TenantId /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN #dim_customer(TenantId, CustomerId)';
-                                   @fail: 'WARN'; */,
+                SELECT TenantId EXPECT EXISTS WITH (TenantId, CustomerId) IN #dim_customer(TenantId, CustomerId) ON FAILURE WARN,
                        CustomerId
                 INTO #clean FROM #orders
                 ON FAILURE WARN;");
@@ -1027,7 +1024,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #dim (Part1, Part2) VALUES ('a', 'bc');");
 
             await Run(eval, @"
-                SELECT Part1 /* @expect: 'EXISTS WITH (Part1, Part2) IN #dim(Part1, Part2)'; @fail: 'WARN'; */,
+                SELECT Part1 EXPECT EXISTS WITH (Part1, Part2) IN #dim(Part1, Part2) ON FAILURE WARN,
                        Part2
                 INTO #clean FROM #orders
                 ON FAILURE WARN;");
@@ -1044,7 +1041,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a')");
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
-                SELECT Id /* @expect: 'UNIQUE WITH (Id, Missing)'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT UNIQUE WITH (Id, Missing) ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;"));
 
@@ -1060,7 +1057,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'Ada'), (2, ''), (3, '   '), (4, NULL)");
 
             await Run(eval, @"
-                SELECT Id, Name /* @expect: 'NOT BLANK'; @fail: 'QUARANTINE'; */
+                SELECT Id, Name EXPECT NOT BLANK ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1075,7 +1072,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'Ada'), (2, '  '), (3, NULL)");
 
             await Run(eval, @"
-                SELECT Id, Name /* @expect: 'NOT NULL, NOT BLANK'; @fail: 'QUARANTINE'; */
+                SELECT Id, Name EXPECT NOT NULL AND NOT BLANK ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1090,7 +1087,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, '1234'), (2, '12345'), (3, '1234567890'), (4, '12345678901')");
 
             await Run(eval, @"
-                SELECT Id, Name /* @expect: 'LENGTH BETWEEN 5 AND 10'; @fail: 'QUARANTINE'; */
+                SELECT Id, Name EXPECT LENGTH BETWEEN 5 AND 10 ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1107,7 +1104,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(7, 'a'), (1234567, 'b')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'LENGTH <= 3'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT LENGTH <= 3 ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -1126,7 +1123,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #raw (RawDate) VALUES ('2026-08-10'), ('not a date'), ('2026-13-45'), (NULL);");
 
             await Run(eval, @"
-                SELECT RawDate /* @expect: 'CASTABLE AS DATE'; @fail: 'QUARANTINE'; */
+                SELECT RawDate EXPECT CASTABLE AS DATE ON FAILURE QUARANTINE
                 INTO #clean FROM #raw
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1145,7 +1142,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #raw (RawAmount) VALUES ('123.45'), ('12'), ('1234.5'), ('1.234'), ('abc');");
 
             await Run(eval, @"
-                SELECT RawAmount /* @expect: 'CASTABLE AS DECIMAL(5,2)'; @fail: 'QUARANTINE'; */
+                SELECT RawAmount EXPECT CASTABLE AS DECIMAL(5,2) ON FAILURE QUARANTINE
                 INTO #clean FROM #raw
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1161,7 +1158,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'short'), (2, 'far too long for the declared width')");
 
             await Run(eval, @"
-                SELECT Id, Name /* @expect: 'CASTABLE AS VARCHAR(10)'; @fail: 'WARN'; */
+                SELECT Id, Name EXPECT CASTABLE AS VARCHAR(10) ON FAILURE WARN
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -1180,7 +1177,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #raw (RawDate) VALUES ('2026-08-10'), ('not a date');");
 
             await Run(eval, @"
-                SELECT RawDate /* @expect: 'CASTABLE AS DATE'; @fail: 'QUARANTINE'; */
+                SELECT RawDate EXPECT CASTABLE AS DATE ON FAILURE QUARANTINE
                 INTO #clean FROM #raw
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1197,7 +1194,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'Retail'), (2, 'UNKNOWN'), (3, 'N/A'), (4, NULL)");
 
             await Run(eval, @"
-                SELECT Id, Name /* @expect: ""NOT IN ('UNKNOWN', 'N/A')""; @fail: 'QUARANTINE'; */
+                SELECT Id, Name EXPECT NOT IN ('UNKNOWN', 'N/A') ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1212,7 +1209,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'plain text'), (2, 'hi <script>alert(1)</script>')");
 
             await Run(eval, @"
-                SELECT Id, Name /* @expect: 'NOT MATCHES <script[^>]*>'; @fail: 'QUARANTINE'; */
+                SELECT Id, Name EXPECT NOT MATCHES '<script[^>]*>' ON FAILURE QUARANTINE
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1227,7 +1224,7 @@ namespace ETL_SQL.Tests.Engine
             var insensitive = NewEvaluator();
             await Seed(insensitive, "(1, 'unknown')");
             await Run(insensitive, @"
-                SELECT Id, Name /* @expect: ""NOT IN ('UNKNOWN')""; @fail: 'WARN'; */
+                SELECT Id, Name EXPECT NOT IN ('UNKNOWN') ON FAILURE WARN
                 INTO #clean FROM #src ON FAILURE WARN;");
             Assert.Equal(1, insensitive.DataQuality.TotalFailures);
 
@@ -1235,7 +1232,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(sensitive, "(1, 'unknown')");
             await Run(sensitive, @"
                 SET CASE_SENSITIVE = ON;
-                SELECT Id, Name /* @expect: ""NOT IN ('UNKNOWN')""; @fail: 'WARN'; */
+                SELECT Id, Name EXPECT NOT IN ('UNKNOWN') ON FAILURE WARN
                 INTO #clean FROM #src ON FAILURE WARN;");
             Assert.Equal(0, sensitive.DataQuality.TotalFailures);
         }
@@ -1250,7 +1247,7 @@ namespace ETL_SQL.Tests.Engine
                     ('2026-08-01'), ('2026-08-10'), ('2025-01-01'), ('2027-01-01');");
 
             await Run(eval, @"
-                SELECT EventDate /* @expect: ""BETWEEN '2026-07-01' AND '2026-09-01'""; @fail: 'QUARANTINE'; */
+                SELECT EventDate EXPECT BETWEEN '2026-07-01' AND '2026-09-01' ON FAILURE QUARANTINE
                 INTO #clean FROM #events
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1267,7 +1264,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(9, 'a'), (1, 'b')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'BETWEEN 2 AND 10'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT BETWEEN 2 AND 10 ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1287,8 +1284,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 DECLARE @RunDate DATETIME = '2026-08-10';
-                SELECT EventDate /* @expect: 'BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate';
-                                    @fail: 'WARN'; */
+                SELECT EventDate EXPECT BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate ON FAILURE WARN
                 INTO #clean FROM #events
                 ON FAILURE WARN;");
 
@@ -1303,7 +1299,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a'), (10, 'b'), (11, 'c'), (NULL, 'd')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'BETWEEN 1 AND 10'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT BETWEEN 1 AND 10 ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
 
@@ -1321,7 +1317,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 DECLARE @Ceiling INT;
-                SELECT Id /* @expect: 'BETWEEN 1 AND @Ceiling'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT BETWEEN 1 AND @Ceiling ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -1338,7 +1334,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #ranges (StartVal, EndVal) VALUES (1, 5), (9, 3);");
 
             await Run(eval, @"
-                SELECT StartVal /* @expect: 'EXPR StartVal <= EndVal'; @fail: 'WARN'; */, EndVal
+                SELECT StartVal EXPECT EXPR StartVal <= EndVal ON FAILURE WARN, EndVal
                 INTO #clean FROM #ranges
                 ON FAILURE WARN;");
 
@@ -1354,8 +1350,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: '>= 0'; @fail: 'WARN';
-                            @expect_1: '<= 120'; @fail_1: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT >= 0 ON FAILURE WARN EXPECT <= 120 ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN
                 ON FAILURE QUARANTINE TO #q;");
@@ -1377,7 +1372,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id, Name /* @pii: true; @expect: 'MATCHES ^ok$'; @fail: 'QUARANTINE'; */
+                SELECT Id, Name EXPECT MATCHES '^ok$' ON FAILURE QUARANTINE /* @pii: true; */
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1401,7 +1396,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT UNIQUE ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1423,7 +1418,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT EventId /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @fail: 'QUARANTINE'; */, LoadedAt, Tag
+                SELECT EventId EXPECT UNIQUE_FIRST BY LoadedAt ON FAILURE QUARANTINE, LoadedAt, Tag
                 INTO #clean FROM #events
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1448,7 +1443,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT EventId /* @expect: 'UNIQUE_LAST BY LoadedAt'; @fail: 'QUARANTINE'; */, LoadedAt, Tag
+                SELECT EventId EXPECT UNIQUE_LAST BY LoadedAt ON FAILURE QUARANTINE, LoadedAt, Tag
                 INTO #clean FROM #events
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1466,7 +1461,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT TenantId /* @expect: 'UNIQUE WITH (TenantId, Region)'; @fail: 'QUARANTINE'; */, Region, Val
+                SELECT TenantId EXPECT UNIQUE WITH (TenantId, Region) ON FAILURE QUARANTINE, Region, Val
                 INTO #clean FROM #t
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1483,7 +1478,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT UNIQUE ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1504,8 +1499,8 @@ namespace ETL_SQL.Tests.Engine
             await Run(eval, @"
                 import_rows:
                 SELECT
-                    A /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */,
-                    B /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */,
+                    A EXPECT UNIQUE ON FAILURE QUARANTINE,
+                    B EXPECT UNIQUE ON FAILURE QUARANTINE,
                     Tag
                 INTO #clean FROM #t
                 ON FAILURE QUARANTINE TO #q;");
@@ -1532,7 +1527,7 @@ namespace ETL_SQL.Tests.Engine
 
                 await Run(eval, @"
                     import_rows:
-                    SELECT EventId /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @fail: 'QUARANTINE'; */, LoadedAt, Tag
+                    SELECT EventId EXPECT UNIQUE_FIRST BY LoadedAt ON FAILURE QUARANTINE, LoadedAt, Tag
                     INTO #clean FROM #events
                     ON FAILURE QUARANTINE TO #q;");
 
@@ -1553,7 +1548,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT EventId /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @fail: 'QUARANTINE'; */, LoadedAt, Tag
+                SELECT EventId EXPECT UNIQUE_FIRST BY LoadedAt ON FAILURE QUARANTINE, LoadedAt, Tag
                 INTO #clean FROM #events
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1575,7 +1570,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT UNIQUE ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #counted
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1590,7 +1585,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a'), (1, 'b'), (2, 'c')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'UNIQUE'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT UNIQUE ON FAILURE WARN, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
@@ -1624,7 +1619,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1637,8 +1632,8 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task RuleTags_AreNotInheritedByDownstreamColumns()
         {
-            // @expect/@fail are enforcement directives bound to the declaring statement, not
-            // descriptive metadata. If they were inherited through lineage, every later read of a
+            // Rules are enforcement directives bound to the declaring statement, not descriptive
+            // metadata — so the tags they project must not inherit. If they did, every later read of a
             // quality-loaded table would re-validate (and re-quarantine) already-validated rows —
             // and a plain SELECT would fail for lacking an ON FAILURE clause it never declared.
             var eval = NewEvaluator();
@@ -1646,7 +1641,7 @@ namespace ETL_SQL.Tests.Engine
 
             await Run(eval, @"
                 import_rows:
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
@@ -1671,7 +1666,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a')");
 
             await Run(eval, @"
-                SELECT Id /* @pii: true; @owner: CRM; @expect: 'NOT NULL'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE WARN /* @pii: true; @owner: CRM; */, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
             await Run(eval, "SELECT Id, Name INTO #downstream FROM #clean;");
@@ -1702,8 +1697,7 @@ namespace ETL_SQL.Tests.Engine
                 CREATE TABLE #src (Id INT, Name VARCHAR(50));
                 INSERT INTO #src (Id, Name) VALUES (1, 'a'), (-5, 'b'), (NULL, 'c');
                 import_rows:
-                SELECT Id /* @expect: '>= 0'; @fail: 'WARN';
-                            @expect_1: 'NOT NULL'; @fail_1: 'QUARANTINE'; */, Name
+                SELECT Id EXPECT >= 0 ON FAILURE WARN EXPECT NOT NULL ON FAILURE QUARANTINE, Name
                 INTO #clean FROM #src
                 ON FAILURE WARN
                 ON FAILURE QUARANTINE TO #q;");
@@ -1729,7 +1723,7 @@ namespace ETL_SQL.Tests.Engine
             var result = await session.ExecuteAsync(@"
                 CREATE TABLE #src (Id INT, Name VARCHAR(50));
                 INSERT INTO #src (Id, Name) VALUES (NULL, 'bad');
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'THROW'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE THROW, Name
                 INTO #clean FROM #src;");
 
             Assert.False(result.Success);
@@ -1753,7 +1747,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a'), (NULL, 'b'), (NULL, 'c')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE WARN, Name
                 INTO #clean FROM #src ON FAILURE WARN;");
 
             var ruleStatement = Assert.Single(
@@ -1802,7 +1796,7 @@ namespace ETL_SQL.Tests.Engine
             await Seed(eval, "(1, 'a'), (NULL, 'b')");
 
             await Run(eval, @"
-                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */, Name
+                SELECT Id EXPECT NOT NULL ON FAILURE WARN, Name
                 INTO #clean FROM #src ON FAILURE WARN;");
 
             Assert.Equal(0, eval.Telemetry.DataQualityValidationTicks);
@@ -1816,7 +1810,7 @@ namespace ETL_SQL.Tests.Engine
             var eval = NewEvaluator();
             eval.Telemetry.IsProfiling = true;
             var script = new Lexer(@"
-                SELECT Id /* @expect: 'NOT NULL, >= 0, IN (1, 2)'; @fail: 'WARN'; */
+                SELECT Id EXPECT NOT NULL AND >= 0 AND IN (1, 2) ON FAILURE WARN
                 FROM #src ON FAILURE WARN;").TokenizeToScript();
             var statement = Assert.IsType<SelectStatement>(Assert.Single(script.Statements));
             var validator = Assert.IsType<ColumnQualityValidator>(
@@ -1879,7 +1873,7 @@ namespace ETL_SQL.Tests.Engine
             var eval = NewEvaluator();
             eval.Telemetry.IsProfiling = false;
             var script = new Lexer(@"
-                SELECT Id /* @expect: 'BETWEEN 0 AND 10'; @fail: 'WARN'; */
+                SELECT Id EXPECT BETWEEN 0 AND 10 ON FAILURE WARN
                 FROM #src ON FAILURE WARN;").TokenizeToScript();
             var statement = Assert.IsType<SelectStatement>(Assert.Single(script.Statements));
             var validator = Assert.IsType<ColumnQualityValidator>(
@@ -1924,8 +1918,8 @@ namespace ETL_SQL.Tests.Engine
 
                 SELECT
                     Id,
-                    Status /* @expect: ""NOT NULL AND (MATCHES ^act OR MATCHES ^pend)""; @fail: 'QUARANTINE'; */,
-                    Score  /* @expect: '>= 0 AND <= 100'; @fail: 'QUARANTINE'; */
+                    Status EXPECT NOT NULL AND (MATCHES '^act' OR MATCHES '^pend') ON FAILURE QUARANTINE,
+                    Score  EXPECT >= 0 AND <= 100 ON FAILURE QUARANTINE
                 INTO #clean
                 FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
@@ -1950,7 +1944,7 @@ namespace ETL_SQL.Tests.Engine
                 -- NULL skips non-NOT NULL compound rules.
                 SELECT
                     Id,
-                    Code /* @expect: ""MATCHES ^[A-Z][0-9]{3}$ OR IN ('SPECIAL', 'TEST')""; @fail: 'QUARANTINE'; */
+                    Code EXPECT MATCHES '^[A-Z][0-9]{3}$' OR IN ('SPECIAL', 'TEST') ON FAILURE QUARANTINE
                 INTO #clean
                 FROM #src
                 ON FAILURE QUARANTINE TO #bad;");
@@ -1969,14 +1963,17 @@ namespace ETL_SQL.Tests.Engine
 
                 SELECT
                     Id,
-                    Val /* @expect: 'NOT NULL AND > 0'; @fail: 'WARN'; */
+                    Val EXPECT NOT NULL AND > 0 ON FAILURE WARN
                 INTO #clean
                 FROM #src
                 ON FAILURE WARN;");
 
+            // A top-level AND unrolls into independent rules, so the report names the conjunct
+            // that actually failed rather than the whole clause — the granularity the comma form
+            // used to give, without the comma.
             var failure = Assert.Single(eval.DataQuality.Failures);
             Assert.Equal("Val", failure.Column);
-            Assert.Equal("NOT NULL AND > 0", failure.Rule);
+            Assert.Equal("> 0", failure.Rule);
         }
 
         private static bool ReadCompleted(ValueTask<bool> result) =>

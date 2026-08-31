@@ -147,6 +147,13 @@ public class CliContext
     public int? ServePort { get; set; }
     public bool ServeNoBrowser { get; set; }
 
+    // studio lifecycle command
+    public string StudioAction { get; set; } = "start";
+    public string? StudioProjectPath { get; set; }
+    public bool StudioNewWindow { get; set; }
+    public bool StudioNewInstance { get; set; }
+    public int StudioIdleShutdownMinutes { get; set; }
+
     // doctor command
     public bool DoctorStrict { get; set; }
     public string DoctorProfile { get; set; } = "quick";

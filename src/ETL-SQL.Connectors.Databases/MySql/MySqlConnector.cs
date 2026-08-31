@@ -138,7 +138,7 @@ namespace ETL_SQL.Connectors.MySql
                 await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
                 return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "MySQL authentication succeeded.")];
             }
-            catch (Exception ex) when (ex is MySqlException or InvalidOperationException or TimeoutException)
+            catch (Exception ex) when (ex is MySqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
             {
                 return
                 [

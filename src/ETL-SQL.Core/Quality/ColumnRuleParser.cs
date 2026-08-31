@@ -11,31 +11,42 @@ using ETL_SQL.Core.Parser;
 namespace ETL_SQL.Core.Quality;
 
 /// <summary>
-/// Parses the <c>@expect</c> mini-DSL into <see cref="ColumnRule"/>s and assembles
-/// <c>@expect</c>/<c>@fail</c> (and numbered <c>@expect_N</c>/<c>@fail_N</c>) metadata pairs into
-/// <see cref="ColumnRuleBinding"/>s. A real tokenizer, not <c>string.Split(',')</c>: rules combine
-/// with top-level commas, while commas inside <c>MATCHES</c> regexes (groups/classes/braces or
-/// <c>\,</c>), <c>IN (…)</c> lists, and <c>EXPR</c> function calls stay literal. Strips the outer
-/// quotes the tag layer preserves (a doubled same-kind quote is a literal quote — SQL style).
-/// All failures throw <see cref="ColumnRuleParseException"/> — malformed rules are hard errors,
-/// never silently ignored (design decision 5).
+/// The <b>read-side</b> rule parser: turns the <c>expect</c>/<c>fail</c> stewardship tags that
+/// <see cref="ColumnExpectProjection"/> publishes onto lineage back into
+/// <see cref="ColumnRuleBinding"/>s, for the catalog, the Portal, and
+/// <c>SHOW DATA QUALITY RULES</c>.
+/// <para>
+/// This is not the authoring path — scripts declare rules with an <c>EXPECT</c> clause, parsed from
+/// the token stream by <see cref="ColumnExpectClauseParser"/>. What arrives here is the engine's own
+/// projection, so this parser only has to accept what that emits: rules combined with <c>AND</c>
+/// (a top-level <c>AND</c> unrolls, matching the clause parser), a quoted <c>MATCHES</c> pattern,
+/// and the historical comma-combined form. All failures throw
+/// <see cref="ColumnRuleParseException"/>; read-side callers skip the entry rather than fail a
+/// listing over one unreadable tag.
+/// </para>
 /// </summary>
 public static partial class ColumnRuleParser
 {
-    /// <summary>Parses one <c>@expect</c> tag value (quotes still attached) into its rules.</summary>
+    /// <summary>Parses one projected <c>expect</c> tag value (quotes optional) into its rules.</summary>
     public static IReadOnlyList<ColumnRule> Parse(string rawExpectValue)
     {
         var value = Unquote(rawExpectValue);
         if (string.IsNullOrWhiteSpace(value))
-            throw new ColumnRuleParseException("@expect value is empty.");
+            throw new ColumnRuleParseException("Rule value is empty.");
 
         var rules = new List<ColumnRule>();
         foreach (var segment in SplitTopLevel(value))
         {
             var text = segment.Trim();
             if (text.Length == 0)
-                throw new ColumnRuleParseException($"@expect '{value}' contains an empty rule segment.");
-            rules.Add(ParseRule(text));
+                throw new ColumnRuleParseException($"'{value}' contains an empty rule segment.");
+
+            // A top-level AND unrolls into independent rules, matching the clause parser, so a
+            // steward reading the catalog sees the same rules the engine evaluates and reports
+            // rather than one merged line.
+            var rule = ParseRule(text);
+            if (rule is AndRule conjunction) rules.AddRange(conjunction.Operands);
+            else rules.Add(rule);
         }
         return rules;
     }
@@ -66,7 +77,7 @@ public static partial class ColumnRuleParser
         {
             if (!expectKeys.ContainsKey(suffix))
                 throw new ColumnRuleParseException(
-                    $"@fail{suffix} has no matching @expect{suffix} rule on the same column.");
+                    $"fail{suffix} has no matching expect{suffix} rule on the same column.");
         }
 
         var bindings = new List<ColumnRuleBinding>();
@@ -80,7 +91,7 @@ public static partial class ColumnRuleParser
         return bindings;
     }
 
-    /// <summary>Parses one <c>@fail</c> tag value (quotes still attached) into its action.</summary>
+    /// <summary>Parses one projected <c>fail</c> tag value (quotes optional) into its action.</summary>
     public static FailAction ParseAction(string rawFailValue, string suffix = "")
     {
         var value = Unquote(rawFailValue).Trim();
@@ -90,11 +101,11 @@ public static partial class ColumnRuleParser
             "WARN" => FailAction.Warn,
             "QUARANTINE" => FailAction.Quarantine,
             _ => throw new ColumnRuleParseException(
-                $"@fail{suffix} action '{value}' is not recognized. Allowed actions: THROW, WARN, QUARANTINE.")
+                $"fail{suffix} action '{value}' is not recognized. Allowed actions: THROW, WARN, QUARANTINE.")
         };
     }
 
-    /// <summary>True when the metadata dictionary carries any <c>@expect</c>/<c>@fail</c> rule keys.</summary>
+    /// <summary>True when the metadata dictionary carries any projected rule keys.</summary>
     public static bool HasRuleTags(IReadOnlyDictionary<string, string>? metadata) =>
         metadata != null && metadata.Keys.Any(k => RuleKeyRegex().IsMatch(k));
 
@@ -123,6 +134,18 @@ public static partial class ColumnRuleParser
         return value;
     }
 
+    /// <summary>
+    /// Strips one pair of single quotes from a MATCHES pattern, unescaping doubled quotes inside.
+    /// An unquoted pattern is returned as-is, so rules written before quoting was required still
+    /// read back.
+    /// </summary>
+    private static string UnquotePattern(string pattern)
+    {
+        if (pattern.Length >= 2 && pattern[0] == '\'' && pattern[^1] == '\'')
+            return pattern[1..^1].Replace("''", "'");
+        return pattern;
+    }
+
     private static ColumnRule ParseRule(string text)
     {
         return ParseOrExpression(text.Trim());
@@ -137,7 +160,7 @@ public static partial class ColumnRuleParser
             foreach (var branch in branches)
             {
                 if (string.IsNullOrWhiteSpace(branch))
-                    throw new ColumnRuleParseException($"@expect rule '{text}' contains an empty OR operand.");
+                    throw new ColumnRuleParseException($"Rule '{text}' contains an empty OR operand.");
                 operands.Add(ParseAndExpression(branch));
             }
             return new OrRule(operands) { Text = text };
@@ -154,7 +177,7 @@ public static partial class ColumnRuleParser
             foreach (var branch in branches)
             {
                 if (string.IsNullOrWhiteSpace(branch))
-                    throw new ColumnRuleParseException($"@expect rule '{text}' contains an empty AND operand.");
+                    throw new ColumnRuleParseException($"Rule '{text}' contains an empty AND operand.");
                 operands.Add(ParsePrimaryRule(branch));
             }
             return new AndRule(operands) { Text = text };
@@ -462,7 +485,7 @@ public static partial class ColumnRuleParser
         }
 
         throw new ColumnRuleParseException(
-            $"Unknown @expect rule '{text}'. Supported: NOT NULL, NOT BLANK, UNIQUE, " +
+            $"Unknown rule '{text}'. Supported: NOT NULL, NOT BLANK, UNIQUE, " +
             "UNIQUE WITH (cols), UNIQUE_FIRST/UNIQUE_LAST BY <key>, MATCHES <regex>, IN (<list>), " +
             "EXISTS IN table(col), EXISTS WITH (cols) IN table(cols), LENGTH BETWEEN <min> AND <max>, " +
             "LENGTH <compare> <n>, CASTABLE AS <type>, NOT IN (<list>), NOT MATCHES <regex>, " +
@@ -569,6 +592,11 @@ public static partial class ColumnRuleParser
             var pattern = body["MATCHES".Length..].Trim();
             if (pattern.Length == 0)
                 throw new ColumnRuleParseException("MATCHES requires a regex pattern.");
+            // In the clause grammar the pattern is a string literal, and that is the form projected
+            // onto lineage. Unwrap it here so a rule read back off a lineage tag compiles to the
+            // same regex the statement enforced — a quoted pattern that stayed quoted would match
+            // nothing and quietly disagree with the engine.
+            pattern = UnquotePattern(pattern);
             var rule = new MatchesRule(pattern, negated) { Text = text };
             rule.Compile(caseSensitive: true); // validate now: syntax + NonBacktracking support
             return rule;

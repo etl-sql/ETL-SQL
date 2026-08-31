@@ -1,6 +1,6 @@
 # Run-Level Quality Assertions (ASSERT JOB)
 
-While column-level `@expect` rules validate individual rows, **`ASSERT JOB`** validates the health of the entire pipeline run. It evaluates batch-level metrics (volume anomalies, null percentages, data freshness, and quarantine ratios) and routes alerts or halts execution before corrupt data affects downstream consumers.
+While column-level `EXPECT` rules validate individual rows, **`ASSERT JOB`** validates the health of the entire pipeline run. It evaluates batch-level metrics (volume anomalies, null percentages, data freshness, and quarantine ratios) and routes alerts or halts execution before corrupt data affects downstream consumers.
 
 ---
 
@@ -37,7 +37,7 @@ ASSERT JOB nightly_orders (
     QUARANTINE_PERCENT < 0.02
 )
 ON FAILURE NOTIFY alerts_channel
-ON CRITICAL_FAILURE THROW;
+ON FAILURE THROW;
 ```
 
 > [!TIP]

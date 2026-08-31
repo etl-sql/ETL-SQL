@@ -26,6 +26,26 @@ An initial exploration proposed separate top-level application tabs ("Script Tab
   - `[ 🌓 Split View ]` (Visual canvas + live CodeMirror 6 code panel with bi-directional AST sync).
   - `[ ⌨️ Code View ]` (Full-screen script editor with real-time server lint diagnostics & results grid).
 
+### 1.2 Desktop project-host lifecycle
+
+Desktop Studio uses one loopback host per project by default. Each host owns its workspace boundary,
+port, execution state, connection metadata, and Git state. A local session record under the current
+user's application-data directory stores the normalized workspace root, instance ID, PID, assigned
+port, start time, and authentication metadata. CLI discovery accepts a record only when both its
+process and authenticated health endpoint are live; failed probes remove stale crash records.
+
+`etlsql studio <project>` reconnects to the existing healthy host or starts a host on an OS-assigned
+port. `studio list`, `studio open`, and `studio stop` expose the same registry contract. Additional
+browser windows share the project host. `--new-instance` deliberately creates an independent host
+for the same project, with content-revision checks preventing one host from overwriting external
+changes made by another.
+
+Browser clients renew authenticated heartbeats. Tab-close signals are advisory; the host also
+expires missed heartbeats and may apply a configured idle timeout once all clients are gone, no run
+is active, and no server draft is pending. The explicit **Exit Studio** flow checks dirty documents
+and active runs, requests graceful application shutdown, and polls for a bounded period so the UI
+can report whether the host actually stopped.
+
 ---
 
 ## 2. Modern Workbench Architecture & UI Layout
@@ -68,6 +88,40 @@ ETL-SQL Studio adopts the clean, minimalist vector icon design language establis
 - 🌿 **Source Control (Git)**: Active branch indicator, file change status, commit, and diff inspection.
 - ⚙️ **Settings**: Light/Dark theme toggle, font scale, formatter options.
 
+### 2.5 Progressive Disclosure & the Learning Path
+
+ETL-SQL Studio is **script-first**. The visual surfaces exist so that an author who does not yet know
+the language can produce correct script, and so that watching the script appear teaches them the
+language. A successful Studio makes itself progressively unnecessary: the author graduates to the
+script editor and returns to the visual helpers only when they are stuck.
+
+The following are binding design constraints, not aspirations:
+
+1. **The script is always visible and always authoritative.** The GUI is a *generator*. No visual
+   state may exist that is not expressible in the saved `.rptsql` / `.etlsql` document.
+2. **GUI mutations patch a range; they never replace the document.** Cursor position, scroll
+   position, and selection survive every visual edit. A wholesale buffer replacement is a defect,
+   because it destroys the author's place in the text and hides what actually changed.
+3. **A host that lacks a capability says so.** Studio ships as one canonical asset across several
+   hosts with different server surfaces. Any capability the active host cannot serve must be
+   presented as explicitly unavailable, with a reason. Silently degrading to a no-op — an assist
+   request that 404s, a control that appears to work and does nothing, a failure rendered as success
+   — is prohibited. Editor assist routes are resolved from the host's declared capabilities, never
+   hardcoded.
+4. **Diagnostics are legible and actionable.** Author-facing messages explain the problem in the
+   author's terms and carry a remedy line, following the Connection Wizard's `💡 Remedy:` pattern.
+   Raw parser output or a raw HTTP body is not an acceptable author-facing message.
+5. **The first session requires no database.** MOCKDB provides a zero-dependency cold start, so a new
+   author can reach a working visual and its generated script without provisioning anything.
+6. **Every GUI mutation can explain what it wrote.** The patched range is identifiable, so a
+   changed-range highlight and a one-line plain-language explanation can be attached to it. The
+   explanation text is sourced from the embedded language help corpus (`docs/reference`, embedded via
+   `ETL-SQL.Core`) so that hover documentation, `HELP`, and Studio explanations never drift apart.
+
+Constraints 1–5 are required for Studio to be considered functionally complete. Constraint 6 is the
+learning layer built on top of them; its delivery may follow, but the range-level patch dispatch it
+depends on is part of constraint 2 and is not optional.
+
 ---
 
 ## 3. Dynamic Context-Aware Canvas Adaptation
@@ -98,6 +152,27 @@ The Studio automatically adapts its visual stage based on the file extension of 
                        │  (Always the authoritative script)  │
                        └─────────────────────────────────────┘
 ```
+
+### 3.1 Dashboard and paginated report workflows
+
+Studio Home exposes **New Dashboard** and **New Paginated Report** as separate creation paths. Both
+produce standard `.rptsql` documents and use the same data catalog, dataset sampling, expression and
+formatting controls, preview service, script editor, parser, and range patcher. The workflow is UI
+state derived from the document; it is not a second file format or hidden manifest.
+
+- **Dashboard** uses the responsive visual board and guides the author through data, visuals,
+  cross-filters, layout, and formatting. Charts, cards, tables, slicers, and other visuals continue
+  to use the shared designer.
+- **Paginated Report** presents the canvas as a physical sheet and guides the author through data,
+  input parameters, group/detail bands, totals, header/footer bands, `PRINT_LAYOUT`, visual page
+  breaks, pagination preview, and export. Page size, orientation, margins, overflow, and break rules
+  are carried by the shared authoring DTOs and changed through `DesignerScriptPatcher`.
+
+When every explicit `CREATE PAGE` declaration has the same mode, Studio selects that workflow. A
+mixed-mode report, or a script without an explicit page, opens a two-choice prompt. The choice does
+not modify the script or dirty the document. A valid code edit may update the inferred workflow; an
+invalid intermediate edit retains both the last valid canvas and its workflow while keeping the
+editor bytes unchanged.
 
 ---
 
@@ -135,6 +210,12 @@ The **Filter Pane** eliminates manual SQL boolean syntax while maintaining code-
 - **Date/Time**: Relative presets (`Today`, `Last 7 Days`, `Last 30 Days`, `This Quarter`, `YTD`) or calendar range picker. Emits `WHERE order_date >= DATEADD(day, -30, CURRENT_DATE)`.
 - **Top-N**: "Show Top [ N ] by [ Measure ]". Emits `ORDER BY measure DESC LIMIT N`.
 
+> **Implementation status.** Shipped today: categorical distinct-value checkboxes (capped at 12
+> sampled values), numeric min/max bounds, and the date presets above. **Not yet shipped:** the
+> categorical search and Select All / Invert controls, the numeric operator set (`between`, `>`, `<`,
+> `is not null`) as distinct operators rather than min/max, and Top-N. Treat the unshipped items as
+> planned scope, not as current behaviour.
+
 ### 5.3 1-Click "Promote to Viewer Slicer"
 Clicking **"Promote to Slicer"** on any filter:
 1. Declares a report parameter: `CREATE PARAMETER selected_region AS STRING('North') OPTIONS (LABEL = 'Select Region');`
@@ -158,17 +239,28 @@ To prevent clobbering hand-crafted SQL queries, CTEs, or custom procedural logic
 
 ---
 
-## 7. Pipeline Studio Foundational DAG (Visual ETL Placeholder)
+## 7. Pipeline execution-map projection
 
-When opening an `.etlsql` script, the Canvas View projects the pipeline's execution flow into an interactive node DAG:
+When opening an `.etlsql` script, Canvas View sends the current bytes to the host-neutral
+`ScriptDagProjectionService` and renders its nodes and edges through the canonical `renderDag`
+component. Both desktop and Portal expose the same authenticated `/api/designer/dag` contract.
 
-- **Source Nodes (`EXTRACT / READ`)**: Connections, Gateway resources, files (`CSV`, `Parquet`, `JSON`), REST endpoints.
-- **Staging Nodes (`#temp tables`)**: Memory-staged intermediate tables.
-- **Transform Recipe Nodes (`TRANSFORM`)**: Visual step-builder for rolling averages, period-over-period delta %, pivots, date gap filling, and deduplication.
-- **Data Quality Gate Nodes (`VALIDATE / CHECK`)**: Zero-Trust assertion rules (`EXPECT NOT NULL`, `ASSERT UNIQUE`, range limits, drift rules).
-- **Destination Nodes (`MERGE / LOAD / EXPORT`)**: Target database tables, SFTP destinations, S3/Azure object storage buckets.
+- **Execution stages** — connections, statements, transforms, procedures, file movement, writes,
+  exports, datasets, and report-authoring statements retain their parser-derived source line.
+- **Control flow** — `IF` chains, `PARALLEL` blocks, loops, and `TRY`/`CATCH` produce labeled branch
+  edges. Branch exits converge on the next sequential stage instead of being flattened.
+- **Quality gates** — assertions, schema expectations, and validation commands use a distinct
+  `validation` node type.
+- **Navigation** — selecting a node reveals its source line. Search, stage-type filters, focus mode,
+  pan, zoom, and fit-to-view are graph interactions only.
 
-All nodes and connections map losslessly to statements in the underlying `.etlsql` file.
+The script remains authoritative. Projection requests never patch it, and graph interactions do not
+write to it. A parse failure leaves the last valid graph visible with an error state while the editor
+keeps the exact invalid intermediate bytes. Any future add/connect editing must use a canonical
+parser/patcher contract and prove byte preservation before it is enabled.
+
+The projection is intentionally read-only. It is an accurate execution map, not yet a visual pipeline
+editor, and the UI does not claim that nodes can be added, connected, or reordered on the canvas.
 
 ---
 
@@ -266,7 +358,8 @@ To ensure zero regression risk and maintain business continuity:
 - **Slice 4 — Property Inspector & Smart Defaults**: Field role assignment (Measure/Category/Breakdown), aggregation selectors (`SUM`, `AVG`, `COUNT`, `MIN`, `MAX`), 1-click number formatting (currency, percent, compact), and design token themes.
 - **Slice 5 — Collapsible Code Drawer & Bi-Directional Sync**: Slide-up CodeMirror 6 editor (`Alt+C`), surgical AST text patching, debounced code-to-canvas synchronization, and inline lint diagnostics.
 - **Slice 6 — Governed Data Preview & Multi-Surface Packaging**: Interactive preview execution under caller RLS and memory arbiters; shared asset packaging across Portal Studio (`/studio/index.html`), VS Code Webview, and Workstation Editor.
-- **Slice 7 — Pipeline Studio Foundational DAG (Future)**: Visual node-graph canvas for multi-stage ETL pipelines emitting `.etlsql` scripts.
+- **Slice 7 — Pipeline Studio Foundational DAG**: Parser-derived execution-map canvas for multi-stage
+  ETL pipelines; visual add/connect authoring remains future work behind a lossless patcher contract.
 - **Slice 8 — Stabilization & Legacy Retirement**: Full parity certification, deprecation notices, and clean retirement of legacy `ReportBuilder` and `WorkstationEditor`.
 
 ---

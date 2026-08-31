@@ -73,6 +73,7 @@
     <ProjectReference Include="..\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
     <ProjectReference Include="..\ETL-SQL.TUI\ETL-SQL.TUI.csproj" />
     <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
+    <ProjectReference Include="..\ETL-SQL.WorkstationEditor\ETL-SQL.WorkstationEditor.csproj" />
   </ItemGroup>
 
   <ItemGroup>

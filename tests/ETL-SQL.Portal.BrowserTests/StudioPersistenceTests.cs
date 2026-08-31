@@ -28,6 +28,113 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         """;
 
     [Fact]
+    public async Task AuthenticatedPortal_AuthoringJourney_PersistsAcrossReloadAndClose()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await fixture.SignInAsync(page);
+
+        var connectionAlias = $"studio_sample_{Guid.NewGuid():N}";
+        var createConnectionStatus = await page.EvaluateAsync<int>(
+            """
+            async alias => {
+                const { auth } = await import('/js/api.js');
+                const response = await fetch(`/api/admin/connections/${encodeURIComponent(alias)}`, {
+                    method: 'PUT',
+                    headers: {
+                        Authorization: `Bearer ${auth.getToken()}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ connectorType: 'MOCKDB', options: {} })
+                });
+                return response.status;
+            }
+            """, connectionAlias);
+        Assert.Equal(204, createConnectionStatus);
+        var folderId = await CreateWritableFolderAsync();
+        var report = await page.EvaluateAsync<JsonElement>(
+            """
+            async request => {
+                const { studioApi } = await import('/js/api.js');
+                return studioApi.createReport(request);
+            }
+            """,
+            new
+            {
+                folderId,
+                name = $"Studio Journey {Guid.NewGuid():N}",
+                scriptText = $"""
+                    SELECT UserID, UserName INTO #users FROM {connectionAlias}.Users;
+                    CREATE VISUAL UsersTable AS TABLE (
+                      SOURCE = #users,
+                      MAPPINGS (USER_ID = UserID, USER_NAME = UserName)
+                    );
+                    CREATE PAGE Main AS DASHBOARD (
+                      LAYOUT (STRUCTURE = 'A', MAP ('A' = UsersTable))
+                    );
+                    """
+            });
+        var reportId = report.GetProperty("id").GetInt32();
+
+        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await WaitForStudioAsync(page);
+        await page.Locator("[data-activity='catalog']").ClickAsync();
+        var schemaRequest = page.WaitForResponseAsync(response =>
+            response.Url.Contains("/api/designer/schema", StringComparison.Ordinal)
+            && response.Url.Contains(Uri.EscapeDataString(connectionAlias), StringComparison.Ordinal));
+        await page.Locator($"[data-connection='{connectionAlias}']").ClickAsync();
+        var schemaResponse = await schemaRequest;
+        if (schemaResponse.Status != 200)
+        {
+            var details = await page.EvaluateAsync<JsonElement>(
+                """
+                async alias => {
+                    const { auth } = await import('/js/api.js');
+                    const response = await fetch(`/api/designer/schema?connection=${encodeURIComponent(alias)}`, {
+                        headers: { Authorization: `Bearer ${auth.getToken()}` }
+                    });
+                    return { status: response.status, body: await response.text() };
+                }
+                """, connectionAlias);
+            Assert.Fail($"Schema request returned {details.GetProperty("status").GetInt32()}: {details.GetProperty("body").GetString()}");
+        }
+        await page.Locator("[data-table='Users']").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].studioContext.snapshot?.rowCount > 0");
+
+        await page.EvaluateAsync("() => { window.__STUDIO__.state.selectedVisualId = 'UsersTable'; }");
+        await page.Locator("[data-field='UserName']").ClickAsync();
+        await page.Locator("[data-filter-dialog-apply]").ClickAsync();
+        var firstValue = page.Locator("[data-filter-value='UserName']").First;
+        await firstValue.CheckAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.editorInstance.getValue().includes('ETL-SQL-STUDIO-FILTER')");
+
+        const string editMarker = "-- production Portal browser journey";
+        await page.EvaluateAsync(
+            "marker => window.__STUDIO__.state.editorInstance.setValue(window.__STUDIO__.state.editorInstance.getValue() + `\n${marker}\n`)",
+            editMarker);
+        await page.EvaluateAsync("() => window.__STUDIO__.state.editorInstance.gotoLine(1, 1)");
+        await page.Locator("[data-action='run-selected']").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].studioContext.runActive === false");
+        var runTrace = await page.EvaluateAsync<JsonElement>(
+            "() => window.__STUDIO__.state.documents[0].studioContext.resultsTrace");
+        Assert.True(runTrace.EnumerateArray().Any(item => item.GetProperty("type").GetString() == "results"),
+            runTrace.ToString());
+
+        await page.Locator("[data-action='save']").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].isDirty === false");
+        await page.ReloadAsync();
+        await WaitForStudioAsync(page);
+        Assert.Contains(editMarker,
+            await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()"),
+            StringComparison.Ordinal);
+
+        await page.Locator(".etlsql-tab-close").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents.length === 0");
+        Assert.False(await HasEditLeaseAsync(reportId));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task CatalogHome_OpenAndClose_CarriesIdentityAndEditLease()
     {
         await using var session = await fixture.NewSessionAsync();
@@ -249,14 +356,18 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
                 first.activeFilters.region = { kind: 'values', values: ['North'] };
                 first.filterFields.push('region');
                 first.selectedSource = { connection: 'alpha', table: 'orders' };
-                document.querySelector('[data-results-host]').innerHTML = '<div>alpha result</div>';
+                studio.setDocumentTrace(studio.state.documents.find(doc => doc.id === 'context-a'), [
+                    { type: 'results', columns: ['note'], rows: [{ note: 'alpha result' }] },
+                ]);
 
                 await studio.switchDoc('context-b');
                 const second = studio.state.documents.find(doc => doc.id === 'context-b').studioContext;
                 second.snapshot = { source: 'beta.customers', columns: ['country'], rowCount: 1, rows: [{ country: 'CA' }] };
                 second.activeFilters.country = { kind: 'values', values: ['CA'] };
                 second.selectedSource = { connection: 'beta', table: 'customers' };
-                document.querySelector('[data-results-host]').innerHTML = '<div>beta result</div>';
+                studio.setDocumentTrace(studio.state.documents.find(doc => doc.id === 'context-b'), [
+                    { type: 'results', columns: ['note'], rows: [{ note: 'beta result' }] },
+                ]);
 
                 await studio.switchDoc('context-a');
                 return {
@@ -265,6 +376,7 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
                     filterValues: first.activeFilters.region.values,
                     connection: first.selectedSource.connection,
                     results: document.querySelector('[data-results-host]').textContent,
+                    restoredTrace: JSON.stringify(first.resultsTrace),
                     secondSource: second.snapshot.source,
                     contextsAreDistinct: first !== second
                 };
@@ -275,7 +387,11 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         Assert.Equal("region", restored.GetProperty("filterFields")[0].GetString());
         Assert.Equal("North", restored.GetProperty("filterValues")[0].GetString());
         Assert.Equal("alpha", restored.GetProperty("connection").GetString());
+        // Results now live in the shared Results/Messages/Performance panel as a per-document trace
+        // rather than an HTML blob, so assert the restored trace and that it reached the panel.
+        Assert.Contains("alpha result", restored.GetProperty("restoredTrace").GetString(), StringComparison.Ordinal);
         Assert.Contains("alpha result", restored.GetProperty("results").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("beta result", restored.GetProperty("results").GetString(), StringComparison.Ordinal);
         Assert.Equal("beta.customers", restored.GetProperty("secondSource").GetString());
         Assert.True(restored.GetProperty("contextsAreDistinct").GetBoolean());
         Assert.Empty(session.PageErrors);

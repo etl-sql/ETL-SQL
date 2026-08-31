@@ -20,7 +20,7 @@ using ETL_SQL.Data;
 namespace ETL_SQL.Engine.Services;
 
 /// <summary>
-/// Runtime enforcement of <c>@expect</c> column rules. Built once per statement that carries
+/// Runtime enforcement of <c>EXPECT</c> column rules. Built once per statement that carries
 /// rules (<see cref="TryCreate"/> returns null otherwise, so zero rules costs zero overhead) and
 /// applied by wrapping the projection stream: each row is validated against the projected
 /// (post-expression) values, then passed through, diverted to a quarantine target, or thrown on.
@@ -83,26 +83,18 @@ public sealed class ColumnQualityValidator
     public static ColumnQualityValidator? TryCreate(
         IExecutionContext context, ILogger logger, SelectStatement statement, IReadOnlyList<string> outputColumnNames)
     {
-        if (!statement.Columns.Any(c => ColumnRuleParser.HasRuleTags(c.Metadata)))
+        if (!statement.Columns.Any(ColumnExpectProjection.HasRules))
             return null;
 
         var ruleSets = new List<ColumnRuleSet>();
         for (int i = 0; i < statement.Columns.Count; i++)
         {
             var column = statement.Columns[i];
-            if (!ColumnRuleParser.HasRuleTags(column.Metadata)) continue;
+            if (!ColumnExpectProjection.HasRules(column)) continue;
 
-            IReadOnlyList<ColumnRuleBinding> bindings;
-            try
-            {
-                bindings = ColumnRuleParser.ParseBindings(column.Metadata!);
-            }
-            catch (ColumnRuleParseException ex)
-            {
-                // The linter reports this as an Error before execution; if a caller bypassed lint,
-                // fail loudly rather than silently dropping enforcement.
-                throw new ExecutionException($"Invalid data-quality rule on column {i + 1}: {ex.Message}");
-            }
+            // Rules are parsed with the statement, so a malformed one never reaches here — it is a
+            // SyntaxException at parse time, with a position, for every caller including this one.
+            var bindings = ColumnExpectProjection.ToBindings(column);
 
             var name = i < outputColumnNames.Count ? outputColumnNames[i] : column.Alias ?? $"Column{i + 1}";
             bool isPii = IsPiiTagged(column.Metadata!);
@@ -127,7 +119,8 @@ public sealed class ColumnQualityValidator
         {
             if (action == FailAction.Quarantine && !routing.ContainsKey(FailAction.Quarantine))
                 throw new ExecutionException(
-                    "@fail: 'QUARANTINE' requires a matching ON FAILURE QUARANTINE TO <table> clause on the statement.");
+                    "EXPECT … ON FAILURE QUARANTINE requires a matching ON FAILURE QUARANTINE TO <table> "
+                    + "clause on the statement.");
         }
 
         return new ColumnQualityValidator(context, logger, statement, ruleSets, routing);

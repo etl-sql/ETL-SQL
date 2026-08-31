@@ -19,7 +19,8 @@ namespace ETL_SQL.Engine.Handlers;
 /// <summary>
 /// Handles <c>ASSERT JOB</c>: evaluates run-level metric predicates against the values the
 /// in-stream collector gathered during this run (never a post-run re-scan), routes failures through
-/// an optional catalog notification, and throws when <c>ON CRITICAL_FAILURE THROW</c> is declared.
+/// the declared <c>ON FAILURE</c> actions, and throws only when <c>ON FAILURE THROW</c> is one of
+/// them — severity is an action, so there is exactly one place that decides whether the run fails.
 /// </summary>
 public class AssertJobStatementHandler(
     ILogger logger,
@@ -126,10 +127,6 @@ public class AssertJobStatementHandler(
                 context);
         }
 
-        var failForWarnRows = stmt.FailOnWarn && report.RowsWarned > 0;
-        if (failForWarnRows)
-            failures.Add($"FAIL_ON_WARN = TRUE ({report.RowsWarned:N0} warned row(s))");
-
         if (failures.Count == 0)
         {
             if (stmt.FailureNotification != null)
@@ -143,10 +140,13 @@ public class AssertJobStatementHandler(
             + string.Join("; ", failures);
         logger.Warning("{AssertJobFailure}", summary);
 
+        // Notify before throwing, whatever order the author wrote the blocks in: an alert that
+        // only fires when the run survives is not an alert. Delivery failure keeps its own policy
+        // (log and continue) and never decides the run's outcome — only THROW does.
         if (stmt.FailureNotification != null)
             await HandleAlertTransitionAsync(context, stmt, failed: true, failures, alertRealertHours, summary);
 
-        if (stmt.ThrowOnCritical || failForWarnRows)
+        if (stmt.ThrowOnFailure)
             throw new ExecutionException(summary, null, stmt.Line, stmt.Column);
     }
 
@@ -297,7 +297,7 @@ public class AssertJobStatementHandler(
     /// <summary>
     /// Posts a failure summary through the named catalog notification. Metric values and counts
     /// only — never sample data, so a PII column's values cannot reach an alerting channel.
-    /// Delivery failure has its own policy (log and continue), independent of ON CRITICAL_FAILURE:
+    /// Delivery failure has its own policy (log and continue), independent of ON FAILURE THROW:
     /// a broken alerting channel must not decide whether the run fails.
     /// </summary>
     private async Task HandleAlertTransitionAsync(

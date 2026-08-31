@@ -169,7 +169,7 @@ duration:
 
 | Column | Contents |
 | :--- | :--- |
-| `RowsQuarantined` | Rows removed from output by an `@expect` … `QUARANTINE` action. |
+| `RowsQuarantined` | Rows removed from output by an `EXPECT … ON FAILURE QUARANTINE` rule. |
 | `RowsWarned` | Rows that failed a `WARN` rule but still reached the target. |
 | `DataQualityFailures` | Compact per-rule failure counts (`column:rule=count;…`). Counts only — sample values are never persisted here. |
 

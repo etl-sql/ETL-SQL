@@ -26,6 +26,36 @@ namespace ETL_SQL.Tests.Core
             Assert.IsType<BinaryExpression>(expr);
         }
 
+        [Theory]
+        [InlineData("SELECT 'Dept ' || id AS cat FROM t;")]
+        [InlineData("SELECT ('Dept ' || id) AS cat FROM t;")]
+        public void ParseConcatenation_AllowsSelectAlias(string source)
+        {
+            var script = new Parser(new Lexer(source).Tokenize(), source).Parse();
+
+            Assert.Empty(script.Diagnostics);
+            var select = Assert.IsType<SelectStatement>(Assert.Single(script.Statements));
+            var column = Assert.Single(select.Columns);
+            Assert.Equal("cat", column.Alias);
+            var concat = Assert.IsType<BinaryExpression>(column.Expression);
+            Assert.Equal(TokenType.CONCAT, concat.Operator);
+            Assert.Equal("Dept ", Assert.IsType<LiteralExpression>(concat.Left).Value);
+            Assert.Equal("id", Assert.IsType<IdentifierExpression>(concat.Right).Name);
+            Assert.Equal("('Dept ' || id)", concat.ToSql());
+        }
+
+        [Fact]
+        public void ParseConcatenation_BindsBelowArithmeticAndAboveComparison()
+        {
+            var expr = Parse("'Dept ' || id + 1 = 'Dept 2'");
+
+            var comparison = Assert.IsType<BinaryExpression>(expr);
+            Assert.Equal(TokenType.EQUALS, comparison.Operator);
+            var concat = Assert.IsType<BinaryExpression>(comparison.Left);
+            Assert.Equal(TokenType.CONCAT, concat.Operator);
+            Assert.Equal(TokenType.PLUS, Assert.IsType<BinaryExpression>(concat.Right).Operator);
+        }
+
         [Fact]
         public void ParseComparison()
         {

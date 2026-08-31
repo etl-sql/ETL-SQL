@@ -4,7 +4,7 @@
 --
 -- EXPECT SCHEMA tells you the columns are the right shape. It says nothing about
 -- whether the values are usable: a VARCHAR happily accepts 'not-an-email', and an
--- INT happily accepts -5 for an age. @expect rules close that gap.
+-- INT happily accepts -5 for an age. EXPECT rules close that gap.
 --
 -- Run:  dotnet run --project src/ETL-SQL.App -- run samples/05_Security_Diagnostics/Data_Quality_Rules.etlsql
 --
@@ -33,11 +33,10 @@ INSERT INTO #raw_users (UserId, Email, Age, Region, Source) VALUES
 -- re-entry point for reprocessing rows once they are fixed.
 import_users:
 SELECT
-    UserId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE';
-              @expect_1: 'UNIQUE';  @fail_1: 'QUARANTINE'; */,
-    Email  /* @expect: 'MATCHES ^[^@]+@[^@]+\.[a-z]+$'; @fail: 'QUARANTINE'; */,
-    Age    /* @expect: '>= 0, <= 120'; @fail: 'WARN'; */,
-    Region /* @expect: "IN ('NA','EMEA','APAC')"; @fail: 'QUARANTINE'; */,
+    UserId EXPECT NOT NULL ON FAILURE QUARANTINE EXPECT UNIQUE ON FAILURE QUARANTINE,
+    Email  EXPECT MATCHES '^[^@]+@[^@]+\.[a-z]+$' ON FAILURE QUARANTINE,
+    Age    EXPECT >= 0 AND <= 120 ON FAILURE WARN,
+    Region EXPECT IN ('NA','EMEA','APAC') ON FAILURE QUARANTINE,
     Source
 INTO #clean_users
 FROM #raw_users
@@ -89,6 +88,6 @@ ASSERT JOB sample_user_import (
     QUARANTINE_PERCENT < 0.10,
     ROW_COUNT > 0
 )
-ON CRITICAL_FAILURE THROW;
+ON FAILURE THROW;
 
 PRINT 'Not reached: the assertion above fails by design.';

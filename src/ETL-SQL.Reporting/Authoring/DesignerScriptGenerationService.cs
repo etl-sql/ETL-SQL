@@ -36,7 +36,7 @@ public sealed class DesignerScriptGenerationService
             var query = string.IsNullOrWhiteSpace(dataset.Query)
                 ? "SELECT 1 AS Placeholder"
                 : dataset.Query.Trim().TrimEnd(';');
-            AppendLine(sb, $"CREATE DATASET {name} AS (", nl);
+            AppendLine(sb, $"CREATE DATASET {name}{DatasetLifespanClauses(dataset)} AS (", nl);
             AppendLine(sb, $"  {query}", nl);
             AppendLine(sb, ");", nl);
             AppendLine(sb, string.Empty, nl);
@@ -59,7 +59,7 @@ public sealed class DesignerScriptGenerationService
                 AppendLine(sb, string.Empty, nl);
             }
 
-            AppendLine(sb, GeneratePage(pageName, page.Mode, visuals, nl), nl);
+            AppendLine(sb, GeneratePage(pageName, page.Mode, visuals, page.PrintLayout, nl), nl);
             AppendLine(sb, string.Empty, nl);
         }
 
@@ -75,6 +75,24 @@ public sealed class DesignerScriptGenerationService
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// The dataset's cache rules, written exactly as authored. An absent clause stays absent: a
+    /// dataset with no TTL is not the same as one with a zero TTL, and inventing a default here would
+    /// silently change how often every report refreshes.
+    /// </summary>
+    internal static string DatasetLifespanClauses(DesignerAuthoringDataset dataset)
+    {
+        var clauses = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(dataset.RefreshInterval))
+            clauses.Append($" REFRESH EVERY '{EscapeStr(TrimQuotes(dataset.RefreshInterval))}'");
+        if (!string.IsNullOrWhiteSpace(dataset.Ttl))
+            clauses.Append($" TTL = '{EscapeStr(TrimQuotes(dataset.Ttl))}'");
+        return clauses.ToString();
+    }
+
+    /// <summary>Durations round-trip as authored text, which may or may not arrive already quoted.</summary>
+    private static string TrimQuotes(string? value) => (value ?? string.Empty).Trim().Trim('\'');
 
     internal static string GenerateParameter(DesignerAuthoringParameter parameter)
     {
@@ -189,16 +207,23 @@ public sealed class DesignerScriptGenerationService
         else if (!string.IsNullOrWhiteSpace(visual.Dataset))
             AppendLine(sb, $"    SOURCE = {NormalizeDatasetName(visual.Dataset)},", nl);
 
+        // A CUSTOM visual carries its encodings inside CHART; the parser rejects a visual that also
+        // declares MAPPINGS. Converting BAR -> CUSTOM used to emit both and produce a script that did
+        // not parse, so track whether a CHART clause was written and drop MAPPINGS when one was.
+        var emittedChartClause = false;
+
         if (visual.Options.TryGetValue("advanced_chart", out var advancedChart) && !string.IsNullOrWhiteSpace(advancedChart))
         {
             var chartBlock = advancedChart.Trim().TrimEnd(',');
             if (!chartBlock.StartsWith("CHART", StringComparison.OrdinalIgnoreCase))
                 chartBlock = $"CHART ({nl}        {chartBlock}{nl}    )";
             AppendLine(sb, $"    {chartBlock},", nl);
+            emittedChartClause = true;
         }
         else if (isScaffold && string.Equals(visual.Type, "CUSTOM", StringComparison.OrdinalIgnoreCase))
         {
             AppendLine(sb, $"    CHART ({nl}        COORDINATE (TYPE = CARTESIAN),{nl}        LAYERS ({nl}            main = RECT ({nl}                ENCODINGS ({nl}                    X = category (TYPE = NOMINAL),{nl}                    Y = value (TYPE = QUANTITATIVE){nl}                ){nl}            ){nl}        ){nl}    ),", nl);
+            emittedChartClause = true;
         }
 
         if (string.Equals(visual.Type, "HTML", StringComparison.OrdinalIgnoreCase) || visual.Options.ContainsKey("html_template"))
@@ -218,11 +243,17 @@ public sealed class DesignerScriptGenerationService
                 AppendLine(sb, $"    FALLBACK = '{EscapeStr(fallback)}',", nl);
         }
 
+        // Carried verbatim: the parser hands back the authored expression, which may be a literal,
+        // a concatenation, or a parameter reference. Re-quoting it would turn an expression into a
+        // string.
+        if (visual.Options.TryGetValue("text_default", out var textDefault) && !string.IsNullOrWhiteSpace(textDefault))
+            AppendLine(sb, $"    DEFAULT = {textDefault.Trim().TrimEnd(',')},", nl);
+
         var mappings = visual.Mappings
             .Where(mapping => !string.IsNullOrWhiteSpace(mapping.Value))
             .Select(mapping => $"{mapping.Key.ToUpperInvariant()} = {mapping.Value}")
             .ToList();
-        if (mappings.Count > 0)
+        if (mappings.Count > 0 && !emittedChartClause)
             AppendLine(sb, $"    MAPPINGS ({string.Join(", ", mappings)}),", nl);
 
         var regularOptions = visual.Options
@@ -248,6 +279,9 @@ public sealed class DesignerScriptGenerationService
 
         if (visual.Options.TryGetValue("cascade", out var cascade) && !string.IsNullOrWhiteSpace(cascade))
             AppendLine(sb, $"    {cascade.Trim().TrimEnd(',')},", nl);
+
+        if (visual.Options.TryGetValue("print_layout", out var printLayout) && !string.IsNullOrWhiteSpace(printLayout))
+            AppendLine(sb, $"    {printLayout.Trim().TrimEnd(',')},", nl);
 
         var styleOptions = new List<string>();
         if (visual.Options.TryGetValue("WIDTH", out var width) && !string.IsNullOrWhiteSpace(width))
@@ -286,27 +320,51 @@ public sealed class DesignerScriptGenerationService
         string pageName,
         string mode,
         IReadOnlyList<DesignerAuthoringVisual> visuals,
+        DesignerAuthoringPageLayout? printLayout,
         string nl)
     {
         var modeKeyword = string.Equals(mode, "Paginated", StringComparison.OrdinalIgnoreCase)
             ? "PAGINATED"
             : "DASHBOARD";
-        if (visuals.Count == 0)
+        if (visuals.Count == 0 && printLayout is null)
             return $"CREATE PAGE [{pageName}] AS {modeKeyword} ( LAYOUT ( STRUCTURE = '.' ) );";
 
         var sb = new StringBuilder();
         AppendLine(sb, $"CREATE PAGE [{pageName}] AS {modeKeyword} (", nl);
         AppendLine(sb, "    LAYOUT (", nl);
-        AppendLine(sb, $"        STRUCTURE = '{EscapeStr(BuildStructure(visuals))}',", nl);
-        AppendLine(sb, "        MAP (", nl);
-        for (var index = 0; index < visuals.Count; index++)
+        // A page with no visuals has nothing to map. Emitting an empty MAP () is not just noise: the
+        // patcher copies desired clauses into the author's statement one by one, so it would write a
+        // meaningless empty clause into a page that never had one.
+        if (visuals.Count == 0)
         {
-            var suffix = index < visuals.Count - 1 ? "," : string.Empty;
-            AppendLine(sb,
-                $"            '{GetSlotLetter(index)}' = {SanitizeName(visuals[index].Name, visuals[index].Id)}{suffix}", nl);
+            AppendLine(sb, $"        STRUCTURE = '{EscapeStr(BuildStructure(visuals))}'", nl);
         }
-        AppendLine(sb, "        )", nl);
-        AppendLine(sb, "    )", nl);
+        else
+        {
+            AppendLine(sb, $"        STRUCTURE = '{EscapeStr(BuildStructure(visuals))}',", nl);
+            AppendLine(sb, "        MAP (", nl);
+            for (var index = 0; index < visuals.Count; index++)
+            {
+                var suffix = index < visuals.Count - 1 ? "," : string.Empty;
+                AppendLine(sb,
+                    $"            '{GetSlotLetter(index)}' = {SanitizeName(visuals[index].Name, visuals[index].Id)}{suffix}", nl);
+            }
+            AppendLine(sb, "        )", nl);
+        }
+        AppendLine(sb, printLayout is null ? "    )" : "    ),", nl);
+        if (printLayout is not null)
+        {
+            var options = new List<string>();
+            if (!string.IsNullOrWhiteSpace(printLayout.PageSize)) options.Add($"PAGE_SIZE = '{EscapeStr(printLayout.PageSize)}'");
+            if (!string.IsNullOrWhiteSpace(printLayout.Orientation)) options.Add($"ORIENTATION = '{EscapeStr(printLayout.Orientation)}'");
+            if (printLayout.CustomWidth.HasValue) options.Add($"CUSTOM_WIDTH = {printLayout.CustomWidth.Value}");
+            if (printLayout.CustomHeight.HasValue) options.Add($"CUSTOM_HEIGHT = {printLayout.CustomHeight.Value}");
+            if (printLayout.MarginTop.HasValue && printLayout.MarginRight.HasValue && printLayout.MarginBottom.HasValue && printLayout.MarginLeft.HasValue)
+                options.Add($"MARGINS = ({printLayout.MarginTop.Value}, {printLayout.MarginRight.Value}, {printLayout.MarginBottom.Value}, {printLayout.MarginLeft.Value})");
+            if (!string.IsNullOrWhiteSpace(printLayout.Units)) options.Add($"UNITS = '{EscapeStr(printLayout.Units)}'");
+            if (!string.IsNullOrWhiteSpace(printLayout.Overflow)) options.Add($"OVERFLOW = '{EscapeStr(printLayout.Overflow)}'");
+            AppendLine(sb, $"    PRINT_LAYOUT ({string.Join(", ", options)})", nl);
+        }
         sb.Append(");");
         return sb.ToString();
     }
@@ -415,6 +473,8 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "cascade", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "text_default", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "print_layout", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "advanced_chart", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "html_template", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "html_mode", StringComparison.OrdinalIgnoreCase)

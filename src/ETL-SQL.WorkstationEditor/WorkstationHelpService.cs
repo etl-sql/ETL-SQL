@@ -1,61 +1,23 @@
+using ETL_SQL.Analysis.Services;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Interfaces;
 
 namespace ETL_SQL.WorkstationEditor;
 
+/// <summary>
+/// Desktop HTTP adapter over the shared <see cref="LanguageHoverService"/>. The lookup itself is
+/// host-neutral so the Portal serves identical hover text from the same corpus.
+/// </summary>
 public sealed class WorkstationHelpService(
     ILanguageHelpRegistry languageHelp,
     IFunctionRegistry functionRegistry)
 {
+    private readonly LanguageHoverService _hover = new(languageHelp, functionRegistry);
+
     public HoverResponse GetHover(HoverRequest request)
     {
-        var word = (request.Word ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(word))
-            return new HoverResponse(null);
-
-        var functionHelp = functionRegistry.GetHelp(word);
-        if (!string.IsNullOrWhiteSpace(functionHelp))
-            return new HoverResponse(ScaleDownHeaders(functionHelp), "function");
-
-        var keywordHelp = languageHelp.GetHelp(word);
-        if (!string.IsNullOrWhiteSpace(keywordHelp))
-            return new HoverResponse(ScaleDownHeaders(keywordHelp), "keyword");
-
-        if (word.Contains('.', StringComparison.Ordinal))
-        {
-            var parts = word.Split('.', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (parts.Length == 2)
-            {
-                var subTopicHelp = languageHelp.GetHelp(parts[0], parts[1]);
-                if (!string.IsNullOrWhiteSpace(subTopicHelp))
-                    return new HoverResponse(ScaleDownHeaders(subTopicHelp), "help");
-            }
-        }
-
-        return new HoverResponse(null);
-    }
-
-    private static string ScaleDownHeaders(string markdown)
-    {
-        if (string.IsNullOrEmpty(markdown))
-            return markdown;
-
-        var lines = markdown.Split(["\r\n", "\r", "\n"], StringSplitOptions.None);
-        for (var i = 0; i < lines.Length; i++)
-        {
-            var line = lines[i];
-            if (!line.StartsWith("#", StringComparison.Ordinal))
-                continue;
-
-            var hashCount = 0;
-            while (hashCount < line.Length && line[hashCount] == '#')
-                hashCount++;
-
-            if (hashCount > 0 && hashCount < line.Length && line[hashCount] == ' ')
-                lines[i] = new string('#', Math.Min(6, hashCount + 3)) + line[hashCount..];
-        }
-
-        return string.Join("\n", lines);
+        var (markdown, kind) = _hover.Lookup(request.Word);
+        return markdown is null ? new HoverResponse(null) : new HoverResponse(markdown, kind);
     }
 }
 

@@ -42,6 +42,8 @@ public class MssqlDialect : DefaultSqlDialect
 
     public override bool SupportsTop => true;
 
+    public override string FormatStringConcat(string left, string right) => $"{left} + {right}";
+
     public override string FormatTop(string compiledTop, bool percent, bool withTies)
     {
         var p = percent ? " PERCENT" : "";

@@ -1,0 +1,6 @@
+SELECT region, amount INTO #stage FROM pg.sales;
+
+CREATE VISUAL v_half AS BAR (
+    TITLE = 'Half typed',
+    SOURCE = #stage,
+    MAPPINGS (X = region, Y =

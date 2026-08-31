@@ -7,11 +7,15 @@
 //   POST /api/designer/analyze  {script}       -> { diagnostics }
 //   POST /api/designer/complete {script,line,column,connectionRef} -> { items }
 //   POST /api/designer/run      {script,selection,connectionRef} -> { columns, rows }
+//   POST /api/designer/dag      {script,documentUri} -> { parsed, dag }
 //   GET  /api/designer/schema?connection=demo -> { tables }
 //   (save endpoints are bypassed via opts.onSaveScript in the story)
 //
 // The parse round-trip just echoes the seed state — a faithful script↔state parse
 // is the real DesignerController's job; here we only need the UI to round-trip.
+// Distinguishes "no handler matched" from a handler that legitimately returns an empty object.
+const UNMATCHED = Symbol('unmatched-mock-route');
+
 export function makeMockApi(seedState) {
   let commitCount = 0;
   return async (url, init) => {
@@ -19,11 +23,13 @@ export function makeMockApi(seedState) {
     let body = {};
     try { body = init?.body ? JSON.parse(init.body) : {}; } catch { /* ignore */ }
 
-    let data = {};
+    let data = UNMATCHED;
     if (path.endsWith('/api/designer/generate')) {
       data = { script: generateMockScript(body.designState ?? seedState) };
     } else if (path.endsWith('/api/designer/patch')) {
-      data = { script: body.script || generateMockScript(body.designState ?? seedState) };
+      data = body.script
+        ? { script: mockPatchScript(body.script, body.designState ?? seedState) }
+        : { script: generateMockScript(body.designState ?? seedState) };
     } else if (path.endsWith('/api/designer/query-filter')) {
       data = { source: body.source };
     } else if (path.endsWith('/api/designer/option-source')) {
@@ -33,8 +39,70 @@ export function makeMockApi(seedState) {
       if (scriptText.includes('SYNTAX_ERROR') || scriptText.includes('>>> INVALID <<<') || body._mockParseError) {
         data = { error: 'Syntax error: Unexpected token in script', designState: null };
       } else {
-        data = { designState: seedState };
+        const designState = JSON.parse(JSON.stringify(seedState));
+        const datasetPattern = /CREATE\s+DATASET\s+(&?[A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(([\s\S]*?)\)\s*;/gi;
+        const datasets = [];
+        let match;
+        while ((match = datasetPattern.exec(scriptText)) !== null) {
+          datasets.push({ id: `ds_${datasets.length}`, name: match[1], query: match[2].trim() });
+        }
+        if (datasets.length) designState.datasets = datasets;
+        const pagePattern = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PAGE\s+(?:\[([^\]]+)\]|([A-Za-z_][A-Za-z0-9_]*))\s+AS\s+(DASHBOARD|PAGINATED)/gi;
+        const pages = [];
+        while ((match = pagePattern.exec(scriptText)) !== null) {
+          const mode = match[3][0] + match[3].slice(1).toLowerCase();
+          // Every visual lands on the first page: the mock does not resolve a page's MAP
+          // clause, and a visual the design state cannot see is worse than one on the wrong page.
+          pages.push({
+            id: `p${pages.length + 1}`,
+            name: match[1] || match[2],
+            mode,
+            visuals: pages.length === 0 ? mockParseVisuals(scriptText) : [],
+            printLayout: mode === 'Paginated' ? {
+              pageSize: scriptText.match(/PAGE_SIZE\s*=\s*'([^']+)'/i)?.[1] || 'Letter',
+              orientation: scriptText.match(/ORIENTATION\s*=\s*'([^']+)'/i)?.[1] || 'PORTRAIT',
+              marginTop: Number(scriptText.match(/MARGINS\s*=\s*\(\s*([0-9.]+)/i)?.[1] || 0.75),
+              marginRight: Number(scriptText.match(/MARGINS\s*=\s*\(\s*[0-9.]+\s*,\s*([0-9.]+)/i)?.[1] || 0.75),
+              marginBottom: 0.75,
+              marginLeft: 0.75,
+              units: 'in',
+              overflow: 'SPLIT',
+            } : null,
+          });
+        }
+        if (pages.length) designState.pages = pages;
+        // Parameters were not reported at all, so a DECLARE the canvas wrote was invisible to
+        // every reader of the design state.
+        designState.parameters = mockParseParameters(scriptText);
+        data = { designState };
       }
+    } else if (path.endsWith('/api/designer/dag')) {
+      data = (body.script || '').includes('>>> INVALID <<<') ? {
+        parsed: false,
+        error: 'Syntax error: Unexpected token in pipeline script',
+        dag: { nodes: [], edges: [] },
+      } : {
+        parsed: true,
+        error: null,
+        dag: {
+          nodes: [
+            { id: 'staging_db', label: 'CONNECT staging_db', type: 'connection', meta: { line: 1 } },
+            { id: '#raw_sales', label: 'SELECT INTO #raw_sales', type: 'io', meta: { line: 8 } },
+            { id: 'quality_branch', label: 'IF', type: 'conditional', meta: { line: 15 } },
+            { id: '#ready_sales', label: 'SELECT INTO #ready_sales', type: 'io', meta: { line: 16 } },
+            { id: '#quarantine_sales', label: 'SELECT INTO #quarantine_sales', type: 'io', meta: { line: 19 } },
+            { id: 'quality_gate', label: 'ASSERT', type: 'validation', meta: { line: 22 } },
+          ],
+          edges: [
+            { source: 'staging_db', target: '#raw_sales' },
+            { source: '#raw_sales', target: 'quality_branch' },
+            { source: 'quality_branch', target: '#ready_sales', label: 'TRUE' },
+            { source: 'quality_branch', target: '#quarantine_sales', label: 'ELSE' },
+            { source: '#ready_sales', target: 'quality_gate' },
+            { source: '#quarantine_sales', target: 'quality_gate' },
+          ],
+        },
+      };
     } else if (path.endsWith('/api/designer/analyze')) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
     } else if (path.endsWith('/api/designer/complete')) {
@@ -52,11 +120,17 @@ export function makeMockApi(seedState) {
         .then(r => r.json())
         .catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
     } else if (path.endsWith('/api/designer/data-preview') || path.endsWith('/api/designer/data-sample')) {
-      const source = body.sourceKind === 'temp' ? body.tempTable : `${body.connection}.${body.table}`;
-      const tableName = body.sourceKind === 'temp' ? body.tempTable : body.table;
+      const source = body.sourceKind === 'temp' ? body.tempTable
+        : body.sourceKind === 'dataset' ? body.dataset
+        : `${body.connection}.${body.table}`;
+      const datasetQuery = body.sourceKind === 'dataset' ? extractDatasetQuery(body.script || '', body.dataset) : '';
+      const tableName = body.sourceKind === 'temp' ? body.tempTable
+        : body.sourceKind === 'dataset' ? selectTargetTable(datasetQuery)
+        : body.table;
       const table = mockSchemaTables().find((t) => t.name.toLowerCase() === String(tableName || '').replace(/^#/, '').toLowerCase())
         || mockSchemaTables()[0];
-      const columns = table.columns.map((c) => c.name);
+      const select = body.sourceKind === 'dataset' ? datasetQuery : null;
+      const columns = select ? resolveSelectColumns(select, table) : table.columns.map((c) => c.name);
       const rows = mockRowsForColumns(columns, table);
       data = {
         sourceKind: body.sourceKind,
@@ -94,6 +168,10 @@ export function makeMockApi(seedState) {
           { path: 'etl/staging_clean.etlsql', size: 450 }
         ]
       };
+    } else if (path.endsWith('/api/connections')) {
+      // Desktop-host route: the workspace's registered connections. The Portal has no equivalent,
+      // which is why studio.js reaches it behind a workspace-host check.
+      data = { connections: seedState?.connections || ['staging_db', 'analytics_dw'] };
     } else if (path.endsWith('/api/session/metadata')) {
       data = {
         connections: seedState?.connections || ['staging_db', 'analytics_dw'],
@@ -117,7 +195,41 @@ export function makeMockApi(seedState) {
           rightAlignKeywords: false,
         };
       }
-    } else if (path.endsWith('/api/format')) {
+    } else if (path.endsWith('/api/designer/hover')) {
+      const word = String(body.word || '').toUpperCase();
+      data = word
+        ? { markdown: '#### ' + word + String.fromCharCode(10,10) + 'Sandbox help for ' + word + '.', kind: 'keyword' }
+        : { markdown: null, kind: null };
+    } else if (path.endsWith('/api/connectors/schema')) {
+      // Shape matters: the wizard reads an array, or { schemas: [...] }. Returning an empty or
+      // wrongly-keyed payload silently leaves it on its built-in fallback list, which is how the
+      // sandbox hid an empty Test Data category.
+      data = {
+        schemas: [
+          {
+            connectorType: 'MOCKDB',
+            aliases: [],
+            description: 'Built-in in-memory sample data. Needs no external database.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [],
+          },
+          {
+            connectorType: 'MSSQL',
+            aliases: ['SQLSERVER'],
+            description: 'Microsoft SQL Server and Azure SQL Database.',
+            isFileBased: false,
+            isDataWarehouse: false,
+            commandTimeoutSeconds: 30,
+            options: [
+              { name: 'SERVER', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'localhost' },
+              { name: 'DATABASE', type: 0, isMandatory: true, category: 'Basic', defaultValue: 'master' },
+            ],
+          },
+        ],
+      };
+    } else if (path.endsWith('/api/designer/format') || path.endsWith('/api/format')) {
       const casing = (seedState?._formatterOptions?.keywordCasing || 'upper').toLowerCase();
       let formatted = body.script || '';
       if (casing === 'lower') {
@@ -125,7 +237,7 @@ export function makeMockApi(seedState) {
       } else if (casing === 'upper') {
         formatted = formatted.replace(/\b(select|from|where|join|left|right|inner|outer|group by|order by|having|create|connection|dataset|visual|page|as|into|begin|try|catch|merge|update|set|insert|values)\b/gi, m => m.toUpperCase());
       }
-      data = { script: formatted };
+      data = { script: formatted, diagnostics: [] };
     } else if (path.endsWith('/api/git/status')) {
       data = {
         branch: 'main',
@@ -139,6 +251,21 @@ export function makeMockApi(seedState) {
         committed: true,
         sourceRevision: 'c0ffee1',
         message: 'Committed successfully.'
+      };
+    }
+
+    // Fail closed on an unrecognised path. This used to answer ok:true with an empty body for ANY
+    // route, so a client calling a URL the real host does not serve looked healthy here and 404'd in
+    // production. That is exactly how Studio shipped pointing at desktop-only routes.
+    if (data === UNMATCHED) {
+      const message = `[ui-sandbox] No mock for ${init?.method || 'GET'} ${path}. `
+        + 'Add a handler in mockApi.js, or fix the caller if the real host does not serve this route.';
+      console.error(message);
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({ error: message }),
+        text: async () => message,
       };
     }
 
@@ -243,6 +370,16 @@ function extractSelectStatement(text) {
   if (selects.length) return selects[selects.length - 1];
   const bare = text.trim().replace(/;+\s*$/, '');
   return /^SELECT\b/i.test(bare) ? bare : '';
+}
+
+function extractDatasetQuery(text, datasetName) {
+  const wanted = String(datasetName || '').replace(/^&/, '').toLowerCase();
+  const pattern = /CREATE\s+DATASET\s+(&?[A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(([\s\S]*?)\)\s*;/gi;
+  let match;
+  while ((match = pattern.exec(String(text || ''))) !== null) {
+    if (match[1].replace(/^&/, '').toLowerCase() === wanted) return match[2].trim();
+  }
+  return '';
 }
 
 // Resolve the FROM target, dropping any connection/schema qualifier and alias:
@@ -705,3 +842,359 @@ function generateMockScript(state) {
   return out.join('\n');
 }
 
+// --- Mock script patching -------------------------------------------------
+//
+// The real POST /api/designer/patch is a lossless span patcher (DesignerScriptPatcher) that edits
+// only the clauses the designer changed. This mock is a deliberately simpler text reconciliation:
+// it adds, removes, and rewrites the statements the Studio workflows create so that a click which
+// writes SQL is actually *visible* in the sandbox.
+//
+// This used to echo `body.script` straight back. That made every canvas mutation — add a visual,
+// add a parameter, add detail bands — look like a dead button, because the sandbox handed back the
+// script it was given and Studio faithfully rendered no change.
+
+function mockPatchScript(script, state) {
+  let out = script;
+  out = mockPatchParameters(out, state?.parameters);
+  out = mockPatchDatasets(out, state?.datasets);
+  out = mockPatchVisuals(out, state);
+  out = mockPatchPages(out, state);
+  return out;
+}
+
+// Finds `KEYWORD ( ... )` by balancing parentheses, so a nested clause does not end the span early.
+function mockFindClause(text, keyword, from = 0) {
+  const pattern = new RegExp('\\b' + keyword + '\\s*\\(', 'gi');
+  pattern.lastIndex = from;
+  const match = pattern.exec(text);
+  if (!match) return null;
+  let depth = 0;
+  for (let i = match.index + match[0].length - 1; i < text.length; i++) {
+    if (text[i] === '(') depth++;
+    else if (text[i] === ')') {
+      depth--;
+      if (depth === 0) return { start: match.index, end: i + 1, text: text.slice(match.index, i + 1) };
+    }
+  }
+  return null;
+}
+
+// The offset just past `CREATE ... ;` starting at `start`, honouring nested parentheses.
+function mockStatementEnd(text, start) {
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '(') depth++;
+    else if (text[i] === ')') depth--;
+    else if (text[i] === ';' && depth <= 0) return i + 1;
+  }
+  return text.length;
+}
+
+function mockNormalizeName(name) {
+  return String(name || '').replace(/^&/, '').toLowerCase();
+}
+
+function mockPatchParameters(script, parameters) {
+  if (!Array.isArray(parameters)) return script;
+  let out = script;
+
+  const existing = new Map();
+  const declarePattern = /^[ \t]*DECLARE\s+(@[A-Za-z_][A-Za-z0-9_]*)[^;]*;[ \t]*\r?\n?/gim;
+  let match;
+  while ((match = declarePattern.exec(out)) !== null) {
+    existing.set(match[1].toLowerCase(), { start: match.index, end: match.index + match[0].length });
+  }
+
+  const desired = new Set(parameters.map(p => (p.name.startsWith('@') ? p.name : '@' + p.name).toLowerCase()));
+
+  // Remove dropped declarations back-to-front so earlier offsets stay valid.
+  const removals = [...existing.entries()].filter(([name]) => !desired.has(name)).map(([, span]) => span);
+  for (const span of removals.sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, span.start) + out.slice(span.end);
+  }
+
+  const additions = parameters
+    .filter(p => !existing.has((p.name.startsWith('@') ? p.name : '@' + p.name).toLowerCase()))
+    .map(p => {
+      const name = p.name.startsWith('@') ? p.name : '@' + p.name;
+      const initial = p.initialValue ? ' = ' + p.initialValue : '';
+      const flags = [p.isInput ? 'INPUT' : '', p.isOutput ? 'OUTPUT' : '', p.isRequired ? 'REQUIRED' : '', p.isSensitive ? 'SENSITIVE' : '']
+        .filter(Boolean).join(' ');
+      return 'DECLARE ' + name + ' ' + (p.dataType || 'VARCHAR') + initial + (flags ? ' ' + flags : '') + ';';
+    });
+
+  return additions.length ? additions.join('\n') + '\n\n' + out : out;
+}
+
+function mockPatchDatasets(script, datasets) {
+  if (!Array.isArray(datasets)) return script;
+  let out = script;
+
+  const existing = new Map();
+  const pattern = /CREATE\s+DATASET\s+(&?[A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(/gi;
+  let match;
+  while ((match = pattern.exec(out)) !== null) {
+    const end = mockStatementEnd(out, match.index);
+    existing.set(mockNormalizeName(match[1]), { start: match.index, end });
+    pattern.lastIndex = end;
+  }
+
+  const desired = new Set(datasets.map(d => mockNormalizeName(d.name)));
+  const removals = [...existing.entries()].filter(([name]) => !desired.has(name)).map(([, span]) => span);
+  for (const span of removals.sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, span.start) + out.slice(span.end).replace(/^\r?\n\r?\n/, '\n');
+  }
+
+  const additions = datasets
+    .filter(d => !existing.has(mockNormalizeName(d.name)))
+    .map(d => {
+      const name = String(d.name).startsWith('&') ? d.name : '&' + d.name;
+      const query = String(d.query || 'SELECT 1 AS Placeholder').trim().replace(/;$/, '');
+      return 'CREATE DATASET ' + name + ' AS (\n  ' + query + '\n);';
+    });
+  if (!additions.length) return out;
+
+  const insertAt = mockFirstPresentationOffset(out);
+  return out.slice(0, insertAt) + additions.join('\n\n') + '\n\n' + out.slice(insertAt);
+}
+
+// Datasets and visuals are declared before the presentation statements that consume them.
+function mockFirstPresentationOffset(script) {
+  const match = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON|PAGE)\b/i.exec(script);
+  return match ? match.index : script.length;
+}
+
+function mockVisualStatement(visual) {
+  const name = sanitizeName(visual.name, visual.id);
+  const source = visual.options?.inline_source
+    || (visual.dataset ? (String(visual.dataset).startsWith('&') ? visual.dataset : '&' + visual.dataset) : null);
+  const clauses = [];
+  if (source) clauses.push('    SOURCE = ' + source);
+  const maps = Object.entries(visual.mappings ?? {}).filter(([, column]) => column).map(([role, column]) => role + ' = ' + column);
+  if (maps.length) clauses.push('    MAPPINGS (' + maps.join(', ') + ')');
+  if (visual.title) clauses.push("    TITLE = '" + String(visual.title).replace(/'/g, "''") + "'");
+  const options = mockOptionsClause(visual.options);
+  if (options) clauses.push('    ' + options);
+  if (visual.options?.print_layout) clauses.push('    ' + visual.options.print_layout);
+  return 'CREATE VISUAL ' + name + ' AS ' + visual.type + ' (\n' + clauses.join(',\n') + '\n);';
+}
+
+// `inline_source` and `print_layout` are carried as their own clauses, not as OPTIONS entries.
+function mockOptionsClause(options) {
+  const entries = Object.entries(options ?? {}).filter(([key]) => key !== 'inline_source' && key !== 'print_layout');
+  if (!entries.length) return '';
+  const body = entries.map(([key, value]) => key + " = '" + String(value).replace(/'/g, "''") + "'").join(', ');
+  return 'OPTIONS (' + body + ')';
+}
+
+function mockPatchVisuals(script, state) {
+  const visuals = (state?.pages ?? []).flatMap(page => page.visuals ?? []);
+  let out = script;
+
+  const existing = new Map();
+  const pattern = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?VISUAL\s+([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+/gi;
+  let match;
+  while ((match = pattern.exec(out)) !== null) {
+    const end = mockStatementEnd(out, match.index);
+    existing.set(match[1].toLowerCase(), { start: match.index, end });
+    pattern.lastIndex = end;
+  }
+
+  const desired = new Map(visuals.map(visual => [sanitizeName(visual.name, visual.id).toLowerCase(), visual]));
+
+  // Rewrite existing visuals back-to-front, then delete dropped ones, so offsets stay valid.
+  const edits = [];
+  for (const [name, span] of existing) {
+    const original = out.slice(span.start, span.end);
+    if (!desired.has(name)) {
+      edits.push({ start: span.start, end: span.end, text: '' });
+      continue;
+    }
+    const rewritten = mockRewriteVisualClauses(original, desired.get(name));
+    if (rewritten !== original) edits.push({ start: span.start, end: span.end, text: rewritten });
+  }
+  for (const edit of edits.sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
+  }
+
+  const additions = visuals
+    .filter(visual => !existing.has(sanitizeName(visual.name, visual.id).toLowerCase()))
+    .map(mockVisualStatement);
+  if (!additions.length) return out;
+
+  const pageMatch = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PAGE\b/i.exec(out);
+  const insertAt = pageMatch ? pageMatch.index : out.length;
+  const prefix = insertAt === out.length && out.length && !out.endsWith('\n') ? '\n\n' : '';
+  return out.slice(0, insertAt) + prefix + additions.join('\n\n') + '\n\n' + out.slice(insertAt);
+}
+
+// Only the clauses the Studio workflows write are reconciled; everything else the author typed stays.
+function mockRewriteVisualClauses(statement, visual) {
+  let out = statement;
+  out = mockReplaceClause(out, 'OPTIONS', mockOptionsClause(visual.options));
+  out = mockReplaceClause(out, 'PRINT_LAYOUT', visual.options?.print_layout || '');
+  return out;
+}
+
+function mockReplaceClause(statement, keyword, replacement) {
+  const existing = mockFindClause(statement, keyword);
+  if (!existing) {
+    if (!replacement) return statement;
+    const close = statement.lastIndexOf(')');
+    if (close < 0) return statement;
+    let previous = close - 1;
+    while (previous >= 0 && /\s/.test(statement[previous])) previous--;
+    const separator = previous >= 0 && statement[previous] !== '(' && statement[previous] !== ',' ? ',' : '';
+    return statement.slice(0, previous + 1) + separator + '\n    ' + replacement + '\n' + statement.slice(close);
+  }
+  if (!replacement) {
+    let end = existing.end;
+    while (end < statement.length && /\s/.test(statement[end])) end++;
+    if (statement[end] === ',') end++;
+    return statement.slice(0, existing.start) + statement.slice(end);
+  }
+  return statement.slice(0, existing.start) + replacement + statement.slice(existing.end);
+}
+
+function mockPatchPages(script, state) {
+  const pages = state?.pages ?? [];
+  if (!pages.length) return script;
+  let out = script;
+
+  const pattern = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PAGE\s+(?:\[([^\]]+)\]|([A-Za-z_][A-Za-z0-9_]*))\s+AS\s+(DASHBOARD|PAGINATED)/gi;
+  const spans = [];
+  let match;
+  while ((match = pattern.exec(out)) !== null) {
+    const end = mockStatementEnd(out, match.index);
+    spans.push({ start: match.index, end });
+    pattern.lastIndex = end;
+  }
+
+  for (let index = spans.length - 1; index >= 0; index--) {
+    const page = pages[index];
+    if (!page) continue;
+    const span = spans[index];
+    const rewritten = mockRewritePageClauses(out.slice(span.start, span.end), page);
+    out = out.slice(0, span.start) + rewritten + out.slice(span.end);
+  }
+  return out;
+}
+
+function mockRewritePageClauses(statement, page) {
+  const visuals = page.visuals ?? [];
+  let out = statement;
+
+  const structure = buildStructure(visuals);
+  out = out.replace(/STRUCTURE\s*=\s*'(?:[^']|'')*'/i, "STRUCTURE = '" + structure.replace(/'/g, "''") + "'");
+
+  // A page with no visuals has nothing to map, so it must not gain an empty MAP () clause.
+  const mapEntries = visuals
+    .map((visual, index) => "            '" + getSlotLetter(index) + "' = " + sanitizeName(visual.name, visual.id))
+    .join(',\n');
+  const layout = mockFindClause(out, 'LAYOUT');
+  if (layout) {
+    const rewrittenLayout = mockReplaceClause(
+      layout.text,
+      'MAP',
+      mapEntries ? 'MAP (\n' + mapEntries + '\n        )' : '');
+    out = out.slice(0, layout.start) + rewrittenLayout + out.slice(layout.end);
+  }
+
+  const print = page.printLayout;
+  if (print) {
+    const options = [];
+    if (print.pageSize) options.push("PAGE_SIZE = '" + print.pageSize + "'");
+    if (print.orientation) options.push("ORIENTATION = '" + print.orientation + "'");
+    if (print.marginTop != null) {
+      const t = print.marginTop;
+      options.push('MARGINS = (' + t + ', ' + (print.marginRight ?? t) + ', ' + (print.marginBottom ?? t) + ', ' + (print.marginLeft ?? t) + ')');
+    }
+    if (print.units) options.push("UNITS = '" + print.units + "'");
+    if (print.overflow) options.push("OVERFLOW = '" + print.overflow + "'");
+    out = mockReplaceClause(out, 'PRINT_LAYOUT', options.length ? 'PRINT_LAYOUT (' + options.join(', ') + ')' : '');
+  }
+  return out;
+}
+
+// Extracts the visuals a script actually declares, rather than echoing the seed state. The mock
+// parse used to hand back the fixture's visuals whenever the script mentioned CREATE VISUAL at all,
+// which meant anything the canvas wrote was invisible to every reader of the design state — the
+// workflow checklist, the report tree, and the inspector all described the fixture, not the script.
+function mockParseVisuals(script) {
+  const visuals = [];
+  const pattern = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?VISUAL\s+([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+([A-Za-z_]+)\s*\(/gi;
+  let match;
+  while ((match = pattern.exec(script)) !== null) {
+    const end = mockStatementEnd(script, match.index);
+    const body = script.slice(match.index, end);
+    pattern.lastIndex = end;
+
+    const options = {};
+    const source = /\bSOURCE\s*=\s*([^,\n]+)/i.exec(body)?.[1]?.trim();
+    const dataset = source && source.startsWith('&') ? source : null;
+    if (source && !dataset) options.inline_source = source;
+
+    const optionsClause = mockFindClause(body, 'OPTIONS');
+    if (optionsClause) {
+      const inner = optionsClause.text.slice(optionsClause.text.indexOf('(') + 1, -1);
+      for (const entry of inner.split(',')) {
+        const [key, ...rest] = entry.split('=');
+        if (!key || !rest.length) continue;
+        options[key.trim()] = rest.join('=').trim().replace(/^'|'$/g, '');
+      }
+    }
+    const printLayout = mockFindClause(body, 'PRINT_LAYOUT');
+    if (printLayout) options.print_layout = printLayout.text;
+    const textDefault = /\bDEFAULT\s*=\s*('(?:[^']|'')*')/i.exec(body)?.[1];
+    if (textDefault) options.text_default = textDefault;
+
+    const mappings = {};
+    const mappingClause = mockFindClause(body, 'MAPPINGS');
+    if (mappingClause) {
+      const inner = mappingClause.text.slice(mappingClause.text.indexOf('(') + 1, -1);
+      inner.split(',').forEach((entry, index) => {
+        const parts = entry.split('=');
+        if (parts.length >= 2) mappings[parts[0].trim().toUpperCase()] = parts.slice(1).join('=').trim();
+        else if (entry.trim()) mappings[`COLUMN${index + 1}`] = entry.trim();
+      });
+    }
+
+    const type = match[2].toUpperCase();
+    const wide = type === 'TABLE' || type === 'MATRIX' || type === 'TEXT';
+    visuals.push({
+      id: `v_${match[1]}_${visuals.length}`,
+      name: match[1],
+      type,
+      // The script carries no grid coordinates; they live in the page's LAYOUT STRUCTURE. Stacking
+      // them is enough for the design state to be read back correctly.
+      gridCol: 1,
+      gridRow: visuals.reduce((row, visual) => row + visual.gridRowSpan, 1),
+      gridColSpan: wide ? 12 : 6,
+      gridRowSpan: type === 'TEXT' ? 2 : type === 'CARD' ? 2 : 4,
+      title: /\bTITLE\s*=\s*'((?:[^']|'')*)'/i.exec(body)?.[1]?.replace(/''/g, "'") || null,
+      dataset,
+      mappings,
+      options,
+    });
+  }
+  return visuals;
+}
+
+function mockParseParameters(script) {
+  const parameters = [];
+  const pattern = /^[ \t]*DECLARE\s+(@[A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z]+)([^;]*);/gim;
+  let match;
+  while ((match = pattern.exec(script)) !== null) {
+    const tail = match[3] || '';
+    parameters.push({
+      name: match[1],
+      dataType: match[2].toUpperCase(),
+      initialValue: /=\s*(.+?)(?:\s+(?:INPUT|OUTPUT|REQUIRED|PASSWORD)\b|\s*$)/i.exec(tail)?.[1]?.trim() || null,
+      isInput: /\bINPUT\b/i.test(tail),
+      isOutput: /\bOUTPUT\b/i.test(tail),
+      isRequired: /\bREQUIRED\b/i.test(tail),
+      isSensitive: /\bPASSWORD\b/i.test(tail),
+    });
+  }
+  return parameters;
+}

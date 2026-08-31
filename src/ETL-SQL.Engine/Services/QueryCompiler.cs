@@ -50,6 +50,13 @@ public class QueryCompiler(Evaluator evaluator)
         }
         if (e is BinaryExpression bin)
         {
+            if (bin.Operator == TokenType.CONCAT)
+            {
+                var left = CompileExpressionInternal(bin.Left, dialect);
+                var right = CompileExpressionInternal(bin.Right, dialect);
+                return $"({dialect.FormatStringConcat(left, right)})";
+            }
+
             var op = bin.Operator switch
             {
                 TokenType.EQUALS => "=",

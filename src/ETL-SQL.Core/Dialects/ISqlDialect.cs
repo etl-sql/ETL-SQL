@@ -9,6 +9,7 @@ public interface ISqlDialect
 
     string RewriteIdentifier(string name);
     string RewriteFunctionCall(string functionName, IReadOnlyList<Expression> arguments, Func<Expression, string> compileArg);
+    string FormatStringConcat(string left, string right);
 
     bool SupportsTop { get; }
     string FormatTop(string compiledTop, bool percent, bool withTies);

@@ -54,6 +54,52 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Null(ctx.RecordRun);
         }
 
+        [Fact]
+        public async Task CliOrchestrator_ParsesStudioLifecycleOptions()
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exit = await root.Parse([
+                "studio", "workspace", "--new-instance", "--new-window", "--idle-timeout-minutes", "15", "--port", "4321"
+            ]).InvokeAsync();
+
+            Assert.Equal(0, exit);
+            Assert.NotNull(captured);
+            Assert.Equal("start", captured!.StudioAction);
+            Assert.Equal("workspace", captured.StudioProjectPath);
+            Assert.True(captured.StudioNewInstance);
+            Assert.True(captured.StudioNewWindow);
+            Assert.Equal(15, captured.StudioIdleShutdownMinutes);
+            Assert.Equal(4321, captured.ServePort);
+        }
+
+        [Theory]
+        [InlineData("list", "list")]
+        [InlineData("open", "open")]
+        [InlineData("stop", "stop")]
+        public async Task CliOrchestrator_ParsesStudioLifecycleCommands(string verb, string expectedAction)
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            var arguments = verb == "list" ? new[] { "studio", verb } : new[] { "studio", verb, "workspace" };
+            var exit = await root.Parse(arguments).InvokeAsync();
+
+            Assert.Equal(0, exit);
+            Assert.NotNull(captured);
+            Assert.Equal(expectedAction, captured!.StudioAction);
+            if (verb != "list") Assert.Equal("workspace", captured.StudioProjectPath);
+        }
+
         /// <summary>The safe reading of a contradictory command line is to record less, not more.</summary>
         [Fact]
         public async Task CliOrchestrator_NoRecordWinsOverRecord()

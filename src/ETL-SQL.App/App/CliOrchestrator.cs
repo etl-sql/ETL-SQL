@@ -335,6 +335,19 @@ namespace ETL_SQL.App
         {
             Description = "Do not automatically open the browser on start"
         };
+        private static readonly Option<bool> StudioNewWindowOption = new("--new-window", Array.Empty<string>())
+        {
+            Description = "Open another browser window against the healthy host for this project"
+        };
+        private static readonly Option<bool> StudioNewInstanceOption = new("--new-instance", Array.Empty<string>())
+        {
+            Description = "Start an independent host for the same project (advanced)"
+        };
+        private static readonly Option<int> StudioIdleShutdownOption = new("--idle-timeout-minutes", Array.Empty<string>())
+        {
+            Description = "Stop the host after this many idle minutes; zero disables idle shutdown",
+            DefaultValueFactory = _ => 0
+        };
         private static readonly Option<bool> DoctorStrictOption = new("--strict", Array.Empty<string>())
         {
             Description = "Exit with code 1 if any check produces a WARN or FAIL result."
@@ -1834,13 +1847,49 @@ namespace ETL_SQL.App
             initCommand.SetAction(context => Dispatch(context, "init", handler));
 
             // 15. STUDIO Command — launch modern web-based ETL-SQL Studio on local loopback
-            var studioCommand = new Command("studio", "Launch the modern ETL-SQL Studio visual & script workbench on local loopback")
+            var studioProjectArgument = new Argument<string?>("project")
             {
-                new Argument<string?>("file") { Description = "Optional script file or directory to open in Studio", Arity = ArgumentArity.ZeroOrOne },
+                Description = "Optional script file or project directory to open in Studio",
+                Arity = ArgumentArity.ZeroOrOne
+            };
+            var studioCommand = new Command("studio", "Launch or control local ETL-SQL Studio project hosts")
+            {
+                studioProjectArgument,
                 ServePortOption,
                 ServeNoBrowserOption,
+                StudioNewWindowOption,
+                StudioNewInstanceOption,
+                StudioIdleShutdownOption,
             };
             studioCommand.SetAction(context => Dispatch(context, "studio", handler));
+
+            var studioListCommand = new Command("list", "List healthy local Studio instances");
+            studioListCommand.SetAction(context => Dispatch(context, "studio-list", handler));
+            studioCommand.Add(studioListCommand);
+
+            var studioOpenProjectArgument = new Argument<string?>("project")
+            {
+                Description = "Optional script file or project directory to open",
+                Arity = ArgumentArity.ZeroOrOne
+            };
+            var studioOpenCommand = new Command("open", "Reconnect to or start a Studio project host")
+            {
+                studioOpenProjectArgument
+            };
+            studioOpenCommand.SetAction(context => Dispatch(context, "studio-open", handler));
+            studioCommand.Add(studioOpenCommand);
+
+            var studioStopProjectArgument = new Argument<string?>("project")
+            {
+                Description = "Optional project directory to stop (defaults to the current directory)",
+                Arity = ArgumentArity.ZeroOrOne
+            };
+            var studioStopCommand = new Command("stop", "Gracefully stop Studio instances for a project")
+            {
+                studioStopProjectArgument
+            };
+            studioStopCommand.SetAction(context => Dispatch(context, "studio-stop", handler));
+            studioCommand.Add(studioStopCommand);
 
             rootCommand.Add(runCommand);
             rootCommand.Add(testCommand);
@@ -2087,14 +2136,22 @@ namespace ETL_SQL.App
                 cliContext.ServePort = res.GetValue(ServePortOption);
                 cliContext.ServeNoBrowser = res.GetValue(ServeNoBrowserOption);
             }
-            else if (commandName == "studio")
+            else if (commandName is "studio" or "studio-open" or "studio-stop" or "studio-list")
             {
-                var fileResult = res.CommandResult.Children.OfType<ArgumentResult>().FirstOrDefault(a => a.Argument.Name == "file");
-                var filePath = fileResult?.GetValueOrDefault<string?>();
-                if (!string.IsNullOrWhiteSpace(filePath))
-                    cliContext.ScriptFile = new FileInfo(filePath.Trim('"', '\'', ' '));
+                var projectResult = res.CommandResult.Children.OfType<ArgumentResult>().FirstOrDefault(a => a.Argument.Name == "project");
+                cliContext.StudioProjectPath = projectResult?.GetValueOrDefault<string?>()?.Trim('"', '\'', ' ');
+                cliContext.StudioAction = commandName["studio".Length..].TrimStart('-') switch
+                {
+                    "list" => "list",
+                    "open" => "open",
+                    "stop" => "stop",
+                    _ => "start"
+                };
                 cliContext.ServePort = res.GetValue(ServePortOption);
                 cliContext.ServeNoBrowser = res.GetValue(ServeNoBrowserOption);
+                cliContext.StudioNewWindow = res.GetValue(StudioNewWindowOption);
+                cliContext.StudioNewInstance = res.GetValue(StudioNewInstanceOption);
+                cliContext.StudioIdleShutdownMinutes = res.GetValue(StudioIdleShutdownOption);
             }
             else if (commandName == "doctor")
             {

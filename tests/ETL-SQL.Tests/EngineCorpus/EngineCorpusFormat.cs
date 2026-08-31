@@ -37,7 +37,7 @@ namespace ETL_SQL.Tests.EngineCorpus
     /// <para>The SQLite corpus is a <i>conformance</i> corpus: it asks whether <c>SELECT a+b</c>
     /// returns the right values, and it is good at that. It has no way to express a file on disk, a
     /// connector, or a load — so <c>BULK INSERT</c>, <c>EXPORT</c>, <c>DATASET</c>, quarantine
-    /// routing and <c>@expect</c> have zero corpus coverage between them, not by oversight but by
+    /// routing and <c>EXPECT</c> have zero corpus coverage between them, not by oversight but by
     /// construction. ETL-SQL is an engine that speaks SQL rather than a database, and that surface
     /// is most of what makes it one.</para>
     ///

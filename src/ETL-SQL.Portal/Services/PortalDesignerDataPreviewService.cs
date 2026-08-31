@@ -27,7 +27,8 @@ public sealed class PortalDesignerDataPreviewService(
         {
             "connection" => await PreviewConnectionAsync(request, user, cancellationToken),
             "temp" => await PreviewTempTableAsync(request, user, cancellationToken),
-            _ => throw new ArgumentException("SourceKind must be 'connection' or 'temp'.")
+            "dataset" => await PreviewDatasetAsync(request, user, cancellationToken),
+            _ => throw new ArgumentException("SourceKind must be 'connection', 'temp', or 'dataset'.")
         };
     }
 
@@ -75,6 +76,21 @@ public sealed class PortalDesignerDataPreviewService(
         return ToResponse("temp", tempTable, result);
     }
 
+    private async Task<DesignerDataPreviewResponse> PreviewDatasetAsync(
+        DesignerDataPreviewRequest request,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken)
+    {
+        var dataset = RequireName(request.Dataset, "dataset");
+        var script = request.Script ?? throw new ArgumentException("The current script is required for dataset preview.");
+        var (query, connection) = BuildDatasetPreviewScript(script, dataset);
+        var result = await runService.RunAsync(
+            new RunDesignerRequest(query, ConnectionRef: connection, DocumentUri: request.DocumentUri),
+            user,
+            cancellationToken);
+        return ToResponse("dataset", dataset, result);
+    }
+
     public static string BuildSourcePreviewScript(string connection, string table)
         => $"SELECT * FROM {QuoteIdentifier(connection)}.{QuoteQualifiedIdentifier(table)};";
 
@@ -106,6 +122,32 @@ public sealed class PortalDesignerDataPreviewService(
 
         builder.Append("SELECT * FROM ").Append(QuoteIdentifier(tempTable)).AppendLine(";");
         return builder.ToString();
+    }
+
+    public static (string Query, string? Connection) BuildDatasetPreviewScript(string scriptText, string datasetName)
+    {
+        var parsed = new CoreParser(new Lexer(scriptText).Tokenize(), scriptText).Parse();
+        var error = parsed.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        if (error is not null)
+            throw new ArgumentException(error.Message);
+
+        var normalizedName = datasetName.Trim().TrimStart('&');
+        var dataset = parsed.Statements.OfType<CreateDatasetStatement>().FirstOrDefault(candidate =>
+            string.Equals(candidate.TempTableName.TrimStart('&'), normalizedName, StringComparison.OrdinalIgnoreCase));
+        if (dataset is null)
+            throw new KeyNotFoundException("The selected dataset is not defined by the current script.");
+        if (PortalInteractiveRunPolicy.Reject(dataset.SourceQuery) is { } rejection)
+            throw new ArgumentException($"Dataset preview is not allowed: {rejection}");
+
+        var connections = dataset.SourceQuery.GetSourceTables()
+            .Where(source => source.Contains('.', StringComparison.Ordinal))
+            .Select(source => source.Split('.', 2)[0])
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (connections.Count > 1)
+            throw new ArgumentException("Dataset preview supports one governed catalog connection. Stage cross-source work in a #temp table first.");
+
+        return (dataset.SourceQuery.ToSql().Trim().TrimEnd(';') + ";", connections.SingleOrDefault());
     }
 
     private static DesignerDataPreviewResponse ToResponse(

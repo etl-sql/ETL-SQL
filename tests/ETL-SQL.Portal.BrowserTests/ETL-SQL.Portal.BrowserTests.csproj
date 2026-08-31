@@ -17,6 +17,7 @@
     <!-- Reuses PortalWebFactory (isolated temp SQLite databases, test JWT secret, first-run admin)
          rather than duplicating ~200 lines of host configuration that would then drift. -->
     <ProjectReference Include="..\..\tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.WorkstationEditor\ETL-SQL.WorkstationEditor.csproj" />
   </ItemGroup>
 
   <ItemGroup>

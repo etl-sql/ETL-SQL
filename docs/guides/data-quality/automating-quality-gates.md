@@ -80,7 +80,7 @@ Run nightly batch scripts with automated logging and JSON evidence generation.
 
 ## Running Unattended Without Portal
 
-For one or two jobs, invoke the CLI directly from the operating-system scheduler. Both `ON CRITICAL_FAILURE THROW` and `FAIL_ON_WARN = TRUE` produce a non-zero process exit; SMTP and WEBHOOK connections are optional.
+For one or two jobs, invoke the CLI directly from the operating-system scheduler. `ON FAILURE THROW` produces a non-zero process exit — pair it with `WARN_PERCENT = 0` to fail on any warned row; SMTP and WEBHOOK connections are optional.
 
 Windows Task Scheduler action:
 - **Program/script**: `C:\Program Files\ETL-SQL\etl-sql.exe`
@@ -96,6 +96,6 @@ When several jobs need scheduling, historical baselines, durable recovery-notifi
 
 ## Related Topics
 
-- [Column Quality Rules](column-quality-rules.md) — Declaring `@expect` rules.
+- [Column Quality Rules](column-quality-rules.md) — Declaring `EXPECT` rules.
 - [Run-Level Assertions](run-level-assertions.md) — Configuring `ASSERT JOB`.
 - [Configuring Script Logging](../operations/configuring-script-logging.md) — Log files and retention.

@@ -60,7 +60,10 @@ public static class WorkstationEditorApp
         builder.Services.AddSingleton<WorkstationFormatService>();
         builder.Services.AddSingleton<WorkstationRunService>();
         builder.Services.AddSingleton<WorkstationPreviewService>();
+        builder.Services.AddSingleton<WorkstationDataSampleService>();
         builder.Services.AddSingleton<WorkstationGitService>();
+        builder.Services.AddSingleton<StudioHostLifecycleService>();
+        builder.Services.AddHostedService(services => services.GetRequiredService<StudioHostLifecycleService>());
 
         var app = builder.Build();
 
@@ -162,8 +165,48 @@ public static class WorkstationEditorApp
                 root = workspace.Root,
                 readOnly = workspace.ReadOnly,
                 initialFile = workspace.InitialRelativeFile(editorOptions.InitialFile),
-                files = workspace.ListFiles()
+                files = workspace.ListFiles(),
+                folders = workspace.ListFolders()
             }, JsonOptions));
+
+        app.MapGet("/api/studio/lifecycle", (
+            StudioHostLifecycleService lifecycle,
+            WorkstationEditorOptions editorOptions) => Results.Json(new
+            {
+                instanceId = editorOptions.InstanceId,
+                workspaceRoot = editorOptions.WorkspaceRoot,
+                processId = Environment.ProcessId,
+                connectedClients = lifecycle.ConnectedClients,
+                activeRuns = lifecycle.ActiveRuns,
+                dirtyClients = lifecycle.DirtyClients,
+                idleShutdownMinutes = editorOptions.IdleShutdownMinutes
+            }, JsonOptions));
+
+        app.MapPost("/api/studio/heartbeat", (StudioHeartbeatRequest request, StudioHostLifecycleService lifecycle) =>
+        {
+            try
+            {
+                lifecycle.Heartbeat(request);
+                return Results.Json(new { connectedClients = lifecycle.ConnectedClients }, JsonOptions);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapPost("/api/studio/disconnect", (StudioHeartbeatRequest request, StudioHostLifecycleService lifecycle) =>
+        {
+            lifecycle.Disconnect(request.ClientId);
+            return Results.NoContent();
+        });
+
+        app.MapPost("/api/studio/shutdown", (StudioShutdownRequest request, StudioHostLifecycleService lifecycle) =>
+        {
+            return lifecycle.TryRequestShutdown(request.Force, out var reason)
+                ? Results.Accepted(value: new { message = "Studio shutdown requested." })
+                : Results.Conflict(new { error = reason });
+        });
 
         app.MapGet("/api/connections", (string? documentUri, IMetadataManager metadata) =>
         {
@@ -285,7 +328,23 @@ public static class WorkstationEditorApp
         {
             try
             {
-                return Results.Json(new { path, content = await workspace.ReadTextAsync(path, cancellationToken) }, JsonOptions);
+                return Results.Json(await workspace.ReadFileAsync(path, cancellationToken), JsonOptions);
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapGet("/api/files/revision", async (string path, WorkstationWorkspace workspace, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return Results.Json(new { path, sourceRevision = await workspace.GetRevisionAsync(path, cancellationToken) }, JsonOptions);
             }
             catch (FileNotFoundException ex)
             {
@@ -301,14 +360,145 @@ public static class WorkstationEditorApp
         {
             try
             {
-                await workspace.WriteTextAsync(request.Path ?? string.Empty, request.Content ?? string.Empty, cancellationToken);
-                return Results.Json(new { saved = true, path = request.Path }, JsonOptions);
+                var sourceRevision = await workspace.WriteTextAsync(
+                    request.Path ?? string.Empty,
+                    request.Content ?? string.Empty,
+                    request.BaseRevision,
+                    cancellationToken);
+                return Results.Json(new { saved = true, path = request.Path, sourceRevision }, JsonOptions);
+            }
+            catch (WorkspaceSaveConflictException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
             }
             catch (InvalidOperationException)
             {
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapPost("/api/files/rename", (RenameFileRequest request, WorkstationWorkspace workspace) =>
+        {
+            try
+            {
+                var renamed = workspace.RenameFile(request.Path ?? string.Empty, request.Name ?? string.Empty);
+                return Results.Json(new
+                {
+                    path = renamed.Path,
+                    name = Path.GetFileName(renamed.Path)
+                }, JsonOptions);
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (WorkspaceEntryConflictException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapPost("/api/workspace/folders", (CreateWorkspaceFolderRequest request, WorkstationWorkspace workspace) =>
+        {
+            try
+            {
+                return Results.Json(workspace.CreateFolder(request.Path ?? string.Empty), JsonOptions);
+            }
+            catch (WorkspaceEntryConflictException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapPost("/api/workspace/rename", (RenameWorkspaceEntryRequest request, WorkstationWorkspace workspace) =>
+        {
+            try
+            {
+                return Results.Json(workspace.RenameEntry(
+                    request.Path ?? string.Empty,
+                    request.Name ?? string.Empty,
+                    request.IsDirectory), JsonOptions);
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (WorkspaceEntryConflictException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or DirectoryNotFoundException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapPost("/api/workspace/move", (MoveWorkspaceFileRequest request, WorkstationWorkspace workspace) =>
+        {
+            try
+            {
+                return Results.Json(workspace.MoveFile(
+                    request.Path ?? string.Empty,
+                    request.DestinationFolder ?? string.Empty), JsonOptions);
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (WorkspaceEntryConflictException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or DirectoryNotFoundException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapPost("/api/workspace/delete", (DeleteWorkspaceEntryRequest request, WorkstationWorkspace workspace) =>
+        {
+            try
+            {
+                workspace.DeleteEntry(request.Path ?? string.Empty, request.IsDirectory);
+                return Results.NoContent();
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or DirectoryNotFoundException)
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
@@ -404,8 +594,12 @@ public static class WorkstationEditorApp
             }
         });
 
-        app.MapPost("/api/designer/run", async (RunRequest request, WorkstationRunService runner, CancellationToken cancellationToken) =>
-            Results.Json(await runner.RunAsync(request, cancellationToken), JsonOptions));
+        app.MapPost("/api/designer/run", async (
+            RunRequest request,
+            WorkstationRunService runner,
+            StudioHostLifecycleService lifecycle,
+            CancellationToken cancellationToken) =>
+            Results.Json(await RunWithLifecycleAsync(request, runner, lifecycle, cancellationToken), JsonOptions));
 
         app.MapPost("/api/designer/analyze", async (AnalyzeRequest request, WorkstationAnalysisService analysis) =>
             Results.Json(await analysis.AnalyzeAsync(request), JsonOptions));
@@ -415,6 +609,52 @@ public static class WorkstationEditorApp
 
         app.MapPost("/api/designer/dag", (ScriptDagRequest request, ScriptDagProjectionService dag) =>
             Results.Json(dag.Project(request.Script), JsonOptions));
+
+        // Studio speaks one route dialect on every host: /api/designer/*. The unprefixed forms above
+        // stay for the legacy editor shell, but hover and format had no designer-prefixed alias, so
+        // Studio silently lost them on any host that did not serve the unprefixed name.
+        app.MapPost("/api/designer/hover", (HoverRequest request, WorkstationHelpService help) =>
+            Results.Json(help.GetHover(request), JsonOptions));
+
+        app.MapPost("/api/designer/format", (FormatRequest request, WorkstationFormatService formatter) =>
+            Results.Json(formatter.Format(request), JsonOptions));
+
+        // Studio's visual canvas is built on this sample and keeps its palette disabled until one
+        // exists, so the desktop host needs it just as much as the Portal does. The service applies
+        // the same schema validation and bounded-run governance as the Portal's route.
+        app.MapPost("/api/designer/data-sample", async (
+            DataSampleRequest request,
+            WorkstationDataSampleService sampler,
+            IMetadataManager metadata,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                EnforceSchemaAccessPolicy(metadata, request.Connection ?? string.Empty, request.DocumentUri);
+            }
+            catch (System.Security.SecurityException ex)
+            {
+                return Results.Json(new { error = SecretRedactor.Redact(ex.Message) }, JsonOptions, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            try
+            {
+                return Results.Json(await sampler.SampleAsync(request, cancellationToken), JsonOptions);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+            catch (OperationCanceledException)
+            {
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // Connector failures routinely quote the connection string back.
+                return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+        });
 
         app.MapPost("/api/designer/preview", async (PreviewRequest request, WorkstationPreviewService previewer, CancellationToken cancellationToken) =>
         {
@@ -430,8 +670,12 @@ public static class WorkstationEditorApp
             }
         });
 
-        app.MapPost("/api/run", async (RunRequest request, WorkstationRunService runner, CancellationToken cancellationToken) =>
-            Results.Json(await runner.RunAsync(request, cancellationToken), JsonOptions));
+        app.MapPost("/api/run", async (
+            RunRequest request,
+            WorkstationRunService runner,
+            StudioHostLifecycleService lifecycle,
+            CancellationToken cancellationToken) =>
+            Results.Json(await RunWithLifecycleAsync(request, runner, lifecycle, cancellationToken), JsonOptions));
 
         app.MapPost("/api/preview", async (PreviewRequest request, WorkstationPreviewService previewer, CancellationToken cancellationToken) =>
         {
@@ -452,6 +696,34 @@ public static class WorkstationEditorApp
         app.MapGet("/api/git/status", (WorkstationGitService git) =>
             Results.Json(git.GetStatus(), JsonOptions));
 
+        app.MapGet("/api/git/history", (string? path, int? limit, WorkstationGitService git) =>
+        {
+            try
+            {
+                return Results.Json(git.GetHistory(path, limit ?? 20), JsonOptions);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+        });
+
+        app.MapPost("/api/git/diff", (GitDiffRequest request, WorkstationGitService git) =>
+        {
+            try
+            {
+                return Results.Json(git.GetDiff(request), JsonOptions);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         app.MapPost("/api/git/commit", (GitCommitRequest request, WorkstationGitService git) =>
         {
             try
@@ -469,15 +741,10 @@ public static class WorkstationEditorApp
             }
         });
 
-        app.MapPost("/api/shutdown", (IHostApplicationLifetime lifetime) =>
-        {
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(200);
-                lifetime.StopApplication();
-            });
-            return Results.Ok(new { message = "Shutting down workstation editor..." });
-        });
+        app.MapPost("/api/shutdown", (StudioShutdownRequest request, StudioHostLifecycleService lifecycle) =>
+            lifecycle.TryRequestShutdown(request.Force, out var reason)
+                ? Results.Accepted(value: new { message = "Studio shutdown requested." })
+                : Results.Conflict(new { error = reason }));
 
         app.MapGet("/designer-preview.html", () => Results.Content("""
 <!DOCTYPE html>
@@ -553,6 +820,16 @@ public static class WorkstationEditorApp
         return addresses?.FirstOrDefault() ?? "http://127.0.0.1:0";
     }
 
+    private static async Task<RunResponse> RunWithLifecycleAsync(
+        RunRequest request,
+        WorkstationRunService runner,
+        StudioHostLifecycleService lifecycle,
+        CancellationToken cancellationToken)
+    {
+        using var run = lifecycle.BeginRun();
+        return await runner.RunAsync(request, cancellationToken);
+    }
+
     /// <summary>
     /// Applies the local egress guardrail to the connection behind a schema request. Throws
     /// <see cref="System.Security.SecurityException"/> when the host is not permitted.
@@ -624,7 +901,12 @@ public static class WorkstationEditorApp
     }
 }
 
-public sealed record SaveFileRequest(string? Path, string? Content);
+public sealed record SaveFileRequest(string? Path, string? Content, string? BaseRevision = null);
+public sealed record RenameFileRequest(string? Path, string? Name);
+public sealed record CreateWorkspaceFolderRequest(string? Path);
+public sealed record RenameWorkspaceEntryRequest(string? Path, string? Name, bool IsDirectory);
+public sealed record MoveWorkspaceFileRequest(string? Path, string? DestinationFolder);
+public sealed record DeleteWorkspaceEntryRequest(string? Path, bool IsDirectory);
 public sealed record ParseConnectionStringRequest(string? ConnectionString, string? HintProvider);
 public sealed record TestConnectionRequest(string? Alias, string? ConnectorType, string? Target, Dictionary<string, string>? Options, int ProbeTimeoutSeconds = 5);
 public sealed record GenerateDesignerAuthoringRequest(ETL_SQL.Reporting.Authoring.DesignerAuthoringState DesignState, string? Script = null);

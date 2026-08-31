@@ -24,6 +24,8 @@
  * CodeMirror bundle loaded on demand: designer/codemirror/codemirror-bundle.min.js
  */
 
+import { renderVisualSample } from './visual-preview.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 2 — DAG Visualization
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,6 +46,8 @@ const _TYPE_COLOR = {
     statement:   '#475569',
     conditional: '#f59e0b',
     loop:        '#f97316',
+    parallel:    '#06b6d4',
+    validation:  '#eab308',
     io:          '#14b8a6',
     outbound:    '#0f766e',
     destructive: '#dc2626',
@@ -170,6 +174,7 @@ function _lineageReach(rootId, allEdges, allNodes) {
  * @param {Array}       graph.edges [{ source: string, target: string, label?: string }]
  * @param {Object}      [options]
  * @param {string}      [options.theme='portal']   'portal' | 'vscode' — affects colour palette
+ * @param {string}      [options.orientation='vertical'] 'vertical' | 'horizontal'
  * @param {Function}    [options.onNodeClick]       Called with (nodeId, nodeMeta) on click
  * @returns {{ dispose: Function, resize: Function, showDetail: Function }}
  *   dispose() — removes DOM listeners and clears the rendered graph
@@ -194,7 +199,15 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     let panY = 0;
     let zoom = graphNodes.length > 40 ? 0.45 : 0.75;
     let disposed = false;
-    let positions = _computeLayout(graphNodes, graphEdges);
+    const computePositions = (layoutNodes, layoutEdges) => {
+        const projected = _computeLayout(layoutNodes, layoutEdges);
+        if (options.orientation !== 'horizontal') return projected;
+        return Object.fromEntries(Object.entries(projected).map(([id, point]) => [id, {
+            x: point.y,
+            y: point.x * 0.55,
+        }]));
+    };
+    let positions = computePositions(graphNodes, graphEdges);
     let searchMatches = [];
     let searchIdx = -1;
     const dragRemovers = [];
@@ -266,12 +279,13 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     zoomControls.append(
         zoomButton('+', 'Zoom in', () => setZoom(Math.min(2, zoom * 1.2))),
         zoomButton('-', 'Zoom out', () => setZoom(Math.max(0.1, zoom / 1.2))),
-        zoomButton('Reset', 'Reset view', () => { panX = 0; panY = 0; zoom = graphNodes.length > 40 ? 0.45 : 0.75; updateViewport(); })
+        zoomButton('Reset', 'Fit graph to view', fitToView)
     );
 
     const presentTypes = [...new Set(graphNodes.map(n => n.type))].sort();
     buildChips();
     render();
+    requestAnimationFrame(fitToView);
 
     searchInput.addEventListener('input', () => {
         const term = searchInput.value.trim().toLowerCase();
@@ -360,7 +374,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     function render() {
         if (disposed) return;
         const nodesToRender = visibleNodes();
-        positions = { ...positions, ..._computeLayout(nodesToRender, visibleEdges()) };
+        positions = { ...positions, ...computePositions(nodesToRender, visibleEdges()) };
         cardLayer.replaceChildren();
         for (const node of nodesToRender) renderCard(node);
         updateFocusBadge();
@@ -378,6 +392,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         card.style.width = '260px';
         card.style.border = `1px solid ${_nodeColor(node.type)}`;
         card.dataset.nodeId = node.id;
+        card.dataset.dagNode = node.id;
 
         const header = document.createElement('div');
         header.className = 'etlsql-dag-card-header';
@@ -624,7 +639,10 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const a = centerOf(fromPort, rect);
         const b = centerOf(toPort, rect);
         const inPath = !focusSet || (focusSet.has(edge.source) && focusSet.has(edge.target));
-        drawLink(a.x, a.y, b.x, b.y, inPath ? '#64748b' : 'rgba(71,85,105,0.08)', inPath ? 1.8 : 0.8);
+        const path = drawLink(a.x, a.y, b.x, b.y, inPath ? '#64748b' : 'rgba(71,85,105,0.08)', inPath ? 1.8 : 0.8);
+        path.dataset.dagSource = edge.source;
+        path.dataset.dagTarget = edge.target;
+        if (edge.label) path.dataset.dagLabel = edge.label;
         if (edge.label && inPath) drawEdgeBadge(a.x, a.y, b.x, b.y, edge.label, false, false);
     }
 
@@ -659,6 +677,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         path.setAttribute('fill', 'none');
         if (dashed) path.setAttribute('stroke-dasharray', '4 4');
         svg.appendChild(path);
+        return path;
     }
 
     function drawEdgeBadge(x1, y1, x2, y2, text, inPath, dim) {
@@ -687,6 +706,26 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 
     function setZoom(value) {
         zoom = value;
+        updateViewport();
+    }
+
+    function fitToView() {
+        const visible = visibleNodes();
+        if (!visible.length || !canvas.clientWidth || !canvas.clientHeight) return;
+        const points = visible.map(node => positions[node.id]).filter(Boolean);
+        if (!points.length) return;
+
+        const minX = Math.min(...points.map(point => point.x)) - 150;
+        const maxX = Math.max(...points.map(point => point.x)) + 150;
+        const minY = Math.min(...points.map(point => point.y)) - 45;
+        const maxY = Math.max(...points.map(point => point.y)) + 110;
+        const graphWidth = Math.max(300, maxX - minX);
+        const graphHeight = Math.max(155, maxY - minY);
+        zoom = Math.max(0.2, Math.min(1.1,
+            (canvas.clientWidth - 48) / graphWidth,
+            (canvas.clientHeight - 40) / graphHeight));
+        panX = -((minX + maxX) / 2) * zoom;
+        panY = canvas.clientHeight * 0.1 - ((minY + maxY) / 2) * zoom;
         updateViewport();
     }
 
@@ -754,7 +793,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             for (const remove of dragRemovers) remove();
             container.innerHTML = '';
         },
-        resize() { updateViewport(); },
+        resize() { fitToView(); },
         showDetail(id) { showNodeDetails(nodeById[id]); },
     };
 }
@@ -943,6 +982,7 @@ export async function createScriptEditor(container, opts = {}) {
     const debounceMs = Number.isFinite(opts.analyzeDebounceMs) ? opts.analyzeDebounceMs : 450;
     const hasCmLint = Boolean(analyzeUrl && typeof linter === 'function');
     const completionKeys = Array.isArray(completionKeymap) ? completionKeymap : [];
+    const historyKeys = Array.isArray(historyKeymap) ? historyKeymap : [];
     const acceptCompletionKey = completionKeys.find(binding => binding?.key === 'Enter' && typeof binding.run === 'function');
     // Reuse the bundle's Ctrl-Space -> startCompletion binding so the toolbar button and an
     // OS-safe alternate key can invoke completion without importing the minified internal.
@@ -1549,6 +1589,55 @@ export async function createScriptEditor(container, opts = {}) {
         setValue: (text) => view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: text },
         }),
+        /**
+         * Bring the buffer to `text` by dispatching only the span that actually changed.
+         *
+         * A whole-document replacement (setValue) moves the cursor to the end, drops the scroll
+         * position, and gives no clue *which* part changed — which matters most for GUI-generated
+         * edits, where the point is to see what the canvas just wrote. Trimming the common prefix
+         * and suffix keeps the caret where the author left it and yields the inserted range.
+         *
+         * @returns {{from:number,to:number}|null} the inserted range, or null when nothing changed.
+         */
+        replaceAll: (text) => {
+            const current = view.state.doc.toString();
+            const next = String(text ?? '');
+            if (current === next) return null;
+
+            let prefix = 0;
+            const maxPrefix = Math.min(current.length, next.length);
+            while (prefix < maxPrefix && current[prefix] === next[prefix]) prefix++;
+
+            let suffix = 0;
+            const maxSuffix = Math.min(current.length - prefix, next.length - prefix);
+            while (
+                suffix < maxSuffix
+                && current[current.length - 1 - suffix] === next[next.length - 1 - suffix]
+            ) suffix++;
+
+            const from = prefix;
+            const to = current.length - suffix;
+            const insert = next.slice(prefix, next.length - suffix);
+
+            // Keep the caret where it was; CodeMirror maps it through the change for us, and
+            // clamping guards the case where the caret sat inside the replaced span.
+            const anchor = Math.min(view.state.selection.main.anchor, from);
+            view.dispatch({
+                changes: { from, to, insert },
+                selection: { anchor },
+                scrollIntoView: false,
+            });
+            return { from, to: from + insert.length };
+        },
+        /** Scrolls a document range into view without stealing focus from the canvas. */
+        revealRange: (from, to) => {
+            if (!view) return;
+            const length = view.state.doc.length;
+            const start = Math.max(0, Math.min(length, Number(from) || 0));
+            const end = Math.max(start, Math.min(length, Number(to) || start));
+            view.dispatch({ effects: EditorView.scrollIntoView(start, { y: 'center' }) });
+            return { from: start, to: end };
+        },
         gotoLine: (line, column = 1) => {
             if (!view) return;
             const safeLine = Math.max(1, Math.min(view.state.doc.lines, Number(line) || 1));
@@ -1558,6 +1647,22 @@ export async function createScriptEditor(container, opts = {}) {
             view.focus();
         },
         analyze: () => runAnalysis(view.state.doc.toString()),
+        /**
+         * Script-level undo/redo, reused from the bundle's own history keymap.
+         *
+         * The script is the authoritative artifact, so undoing a canvas action means undoing the
+         * text it generated. This works because GUI mutations are applied as ranged transactions
+         * (see replaceAll) rather than whole-document replacements — a host that binds these gets
+         * working undo for palette and filter actions, not just for typing.
+         */
+        undo: () => {
+            const binding = historyKeys.find(entry => entry?.key === 'Mod-z');
+            return binding?.run ? binding.run(view) : false;
+        },
+        redo: () => {
+            const binding = historyKeys.find(entry => entry?.key === 'Mod-y' || entry?.key === 'Mod-Shift-z');
+            return binding?.run ? binding.run(view) : false;
+        },
         dispose: () => {
             clearTimeout(analyzeTimer);
             clearTimeout(hoverTimer);
@@ -1580,7 +1685,7 @@ export function redactSecrets(text) {
         .replace(/\bBearer\s+[A-Za-z0-9._~+/=\-]+/gi, 'Bearer ********');
 }
 
-function normalizeRunTrace(result, script) {
+export function normalizeRunTrace(result, script) {
     if (Array.isArray(result?.trace)) return result.trace;
     const isSuccess = result?.success !== false;
     const rows = Array.isArray(result?.rows) ? result.rows : [];
@@ -1769,7 +1874,8 @@ function updateDagLines(container) {
     }
 }
 
-export function createScriptResultsPanel(container) {
+export function createScriptResultsPanel(container, { onNavigate = null } = {}) {
+    let navigate = onNavigate;
     let messages = [];
     let progress = [];
     let resultSets = [];
@@ -1800,6 +1906,18 @@ export function createScriptResultsPanel(container) {
     const statusEl = container.querySelector('[data-status]');
     const filterEl = container.querySelector('[data-result-filter]');
     const toolsEl = container.querySelector('[data-result-tools]');
+
+    // A diagnostic that names a line but cannot take you there makes the reader do the lookup by
+    // hand. Hosts supply onNavigate; without one the entries stay inert rather than pretending.
+    function onDiagnosticActivate(event) {
+        const target = event.target.closest?.('[data-jump-line]');
+        if (!target) return;
+        if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        navigate?.(Number(target.dataset.jumpLine) || 1, Number(target.dataset.jumpColumn) || 1);
+    }
+    container.addEventListener('click', onDiagnosticActivate);
+    container.addEventListener('keydown', onDiagnosticActivate);
 
     function setTab(tab) {
         activeTab = tab;
@@ -1883,7 +2001,7 @@ export function createScriptResultsPanel(container) {
             // Analyzer positions are 0-based; the editor gutter shows them 1-based.
             const line = (Number.isFinite(d.startLine) ? d.startLine : 0) + 1;
             const column = (Number.isFinite(d.startColumn) ? d.startColumn : 0) + 1;
-            return `<div class="etlsql-script-message" data-level="${diagnosticLevel(d)}"><span>${escape(d.code || d.source || 'lint')}</span>${escape(`${line}:${column}  ${d.message || ''}`)}</div>`;
+            return `<div class="etlsql-script-message etlsql-script-message-jump" role="button" tabindex="0" data-level="${diagnosticLevel(d)}" data-jump-line="${line}" data-jump-column="${column}" title="Go to line ${line}"><span>${escape(d.code || d.source || 'lint')}</span>${escape(`${line}:${column}  ${d.message || ''}`)}</div>`;
         }).join('');
         return `<div class="etlsql-script-message-group"><div class="etlsql-script-message-group-title">Diagnostics</div>${rows}</div>`;
     }
@@ -2121,10 +2239,16 @@ export function createScriptResultsPanel(container) {
             paintStatus();
         },
         clear,
+        /** Sets the jump-to-line handler used by clickable diagnostics. */
+        setNavigate(handler) {
+            navigate = typeof handler === 'function' ? handler : null;
+        },
         dispose() {
             clearInterval(elapsedTimer);
             elapsedTimer = null;
             window.removeEventListener('resize', onResize);
+            container.removeEventListener('click', onDiagnosticActivate);
+            container.removeEventListener('keydown', onDiagnosticActivate);
             container.replaceChildren();
         },
     };
@@ -4582,22 +4706,10 @@ export function createDesigner(container, opts = {}) {
             return;
         }
 
-        // Dependency-free SVG preview fallback; production manifests use the same native SVG surface.
-        const sample = rows[0] || [];
-        const catIdx = (Array.isArray(sample) && sample.length >= 3) ? 1 : 0;
-        const valIdx = (Array.isArray(sample) && sample.length >= 2) ? sample.length - 1 : 0;
-        const categories = rows.map(row => String(Array.isArray(row) ? row[catIdx] : row));
-        const values = rows.map(row => Number(Array.isArray(row) ? row[valIdx] : 0) || 0);
-        const maximum = Math.max(1, ...values.map(value => Math.abs(value)));
-        const width = 360, height = 180, pad = 24;
-        const slot = (width - pad * 2) / Math.max(1, values.length);
-        const marks = values.map((value, index) => {
-            const barHeight = Math.abs(value) / maximum * (height - pad * 2);
-            const x = pad + index * slot + slot * .15;
-            const y = height - pad - barHeight;
-            return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(slot * .7).toFixed(1)}" height="${barHeight.toFixed(1)}" rx="2" fill="${VCOLOR[type] || '#3b82f6'}"><title>${esc(categories[index])}: ${esc(value)}</title></rect></g>`;
-        }).join('');
-        bodyEl.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(visual.title || visual.name)}" style="width:100%;height:100%"><line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" stroke="#cbd5e1"/>${marks}</svg>`;
+        // Dependency-free preview fallback; production manifests use the native SVG surface. It reads
+        // the visual's MAPPINGS, so assigning a column to a role changes what the card draws. The
+        // previous fallback chose columns by position and ignored the mapping entirely.
+        renderVisualSample(bodyEl, visual, { columns: snapshotPackage.columns || [], rows });
     }
 
     function renderCanvas() {
@@ -6199,7 +6311,31 @@ export function createDesigner(container, opts = {}) {
     }
 
     let syncTimeout = null;
+
+    // Depth counter, not a boolean: renderAll() can nest, and a boolean would be cleared by the
+    // inner call while the outer one is still ingesting.
+    let suppressScriptSync = 0;
+
+    /**
+     * Re-render after ingesting script text, without writing the script back.
+     *
+     * The canvas regenerates its script from `state` alone, so anything the design state does not
+     * model — a bare CREATE CONNECTION, hand-authored SQL that did not round-trip — is absent from
+     * the regenerated text. Letting that regeneration run in response to the editor's own content
+     * meant typing into the script pane produced: text -> canvas -> regenerate -> overwrite the text
+     * the author had just typed. A canvas update caused *by* the script must never write back to it.
+     */
+    function renderAllFromScript() {
+        suppressScriptSync++;
+        try {
+            renderAll();
+        } finally {
+            suppressScriptSync--;
+        }
+    }
+
     function syncScriptFromGridDebounced() {
+        if (suppressScriptSync > 0) return;
         if (!isSplitActive && !scriptEditor && typeof opts.onScriptChange !== 'function') return;
         clearTimeout(syncTimeout);
         syncTimeout = setTimeout(syncScriptFromGrid, 400);
@@ -6319,9 +6455,17 @@ export function createDesigner(container, opts = {}) {
         await applyScriptText(scriptEditor.getValue());
     }
 
+    let scriptApplySequence = 0;
+
+    function invalidateScriptApply() {
+        scriptApplySequence++;
+    }
+
     async function applyScriptText(script) {
+        const sequence = ++scriptApplySequence;
         try {
             const r = await apiJson('/api/designer/parse', 'POST', { script });
+            if (sequence !== scriptApplySequence) return { applied: false, stale: true };
             if (r?.designState?.pages?.length) {
                 setScriptDiagnosticBadge(null);
                 Object.assign(state, r.designState);
@@ -6333,18 +6477,22 @@ export function createDesigner(container, opts = {}) {
                 if (!isSplitActive) {
                     closeScript();
                 }
-                renderAll();
+                renderAllFromScript();
+                return { applied: true, designState: r.designState };
             } else {
                 setScriptDiagnosticBadge(r?.error || 'Script syntax error');
                 if (!isSplitActive) {
                     _feedback.notify(r?.error || 'Could not parse script.', { title: 'Script not parsed', tone: 'error' });
                 }
+                return { applied: false, error: r?.error || 'Script syntax error' };
             }
         } catch (e) {
+            if (sequence !== scriptApplySequence) return { applied: false, stale: true };
             setScriptDiagnosticBadge(e.message);
             if (!isSplitActive) {
                 _feedback.notify(e.message, { title: 'Script not parsed', tone: 'error' });
             }
+            return { applied: false, error: e.message };
         }
     }
 
@@ -7153,6 +7301,7 @@ export function createDesigner(container, opts = {}) {
 
     return {
         applyScriptText,
+        invalidateScriptApply,
         addVisual,
         selectVisual,
         refreshSnapshot: renderCanvas,

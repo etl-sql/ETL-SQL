@@ -50,10 +50,15 @@ INTO #raw_sales
 FROM staging_db.sales_orders
 WHERE sale_date >= DATEADD(DAY, -7, GETDATE());
 
--- 2. Validate clean non-null amounts
-UPDATE #raw_sales SET amount = 0 WHERE amount IS NULL;
+-- 2. Branch clean rows from rows that need review
+IF 1 = 1 BEGIN
+  SELECT * INTO #ready_sales FROM #raw_sales WHERE amount IS NOT NULL;
+END ELSE BEGIN
+  SELECT * INTO #quarantine_sales FROM #raw_sales WHERE amount IS NULL;
+END;
 
-PRINT 'Staging extract & clean complete.';`,
+-- 3. Stop before loading if the quality gate fails
+ASSERT (SELECT COUNT(*) FROM #ready_sales) > 0, 'No clean sales rows were staged.';`,
     isDirty: false,
     projection: 'split',
   },
@@ -103,11 +108,31 @@ export default {
     // Import canonical studio module
     const studioMod = await importFresh(STUDIO_JS);
     const api = makeMockApi(STUDIO_DESIGN_STATE);
+    const apiRequests = [];
+    const exitRequests = [];
+    const sandboxWorkspace = {
+      files: JSON.parse(JSON.stringify(STUDIO_DESIGN_STATE.files)),
+      folders: [{ path: 'reports' }, { path: 'etl' }, { path: 'scripts' }],
+    };
+    const workspaceSnapshot = result => ({
+      files: JSON.parse(JSON.stringify(sandboxWorkspace.files)),
+      folders: JSON.parse(JSON.stringify(sandboxWorkspace.folders)),
+      result,
+    });
+    const authFetch = async (url, init) => {
+      let body = null;
+      try { body = init?.body ? JSON.parse(init.body) : null; } catch { /* test instrumentation only */ }
+      apiRequests.push({ url: String(url), body });
+      const delay = Number(window.__STUDIO_API_DELAY__?.({ url: String(url), body }) || 0);
+      if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+      return api(url, init);
+    };
 
     const workbench = await studioMod.createStudioWorkbench(stage, {
       documents: JSON.parse(JSON.stringify(SAMPLE_DOCS)),
-      workspaceFiles: JSON.parse(JSON.stringify(STUDIO_DESIGN_STATE.files)),
-      authFetch: api,
+      workspaceFiles: JSON.parse(JSON.stringify(sandboxWorkspace.files)),
+      workspaceFolders: JSON.parse(JSON.stringify(sandboxWorkspace.folders)),
+      authFetch,
       apiBase: '',
       initialSnapshot: {
         source: '&orders',
@@ -125,15 +150,85 @@ export default {
           { order_date: '2026-08-27', total_amount: 2760, region: 'East' },
         ],
       },
+      onExit: async state => {
+        exitRequests.push(state);
+        return true;
+      },
       onSave: async (content, path) => {
         console.log(`[Studio Save] Saved ${path} (${content.length} chars)`);
       },
+      onRenameDocument: async (document, name) => {
+        const slash = Math.max(document.path.lastIndexOf('/'), document.path.lastIndexOf('\\'));
+        const directory = slash >= 0 ? document.path.slice(0, slash + 1) : '';
+        const extension = name.includes('.') ? '' : document.name.slice(document.name.lastIndexOf('.'));
+        const path = `${directory}${name}${extension}`;
+        const file = sandboxWorkspace.files.find(item => item.path === document.path);
+        if (file) file.path = path;
+        return { path, name: path.slice(directory.length) };
+      },
+      onCreateWorkspaceFolder: async path => {
+        const folder = { path };
+        sandboxWorkspace.folders.push(folder);
+        return workspaceSnapshot(folder);
+      },
+      onRenameWorkspaceEntry: async (entry, name) => {
+        const slash = entry.path.lastIndexOf('/');
+        const directory = slash >= 0 ? entry.path.slice(0, slash + 1) : '';
+        const extension = !entry.isDirectory && !name.includes('.') ? entry.path.slice(entry.path.lastIndexOf('.')) : '';
+        const path = `${directory}${name}${extension}`;
+        if (entry.isDirectory) {
+          sandboxWorkspace.folders.forEach(folder => { if (folder.path === entry.path || folder.path.startsWith(`${entry.path}/`)) folder.path = path + folder.path.slice(entry.path.length); });
+          sandboxWorkspace.files.forEach(file => { if (file.path.startsWith(`${entry.path}/`)) file.path = path + file.path.slice(entry.path.length); });
+        } else {
+          const file = sandboxWorkspace.files.find(item => item.path === entry.path);
+          if (file) file.path = path;
+        }
+        return workspaceSnapshot({ path, isDirectory: entry.isDirectory });
+      },
+      onDeleteWorkspaceEntry: async entry => {
+        sandboxWorkspace.files = sandboxWorkspace.files.filter(file => file.path !== entry.path && !(entry.isDirectory && file.path.startsWith(`${entry.path}/`)));
+        sandboxWorkspace.folders = sandboxWorkspace.folders.filter(folder => folder.path !== entry.path && !(entry.isDirectory && folder.path.startsWith(`${entry.path}/`)));
+        return workspaceSnapshot(null);
+      },
+      onMoveWorkspaceFile: async (path, destinationFolder) => {
+        const file = sandboxWorkspace.files.find(item => item.path === path);
+        const name = path.slice(path.lastIndexOf('/') + 1);
+        const movedPath = destinationFolder ? `${destinationFolder}/${name}` : name;
+        if (file) file.path = movedPath;
+        return workspaceSnapshot({ path: movedPath, isDirectory: false });
+      },
+      onLoadGitStatus: async () => ({
+        branch: 'feature/studio-diff',
+        modified: ['reports/sales_overview.rptsql'],
+        untracked: [],
+        staged: [],
+        isGitRepository: true,
+      }),
+      onLoadGitHistory: async () => ({
+        isGitRepository: true,
+        entries: [
+          { revision: 'a12bc34def567890123456789012345678901234', shortRevision: 'a12bc34d', authoredAt: '2026-08-28T14:20:00Z', author: 'Studio Author', subject: 'Add sales overview' },
+          { revision: '91fe230abc456789012345678901234567890123', shortRevision: '91fe230a', authoredAt: '2026-08-26T09:10:00Z', author: 'Studio Author', subject: 'Start report workspace' },
+        ],
+      }),
+      onLoadGitDiff: async (document, revision, content) => ({
+        path: document.path,
+        revision,
+        baselineLabel: revision === 'HEAD' ? 'HEAD a12bc34d' : revision.slice(0, 8),
+        baselineContent: document.content.replace("TITLE = 'Total Revenue'", "TITLE = 'Revenue'"),
+        workingContent: content,
+      }),
     });
 
     window.__STUDIO_INSTANCE__ = workbench;
+    window.__STUDIO_API_REQUESTS__ = apiRequests;
+    window.__STUDIO_EXIT_REQUESTS__ = exitRequests;
 
     return () => {
       window.__STUDIO_INSTANCE__ = null;
+      window.__STUDIO_API_REQUESTS__ = null;
+      window.__STUDIO_EXIT_REQUESTS__ = null;
+      window.__STUDIO_API_DELAY__ = null;
       workbench?.dispose?.();
     };
   }

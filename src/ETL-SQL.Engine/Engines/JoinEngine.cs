@@ -48,7 +48,8 @@ public class JoinEngine
 
         // Pre-filter the FROM table before any joins so single-table predicates (e.g., 765=b4)
         // never participate in a Cartesian product at all.
-        if (allBufferedRows.Count > 0 && wherePredicates.Count > 0)
+        bool hasRightOrFull = joins.Any(j => IsRightOuter(j.JoinType));
+        if (allBufferedRows.Count > 0 && wherePredicates.Count > 0 && !hasRightOrFull)
             allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, "INNER JOIN");
 
         foreach (var join in joins)
@@ -66,8 +67,9 @@ public class JoinEngine
 
             // Pre-filter the join table using predicates that reference ONLY its own columns —
             // none of the already-accumulated left columns. Eliminates single-table predicates
-            // (e.g., d6 IN (...)) before any Cartesian product is formed.
-            if (joinRows.Count > 0 && wherePredicates.Count > 0 && allBufferedRows.Count > 0)
+            // (e.g., d6 IN (...)) before any Cartesian product is formed. Only valid for INNER/CROSS joins.
+            bool isInnerOrCross = !IsLeftOuter(join.JoinType) && !IsRightOuter(join.JoinType) && !IsSemiJoin(join.JoinType) && !IsAntiJoin(join.JoinType);
+            if (joinRows.Count > 0 && wherePredicates.Count > 0 && allBufferedRows.Count > 0 && isInnerOrCross)
                 joinRows = await PreFilterJoinTable(joinRows, wherePredicates, BuildBareColumnSet(allBufferedRows[0]));
 
             // For CROSS JOINs still carrying a literal-true condition, find WHERE predicates whose
@@ -415,8 +417,9 @@ public class JoinEngine
 
         var joinRows = await GetJoinRows(join); // Buffer right side (usually smaller)
 
-        // Pre-filter the right-side join table using predicates in WHERE that reference ONLY this table.
-        if (joinRows.Count > 0 && stmt.WhereClause != null)
+        // Pre-filter the right-side join table using predicates in WHERE that reference ONLY this table (INNER/CROSS only).
+        bool isInnerOrCross = !IsLeftOuter(join.JoinType) && !IsRightOuter(join.JoinType) && !IsSemiJoin(join.JoinType) && !IsAntiJoin(join.JoinType);
+        if (joinRows.Count > 0 && stmt.WhereClause != null && isInnerOrCross)
         {
             var wherePredicates = new List<Expression>();
             FlattenAnds(stmt.WhereClause, wherePredicates);

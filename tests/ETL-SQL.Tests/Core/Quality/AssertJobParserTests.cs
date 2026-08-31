@@ -11,8 +11,8 @@ namespace ETL_SQL.Tests.Core.Quality
 {
     /// <summary>
     /// ASSERT JOB grammar: metric predicates (direct comparisons and the HISTORICAL tolerance
-    /// band), the trailing NOTIFY / CRITICAL_FAILURE clauses, and the contextual-keyword handling
-    /// that keeps plain boolean ASSERT working.
+    /// band), the stacked ON FAILURE action blocks it shares with a rule-carrying SELECT, and the
+    /// contextual-keyword handling that keeps plain boolean ASSERT working.
     /// </summary>
     public class AssertJobParserTests
     {
@@ -26,11 +26,11 @@ namespace ETL_SQL.Tests.Core.Quality
                     QUARANTINE_PERCENT < 0.01
                 )
                 ON FAILURE NOTIFY dq_failures
-                ON CRITICAL_FAILURE THROW;");
+                ON FAILURE THROW;");
 
             Assert.Equal("import_csv", stmt.JobName);
             Assert.Equal("dq_failures", stmt.FailureNotification);
-            Assert.True(stmt.ThrowOnCritical);
+            Assert.True(stmt.ThrowOnFailure);
 
             Assert.Collection(stmt.Predicates,
                 p =>
@@ -121,27 +121,85 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void ClausesAreOptional_AndOrderIndependent()
         {
+            // No block at all means WARN: recorded, run continues.
             var neither = ParseAssertJob("ASSERT JOB j (ROW_COUNT > 0);");
             Assert.Null(neither.FailureNotification);
-            Assert.False(neither.ThrowOnCritical);
+            Assert.False(neither.ThrowOnFailure);
+            Assert.Empty(neither.Actions);
 
-            var criticalFirst = ParseAssertJob(
-                "ASSERT JOB j (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW ON FAILURE NOTIFY hook;");
-            Assert.Equal("hook", criticalFirst.FailureNotification);
-            Assert.True(criticalFirst.ThrowOnCritical);
+            var throwFirst = ParseAssertJob(
+                "ASSERT JOB j (ROW_COUNT > 0) ON FAILURE THROW ON FAILURE NOTIFY hook;");
+            Assert.Equal("hook", throwFirst.FailureNotification);
+            Assert.True(throwFirst.ThrowOnFailure);
         }
 
         [Fact]
-        public void Parses_FailOnWarnOption()
+        public void WarnIsExplicitlySpellable_AndStillNonFatal()
         {
-            var enabled = ParseAssertJob(
-                "ASSERT JOB j (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE) ON FAILURE NOTIFY hook;");
-            Assert.True(enabled.FailOnWarn);
-            Assert.Equal("hook", enabled.FailureNotification);
-            Assert.Contains("WITH (FAIL_ON_WARN = TRUE)", enabled.ToSql());
+            var stmt = ParseAssertJob("ASSERT JOB j (WARN_PERCENT < 0.05) ON FAILURE WARN;");
 
-            Assert.False(ParseAssertJob(
-                "ASSERT JOB j (ROW_COUNT > 0) WITH (FAIL_ON_WARN = FALSE);").FailOnWarn);
+            Assert.False(stmt.ThrowOnFailure);
+            Assert.Equal(FailAction.Warn, Assert.Single(stmt.Actions).Action);
+        }
+
+        [Fact]
+        public void NotifyAlone_DoesNotFailTheRun()
+        {
+            // "Worth telling someone about, not worth stopping for" — only THROW fails a run, and
+            // it has to be written.
+            var stmt = ParseAssertJob("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE NOTIFY hook;");
+
+            Assert.Equal("hook", stmt.FailureNotification);
+            Assert.False(stmt.ThrowOnFailure);
+        }
+
+        [Fact]
+        public void FailOnWarnOption_IsRetired_WithItsReplacement()
+        {
+            var ex = Assert.Throws<SyntaxException>(() => ParseAssertJob(
+                "ASSERT JOB j (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE);"));
+
+            Assert.Contains("WARN_PERCENT = 0", ex.Message);
+            Assert.Contains("ON FAILURE THROW", ex.Message);
+        }
+
+        [Fact]
+        public void CriticalFailureClause_IsRetired()
+        {
+            // Severity is an action, not a clause name; the parser stops at the unknown clause
+            // rather than accepting a statement whose severity it would silently drop.
+            Assert.ThrowsAny<Exception>(() => ParseAssertJob(
+                "ASSERT JOB j (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW;"));
+        }
+
+        [Fact]
+        public void Quarantine_IsRejected_WithAPointerToTheSelectClause()
+        {
+            var ex = Assert.Throws<SyntaxException>(() => ParseAssertJob(
+                "ASSERT JOB j (ROW_COUNT > 0) ON FAILURE QUARANTINE;"));
+
+            Assert.Contains("no row to divert", ex.Message);
+        }
+
+        [Fact]
+        public void DuplicateAction_IsRejected()
+        {
+            Assert.Throws<SyntaxException>(() => ParseAssertJob(
+                "ASSERT JOB j (ROW_COUNT > 0) ON FAILURE THROW ON FAILURE THROW;"));
+        }
+
+        [Fact]
+        public void RoundTripsThroughTheSerializer()
+        {
+            var sql = ParseAssertJob(
+                "ASSERT JOB j (ROW_COUNT > 0) ON FAILURE NOTIFY hook ON FAILURE THROW;").ToSql();
+
+            Assert.Contains("ON FAILURE NOTIFY hook", sql);
+            Assert.Contains("ON FAILURE THROW", sql);
+
+            var reparsed = ParseAssertJob(sql);
+            Assert.Equal("hook", reparsed.FailureNotification);
+            Assert.True(reparsed.ThrowOnFailure);
         }
 
         [Fact]
@@ -181,10 +239,10 @@ namespace ETL_SQL.Tests.Core.Quality
         [InlineData("ASSERT JOB j (FRESHNESS(EventTime) < 2);")]           // freshness needs interval string
         [InlineData("ASSERT JOB j (NULL_PERCENT(a.b.c) < 0.5);")]         // only target.column
         [InlineData("ASSERT JOB j (ROW_COUNT > abc);")]                    // non-numeric bound
-        [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE THROW;")]     // NOTIFY is required after ON FAILURE
+        [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE;")]           // no action
+        [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE EXPLODE;")]   // not in the vocabulary
         [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE NOTIFY a ON FAILURE NOTIFY b;")] // duplicate
         [InlineData("ASSERT JOB j (ROW_COUNT > 0) WITH (UNKNOWN = TRUE);")]
-        [InlineData("ASSERT JOB j (ROW_COUNT > 0) WITH (FAIL_ON_WARN = 1);")]
         public void MalformedForms_AreSyntaxErrors(string sql)
         {
             Assert.Throws<SyntaxException>(() => ParseAssertJob(sql));

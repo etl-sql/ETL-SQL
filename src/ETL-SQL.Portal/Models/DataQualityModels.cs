@@ -137,7 +137,7 @@ public sealed record DataQualityRuleFailureDto(
 public sealed record DataQualityRuleDefinitionDto(
     string TargetTable,
     string? TargetColumn,
-    string RuleTag,
+    string RuleClause,
     string Rule,
     string Action,
     string? SourceFile,

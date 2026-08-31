@@ -1,0 +1,22 @@
+-- Chained CTEs the designer never models and must not rewrite.
+WITH cte_orders AS (
+    SELECT region, amount, order_date
+    FROM pg.orders
+    WHERE order_date >= '2026-01-01'
+),
+cte_ranked AS (
+    SELECT region, SUM(amount) AS revenue
+    FROM cte_orders
+    GROUP BY region
+)
+SELECT region, revenue INTO #ranked FROM cte_ranked;
+
+CREATE VISUAL v_ranked AS BAR (
+    TITLE = 'Revenue by Region',
+    SOURCE = #ranked,
+    MAPPINGS (X = region, Y = revenue)
+);
+
+CREATE PAGE [Ranked] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = v_ranked))
+);

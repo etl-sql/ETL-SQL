@@ -277,7 +277,7 @@ namespace ETL_SQL.Tests.Core
         [Fact]
         public void TestMetadataTagFormattingWithQuotedSemicolonsAndInLists()
         {
-            string sql = "SELECT gender /* @d: patient gender; @expect: \"IN (; 'MALE' ,'FEMALE' ,'OTHER' )\"; @fail: 'QUARANTINE'; */ FROM pats;";
+            string sql = "SELECT gender /* @d: patient gender; @example: \"IN (; 'MALE' ,'FEMALE' ,'OTHER' )\"; @owner: 'Bob'; */ FROM pats;";
             var options = new FormatterOptions { FormatMetadataTags = true, CommaPlacement = "trailing" };
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
@@ -285,8 +285,8 @@ namespace ETL_SQL.Tests.Core
                               "    gender\n" +
                               "        /*\n" +
                               "            @d: patient gender;\n" +
-                              "            @expect: \"IN ('MALE', 'FEMALE', 'OTHER')\";\n" +
-                              "            @fail: 'QUARANTINE';\n" +
+                              "            @example: \"IN ('MALE', 'FEMALE', 'OTHER')\";\n" +
+                              "            @owner: 'Bob';\n" +
                               "        */\n" +
                               "FROM pats;";
             Assert.Equal(expected, formatted);

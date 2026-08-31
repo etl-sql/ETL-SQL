@@ -1,0 +1,15 @@
+-- A script the parser recovers from rather than rejecting: the stray '(' inside MAPPINGS leaves the
+-- clause unbalanced, which is exactly what a split-screen author produces mid-keystroke. The clause
+-- span the patcher computes runs past the statement's own closing ')', so a naive replacement deletes
+-- the terminator and writes a broken document over a working one.
+SELECT 'North' AS region, 5000 AS revenue INTO #sales;
+
+CREATE VISUAL v_bar AS BAR (
+    TITLE = 'Regional Revenue',
+    SOURCE = #sales,
+    MAPPINGS (X  SELECT UNCLOSED ( = region, Y = revenue)
+);
+
+CREATE PAGE [Overview] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = v_bar))
+);

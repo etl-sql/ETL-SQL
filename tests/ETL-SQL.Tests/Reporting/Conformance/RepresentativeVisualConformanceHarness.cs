@@ -306,7 +306,7 @@ public static class RepresentativeVisualConformanceHarness
                 FixtureFileName: "combo_dual_axes.rptsql",
                 ExpectedVisualType: VisualType.Combo,
                 ExpectedCategories: ["Week 1", "Week 2", "Week 3", "Week 4"],
-                ExpectedSeriesNames: ["UnitsProduced", "QualityPassRate"],
+                ExpectedSeriesNames: ["QualityPassRate", "UnitsProduced"],
                 HasExplicitDomain: false,
                 HasNullGaps: false,
                 HasDualAxes: true,

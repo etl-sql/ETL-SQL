@@ -22,7 +22,7 @@ namespace ETL_SQL.Orchestrator.Execution
         public List<DataTable> ResultsTables { get; set; } = new();
         public long ExecutionTimeMs { get; set; }
         public long RowsProcessed { get; set; }
-        /// <summary>Rows removed from output by an <c>@expect</c> QUARANTINE action during this run.</summary>
+        /// <summary>Rows removed from output by an <c>EXPECT … ON FAILURE QUARANTINE</c> rule during this run.</summary>
         public long RowsQuarantined { get; set; }
         /// <summary>Rows that failed a WARN rule but still reached the target during this run.</summary>
         public long RowsWarned { get; set; }

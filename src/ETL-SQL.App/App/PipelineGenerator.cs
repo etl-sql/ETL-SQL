@@ -471,9 +471,11 @@ namespace ETL_SQL.App
                 {
                     var col = spec.Schema[i];
                     var castExpr = GetCastingExpression(col);
-                    var comment = GetInlineComment(col, rejectPolicy);
+                    var expectClause = GetExpectClause(col, rejectPolicy);
+                    var comment = GetInlineComment(col);
                     var comma = (i == spec.Schema.Count - 1) ? "" : ",";
-                    sb.Indent(2).AppendLine($"{castExpr,-50} AS {col.ColumnName,-25} {comment}{comma}");
+                    sb.Indent(2).AppendLine(
+                        $"{castExpr,-50} AS {col.ColumnName,-25}{expectClause} {comment}{comma}".TrimEnd());
                 }
             }
             sb.Indent(1).AppendLine("INTO #cleaned_data");
@@ -851,15 +853,20 @@ namespace ETL_SQL.App
             return $"TRY_CAST({colName} AS {GetSqlTypeString(col)})";
         }
 
-        private static string GetInlineComment(SpecColumn col, string? rejectPolicy = null)
+        /// <summary>
+        /// Builds the column's <c>EXPECT &lt;rule&gt; [ON FAILURE &lt;action&gt;]</c> clause from the
+        /// spec. Rules are grammar, so a generated pipeline declares them in the statement — a
+        /// generator that emitted them as comment tags would produce scripts whose quality rules
+        /// silently do nothing, which is the failure the clause form exists to prevent.
+        /// </summary>
+        private static string GetExpectClause(SpecColumn col, string? rejectPolicy = null)
         {
-            var tagsList = new List<string>();
-
-            // 1. Data Quality Expect Rules
             var rules = new List<string>();
             if (col.ExpectRules != null && col.ExpectRules.Count > 0)
             {
-                rules.AddRange(col.ExpectRules);
+                // Spec-supplied rules are written by hand, so a MATCHES pattern arrives bare;
+                // quote it here or the generated script will not parse.
+                rules.AddRange(col.ExpectRules.Select(QuoteMatchesPattern));
             }
             else
             {
@@ -874,54 +881,78 @@ namespace ETL_SQL.App
                 }
                 if (!string.IsNullOrWhiteSpace(col.ValidationRegex))
                 {
-                    rules.Add($"MATCHES {col.ValidationRegex.Trim()}");
+                    // A regex is a string literal in the clause form, so it needs SQL quoting once
+                    // rather than the doubled quoting the tag layer used to require.
+                    rules.Add($"MATCHES '{col.ValidationRegex.Trim().Replace("'", "''")}'");
                 }
                 if (col.AllowedValues != null && col.AllowedValues.Count > 0)
                 {
-                    var vals = string.Join(", ", col.AllowedValues.Select(v => $"''{v.Replace("'", "''''")}''"));
+                    var vals = string.Join(", ", col.AllowedValues.Select(v => $"'{v.Replace("'", "''")}'"));
                     rules.Add($"IN ({vals})");
                 }
             }
 
-            if (rules.Count > 0)
-            {
-                var combinedRules = string.Join(", ", rules);
-                tagsList.Add($"@expect: '{combinedRules}'");
-            }
+            if (rules.Count == 0) return "";
 
-            // 2. Fail Rules / Fail Action
-            if (col.FailRules != null && col.FailRules.Count > 0)
-            {
-                tagsList.Add($"@fail: '{string.Join(", ", col.FailRules)}'");
-            }
-            else if (!string.IsNullOrWhiteSpace(col.FailAction))
-            {
-                tagsList.Add($"@fail: '{col.FailAction.Trim().ToUpperInvariant()}'");
-            }
-            else if (rules.Count > 0 && !string.IsNullOrWhiteSpace(rejectPolicy))
-            {
-                var normPolicy = rejectPolicy.Trim().ToLowerInvariant();
-                if (normPolicy == "quarantine")
-                {
-                    tagsList.Add("@fail: 'QUARANTINE'");
-                }
-                else if (normPolicy == "fail_batch" || normPolicy == "throw" || normPolicy == "reject")
-                {
-                    tagsList.Add("@fail: 'THROW'");
-                }
-                else if (normPolicy == "warn")
-                {
-                    tagsList.Add("@fail: 'WARN'");
-                }
-            }
+            // Rules combine with AND: inside a select list a comma separates columns, so it cannot
+            // also separate rules.
+            var action = ResolveFailAction(col, rejectPolicy);
+            var clause = $" EXPECT {string.Join(" AND ", rules)}";
+            return action == null ? clause : $"{clause} ON FAILURE {action}";
+        }
 
-            // 3. Description
+        /// <summary>
+        /// The column's failure action, from the spec's explicit action or the source's reject
+        /// policy. Only the three real actions are accepted: a spec carrying something else would
+        /// otherwise generate a script that does not parse, turning a bad spec into a broken
+        /// pipeline instead of a pipeline with a defaulted action.
+        /// </summary>
+        private static string? ResolveFailAction(SpecColumn col, string? rejectPolicy)
+        {
+            var declared = col.FailRules is { Count: > 0 } ? col.FailRules[0] : col.FailAction;
+            var action = declared?.Trim().ToUpperInvariant();
+            if (action is "THROW" or "WARN" or "QUARANTINE") return action;
+
+            if (string.IsNullOrWhiteSpace(rejectPolicy)) return null;
+            return rejectPolicy.Trim().ToLowerInvariant() switch
+            {
+                "quarantine" => "QUARANTINE",
+                "fail_batch" or "throw" or "reject" => "THROW",
+                "warn" => "WARN",
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Wraps a bare <c>MATCHES</c> pattern in a string literal. A regex cannot be lexed as
+        /// tokens — '@', quotes, and operators would all tokenize — so the clause grammar requires
+        /// the literal form.
+        /// </summary>
+        private static string QuoteMatchesPattern(string rule)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(
+                rule.Trim(), @"^(?<lead>(NOT\s+)?MATCHES)\s+(?<pattern>.+)$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!match.Success) return rule.Trim();
+
+            var pattern = match.Groups["pattern"].Value.Trim();
+            if (pattern.StartsWith('\'') && pattern.EndsWith('\'')) return rule.Trim();
+            return $"{match.Groups["lead"].Value} '{pattern.Replace("'", "''")}'";
+        }
+
+        /// <summary>
+        /// Descriptive tags only — a description and any stewardship tags the spec carries. These
+        /// are the things a comment is for: strip them and the pipeline still loads the same rows.
+        /// </summary>
+        private static string GetInlineComment(SpecColumn col)
+        {
+            var tagsList = new List<string>();
+
             if (!string.IsNullOrEmpty(col.Description))
             {
                 tagsList.Add($"@d: '{col.Description.Replace("'", "''")}'");
             }
 
-            // 4. Tags
             if (col.Tags != null && col.Tags.Count > 0)
             {
                 foreach (var tag in col.Tags)

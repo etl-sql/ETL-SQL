@@ -302,7 +302,7 @@ public sealed class ScriptedPortalImportTests
         var jobName = $"portal_rules_{suffix}";
         var scriptPath = Path.Combine(factory.TempDir, "scripts", $"portal_rules_{suffix}.etlsql");
         await File.WriteAllTextAsync(scriptPath, """
-            SELECT Id /* @expect: 'NOT NULL, >= 0'; @fail: 'QUARANTINE'; */
+            SELECT Id EXPECT NOT NULL AND >= 0 ON FAILURE QUARANTINE
             INTO #clean FROM #source
             ON FAILURE QUARANTINE TO #quarantine;
             """);
@@ -316,7 +316,7 @@ public sealed class ScriptedPortalImportTests
         }
 
         var table = Assert.Single(batches);
-        foreach (var column in new[] { "targetTable", "targetColumn", "ruleTag", "rule", "action", "sourceFile", "line" })
+        foreach (var column in new[] { "targetTable", "targetColumn", "ruleClause", "rule", "action", "sourceFile", "line" })
         {
             Assert.Contains(column, table.ColumnNames);
         }
@@ -325,7 +325,7 @@ public sealed class ScriptedPortalImportTests
         {
             Assert.Equal("#clean", row["targetTable"]);
             Assert.Equal("Id", row["targetColumn"]);
-            Assert.Equal("@expect", row["ruleTag"]);
+            Assert.Equal("EXPECT", row["ruleClause"]);
             Assert.Equal("QUARANTINE", row["action"]);
         });
     }

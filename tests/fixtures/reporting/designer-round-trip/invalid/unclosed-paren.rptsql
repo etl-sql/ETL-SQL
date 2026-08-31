@@ -1,0 +1,7 @@
+SELECT region, SUM(amount AS revenue INTO #stage FROM pg.sales;
+
+CREATE VISUAL v_broken AS BAR (
+    TITLE = 'Broken',
+    SOURCE = #stage,
+    MAPPINGS (X = region, Y = revenue)
+);

@@ -931,35 +931,22 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
     }
 
     /// <summary>
-    /// Statements carrying <c>@expect</c> data-quality rules are pinned to the local row pipeline:
+    /// Statements carrying <c>EXPECT</c> data-quality rules are pinned to the local row pipeline:
     /// the columnar/native fast paths bypass local projection entirely, which is where rules are
     /// enforced and where the pre-projection input row for QUARANTINE capture is available.
     /// Upstream predicate/semi-join pushdown is unaffected — it moves filters, and rules validate
     /// output rows. A regression test guards this pin.
     /// </summary>
     private static bool HasDataQualityRules(SelectStatement stmt)
-        => stmt.Columns.Any(c => ETL_SQL.Core.Quality.ColumnRuleParser.HasRuleTags(c.Metadata));
+        => stmt.Columns.Any(ETL_SQL.Core.Quality.ColumnExpectProjection.HasRules);
 
     /// <summary>
     /// True when any column carries a UNIQUE-family rule. Those require the whole-stream pre-pass,
     /// so the statement must run through the multi-pass pipeline rather than the streaming engine.
-    /// Malformed rules are ignored here — the linter and the validator both report them.
     /// </summary>
     private static bool HasUniqueDataQualityRule(SelectStatement stmt)
-    {
-        foreach (var column in stmt.Columns)
-        {
-            if (!ETL_SQL.Core.Quality.ColumnRuleParser.HasRuleTags(column.Metadata)) continue;
-            try
-            {
-                if (ETL_SQL.Core.Quality.ColumnRuleParser.ParseBindings(column.Metadata!)
-                    .Any(b => b.Rules.FlattenAll().Any(r => r is ETL_SQL.Core.Quality.UniqueRule)))
-                    return true;
-            }
-            catch (ETL_SQL.Core.Quality.ColumnRuleParseException) { /* reported elsewhere */ }
-        }
-        return false;
-    }
+        => stmt.Columns.Any(column => column.Expectations?.Any(
+            clause => clause.Rules.FlattenAll().Any(r => r is ETL_SQL.Core.Quality.UniqueRule)) == true);
 
     private static bool IsSimpleColumnarCandidate(SelectStatement stmt)
         => stmt.FromTable.TableOperators.Count == 0

@@ -224,12 +224,12 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public bool CaseSensitiveComparison { get => _options.CaseSensitiveComparison; set => _options.CaseSensitiveComparison = value; }
 
     /// <summary>
-    /// When true, <c>@expect</c> rules report what they would do without enforcing it. Session
+    /// When true, <c>EXPECT</c> rules report what they would do without enforcing it. Session
     /// state rather than an option, so it resets with the session and never persists into a job.
     /// </summary>
     public bool DataQualityDryRun { get; set; }
     /// <summary>
-    /// Per-run data-quality outcomes accumulated by <c>@expect</c> rule enforcement. Stays empty
+    /// Per-run data-quality outcomes accumulated by <c>EXPECT</c> rule enforcement. Stays empty
     /// (and costs nothing) when no statement carries rules.
     /// </summary>
     public ETL_SQL.Core.Quality.DataQualityReport DataQuality { get; } = new();

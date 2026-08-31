@@ -59,7 +59,27 @@ public sealed class DesignerScriptPatcher
         PatchPages(script, ast, state.Pages ?? [], lineEnding, replacements);
         PatchBookmarks(script, ast, state.Bookmarks, lineEnding, replacements);
 
-        return ApplyReplacements(script, replacements);
+        var patched = ApplyReplacements(script, replacements);
+
+        // Last line of defence. Clause spans are found by balancing parentheses, so a script the
+        // parser accepted but that has an unbalanced parenthesis inside a clause — the shape a
+        // split-screen author produces mid-keystroke — can hand back a span that runs past the
+        // statement's own closing paren. Replacing it then deletes the terminator and writes a broken
+        // document over a working one. Refusing the edit is always better than corrupting the file.
+        return ParsesWithoutError(patched) ? patched : script;
+    }
+
+    private static bool ParsesWithoutError(string script)
+    {
+        try
+        {
+            var ast = new CoreParser(new Lexer(script).Tokenize(), script).Parse();
+            return !ast.Diagnostics.Any(d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void PatchParameters(
@@ -156,16 +176,23 @@ public sealed class DesignerScriptPatcher
             var query = string.IsNullOrWhiteSpace(dataset.Query)
                 ? "SELECT 1 AS Placeholder"
                 : dataset.Query.Trim().TrimEnd(';');
+            var lifespan = DesignerScriptGenerationService.DatasetLifespanClauses(dataset);
             if (existing.TryGetValue(name, out var statement))
             {
-                if (string.Equals(statement.SourceQuery.ToSql().Trim().TrimEnd(';'), query, StringComparison.Ordinal))
+                var sameQuery = string.Equals(statement.SourceQuery.ToSql().Trim().TrimEnd(';'), query, StringComparison.Ordinal);
+                var sameLifespan = string.Equals(
+                    DesignerScriptGenerationService.DatasetLifespanClauses(
+                        dataset with { RefreshInterval = statement.RefreshInterval, Ttl = statement.Ttl }),
+                    lifespan,
+                    StringComparison.Ordinal);
+                if (sameQuery && sameLifespan)
                     continue;
-                var desired = $"CREATE DATASET {name} AS ({lineEnding}  {query}{lineEnding});";
+                var desired = $"CREATE DATASET {name}{lifespan} AS ({lineEnding}  {query}{lineEnding});";
                 AddStatementReplacementIfChanged(script, statement, desired, replacements);
                 continue;
             }
 
-            additions.Add($"CREATE DATASET {name} AS ({lineEnding}  {query}{lineEnding});");
+            additions.Add($"CREATE DATASET {name}{lifespan} AS ({lineEnding}  {query}{lineEnding});");
         }
 
         foreach (var (name, statement) in existing)
@@ -290,7 +317,7 @@ public sealed class DesignerScriptPatcher
             var page = pages[index];
             var name = DesignerScriptGenerationService.SanitizeName(
                 string.IsNullOrWhiteSpace(page.Name) ? $"Page{index + 1}" : page.Name);
-            var desired = DesignerScriptGenerationService.GeneratePage(name, page.Mode, page.Visuals ?? [], lineEnding);
+            var desired = DesignerScriptGenerationService.GeneratePage(name, page.Mode, page.Visuals ?? [], page.PrintLayout, lineEnding);
 
             CreatePageStatement? statement = null;
             if (byName.TryGetValue(name, out var named))
@@ -320,7 +347,7 @@ public sealed class DesignerScriptPatcher
     private static string PatchElementStatement(string original, string desired)
     {
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON)\s+[^\s]+(?:\s+AS\s+[^\s(]+)?");
-        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "MAPPINGS", "OPTIONS", "ACTIONS", "INTERACTIONS", "STYLE", "FALLBACK", "LAYOUT" })
+        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "DEFAULT", "MAPPINGS", "OPTIONS", "ACTIONS", "INTERACTIONS", "STYLE", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
         {
             // If the desired state does not specify a CHART clause, keep existing CHART trivia intact
             if (clause == "CHART" && FindClause(original, clause) is not null && FindClause(desired, clause) is null)
@@ -353,9 +380,39 @@ public sealed class DesignerScriptPatcher
     private static string PatchPageStatement(string original, string desired)
     {
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PAGE\s+[^\s]+\s+AS\s+(?:DASHBOARD|PAGINATED)");
-        patched = PatchClause(patched, desired, "STRUCTURE");
+        // STRUCTURE is regenerated from grid coordinates, so it comes back in the canonical
+        // slash-separated form even when the author wrote the same grid across several lines. Compare
+        // the grids rather than the text so an untouched layout keeps the author's formatting.
+        if (!DescribesTheSameGrid(FindClause(patched, "STRUCTURE"), FindClause(desired, "STRUCTURE")))
+            patched = PatchClause(patched, desired, "STRUCTURE");
         patched = PatchClause(patched, desired, "MAP");
+        patched = PatchClause(patched, desired, "PRINT_LAYOUT");
         return patched;
+    }
+
+    private static bool DescribesTheSameGrid(ClauseSpan? existing, ClauseSpan? desired)
+    {
+        if (existing is null || desired is null) return false;
+
+        var left = StructureGrid(existing.Value.Text);
+        var right = StructureGrid(desired.Value.Text);
+        if (left is null || right is null || left.Count != right.Count) return false;
+
+        return left.Zip(right).All(pair => pair.First.SequenceEqual(pair.Second, StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Rows of slots, split the way the runtime page compiler splits them.</summary>
+    private static List<List<string>>? StructureGrid(string clause)
+    {
+        var literal = Regex.Match(clause, @"'((?:[^']|'')*)'", RegexOptions.CultureInvariant);
+        if (!literal.Success) return null;
+
+        return literal.Groups[1].Value
+            .Split(['/', '\n', '\r'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(row => row
+                .Split([' ', '\t'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .ToList())
+            .ToList();
     }
 
     private static string PatchHeader(string original, string desired, string pattern)
@@ -391,8 +448,17 @@ public sealed class DesignerScriptPatcher
             if (close < 0) return original;
             var lineEnding = DetectLineEnding(original);
             var indent = DetectBodyIndent(original);
-            var prefix = close > 0 && original[close - 1] is not '\n' and not '\r' ? "," + lineEnding : string.Empty;
-            return original.Insert(close, prefix + indent + desired.Value.Text + lineEnding);
+            // The separator depends on whether a sibling clause already precedes this one, not on how
+            // the author wrapped their lines. Looking only at the character immediately before the
+            // closing paren reads the newline of a multi-line statement and drops the comma, splicing
+            // two clauses together with nothing between them.
+            var previous = close - 1;
+            while (previous >= 0 && char.IsWhiteSpace(original[previous])) previous--;
+            var needsSeparator = previous >= 0 && original[previous] is not '(' and not ',';
+            // Insert the clause first, then the comma, so the later offset stays valid. The comma
+            // goes right after the preceding clause rather than onto a line of its own.
+            var patched = original.Insert(close, indent + desired.Value.Text + lineEnding);
+            return needsSeparator ? patched.Insert(previous + 1, ",") : patched;
         }
 
         var replacement = PreserveComments(existing!.Value.Text, desired!.Value.Text, DetectLineEnding(original));

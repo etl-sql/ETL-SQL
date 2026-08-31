@@ -27,7 +27,23 @@ catch (IOException ex)
 }
 
 var pathPrefix = options.StudioMode ? "/studio" : "";
-var url = $"{WorkstationEditorApp.GetListeningUrl(app)}{pathPrefix}/?token={Uri.EscapeDataString(options.SessionToken)}";
+var listeningUrl = WorkstationEditorApp.GetListeningUrl(app);
+var url = $"{listeningUrl}{pathPrefix}/?token={Uri.EscapeDataString(options.SessionToken)}";
+StudioSessionRegistry? studioRegistry = null;
+if (options.StudioMode)
+{
+    var port = new Uri(listeningUrl).Port;
+    studioRegistry = new StudioSessionRegistry();
+    var record = new StudioSessionRecord(
+        options.InstanceId ?? throw new InvalidOperationException("Studio instance identity is unavailable."),
+        options.WorkspaceRoot,
+        Environment.ProcessId,
+        port,
+        DateTimeOffset.UtcNow,
+        new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", options.SessionToken));
+    await studioRegistry.WriteAsync(record);
+    app.Lifetime.ApplicationStopped.Register(() => studioRegistry.Remove(record.InstanceId));
+}
 Console.WriteLine(options.StudioMode ? "ETL-SQL Studio (Local Workbench)" : "ETL-SQL Local Script Editor");
 Console.WriteLine($"Workspace: {options.WorkspaceRoot}");
 if (options.ReadOnly) Console.WriteLine("Mode:      read-only");

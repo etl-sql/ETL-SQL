@@ -126,7 +126,7 @@ namespace ETL_SQL.Connectors.SqlServer
                 await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
                 return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "MSSQL authentication succeeded.")];
             }
-            catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException)
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
             {
                 return
                 [

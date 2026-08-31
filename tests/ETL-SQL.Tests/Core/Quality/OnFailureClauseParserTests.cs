@@ -174,7 +174,7 @@ namespace ETL_SQL.Tests.Core.Quality
         public void OnFailureClauses_SurviveAFormatterRoundTrip()
         {
             // The formatter used to drop them, which turns a valid script into one whose
-            // @fail: 'QUARANTINE' tags route nowhere — a hard error on the next run.
+            // A column electing QUARANTINE routes nowhere — a hard error on the next run.
             var select = ParseSelect(@"
                 SELECT A INTO t FROM src
                 ON FAILURE QUARANTINE TO q WITH (RETENTION = '7 DAYS', HANDLING = SCRIPT)

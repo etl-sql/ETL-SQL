@@ -54,7 +54,20 @@ public sealed record DesignerAuthoringPage(
     string Id,
     string Name,
     string Mode,
-    List<DesignerAuthoringVisual> Visuals);
+    List<DesignerAuthoringVisual> Visuals,
+    DesignerAuthoringPageLayout? PrintLayout = null);
+
+public sealed record DesignerAuthoringPageLayout(
+    string? PageSize = null,
+    string? Orientation = null,
+    decimal? MarginTop = null,
+    decimal? MarginRight = null,
+    decimal? MarginBottom = null,
+    decimal? MarginLeft = null,
+    string? Units = null,
+    string? Overflow = null,
+    decimal? CustomWidth = null,
+    decimal? CustomHeight = null);
 
 public sealed record DesignerAuthoringVisual(
     string Id,
@@ -70,7 +83,15 @@ public sealed record DesignerAuthoringVisual(
     Dictionary<string, string> Options,
     string? ContainerId = null);
 
+/// <summary>
+/// A named, cached query. <c>RefreshInterval</c> and <c>Ttl</c> are the dataset's lifespan rules,
+/// carried as the authored duration text ('30m', '2h') rather than parsed spans — a designer that
+/// round-trips them must not rewrite '60m' into '1h'. Null means the clause is absent, which is not
+/// the same as a zero duration.
+/// </summary>
 public sealed record DesignerAuthoringDataset(
     string Id,
     string Name,
-    string Query);
+    string Query,
+    string? RefreshInterval = null,
+    string? Ttl = null);

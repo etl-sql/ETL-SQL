@@ -2,15 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Quality;
 using Xunit;
 
 namespace ETL_SQL.Tests.Core.Quality
 {
     /// <summary>
-    /// The @expect mini-DSL parser: rule forms, top-level comma combination with literal commas
-    /// inside MATCHES regexes / IN lists / EXPR calls, tag-layer quote stripping, and
-    /// @expect/@fail binding assembly (numbered pairs, WARN default, hard errors).
+    /// The <c>EXPECT</c> column-rule grammar, parsed from real script text: every rule form, the
+    /// clause's action, repetition, and the boundaries that keep a rule from swallowing the rest of
+    /// the select list. Rules are grammar, so a malformed one is a <see cref="SyntaxException"/>
+    /// with a position — not a deferred lint finding and not a silently dropped rule.
     /// </summary>
     public class ColumnRuleParserTests
     {
@@ -19,7 +22,7 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void Parses_NotNull_And_Unique()
         {
-            var rules = ColumnRuleParser.Parse("'NOT NULL, UNIQUE'");
+            var rules = ParseRules("NOT NULL AND UNIQUE");
 
             Assert.Collection(rules,
                 r => Assert.IsType<NotNullRule>(r),
@@ -35,7 +38,7 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void Parses_NotBlank()
         {
-            var rules = ColumnRuleParser.Parse("'NOT NULL, NOT BLANK'");
+            var rules = ParseRules("NOT NULL AND NOT BLANK");
 
             Assert.Collection(rules,
                 r => Assert.IsType<NotNullRule>(r),
@@ -53,7 +56,7 @@ namespace ETL_SQL.Tests.Core.Quality
         [InlineData("length between 0 and 0", 0, 0)]
         public void Parses_Length_OntoAnInclusiveRange(string text, int expectedMin, int? expectedMax)
         {
-            var rule = Assert.IsType<LengthRule>(ColumnRuleParser.Parse($"'{text}'").Single());
+            var rule = Assert.IsType<LengthRule>(ParseRule(text));
 
             Assert.Equal(expectedMin, rule.MinLength);
             Assert.Equal(expectedMax, rule.MaxLength);
@@ -69,27 +72,25 @@ namespace ETL_SQL.Tests.Core.Quality
         [InlineData("LENGTH")]
         public void Length_Unsatisfiable_Or_Malformed_IsHardError(string text)
         {
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse($"'{text}'"));
+            Assert.Throws<SyntaxException>(() => ParseRules(text));
         }
 
         [Fact]
         public void Parses_Castable_WithAndWithoutADeclaredWidth()
         {
-            var date = Assert.IsType<CastableRule>(ColumnRuleParser.Parse("'CASTABLE AS DATE'").Single());
+            var date = Assert.IsType<CastableRule>(ParseRule("CASTABLE AS DATE"));
             Assert.Equal("DATE", date.BaseType);
             Assert.Equal("DATE", date.DeclaredType);
             Assert.Null(date.Precision);
             Assert.Null(date.Scale);
 
-            var money = Assert.IsType<CastableRule>(
-                ColumnRuleParser.Parse("'CASTABLE AS DECIMAL(18,2)'").Single());
+            var money = Assert.IsType<CastableRule>(ParseRule("CASTABLE AS DECIMAL(18,2)"));
             Assert.Equal("DECIMAL", money.BaseType);
             Assert.Equal("DECIMAL(18,2)", money.DeclaredType);
             Assert.Equal(18, money.Precision);
             Assert.Equal(2, money.Scale);
 
-            var name = Assert.IsType<CastableRule>(
-                ColumnRuleParser.Parse("'castable as varchar(50)'").Single());
+            var name = Assert.IsType<CastableRule>(ParseRule("castable as varchar(50)"));
             Assert.Equal("VARCHAR", name.BaseType);
             Assert.Equal(50, name.Precision);
             Assert.Null(name.Scale);
@@ -100,8 +101,7 @@ namespace ETL_SQL.Tests.Core.Quality
         {
             // An unregistered type makes the shared cast a no-op, so the rule would accept every
             // value. Catching it at parse time is the difference between a rule and a decoration.
-            var ex = Assert.Throws<ColumnRuleParseException>(
-                () => ColumnRuleParser.Parse("'CASTABLE AS BANANA'"));
+            var ex = Assert.Throws<SyntaxException>(() => ParseRules("CASTABLE AS BANANA"));
 
             Assert.Contains("BANANA", ex.Message);
             Assert.Contains("every value", ex.Message);
@@ -114,29 +114,27 @@ namespace ETL_SQL.Tests.Core.Quality
         [InlineData("CASTABLE DATE")]
         public void Castable_Malformed_Or_Unsatisfiable_IsHardError(string text)
         {
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse($"'{text}'"));
+            Assert.Throws<SyntaxException>(() => ParseRules(text));
         }
 
         [Fact]
         public void Parses_NegatedMembershipAndPattern()
         {
-            var notIn = Assert.IsType<InListRule>(
-                ColumnRuleParser.Parse("\"NOT IN ('UNKNOWN', 'N/A')\"").Single());
+            var notIn = Assert.IsType<InListRule>(ParseRule("NOT IN ('UNKNOWN', 'N/A')"));
             Assert.True(notIn.Negated);
             Assert.Equal(new object?[] { "UNKNOWN", "N/A" }, notIn.Values);
 
-            var notMatches = Assert.IsType<MatchesRule>(
-                ColumnRuleParser.Parse("'NOT MATCHES <script[^>]*>'").Single());
+            var notMatches = Assert.IsType<MatchesRule>(ParseRule("NOT MATCHES '<script[^>]*>'"));
             Assert.True(notMatches.Negated);
             Assert.Equal("<script[^>]*>", notMatches.Pattern);
-            Assert.Equal("NOT MATCHES <script[^>]*>", notMatches.Text);
+            Assert.Equal("NOT MATCHES '<script[^>]*>'", notMatches.Text);
         }
 
         [Fact]
         public void PositiveFormsStayUnnegated()
         {
-            Assert.False(Assert.IsType<InListRule>(ColumnRuleParser.Parse("\"IN ('NA')\"").Single()).Negated);
-            Assert.False(Assert.IsType<MatchesRule>(ColumnRuleParser.Parse("'MATCHES ^a+$'").Single()).Negated);
+            Assert.False(Assert.IsType<InListRule>(ParseRule("IN ('NA')")).Negated);
+            Assert.False(Assert.IsType<MatchesRule>(ParseRule("MATCHES '^a+$'")).Negated);
         }
 
         [Fact]
@@ -144,17 +142,16 @@ namespace ETL_SQL.Tests.Core.Quality
         {
             // Both directions run through one parser, so an invalid pattern or list is invalid
             // either way rather than only when written positively.
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse(@"'NOT MATCHES (a)\1'"));
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'NOT IN (NULL)'"));
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'NOT MATCHES'"));
+            Assert.Throws<SyntaxException>(() => ParseRules(@"NOT MATCHES '(a)\1'"));
+            Assert.Throws<SyntaxException>(() => ParseRules("NOT IN (NULL)"));
+            Assert.Throws<SyntaxException>(() => ParseRules("NOT MATCHES"));
         }
 
         [Fact]
         public void NotIn_DoesNotSwallowExistsIn()
         {
-            // 'NOT' only negates when MATCHES or IN( follows immediately.
-            var exists = Assert.IsType<ExistsInRule>(
-                ColumnRuleParser.Parse("'EXISTS IN dim_region(Id)'").Single());
+            // 'NOT' only negates when NULL, BLANK, MATCHES, or IN follows immediately.
+            var exists = Assert.IsType<ExistsInRule>(ParseRule("EXISTS IN dim_region(Id)"));
             Assert.Equal("dim_region", exists.Table);
         }
 
@@ -162,7 +159,7 @@ namespace ETL_SQL.Tests.Core.Quality
         public void Parses_Between_WithExpressionBounds()
         {
             var rule = Assert.IsType<BetweenRule>(
-                ColumnRuleParser.Parse("'BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate'").Single());
+                ParseRule("BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate"));
 
             Assert.NotNull(rule.Lower);
             Assert.NotNull(rule.Upper);
@@ -170,21 +167,20 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
-        public void Between_SplitsOnTheTopLevelAnd_NotTheFirstOne()
+        public void Between_BoundsCannotSwallowTheSeparatingAnd()
         {
-            // The lower bound contains its own AND inside a function call; splitting on the first
-            // one would cut the bound in half and parse neither side.
-            var rule = Assert.IsType<BetweenRule>(
-                ColumnRuleParser.Parse("'BETWEEN IIF(1 = 1 AND 2 = 2, 5, 10) AND 100'").Single());
+            // Bounds parse at additive precedence — the level SQL's own BETWEEN uses — so the AND
+            // between them is always the separator and never a boolean operator.
+            var rule = Assert.IsType<BetweenRule>(ParseRule("BETWEEN IIF(1 = 1 AND 2 = 2, 5, 10) AND 100"));
 
             Assert.NotNull(rule.Lower);
             Assert.NotNull(rule.Upper);
         }
 
         [Fact]
-        public void Between_CombinesWithOtherRules_TheCommaStillSeparates()
+        public void Between_CombinesWithOtherRules_ViaAnd()
         {
-            var rules = ColumnRuleParser.Parse("'NOT NULL, BETWEEN 1 AND 10'");
+            var rules = ParseRules("NOT NULL AND BETWEEN 1 AND 10");
 
             Assert.Collection(rules,
                 r => Assert.IsType<NotNullRule>(r),
@@ -194,16 +190,21 @@ namespace ETL_SQL.Tests.Core.Quality
         [Theory]
         [InlineData("BETWEEN 1")]
         [InlineData("BETWEEN AND 10")]
-        [InlineData("BETWEEN 1 AND")]
         public void Between_Malformed_IsHardError(string text)
         {
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse($"'{text}'"));
+            Assert.Throws<SyntaxException>(() => ParseRules(text));
+        }
+
+        [Fact]
+        public void Between_MissingUpperBound_IsHardError()
+        {
+            Assert.Throws<SyntaxException>(() => ParseStatement("SELECT c EXPECT BETWEEN 1 AND;"));
         }
 
         [Fact]
         public void Parses_UniqueWith_CompositeTuple()
         {
-            var rule = Assert.IsType<UniqueRule>(ColumnRuleParser.Parse("'UNIQUE WITH (TenantId, Region)'").Single());
+            var rule = Assert.IsType<UniqueRule>(ParseRule("UNIQUE WITH (TenantId, Region)"));
 
             Assert.Equal(UniqueMode.All, rule.Mode);
             Assert.Equal(new[] { "TenantId", "Region" }, rule.CompositeColumns);
@@ -212,7 +213,7 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void Parses_UniqueFirst_WithByKey()
         {
-            var rule = Assert.IsType<UniqueRule>(ColumnRuleParser.Parse("'UNIQUE_FIRST BY LoadedAt'").Single());
+            var rule = Assert.IsType<UniqueRule>(ParseRule("UNIQUE_FIRST BY LoadedAt"));
 
             Assert.Equal(UniqueMode.First, rule.Mode);
             Assert.NotNull(rule.OrderKey);
@@ -222,17 +223,18 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void UniqueFirst_WithoutBy_IsHardError()
         {
-            var ex = Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'UNIQUE_FIRST'"));
+            var ex = Assert.Throws<SyntaxException>(() => ParseRules("UNIQUE_FIRST"));
             Assert.Contains("BY", ex.Message);
 
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'UNIQUE_LAST'"));
+            Assert.Throws<SyntaxException>(() => ParseRules("UNIQUE_LAST"));
         }
 
         [Fact]
         public void Parses_Matches_WithCommasInsideRegex()
         {
-            // Commas inside {n,m} braces and character classes are literal, not rule separators.
-            var rules = ColumnRuleParser.Parse(@"'MATCHES ^[a-z,;]{1,10}$, NOT NULL'");
+            // The pattern is a string literal, so commas, braces, and classes inside it are the
+            // lexer's business and never reach the rule grammar.
+            var rules = ParseRules(@"MATCHES '^[a-z,;]{1,10}$' AND NOT NULL");
 
             Assert.Equal(2, rules.Count);
             var matches = Assert.IsType<MatchesRule>(rules[0]);
@@ -243,43 +245,49 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void Parses_Matches_EmailRegex_WithAtAndBackslash()
         {
-            var matches = Assert.IsType<MatchesRule>(
-                ColumnRuleParser.Parse(@"'MATCHES ^[^@]+@[^@]+\.com$'").Single());
+            // '@' would lex as a variable and the backslash would need escaping if the pattern were
+            // bare — quoting is what makes an arbitrary regex expressible at all.
+            var matches = Assert.IsType<MatchesRule>(ParseRule(@"MATCHES '^[^@]+@[^@]+\.com$'"));
 
             Assert.Equal(@"^[^@]+@[^@]+\.com$", matches.Pattern);
             Assert.Matches(matches.Compile(caseSensitive: true), "user@example.com");
         }
 
         [Fact]
+        public void Matches_UnquotedPattern_IsHardError_WithGuidance()
+        {
+            var ex = Assert.Throws<SyntaxException>(() => ParseRules("MATCHES ^a+$"));
+            Assert.Contains("quoted pattern", ex.Message);
+        }
+
+        [Fact]
         public void Matches_NonBacktrackingIncompatible_Backreference_IsHardError()
         {
-            var ex = Assert.Throws<ColumnRuleParseException>(() =>
-                ColumnRuleParser.Parse(@"'MATCHES ^(a)\1$'"));
+            var ex = Assert.Throws<SyntaxException>(() => ParseRules(@"MATCHES '^(a)\1$'"));
             Assert.Contains("NonBacktracking", ex.Message);
         }
 
         [Fact]
         public void Matches_NonBacktrackingIncompatible_Lookahead_IsHardError()
         {
-            Assert.Throws<ColumnRuleParseException>(() =>
-                ColumnRuleParser.Parse(@"'MATCHES ^(?=a).*$'"));
+            Assert.Throws<SyntaxException>(() => ParseRules(@"MATCHES '^(?=a).*$'"));
         }
 
         [Fact]
         public void Parses_InList_WithStringsAndNumbers()
         {
-            var rule = Assert.IsType<InListRule>(
-                ColumnRuleParser.Parse("\"IN ('NA','EMEA','APAC')\"").Single());
+            // No outer quoting, so no SQL-style quote doubling: the list is written once.
+            var rule = Assert.IsType<InListRule>(ParseRule("IN ('NA','EMEA','APAC')"));
             Assert.Equal(new object?[] { "NA", "EMEA", "APAC" }, rule.Values);
 
-            var numeric = Assert.IsType<InListRule>(ColumnRuleParser.Parse("'IN (1, 2, -3)'").Single());
+            var numeric = Assert.IsType<InListRule>(ParseRule("IN (1, 2, -3)"));
             Assert.Equal(new object?[] { 1m, 2m, -3m }, numeric.Values);
         }
 
         [Fact]
-        public void Parses_InList_CommasInsideListDoNotSplitRules()
+        public void Parses_InList_CommasInsideListDoNotEndTheColumn()
         {
-            var rules = ColumnRuleParser.Parse("\"NOT NULL, IN ('a,b', 'c')\"");
+            var rules = ParseRules("NOT NULL AND IN ('a,b', 'c')");
 
             Assert.Equal(2, rules.Count);
             var inList = Assert.IsType<InListRule>(rules[1]);
@@ -289,36 +297,34 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void InList_WithNull_IsHardError()
         {
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'IN (NULL)'"));
+            Assert.Throws<SyntaxException>(() => ParseRules("IN (NULL)"));
         }
 
         [Fact]
         public void Parses_ExistsIn_TableAndKeyColumn()
         {
-            var rule = Assert.IsType<ExistsInRule>(
-                ColumnRuleParser.Parse("'EXISTS IN dim_region(Id)'").Single());
+            var rule = Assert.IsType<ExistsInRule>(ParseRule("EXISTS IN dim_region(Id)"));
 
             Assert.Equal("dim_region", rule.Table);
             Assert.Equal(new[] { "Id" }, rule.KeyColumns);
             Assert.Null(rule.SourceColumns);
             Assert.False(rule.IsComposite);
 
-            var temp = Assert.IsType<ExistsInRule>(ColumnRuleParser.Parse("'EXISTS IN #ref(Code)'").Single());
+            var temp = Assert.IsType<ExistsInRule>(ParseRule("EXISTS IN #ref(Code)"));
             Assert.Equal("#ref", temp.Table);
         }
 
         [Fact]
         public void ExistsIn_Malformed_IsHardError()
         {
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'EXISTS IN dim_region'"));
+            Assert.Throws<SyntaxException>(() => ParseRules("EXISTS IN dim_region"));
         }
 
         [Fact]
         public void Parses_ExistsWith_CompositeTuple()
         {
             var rule = Assert.IsType<ExistsInRule>(
-                ColumnRuleParser.Parse("'EXISTS WITH (TenantId, CustomerId) IN dim_customer(TenantId, CustomerId)'")
-                    .Single());
+                ParseRule("EXISTS WITH (TenantId, CustomerId) IN dim_customer(TenantId, CustomerId)"));
 
             Assert.True(rule.IsComposite);
             Assert.Equal("dim_customer", rule.Table);
@@ -332,7 +338,7 @@ namespace ETL_SQL.Tests.Core.Quality
             // The two tuples pair positionally, so the reference table's columns need not share
             // the source's names.
             var rule = Assert.IsType<ExistsInRule>(
-                ColumnRuleParser.Parse("'EXISTS WITH (TenantId, CustomerId) IN dim_customer(Tenant, Id)'").Single());
+                ParseRule("EXISTS WITH (TenantId, CustomerId) IN dim_customer(Tenant, Id)"));
 
             Assert.Equal(new[] { "TenantId", "CustomerId" }, rule.SourceColumns);
             Assert.Equal(new[] { "Tenant", "Id" }, rule.KeyColumns);
@@ -341,8 +347,8 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void ExistsWith_ArityMismatch_IsHardError()
         {
-            var ex = Assert.Throws<ColumnRuleParseException>(() =>
-                ColumnRuleParser.Parse("'EXISTS WITH (TenantId, CustomerId) IN dim_customer(Id)'"));
+            var ex = Assert.Throws<SyntaxException>(() =>
+                ParseRules("EXISTS WITH (TenantId, CustomerId) IN dim_customer(Id)"));
 
             Assert.Contains("arity", ex.Message);
         }
@@ -352,50 +358,58 @@ namespace ETL_SQL.Tests.Core.Quality
         {
             // An expression here cannot be reproduced by the reference-table read that builds the
             // key set, so it is rejected rather than silently treated as a column name.
-            Assert.Throws<ColumnRuleParseException>(() =>
-                ColumnRuleParser.Parse("'EXISTS WITH (UPPER(TenantId)) IN dim_customer(TenantId)'"));
+            Assert.Throws<SyntaxException>(() =>
+                ParseRules("EXISTS WITH (UPPER(TenantId)) IN dim_customer(TenantId)"));
 
-            Assert.Throws<ColumnRuleParseException>(() =>
-                ColumnRuleParser.Parse("'EXISTS WITH (TenantId, ) IN dim_customer(TenantId, Id)'"));
+            Assert.Throws<SyntaxException>(() =>
+                ParseRules("EXISTS WITH (TenantId, ) IN dim_customer(TenantId, Id)"));
         }
 
         [Fact]
         public void ExistsWith_Malformed_ReportsBothSupportedForms()
         {
-            var ex = Assert.Throws<ColumnRuleParseException>(() =>
-                ColumnRuleParser.Parse("'EXISTS WITH (TenantId) dim_customer(TenantId)'"));
+            var ex = Assert.Throws<SyntaxException>(() =>
+                ParseRules("EXISTS WITH (TenantId) dim_customer(TenantId)"));
 
-            Assert.Contains("EXISTS IN table(KeyColumn)", ex.Message);
-            Assert.Contains("EXISTS WITH", ex.Message);
+            Assert.Contains("IN <table>(cols)", ex.Message);
         }
 
         [Fact]
         public void Parses_Expr_CrossColumnPredicate_WithFunctionCallCommas()
         {
-            var rules = ColumnRuleParser.Parse("'EXPR StartDate <= EndDate, NOT NULL'");
+            var rules = ParseRules("EXPR StartDate <= EndDate AND NOT NULL");
             Assert.Equal(2, rules.Count);
             Assert.IsType<ExprRule>(rules[0]);
+            Assert.IsType<NotNullRule>(rules[1]);
 
             // Commas inside a function call stay inside one EXPR rule.
-            var withCall = ColumnRuleParser.Parse("'EXPR COALESCE(EndDate, StartDate) >= StartDate'");
-            Assert.IsType<ExprRule>(Assert.Single(withCall));
+            Assert.IsType<ExprRule>(ParseRule("EXPR COALESCE(EndDate, StartDate) >= StartDate"));
+        }
+
+        [Fact]
+        public void Expr_ParsesAtComparisonPrecedence_SoTheNextRuleSurvives()
+        {
+            // A predicate that consumed the AND would swallow the rule after it. Parenthesize to
+            // put AND/OR inside one predicate.
+            var compound = Assert.IsType<ExprRule>(ParseRule("EXPR (StartDate <= EndDate AND Qty > 0)"));
+            Assert.NotNull(compound.Predicate);
         }
 
         [Fact]
         public void Expr_InvalidSql_IsHardError()
         {
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'EXPR >>>'"));
+            Assert.Throws<SyntaxException>(() => ParseRules("EXPR >>>"));
         }
 
         [Theory]
-        [InlineData("'>= 0'", CompareOp.GreaterOrEqual, 0)]
-        [InlineData("'<= 120'", CompareOp.LessOrEqual, 120)]
-        [InlineData("'> -1.5'", CompareOp.Greater, -1.5)]
-        [InlineData("'< 100'", CompareOp.Less, 100)]
-        [InlineData("'= 42'", CompareOp.Equal, 42)]
-        public void Parses_NumericComparisons_AsDecimal(string expect, CompareOp op, double bound)
+        [InlineData(">= 0", CompareOp.GreaterOrEqual, 0)]
+        [InlineData("<= 120", CompareOp.LessOrEqual, 120)]
+        [InlineData("> -1.5", CompareOp.Greater, -1.5)]
+        [InlineData("< 100", CompareOp.Less, 100)]
+        [InlineData("= 42", CompareOp.Equal, 42)]
+        public void Parses_NumericComparisons_AsDecimal(string text, CompareOp op, double bound)
         {
-            var rule = Assert.IsType<ComparisonRule>(ColumnRuleParser.Parse(expect).Single());
+            var rule = Assert.IsType<ComparisonRule>(ParseRule(text));
 
             Assert.Equal(op, rule.Op);
             Assert.Equal((decimal)bound, rule.Value);
@@ -404,124 +418,148 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void Comparison_NonNumericBound_IsHardError()
         {
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'>= abc'"));
+            var ex = Assert.Throws<SyntaxException>(() => ParseRules(">= abc"));
+            Assert.Contains("EXPR", ex.Message); // points at the rule that does take an expression
         }
 
         [Theory]
-        [InlineData("'FROBNICATE'")]
-        [InlineData("''")]
-        [InlineData("'NOT NULL,,UNIQUE'")]
-        public void MalformedRules_AreHardErrors_NeverSilentlyIgnored(string expect)
+        [InlineData("FROBNICATE")]
+        [InlineData("NOT NULL AND AND UNIQUE")]
+        public void MalformedRules_AreHardErrors_NeverSilentlyIgnored(string text)
         {
-            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse(expect));
+            Assert.Throws<SyntaxException>(() => ParseRules(text));
         }
 
-        // ── Quote stripping (tag layer preserves outer quotes) ────────────
-
         [Fact]
-        public void Unquote_StripsOuterQuotes_AndUnescapesDoubledQuotes()
+        public void EmptyClause_IsHardError()
         {
-            Assert.Equal("NOT NULL", ColumnRuleParser.Unquote("'NOT NULL'"));
-            Assert.Equal("IN ('NA','EMEA')", ColumnRuleParser.Unquote("\"IN ('NA','EMEA')\""));
-            Assert.Equal("IN ('NA')", ColumnRuleParser.Unquote("'IN (''NA'')'"));
-            Assert.Equal("bare", ColumnRuleParser.Unquote("  bare  "));
+            Assert.Throws<SyntaxException>(() => ParseColumn("c EXPECT"));
         }
 
-        // ── @expect/@fail binding assembly ─────────────────────────────────
+        // ── Clause shape: action, repetition, boundaries ────────────────────
 
         [Fact]
-        public void ParseBindings_PairsNumberedSuffixes_InOrder()
+        public void OmittedAction_DefaultsToWarn_FailSafeNotSilent()
         {
-            var metadata = Metadata(
-                ("expect", "'NOT NULL'"), ("fail", "'THROW'"),
-                ("expect_1", "'UNIQUE'"), ("fail_1", "'QUARANTINE'"),
-                ("owner", "steward@example.com")); // unrelated tags ignored
+            var clause = Assert.Single(ParseColumn("c EXPECT >= 0").Expectations!);
 
-            var bindings = ColumnRuleParser.ParseBindings(metadata);
+            Assert.Equal(FailAction.Warn, clause.Action);
+            Assert.False(clause.ActionExplicit);
+        }
 
-            Assert.Collection(bindings,
-                b =>
+        [Theory]
+        [InlineData("THROW", FailAction.Throw)]
+        [InlineData("WARN", FailAction.Warn)]
+        [InlineData("QUARANTINE", FailAction.Quarantine)]
+        public void OnFailure_SelectsTheAction(string word, FailAction expected)
+        {
+            var clause = Assert.Single(ParseColumn($"c EXPECT NOT NULL ON FAILURE {word}").Expectations!);
+
+            Assert.Equal(expected, clause.Action);
+            Assert.True(clause.ActionExplicit);
+        }
+
+        [Fact]
+        public void RepeatedClauses_ReplaceTheNumberedTagPairing()
+        {
+            var column = ParseColumn("UserId EXPECT NOT NULL ON FAILURE THROW EXPECT UNIQUE ON FAILURE QUARANTINE");
+
+            Assert.Collection(column.Expectations!,
+                c =>
                 {
-                    Assert.Equal("expect", b.ExpectKey);
-                    Assert.Equal(FailAction.Throw, b.Action);
-                    Assert.IsType<NotNullRule>(b.Rules.Single());
+                    Assert.IsType<NotNullRule>(c.Rules.Single());
+                    Assert.Equal(FailAction.Throw, c.Action);
                 },
-                b =>
+                c =>
                 {
-                    Assert.Equal("expect_1", b.ExpectKey);
-                    Assert.Equal(FailAction.Quarantine, b.Action);
-                    Assert.IsType<UniqueRule>(b.Rules.Single());
+                    Assert.IsType<UniqueRule>(c.Rules.Single());
+                    Assert.Equal(FailAction.Quarantine, c.Action);
                 });
         }
 
         [Fact]
-        public void ParseBindings_MissingFail_DefaultsToWarn_FailSafeNotSilent()
+        public void Notify_IsRejectedOnAColumn_WithAPointerToAssertJob()
         {
-            var binding = ColumnRuleParser.ParseBindings(Metadata(("expect", "'>= 0'"))).Single();
+            var ex = Assert.Throws<SyntaxException>(
+                () => ParseColumn("c EXPECT NOT NULL ON FAILURE NOTIFY alerts"));
 
-            Assert.Equal(FailAction.Warn, binding.Action);
-            Assert.False(binding.ActionExplicit);
+            Assert.Contains("ASSERT JOB", ex.Message);
         }
 
         [Fact]
-        public void ParseBindings_FailWithoutExpect_IsHardError()
+        public void ColumnLevelAction_TakesNoTargetOrOptions()
         {
-            var ex = Assert.Throws<ColumnRuleParseException>(() =>
-                ColumnRuleParser.ParseBindings(Metadata(("fail_1", "'THROW'"))));
-            Assert.Contains("expect_1", ex.Message);
+            // Routing is declared once per statement; a per-column target would let two columns
+            // disagree about where the same run's rows land.
+            var target = Assert.Throws<SyntaxException>(
+                () => ParseColumn("c EXPECT NOT NULL ON FAILURE QUARANTINE TO q"));
+            Assert.Contains("ON FAILURE QUARANTINE TO <table>", target.Message);
+
+            var options = Assert.Throws<SyntaxException>(
+                () => ParseColumn("c EXPECT NOT NULL ON FAILURE WARN WITH (RETENTION = '30 DAYS')"));
+            Assert.Contains("RETENTION", options.Message);
         }
 
         [Fact]
-        public void ParseBindings_UnknownAction_IsHardError()
+        public void ClauseFollowsAnAlias_AndNeedsNoAs()
         {
-            var ex = Assert.Throws<ColumnRuleParseException>(() =>
-                ColumnRuleParser.ParseBindings(Metadata(("expect", "'NOT NULL'"), ("fail", "'EXPLODE'"))));
-            Assert.Contains("THROW, WARN, QUARANTINE", ex.Message);
+            var aliased = ParseColumn("RawEmail AS Email EXPECT NOT NULL");
+            Assert.Equal("Email", aliased.Alias);
+            Assert.Single(aliased.Expectations!);
+
+            // EXPECT is a reserved token, so it can never be swallowed as an implicit alias.
+            var bare = ParseColumn("Email EXPECT NOT NULL");
+            Assert.Null(bare.Alias);
+            Assert.Single(bare.Expectations!);
         }
 
         [Fact]
-        public void ParseBindings_NoRuleTags_ReturnsEmpty()
+        public void TopLevelComma_EndsTheColumn_NotTheRuleList()
         {
-            Assert.Empty(ColumnRuleParser.ParseBindings(Metadata(("owner", "Bob"), ("pii", "true"))));
-            Assert.False(ColumnRuleParser.HasRuleTags(Metadata(("owner", "Bob"))));
-            Assert.True(ColumnRuleParser.HasRuleTags(Metadata(("EXPECT_2", "'NOT NULL'"))));
+            var sql = "SELECT a EXPECT NOT NULL, b EXPECT UNIQUE FROM src;";
+            var columns = ((SelectStatement)ParseStatement(sql)).Columns;
+
+            Assert.Equal(2, columns.Count);
+            Assert.IsType<NotNullRule>(Assert.Single(columns[0].Expectations!).Rules.Single());
+            Assert.IsType<UniqueRule>(Assert.Single(columns[1].Expectations!).Rules.Single());
         }
 
-        // ── End-to-end through the comment-tag pipeline ────────────────────
+        [Fact]
+        public void DescriptiveTagsStillAttach_AlongsideRules()
+        {
+            // Comments keep describing; only enforcement moved into the grammar.
+            var column = ParseColumn("Email EXPECT NOT NULL ON FAILURE THROW /* @d: primary contact; @pii: true; */");
+
+            Assert.Equal("primary contact", column.Description);
+            Assert.Equal("true", column.Metadata["pii"]);
+            Assert.Equal(FailAction.Throw, Assert.Single(column.Expectations!).Action);
+        }
 
         [Fact]
-        public void RuleTags_FlowFromScriptCommentToBindings()
+        public void ExpectSchema_IsNotMistakenForAColumnRule()
         {
-            var source = "SELECT Email /* @expect: 'MATCHES ^[^@]+@[^@]+$, NOT NULL'; @fail: 'QUARANTINE'; */ FROM src;";
-            var script = new ETL_SQL.Core.Parser.Parser(new ETL_SQL.Core.Parser.Lexer(source).Tokenize(), source).Parse();
-            var column = ((SelectStatement)script.Statements[0]).Columns[0];
-
-            var binding = ColumnRuleParser.ParseBindings(column.Metadata!).Single();
-
-            Assert.Equal(FailAction.Quarantine, binding.Action);
-            Assert.Equal(2, binding.Rules.Count);
-            Assert.IsType<MatchesRule>(binding.Rules[0]);
-            Assert.IsType<NotNullRule>(binding.Rules[1]);
+            var ex = Assert.Throws<SyntaxException>(() => ParseColumn("c EXPECT SCHEMA target (a INT)"));
+            Assert.Contains("EXPECT SCHEMA is a statement", ex.Message);
         }
 
         // ── Compound rules (AND / OR / parentheses) ─────────────────────────
 
         [Fact]
-        public void Parse_CompoundAndRule_ReturnsAndRuleWithOperands()
+        public void TopLevelAnd_UnrollsIntoIndependentRules()
         {
-            var rules = ColumnRuleParser.Parse("'NOT NULL AND > 0'");
-            var rule = Assert.IsType<AndRule>(Assert.Single(rules));
-            Assert.Equal(2, rule.Operands.Count);
-            Assert.IsType<NotNullRule>(rule.Operands[0]);
-            Assert.IsType<ComparisonRule>(rule.Operands[1]);
-            Assert.Equal("NOT NULL AND > 0", rule.Text);
+            // Each conjunct reports its own failures, which is what the comma form used to give.
+            var rules = ParseRules("NOT NULL AND > 0");
+
+            Assert.Collection(rules,
+                r => Assert.IsType<NotNullRule>(r),
+                r => Assert.IsType<ComparisonRule>(r));
         }
 
         [Fact]
         public void Parse_CompoundOrRule_ReturnsOrRuleWithOperands()
         {
-            var rules = ColumnRuleParser.Parse("'> 100 OR < 10'");
-            var rule = Assert.IsType<OrRule>(Assert.Single(rules));
+            var rule = Assert.IsType<OrRule>(ParseRule("> 100 OR < 10"));
+
             Assert.Equal(2, rule.Operands.Count);
             Assert.IsType<ComparisonRule>(rule.Operands[0]);
             Assert.IsType<ComparisonRule>(rule.Operands[1]);
@@ -530,17 +568,14 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void Parse_Precedence_AndBindsTighterThanOr()
         {
-            var rules = ColumnRuleParser.Parse("'> 0 AND < 10 OR > 100 AND < 200'");
-            var orRule = Assert.IsType<OrRule>(Assert.Single(rules));
+            var orRule = Assert.IsType<OrRule>(ParseRule("> 0 AND < 10 OR > 100 AND < 200"));
             Assert.Equal(2, orRule.Operands.Count);
 
             var and1 = Assert.IsType<AndRule>(orRule.Operands[0]);
-            Assert.Equal(2, and1.Operands.Count);
             Assert.Equal(CompareOp.Greater, Assert.IsType<ComparisonRule>(and1.Operands[0]).Op);
             Assert.Equal(CompareOp.Less, Assert.IsType<ComparisonRule>(and1.Operands[1]).Op);
 
             var and2 = Assert.IsType<AndRule>(orRule.Operands[1]);
-            Assert.Equal(2, and2.Operands.Count);
             Assert.Equal(CompareOp.Greater, Assert.IsType<ComparisonRule>(and2.Operands[0]).Op);
             Assert.Equal(CompareOp.Less, Assert.IsType<ComparisonRule>(and2.Operands[1]).Op);
         }
@@ -548,50 +583,117 @@ namespace ETL_SQL.Tests.Core.Quality
         [Fact]
         public void Parse_Parentheses_OverridePrecedence()
         {
-            var rules = ColumnRuleParser.Parse("'NOT NULL AND (= 1 OR = 2)'");
-            var andRule = Assert.IsType<AndRule>(Assert.Single(rules));
-            Assert.Equal(2, andRule.Operands.Count);
-            Assert.IsType<NotNullRule>(andRule.Operands[0]);
+            var rules = ParseRules("NOT NULL AND (= 1 OR = 2)");
 
-            var orRule = Assert.IsType<OrRule>(andRule.Operands[1]);
-            Assert.Equal(2, orRule.Operands.Count);
-            Assert.IsType<ComparisonRule>(orRule.Operands[0]);
-            Assert.IsType<ComparisonRule>(orRule.Operands[1]);
+            Assert.Collection(rules,
+                r => Assert.IsType<NotNullRule>(r),
+                r =>
+                {
+                    var orRule = Assert.IsType<OrRule>(r);
+                    Assert.Equal(2, orRule.Operands.Count);
+                });
         }
 
         [Fact]
-        public void Parse_BetweenAndLengthBetween_PreserveInternalAndKeyword()
+        public void Parse_BetweenAndLengthBetween_ConsumeTheirOwnAnd()
         {
-            var rules = ColumnRuleParser.Parse("'BETWEEN 1 AND 10 OR BETWEEN 20 AND 30'");
-            var orRule = Assert.IsType<OrRule>(Assert.Single(rules));
+            var orRule = Assert.IsType<OrRule>(ParseRule("BETWEEN 1 AND 10 OR BETWEEN 20 AND 30"));
             Assert.Equal(2, orRule.Operands.Count);
             Assert.IsType<BetweenRule>(orRule.Operands[0]);
             Assert.IsType<BetweenRule>(orRule.Operands[1]);
 
-            var lengthRules = ColumnRuleParser.Parse("'LENGTH BETWEEN 5 AND 10 AND NOT NULL'");
-            var andRule = Assert.IsType<AndRule>(Assert.Single(lengthRules));
-            Assert.Equal(2, andRule.Operands.Count);
-            Assert.IsType<LengthRule>(andRule.Operands[0]);
-            Assert.IsType<NotNullRule>(andRule.Operands[1]);
+            var lengthRules = ParseRules("LENGTH BETWEEN 5 AND 10 AND NOT NULL");
+            Assert.Collection(lengthRules,
+                r => Assert.IsType<LengthRule>(r),
+                r => Assert.IsType<NotNullRule>(r));
         }
 
         [Fact]
         public void Parse_FlattenAll_FlattensNestedTree()
         {
-            var rules = ColumnRuleParser.Parse("'NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES ^LEGACY-)'");
+            var rules = ParseRules(@"NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES '^LEGACY-')");
             var flattened = rules.FlattenAll().ToList();
-            // Root AndRule, NotNullRule, OrRule, LengthRule, MatchesRule
-            Assert.Equal(5, flattened.Count);
+
+            // NotNullRule, OrRule, LengthRule, MatchesRule — the top-level AND is already unrolled.
+            Assert.Equal(4, flattened.Count);
             Assert.Contains(flattened, r => r is NotNullRule);
             Assert.Contains(flattened, r => r is LengthRule);
             Assert.Contains(flattened, r => r is MatchesRule);
         }
 
-        private static Dictionary<string, string> Metadata(params (string Key, string Value)[] entries)
+        // ── Rule text is the clause as written ─────────────────────────────
+
+        [Fact]
+        public void RuleText_IsSlicedFromTheSource_NotReconstructed()
         {
-            var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var (key, value) in entries) metadata[key] = value;
-            return metadata;
+            // __dq_rule and every diagnostic quote this text, so it must read back as the author
+            // wrote it, spacing and casing included.
+            var rule = ParseRule("in ('NA',  'EMEA')");
+            Assert.Equal("in ('NA',  'EMEA')", rule.Text);
         }
+
+        // ── Projection onto stewardship tags ───────────────────────────────
+
+        [Fact]
+        public void Clauses_ProjectOntoExpectAndFailTags_ForTheStewardReadSide()
+        {
+            var column = ParseColumn(
+                "UserId EXPECT NOT NULL ON FAILURE THROW EXPECT UNIQUE ON FAILURE QUARANTINE");
+
+            var tags = ColumnExpectProjection.WithProjectedTags(column, column.Metadata);
+
+            Assert.Equal("NOT NULL", tags["expect"]);
+            Assert.Equal("THROW", tags["fail"]);
+            Assert.Equal("UNIQUE", tags["expect_1"]);
+            Assert.Equal("QUARANTINE", tags["fail_1"]);
+        }
+
+        [Fact]
+        public void ProjectedTags_ReadBackThroughTheStringParser_Unchanged()
+        {
+            // The catalog, Portal, and SHOW DATA QUALITY RULES all re-read these tags off lineage,
+            // so what is projected has to survive the trip back.
+            var column = ParseColumn(@"Email EXPECT MATCHES '^[^@]+@[^@]+$' AND NOT NULL ON FAILURE QUARANTINE");
+            var tags = ColumnExpectProjection.WithProjectedTags(column, column.Metadata);
+
+            var binding = ColumnRuleParser.ParseBindings(tags).Single();
+
+            Assert.Equal(FailAction.Quarantine, binding.Action);
+            Assert.Collection(binding.Rules,
+                r => Assert.Equal("^[^@]+@[^@]+$", Assert.IsType<MatchesRule>(r).Pattern),
+                r => Assert.IsType<NotNullRule>(r));
+        }
+
+        [Fact]
+        public void ClauseLabel_NamesTheClause_NotADeadTagForm()
+        {
+            var column = ParseColumn("c EXPECT NOT NULL EXPECT UNIQUE");
+            var bindings = ColumnExpectProjection.ToBindings(column);
+
+            Assert.Equal("EXPECT", bindings[0].ClauseLabel);
+            Assert.Equal("EXPECT #2", bindings[1].ClauseLabel);
+        }
+
+        // ── Helpers ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Parses one statement directly, so a malformed rule surfaces as the SyntaxException the
+        /// parser raises. Script-level <c>Parse()</c> collects diagnostics instead of throwing (the
+        /// language server needs the rest of the file), and the Evaluator turns any Error
+        /// diagnostic into a hard failure before execution — both paths refuse the script.
+        /// </summary>
+        private static Statement ParseStatement(string sql) =>
+            new ETL_SQL.Core.Parser.Parser(new Lexer(sql).Tokenize(), sql).ParseStatement();
+
+        private static SelectColumn ParseColumn(string columnSql)
+        {
+            var sql = $"SELECT {columnSql} FROM src;";
+            return ((SelectStatement)ParseStatement(sql)).Columns[0];
+        }
+
+        private static IReadOnlyList<ColumnRule> ParseRules(string ruleText) =>
+            Assert.Single(ParseColumn($"c EXPECT {ruleText}").Expectations!).Rules;
+
+        private static ColumnRule ParseRule(string ruleText) => Assert.Single(ParseRules(ruleText));
     }
 }

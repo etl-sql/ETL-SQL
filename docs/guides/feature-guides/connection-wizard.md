@@ -63,18 +63,12 @@ If any check fails, the wizard displays the failing layer along with specific re
 
 ## 5. Hybrid Connectivity & Data Gateways
 
-For on-premises data sources located behind enterprise firewalls, select an enrolled **Data Gateway** cluster from the Gateway Routing dropdown.
+For on-premises data sources located behind enterprise firewalls, select an enrolled **Data Gateway** cluster and registered resource from the Gateway Routing dropdown in Admin Mode.
 
-The wizard emits the `GATEWAY` routing option:
+Scripts reference the governed catalog alias:
 
 ```sql
-CREATE CONNECTION onprem_erp AS MSSQL(
-  SERVER = 'erp.local.corp',
-  DATABASE = 'EnterpriseDB',
-  USER = 'svc_etl',
-  PASSWORD = SECRET:ERP_READER_PW,
-  GATEWAY = 'dallas-cluster-01'
-);
+CREATE CONNECTION onprem_erp AS MSSQL('SHARED:onprem_erp');
 ```
 
 ---
@@ -89,7 +83,7 @@ CREATE CONNECTION sales_dw AS MSSQL(
   PORT = 1433,
   DATABASE = 'SalesDW',
   USER = 'app_reader',
-  PASSWORD = SECRET:SQL_READER_PW,
+  PASSWORD = 'SECRET:SQL_READER_PW',
   ENCRYPT = TRUE,
   TRUST_SERVER_CERTIFICATE = TRUE,
   TIMEOUT_SECONDS = 30

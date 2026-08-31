@@ -1,12 +1,14 @@
 # `eng.data_quality_rules`
 
-Data-quality rules captured from `@expect` and `@fail` metadata in the current session.
+Data-quality rules captured from the `EXPECT` clauses in the current session's scripts, projected onto lineage as `expect`/`fail` stewardship tags.
 
 ```sql
 SELECT * FROM eng.data_quality_rules WHERE action = 'QUARANTINE';
 ```
 
-Columns: `target_table`, `target_column`, `rule_tag`, `rule`, `action`, `source_file`, `line`.
+Columns: `target_table`, `target_column`, `rule_clause`, `rule`, `action`, `source_file`, `line`.
+
+`rule_clause` names the clause a rule came from: `EXPECT` for a column's first clause, `EXPECT #2` for its second, and so on.
 
 ## Over a `PORTAL` connection
 

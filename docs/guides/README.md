@@ -40,7 +40,7 @@ Ensure data integrity with inline column validation, quarantine triage, and line
 
 | Guide | Description |
 | :--- | :--- |
-| [Column Quality Rules](data-quality/column-quality-rules.md) | Declare inline `@expect` / `@fail` rules for null checks, regex patterns, ranges, and castability. |
+| [Column Quality Rules](data-quality/column-quality-rules.md) | Declare inline `EXPECT` rules for null checks, regex patterns, ranges, and castability. |
 | [Quarantine & Remediation](data-quality/quarantine-and-remediation.md) | Divert bad rows to durable tables, inspect `__dq_*` metadata, and reprocess with `REPLAY QUARANTINE`. |
 | [Multi-Row & Cross-Table Rules](data-quality/multi-row-and-cross-table-rules.md) | Deduplicate with `UNIQUE_FIRST BY`, validate cross-table `EXISTS IN`, and enforce tenant boundaries. |
 | [Run-Level Assertions (`ASSERT JOB`)](data-quality/run-level-assertions.md) | Assert batch volume against historical baselines, column freshness, and notification transitions. |

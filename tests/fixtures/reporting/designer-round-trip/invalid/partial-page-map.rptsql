@@ -1,0 +1,9 @@
+SELECT region, amount INTO #stage FROM pg.sales;
+
+CREATE VISUAL v_page AS BAR (
+    TITLE = 'Page', SOURCE = #stage, MAPPINGS (X = region, Y = amount)
+);
+
+CREATE PAGE [Half] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' =
+);

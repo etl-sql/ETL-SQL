@@ -3,7 +3,7 @@
 -- Demonstrates evaluating multi-condition validation rules on columns:
 --   - Compound AND: NOT NULL AND > 0
 --   - Compound OR: IN ('NA', 'EMEA') OR IN ('APAC', 'LATAM')
---   - Nested expressions: NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES ^LEGACY-)
+--   - Nested expressions: NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES '^LEGACY-')
 --
 -- Run: dotnet run --project src/ETL-SQL.App -- run samples/05_Security_Diagnostics/Compound_Quality_Rules.etlsql
 
@@ -26,10 +26,10 @@ INSERT INTO #raw_transactions (TxId, AccountCode, Amount, Status) VALUES
 -- 2. Stage and apply compound quality rules
 validate_transactions:
 SELECT
-    TxId        /* @expect: 'NOT NULL AND > 0'; @fail: 'QUARANTINE'; */,
-    AccountCode /* @expect: 'NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES ^LEGACY-)'; @fail: 'QUARANTINE'; */,
-    Amount      /* @expect: 'NOT NULL AND > 0'; @fail: 'QUARANTINE'; */,
-    Status      /* @expect: 'NOT NULL AND (MATCHES ^APP OR MATCHES ^PEND)'; @fail: 'WARN'; */
+    TxId        EXPECT NOT NULL AND > 0 ON FAILURE QUARANTINE,
+    AccountCode EXPECT NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES '^LEGACY-') ON FAILURE QUARANTINE,
+    Amount      EXPECT NOT NULL AND > 0 ON FAILURE QUARANTINE,
+    Status      EXPECT NOT NULL AND (MATCHES '^APP' OR MATCHES '^PEND') ON FAILURE WARN
 INTO #clean_transactions
 FROM #raw_transactions
 ON FAILURE QUARANTINE TO #quarantined_transactions
@@ -39,5 +39,5 @@ ON FAILURE WARN;
 PRINT '=== Clean Transactions (Passed) ===';
 SELECT TxId, AccountCode, Amount, Status FROM #clean_transactions;
 
-PRINT '=== Quarantined Transactions (Failed @fail: QUARANTINE) ===';
+PRINT '=== Quarantined Transactions (ON FAILURE QUARANTINE) ===';
 SELECT TxId, AccountCode, Amount, Status, __dq_column, __dq_rule, __dq_reason FROM #quarantined_transactions;

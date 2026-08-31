@@ -348,7 +348,7 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 | [5-Minute Quickstart](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/QUICKSTART.md) | Zero-dependency starter pipeline and environment verification |
 | [Getting Started](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/getting-started.md) | Core paradigms, connections, variables, control flow, and debugging |
 | [Report-SQL & Dashboards](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/reporting/README.md) | Dashboards, cascading slicers, parameters, RLS, and custom theming |
-| [Data Quality & Governance](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/data-quality/README.md) | Value rules (`@expect`), quarantine remediation, cross-table checks, and impact analysis |
+| [Data Quality & Governance](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/data-quality/README.md) | Value rules (`EXPECT`), quarantine remediation, cross-table checks, and impact analysis |
 | [ETL Pipelines & Orchestration](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/pipelines/README.md) | Staged vs. streaming ingestion, modular scripts, parallel runs, and unit testing |
 | [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md) | 29 production-grade, copy-pasteable ETL recipes |
 | [Task Index](https://github.com/etl-sql/ETL-SQL/blob/main/docs/task-index.md) | Goal-oriented "How do I..." locator for common tasks |

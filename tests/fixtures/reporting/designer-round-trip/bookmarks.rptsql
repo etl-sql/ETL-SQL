@@ -1,0 +1,27 @@
+-- Data prep the designer must not touch
+CREATE DATASET &sales AS (
+  SELECT region, amount FROM pg.sales
+);
+
+CREATE VISUAL v_rev AS BAR (
+    TITLE = 'Revenue by region',
+    SOURCE = &sales,
+    MAPPINGS (X = region, Y = amount)
+);
+
+CREATE PAGE [Summary] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = v_rev))
+);
+
+CREATE BOOKMARK WestQ4 AS (
+    TITLE = 'West, Q4',
+    PARAMETERS (
+        @Region = 'West',
+        @Limit = 25
+    ),
+    PAGE = Summary,
+    STATE (
+        v_rev.COLLAPSED = ON
+    ),
+    DEFAULT = ON
+);

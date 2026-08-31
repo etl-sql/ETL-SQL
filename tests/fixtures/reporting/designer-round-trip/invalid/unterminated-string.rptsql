@@ -1,0 +1,7 @@
+SELECT region, amount INTO #stage FROM pg.sales;
+
+CREATE VISUAL v_string AS BAR (
+    TITLE = 'Still typing the title,
+    SOURCE = #stage,
+    MAPPINGS (X = region, Y = amount)
+);

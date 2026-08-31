@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using ETL_SQL.Data;
 using ETL_SQL.WorkstationEditor;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace ETL_SQL.Tests.WorkstationEditor;
@@ -39,6 +40,21 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public void Options_ParseStudioLifecycleFlags()
+    {
+        using var temp = new TempWorkspace();
+        var instanceId = Guid.NewGuid();
+
+        var options = WorkstationEditorOptions.Parse(
+            [temp.Root, "--studio", "--instance-id", instanceId.ToString(), "--idle-timeout-minutes", "12"],
+            Directory.GetCurrentDirectory());
+
+        Assert.True(options.StudioMode);
+        Assert.Equal(instanceId.ToString("D"), options.InstanceId);
+        Assert.Equal(12, options.IdleShutdownMinutes);
+    }
+
+    [Fact]
     public void Workspace_RejectsTraversalAndNonScriptFiles()
     {
         using var temp = new TempWorkspace();
@@ -58,6 +74,197 @@ public sealed class WorkstationEditorTests
 
         Assert.Equal("SELECT 1;", await workspace.ReadTextAsync("nested/pipeline.etlsql", CancellationToken.None));
         Assert.Contains(workspace.ListFiles(), file => file.Path == "nested/pipeline.etlsql");
+    }
+
+    [Fact]
+    public async Task Workspace_RenameFile_PreservesFolderAndExtension()
+    {
+        using var temp = new TempWorkspace();
+        var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+        await workspace.WriteTextAsync("nested/pipeline.etlsql", "SELECT 1;", CancellationToken.None);
+
+        var renamed = workspace.RenameFile("nested/pipeline.etlsql", "daily_load");
+
+        Assert.Equal("nested/daily_load.etlsql", renamed.Path);
+        Assert.False(File.Exists(Path.Combine(temp.Root, "nested", "pipeline.etlsql")));
+        Assert.Equal("SELECT 1;", await workspace.ReadTextAsync(renamed.Path, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Workspace_RenameFile_RejectsFolderPathsAndCollisions()
+    {
+        using var temp = new TempWorkspace();
+        var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+        await workspace.WriteTextAsync("pipeline.etlsql", "SELECT 1;", CancellationToken.None);
+        await workspace.WriteTextAsync("existing.etlsql", "SELECT 2;", CancellationToken.None);
+
+        Assert.Throws<ArgumentException>(() => workspace.RenameFile("pipeline.etlsql", "nested/moved.etlsql"));
+        Assert.Throws<WorkspaceEntryConflictException>(() => workspace.RenameFile("pipeline.etlsql", "existing.etlsql"));
+        Assert.Equal("SELECT 1;", await workspace.ReadTextAsync("pipeline.etlsql", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Workspace_FolderLifecycleAndFileMove_StayInsideRoot()
+    {
+        using var temp = new TempWorkspace();
+        var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+        await workspace.WriteTextAsync("pipeline.etlsql", "SELECT 1;", CancellationToken.None);
+
+        var folder = workspace.CreateFolder("archive");
+        var moved = workspace.MoveFile("pipeline.etlsql", folder.Path);
+        var renamed = workspace.RenameEntry(folder.Path, "completed", isDirectory: true);
+
+        Assert.Equal("archive/pipeline.etlsql", moved.Path);
+        Assert.Equal("completed", renamed.Path);
+        Assert.Contains(workspace.ListFolders(), item => item.Path == "completed");
+        Assert.Equal("SELECT 1;", await workspace.ReadTextAsync("completed/pipeline.etlsql", CancellationToken.None));
+
+        workspace.DeleteEntry("completed", isDirectory: true);
+        Assert.DoesNotContain(workspace.ListFolders(), item => item.Path == "completed");
+        Assert.Empty(workspace.ListFiles());
+        Assert.Throws<UnauthorizedAccessException>(() => workspace.CreateFolder("../outside"));
+    }
+
+    [Fact]
+    public async Task Workspace_SaveRejectsAnExternalRevisionChange()
+    {
+        using var temp = new TempWorkspace();
+        var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+        await workspace.WriteTextAsync("pipeline.etlsql", "SELECT 1;", CancellationToken.None);
+        var opened = await workspace.ReadFileAsync("pipeline.etlsql", CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 2;");
+
+        var error = await Assert.ThrowsAsync<WorkspaceSaveConflictException>(() =>
+            workspace.WriteTextAsync("pipeline.etlsql", "SELECT 3;", opened.SourceRevision, CancellationToken.None));
+
+        Assert.Contains("changed outside", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("SELECT 2;", await File.ReadAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql")));
+    }
+
+    [Fact]
+    public void Lifecycle_TracksHeartbeatsDirtyDocumentsAndRuns()
+    {
+        using var temp = new TempWorkspace();
+        var lifetime = new TestHostApplicationLifetime();
+        var service = new StudioHostLifecycleService(
+            new WorkstationEditorOptions(temp.Root, null, 0, false, "token", StudioMode: true),
+            lifetime);
+
+        service.Heartbeat(new StudioHeartbeatRequest("browser-1", Dirty: true));
+        using var run = service.BeginRun();
+
+        Assert.Equal(1, service.ConnectedClients);
+        Assert.Equal(1, service.DirtyClients);
+        Assert.Equal(1, service.ActiveRuns);
+        Assert.False(service.TryRequestShutdown(force: false, out var reason));
+        Assert.Contains("active run", reason, StringComparison.OrdinalIgnoreCase);
+        Assert.False(lifetime.StopRequested);
+    }
+
+    [Fact]
+    public async Task Lifecycle_IdleShutdownWaitsUntilTheLastClientDisconnects()
+    {
+        using var temp = new TempWorkspace();
+        var lifetime = new TestHostApplicationLifetime();
+        var service = new StudioHostLifecycleService(
+            new WorkstationEditorOptions(temp.Root, null, 0, false, "token", StudioMode: true),
+            lifetime,
+            TimeSpan.FromMilliseconds(30));
+        await service.StartAsync(CancellationToken.None);
+        service.Heartbeat(new StudioHeartbeatRequest("browser-1", Dirty: false));
+        await Task.Delay(60);
+        Assert.False(lifetime.StopRequested);
+
+        service.Disconnect("browser-1");
+        await Task.Delay(100);
+
+        Assert.True(lifetime.StopRequested);
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task SessionRegistry_DiscoversHealthyProjectsAndRemovesStaleRecords()
+    {
+        using var workspace = new TempWorkspace();
+        using var registryStorage = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            workspace.Root, null, 0, false, "registry-token", StudioMode: true));
+        await app.StartAsync();
+        var port = new Uri(WorkstationEditorApp.GetListeningUrl(app)).Port;
+        var registry = new StudioSessionRegistry(registryStorage.Root);
+        var healthyRecord = new StudioSessionRecord(
+            Guid.NewGuid().ToString("D"), workspace.Root, Environment.ProcessId, port, DateTimeOffset.UtcNow,
+            new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "registry-token"));
+        await registry.WriteAsync(healthyRecord);
+        await registry.WriteAsync(new StudioSessionRecord(
+            Guid.NewGuid().ToString("D"), workspace.Root, int.MaxValue, port + 1, DateTimeOffset.UtcNow,
+            new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "stale")));
+
+        var sessions = await registry.ListHealthyAsync();
+
+        var discovered = Assert.Single(sessions);
+        Assert.Equal(healthyRecord.InstanceId, discovered.InstanceId);
+        Assert.Equal(StudioSessionRegistry.NormalizeWorkspace(workspace.Root), discovered.WorkspaceRoot);
+        Assert.Single(Directory.EnumerateFiles(registryStorage.Root, "*.json"));
+    }
+
+    [Fact]
+    public async Task SessionRegistry_KeepsDifferentProjectsAndSameProjectInstancesSeparate()
+    {
+        using var firstWorkspace = new TempWorkspace();
+        using var secondWorkspace = new TempWorkspace();
+        using var registryStorage = new TempWorkspace();
+        using var httpClient = new HttpClient(new AlwaysHealthyHandler());
+        var registry = new StudioSessionRegistry(registryStorage.Root, httpClient);
+        var firstProject = new StudioSessionRecord(
+            Guid.NewGuid().ToString("D"), firstWorkspace.Root, Environment.ProcessId, 41001, DateTimeOffset.UtcNow,
+            new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "first"));
+        var independentInstance = firstProject with
+        {
+            InstanceId = Guid.NewGuid().ToString("D"),
+            Port = 41002,
+            Authentication = new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "independent")
+        };
+        var secondProject = firstProject with
+        {
+            InstanceId = Guid.NewGuid().ToString("D"),
+            WorkspaceRoot = secondWorkspace.Root,
+            Port = 41003,
+            Authentication = new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "second")
+        };
+        await registry.WriteAsync(firstProject);
+        await registry.WriteAsync(independentInstance);
+        await registry.WriteAsync(secondProject);
+
+        var sessions = await registry.ListHealthyAsync();
+
+        Assert.Equal(3, sessions.Count);
+        Assert.Equal(2, sessions.Count(record => record.WorkspaceRoot == StudioSessionRegistry.NormalizeWorkspace(firstWorkspace.Root)));
+        Assert.Single(sessions, record => record.WorkspaceRoot == StudioSessionRegistry.NormalizeWorkspace(secondWorkspace.Root));
+        Assert.Equal(3, sessions.Select(record => record.Port).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task LifecycleApi_RefusesOrdinaryShutdownWhileClientIsDirty()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token", StudioMode: true));
+        await app.StartAsync();
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var heartbeat = new HttpRequestMessage(HttpMethod.Post, "/api/studio/heartbeat");
+        heartbeat.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        heartbeat.Content = JsonContent.Create(new StudioHeartbeatRequest("browser-1", Dirty: true));
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(heartbeat)).StatusCode);
+
+        using var shutdown = new HttpRequestMessage(HttpMethod.Post, "/api/studio/shutdown");
+        shutdown.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        shutdown.Content = JsonContent.Create(new StudioShutdownRequest());
+        var response = await client.SendAsync(shutdown);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("unsaved", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -164,8 +371,10 @@ public sealed class WorkstationEditorTests
         Assert.DoesNotContain(result!.Diagnostics, d => d.Code == "AvoidSelectStar");
     }
 
-    [Fact]
-    public async Task ScriptDag_ReturnsDesignTimeFlow()
+    [Theory]
+    [InlineData("/api/script/dag")]
+    [InlineData("/api/designer/dag")]
+    public async Task ScriptDag_ReturnsDesignTimeFlow(string route)
     {
         using var temp = new TempWorkspace();
         await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
@@ -173,10 +382,19 @@ public sealed class WorkstationEditorTests
         await app.StartAsync();
 
         using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
-        using var dag = new HttpRequestMessage(HttpMethod.Post, "/api/script/dag");
+        using var dag = new HttpRequestMessage(HttpMethod.Post, route);
         dag.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
         dag.Content = JsonContent.Create(new ScriptDagRequest(
-            "CREATE CONNECTION m AS MOCKDB();\nSELECT UserID INTO #staging FROM m.Users;",
+            """
+            CREATE CONNECTION m AS MOCKDB();
+            SELECT UserID INTO #staging FROM m.Users;
+            IF 1 = 1 BEGIN
+              SELECT UserID INTO #accepted FROM #staging;
+            END ELSE BEGIN
+              SELECT UserID INTO #rejected FROM #staging;
+            END;
+            ASSERT (SELECT COUNT(*) FROM #accepted) > 0;
+            """,
             "pipeline.etlsql"));
 
         var response = await client.SendAsync(dag);
@@ -186,6 +404,10 @@ public sealed class WorkstationEditorTests
         Assert.Contains("\"parsed\":true", body, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("CONNECT m", body, StringComparison.Ordinal);
         Assert.Contains("SELECT INTO #staging", body, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"conditional\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"type\":\"validation\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"label\":\"TRUE\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"label\":\"ELSE\"", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -313,6 +535,148 @@ public sealed class WorkstationEditorTests
         var result = await response.Content.ReadFromJsonAsync<HoverResponse>();
         Assert.NotNull(result);
         Assert.Contains("SELECT", result!.Markdown, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DesignerPrefixedHoverAndFormat_MatchTheirUnprefixedAliases()
+    {
+        // Studio speaks one route dialect on every host: /api/designer/*. Hover and format had no
+        // designer-prefixed alias here, so Studio requested names only this host served and lost
+        // both features entirely on the Portal.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var hover = new HttpRequestMessage(HttpMethod.Post, "/api/designer/hover");
+        hover.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        hover.Content = JsonContent.Create(new HoverRequest("SELECT", "SELECT 1;", 0, 0, "pipeline.etlsql"));
+        var hoverResponse = await client.SendAsync(hover);
+        hoverResponse.EnsureSuccessStatusCode();
+        var hoverResult = await hoverResponse.Content.ReadFromJsonAsync<HoverResponse>();
+        Assert.NotNull(hoverResult);
+        Assert.Contains("SELECT", hoverResult!.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        using var format = new HttpRequestMessage(HttpMethod.Post, "/api/designer/format");
+        format.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        format.Content = JsonContent.Create(new FormatRequest(
+            "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users WHERE UserID = 1;",
+            "pipeline.etlsql"));
+        var formatResponse = await client.SendAsync(format);
+        formatResponse.EnsureSuccessStatusCode();
+        var formatResult = await formatResponse.Content.ReadFromJsonAsync<FormatResponse>();
+        Assert.NotNull(formatResult);
+        Assert.Empty(formatResult!.Diagnostics);
+        Assert.Contains("CREATE CONNECTION", formatResult.Script);
+    }
+
+    [Fact]
+    public async Task Complete_OffersSnippetTemplatesFromTheSharedLibrary()
+    {
+        // End-to-end wiring check: the snippet library is embedded in Core and shared with the TUI
+        // and VS Code, but neither GUI editor surfaced it until now.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/designer/complete");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        request.Content = JsonContent.Create(new CompleteRequest("$kpi", 0, 4, "pipeline.etlsql"));
+
+        var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<CompleteResponse>();
+        Assert.NotNull(result);
+        var snippet = result!.Items.FirstOrDefault(item => item.Kind == "snippet" && item.Label == "$kpi");
+        Assert.NotNull(snippet);
+        Assert.Contains("CREATE VISUAL", snippet!.InsertText, StringComparison.Ordinal);
+    }
+
+    private const string MockDbScript = "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users;";
+
+    [Fact]
+    public async Task DataSample_ReturnsRowsForAnAuthorizedTable()
+    {
+        // Studio keeps its entire visual palette disabled until a sample exists, so without this
+        // route the desktop canvas could never be used at all.
+        using var temp = new TempWorkspace();
+        var scriptPath = Path.Combine(temp.Root, "pipeline.etlsql");
+        await File.WriteAllTextAsync(scriptPath, "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users;");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, scriptPath, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/designer/data-sample");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        request.Content = JsonContent.Create(new DataSampleRequest("connection", "m", "Users", "pipeline.etlsql", MockDbScript));
+
+        var response = await client.SendAsync(request);
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        var result = await response.Content.ReadFromJsonAsync<DataSampleResponse>();
+        Assert.NotNull(result);
+        Assert.Equal("connection", result!.SourceKind);
+        Assert.NotEmpty(result.Columns);
+        Assert.NotEmpty(result.Rows);
+    }
+
+    [Fact]
+    public async Task DataSample_RejectsATableOutsideTheConnectionSchema()
+    {
+        using var temp = new TempWorkspace();
+        var scriptPath = Path.Combine(temp.Root, "pipeline.etlsql");
+        await File.WriteAllTextAsync(scriptPath, "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users;");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, scriptPath, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/designer/data-sample");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        request.Content = JsonContent.Create(new DataSampleRequest("connection", "m", "NotARealTable", "pipeline.etlsql", MockDbScript));
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DataSample_RefreshesAParsedDatasetQuery()
+    {
+        using var temp = new TempWorkspace();
+        var scriptPath = Path.Combine(temp.Root, "report.rptsql");
+        const string script = """
+            CREATE CONNECTION m AS MOCKDB();
+            CREATE DATASET &users AS (SELECT UserId, Name FROM m.Users);
+            """;
+        await File.WriteAllTextAsync(scriptPath, script);
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, scriptPath, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/designer/data-sample");
+        request.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        request.Content = JsonContent.Create(new DataSampleRequest(
+            "dataset", null, null, "report.rptsql", script, "&users"));
+
+        var response = await client.SendAsync(request);
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        var result = await response.Content.ReadFromJsonAsync<DataSampleResponse>();
+        Assert.NotNull(result);
+        Assert.Equal("dataset", result!.SourceKind);
+        Assert.Equal(["UserId", "Name"], result.Columns);
+        Assert.NotEmpty(result.Rows);
     }
 
     [Fact]
@@ -604,9 +968,11 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
-    public void Guard_IgnoresUnparseableText() =>
+    public void Guard_IgnoresUnparseableText()
+    {
         // The run itself surfaces the parse error; the guard must not throw on the way there.
         Assert.Empty(WorkstationRunGuard.FindDestructiveStatements("this is not a script ("));
+    }
 
     [Fact]
     public async Task Run_RefusesDestructiveScriptUntilConfirmed()
@@ -741,6 +1107,54 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task GitHistoryAndDiff_CompareUnsavedContentWithLocalRevision()
+    {
+        using var temp = new TempWorkspace();
+        RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
+        RunGit(temp.Root, "config", "user.name", "Workstation Tests");
+        await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 1 AS Value;\n");
+        RunGit(temp.Root, "add", "pipeline.etlsql");
+        RunGit(temp.Root, "commit", "-m", "Add pipeline");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var historyRequest = new HttpRequestMessage(HttpMethod.Get, "/api/git/history?path=pipeline.etlsql");
+        historyRequest.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        var historyResponse = await client.SendAsync(historyRequest);
+        var history = await historyResponse.Content.ReadFromJsonAsync<GitHistoryResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+        Assert.NotNull(history);
+        Assert.True(history!.IsGitRepository);
+        var entry = Assert.Single(history.Entries);
+        Assert.Equal("Add pipeline", entry.Subject);
+
+        using var diffRequest = new HttpRequestMessage(HttpMethod.Post, "/api/git/diff");
+        diffRequest.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        diffRequest.Content = JsonContent.Create(new GitDiffRequest(
+            "pipeline.etlsql",
+            "SELECT 2 AS Value;\n-- unsaved\n",
+            entry.Revision));
+        var diffResponse = await client.SendAsync(diffRequest);
+        var diff = await diffResponse.Content.ReadFromJsonAsync<GitDiffResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, diffResponse.StatusCode);
+        Assert.NotNull(diff);
+        Assert.Equal("pipeline.etlsql", diff!.Path);
+        Assert.Equal("SELECT 1 AS Value;\n", diff.BaselineContent);
+        Assert.Contains("-- unsaved", diff.WorkingContent, StringComparison.Ordinal);
+
+        using var invalidRequest = new HttpRequestMessage(HttpMethod.Post, "/api/git/diff");
+        invalidRequest.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        invalidRequest.Content = JsonContent.Create(new GitDiffRequest("pipeline.etlsql", "SELECT 2;", "HEAD~1"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(invalidRequest)).StatusCode);
+    }
+
+    [Fact]
     public async Task GitCommit_WithTrailingBackslashMessage_CommitsSuccessfully()
     {
         using var temp = new TempWorkspace();
@@ -860,5 +1274,29 @@ public sealed class WorkstationEditorTests
                 Directory.Delete(Root, recursive: true);
             }
         }
+    }
+
+    private sealed class TestHostApplicationLifetime : IHostApplicationLifetime
+    {
+        private readonly CancellationTokenSource _started = new();
+        private readonly CancellationTokenSource _stopping = new();
+        private readonly CancellationTokenSource _stopped = new();
+
+        public bool StopRequested { get; private set; }
+        public CancellationToken ApplicationStarted => _started.Token;
+        public CancellationToken ApplicationStopping => _stopping.Token;
+        public CancellationToken ApplicationStopped => _stopped.Token;
+
+        public void StopApplication()
+        {
+            StopRequested = true;
+            _stopping.Cancel();
+        }
+    }
+
+    private sealed class AlwaysHealthyHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
     }
 }

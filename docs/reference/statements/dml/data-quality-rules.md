@@ -1,17 +1,18 @@
-# Data Quality Rules (@expect / @fail / ON FAILURE)
+# Data Quality Rules (EXPECT / ON FAILURE)
 <!-- ShowDataQualityRulesStatement -->
 
-Column-value validation declared inline on SELECT columns as governance tags, with pluggable
-failure actions. Rules are ordinary stewardship tags, so they surface everywhere tags already do —
-the tag catalog, lineage, and the stewardship read side — and their per-run impact is recorded on
-the job's history.
+Column-value validation declared inline on SELECT columns, with pluggable failure actions. Rules
+are part of the statement's grammar — a rule decides which rows leave the statement, so it is not
+something a comment can hold. They are still published to the tag catalog, lineage, and the
+stewardship read side, so a steward sees which rules protect which columns exactly as before, and
+their per-run impact is recorded on the job's history.
 
 ## Syntax
 
 ```sql
 <section_label>:
 SELECT
-    <column> /* @expect: '<rule>[, <rule>...]'; @fail: 'THROW' | 'WARN' | 'QUARANTINE'; */
+    <column> [AS <alias>] EXPECT <rule> [ON FAILURE THROW | WARN | QUARANTINE] [EXPECT ...]
 INTO <target>
 FROM <source>
 ON FAILURE QUARANTINE TO <table> [WITH (RETENTION = '<interval>' [, HANDLING = SCRIPT | STEWARD])]
@@ -21,14 +22,21 @@ ON FAILURE THROW;
 REPLAY QUARANTINE <table>;
 ```
 
-A column can carry several independent rule/action pairs by adding a matching integer suffix:
-`@expect_1` pairs with `@fail_1`, `@expect_2` with `@fail_2`, and so on. The unsuffixed
-`@expect` pairs with the unsuffixed `@fail`.
+A column carries several independent rule/action pairs by repeating the clause:
+
+```sql
+SELECT UserId EXPECT NOT NULL ON FAILURE THROW
+              EXPECT UNIQUE   ON FAILURE QUARANTINE
+```
+
+Rules are grammar, not comments — a rule decides which rows leave the statement, so no formatter or
+comment stripper can quietly remove one. Comments keep describing (`@d`, `@owner`, `@pii`); writing
+a rule as `/* @expect: … */` is a lint error, because it would look enforced and do nothing.
 
 ## Rules
 
-Combine rules on one column with top-level commas. Commas inside a `MATCHES` pattern, an `IN` list,
-or an `EXPR` function call are literal.
+Combine rules on one column with `AND` / `OR`. A comma separates columns in the select list, so it
+never separates rules; commas inside an `IN` list or a function call are the list's own.
 
 | Rule | Meaning |
 | :--- | :--- |
@@ -38,8 +46,8 @@ or an `EXPR` function call are literal.
 | `UNIQUE WITH (<col>, …)` | Uniqueness over the column tuple rather than the single column. |
 | `UNIQUE_FIRST BY <expr>` | Keep only the row with the smallest `<expr>` per duplicate group. |
 | `UNIQUE_LAST BY <expr>` | Keep only the row with the largest `<expr>` per duplicate group. |
-| `MATCHES <regex>` | Value must match the regular expression. |
-| `NOT MATCHES <regex>` | Value must **not** match the regular expression. |
+| `MATCHES '<regex>'` | Value must match the regular expression. The pattern is a quoted string. |
+| `NOT MATCHES '<regex>'` | Value must **not** match the regular expression. |
 | `IN (<list>)` | Value must be one of the listed string or numeric literals. |
 | `NOT IN (<list>)` | Value must be none of them — the placeholders a column should never carry. |
 | `EXISTS IN <table>(<column>)` | Value must exist in the reference table's key column (relationship / FK check). |
@@ -52,25 +60,29 @@ or an `EXPR` function call are literal.
 | `>=` `<=` `>` `<` `=` | Numeric comparison against a literal bound, e.g. `>= 0`. |
 
 | `<rule1> AND <rule2>` | Logical AND: both sub-rules must pass (e.g. `NOT NULL AND > 0`). |
-| `<rule1> OR <rule2>` | Logical OR: at least one sub-rule must pass (e.g. `MATCHES ^A OR MATCHES ^B`). |
+| `<rule1> OR <rule2>` | Logical OR: at least one sub-rule must pass (e.g. `MATCHES '^A' OR MATCHES '^B'`). |
 | `(<rule>)` | Parentheses for grouping and overriding operator precedence. |
 
-Quote the rule string. Because tag values keep their quotes through the comment layer, a `;`, `,`,
-or `@` inside a quoted value is literal — which is what lets regexes and `IN` lists work. To
-include the same kind of quote inside the value, double it (SQL style): `'IN (''NA'',''EMEA'')'`.
-Backslash escaping is *not* used, so `MATCHES` patterns pass through untouched.
+Rules are written as ordinary tokens, so there is no outer quoting and no doubled quotes:
+`IN ('NA','EMEA')` is written once. The one exception is `MATCHES`, whose pattern is a **string
+literal** — a bare regex cannot be tokenized, since `@` would start a variable and the operators
+would split it. Inside that literal, normal SQL string rules apply (double a `'` to include one)
+and nothing else is escaped, so patterns pass through untouched.
 
 ### Compound Rules (AND / OR)
 
 Rules can be composed with logical `AND` and `OR` operators and grouped with parentheses `(...)`:
-- **Operator Precedence**: `NOT` > `AND` (and `,`) > `OR`. `AND` binds tighter than `OR`.
-- **Parentheses**: Use parentheses to control evaluation order, e.g. `NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES ^LEGACY-)`.
+- **Operator Precedence**: `NOT` > `AND` > `OR`. `AND` binds tighter than `OR`.
+- **Reporting granularity**: a top-level `AND` is unrolled into independent rules, so each conjunct
+  reports its own failures and appears as its own row in the rule catalog. Parenthesize or use `OR`
+  to keep a compound rule together.
+- **Parentheses**: Use parentheses to control evaluation order, e.g. `NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR MATCHES '^LEGACY-')`.
 - **Three-Valued Logic**: `NULL` values skip all non-`NOT NULL` rules.
-- **Internal Keywords**: The `AND` keyword inside `BETWEEN <lower> AND <upper>` and `LENGTH BETWEEN <min> AND <max>` is automatically preserved as part of the range rather than parsed as a rule conjunction.
+- **Internal Keywords**: `BETWEEN <lower> AND <upper>` and `LENGTH BETWEEN <min> AND <max>` consume their own `AND` while parsing their bounds, so it is always the range's separator and never a rule conjunction.
 
 ### Rule semantics
 
-- **Rules validate the projected value.** `SELECT UPPER(Email) /* @expect: 'MATCHES …' */`
+- **Rules validate the projected value.** `SELECT UPPER(Email) EXPECT MATCHES '…'`
   validates the uppercased value.
 - **NULL skips every rule except `NOT NULL`** (the SQL `CHECK`-constraint convention, matching dbt's
   `accepted_values`). Pair with `NOT NULL` explicitly to reject NULLs — otherwise every nullable
@@ -103,11 +115,12 @@ Rules can be composed with logical `AND` and `OR` operators and grouped with par
   as well as `EXISTS WITH`.
 - **Numeric comparisons are decimal** at runtime.
 - **`MATCHES` patterns compile with non-backtracking regex.** A per-row user-supplied regex is
-  otherwise a denial-of-service vector. Backreferences and lookaround are rejected at lint time.
+  otherwise a denial-of-service vector. Backreferences and lookaround are rejected when the script
+  is parsed, so a ReDoS-prone pattern never reaches a run.
 
 ## Actions
 
-`@fail` selects what happens to a failing row. When `@expect` is present but `@fail` is omitted,
+`ON FAILURE` selects what happens to a failing row. When a rule is written with no action,
 the action defaults to **`WARN`** — fail-safe, not silent.
 
 | Action | Effect |
@@ -137,7 +150,7 @@ still carry their `__dq_*` context, so a later statement in the same run can rea
 and act on them:
 
 ```sql
-SELECT CustomerId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Region
+SELECT CustomerId EXPECT NOT NULL ON FAILURE QUARANTINE, Region
 INTO clean_orders
 FROM raw_orders
 ON FAILURE QUARANTINE TO #needs_default WITH (HANDLING = SCRIPT);
@@ -156,10 +169,9 @@ The section-label and durable-target requirements both exist to serve remediatio
 so neither applies under `SCRIPT`. Per-run quality metrics are recorded either way — counts, never
 sample values.
 
-**Validation is symmetric.** A `@fail: 'QUARANTINE'` with no matching `ON FAILURE QUARANTINE TO`
-clause is an error, *and* an `ON FAILURE` clause with no matching `@fail` rule is equally an error.
-This is deliberate: if a formatter or tool strips the comment tags, the orphaned clause breaks the
-script loudly instead of silently disabling enforcement.
+**Validation is symmetric.** A column electing `ON FAILURE QUARANTINE` with no matching statement
+`ON FAILURE QUARANTINE TO` clause is an error, *and* a statement clause no column elects is equally
+an error — routing that nothing uses reads as enforcement that is not happening.
 
 ## Capture schema
 
@@ -237,9 +249,10 @@ Retention applies only to terminal `warned`, `replayed`, or `discarded` rows in 
 - **PII values never leave the quarantine table.** Sample values from a `@pii`-tagged column are
   masked in warnings, logs, `__dq_value`, and alert payloads. The full value survives only inside
   the capture table, which needs the same access controls as its source.
-- **Known limitation — comment stripping.** `WARN`- and `THROW`-only rules with no trailing
-  `ON FAILURE` clause vanish silently if a downstream tool strips SQL comments. Rules routed
-  through an `ON FAILURE` clause are protected by the symmetric check above.
+- **Rules survive tooling.** Because a rule is part of the statement rather than a comment, no
+  formatter, comment stripper, or copy-paste through another editor can quietly remove enforcement —
+  a tool that mangles a rule produces a syntax error instead of a script that silently stops
+  checking. Descriptive tags stay strippable by design; that is the difference between the two.
 
 ## Per-run metrics
 
@@ -253,12 +266,11 @@ counts only.
 -- Validate a user import, routing failures three different ways
 import_users:
 SELECT
-    UserId   /* @expect: 'NOT NULL'; @fail: 'THROW';
-                @expect_1: 'UNIQUE'; @fail_1: 'QUARANTINE'; */,
-    Email    /* @expect: 'MATCHES ^[^@]+@[^@]+$'; @fail: 'QUARANTINE'; */,
-    Age      /* @expect: '>= 0, <= 120'; @fail: 'WARN'; */,
-    Region   /* @expect: "IN ('NA','EMEA','APAC')"; @fail: 'QUARANTINE'; */,
-    RegionId /* @expect: 'EXISTS IN dim_region(Id)'; @fail: 'QUARANTINE'; */
+    UserId   EXPECT NOT NULL ON FAILURE THROW EXPECT UNIQUE ON FAILURE QUARANTINE,
+    Email    EXPECT MATCHES '^[^@]+@[^@]+$' ON FAILURE QUARANTINE,
+    Age      EXPECT >= 0 AND <= 120 ON FAILURE WARN,
+    Region   EXPECT IN ('NA','EMEA','APAC') ON FAILURE QUARANTINE,
+    RegionId EXPECT EXISTS IN dim_region(Id) ON FAILURE QUARANTINE
 INTO clean_users
 FROM raw_users
 ON FAILURE QUARANTINE TO quarantine_users WITH (RETENTION = '30 DAYS')
@@ -270,7 +282,7 @@ ON FAILURE THROW;
 -- Deduplicate an event feed, keeping the earliest row per event
 load_events:
 SELECT
-    EventId /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @fail: 'QUARANTINE'; */,
+    EventId EXPECT UNIQUE_FIRST BY LoadedAt ON FAILURE QUARANTINE,
     LoadedAt,
     Payload
 INTO clean_events
@@ -281,7 +293,7 @@ ON FAILURE QUARANTINE TO quarantine_events WITH (RETENTION = '14 DAYS');
 ```sql
 -- Diagnostic-only mode: warn without storing any rows
 SELECT
-    Amount /* @expect: '>= 0'; @fail: 'WARN'; */,
+    Amount EXPECT >= 0 ON FAILURE WARN,
     Currency
 INTO staged_payments
 FROM raw_payments
@@ -292,9 +304,9 @@ ON FAILURE WARN;
 -- Cross-column check and a composite uniqueness key
 load_bookings:
 SELECT
-    TenantId  /* @expect: 'UNIQUE WITH (TenantId, BookingRef)'; @fail: 'QUARANTINE'; */,
+    TenantId  EXPECT UNIQUE WITH (TenantId, BookingRef) ON FAILURE QUARANTINE,
     BookingRef,
-    StartDate /* @expect: 'EXPR StartDate <= EndDate'; @fail: 'QUARANTINE'; */,
+    StartDate EXPECT EXPR StartDate <= EndDate ON FAILURE QUARANTINE,
     EndDate
 INTO clean_bookings
 FROM raw_bookings
@@ -306,8 +318,7 @@ ON FAILURE QUARANTINE TO quarantine_bookings WITH (RETENTION = '30 DAYS');
 -- belongs to a different tenant, which is precisely the row this check exists to catch.
 load_orders:
 SELECT
-    TenantId   /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN dim_customer(TenantId, CustomerId)';
-                  @fail: 'QUARANTINE'; */,
+    TenantId   EXPECT EXISTS WITH (TenantId, CustomerId) IN dim_customer(TenantId, CustomerId) ON FAILURE QUARANTINE,
     CustomerId,
     Amount
 INTO clean_orders

@@ -1,0 +1,14 @@
+-- Line-ending fixture. The line endings are pinned in .gitattributes so a Windows
+-- checkout cannot rewrite what this lane compares. A round trip must preserve them
+-- exactly and must not accumulate blank lines.
+SELECT region, amount INTO #stage FROM pg.sales;
+
+CREATE VISUAL v_lf AS BAR (
+    TITLE = 'Line endings',
+    SOURCE = #stage,
+    MAPPINGS (X = region, Y = amount)
+);
+
+CREATE PAGE [LineEndings] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = v_lf))
+);

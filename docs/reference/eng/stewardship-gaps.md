@@ -18,7 +18,7 @@ WHERE scope_type = 'TABLE';
 | `component` | Score component that owns the unmet requirement. |
 | `target_table` | Affected target table or asset. |
 | `target_column` | Affected column, when applicable. |
-| `requirement` | Missing tag or rule, such as `@owner|@steward|@contact`, `@classification`, or `@expect`. |
+| `requirement` | Missing tag or rule, such as `@owner|@steward|@contact`, `@classification`, or an `EXPECT` rule. |
 | `source_file` | Script or scanned schema source when known. |
 | `line` | One-based source line when known; legacy catalog entries may report zero. |
 | `evaluated_at_utc` | UTC evaluation timestamp shared with the score calculation. |

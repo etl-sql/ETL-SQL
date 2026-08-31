@@ -1720,7 +1720,7 @@ public sealed class DataQualityRulesDataSource : IDataSource
 {
     private readonly Evaluator _evaluator;
     private static readonly string[] Columns = [
-        "target_table", "target_column", "rule_tag", "rule", "action", "source_file", "line"
+        "target_table", "target_column", "rule_clause", "rule", "action", "source_file", "line"
     ];
 
     public DataQualityRulesDataSource(Evaluator evaluator) => _evaluator = evaluator;
@@ -1764,7 +1764,7 @@ public sealed class DataQualityRulesDataSource : IDataSource
                     var row = new Row();
                     row["target_table"] = entry.TargetTable;
                     row["target_column"] = entry.TargetColumn;
-                    row["rule_tag"] = "@" + binding.ExpectKey;
+                    row["rule_clause"] = binding.ClauseLabel;
                     row["rule"] = rule.Text;
                     row["action"] = binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)");
                     row["source_file"] = entry.SourceFile;

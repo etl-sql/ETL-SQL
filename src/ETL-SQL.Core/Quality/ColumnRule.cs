@@ -7,8 +7,33 @@ namespace ETL_SQL.Core.Quality;
 /// <summary>Uniqueness variants for <see cref="UniqueRule"/>.</summary>
 public enum UniqueMode { All, First, Last }
 
-/// <summary>What happens to a row when a rule fails (bound via the <c>@fail</c> tag).</summary>
-public enum FailAction { Throw, Warn, Quarantine }
+/// <summary>
+/// What happens when a data-quality check fails. One vocabulary across the whole feature: a column
+/// rule elects one of these, the statement's trailing <c>ON FAILURE</c> blocks route them, and
+/// <c>ASSERT JOB</c> declares them the same way. Each surface accepts the subset that is meaningful
+/// there and rejects the rest with a message naming the surface that does accept it.
+/// </summary>
+public enum FailAction
+{
+    /// <summary>Raise an error and abort. The only action that fails a run.</summary>
+    Throw,
+
+    /// <summary>
+    /// Record and continue — the default everywhere an action can be omitted, so an author who
+    /// writes a rule and forgets the action gets fail-safe behaviour rather than silence.
+    /// </summary>
+    Warn,
+
+    /// <summary>Remove the row from the output and write it to the routing target. Column rules only.</summary>
+    Quarantine,
+
+    /// <summary>
+    /// Post a summary through a named Orchestrator notification. Non-fatal on its own — "worth
+    /// telling someone about, not worth stopping for". <c>ASSERT JOB</c> only: a per-statement
+    /// notification would fire once per materializing statement, which is an alert-storm generator.
+    /// </summary>
+    Notify
+}
 
 /// <summary>
 /// Who owns a quarantined row, selected by <c>WITH (HANDLING = …)</c> on the
@@ -32,11 +57,11 @@ public enum QuarantineHandling
     Script
 }
 
-/// <summary>Comparison operators supported by numeric <c>@expect</c> rules.</summary>
+/// <summary>Comparison operators supported by numeric rules.</summary>
 public enum CompareOp { GreaterOrEqual, LessOrEqual, Greater, Less, Equal }
 
 /// <summary>
-/// One parsed <c>@expect</c> rule attached to a SELECT column. Rules validate the projected
+/// One parsed rule from a column's <c>EXPECT</c> clause. Rules validate the projected
 /// (post-expression) value; NULL values skip every rule except <see cref="NotNullRule"/>.
 /// <see cref="Text"/> preserves the original rule segment for diagnostics and the
 /// <c>__dq_rule</c> quarantine column.
@@ -223,16 +248,49 @@ public static class ColumnRuleExtensions
 }
 
 /// <summary>
-/// One <c>@expect</c>/<c>@fail</c> pair resolved from a column's metadata: the parsed rules,
-/// the bound action (default <see cref="FailAction.Warn"/> when <c>@fail</c> is omitted —
+/// One rule/action pair: the parsed rules,
+/// the bound action (default <see cref="FailAction.Warn"/> when none is written —
 /// fail-safe, not silent), and the metadata key it came from (<c>expect</c>, <c>expect_1</c>, …).
 /// </summary>
+/// <summary>
+/// One <c>EXPECT &lt;rule&gt; [ON FAILURE &lt;action&gt;]</c> clause as written on a select column.
+/// A column carries these in written order; repetition is how a column declares several distinct
+/// rule/action pairs, replacing the numbered <c>@expect_N</c>/<c>@fail_N</c> tag pairing.
+/// </summary>
+/// <param name="Rules">The rules in this clause. Several only when combined with AND/OR.</param>
+/// <param name="Action">
+/// What happens to a failing row. Defaults to <see cref="FailAction.Warn"/> when the author wrote
+/// no <c>ON FAILURE</c> — fail-safe, not silent.
+/// </param>
+/// <param name="ActionExplicit">
+/// False when the action was defaulted. Kept so diagnostics and the serializer can tell a written
+/// <c>ON FAILURE WARN</c> from an omitted one.
+/// </param>
+/// <param name="Text">The clause's rule text as written, for diagnostics and the tag projection.</param>
+public sealed record ColumnExpectClause(
+    IReadOnlyList<ColumnRule> Rules,
+    FailAction Action,
+    bool ActionExplicit,
+    string Text) : AstNode;
+
 public sealed record ColumnRuleBinding(
     string ExpectKey,
     IReadOnlyList<ColumnRule> Rules,
     FailAction Action,
-    bool ActionExplicit);
+    bool ActionExplicit)
+{
+    /// <summary>
+    /// How this rule's clause is named on read-side surfaces: <c>EXPECT</c> for a column's first
+    /// clause, <c>EXPECT #2</c> for its second, and so on. The projection key stays
+    /// <c>expect</c>/<c>expect_1</c> because that is the tag lineage stores; what a steward is
+    /// shown is the clause they would find in the script.
+    /// </summary>
+    public string ClauseLabel =>
+        ExpectKey.IndexOf('_') is var underscore && underscore < 0
+            ? "EXPECT"
+            : $"EXPECT #{(int.TryParse(ExpectKey[(underscore + 1)..], out var n) ? n + 1 : 1)}";
+}
 
-/// <summary>Raised when an <c>@expect</c>/<c>@fail</c> tag value cannot be parsed. The linter
+/// <summary>Raised when a projected rule tag value cannot be parsed. The read side
 /// surfaces the message as a <c>Diagnostic(Error)</c>; the runtime treats it as a hard error.</summary>
 public sealed class ColumnRuleParseException(string message) : Exception(message);

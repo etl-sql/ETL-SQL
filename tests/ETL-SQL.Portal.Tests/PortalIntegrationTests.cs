@@ -1522,7 +1522,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var jobName = $"rules_{suffix}";
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"rules_{suffix}.etlsql");
         await File.WriteAllTextAsync(scriptPath, """
-            SELECT Id /* @expect: 'NOT NULL, >= 0'; @fail: 'QUARANTINE'; */
+            SELECT Id EXPECT NOT NULL AND >= 0 ON FAILURE QUARANTINE
             INTO #clean FROM #source
             ON FAILURE QUARANTINE TO #quarantine;
             """);
@@ -1538,7 +1538,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         {
             Assert.Equal("#clean", rule.TargetTable);
             Assert.Equal("Id", rule.TargetColumn);
-            Assert.Equal("@expect", rule.RuleTag);
+            Assert.Equal("EXPECT", rule.RuleClause);
             Assert.Equal("QUARANTINE", rule.Action);
         });
     }

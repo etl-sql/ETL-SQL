@@ -26,6 +26,7 @@ Treats `NULL` arguments as empty strings.
 
 - `NULL` arguments do not propagate `NULL`, unlike the `+` operator.
 - Non-string arguments are implicitly coerced to `STRING`.
+- Use the `||` operator when either `NULL` operand should make the whole expression `NULL`.
 
 ## Examples
 
@@ -36,6 +37,11 @@ SELECT CONCAT('Hello', ' ', 'World') AS greeting;
 ```sql
 SELECT CONCAT(first_name, ' ', last_name) AS full_name
 FROM #customers;
+```
+
+```sql
+SELECT 'Dept ' || department_id AS department_label
+FROM #departments;
 ```
 
 ## References

@@ -216,7 +216,7 @@ public sealed class DataQualityController(
                     rules.Add(new DataQualityRuleDefinitionDto(
                         entry.Target,
                         entry.TargetColumn,
-                        "@" + binding.ExpectKey,
+                        binding.ClauseLabel,
                         rule.Text,
                         binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)"),
                         scriptPath,
@@ -270,7 +270,7 @@ public sealed class DataQualityController(
                             rules.Add(new DataQualityRuleDefinitionDto(
                                 entry.Target,
                                 entry.TargetColumn,
-                                "@" + binding.ExpectKey,
+                                binding.ClauseLabel,
                                 rule.Text,
                                 binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)"),
                                 scriptPath,

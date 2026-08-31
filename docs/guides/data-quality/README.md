@@ -10,7 +10,7 @@ ETL-SQL provides deep value-level validation, anomaly detection, quarantine rout
 
 | Guide | Description |
 | :--- | :--- |
-| [Column Quality Rules](column-quality-rules.md) | Declare inline `@expect` / `@fail` rules for null checks, regex patterns, range boundaries, and castability. |
+| [Column Quality Rules](column-quality-rules.md) | Declare inline `EXPECT` rules for null checks, regex patterns, range boundaries, and castability. |
 | [Quarantine & Remediation](quarantine-and-remediation.md) | Divert invalid rows to durable capture tables, inspect `__dq_*` metadata, and reprocess with `REPLAY QUARANTINE`. |
 | [Multi-Row & Cross-Table Rules](multi-row-and-cross-table-rules.md) | Enforce `UNIQUE_FIRST BY`, composite uniqueness, cross-table `EXISTS IN`, and scoped multi-tenant boundaries. |
 | [Run-Level Assertions (`ASSERT JOB`)](run-level-assertions.md) | Evaluate load volume anomalies against historical baselines, freshness thresholds, and notification transitions. |

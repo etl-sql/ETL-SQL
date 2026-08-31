@@ -30,6 +30,11 @@ public sealed class PortalBrowserFactory : PortalWebFactory
     /// <summary>Absolute base URL the browser should navigate to, e.g. <c>http://127.0.0.1:53124</c>.</summary>
     public string ServerAddress { get; private set; } = string.Empty;
 
+    protected override void CustomizeConfiguration(Dictionary<string, string?> settings)
+    {
+        settings["Governance:ConnectionCatalog:Provider"] = "Portal";
+    }
+
     protected override IHost CreateHost(IHostBuilder builder)
     {
         // Build the TestServer host first: once the builder is switched to Kestrel below, the

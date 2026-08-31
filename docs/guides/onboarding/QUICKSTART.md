@@ -97,5 +97,5 @@ etl-sql-tui
 
 - [Thinking in Pipelines](getting-started.md) — Understand the multi-context engine model.
 - [Authoring Dashboards](../reporting/authoring-dashboards.md) — Build interactive visual reports.
-- [Data Quality Column Rules](../data-quality/column-quality-rules.md) — Add `@expect` validation rules.
+- [Data Quality Column Rules](../data-quality/column-quality-rules.md) — Add `EXPECT` validation rules.
 - [Data Connectors Reference](../../reference/connectors/README.md) — Connect to PostgreSQL, SQL Server, SFTP, and APIs.

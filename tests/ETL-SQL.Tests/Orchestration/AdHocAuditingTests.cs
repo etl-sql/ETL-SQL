@@ -398,7 +398,7 @@ namespace ETL_SQL.Tests.Orchestration
                   CustomerId INT /* @owner: 'sales'; @steward: 'data-office' */
                 );
                 INSERT INTO #source (CustomerId) VALUES (NULL);
-                SELECT CustomerId /* @owner: 'sales'; @steward: 'data-office'; @expect: 'NOT NULL'; @fail: 'THROW' */
+                SELECT CustomerId EXPECT NOT NULL ON FAILURE THROW /* @owner: 'sales'; @steward: 'data-office'; */
                 INTO #clean FROM #source;
                 """);
 

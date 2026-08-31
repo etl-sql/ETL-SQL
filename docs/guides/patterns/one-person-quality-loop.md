@@ -4,7 +4,7 @@ This workflow gives one operator a source-controlled pipeline, policy, non-zero 
 
 The runnable files are in [`samples/quality-loop`](../../../samples/quality-loop):
 
-- `customer_quality.etlsql` — staged transform, stewardship tags, `@expect` rules, quarantine routing, and `ASSERT JOB`.
+- `customer_quality.etlsql` — staged transform, stewardship tags, `EXPECT` rules, quarantine routing, and `ASSERT JOB`.
 - `etlsql-policy.json` — required tags, classifier patterns, thresholds, and visible score weights.
 - `register_schedule.etlsql` — local SQLite Orchestrator schedule and job registration.
 - [`data_quality_health.rptsql`](../../../samples/08_Reporting/data_quality_health.rptsql) — counts-only run status, failures, trends, and freshness.
@@ -85,7 +85,7 @@ CREATE NOTIFICATION data_quality_alerts USING quality_alerts
 
 ASSERT JOB customer_quality (QUARANTINE_PERCENT < 0.01)
 ON FAILURE NOTIFY data_quality_alerts
-ON CRITICAL_FAILURE THROW;
+ON FAILURE THROW;
 ```
 
 No alert or history record includes failed values. Quarantine rows are available only through the separately authorized quarantine target.

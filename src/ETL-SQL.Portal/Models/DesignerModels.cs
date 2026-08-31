@@ -28,6 +28,27 @@ public record CompleteDesignerRequest(
 
 public record CompleteDesignerResponse(IReadOnlyList<DesignerCompletionItem> Items);
 
+public record HoverDesignerRequest(
+    string? Word,
+    string? Script = null,
+    int Line = 0,
+    int Column = 0,
+    string? DocumentUri = null);
+
+public record HoverDesignerResponse(string? Markdown, string? Kind = null);
+
+public record FormatDesignerRequest(
+    string Script,
+    string? DocumentUri = null);
+
+/// <param name="Diagnostics">Reasons the script could not be formatted; empty on success.</param>
+/// <remarks>
+/// Shape-compatible with the desktop host's <c>FormatResponse</c> so Studio consumes one contract.
+/// </remarks>
+public record FormatDesignerResponse(string Script, IReadOnlyList<FormatDesignerDiagnostic> Diagnostics);
+
+public record FormatDesignerDiagnostic(string Message);
+
 public record DesignerCompletionItem(
     string Label,
     string InsertText,
@@ -61,7 +82,8 @@ public record DesignerDataPreviewRequest(
     string? Table = null,
     string? TempTable = null,
     string? Script = null,
-    string? DocumentUri = null);
+    string? DocumentUri = null,
+    string? Dataset = null);
 
 public record DesignerDataPreviewResponse(
     string SourceKind,
@@ -149,7 +171,20 @@ public record DesignerPageDto(
     string Id,
     string Name,
     string Mode,
-    List<DesignerVisualDto> Visuals);
+    List<DesignerVisualDto> Visuals,
+    DesignerPageLayoutDto? PrintLayout = null);
+
+public record DesignerPageLayoutDto(
+    string? PageSize = null,
+    string? Orientation = null,
+    decimal? MarginTop = null,
+    decimal? MarginRight = null,
+    decimal? MarginBottom = null,
+    decimal? MarginLeft = null,
+    string? Units = null,
+    string? Overflow = null,
+    decimal? CustomWidth = null,
+    decimal? CustomHeight = null);
 
 public record DesignerVisualDto(
     string Id,
@@ -168,7 +203,9 @@ public record DesignerVisualDto(
 public record DesignerDatasetDto(
     string Id,
     string Name,
-    string Query);
+    string Query,
+    string? RefreshInterval = null,
+    string? Ttl = null);
 
 public record ScriptContentRequest(string ScriptText, string? BaseRevision = null);
 

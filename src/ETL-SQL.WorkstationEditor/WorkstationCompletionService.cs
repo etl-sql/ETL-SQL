@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ETL_SQL.Analysis.Services;
 using ETL_SQL.Core.Services;
 
 namespace ETL_SQL.WorkstationEditor;
@@ -26,10 +27,22 @@ public sealed class WorkstationCompletionService(
             DocumentUri = documentUri
         });
 
-        var items = suggestions
-            .Take(100)
-            .Select(s => ToCompletionItem(s, prefix, currentLine, request.Column))
+        // Snippets lead: a `$trigger` match is an explicit request for that template, so burying it
+        // under keyword suggestions would make the library undiscoverable in the GUI editors.
+        var items = SnippetCompletionSource.GetMatches(scriptBefore, prefix)
+            .Select(snippet => new CompletionItemResponse(
+                snippet.Trigger,
+                snippet.TuiBody,
+                "snippet",
+                snippet.Label,
+                snippet.Description,
+                Math.Max(0, request.Column - prefix.Length),
+                request.Column))
             .ToList();
+
+        items.AddRange(suggestions
+            .Take(100)
+            .Select(s => ToCompletionItem(s, prefix, currentLine, request.Column)));
 
         return new CompleteResponse(items);
     }

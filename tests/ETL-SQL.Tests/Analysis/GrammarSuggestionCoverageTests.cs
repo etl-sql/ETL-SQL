@@ -149,16 +149,15 @@ namespace ETL_SQL.Tests.Analysis
                 files.AddRange(Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories));
             }
 
-            var sqlBlock = new Regex(@"```sql\r?\n(.*?)\r?\n```", RegexOptions.Singleline);
             foreach (var file in files)
             {
                 var relPath = Path.GetRelativePath(repoRoot, file).Replace('\\', '/');
-                foreach (Match match in sqlBlock.Matches(File.ReadAllText(file)))
+                foreach (var block in DocumentationSyntaxTests.ExtractSqlBlocks(File.ReadAllText(file)))
                 {
-                    var block = match.Groups[1].Value.Trim();
-                    if (!string.IsNullOrWhiteSpace(block))
+                    var trimmed = block.Trim();
+                    if (!string.IsNullOrWhiteSpace(trimmed))
                     {
-                        yield return (block, relPath);
+                        yield return (trimmed, relPath);
                     }
                 }
             }

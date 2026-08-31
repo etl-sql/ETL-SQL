@@ -279,7 +279,7 @@ public interface IDataContext
     bool CaseSensitiveComparison { get; set; }
 
     /// <summary>
-    /// When true, <c>@expect</c> rules are evaluated and counted but never enforced: no row is
+    /// When true, <c>EXPECT</c> rules are evaluated and counted but never enforced: no row is
     /// diverted, no capture table is written, and THROW does not abort. Lets a steward measure a
     /// new rule's impact against real data before it can affect a production load.
     /// Settable via <c>SET DATA_QUALITY_DRY_RUN</c>.
@@ -290,7 +290,7 @@ public interface IDataContext
     List<object?>? Parameters { get; set; }
 
     /// <summary>
-    /// Per-run data-quality outcomes accumulated by <c>@expect</c> rule enforcement: aggregated
+    /// Per-run data-quality outcomes accumulated by <c>EXPECT</c> rule enforcement: aggregated
     /// per-(column, rule) failure counts with capped samples, plus quarantine/warn row tallies.
     /// Always non-null; stays empty (and costs nothing) when no statement carries rules.
     /// </summary>

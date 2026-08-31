@@ -8,6 +8,8 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 
+using ETL_SQL.Core.Quality;
+
 namespace ETL_SQL.Core.Services;
 
 public enum SuggestionType
@@ -233,6 +235,7 @@ public class LanguageService : ILanguageService
             }
 
             results.AddRange(GetTagValueSuggestions(context.ScriptBefore));
+            results.AddRange(GetExpectClauseSuggestions(context.ScriptBefore));
         }
         catch { }
         return results;
@@ -240,7 +243,8 @@ public class LanguageService : ILanguageService
 
     /// <summary>
     /// Value completions inside a governance tag: the allowed enum values for catalog enum tags
-    /// (e.g. <c>@fail: 'THROW'</c>), and the rule-grammar starters for <c>@expect</c>. Returns
+    /// (e.g. <c>@classification: 'restricted'</c>). Rule vocabulary lives in the EXPECT clause
+    /// completions instead. Returns
     /// nothing unless the cursor sits right after a <c>@tag:</c> inside a comment tag.
     /// </summary>
     private static List<Suggestion> GetTagValueSuggestions(string? scriptBefore)
@@ -256,22 +260,14 @@ public class LanguageService : ILanguageService
         var quote = match.Groups["quote"].Success ? match.Groups["quote"].Value : "'";
         var partial = match.Groups["partial"].Value.TrimStart();
 
-        IEnumerable<string> values;
-        if (tagName.Equals("expect", StringComparison.OrdinalIgnoreCase)
-            || System.Text.RegularExpressions.Regex.IsMatch(tagName, @"^expect_\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-        {
-            values = ["NOT NULL", "NOT BLANK", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ",
-                      "UNIQUE_LAST BY ", "MATCHES ", "NOT MATCHES ", "IN (", "NOT IN (",
-                      "EXISTS IN ", "EXISTS WITH (",
-                      "LENGTH BETWEEN ", "LENGTH >= ", "LENGTH <= ", "CASTABLE AS ", "BETWEEN ",
-                      "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
-        }
-        else
-        {
-            var definition = ETL_SQL.Common.StewardshipTagCatalog.Resolve(tagName);
-            if (definition is not { ValueKind: ETL_SQL.Common.StewardshipTagValueKind.Enum }) return results;
-            values = definition.AllowedValues;
-        }
+        // expect/fail are projected onto lineage, never authored: a rule written as a tag is inert,
+        // so completing one here would help an author into a silent failure. GetExpectClauseSuggestions
+        // offers the same vocabulary where it actually enforces something.
+        if (ColumnRuleParser.IsRuleTagKey(tagName)) return results;
+
+        var definition = ETL_SQL.Common.StewardshipTagCatalog.Resolve(tagName);
+        if (definition is not { ValueKind: ETL_SQL.Common.StewardshipTagValueKind.Enum }) return results;
+        IEnumerable<string> values = definition.AllowedValues;
 
         foreach (var value in values.Where(v =>
                      partial.Length == 0 || v.StartsWith(partial, StringComparison.OrdinalIgnoreCase)))
@@ -283,6 +279,54 @@ public class LanguageService : ILanguageService
                 Documentation: GetTagDocumentation(ETL_SQL.Common.StewardshipTagCatalog.Canonicalize(tagName))));
         }
         return results;
+    }
+
+    /// <summary>
+    /// Completions inside a column's <c>EXPECT</c> clause: the rule vocabulary right after
+    /// <c>EXPECT</c>, and the three column actions after <c>ON FAILURE</c>. Rules are grammar now,
+    /// so this is where the vocabulary belongs — a completion list is one of the few places an
+    /// author discovers a language, and offering rules only inside comments taught the wrong form.
+    /// </summary>
+    private static List<Suggestion> GetExpectClauseSuggestions(string? scriptBefore)
+    {
+        var results = new List<Suggestion>();
+        if (string.IsNullOrEmpty(scriptBefore)) return results;
+
+        // Inside a comment tag this text is documentation, not grammar — say nothing.
+        var lastOpen = scriptBefore.LastIndexOf("/*", StringComparison.Ordinal);
+        if (lastOpen >= 0 && scriptBefore.IndexOf("*/", lastOpen, StringComparison.Ordinal) < 0) return results;
+
+        var action = System.Text.RegularExpressions.Regex.Match(
+            scriptBefore, @"\bON\s+FAILURE\s+(?<partial>\w*)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (action.Success)
+        {
+            // Only inside a select list: after the query body ON FAILURE is the routing clause,
+            // which takes a target as well and is completed by the statement-level path.
+            foreach (var value in new[] { "THROW", "WARN", "QUARANTINE" })
+                Add(results, value, action.Groups["partial"].Value);
+            return results;
+        }
+
+        var expect = System.Text.RegularExpressions.Regex.Match(
+            scriptBefore, @"\bEXPECT\s+(?<partial>[\w>=<]*)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!expect.Success) return results;
+
+        foreach (var value in new[]
+                 {
+                     "NOT NULL", "NOT BLANK", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ",
+                     "UNIQUE_LAST BY ", "MATCHES ", "NOT MATCHES ", "IN (", "NOT IN (",
+                     "EXISTS IN ", "EXISTS WITH (", "LENGTH BETWEEN ", "LENGTH >= ", "LENGTH <= ",
+                     "CASTABLE AS ", "BETWEEN ", "EXPR ", ">= ", "<= ", "> ", "< ", "= "
+                 })
+            Add(results, value, expect.Groups["partial"].Value);
+
+        return results;
+
+        static void Add(List<Suggestion> into, string value, string partial)
+        {
+            if (partial.Length > 0 && !value.StartsWith(partial, StringComparison.OrdinalIgnoreCase)) return;
+            into.Add(new Suggestion(value, SuggestionType.Keyword, Priority: 0));
+        }
     }
 
     private static string? GetTagDocumentation(string tag) => tag switch
@@ -309,22 +353,11 @@ public class LanguageService : ILanguageService
         "source_table" => "**@source_table** `dbo.Orders` — Originating table.",
         "source_column" => "**@source_column** `cust_id` — Original column name in the source system before any ETL renaming.",
         "load_pattern" => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
-        "expect" => "**@expect** `'<rule>[, <rule>...]'` — Enforced data-quality rule on this column. "
-            + "Rules: `NOT NULL`, `NOT BLANK`, `UNIQUE`, `UNIQUE WITH (cols)`, "
-            + "`UNIQUE_FIRST|UNIQUE_LAST BY <expr>`, `MATCHES <regex>`, `NOT MATCHES <regex>`, "
-            + "`IN (<list>)`, `NOT IN (<list>)`, "
-            + "`EXISTS IN table(col)`, `EXISTS WITH (cols) IN table(cols)`, "
-            + "`LENGTH BETWEEN <min> AND <max>`, `LENGTH <compare> <n>`, `CASTABLE AS <type>`, "
-            + "`BETWEEN <lower> AND <upper>`, "
-            + "`EXPR <predicate>`, and `>= <= > < =` compares. "
-            + "Quote the value; NULL skips every rule except `NOT NULL`. Pair with `@fail` (default `WARN`). "
-            + "Numbered variants `@expect_1`, `@expect_2`, ... declare additional rules on the same column.",
-        "fail" => "**@fail** `THROW|WARN|QUARANTINE` — What happens to a row failing the paired `@expect` rule. "
-            + "`THROW` aborts the statement; `WARN` lets the row through and aggregates a warning; "
-            + "`QUARANTINE` diverts the row to the `ON FAILURE QUARANTINE TO <table>` target — add "
-            + "`WITH (HANDLING = SCRIPT)` there when this run remediates the rows itself, so no "
-            + "replay manifest or steward-queue item is recorded. "
-            + "Defaults to `WARN` when omitted. `QUARANTINE` and `WARN TO` require a matching trailing `ON FAILURE` clause.",
+        "expect" => "**expect** — Projected from the column's `EXPECT` clauses; not written as a tag. "
+            + "Declare rules in the statement: `SELECT UserId EXPECT NOT NULL ON FAILURE THROW`.",
+        "fail" => "**fail** — Projected from the column's `EXPECT … ON FAILURE <action>`; not written as a tag. "
+            + "`THROW` aborts the statement; `WARN` (the default) lets the row through and aggregates a warning; "
+            + "`QUARANTINE` diverts the row to the statement's `ON FAILURE QUARANTINE TO <table>` target.",
         _ => null
     };
 

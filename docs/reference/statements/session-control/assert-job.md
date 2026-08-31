@@ -14,9 +14,9 @@ Where [`ASSERT`](assert.md) guards a condition inside the script,
 ASSERT JOB <job_name> (
   <predicate> [, <predicate> ...]
 )
-[WITH (FAIL_ON_WARN = TRUE|FALSE)]
+[ON FAILURE WARN]
 [ON FAILURE NOTIFY <notification>]
-[ON CRITICAL_FAILURE THROW];
+[ON FAILURE THROW];
 ```
 
 ## Predicates
@@ -66,17 +66,26 @@ absolute distance from that mean is greater than `n` standard deviations.
 
 ## Failure handling
 
-By default a failing assertion is reported (log + run diagnostics) and the script continues.
+`ASSERT JOB` takes the same stacked `ON FAILURE <action>` blocks a rule-carrying `SELECT` takes,
+from the same vocabulary. By default — no block at all — a failing assertion is reported (log + run
+diagnostics) and the script continues.
 
-- **`ON FAILURE NOTIFY <notification>`** posts a summary through a named Orchestrator notification.
-  The notification resolves to its configured connection alias and optional recipient at dispatch
-  time. The payload carries the job name, the failed predicates, and the run counts. **It never
-  carries sample data**, so values from a `@pii`-tagged column cannot reach an alerting channel.
-- **`ON CRITICAL_FAILURE THROW`** raises an execution error after alerting, failing the run.
-- **`WITH (FAIL_ON_WARN = TRUE)`** raises an execution error when any row triggered a `WARN`
-  quality action, even when every explicit metric predicate passed. This gives Task Scheduler,
-  cron, and CI a reliable non-zero process exit without requiring a notification destination.
-  The default is `FALSE`.
+- **`ON FAILURE WARN`** is that default, written out: record the failure and carry on. Useful when
+  you want the intent stated rather than inferred.
+- **`ON FAILURE NOTIFY <notification>`** posts a summary through a named Orchestrator notification,
+  and is **non-fatal on its own** — the "worth telling someone about, not worth stopping for"
+  shape. The notification resolves to its configured connection alias and optional recipient at
+  dispatch time. The payload carries the job name, the failed predicates, and the run counts. **It
+  never carries sample data**, so values from a `@pii`-tagged column cannot reach an alerting
+  channel.
+- **`ON FAILURE THROW`** raises an execution error, failing the run. This is the only thing that
+  fails a run, and it has to be written. Stacked with `NOTIFY`, the notification is dispatched
+  first whatever order the blocks are written in — an alert that only fires when the run survives
+  is not an alert.
+
+To fail a run on any warned row — the CI shape — assert on the warn rate itself:
+`ASSERT JOB j (WARN_PERCENT = 0) ON FAILURE THROW;`. That gives Task Scheduler, cron, and CI a
+reliable non-zero process exit without requiring a notification destination.
 
 When orchestrator job state is available, notifications are transition-based per job/assertion signature:
 
@@ -90,7 +99,7 @@ catalog raise a clear execution error if notification delivery is needed.
 
 Notification delivery has its own policy: if the destination is unreachable, that is logged and the run
 continues. A broken notification channel never decides whether the job fails — only
-`ON CRITICAL_FAILURE THROW` does, and it raises the assertion's failure, not the delivery error.
+`ON FAILURE THROW` does, and it raises the assertion's failure, not the delivery error.
 
 ## Examples
 
@@ -102,7 +111,7 @@ ASSERT JOB import_csv (
     QUARANTINE_PERCENT < 0.01
 )
 ON FAILURE NOTIFY data_quality_alerts
-ON CRITICAL_FAILURE THROW;
+ON FAILURE THROW;
 ```
 
 ```sql
@@ -112,17 +121,17 @@ ASSERT JOB import_csv (
     FRESHNESS(clean_users.UpdatedAt) < '2 HOURS'
 )
 ON FAILURE NOTIFY data_quality_alerts
-ON CRITICAL_FAILURE THROW;
+ON FAILURE THROW;
 ```
 
 ```sql
 -- Fail the run outright if the feed came back empty
-ASSERT JOB daily_feed (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW;
+ASSERT JOB daily_feed (ROW_COUNT > 0) ON FAILURE THROW;
 ```
 
 ```sql
 -- Treat any warned row as a failed CI run; notifications remain optional
-ASSERT JOB customer_ci (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE);
+ASSERT JOB customer_ci (WARN_PERCENT = 0) ON FAILURE THROW;
 ```
 
 ```sql

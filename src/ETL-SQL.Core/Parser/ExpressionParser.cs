@@ -71,6 +71,22 @@ public partial class ExpressionParser
     /// <c>a OR b => x : y</c> means <c>(a OR b) => x : y</c>. The final else branch is REQUIRED:
     /// a dangling <c>expr => val</c> is a syntax error, never an implicit NULL.
     /// </summary>
+    /// <summary>
+    /// Parses an expression at comparison precedence — everything below <c>AND</c>/<c>OR</c>.
+    /// Data-quality rules need this: inside an <c>EXPECT</c> clause <c>AND</c> combines *rules*
+    /// (<c>EXPECT EXPR a &lt;= b AND NOT NULL</c>), so a predicate that greedily consumed the
+    /// <c>AND</c> would swallow the next rule. A compound predicate is written parenthesized,
+    /// <c>EXPR (a &lt;= b AND c &gt; d)</c>, which reaches the full expression grammar again.
+    /// </summary>
+    public Expression ParseExpressionNoLogical() => ParseComparison();
+
+    /// <summary>
+    /// Parses an expression at additive precedence — the level SQL's own
+    /// <c>BETWEEN &lt;a&gt; AND &lt;b&gt;</c> uses for its bounds, so a bound cannot swallow the
+    /// <c>AND</c> that separates it from the upper bound.
+    /// </summary>
+    public Expression ParseExpressionTerm() => ParseTerm();
+
     private Expression ParseArrow()
     {
         var operand = ParseOr();
@@ -322,13 +338,36 @@ public partial class ExpressionParser
 
     private Expression ParseShift()
     {
-        var left = ParseTerm();
+        var left = ParseConcat();
         while (_parser.Current.Type == TokenType.LSHIFT || _parser.Current.Type == TokenType.RSHIFT)
         {
             var opToken = _parser.Advance();
             var op = opToken.Type;
-            var right = ParseTerm();
+            var right = ParseConcat();
             left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+        }
+        return left;
+    }
+
+    /// <summary>
+    /// SQL string concatenation binds less tightly than arithmetic and more tightly than shifts and
+    /// comparisons. The token value check keeps the <c>CONCAT(...)</c> function keyword from being
+    /// accepted as an infix operator.
+    /// </summary>
+    private Expression ParseConcat()
+    {
+        var left = ParseTerm();
+        while (_parser.Current.Type == TokenType.CONCAT && _parser.Current.Value == "||")
+        {
+            _parser.Advance();
+            var right = ParseTerm();
+            left = new BinaryExpression(left, TokenType.CONCAT, right)
+            {
+                Line = left.Line,
+                Column = left.Column,
+                EndLine = _parser.LastTokenEndLine,
+                EndColumn = _parser.LastTokenEndColumn
+            };
         }
         return left;
     }

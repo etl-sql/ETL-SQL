@@ -1,0 +1,25 @@
+-- Dataset-global filter lives in the dataset query; visual-local filters live in
+-- each visual's SOURCE subquery. Neither shape may be rewritten by a round trip.
+CREATE DATASET &sales AS (
+  SELECT region, category, amount, order_date
+  FROM pg.sales
+  WHERE order_date >= '2026-01-01' AND amount > 0
+);
+
+CREATE VISUAL f_region AS SLICER (
+    SOURCE = (SELECT DISTINCT region FROM &sales ORDER BY region),
+    MAPPINGS (VALUE = region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
+);
+
+CREATE VISUAL v_filtered AS BAR (
+    TITLE = 'Filtered Revenue',
+    SOURCE = (SELECT category, SUM(amount) AS revenue FROM &sales
+              WHERE @region = 'All' OR region = @region
+              GROUP BY category),
+    MAPPINGS (X = category, Y = revenue)
+);
+
+CREATE PAGE [Filtered] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A B', MAP ('A' = f_region, 'B' = v_filtered))
+);

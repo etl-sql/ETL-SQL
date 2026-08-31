@@ -173,10 +173,10 @@ function renderTrendPanel(state) {
           ${renderSparkline(trend.runs || [])}
           <h4 class="dq-trend-subhead">Rules protecting columns</h4>
           ${(state.rules || []).length ? `<table class="dq-rows-table">
-            <thead><tr><th>Target</th><th>Column</th><th>Tag</th><th>Rule</th><th>Action</th><th>Source</th></tr></thead>
+            <thead><tr><th>Target</th><th>Column</th><th>Clause</th><th>Rule</th><th>Action</th><th>Source</th></tr></thead>
             <tbody>${state.rules.map(rule => `<tr>
               <td>${esc(rule.targetTable)}</td><td>${esc(rule.targetColumn || '—')}</td>
-              <td><code>${esc(rule.ruleTag)}</code></td><td><code>${esc(rule.rule)}</code></td>
+              <td><code>${esc(rule.ruleClause)}</code></td><td><code>${esc(rule.rule)}</code></td>
               <td>${esc(rule.action)}</td><td>${esc(rule.sourceFile || '—')}:${esc(rule.line)}</td>
             </tr>`).join('')}</tbody>
           </table>` : '<p class="library-subtitle">No readable rule definitions were found for this job script.</p>'}

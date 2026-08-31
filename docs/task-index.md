@@ -37,7 +37,7 @@ link to the page that shows how. For language keywords, functions, and options, 
 
 | I want to… | Go to |
 | :--- | :--- |
-| Enforce column rules with `@expect` and `@fail` | [Column Quality Rules](guides/data-quality/column-quality-rules.md) |
+| Enforce column rules with `EXPECT` clauses | [Column Quality Rules](guides/data-quality/column-quality-rules.md) |
 | Quarantine bad rows and triage failure metadata | [Quarantine & Remediation](guides/data-quality/quarantine-and-remediation.md) |
 | Deduplicate with `UNIQUE_FIRST BY` or cross-table `EXISTS IN` | [Multi-Row & Cross-Table Rules](guides/data-quality/multi-row-and-cross-table-rules.md) |
 | Assert batch volume and freshness against historical baselines | [Run-Level Assertions (`ASSERT JOB`)](guides/data-quality/run-level-assertions.md) |

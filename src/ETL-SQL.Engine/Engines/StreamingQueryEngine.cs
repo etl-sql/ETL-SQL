@@ -57,7 +57,7 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 compiledColumns[i] = value;
         }
 
-        // Data-quality rules (@expect/@fail): null when no column carries them, so a rule-free
+        // Data-quality rules (EXPECT clauses): null when no column carries them, so a rule-free
         // statement pays nothing.
         var qualityValidator = ETL_SQL.Engine.Services.ColumnQualityValidator.TryCreate(_context, _logger, stmt, colNames);
         if (qualityValidator != null) await qualityValidator.InitializeAsync(_context.CancellationToken);

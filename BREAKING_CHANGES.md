@@ -17,6 +17,34 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.19.0 — Syntax: data-quality rules are an `EXPECT` clause, not `@expect`/`@fail` comment tags
+- **What changed**: A column's data-quality rules are declared with `EXPECT <rule> [ON FAILURE THROW | WARN | QUARANTINE]`, repeatable per column, replacing `/* @expect: '…'; @fail: '…'; */` and the numbered `@expect_N`/`@fail_N` pairing. Rules combine with `AND`/`OR` rather than a comma (in a select list the comma separates columns), a `MATCHES` pattern is a quoted string literal, and rule values need no outer quoting or SQL-style doubling. A rule decides which rows leave a statement, so it belongs in the grammar where no formatter or comment stripper can remove it; comments keep carrying the tags that describe data.
+- **Who is affected**: Every script declaring column rules with `@expect`/`@fail`.
+- **Migration**: `/* @expect: 'NOT NULL, UNIQUE'; @fail: 'THROW'; */` becomes `EXPECT NOT NULL AND UNIQUE ON FAILURE THROW` after the column and its alias. Numbered pairs become repeated clauses. `@expect: 'MATCHES ^A.*'` becomes `EXPECT MATCHES '^A.*'`. `'IN (''NA'',''EMEA'')'` becomes `IN ('NA','EMEA')`.
+- **Diagnostic**: Lint rule `ColumnRule` reports a rule left in a comment as an Error and prints the clause to write instead.
+- **Earliest removal**: Immediate — the tag form is deleted, not deprecated.
+
+### v0.19.0 — Syntax: `ASSERT JOB` uses stacked `ON FAILURE` actions
+- **What changed**: `ON CRITICAL_FAILURE THROW` and `WITH (FAIL_ON_WARN = TRUE)` are replaced by stacked `ON FAILURE WARN | NOTIFY <notification> | THROW` blocks, the same vocabulary a rule-carrying `SELECT` uses. Severity is an action rather than a clause name, and `FAIL_ON_WARN` — which could fail a run with no severity clause present — is expressible as the predicate it always was.
+- **Who is affected**: Scripts using `ON CRITICAL_FAILURE THROW` or `WITH (FAIL_ON_WARN = …)`.
+- **Migration**: `ON CRITICAL_FAILURE THROW` becomes `ON FAILURE THROW`. `WITH (FAIL_ON_WARN = TRUE)` becomes the predicate `WARN_PERCENT = 0` plus `ON FAILURE THROW`; `FAIL_ON_WARN = FALSE` is simply deleted. Writing either retired form is a syntax error naming its replacement.
+- **Diagnostic**: N/A — reported as a positioned syntax error.
+- **Earliest removal**: Immediate.
+
+### v0.19.0 — Semantic: an `ASSERT JOB` predicate on an unwritten column is an error
+- **What changed**: A predicate naming a column no sink in the script writes was skipped at runtime with a warning, and the assertion passed — a typo such as `NULL_PERCENT(clean_users.Emial)` produced a guard that could never fail. It is now a lint Error. Skip-with-warning remains for what is genuinely unknowable until runtime: a run that observed no rows, and historical cold start.
+- **Who is affected**: Scripts whose `ASSERT JOB` predicates name a column or target the script does not write. Those assertions were passing without evaluating.
+- **Migration**: Correct the column or target name. A sink the analyzer cannot enumerate (`SELECT *`) is never reported.
+- **Diagnostic**: Lint rule `JobMetricColumn`.
+- **Earliest removal**: Immediate.
+
+### v0.19.0 — Runtime: data-quality rule catalog renames `rule_tag` to `rule_clause`
+- **What changed**: `eng.data_quality_rules`, `SHOW DATA QUALITY RULES`, and the Portal's data-quality API returned a `rule_tag` column holding `@expect` / `@expect_1`. The column is now `rule_clause` and holds `EXPECT` / `EXPECT #2`, naming a form that can still be written.
+- **Who is affected**: Queries or dashboards selecting `rule_tag` (`RuleTag` in the Portal DTO) from those surfaces.
+- **Migration**: Select `rule_clause` (`RuleClause`) instead, and expect `EXPECT`/`EXPECT #2` values rather than `@expect`/`@expect_1`.
+- **Diagnostic**: N/A — an unknown column name error from the catalog query.
+- **Earliest removal**: Immediate.
+
 ### v0.19.0 — Semantic: CUSTOM charts cross-filter on their resolved X binding
 - **What changed**: A layered `CUSTOM` chart has no `MAPPINGS` clause, so the browser's `mapping:*` lookup found nothing and fell through to `visual.columns[0]` — every `CUSTOM` chart cross-filtered on whatever column the source query happened to list first. The selection key is now resolved server-side from the chart's encodings and delivered on `visual.interaction.key`. When the resolved key names no column in the visual's data, the click raises no filter at all instead of guessing.
 - **Who is affected**: Reports with a `CUSTOM` visual and an `INTERACTIONS (ON_SELECT = ...)` clause whose X binding is not the first column of its source query. Those reports were filtering on the wrong column.

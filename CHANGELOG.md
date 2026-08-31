@@ -12,6 +12,167 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Split Studio's Data and Filters activity-rail tools into independent sidebars that can remain open
+  together. Data now prioritizes New connection and field discovery, while Filters provides a
+  type-aware New filter dialog, active-rule controls, and drag-and-drop or keyboard field transfer.
+
+- Added a side-by-side Git diff viewer to desktop Studio. The Source Control rail now compares the
+  live editor buffer with `HEAD` or a selected local commit, including unsaved changes, aligned line
+  numbers, and added/deleted line highlighting.
+
+- Fixed narrow desktop Studio layouts collapsing dashboard cards below a usable width. The authored
+  12-column canvas now scrolls internally while the outer Studio shell remains overflow-free.
+
+- Added a full desktop Studio workspace Explorer. It now creates, renames, and deletes files and
+  folders, moves files into folders or back to the workspace root by drag-and-drop, keeps open tabs
+  aligned with moved paths, blocks deletion of dirty documents, and enforces the workspace boundary.
+
+- Added inline file rename to desktop Studio tabs. Double-clicking a tab name now opens a keyboard-
+  accessible editor that renames the underlying workspace file, preserves its extension when omitted,
+  updates the open document and Explorer paths, and rejects read-only, unsafe, or colliding targets.
+
+- Added authenticated production-host Studio browser journeys for Portal and desktop. The Portal
+  journey creates and opens a catalog report, connects to a governed catalog source, samples and
+  filters data, edits and runs a statement, saves, reloads, and closes its edit lease. The desktop
+  journey covers the same authoring loop plus simultaneous project windows, host shutdown, and
+  relaunch with persisted source. Studio now carries the active document URI through desktop
+  connection/schema discovery and sends the selected governed connection with Portal run requests.
+
+- Split Studio report authoring into distinct **Dashboard** and **Paginated Report** workflows. Both
+  create ordinary `.rptsql` files and keep the shared parser, patcher, data, expression, formatting,
+  preview, and code surfaces. Dashboard opens a responsive tile board with data, visual,
+  cross-filter, layout, and formatting guidance. Paginated Report opens a physical-page surface with
+  an eight-step path through parameters, group/detail bands, totals, headers/footers, page setup,
+  breaks, preview, and export. Existing files select a workflow from explicit page modes; mixed or
+  implicit reports ask without touching source bytes. Physical page settings and visual print-break
+  clauses now round-trip through the shared authoring contract.
+
+- **Breaking:** data-quality rules moved out of comment tags into first-class syntax. A column now
+  declares rules with `EXPECT <rule> [ON FAILURE THROW | WARN | QUARANTINE]`, repeated as needed,
+  replacing `/* @expect: '…'; @fail: '…'; */` and the numbered `@expect_N`/`@fail_N` pairing. A rule
+  decides which rows leave a statement, so it must not be something a formatter or comment stripper
+  can silently remove; comments keep carrying the tags that describe data (`@d`, `@owner`, `@pii`).
+  Rules combine with `AND`/`OR` — the comma separates columns in a select list — and a `MATCHES`
+  pattern is now a quoted string literal, so the outer quoting and doubled quotes the tag layer
+  forced are gone. Writing a rule as a tag is a lint error naming the clause to use instead.
+
+- **Breaking:** `ASSERT JOB` folds onto the same failure-action vocabulary. `ON CRITICAL_FAILURE
+  THROW` and `WITH (FAIL_ON_WARN = TRUE)` are replaced by stacked `ON FAILURE WARN | NOTIFY
+  <notification> | THROW` blocks: severity is an action, not a clause name, and not an option
+  hidden in a `WITH()` bag that could fail a run without the severity clause saying so. `WARN` is
+  the default on both surfaces, `NOTIFY` alone is non-fatal, and "any warned row fails the run" is
+  now the predicate `WARN_PERCENT = 0` with `ON FAILURE THROW`.
+
+- Fixed an `ASSERT JOB` predicate naming a column no sink in the script writes reporting green
+  forever. The runtime skipped the unobserved metric and the assertion passed, so a typo such as
+  `NULL_PERCENT(clean_users.Emial)` was a guard that could never fire; it is now a lint error at
+  author time. Skip-with-warning remains for what is genuinely unknowable until runtime — a run
+  that observed no rows, and historical cold start.
+
+- Renamed the data-quality rule catalog's `rule_tag` column to `rule_clause`, and its values from
+  `@expect`/`@expect_1` to `EXPECT`/`EXPECT #2`, so the catalog names a form that can still be
+  written. This affects `eng.data_quality_rules`, `SHOW DATA QUALITY RULES`, and the Portal's
+  data-quality views.
+
+- Fixed `||` string concatenation across the full expression grammar. Concatenations now retain
+  explicit aliases, work inside parentheses and larger expressions, preserve SQL-style `NULL`
+  propagation in engine execution, and compile to the target dialect's concatenation operator.
+  Report designer fuzz scripts again exercise the operator directly.
+
+- Replaced Studio's regex-generated pipeline cards with the shared engine DAG projection. `.etlsql`
+  canvases now show real sequential and branching edges, including `IF`, `PARALLEL`, loop,
+  `TRY`/`CATCH`, and validation stages. The canonical graph opens as a fitted left-to-right execution
+  map, node selection navigates to source, and invalid edits keep the last valid topology without
+  rewriting the script.
+
+- Added the desktop Studio host lifecycle. `etlsql studio <project>` now reconnects to a healthy
+  per-project host, while `studio list`, `studio open`, `studio stop`, `--new-window`, and the
+  advanced `--new-instance` option manage local instances explicitly. Authenticated session records
+  retain normalized workspace, PID, assigned port, start time, and local authentication metadata;
+  stale records are removed after health checks. Browser heartbeats, active-run tracking,
+  configurable idle shutdown, a bounded **Exit Studio** flow, and revision-checked saves prevent
+  orphan hosts and same-project overwrite conflicts.
+
+- Finished Studio code-to-canvas data synchronization. A valid `CREATE DATASET` query edit now
+  reparses the canvas and refreshes that document's `__ETLSNAP__` rows through the bounded,
+  read-only preview contract on both Portal and desktop hosts. Parse failures retain the last valid
+  canvas and sample. Per-document cancellation and revision checks prevent late parse or preview
+  responses from overwriting a newer edit or another tab's data.
+
+- Fixed the Studio script pane erasing what you typed. The canvas regenerates its script from the
+  design state alone, and updating the canvas *from* the editor let that regeneration run and
+  overwrite the buffer ~800ms later — so anything the design state does not model, most visibly a
+  `CREATE CONNECTION`, vanished as it was typed. A canvas update caused *by* the script no longer
+  writes back to it; genuine canvas edits still do. This also made the Connection Wizard look
+  broken: its inserted statement disappeared moments after Insert.
+
+- Fixed the Connection Wizard accepting an empty alias. The field was marked required but nothing
+  enforced it, and the generator substitutes a literal `<alias>` placeholder when it is blank, so
+  confirming the dialog wrote `CREATE CONNECTION <alias> AS …` — which does not parse. The alias is
+  now prefilled with a free, valid name derived from the connector (avoiding names already used in
+  the script), stays editable, and Insert is blocked with a specific reason when it is empty,
+  malformed, or already taken. Studio now passes its existing connection names to the wizard, so
+  collision detection works there at all.
+
+- Added MOCKDB to the Connection Wizard's built-in connector list. It is the only connector that
+  needs no external database and it backs Studio Home's "Start with sample data", but it was absent
+  from the fallback list used when connector discovery fails — so the zero-dependency on-ramp
+  disappeared exactly when the environment could least reach a real server.
+
+- Gave ETL-SQL Studio the script workbench it was missing. Studio now mounts the shared results
+  panel, so it has the Workstation Editor's **Results / Messages / Pipeline / Performance** tabs,
+  result filter, CSV/Excel/JSON export, and column lineage bar. Results are a per-document trace
+  replayed into one panel, so switching tabs restores each document's own run. Lint diagnostics are
+  routed to the Messages tab — Studio suppressed the editor's own diagnostics panel without providing
+  a replacement, so they had existed only as gutter squiggles — and clicking one jumps to its line.
+
+- Canvas edits are applied as ranged editor transactions rather than replacing the whole document.
+  The author keeps cursor and scroll position, the generated span is scrolled into view, and because
+  the edit is an ordinary transaction, undo now covers it: Ctrl+Z genuinely reverses an "Add visual".
+  Bound the shortcuts the toolbar had advertised all along (`Ctrl+N`, `Ctrl+S`, `Ctrl+Enter`,
+  `Ctrl+Shift+Enter`) — Studio had no keyboard handler at all — and added an unsaved-work guard on
+  browser close.
+
+- The shared `$trigger` snippet library reaches the GUI editors. Its 83 templates were embedded in
+  the engine and already served the TUI and VS Code, but neither Studio nor the Workstation Editor
+  exposed them; both now offer them through a shared `SnippetCompletionSource`, carrying the readable
+  `«placeholder»` form rather than LSP tab stops.
+
+- Studio Home no longer dead-ends a first session. Because the visual palette stays disabled until a
+  data sample exists, and a sample needs a connection a new author does not have, Home now leads with
+  **Start with sample data** — a working dashboard on the built-in MOCKDB connector, needing no
+  database. The three blank-document actions are distinguishable (they previously read as two
+  identical `.etlsql` buttons), and the Portal's permission dead-ends now say what is missing and who
+  can grant it. Starter scripts are parser-checked in CI.
+
+- Removed ~250 lines of unreachable Studio code, including a hardcoded filter pane with fabricated
+  `$32,000`/`$71,000` values that a routing change would have exposed. `CARD` — the KPI tile — now
+  gets its intended compact grid size; the previous special case tested for a `KPI` type name that
+  the grammar does not define.
+
+- Repaired Studio's editor-assist layer, which was silently dead in Portal Studio. The shared
+  `studio.js` requested `/api/analyze`, `/api/complete`, `/api/hover`, `/api/format`, and `/api/run` —
+  names only the desktop Workstation Editor serves — so autocomplete and hover documentation returned
+  nothing, the linter pinned a spurious "Not Found" diagnostic to line 1, Format silently changed
+  nothing while reporting success, and a failed Run rendered as a green "In-Memory Run Completed" over
+  stale design-time sample rows. Studio now resolves every server path through one `STUDIO_ROUTES`
+  table on the canonical `/api/designer/*` dialect that both hosts serve. Format reads the `script`
+  field both hosts actually return and reports success only when the document changed; a failed run
+  renders as a failure and never presents sample rows as results.
+
+- Closed the Studio desktop/Portal route gap. Added the governed desktop
+  `POST /api/designer/data-sample` — schema-validated, bounded, secret-redacted, and self-registering
+  the script's connections — without which the desktop visual canvas could never enable its palette.
+  Added `/api/designer/hover` and `/api/designer/format` on both hosts, with hover served from one
+  host-neutral `LanguageHoverService` over the embedded `docs/reference` help corpus. Desktop-only
+  workspace routes are now gated behind an explicit host capability instead of 404ing silently.
+
+- Added `StudioRouteContractTests`, which asserts that every route Studio calls exists on both the
+  Portal and the desktop host and that no route bypasses the route table, plus behavioural cover for
+  the hover and format endpoints. The ui-sandbox mock now fails closed on an unmatched route; its
+  previous `{ok:true}` catch-all answered any URL successfully and is what kept this entire class of
+  defect invisible. Shared-asset sync now also covers the Workstation Editor's published `wwwroot`.
+
 - Routed Studio visual creation, duplication, deletion, property edits, mapping edits, and slicer
   promotion through the canonical parser and surgical patcher. The shared authoring contract now
   round-trips report parameters, and promoted slicers emit real parameter/action bindings without

@@ -1,8 +1,12 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
+using ETL_SQL.Analysis.Services;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Formatting;
+using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Interfaces;
 using ETL_SQL.Core.Services;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Filters;
@@ -13,6 +17,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using DesignerQueryFilterService = ETL_SQL.Reporting.Authoring.DesignerQueryFilterService;
+using ScriptDagProjectionService = ETL_SQL.Portal.Services.ScriptDagProjectionService;
 
 namespace ETL_SQL.Portal.Controllers;
 
@@ -39,6 +44,7 @@ public class DesignerController : ControllerBase
     private readonly DesignerSnapshotService? _snapshots;
     private readonly ScriptDagProjectionService _scriptDag;
     private readonly DesignerQueryFilterService _queryFilters = new();
+    private readonly LanguageHoverService? _hoverService;
 
     public DesignerController(
         PortalDesignerSchemaService? schemaService = null,
@@ -54,7 +60,9 @@ public class DesignerController : ControllerBase
         IMetadataManager? metadata = null,
         DesignerSnapshotService? snapshots = null,
         ScriptDagProjectionService? scriptDag = null,
-        PortalDesignerDataPreviewService? dataPreviewService = null)
+        PortalDesignerDataPreviewService? dataPreviewService = null,
+        ILanguageHelpRegistry? languageHelp = null,
+        IFunctionRegistry? functionRegistry = null)
     {
         _schemaService = schemaService;
         _runService = runService;
@@ -70,6 +78,9 @@ public class DesignerController : ControllerBase
         _metadata = metadata;
         _snapshots = snapshots;
         _scriptDag = scriptDag ?? new ScriptDagProjectionService();
+        _hoverService = languageHelp is not null && functionRegistry is not null
+            ? new LanguageHoverService(languageHelp, functionRegistry)
+            : null;
     }
 
     // ── GET /api/session/metadata ─────────────────────────────────────────────
@@ -273,6 +284,18 @@ public class DesignerController : ControllerBase
 
             var suggestionList = suggestions.Take(100).ToList();
             var items = new List<DesignerCompletionItem>();
+
+            // Snippets lead: a `$trigger` match is an explicit request for that template, so burying
+            // it under keyword suggestions would make the library undiscoverable in the GUI editors.
+            items.AddRange(SnippetCompletionSource.GetMatches(scriptBefore, prefix)
+                .Select(snippet => new DesignerCompletionItem(
+                    snippet.Trigger,
+                    snippet.TuiBody,
+                    "snippet",
+                    snippet.Label,
+                    snippet.Description,
+                    Math.Max(0, req.Column - prefix.Length),
+                    req.Column)));
             if (prefix == "*")
             {
                 var columnExpansion = suggestionList
@@ -308,6 +331,54 @@ public class DesignerController : ControllerBase
         finally
         {
             gate?.Release();
+        }
+    }
+
+    // ── POST /api/designer/hover ─────────────────────────────────────────────
+    // Serves editor hover documentation from the embedded language help corpus. Studio on the
+    // desktop reaches the same lookup through the Workstation Editor's /api/hover; both delegate to
+    // the shared LanguageHoverService so the two hosts cannot drift apart.
+
+    [HttpPost("hover")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult Hover([FromBody] HoverDesignerRequest req)
+    {
+        if (_hoverService is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Language help is not configured." });
+
+        if (ValidateTextLimit(req.Word, "word", MaxHoverWordCharacters) is { } limitResult)
+            return limitResult;
+
+        var (markdown, kind) = _hoverService.Lookup(req.Word);
+        return Ok(new HoverDesignerResponse(markdown, kind));
+    }
+
+    // ── POST /api/designer/format ────────────────────────────────────────────
+    // The Portal has no workspace on disk, so there is no .etlsql-formatter.json to honour here;
+    // formatting uses engine defaults. The desktop host keeps its workspace-aware variant.
+
+    [HttpPost("format")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult Format([FromBody] FormatDesignerRequest req)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        var script = req.Script ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(script))
+            return Ok(new FormatDesignerResponse(script, []));
+
+        try
+        {
+            return Ok(new FormatDesignerResponse(SqlFormatter.Format(script, new FormatterOptions()), []));
+        }
+        catch (Exception ex)
+        {
+            // Formatting a script that does not parse is an ordinary outcome, not a server fault:
+            // hand back the original text plus the reason so the editor can leave the buffer alone.
+            return Ok(new FormatDesignerResponse(script, [new FormatDesignerDiagnostic(ex.Message)]));
         }
     }
 
@@ -744,6 +815,9 @@ public class DesignerController : ControllerBase
     private int MaxAstStatements => Math.Max(1, DesignerLimits.MaxAstStatements);
     private int MaxGeneratedItems => Math.Max(1, DesignerLimits.MaxGeneratedItems);
     private int MaxGeneratedScriptCharacters => Math.Max(1, DesignerLimits.MaxGeneratedScriptCharacters);
+
+    // A hover token is a single identifier; anything longer is not a word the help corpus can key on.
+    private const int MaxHoverWordCharacters = 256;
 
     private IActionResult? ValidateTextLimit(string? value, string field, int maxCharacters)
     {

@@ -32,6 +32,16 @@ public sealed class DesignerScriptParsingService
         }
     }
 
+    /// <summary>
+    /// Reads design state from an AST the caller has already parsed. Hosts that need the diagnostics or
+    /// enforce their own statement limits parse once and call this, rather than parsing a second time.
+    /// </summary>
+    public DesignerAuthoringState Parse(Script ast, string? script)
+    {
+        ArgumentNullException.ThrowIfNull(ast);
+        return ScriptToState(ast, script);
+    }
+
     public static DesignerAuthoringState EmptyState() =>
         new([new DesignerAuthoringPage("p1", "Page 1", "Dashboard", [])], []);
 
@@ -41,7 +51,9 @@ public sealed class DesignerScriptParsingService
             .Select((ds, i) => new DesignerAuthoringDataset(
                 $"ds_{i}",
                 NormalizeDatasetName(ds.TempTableName),
-                ExtractAuthoredNode(script, ds.SourceQuery, ds.SourceQuery.ToSql()).Trim().TrimEnd(';')))
+                ExtractAuthoredNode(script, ds.SourceQuery, ds.SourceQuery.ToSql()).Trim().TrimEnd(';'),
+                ds.RefreshInterval,
+                ds.Ttl))
             .ToList();
 
         var elements = new Dictionary<string, DesignerAuthoringVisual>(StringComparer.OrdinalIgnoreCase);
@@ -140,7 +152,18 @@ public sealed class DesignerScriptParsingService
                 $"p{pageNum}",
                 stmt.Name,
                 stmt.PageMode.ToString(),
-                pageVisuals));
+                pageVisuals,
+                stmt.PrintLayout is null ? null : new DesignerAuthoringPageLayout(
+                    stmt.PrintLayout.PageSize,
+                    stmt.PrintLayout.Orientation,
+                    stmt.PrintLayout.MarginTop,
+                    stmt.PrintLayout.MarginRight,
+                    stmt.PrintLayout.MarginBottom,
+                    stmt.PrintLayout.MarginLeft,
+                    stmt.PrintLayout.Units,
+                    stmt.PrintLayout.Overflow,
+                    stmt.PrintLayout.CustomWidth,
+                    stmt.PrintLayout.CustomHeight)));
         }
 
         if (pages.Count == 0 && elements.Count > 0)
@@ -242,6 +265,22 @@ public sealed class DesignerScriptParsingService
         {
             options["cascade"] = v.Cascade.ToSql();
         }
+        // A TEXT band's content lives in its own DEFAULT clause, not in OPTIONS. Without this the
+        // designer cannot see the text an author wrote, so a round-trip through the canvas would
+        // hand the patcher a band with no content and delete it.
+        if (v.DefaultValue != null)
+        {
+            options["text_default"] = v.DefaultValue.ToSql();
+        }
+        if (v.PrintLayout != null)
+        {
+            var parts = new List<string>();
+            if (v.PrintLayout.PageBreakBefore.HasValue) parts.Add($"PAGE_BREAK_BEFORE = {(v.PrintLayout.PageBreakBefore.Value ? "ON" : "OFF")}");
+            if (v.PrintLayout.PageBreakAfter.HasValue) parts.Add($"PAGE_BREAK_AFTER = {(v.PrintLayout.PageBreakAfter.Value ? "ON" : "OFF")}");
+            if (v.PrintLayout.KeepTogether.HasValue) parts.Add($"KEEP_TOGETHER = {(v.PrintLayout.KeepTogether.Value ? "ON" : "OFF")}");
+            if (v.PrintLayout.ExcludeFromPrint.HasValue) parts.Add($"EXCLUDE_FROM_PRINT = {(v.PrintLayout.ExcludeFromPrint.Value ? "ON" : "OFF")}");
+            options["print_layout"] = $"PRINT_LAYOUT ({string.Join(", ", parts)})";
+        }
         if (v.AdvancedChart != null)
         {
             if (script != null && v.AdvancedChart.StartOffset >= 0 && v.AdvancedChart.EndOffset > v.AdvancedChart.StartOffset && v.AdvancedChart.EndOffset <= script.Length)
@@ -313,15 +352,26 @@ public sealed class DesignerScriptParsingService
             1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
     }
 
-    private static List<List<string>> ParseStructure(string structure)
+    /// <summary>
+    /// Splits a LAYOUT STRUCTURE into rows of slots the same way the runtime does. Rows separate on
+    /// <c>/</c> or a newline — an author who writes the grid across several lines means several rows,
+    /// and reading it as one row put every visual in the same cell, which the patcher then wrote back
+    /// as a collapsed single-slot layout.
+    /// </summary>
+    internal static List<List<string>> ParseStructure(string structure)
     {
-        var rows = structure.Split('/', StringSplitOptions.TrimEntries);
+        var rows = structure.Split(
+            StructureRowSeparators,
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return rows.Select(r =>
-            r.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            r.Split(StructureSlotSeparators, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
              .Select(s => s.Trim('"', '\'', '[', ']'))
              .ToList()
         ).ToList();
     }
+
+    private static readonly char[] StructureRowSeparators = ['/', '\n', '\r'];
+    private static readonly char[] StructureSlotSeparators = [' ', '\t'];
 
     private static (int col, int row, int colSpan, int rowSpan) FindSlotBounds(
         List<List<string>> grid, string slot)
@@ -396,18 +446,10 @@ public sealed class DesignerScriptParsingService
         return (startCol, startRow, colSpan, rowSpan);
     }
 
-    private static string NormalizeDatasetName(string name)
-    {
-        var trimmed = (name ?? "").Trim();
-        if (trimmed.StartsWith('&') || trimmed.StartsWith('#'))
-            trimmed = trimmed[1..];
-        return "&" + SanitizeName(trimmed);
-    }
-
-    private static string SanitizeName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return "visual1";
-        var clean = new string(name.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
-        return char.IsDigit(clean[0]) ? "v_" + clean : clean;
-    }
+    // Naming belongs to the side that writes names into the script. This used to be a third private
+    // copy of the rule, and it disagreed with generation on two cases: it kept Unicode letters, and it
+    // prefixed only a leading digit rather than anything that is not a letter. A dataset read back
+    // under a name generation would never write stops matching the visual SOURCE that refers to it.
+    private static string NormalizeDatasetName(string name) =>
+        DesignerScriptGenerationService.NormalizeDatasetName(name);
 }

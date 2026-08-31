@@ -192,8 +192,8 @@ foreach_statement = "FOREACH" variable_name "IN" expression block_statement ;
 raiseerror_statement = "RAISEERROR" "(" expression "," expression [ "," expression { "," expression } ] ")" ;
 assert_statement = "ASSERT" expression [ "," expression ] ;
 assert_job_statement = "ASSERT" "JOB" ( identifier | string_literal ) "(" job_metric_predicate { "," job_metric_predicate } ")"
-                       [ "WITH" "(" "FAIL_ON_WARN" "=" ( "TRUE" | "FALSE" ) ")" ]
-                       [ "ON" "FAILURE" "NOTIFY" identifier ] [ "ON" "CRITICAL_FAILURE" "THROW" ] ;
+                       { job_on_failure_clause } ;
+job_on_failure_clause = "ON" "FAILURE" ( "WARN" | "THROW" | "NOTIFY" identifier ) ;
 assert_table_statement = "ASSERT" "TABLE" ( temp_table_name | identifier ) "MATCHES" ( temp_table_name | identifier )
                          [ "WITH" "(" assert_table_option { "," assert_table_option } ")" ] ;
 assert_table_option = ( ( "IGNORE_ORDER" | "ORDERED" ) "=" ( "TRUE" | "FALSE" ) )
@@ -484,7 +484,26 @@ join_hint = "HASH" | "LOOP" | "MERGE" ;
 select_list = select_item { "," select_item } [ "," ] ;
 select_item = "*" { "EXCLUDE" "(" column_list ")" | "REPLACE" "(" expression "AS" identifier { "," expression "AS" identifier } ")"
                   | "RENAME" "(" identifier "AS" identifier { "," identifier "AS" identifier } ")" }
-            | expression [ [ "AS" ] identifier ] ;
+            | expression [ [ "AS" ] identifier ] { column_expect_clause } ;
+
+column_expect_clause = "EXPECT" column_rule [ "ON" "FAILURE" ( "THROW" | "WARN" | "QUARANTINE" ) ] ;
+column_rule = column_rule_and { "OR" column_rule_and } ;
+column_rule_and = column_rule_primary { "AND" column_rule_primary } ;
+column_rule_primary = "(" column_rule ")" | column_rule_atom ;
+column_rule_atom = "NOT" "NULL"
+                 | "NOT" "BLANK"
+                 | "UNIQUE" [ "WITH" "(" column_list ")" ]
+                 | ( "UNIQUE_FIRST" | "UNIQUE_LAST" ) "BY" expression
+                 | [ "NOT" ] "MATCHES" string_literal
+                 | [ "NOT" ] "IN" "(" rule_literal { "," rule_literal } ")"
+                 | "EXISTS" "IN" table_name "(" identifier ")"
+                 | "EXISTS" "WITH" "(" column_list ")" "IN" table_name "(" column_list ")"
+                 | "LENGTH" ( "BETWEEN" number "AND" number | job_comparison_operator number )
+                 | "CASTABLE" "AS" identifier [ "(" number [ "," number ] ")" ]
+                 | "BETWEEN" expression "AND" expression
+                 | "EXPR" expression
+                 | job_comparison_operator number ;
+rule_literal = string_literal | [ "-" ] number ;
 
 table_reference = table_name ;
 from_reference = from_primary { table_operator }

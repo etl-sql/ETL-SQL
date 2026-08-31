@@ -1,0 +1,25 @@
+-- ─────────────────────────────────────────────────────────────
+-- Revenue summary. This banner is hand-authored and must survive
+-- every designer round trip byte for byte.
+-- ─────────────────────────────────────────────────────────────
+
+/* Block comment before the staging query.
+   Indentation, blank lines, and the closing marker all matter. */
+
+SELECT region, amount   -- trailing comment with odd    spacing
+INTO #sales             -- another trailing comment
+FROM pg.orders;
+
+CREATE VISUAL v_rev AS BAR (
+    -- comment inside the visual body
+    TITLE = 'Revenue',
+    SOURCE = #sales,
+    /* inline block comment between clauses */
+    MAPPINGS (X = region, Y = amount)
+);
+
+CREATE PAGE [Summary] AS DASHBOARD (
+    LAYOUT (STRUCTURE = 'A', MAP ('A' = v_rev))
+);
+
+-- Trailing comment at end of file, no newline handling surprises.

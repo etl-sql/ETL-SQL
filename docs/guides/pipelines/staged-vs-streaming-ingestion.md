@@ -26,7 +26,7 @@ Direct Streaming:
 | **I/O Overhead** | Writes locally to engine memory/spill before destination write | **Zero local I/O** — rows stream straight through |
 | **Checkpoint & Resume** | **Fully supported** across top-level labels | Not supported — failure requires restarting from the beginning |
 | **Multi-Pass Updates** | Supported (can index, update, or join `#temp` repeatedly) | Single-pass only |
-| **Transformations & Rules**| Full support (`REGEX`, `HASHBYTES`, `@expect`, etc.) | Full support (`REGEX`, `HASHBYTES`, `@expect`, etc.) |
+| **Transformations & Rules**| Full support (`REGEX`, `HASHBYTES`, `EXPECT`, etc.) | Full support (`REGEX`, `HASHBYTES`, `EXPECT`, etc.) |
 | **Best Used When...** | Source database is busy, or multi-step cleansing is required | Moving large datasets where local disk write overhead is prohibitive |
 
 ---

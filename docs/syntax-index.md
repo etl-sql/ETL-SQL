@@ -1128,7 +1128,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `eng.job_history` | Orch | Queryable virtual table for job execution history |
 | `eng.data_quality_status` | Orch | Current/local/remote counts-only run quality summary |
 | `eng.data_quality_failures` | Orch | Normalized rule-failure counts by run and target |
-| `eng.data_quality_rules` | Orch | Current-session `@expect`/`@fail` rules; `eng.data_quality_rules(job)` over a `PORTAL` connection for another job's |
+| `eng.data_quality_rules` | Orch | Current-session `EXPECT` rules; `eng.data_quality_rules(job)` over a `PORTAL` connection for another job's |
 | `eng.job_state` | Orch | Queryable virtual table for saved job-state key/value pairs |
 | `eng.host_metrics` | Orch | Queryable virtual table for recent host-utilization samples |
 | `eng.lineage_history` | Lineage | Cross-run catalog of lineage entries; qualify with a connection for remote Orchestrators |
@@ -1471,6 +1471,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql serve` | Start a live preview server for a Report-SQL script | [serve](reference/cli/serve.md) |
 | `etl-sql session clear` | Clear a session state | [session clear](reference/cli/session-clear.md) |
 | `etl-sql session` | Manage ad-hoc execution sessions | [session](reference/cli/session.md) |
+| `etl-sql studio` | Launch the modern ETL-SQL Studio visual & script workbench on local loopback | [studio](reference/cli/studio.md) |
 | `etl-sql test` | Run native ETL-SQL test suites (*.test.etlsql) and table assertions | [test](reference/cli/test.md) |
 | `etl-sql ui edit` | Start the modern windowed Terminal IDE (default) | [ui edit](reference/cli/ui-edit.md) |
 | `etl-sql ui old` | Start the legacy Spectre-based console editor | [ui old](reference/cli/ui-old.md) |
@@ -2025,7 +2026,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `CONNECTION_PREVIEW_LIMIT` | General | Canonical language token |
 | `CONNECTIONS` | General | Canonical language token |
 | `CONVERT` | General | Canonical language token |
-| `CRITICAL_FAILURE` | General | Canonical language token |
+| `EXPECT` | General | Canonical language token |
 | `DATA_QUALITY_DRY_RUN` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
@@ -2446,8 +2447,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `@domain` | Tag | Standard governance tag |
 | `@encrypted_at_rest` | Tag | Standard governance tag |
 | `@example` | Tag | Standard governance tag |
-| `@expect` | Tag | Standard governance tag |
-| `@fail` | Tag | Standard governance tag |
+| `@expect` | Tag | Projected from `EXPECT` clauses onto lineage; not written by hand |
+| `@fail` | Tag | Projected from `EXPECT … ON FAILURE`; not written by hand |
 | `@format` | Tag | Standard governance tag |
 | `@freshness` | Tag | Standard governance tag |
 | `@load_pattern` | Tag | Standard governance tag |
