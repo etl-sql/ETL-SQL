@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "PrecisionTelemetryLine",
   "title": "High-Precision Daily Sensor Telemetry",
   "bounds": {
@@ -187,7 +187,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-01, Y: 98.7452",
           "encodings": []
         },
         {
@@ -211,7 +210,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-02, Y: 104.3819",
           "encodings": []
         },
         {
@@ -235,7 +233,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-03, Y: 101.9205",
           "encodings": []
         },
         {
@@ -259,7 +256,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-04, Y: 112.5641",
           "encodings": []
         },
         {
@@ -283,7 +279,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-05, Y: 108.1187",
           "encodings": []
         }
       ],

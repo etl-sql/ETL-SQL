@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "SharedPaletteBar",
   "title": "Plan-Backed Categories",
   "bounds": {
@@ -291,7 +291,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Alpha, Y: 120, Color: Alpha",
           "encodings": []
         },
         {
@@ -446,7 +445,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Beta, Y: 180, Color: Beta",
           "encodings": []
         },
         {
@@ -628,7 +626,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Delta, Y: 210, Color: Delta",
           "encodings": []
         }
       ],
@@ -729,7 +726,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Gamma, Y: 140, Color: Gamma",
           "encodings": []
         },
         {

@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "RegionSmallMultiples",
   "title": "Wrapped small multiples at a fixed aspect ratio",
   "bounds": {
@@ -177,7 +177,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 10, Y: 22, Wrap: North",
           "encodings": []
         },
         {
@@ -209,7 +208,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 14, Y: 30, Wrap: North",
           "encodings": []
         },
         {
@@ -241,7 +239,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 11, Y: 18, Wrap: South",
           "encodings": []
         },
         {
@@ -273,7 +270,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 16, Y: 26, Wrap: South",
           "encodings": []
         },
         {
@@ -305,7 +301,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 12, Y: 24, Wrap: East",
           "encodings": []
         },
         {
@@ -337,7 +332,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 18, Y: 33, Wrap: West",
           "encodings": []
         }
       ],

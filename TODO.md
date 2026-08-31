@@ -305,37 +305,23 @@ hoists in `RenderPoints`/`RenderRects`, single-pass row indexing in `ResolveLaye
 and per-layer `GroupConditions`. The items below were deliberately left out of that pass because
 each changes checked-in goldens, the serialized contract, or needs a measurement first.
 
-- [ ] **Verify the resolver changes against the golden lane.** The batch is build-verified and
-  sample-verified only; `dotnet test` and `Test-ReportingGoldens.ps1` could not run because an
-  unrelated in-flight rename (`WorkspaceRenameConflictException` -> `WorkspaceEntryConflictException`)
-  was breaking the shared test project's build at the time. Re-run the reporting suite and the
-  golden lane; no plan or SVG hash should move.
-- [ ] **Drop `ResolvedDatum.Tooltip`.** The resolver builds a joined, per-channel interpolated string
-  for every row (`PlotPlanResolver.Datum`), and no production renderer reads it — native SVG and
-  terminal both build titles from the `Text`/`Tooltip` *channels*. It is serialized into the plan, so
-  removing it needs a `ChartContractVersions.PlotPlanCurrent` bump, a `COMPAT_BREAK` note, and a
-  golden re-bless.
-- [ ] **Slim the native SVG payload.** Each mark repeats constant attributes
-  (`stroke='white' stroke-width='1.5'`, `fill-opacity='1'`, `class='plot-point'`), roughly 50 of the
-  ~158 bytes per mark — about 30% of a scatter payload, on the one representation that actually
-  crosses the wire. Hoisting `stroke`/`stroke-width` to the parent `<g>` and omitting a unit
-  `fill-opacity` is runtime-safe (the client keys interaction off `[data-row-index]`, not the class);
-  hoisting `class='plot-point'` additionally rewrites the per-mark count assertions in
-  `StandardCatalogCartesianMigrationTests`. Requires a golden re-bless either way.
-- [ ] **Split `PlotPlanResolver.Resolve` into bounds-independent and bounds-dependent passes.**
-  `NativeChartLayoutResolver.Resolve` re-runs the entire resolver when only the container width band
-  changed, but `bounds` feeds only `ResolveFacets`, `ResolveDisplayOffsets`,
-  `ResolveCartesianViewport` and the facet part of `BuildSummary`. Categories, series, palette,
-  scale inference, per-row datum construction and the fallback are all bounds-independent and are
-  the expensive part, so a tier change currently pays 100% of resolve cost for a layout change.
-- [ ] **Hoist the color-scale lookup out of `ResolveDatumColor`.** It rescans `plan.Scales` for the
-  colour scale on every datum; only the value-to-colour mapping is genuinely per-datum. Needs a
-  signature change to the helper, which is why it was left out of the mechanical hoist pass.
-- [ ] **Tighten the GoG regression budgets.** `RepresentativeRefinementWorkload_HasBoundedResolverAndRendererWork`
-  gates at `< 5,000 ms` resolve/render and `< 256 MB` allocation against measured values of 65 ms,
-  35 ms and 14.7 MB, so it would not catch a 10x regression. Re-measure after the changes above and
-  set the allocation and payload-size budgets near the observed numbers; leave the timing bounds
-  loose, as they are already marked `flaky-time-bound-ok`.
+- [x] **Verify the resolver changes against the golden lane.** The focused reporting suite and the
+  50-case reporting golden lane pass. The pre-contract-change baseline had no plan or SVG drift.
+- [x] **Drop `ResolvedDatum.Tooltip`.** PlotPlan v3 removes the redundant joined string and retains
+  tooltip/text content in typed channels. The compatibility break, focused test, and goldens cover
+  the new contract.
+- [x] **Slim the native SVG payload.** Point stroke attributes now live on their layer group and
+  rectangles and points omit unit `fill-opacity`. The 5,000-mark SVG dropped from 789,615 bytes to
+  534,754 bytes while keeping the per-mark class and `data-row-index` interaction hooks.
+- [x] **Split `PlotPlanResolver.Resolve` into bounds-independent and bounds-dependent passes.**
+  `NativeChartLayoutResolver.Resolve` now relays an existing semantic plan through `Relayout`, which
+  recomputes facets, display offsets, viewport, and the bounds-dependent summary without rebuilding
+  categories, series, palette, scales, datum channels, fallback, or interaction semantics.
+- [x] **Hoist the color-scale lookup out of `ResolveDatumColor`.** Rect, tick, and point layers now
+  resolve the color scale once before their datum loops.
+- [x] **Tighten the GoG regression budgets.** The re-measured workload uses a 16 MiB resolver
+  allocation budget, 6 MiB serialized-plan budget, and 600 KiB native-SVG budget against observed
+  results of 10,138,072, 5,427,304, and 534,754 bytes. Timing remains a loose 5-second bound.
 
 ## v0.19.0 Release Evidence Gates
 

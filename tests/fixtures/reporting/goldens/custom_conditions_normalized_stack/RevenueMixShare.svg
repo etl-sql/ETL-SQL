@@ -12,14 +12,14 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='RevenueMixShare-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#RevenueMixShare-plot-clip)'>
-<rect x='77.333' y='190' width='137.667' height='100' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>40</title></rect>
-<rect x='250.667' y='152.5' width='137.667' height='137.5' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>55</title></rect>
+<rect x='77.333' y='190' width='137.667' height='100' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>40</title></rect>
+<rect x='250.667' y='152.5' width='137.667' height='137.5' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>55</title></rect>
 <rect x='424' y='215' width='137.667' height='75' fill='#5470c6' fill-opacity='0.5' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>30</title></rect>
-<rect x='77.333' y='102.5' width='137.667' height='87.5' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>35</title></rect>
-<rect x='250.667' y='77.5' width='137.667' height='75' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>30</title></rect>
+<rect x='77.333' y='102.5' width='137.667' height='87.5' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>35</title></rect>
+<rect x='250.667' y='77.5' width='137.667' height='75' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>30</title></rect>
 <rect x='424' y='140' width='137.667' height='75' fill='#5470c6' fill-opacity='0.5' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>30</title></rect>
-<rect x='77.333' y='40' width='137.667' height='62.5' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>25</title></rect>
-<rect x='250.667' y='40' width='137.667' height='37.5' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>15</title></rect>
+<rect x='77.333' y='40' width='137.667' height='62.5' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>25</title></rect>
+<rect x='250.667' y='40' width='137.667' height='37.5' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>15</title></rect>
 <rect x='424' y='40' width='137.667' height='100' fill='#5470c6' fill-opacity='0.5' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>40</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Q1</text>

@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "DenseLabels",
   "title": "Dense multi-series labels",
   "bounds": {
@@ -331,7 +331,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 01, Y: 1, Color: Actual",
           "encodings": []
         },
         {
@@ -363,7 +362,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 02, Y: 2, Color: Actual",
           "encodings": []
         },
         {
@@ -395,7 +393,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 03, Y: 3, Color: Actual",
           "encodings": []
         },
         {
@@ -427,7 +424,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 04, Y: 4, Color: Actual",
           "encodings": []
         },
         {
@@ -459,7 +455,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 05, Y: 5, Color: Actual",
           "encodings": []
         },
         {
@@ -491,7 +486,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 06, Y: 6, Color: Actual",
           "encodings": []
         },
         {
@@ -523,7 +517,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 07, Y: 7, Color: Actual",
           "encodings": []
         },
         {
@@ -555,7 +548,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 08, Y: 8, Color: Actual",
           "encodings": []
         },
         {
@@ -587,7 +579,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 09, Y: 9, Color: Actual",
           "encodings": []
         },
         {
@@ -619,7 +610,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 10, Y: 10, Color: Actual",
           "encodings": []
         },
         {
@@ -651,7 +641,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 11, Y: 11, Color: Actual",
           "encodings": []
         },
         {
@@ -683,7 +672,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 12, Y: 12, Color: Actual",
           "encodings": []
         }
       ],
@@ -728,7 +716,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 01, Y: 1, Color: Forecast",
           "encodings": []
         },
         {
@@ -760,7 +747,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 02, Y: 2, Color: Forecast",
           "encodings": []
         },
         {
@@ -792,7 +778,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 03, Y: 3, Color: Forecast",
           "encodings": []
         },
         {
@@ -824,7 +809,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 04, Y: 4, Color: Forecast",
           "encodings": []
         },
         {
@@ -856,7 +840,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 05, Y: 5, Color: Forecast",
           "encodings": []
         },
         {
@@ -888,7 +871,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 06, Y: 6, Color: Forecast",
           "encodings": []
         },
         {
@@ -920,7 +902,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 07, Y: 7, Color: Forecast",
           "encodings": []
         },
         {
@@ -952,7 +933,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 08, Y: 8, Color: Forecast",
           "encodings": []
         },
         {
@@ -984,7 +964,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 09, Y: 9, Color: Forecast",
           "encodings": []
         },
         {
@@ -1016,7 +995,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 10, Y: 10, Color: Forecast",
           "encodings": []
         },
         {
@@ -1048,7 +1026,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 11, Y: 11, Color: Forecast",
           "encodings": []
         },
         {
@@ -1080,7 +1057,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Long category 12, Y: 12, Color: Forecast",
           "encodings": []
         }
       ],

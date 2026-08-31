@@ -12,10 +12,10 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='FactoryPerformanceCombo-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#FactoryPerformanceCombo-plot-clip)'>
-<rect x='76.25' y='114.356' width='96.5' height='175.644' fill='#2563EB' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>450</title></rect>
-<rect x='206.25' y='87.034' width='96.5' height='202.966' fill='#2563EB' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>520</title></rect>
-<rect x='336.25' y='102.646' width='96.5' height='187.354' fill='#2563EB' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>480</title></rect>
-<rect x='466.25' y='51.905' width='96.5' height='238.095' fill='#2563EB' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>610</title></rect>
+<rect x='76.25' y='114.356' width='96.5' height='175.644' fill='#2563EB' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>450</title></rect>
+<rect x='206.25' y='87.034' width='96.5' height='202.966' fill='#2563EB' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>520</title></rect>
+<rect x='336.25' y='102.646' width='96.5' height='187.354' fill='#2563EB' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>480</title></rect>
+<rect x='466.25' y='51.905' width='96.5' height='238.095' fill='#2563EB' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>610</title></rect>
 <circle cx='125' cy='57.228' r='3' fill='#E11D48' data-row-index='0'><title>96.2</title></circle>
 <circle cx='255' cy='60.616' r='3' fill='#E11D48' data-row-index='1'><title>94.8</title></circle>
 <circle cx='385' cy='55.05' r='3' fill='#E11D48' data-row-index='2'><title>97.1</title></circle>

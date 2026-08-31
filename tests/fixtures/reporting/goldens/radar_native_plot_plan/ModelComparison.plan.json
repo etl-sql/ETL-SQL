@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "ModelComparison",
   "title": "Model Comparison",
   "bounds": {
@@ -227,7 +227,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Speed: 88",
           "encodings": []
         },
         {
@@ -251,7 +250,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Reliability: 92",
           "encodings": []
         },
         {
@@ -275,7 +273,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Efficiency: 75",
           "encodings": []
         },
         {
@@ -299,7 +296,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Coverage: 83",
           "encodings": []
         }
       ],
@@ -345,7 +341,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Speed: 76",
           "encodings": []
         },
         {
@@ -369,7 +364,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Reliability: 85",
           "encodings": []
         },
         {
@@ -393,7 +387,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Efficiency: 91",
           "encodings": []
         },
         {
@@ -417,7 +410,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Coverage: 79",
           "encodings": []
         }
       ],

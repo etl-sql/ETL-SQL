@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "DistributionComposition",
   "title": "Box plot plus mean tick",
   "bounds": {
@@ -183,7 +183,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Mon, Low: 8, Q1: 9, Median: 11, Q3: 14, High: 15",
           "encodings": []
         },
         {
@@ -239,7 +238,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Tue, Low: 9, Q1: 10, Median: 12, Q3: 15, High: 16",
           "encodings": []
         }
       ],
@@ -278,7 +276,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Mon, Y: 11.5",
           "encodings": []
         },
         {
@@ -302,7 +299,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Tue, Y: 12.4",
           "encodings": []
         }
       ],

@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "ExplicitDomainBar",
   "title": "Headcount by Department with Explicit Domain",
   "bounds": {
@@ -175,7 +175,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Dept A, Y: 150",
           "encodings": []
         },
         {
@@ -199,7 +198,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Dept B, Y: 320",
           "encodings": []
         },
         {
@@ -223,7 +221,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Dept C, Y: 280",
           "encodings": []
         },
         {
@@ -247,7 +244,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Dept D, Y: 410",
           "encodings": []
         }
       ],

@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "StationLoad",
   "title": "Sequential quantitative colour with a per-category target tick",
   "bounds": {
@@ -281,7 +281,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Assembly, Y: 62, Color: 18",
           "encodings": []
         },
         {
@@ -313,7 +312,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Paint, Y: 81, Color: 64",
           "encodings": []
         },
         {
@@ -345,7 +343,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Trim, Y: 74, Color: 45",
           "encodings": []
         },
         {
@@ -377,7 +374,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Final QA, Y: 55, Color: 92",
           "encodings": []
         }
       ],
@@ -424,7 +420,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Assembly, Y: 70, Tooltip: Target",
           "encodings": []
         },
         {
@@ -456,7 +451,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Paint, Y: 70, Tooltip: Target",
           "encodings": []
         },
         {
@@ -488,7 +482,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Trim, Y: 70, Tooltip: Target",
           "encodings": []
         },
         {
@@ -520,7 +513,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Final QA, Y: 70, Tooltip: Target",
           "encodings": []
         }
       ],

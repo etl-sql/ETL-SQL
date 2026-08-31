@@ -12,9 +12,9 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='BinnedHistogram-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#BinnedHistogram-plot-clip)'>
-<rect class='plot-range-rect' x='60' y='190' width='130' height='100' fill='#5470c6' fill-opacity='1' data-row-index='0'><title>40</title></rect>
-<rect class='plot-range-rect' x='190' y='140' width='130' height='150' fill='#5470c6' fill-opacity='1' data-row-index='1'><title>60</title></rect>
-<rect class='plot-range-rect' x='320' y='240' width='260' height='50' fill='#5470c6' fill-opacity='1' data-row-index='2'><title>20</title></rect>
+<rect class='plot-range-rect' x='60' y='190' width='130' height='100' fill='#5470c6' data-row-index='0'><title>40</title></rect>
+<rect class='plot-range-rect' x='190' y='140' width='130' height='150' fill='#5470c6' data-row-index='1'><title>60</title></rect>
+<rect class='plot-range-rect' x='320' y='240' width='260' height='50' fill='#5470c6' data-row-index='2'><title>20</title></rect>
 </g>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>

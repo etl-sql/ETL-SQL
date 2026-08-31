@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "FactoryPerformanceCombo",
   "title": "Production Volume vs Quality Pass Rate",
   "bounds": {
@@ -245,7 +245,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Week 1, Y: 450",
           "encodings": []
         },
         {
@@ -269,7 +268,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Week 2, Y: 520",
           "encodings": []
         },
         {
@@ -293,7 +291,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Week 3, Y: 480",
           "encodings": []
         },
         {
@@ -317,7 +314,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Week 4, Y: 610",
           "encodings": []
         }
       ],
@@ -361,7 +357,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Week 1, Y2: 96.2",
           "encodings": []
         },
         {
@@ -385,7 +380,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Week 2, Y2: 94.8",
           "encodings": []
         },
         {
@@ -409,7 +403,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Week 3, Y2: 97.1",
           "encodings": []
         },
         {
@@ -433,7 +426,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Week 4, Y2: 98.4",
           "encodings": []
         }
       ],

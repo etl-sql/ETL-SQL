@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "DeliveryDistribution",
   "title": "Delivery Distribution",
   "bounds": {
@@ -183,7 +183,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "North: 2, 3.50, 5.0, 6.50, 8",
           "encodings": []
         },
         {
@@ -239,7 +238,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "South: 1, 2.00, 3.0, 4.00, 5",
           "encodings": []
         }
       ],

@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "StackedTierBar",
   "title": "Quarterly Tier Revenue Stack",
   "bounds": {
@@ -255,7 +255,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-Q1, Y: 85000, Color: Enterprise",
           "encodings": []
         },
         {
@@ -303,7 +302,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-Q2, Y: 92000, Color: Enterprise",
           "encodings": []
         }
       ],
@@ -366,7 +364,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-Q1, Y: 42000, Color: Mid-Market",
           "encodings": []
         },
         {
@@ -414,7 +411,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-Q2, Y: 47000, Color: Mid-Market",
           "encodings": []
         }
       ],
@@ -477,7 +473,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-Q1, Y: 28000, Color: SMB",
           "encodings": []
         },
         {
@@ -525,7 +520,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-Q2, Y: 31000, Color: SMB",
           "encodings": []
         }
       ],

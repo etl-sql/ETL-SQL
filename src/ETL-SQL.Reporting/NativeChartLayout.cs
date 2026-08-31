@@ -107,7 +107,10 @@ public static class NativeChartLayoutResolver
         var selectedProfile = profile ?? NativeChartLayoutProfile.Default;
         if (visual.ChartSpec is not null && visual.ChartData is not null)
         {
-            visual.PlotPlan = new PlotPlanResolver().Resolve(visual.ChartSpec, visual.ChartData, selectedProfile[tier].Bounds, visual.GeographicGeometry);
+            var resolver = new PlotPlanResolver();
+            visual.PlotPlan = visual.PlotPlan is null
+                ? resolver.Resolve(visual.ChartSpec, visual.ChartData, selectedProfile[tier].Bounds, visual.GeographicGeometry)
+                : resolver.Relayout(visual.ChartSpec, visual.ChartData, visual.PlotPlan, selectedProfile[tier].Bounds);
             visual.Interaction = visual.PlotPlan.Interaction is null
                 ? null
                 : InteractionManifest.From(visual.PlotPlan.Interaction);

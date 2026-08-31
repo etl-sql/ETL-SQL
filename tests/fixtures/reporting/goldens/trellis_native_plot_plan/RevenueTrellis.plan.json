@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "RevenueTrellis",
   "title": "Revenue by Region",
   "bounds": {
@@ -159,7 +159,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: A, Y: 10, Column: North",
           "encodings": []
         },
         {
@@ -191,7 +190,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: B, Y: 20, Column: North",
           "encodings": []
         },
         {
@@ -223,7 +221,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: A, Y: 7, Column: South",
           "encodings": []
         },
         {
@@ -255,7 +252,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: B, Y: 14, Column: South",
           "encodings": []
         }
       ],

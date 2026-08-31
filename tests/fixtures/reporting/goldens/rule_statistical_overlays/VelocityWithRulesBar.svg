@@ -12,12 +12,12 @@
 <line x1='60' y1='40' x2='424.4' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='VelocityWithRulesBar-plot-clip'><rect x='60' y='40' width='364.4' height='250'/></clipPath></defs>
 <g clip-path='url(#VelocityWithRulesBar-plot-clip)'>
-<rect x='67.592' y='120.645' width='44.55' height='169.355' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>42</title></rect>
-<rect x='128.325' y='96.452' width='44.55' height='193.548' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>48</title></rect>
-<rect x='189.058' y='132.742' width='44.55' height='157.258' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>39</title></rect>
-<rect x='249.792' y='68.226' width='44.55' height='221.774' fill='#5470c6' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>55</title></rect>
-<rect x='310.525' y='84.355' width='44.55' height='205.645' fill='#5470c6' fill-opacity='1' data-row-index='4' data-extent-axis='y' data-extent-anchor='end'><title>51</title></rect>
-<rect x='371.258' y='40' width='44.55' height='250' fill='#5470c6' fill-opacity='1' data-row-index='5' data-extent-axis='y' data-extent-anchor='end'><title>62</title></rect>
+<rect x='67.592' y='120.645' width='44.55' height='169.355' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>42</title></rect>
+<rect x='128.325' y='96.452' width='44.55' height='193.548' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>48</title></rect>
+<rect x='189.058' y='132.742' width='44.55' height='157.258' fill='#5470c6' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>39</title></rect>
+<rect x='249.792' y='68.226' width='44.55' height='221.774' fill='#5470c6' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>55</title></rect>
+<rect x='310.525' y='84.355' width='44.55' height='205.645' fill='#5470c6' data-row-index='4' data-extent-axis='y' data-extent-anchor='end'><title>51</title></rect>
+<rect x='371.258' y='40' width='44.55' height='250' fill='#5470c6' data-row-index='5' data-extent-axis='y' data-extent-anchor='end'><title>62</title></rect>
 <g class='plot-overlay' data-overlay-type='Goal' data-z-index='100'>
 <line x1='60' y1='88.387' x2='424.4' y2='88.387' stroke='#DC2626' stroke-width='2' stroke-dasharray='7 5'/>
 </g>

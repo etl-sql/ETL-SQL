@@ -12,14 +12,14 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='OrderedCategoryBar-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#OrderedCategoryBar-plot-clip)'>
-<rect x='76.25' y='147.143' width='47.75' height='142.857' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
-<rect x='206.25' y='75.714' width='47.75' height='214.286' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>180</title></rect>
-<rect x='336.25' y='123.333' width='47.75' height='166.667' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>140</title></rect>
-<rect x='466.25' y='40' width='47.75' height='250' fill='#5470c6' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>210</title></rect>
-<rect x='125' y='159.048' width='47.75' height='130.952' fill='#91cc75' fill-opacity='1' data-row-index='4' data-extent-axis='y' data-extent-anchor='end'><title>110</title></rect>
-<rect x='255' y='99.524' width='47.75' height='190.476' fill='#91cc75' fill-opacity='1' data-row-index='5' data-extent-axis='y' data-extent-anchor='end'><title>160</title></rect>
-<rect x='385' y='111.429' width='47.75' height='178.571' fill='#91cc75' fill-opacity='1' data-row-index='6' data-extent-axis='y' data-extent-anchor='end'><title>150</title></rect>
-<rect x='515' y='51.905' width='47.75' height='238.095' fill='#91cc75' fill-opacity='1' data-row-index='7' data-extent-axis='y' data-extent-anchor='end'><title>200</title></rect>
+<rect x='76.25' y='147.143' width='47.75' height='142.857' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
+<rect x='206.25' y='75.714' width='47.75' height='214.286' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>180</title></rect>
+<rect x='336.25' y='123.333' width='47.75' height='166.667' fill='#5470c6' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>140</title></rect>
+<rect x='466.25' y='40' width='47.75' height='250' fill='#5470c6' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>210</title></rect>
+<rect x='125' y='159.048' width='47.75' height='130.952' fill='#91cc75' data-row-index='4' data-extent-axis='y' data-extent-anchor='end'><title>110</title></rect>
+<rect x='255' y='99.524' width='47.75' height='190.476' fill='#91cc75' data-row-index='5' data-extent-axis='y' data-extent-anchor='end'><title>160</title></rect>
+<rect x='385' y='111.429' width='47.75' height='178.571' fill='#91cc75' data-row-index='6' data-extent-axis='y' data-extent-anchor='end'><title>150</title></rect>
+<rect x='515' y='51.905' width='47.75' height='238.095' fill='#91cc75' data-row-index='7' data-extent-axis='y' data-extent-anchor='end'><title>200</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Alpha</text>
 <text class='plot-axis-label' data-axis-index='1' x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Beta</text>

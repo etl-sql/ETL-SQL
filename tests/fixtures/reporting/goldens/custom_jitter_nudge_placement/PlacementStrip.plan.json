@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "PlacementStrip",
   "title": "Deterministic jitter on observations with nudged labels",
   "bounds": {
@@ -221,7 +221,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 12, Y: 3, XOffset: Left, Detail: r1",
           "encodings": [],
           "displayOffsetX": -178.98482940151036113611174292,
           "displayOffsetY": -8.100096288216240056416196655
@@ -263,7 +262,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 18, Y: 5, XOffset: Right, Detail: r2",
           "encodings": [],
           "displayOffsetX": 170.18422078306611143506044978,
           "displayOffsetY": -11.550961449707814658559071925
@@ -305,7 +303,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 15, Y: 2, XOffset: Left, Detail: r3",
           "encodings": [],
           "displayOffsetX": -139.87327151699138851438573110,
           "displayOffsetY": 13.518412480939078165412867145
@@ -347,7 +344,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 21, Y: 4, XOffset: Right, Detail: r4",
           "encodings": [],
           "displayOffsetX": 187.85932552110894007531810542,
           "displayOffsetY": -10.707980124684400847606548910
@@ -402,7 +398,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 12, Y: 3, Text: r1",
           "encodings": [],
           "displayOffsetY": -106.06060606060606060606060605
         },
@@ -435,7 +430,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 18, Y: 5, Text: r2",
           "encodings": [],
           "displayOffsetY": -106.06060606060606060606060608
         },
@@ -468,7 +462,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 15, Y: 2, Text: r3",
           "encodings": [],
           "displayOffsetY": -106.06060606060606060606060605
         },
@@ -501,7 +494,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 21, Y: 4, Text: r4",
           "encodings": [],
           "displayOffsetY": -106.06060606060606060606060605
         }

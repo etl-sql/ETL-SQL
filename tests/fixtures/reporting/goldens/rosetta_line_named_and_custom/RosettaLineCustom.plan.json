@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "RosettaLineCustom",
   "title": "Daily visits",
   "bounds": {
@@ -175,7 +175,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-01, Y: 42",
           "encodings": []
         },
         {
@@ -199,7 +198,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-02, Y: 55",
           "encodings": []
         },
         {
@@ -223,7 +221,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-03, Y: 48",
           "encodings": []
         },
         {
@@ -247,7 +244,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 2026-01-04, Y: 61",
           "encodings": []
         }
       ],

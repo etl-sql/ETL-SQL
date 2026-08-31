@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "InheritedEncodings",
   "title": "Chart-scope encodings inherited by one layer and isolated in another",
   "bounds": {
@@ -211,7 +211,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Alpha, Y: 120",
           "encodings": []
         },
         {
@@ -235,7 +234,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Beta, Y: 180",
           "encodings": []
         },
         {
@@ -259,7 +257,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Gamma, Y: 95",
           "encodings": []
         }
       ],
@@ -306,7 +303,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Alpha, Y: 150, Color: #b91c1c",
           "encodings": []
         },
         {
@@ -338,7 +334,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Beta, Y: 150, Color: #b91c1c",
           "encodings": []
         },
         {
@@ -370,7 +365,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Gamma, Y: 150, Color: #b91c1c",
           "encodings": []
         }
       ],

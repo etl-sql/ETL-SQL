@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "MarketComposition",
   "title": "Candlestick plus volume",
   "bounds": {
@@ -205,7 +205,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Mon, Y2: 1000",
           "encodings": []
         },
         {
@@ -229,7 +228,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Tue, Y2: 1400",
           "encodings": []
         }
       ],
@@ -297,7 +295,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Mon, Open: 10, Close: 13, Low: 8, High: 15",
           "encodings": []
         },
         {
@@ -345,7 +342,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Tue, Open: 13, Close: 11, Low: 9, High: 16",
           "encodings": []
         }
       ],

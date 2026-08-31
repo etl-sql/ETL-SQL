@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "RevenueMixShare",
   "title": "Normalized revenue mix dimmed on the projected period",
   "bounds": {
@@ -179,7 +179,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q1, Y: 40",
           "encodings": [
             {
               "channel": "opacity",
@@ -227,7 +226,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q2, Y: 55",
           "encodings": [
             {
               "channel": "opacity",
@@ -275,7 +273,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q3, Y: 30",
           "encodings": [
             {
               "channel": "opacity",
@@ -343,7 +340,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q1, Y: 35",
           "encodings": [
             {
               "channel": "opacity",
@@ -391,7 +387,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q2, Y: 30",
           "encodings": [
             {
               "channel": "opacity",
@@ -439,7 +434,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q3, Y: 30",
           "encodings": [
             {
               "channel": "opacity",
@@ -507,7 +501,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q1, Y: 25",
           "encodings": [
             {
               "channel": "opacity",
@@ -555,7 +548,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q2, Y: 15",
           "encodings": [
             {
               "channel": "opacity",
@@ -603,7 +595,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Q3, Y: 40",
           "encodings": [
             {
               "channel": "opacity",

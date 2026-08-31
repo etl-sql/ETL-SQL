@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "RegionalRevenue",
   "title": "Revenue by Region",
   "bounds": {
@@ -163,7 +163,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: North, Y: 500",
           "encodings": []
         },
         {
@@ -187,7 +186,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: South, Y: 300",
           "encodings": []
         },
         {
@@ -211,7 +209,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: East, Y: 450",
           "encodings": []
         }
       ],

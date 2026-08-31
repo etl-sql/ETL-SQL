@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "ComplianceGauge",
   "title": "SLA Compliance",
   "bounds": {
@@ -239,7 +239,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Radius: 73.5, Y: 0, Y2: 100, Detail: 80",
           "encodings": []
         }
       ],

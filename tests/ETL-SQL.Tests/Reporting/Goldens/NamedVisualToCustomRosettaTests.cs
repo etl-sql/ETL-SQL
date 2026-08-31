@@ -183,7 +183,6 @@ public class NamedVisualToCustomRosettaTests
     private sealed record DatumProjection(
         int RowIndex,
         bool IsGap,
-        string? Tooltip,
         ImmutableArray<ResolvedChannelValue> Channels,
         ImmutableArray<ResolvedEncodingValue> Encodings,
         decimal DisplayOffsetX,
@@ -221,7 +220,7 @@ public class NamedVisualToCustomRosettaTests
                 layer.Mark, layer.ZIndex, layer.Stack, layer.BandSize, layer.ExtentAxis, layer.ExtentAnchor,
                 layer.Style.IsDefault ? [] : layer.Style,
                 layer.Data.Select(datum => new DatumProjection(
-                    datum.RowIndex, datum.IsGap, datum.Tooltip, datum.Channels,
+                    datum.RowIndex, datum.IsGap, datum.Channels,
                     datum.Encodings.IsDefault ? [] : datum.Encodings,
                     datum.DisplayOffsetX, datum.DisplayOffsetY)).ToImmutableArray()))
             .ToImmutableArray(),

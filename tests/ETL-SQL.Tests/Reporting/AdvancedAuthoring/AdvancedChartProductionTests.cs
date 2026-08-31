@@ -15,10 +15,11 @@ using ETL_SQL.Reporting.Semantics.Runtime;
 using ETL_SQL.Tests.Reporting;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Xunit.Abstractions;
 
 namespace ETL_SQL.Tests.Reporting.AdvancedAuthoring;
 
-public sealed class AdvancedChartProductionTests
+public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
 {
     [Fact]
     public void GeographicCustomLayers_ParseLowerResolveAndRenderWithBoundedBuiltInGeometry()
@@ -450,7 +451,8 @@ public sealed class AdvancedChartProductionTests
         Assert.Equal(12m, PlotPlanResolver.Number(plan.Layers[0].Data[1].Channels.Single(channel => channel.Channel == FieldChannel.YEnd).Value));
         Assert.True(plan.Layers[0].Data[2].IsGap);
         Assert.Contains("class='plot-ribbon'", new SvgChartRenderer().Render(plan));
-        Assert.Contains("first", plan.Layers[0].Data[0].Tooltip);
+        Assert.Equal("first", plan.Layers[0].Data[0].Channels
+            .Single(channel => channel.Channel == FieldChannel.Tooltip).DisplayValue);
     }
 
     [Fact]
@@ -750,12 +752,14 @@ public sealed class AdvancedChartProductionTests
         renderClock.Stop();
         var svgBytes = System.Text.Encoding.UTF8.GetByteCount(svg);
 
+        output.WriteLine($"resolver_ms={resolverClock.Elapsed.TotalMilliseconds:0.###} render_ms={renderClock.Elapsed.TotalMilliseconds:0.###} allocated_bytes={allocatedBytes} plan_bytes={planBytes} svg_bytes={svgBytes}");
+
         Assert.Equal(rowCount, Assert.Single(plan.Layers).Data.Length);
         Assert.True(resolverClock.Elapsed < TimeSpan.FromSeconds(5), $"Resolver took {resolverClock.ElapsedMilliseconds} ms."); // flaky-time-bound-ok: 5-second regression budget has substantial headroom over the measured 65 ms workload.
         Assert.True(renderClock.Elapsed < TimeSpan.FromSeconds(5), $"SVG render took {renderClock.ElapsedMilliseconds} ms."); // flaky-time-bound-ok: 5-second regression budget has substantial headroom over the measured 35 ms workload.
-        Assert.True(allocatedBytes < 256L * 1024L * 1024L, $"Resolver allocated {allocatedBytes:N0} bytes.");
-        Assert.InRange(planBytes, 1, 16 * 1024 * 1024);
-        Assert.InRange(svgBytes, 1, 16 * 1024 * 1024);
+        Assert.True(allocatedBytes < 16L * 1024L * 1024L, $"Resolver allocated {allocatedBytes:N0} bytes.");
+        Assert.InRange(planBytes, 1, 6 * 1024 * 1024);
+        Assert.InRange(svgBytes, 1, 600 * 1024);
     }
 
     [Fact]

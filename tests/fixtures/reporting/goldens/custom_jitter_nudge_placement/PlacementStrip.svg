@@ -12,10 +12,12 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='PlacementStrip-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#PlacementStrip-plot-clip)'>
-<circle class='plot-point' cx='-95.348' cy='194.779' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='0'></circle>
-<circle class='plot-point' cx='568.972' cy='39.813' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='1'></circle>
-<circle class='plot-point' cx='101.339' cy='292.155' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='2'></circle>
-<circle class='plot-point' cx='744.223' cy='116.413' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='3'></circle>
+<g class='plot-point-layer' stroke='white' stroke-width='1.5'>
+<circle class='plot-point' cx='-95.348' cy='194.779' r='4' fill='#5470c6' data-row-index='0'></circle>
+<circle class='plot-point' cx='568.972' cy='39.813' r='4' fill='#5470c6' data-row-index='1'></circle>
+<circle class='plot-point' cx='101.339' cy='292.155' r='4' fill='#5470c6' data-row-index='2'></circle>
+<circle class='plot-point' cx='744.223' cy='116.413' r='4' fill='#5470c6' data-row-index='3'></circle>
+</g>
 </g>
 <text class='plot-smart-label' data-row-index='0' data-priority='201' x='83.636' y='89.818' text-anchor='middle' font-size='10' fill='#5470c6'>r1</text>
 <path class='plot-smart-label-leader' data-row-index='1' d='M 398.788 -54.697 L 398.788 49' fill='none' stroke='#5470c6' stroke-width='.75' stroke-opacity='.65'/>

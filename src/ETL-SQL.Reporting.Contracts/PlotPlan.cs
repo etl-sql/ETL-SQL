@@ -61,8 +61,7 @@ public sealed record ResolvedEncodingValue(ConditionalEncodingChannel Channel, C
 public sealed record ResolvedDatum(
     int RowIndex,
     ImmutableArray<ResolvedChannelValue> Channels,
-    bool IsGap,
-    string? Tooltip)
+    bool IsGap)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<ResolvedEncodingValue> Encodings { get; init; } = [];

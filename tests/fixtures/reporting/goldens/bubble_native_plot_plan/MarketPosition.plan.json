@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "MarketPosition",
   "title": "Market Position",
   "bounds": {
@@ -239,7 +239,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 10, Y: 20, Size: 1000, Text: Market A",
           "encodings": []
         },
         {
@@ -279,7 +278,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 15, Y: 25, Size: 500, Text: Market B",
           "encodings": []
         },
         {
@@ -319,7 +317,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 5, Y: 30, Size: 2000, Text: Market C",
           "encodings": []
         }
       ],

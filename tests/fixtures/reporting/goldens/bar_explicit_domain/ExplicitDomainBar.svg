@@ -12,10 +12,10 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='ExplicitDomainBar-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#ExplicitDomainBar-plot-clip)'>
-<rect x='76.25' y='215' width='96.5' height='75' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>150</title></rect>
-<rect x='206.25' y='130' width='96.5' height='160' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>320</title></rect>
-<rect x='336.25' y='150' width='96.5' height='140' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>280</title></rect>
-<rect x='466.25' y='85' width='96.5' height='205' fill='#5470c6' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>410</title></rect>
+<rect x='76.25' y='215' width='96.5' height='75' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>150</title></rect>
+<rect x='206.25' y='130' width='96.5' height='160' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>320</title></rect>
+<rect x='336.25' y='150' width='96.5' height='140' fill='#5470c6' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>280</title></rect>
+<rect x='466.25' y='85' width='96.5' height='205' fill='#5470c6' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>410</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Dept A</text>
 <text class='plot-axis-label' data-axis-index='1' x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Dept B</text>

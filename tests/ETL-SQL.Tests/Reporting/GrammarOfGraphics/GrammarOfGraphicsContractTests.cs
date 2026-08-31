@@ -40,7 +40,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.PlotPlan();
         var json = ChartContractSerializer.Serialize(value);
 
-        Assert.Equal("767de214aa732fa6030c97256860efc7e50bc0349350532f9988db39b535e5cc", Fingerprint(json));
+        Assert.Equal("597bb68a3043722b1da0057bb93de929f9df0870807f493417bd0edf14186214", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializePlotPlan(json)));
         Assert.Equal(["North", "South"], value.Series.Select(series => series.Key));
         Assert.Equal(["revenue-bars", "target-rule"], value.Layers.Select(layer => layer.Id));
@@ -55,6 +55,17 @@ public sealed class GrammarOfGraphicsContractTests
             json.Replace(ChartContractVersions.ChartSpecSchema, "https://example.invalid/chart-spec", StringComparison.Ordinal)));
         Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializeChartSpec(
             json.Replace("\"version\": 2", "\"version\": 3", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.19")]
+    public void PlotPlanVersionTwo_MustBeRegeneratedAfterTooltipRemoval()
+    {
+        var json = ChartContractSerializer.Serialize(GrammarOfGraphicsContractFixtures.PlotPlan())
+            .Replace(ChartContractVersions.PlotPlanSchema, ChartContractVersions.LegacyPlotPlanV2Schema, StringComparison.Ordinal)
+            .Replace("\"version\": 3", "\"version\": 2", StringComparison.Ordinal);
+
+        Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializePlotPlan(json));
     }
 
     [Fact]

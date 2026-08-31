@@ -12,12 +12,16 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='InferredScatterVisual-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#InferredScatterVisual-plot-clip)'>
-<circle class='plot-point' cx='83.636' cy='100.54' r='11.2' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='0'></circle>
-<circle class='plot-point' cx='242.139' cy='51.364' r='22' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='1'></circle>
-<circle class='plot-point' cx='425.668' cy='146.393' r='4' fill='#5470c6' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='2'></circle>
-<circle class='plot-point' cx='153.155' cy='236.77' r='4' fill='#91cc75' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='3'></circle>
-<circle class='plot-point' cx='350.588' cy='193.575' r='14.8' fill='#91cc75' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='4'></circle>
-<circle class='plot-point' cx='556.364' cy='278.636' r='22' fill='#91cc75' fill-opacity='1' stroke='white' stroke-width='1.5' data-row-index='5'></circle>
+<g class='plot-point-layer' stroke='white' stroke-width='1.5'>
+<circle class='plot-point' cx='83.636' cy='100.54' r='11.2' fill='#5470c6' data-row-index='0'></circle>
+<circle class='plot-point' cx='242.139' cy='51.364' r='22' fill='#5470c6' data-row-index='1'></circle>
+<circle class='plot-point' cx='425.668' cy='146.393' r='4' fill='#5470c6' data-row-index='2'></circle>
+</g>
+<g class='plot-point-layer' stroke='white' stroke-width='1.5'>
+<circle class='plot-point' cx='153.155' cy='236.77' r='4' fill='#91cc75' data-row-index='3'></circle>
+<circle class='plot-point' cx='350.588' cy='193.575' r='14.8' fill='#91cc75' data-row-index='4'></circle>
+<circle class='plot-point' cx='556.364' cy='278.636' r='22' fill='#91cc75' data-row-index='5'></circle>
+</g>
 </g>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>56.49</text>

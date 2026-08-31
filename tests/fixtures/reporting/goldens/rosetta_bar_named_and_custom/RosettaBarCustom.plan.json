@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "RosettaBarCustom",
   "title": "Revenue by region",
   "bounds": {
@@ -175,7 +175,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: North, Y: 120",
           "encodings": []
         },
         {
@@ -199,7 +198,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: South, Y: 95",
           "encodings": []
         },
         {
@@ -223,7 +221,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: East, Y: 140",
           "encodings": []
         },
         {
@@ -247,7 +244,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: West, Y: 110",
           "encodings": []
         }
       ],

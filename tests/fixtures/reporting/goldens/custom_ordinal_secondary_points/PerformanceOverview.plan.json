@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "PerformanceOverview",
   "title": "Revenue and Margin",
   "bounds": {
@@ -217,7 +217,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Jan, Y: 120",
           "encodings": []
         },
         {
@@ -241,7 +240,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Feb, Y: 145",
           "encodings": []
         },
         {
@@ -265,7 +263,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Mar, Y: 130",
           "encodings": []
         }
       ],
@@ -304,7 +301,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Jan, Y2: 0.28",
           "encodings": [
             {
               "channel": "color",
@@ -343,7 +339,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Feb, Y2: 0.32",
           "encodings": [
             {
               "channel": "color",
@@ -382,7 +377,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Mar, Y2: -0.05",
           "encodings": [
             {
               "channel": "color",

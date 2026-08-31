@@ -12,12 +12,12 @@
 <line x1='60' y1='40' x2='470' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='StackedTierBar-plot-clip'><rect x='60' y='40' width='410' height='250'/></clipPath></defs>
 <g clip-path='url(#StackedTierBar-plot-clip)'>
-<rect x='85.625' y='165' width='152.75' height='125' fill='#1E3A8A' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>85000</title></rect>
-<rect x='290.625' y='154.706' width='152.75' height='135.294' fill='#1E3A8A' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>92000</title></rect>
-<rect x='85.625' y='103.235' width='152.75' height='61.765' fill='#3B82F6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>42000</title></rect>
-<rect x='290.625' y='85.588' width='152.75' height='69.118' fill='#3B82F6' fill-opacity='1' data-row-index='4' data-extent-axis='y' data-extent-anchor='end'><title>47000</title></rect>
-<rect x='85.625' y='62.059' width='152.75' height='41.176' fill='#93C5FD' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>28000</title></rect>
-<rect x='290.625' y='40' width='152.75' height='45.588' fill='#93C5FD' fill-opacity='1' data-row-index='5' data-extent-axis='y' data-extent-anchor='end'><title>31000</title></rect>
+<rect x='85.625' y='165' width='152.75' height='125' fill='#1E3A8A' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>85000</title></rect>
+<rect x='290.625' y='154.706' width='152.75' height='135.294' fill='#1E3A8A' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>92000</title></rect>
+<rect x='85.625' y='103.235' width='152.75' height='61.765' fill='#3B82F6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>42000</title></rect>
+<rect x='290.625' y='85.588' width='152.75' height='69.118' fill='#3B82F6' data-row-index='4' data-extent-axis='y' data-extent-anchor='end'><title>47000</title></rect>
+<rect x='85.625' y='62.059' width='152.75' height='41.176' fill='#93C5FD' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>28000</title></rect>
+<rect x='290.625' y='40' width='152.75' height='45.588' fill='#93C5FD' data-row-index='5' data-extent-axis='y' data-extent-anchor='end'><title>31000</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='162.5' y='306' text-anchor='middle' font-size='9' fill='#666'>2026-Q1</text>
 <text class='plot-axis-label' data-axis-index='1' x='367.5' y='306' text-anchor='middle' font-size='9' fill='#666'>2026-Q2</text>

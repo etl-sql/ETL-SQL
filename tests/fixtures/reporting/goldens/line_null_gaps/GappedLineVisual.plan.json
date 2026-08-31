@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "GappedLineVisual",
   "title": "Discontinuous Telemetry with Missing Values",
   "bounds": {
@@ -199,7 +199,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Day 1, Y: 10.5",
           "encodings": []
         },
         {
@@ -223,7 +222,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Day 2, Y: 14.2",
           "encodings": []
         },
         {
@@ -245,7 +243,6 @@
             }
           ],
           "isGap": true,
-          "tooltip": "X: Day 3, Y: -",
           "encodings": []
         },
         {
@@ -269,7 +266,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Day 4, Y: 18.9",
           "encodings": []
         },
         {
@@ -291,7 +287,6 @@
             }
           ],
           "isGap": true,
-          "tooltip": "X: Day 5, Y: -",
           "encodings": []
         },
         {
@@ -315,7 +310,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Day 6, Y: 22.1",
           "encodings": []
         }
       ],

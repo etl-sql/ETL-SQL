@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "ProfitBridge",
   "title": "Profit Bridge",
   "bounds": {
@@ -199,7 +199,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Opening, Y: 50, Detail: 1",
           "encodings": []
         },
         {
@@ -247,7 +246,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Revenue, Y: 30, Detail: 0",
           "encodings": []
         },
         {
@@ -295,7 +293,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Costs, Y: -20, Detail: 0",
           "encodings": []
         },
         {
@@ -343,7 +340,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Closing, Y: 60, Detail: 1",
           "encodings": []
         }
       ],

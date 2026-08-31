@@ -16,6 +16,40 @@ public sealed class PlotPlanResolver
     public PlotPlan Resolve(ChartSpec spec, ChartDataSet data, PlotBounds? bounds = null,
         ResolvedGeographicGeometry? geography = null)
     {
+        var independent = ResolveIndependent(spec, data, geography);
+        return ResolveBounds(spec, data, independent, bounds ?? new PlotBounds(0, 0, 600, 350));
+    }
+
+    /// <summary>Recomputes only geometry that depends on the requested container bounds.</summary>
+    public PlotPlan Relayout(ChartSpec spec, ChartDataSet data, PlotPlan plan, PlotBounds bounds)
+    {
+        spec.Validate();
+        data.Validate();
+        plan.Validate();
+        var columns = data.Columns.ToDictionary(column => column.Name, StringComparer.OrdinalIgnoreCase);
+        var formatter = new ChartValueFormatter(spec.Formatting);
+        var facets = ResolveFacets(spec, columns, plan.Scales, bounds, formatter);
+        var layers = ResolveDisplayOffsets(spec, data, columns, plan.Layers, plan.Scales, facets, bounds);
+        layers = ResolveMarkExtents(spec, layers);
+        var summary = BuildSummary(spec, data, plan.Series, layers, plan.Scales, facets,
+            plan.Nulls.GapRows, plan.Nulls.SkippedRows);
+        var resolved = plan with
+        {
+            Bounds = bounds,
+            Layers = layers,
+            AccessibleSummary = summary,
+            Facets = facets,
+            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, plan.Scales, bounds)
+        };
+        resolved.Validate();
+        return resolved;
+    }
+
+    private static BoundsIndependentPlan ResolveIndependent(
+        ChartSpec spec,
+        ChartDataSet data,
+        ResolvedGeographicGeometry? geography)
+    {
         spec.Validate();
         data.Validate();
         var columns = data.Columns.ToDictionary(column => column.Name, StringComparer.OrdinalIgnoreCase);
@@ -33,9 +67,6 @@ public sealed class PlotPlanResolver
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
         var layers = ResolveStacking(ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray());
         var scales = ResolveScales(spec, columns, categories, layers, formatter).ToImmutableArray();
-        var plotBounds = bounds ?? new PlotBounds(0, 0, 600, 350);
-        var facets = ResolveFacets(spec, columns, scales, plotBounds, formatter);
-        layers = ResolveDisplayOffsets(spec, data, columns, layers, scales, facets, plotBounds);
         layers = ResolveMarkExtents(spec, layers);
         // One pass over the source layers. `sourceLayers` was a lazy query enumerated twice, and
         // `gapRows.Contains` on an ImmutableArray made the skipped-row scan O(rows x gap rows).
@@ -51,36 +82,64 @@ public sealed class PlotPlanResolver
         var skippedRows = Enumerable.Range(0, data.RowCount)
             .Where(index => !usedRows.Contains(index) && !gapRowSet.Contains(index)).ToImmutableArray();
         var fallback = BuildFallback(spec, layers, categories, formatter);
-        var summary = BuildSummary(spec, data, series, layers, scales, facets, gapRows, skippedRows);
-
         var interaction = ChartInteractionResolver.Resolve(
             spec,
             data.Columns.Select(column => column.Name).ToArray(),
             ChartInteractionResolver.HighlightFor(layers));
 
+        return new BoundsIndependentPlan(columns, formatter, series, palette, legend, layers, scales,
+            new ResolvedNullPolicy(spec.NullHandling.Default, spec.NullHandling.Fields, gapRows, skippedRows),
+            fallback, interaction, geography);
+    }
+
+    private static PlotPlan ResolveBounds(
+        ChartSpec spec,
+        ChartDataSet data,
+        BoundsIndependentPlan independent,
+        PlotBounds bounds)
+    {
+        var facets = ResolveFacets(spec, independent.Columns, independent.Scales, bounds, independent.Formatter);
+        var layers = ResolveDisplayOffsets(spec, data, independent.Columns, independent.Layers,
+            independent.Scales, facets, bounds);
+        var summary = BuildSummary(spec, data, independent.Series, layers, independent.Scales, facets,
+            independent.Nulls.GapRows, independent.Nulls.SkippedRows);
+
         var plan = PlotPlan.Create(
             spec.Id,
-            plotBounds,
-            scales,
-            series,
-            palette,
-            legend,
+            bounds,
+            independent.Scales,
+            independent.Series,
+            independent.Palette,
+            independent.Legend,
             layers,
-            new ResolvedNullPolicy(spec.NullHandling.Default, spec.NullHandling.Fields, gapRows, skippedRows),
+            independent.Nulls,
             summary,
-            fallback,
+            independent.Fallback,
             spec.Title,
             spec.Coordinate,
             spec.Theme.Tokens,
             facets) with
         {
-            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, plotBounds),
-            Interaction = interaction,
-            Geography = geography
+            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, independent.Scales, bounds),
+            Interaction = independent.Interaction,
+            Geography = independent.Geography
         };
         plan.Validate();
         return plan;
     }
+
+    private sealed record BoundsIndependentPlan(
+        IReadOnlyDictionary<string, ChartColumn> Columns,
+        ChartValueFormatter Formatter,
+        ImmutableArray<ResolvedSeries> Series,
+        ImmutableArray<PaletteAssignment> Palette,
+        ImmutableArray<LegendEntry> Legend,
+        ImmutableArray<ResolvedMarkLayer> Layers,
+        ImmutableArray<ResolvedScale> Scales,
+        ResolvedNullPolicy Nulls,
+        SemanticFallback Fallback,
+        ResolvedInteraction? Interaction,
+        ResolvedGeographicGeometry? Geography);
 
     /// <summary>
     /// Stamps the resolved value-extent semantics onto every layer, so renderers and the browser
@@ -466,7 +525,7 @@ public sealed class PlotPlanResolver
                 new ResolvedChannelValue(FieldChannel.Median, ChartValue.From(median), median.ToString(CultureInfo.InvariantCulture)),
                 new ResolvedChannelValue(FieldChannel.Q3, ChartValue.From(q3), q3.ToString(CultureInfo.InvariantCulture)),
                 new ResolvedChannelValue(FieldChannel.High, ChartValue.From(high), high.ToString(CultureInfo.InvariantCulture))
-            ], values.Length == 0, $"{category}: {low}, {q1}, {median}, {q3}, {high}");
+            ], values.Length == 0);
         }).ToImmutableArray();
         return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, resolvedData)
         { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
@@ -529,7 +588,7 @@ public sealed class PlotPlanResolver
                     new ResolvedChannelValue(FieldChannel.Theta, ChartValue.From(binding.Field!), binding.Field),
                     new ResolvedChannelValue(FieldChannel.Radius, value,
                         column.DisplayValues.IsDefaultOrEmpty ? formatter.Format(value, binding.Field) : column.DisplayValues[rowIndex])
-                ], value.Kind == ChartValueKind.Null, $"{binding.Field}: {formatter.Format(value, binding.Field)}");
+                ], value.Kind == ChartValueKind.Null);
             }).ToImmutableArray();
             yield return new ResolvedMarkLayer($"{layer.Id}-{rowIndex:D2}", layer.Mark, layer.ZIndex + rowIndex, key, points)
             { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
@@ -626,8 +685,7 @@ public sealed class PlotPlanResolver
                 FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.YStart or FieldChannel.YEnd or
                 FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close)
             && channel.Value.Kind == ChartValueKind.Null);
-        return new ResolvedDatum(rowIndex, channels, requiredNull && nulls.Default == NullValuePolicy.Gap,
-            string.Join(", ", channels.Select(channel => $"{channel.Channel}: {channel.DisplayValue ?? formatter.Format(channel.Value)}")))
+        return new ResolvedDatum(rowIndex, channels, requiredNull && nulls.Default == NullValuePolicy.Gap)
         {
             Encodings = ResolveConditions(conditionGroups, rowIndex, columns)
         };
@@ -638,7 +696,7 @@ public sealed class PlotPlanResolver
         var channels = bindings.Select(binding => new ResolvedChannelValue(binding.Channel,
             binding == categoryBinding ? ChartValue.From(category) : ChartValue.Null(),
             binding == categoryBinding ? category : null)).ToImmutableArray();
-        return new ResolvedDatum(index, channels, true, null);
+        return new ResolvedDatum(index, channels, true);
     }
 
     /// <summary>
@@ -772,7 +830,7 @@ public sealed class PlotPlanResolver
                     new ResolvedChannelValue(FieldChannel.X, xValue, xDisplay),
                     new ResolvedChannelValue(FieldChannel.Y, value.HasValue ? ChartValue.From(value.Value) : ChartValue.Null(),
                         value.HasValue ? formatter.Number(value.Value, "G") : formatter.NullLabel)
-                ], !value.HasValue, null);
+                ], !value.HasValue);
         }).ToImmutableArray();
         return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, data)
         { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };

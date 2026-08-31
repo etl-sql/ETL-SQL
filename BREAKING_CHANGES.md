@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.19.0 — Runtime: PlotPlan v3 removes the redundant per-datum tooltip string
+- **What changed**: Serialized `PlotPlan` data no longer repeats a joined `tooltip` string on every datum. Tooltip and text content remain available through the datum's typed `channels` collection, which is the source used by production renderers.
+- **Who is affected**: Diagnostic or server-side integrations that deserialize PlotPlan v2 JSON or read `layers[].data[].tooltip`.
+- **Migration**: Regenerate stored plans from their `ChartSpec` and chart data, then read the `tooltip` or `text` channel's display value. PlotPlan v2 payloads are rejected because the resolved contract is versioned and not a browser persistence format.
+- **Diagnostic**: N/A — contract validation reports the unsupported schema and version.
+- **Earliest removal**: Immediate.
+
 ### v0.19.0 — Syntax: data-quality rules are an `EXPECT` clause, not `@expect`/`@fail` comment tags
 - **What changed**: A column's data-quality rules are declared with `EXPECT <rule> [ON FAILURE THROW | WARN | QUARANTINE]`, repeatable per column, replacing `/* @expect: '…'; @fail: '…'; */` and the numbered `@expect_N`/`@fail_N` pairing. Rules combine with `AND`/`OR` rather than a comma (in a select list the comma separates columns), a `MATCHES` pattern is a quoted string literal, and rule values need no outer quoting or SQL-style doubling. A rule decides which rows leave a statement, so it belongs in the grammar where no formatter or comment stripper can remove it; comments keep carrying the tags that describe data.
 - **Who is affected**: Every script declaring column rules with `@expect`/`@fail`.

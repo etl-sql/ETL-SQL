@@ -589,6 +589,7 @@ internal sealed class PlotPlanSvgRenderer
         var labelColorToken = showLabels ? Style(plan, "DATA_LABELS:COLOR") : null;
         var labelSize = showLabels ? Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9" : "9";
         var labelWeight = showLabels ? Style(plan, "DATA_LABELS:FONT_WEIGHT") : null;
+        var colorScale = ColorScale(plan);
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
@@ -622,7 +623,7 @@ internal sealed class PlotPlanSvgRenderer
                 x = Math.Min(first, second);
                 width = Math.Max(1m, Math.Abs(second - first));
             }
-            var datumColor = ResolveDatumColor(plan, datum, color);
+            var datumColor = ResolveDatumColor(colorScale, datum, color);
             var opacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m;
             var top = Math.Min(startY, endY);
             var barHeight = Math.Max(1m, Math.Abs(startY - endY));
@@ -632,7 +633,7 @@ internal sealed class PlotPlanSvgRenderer
                 : label;
             var rangedClass = rangedY || rangedX ? " class='plot-range-rect'" : string.Empty;
             var extent = rangedY || rangedX ? string.Empty : extentAttributes;
-            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'{extent}><title>{Esc(title)}</title></rect>");
+            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}' fill='{Esc(datumColor)}'{OpacityAttribute(opacity)} data-row-index='{datum.RowIndex}'{extent}><title>{Esc(title)}</title></rect>");
             if (showLabels)
             {
                 var position = labelPosition;
@@ -663,6 +664,7 @@ internal sealed class PlotPlanSvgRenderer
         var slot = plotWidth / categoryCount;
         var length = slot * layer.BandSize;
         var strokeWidth = Math.Clamp(layer.TickThickness * 8m, 1m, 8m);
+        var colorScale = ColorScale(plan);
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
@@ -675,7 +677,7 @@ internal sealed class PlotPlanSvgRenderer
             var x2 = vertical ? x : x + length / 2m;
             var y1 = vertical ? y - Math.Min(length, plotHeight / Math.Max(1, categoryCount)) / 2m : y;
             var y2 = vertical ? y + Math.Min(length, plotHeight / Math.Max(1, categoryCount)) / 2m : y;
-            var datumColor = ResolveDatumColor(plan, datum, color);
+            var datumColor = ResolveDatumColor(colorScale, datum, color);
             builder.AppendLine($"<line class='plot-tick' x1='{N(x1)}' y1='{N(y1)}' x2='{N(x2)}' y2='{N(y2)}' stroke='{Esc(datumColor)}' stroke-width='{N(strokeWidth)}' data-row-index='{datum.RowIndex}'><title>{Esc(PlotPlanResolver.Display(Channel(datum, FieldChannel.Tooltip) ?? ChartValue.From(value.Value)))}</title></line>");
         }
     }
@@ -813,13 +815,15 @@ internal sealed class PlotPlanSvgRenderer
         var labelFormat = showLabels ? Style(plan, "DATA_LABELS:FORMAT") : null;
         var labelColor = showLabels ? SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444") : "#444";
         var labelFontSize = showLabels ? FontSize(Style(plan, "DATA_LABELS:FONT_SIZE")) : 9m;
+        var colorScale = ColorScale(plan);
+        builder.AppendLine("<g class='plot-point-layer' stroke='white' stroke-width='1.5'>");
         foreach (var datum in layer.Data.Where(item => !item.IsGap))
         {
             var xChannel = Channel(datum, FieldChannel.X) ?? ChartValue.Null();
             var yValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ??
                 Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
             if (!yValue.HasValue) continue;
-            var datumColor = ResolveDatumColor(plan, datum, color);
+            var datumColor = ResolveDatumColor(colorScale, datum, color);
             var rawSize = PlotPlanResolver.Number(Channel(datum, FieldChannel.Size) ?? ChartValue.Null());
             var radius = EncodingNumber(datum, ConditionalEncodingChannel.Size)
                 ?? NormalizePointRadius(rawSize, minimumSize, maximumSize);
@@ -841,7 +845,7 @@ internal sealed class PlotPlanSvgRenderer
             }
             x += datum.DisplayOffsetX;
             var y = MapY(yValue.Value, yScale, plotHeight) + datum.DisplayOffsetY;
-            builder.AppendLine($"<circle class='plot-point' cx='{N(x)}' cy='{N(y)}' r='{N(Math.Clamp(radius, 1m, 30m))}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(opacity, 0m, 1m))}' stroke='white' stroke-width='1.5' data-row-index='{datum.RowIndex}'>{(string.IsNullOrWhiteSpace(label) ? string.Empty : $"<title>{Esc(label)}</title>")}</circle>");
+            builder.AppendLine($"<circle class='plot-point' cx='{N(x)}' cy='{N(y)}' r='{N(Math.Clamp(radius, 1m, 30m))}' fill='{Esc(datumColor)}'{OpacityAttribute(opacity)} data-row-index='{datum.RowIndex}'>{(string.IsNullOrWhiteSpace(label) ? string.Empty : $"<title>{Esc(label)}</title>")}</circle>");
             if (showLabels)
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
                     label ?? FormatDataLabel(yValue.Value, labelFormat),
@@ -849,6 +853,7 @@ internal sealed class PlotPlanSvgRenderer
                     100 + layer.ZIndex,
                     labelFontSize));
         }
+        builder.AppendLine("</g>");
     }
 
     private static void RenderFunnel(StringBuilder builder, PlotPlan plan)
@@ -1860,20 +1865,21 @@ internal sealed class PlotPlanSvgRenderer
         return null;
     }
 
-    private static string ResolveDatumColor(PlotPlan plan, ResolvedDatum datum, string fallback)
+    private static ResolvedScale? ColorScale(PlotPlan plan)
     {
-        if (EncodingText(datum, ConditionalEncodingChannel.Color) is { } conditional)
-            return SafePaint(conditional, fallback);
-        ResolvedScale? scale = null;
         var scales = plan.Scales;
         for (var i = 0; i < scales.Length; i++)
         {
             if (scales[i].Channel == FieldChannel.Color && scales[i].ColorRange is not null)
-            {
-                scale = scales[i];
-                break;
-            }
+                return scales[i];
         }
+        return null;
+    }
+
+    private static string ResolveDatumColor(ResolvedScale? scale, ResolvedDatum datum, string fallback)
+    {
+        if (EncodingText(datum, ConditionalEncodingChannel.Color) is { } conditional)
+            return SafePaint(conditional, fallback);
         if (scale?.ColorRange is not { } range) return fallback;
         var raw = Channel(datum, FieldChannel.Color);
         var value = raw is null ? null : PlotPlanResolver.Number(raw);
@@ -1888,6 +1894,12 @@ internal sealed class PlotPlanSvgRenderer
                 : InterpolateColor(range.Mid, range.High, middle == 1m ? 1m : (ratio - middle) / (1m - middle));
         }
         return InterpolateColor(range.Low, range.High, ratio);
+    }
+
+    private static string OpacityAttribute(decimal opacity)
+    {
+        var clamped = Math.Clamp(opacity, 0m, 1m);
+        return clamped == 1m ? string.Empty : $" fill-opacity='{N(clamped)}'";
     }
 
     private static decimal ColorMidOffset(ResolvedScale scale, ResolvedColorRange range)

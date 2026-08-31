@@ -17,8 +17,8 @@
 <line x1='60' y1='40' x2='280' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='RevenueTrellis-plot-clip'><rect x='60' y='40' width='220' height='250'/></clipPath></defs>
 <g clip-path='url(#RevenueTrellis-plot-clip)'>
-<rect x='73.75' y='165' width='81.5' height='125' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>10</title></rect>
-<rect x='183.75' y='40' width='81.5' height='250' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>20</title></rect>
+<rect x='73.75' y='165' width='81.5' height='125' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>10</title></rect>
+<rect x='183.75' y='40' width='81.5' height='250' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>20</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='115' y='306' text-anchor='middle' font-size='9' fill='#666'>A</text>
 <text class='plot-axis-label' data-axis-index='1' x='225' y='306' text-anchor='middle' font-size='9' fill='#666'>B</text>
@@ -48,8 +48,8 @@
 <line x1='60' y1='40' x2='280' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='RevenueTrellis-plot-clip'><rect x='60' y='40' width='220' height='250'/></clipPath></defs>
 <g clip-path='url(#RevenueTrellis-plot-clip)'>
-<rect x='73.75' y='202.5' width='81.5' height='87.5' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>7</title></rect>
-<rect x='183.75' y='115' width='81.5' height='175' fill='#5470c6' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>14</title></rect>
+<rect x='73.75' y='202.5' width='81.5' height='87.5' fill='#5470c6' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>7</title></rect>
+<rect x='183.75' y='115' width='81.5' height='175' fill='#5470c6' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>14</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='115' y='306' text-anchor='middle' font-size='9' fill='#666'>A</text>
 <text class='plot-axis-label' data-axis-index='1' x='225' y='306' text-anchor='middle' font-size='9' fill='#666'>B</text>

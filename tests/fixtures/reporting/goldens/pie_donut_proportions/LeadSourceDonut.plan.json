@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "LeadSourceDonut",
   "title": "Lead Source Breakdown (Donut)",
   "bounds": {
@@ -223,7 +223,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Theta: Search, Radius: 4500",
           "encodings": []
         },
         {
@@ -247,7 +246,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Theta: Direct, Radius: 2800",
           "encodings": []
         },
         {
@@ -271,7 +269,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Theta: Referral, Radius: 1900",
           "encodings": []
         },
         {
@@ -295,7 +292,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Theta: Organic Social, Radius: 1200",
           "encodings": []
         }
       ],

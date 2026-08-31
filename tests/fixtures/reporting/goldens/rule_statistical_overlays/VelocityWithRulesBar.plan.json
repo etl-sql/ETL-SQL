@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "VelocityWithRulesBar",
   "title": "Engineering Velocity vs Target Benchmarks",
   "bounds": {
@@ -199,7 +199,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Sprint 1, Y: 42",
           "encodings": []
         },
         {
@@ -223,7 +222,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Sprint 2, Y: 48",
           "encodings": []
         },
         {
@@ -247,7 +245,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Sprint 3, Y: 39",
           "encodings": []
         },
         {
@@ -271,7 +268,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Sprint 4, Y: 55",
           "encodings": []
         },
         {
@@ -295,7 +291,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Sprint 5, Y: 51",
           "encodings": []
         },
         {
@@ -319,7 +314,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Sprint 6, Y: 62",
           "encodings": []
         }
       ],

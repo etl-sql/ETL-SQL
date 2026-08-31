@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "BinnedHistogram",
   "title": "Explicit-bin histogram authored as ranged rectangles",
   "bounds": {
@@ -177,7 +177,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "XStart: 0, XEnd: 25, Y: 40",
           "encodings": []
         },
         {
@@ -209,7 +208,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "XStart: 25, XEnd: 50, Y: 60",
           "encodings": []
         },
         {
@@ -241,7 +239,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "XStart: 50, XEnd: 100, Y: 20",
           "encodings": []
         }
       ],

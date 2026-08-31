@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "PriceHistory",
   "title": "Price History",
   "bounds": {
@@ -187,7 +187,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: D1, Open: 10, High: 14, Low: 8, Close: 12",
           "encodings": []
         },
         {
@@ -235,7 +234,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: D2, Open: 12, High: 15, Low: 9, Close: 10",
           "encodings": []
         },
         {
@@ -283,7 +281,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: D3, Open: 10, High: 16, Low: 10, Close: 15",
           "encodings": []
         }
       ],

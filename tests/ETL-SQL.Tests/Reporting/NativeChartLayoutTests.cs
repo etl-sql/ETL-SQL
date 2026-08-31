@@ -1,6 +1,7 @@
 using ETL_SQL.ReportHosting;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Semantics;
+using ETL_SQL.Reporting.Semantics.Runtime;
 
 namespace ETL_SQL.Tests.Reporting;
 
@@ -71,6 +72,25 @@ public sealed class NativeChartLayoutTests
         var pdf = new PdfExporter().Export(refreshed);
         Assert.True(pdf.Length > 100);
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
+    }
+
+    [Fact]
+    public void Resolve_ReusesBoundsIndependentPlanState()
+    {
+        var spec = GrammarOfGraphics.GrammarOfGraphicsContractFixtures.ChartSpec();
+        var data = GrammarOfGraphics.GrammarOfGraphicsContractFixtures.ChartData();
+        var original = new PlotPlanResolver().Resolve(spec, data);
+        var visual = new VisualManifest { Name = "Reusable", VisualType = "CUSTOM", ChartSpec = spec, ChartData = data, PlotPlan = original };
+
+        NativeChartLayoutResolver.Resolve(visual, NativeChartLayoutTier.Wide);
+
+        var relaid = Assert.IsType<PlotPlan>(visual.PlotPlan);
+        Assert.Equal(1200m, relaid.Bounds.Width);
+        Assert.True(original.Scales == relaid.Scales);
+        Assert.True(original.Series == relaid.Series);
+        Assert.True(original.Palette == relaid.Palette);
+        Assert.True(original.Legend == relaid.Legend);
+        Assert.Same(original.Fallback, relaid.Fallback);
     }
 
     private static string GetSamplePath(string relativePath)

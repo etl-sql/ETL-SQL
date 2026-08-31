@@ -12,10 +12,10 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='SharedPaletteBar-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#SharedPaletteBar-plot-clip)'>
-<rect x='76.25' y='147.143' width='23.375' height='142.857' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
-<rect x='230.625' y='75.714' width='23.375' height='214.286' fill='#91cc75' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>180</title></rect>
-<rect x='515' y='40' width='23.375' height='250' fill='#fac858' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>210</title></rect>
-<rect x='409.375' y='123.333' width='23.375' height='166.667' fill='#ee6666' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>140</title></rect>
+<rect x='76.25' y='147.143' width='23.375' height='142.857' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
+<rect x='230.625' y='75.714' width='23.375' height='214.286' fill='#91cc75' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>180</title></rect>
+<rect x='515' y='40' width='23.375' height='250' fill='#fac858' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>210</title></rect>
+<rect x='409.375' y='123.333' width='23.375' height='166.667' fill='#ee6666' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>140</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Alpha</text>
 <text class='plot-axis-label' data-axis-index='1' x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>Beta</text>

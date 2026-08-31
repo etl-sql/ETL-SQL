@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "BulletBands",
   "title": "Ranged qualitative bands with an actual bar and a target rule",
   "bounds": {
@@ -171,7 +171,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Revenue, YStart: 0, YEnd: 50",
           "encodings": []
         },
         {
@@ -203,7 +202,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Margin, YStart: 0, YEnd: 50",
           "encodings": []
         },
         {
@@ -235,7 +233,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: NPS, YStart: 0, YEnd: 50",
           "encodings": []
         }
       ],
@@ -289,7 +286,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Revenue, YStart: 50, YEnd: 75",
           "encodings": []
         },
         {
@@ -321,7 +317,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Margin, YStart: 50, YEnd: 75",
           "encodings": []
         },
         {
@@ -353,7 +348,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: NPS, YStart: 50, YEnd: 70",
           "encodings": []
         }
       ],
@@ -407,7 +401,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Revenue, YStart: 75, YEnd: 100",
           "encodings": []
         },
         {
@@ -439,7 +432,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Margin, YStart: 75, YEnd: 100",
           "encodings": []
         },
         {
@@ -471,7 +463,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: NPS, YStart: 70, YEnd: 100",
           "encodings": []
         }
       ],
@@ -517,7 +508,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Revenue, Y: 92",
           "encodings": []
         },
         {
@@ -541,7 +531,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Margin, Y: 80",
           "encodings": []
         },
         {
@@ -565,7 +554,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: NPS, Y: 78",
           "encodings": []
         }
       ],
@@ -603,7 +591,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Revenue, Y: 83",
           "encodings": []
         },
         {
@@ -627,7 +614,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: Margin, Y: 92",
           "encodings": []
         },
         {
@@ -651,7 +637,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: NPS, Y: 80",
           "encodings": []
         }
       ],

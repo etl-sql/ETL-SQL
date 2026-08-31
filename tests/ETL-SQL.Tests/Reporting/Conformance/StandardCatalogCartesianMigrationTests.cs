@@ -278,7 +278,7 @@ public sealed class StandardCatalogCartesianMigrationTests
         var svg = new SvgChartRenderer().Render(plan);
         Assert.Equal(3, CountOccurrences(svg, "class='plot-point'"));
         Assert.Contains("fill='#C0392B' fill-opacity='0.45'", svg);
-        Assert.Contains("fill='#2E86C1' fill-opacity='1'", svg);
+        Assert.Contains("fill='#2E86C1' data-row-index=", svg);
         Assert.Contains(">-0.07</text>", svg);
     }
 

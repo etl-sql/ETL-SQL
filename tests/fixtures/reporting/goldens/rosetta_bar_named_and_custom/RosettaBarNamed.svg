@@ -12,10 +12,10 @@
 <line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
 <defs><clipPath id='RosettaBarNamed-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#RosettaBarNamed-plot-clip)'>
-<rect x='76.25' y='75.714' width='96.5' height='214.286' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
-<rect x='206.25' y='120.357' width='96.5' height='169.643' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>95</title></rect>
-<rect x='336.25' y='40' width='96.5' height='250' fill='#5470c6' fill-opacity='1' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>140</title></rect>
-<rect x='466.25' y='93.571' width='96.5' height='196.429' fill='#5470c6' fill-opacity='1' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>110</title></rect>
+<rect x='76.25' y='75.714' width='96.5' height='214.286' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>120</title></rect>
+<rect x='206.25' y='120.357' width='96.5' height='169.643' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>95</title></rect>
+<rect x='336.25' y='40' width='96.5' height='250' fill='#5470c6' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>140</title></rect>
+<rect x='466.25' y='93.571' width='96.5' height='196.429' fill='#5470c6' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>110</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>North</text>
 <text class='plot-axis-label' data-axis-index='1' x='255' y='306' text-anchor='middle' font-size='9' fill='#666'>South</text>

@@ -99,13 +99,13 @@ internal static class GrammarOfGraphicsContractFixtures
             new ResolvedMarkLayer("revenue-bars", MarkKind.Rect, 0, null,
             [
                 new ResolvedDatum(0,
-                    [new ResolvedChannelValue(FieldChannel.X, ChartValue.From("2026-07"), "Jul"), new ResolvedChannelValue(FieldChannel.Y, ChartValue.From(1234.50m), "$1,234.50")], false, "North: $1,234.50"),
+                    [new ResolvedChannelValue(FieldChannel.X, ChartValue.From("2026-07"), "Jul"), new ResolvedChannelValue(FieldChannel.Y, ChartValue.From(1234.50m), "$1,234.50")], false),
                 new ResolvedDatum(1,
-                    [new ResolvedChannelValue(FieldChannel.X, ChartValue.From("2026-08"), "Aug"), new ResolvedChannelValue(FieldChannel.Y, ChartValue.Null(), "—")], true, "South: —")
+                    [new ResolvedChannelValue(FieldChannel.X, ChartValue.From("2026-08"), "Aug"), new ResolvedChannelValue(FieldChannel.Y, ChartValue.Null(), "—")], true)
             ]),
             new ResolvedMarkLayer("target-rule", MarkKind.Rule, 1, null,
             [
-                new ResolvedDatum(0, [new ResolvedChannelValue(FieldChannel.Y, ChartValue.From(1000m), "$1,000")], false, "Target: $1,000")
+                new ResolvedDatum(0, [new ResolvedChannelValue(FieldChannel.Y, ChartValue.From(1000m), "$1,000")], false)
             ])
         ],
         nulls: new ResolvedNullPolicy(NullValuePolicy.Gap, [], [1], []),

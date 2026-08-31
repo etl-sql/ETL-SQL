@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "OrderHeatMap",
   "title": "Orders by Period",
   "bounds": {
@@ -195,7 +195,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: AM, Y: Mon, Size: 12",
           "encodings": []
         },
         {
@@ -227,7 +226,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: PM, Y: Mon, Size: 30",
           "encodings": []
         },
         {
@@ -259,7 +257,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: AM, Y: Tue, Size: 18",
           "encodings": []
         },
         {
@@ -291,7 +288,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: PM, Y: Tue, Size: 42",
           "encodings": []
         }
       ],

@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "DeliveryPlan",
   "title": "Delivery Plan",
   "bounds": {
@@ -267,7 +267,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Y: Design, X: 2026-01-01, X2: 2026-01-05, Size: 100, Shape: 0, Detail: ",
           "encodings": []
         },
         {
@@ -323,7 +322,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Y: Build, X: 2026-01-06, X2: 2026-01-12, Size: 50, Shape: 0, Detail: Design",
           "encodings": []
         },
         {
@@ -379,7 +377,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Y: Launch, X: 2026-01-13, X2: 2026-01-13, Size: 0, Shape: 1, Detail: Build",
           "encodings": []
         }
       ],

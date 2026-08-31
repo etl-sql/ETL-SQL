@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "ServiceMap",
   "title": "Regions, routes, and service locations",
   "bounds": {
@@ -115,7 +115,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Region: United States of America, Color: 90",
           "encodings": []
         },
         {
@@ -139,7 +138,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Region: Canada, Color: 60",
           "encodings": []
         },
         {
@@ -163,7 +161,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Region: France, Color: 45",
           "encodings": []
         },
         {
@@ -187,7 +184,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Region: United States of America, Color: 90",
           "encodings": []
         }
       ],
@@ -232,7 +228,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -122.3, Latitude: 47.6, Route: west-route",
           "encodings": []
         },
         {
@@ -264,7 +259,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -79.4, Latitude: 43.7, Route: west-route",
           "encodings": []
         },
         {
@@ -296,7 +290,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: 2.35, Latitude: 48.86, Route: atlantic-route",
           "encodings": []
         },
         {
@@ -328,7 +321,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -74.0, Latitude: 40.71, Route: atlantic-route",
           "encodings": []
         }
       ],
@@ -378,7 +370,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -122.3, Latitude: 47.6, Text: Seattle",
           "encodings": []
         },
         {
@@ -410,7 +401,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -79.4, Latitude: 43.7, Text: Toronto",
           "encodings": []
         },
         {
@@ -442,7 +432,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: 2.35, Latitude: 48.86, Text: Paris",
           "encodings": []
         },
         {
@@ -474,7 +463,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -74.0, Latitude: 40.71, Text: New York",
           "encodings": []
         }
       ],
@@ -524,7 +512,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -122.3, Latitude: 47.6, Text: Seattle",
           "encodings": []
         },
         {
@@ -556,7 +543,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -79.4, Latitude: 43.7, Text: Toronto",
           "encodings": []
         },
         {
@@ -588,7 +574,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: 2.35, Latitude: 48.86, Text: Paris",
           "encodings": []
         },
         {
@@ -620,7 +605,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "Longitude: -74.0, Latitude: 40.71, Text: New York",
           "encodings": []
         }
       ],

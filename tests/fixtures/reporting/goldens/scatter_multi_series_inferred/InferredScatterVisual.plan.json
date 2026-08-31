@@ -1,6 +1,6 @@
 {
-  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v2",
-  "version": 2,
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
   "specId": "InferredScatterVisual",
   "title": "Cohort Velocity vs Efficiency Distribution",
   "bounds": {
@@ -291,7 +291,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 12.5, Y: 85.0, Size: 30, Color: Cohort A",
           "encodings": []
         },
         {
@@ -331,7 +330,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 18.2, Y: 92.4, Size: 45, Color: Cohort A",
           "encodings": []
         },
         {
@@ -371,7 +369,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 24.8, Y: 78.1, Size: 20, Color: Cohort A",
           "encodings": []
         }
       ],
@@ -424,7 +421,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 15.0, Y: 64.5, Size: 35, Color: Cohort B",
           "encodings": []
         },
         {
@@ -464,7 +460,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 22.1, Y: 71.0, Size: 50, Color: Cohort B",
           "encodings": []
         },
         {
@@ -504,7 +499,6 @@
             }
           ],
           "isGap": false,
-          "tooltip": "X: 29.5, Y: 58.2, Size: 60, Color: Cohort B",
           "encodings": []
         }
       ],
