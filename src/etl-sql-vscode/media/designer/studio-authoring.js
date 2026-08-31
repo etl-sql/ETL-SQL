@@ -298,14 +298,15 @@ export function createStudioAuthoringSurfaces({
      * the only path that produces a named, reusable query without writing code, which is what every
      * later step depends on. Resolves with the dataset name that is now in play.
      */
-    async function openDataWizard() {
+    async function openDataWizard({ intent = null, connection = null } = {}) {
         const doc = getActiveDocument();
         if (!doc) return null;
         const context = contextFor(doc);
         const wizard = {
-            pane: 'start',
+            // Resuming after the connection wizard skips straight back to the pane the author was on.
+            pane: intent ? 'connection' : 'start',
             // 'dataset' caches through CREATE DATASET; 'live' binds the query straight to the visuals.
-            intent: 'dataset',
+            intent: intent || 'dataset',
             ttl: '',
             scriptDatasets: null,
             registry: null,
@@ -580,10 +581,15 @@ export function createStudioAuthoringSurfaces({
                 : (wizard.queryWorkbench?.getValue?.() ?? wizard.query).trim().replace(/;$/, ''));
 
             const openConnectionThenReturn = () => {
-                // The connection wizard owns the whole modal surface, so this one steps aside and the
-                // author returns to a data wizard that can now see the connection they just wrote.
+                // The connection wizard owns the whole modal surface, so this one steps aside. It
+                // resumes where it left off rather than at the first pane: the author already said
+                // they were creating a dataset, and making them say it again is the whole reason this
+                // detour felt like a dead end.
+                const resumeIntent = wizard.intent;
                 finish(null);
-                shell.openConnectionWizard({ onDone: () => openDataWizard() });
+                shell.openConnectionWizard({
+                    onDone: alias => openDataWizard({ intent: resumeIntent, connection: alias }),
+                });
             };
 
             const openConnection = async alias => {
@@ -710,7 +716,11 @@ export function createStudioAuthoringSurfaces({
                 finish(created);
             };
 
-            paint();
+            // A connection just created is the one the author meant to use, so open it rather than
+            // making them pick it out of a list of one.
+            if (intent && connection && wizard.connections.includes(connection)) openConnection(connection);
+            else paint();
+
             Promise.all([scriptDatasetNames(), registryDatasets()]).then(([scripts, registry]) => {
                 wizard.scriptDatasets = scripts;
                 // A registered dataset this script already declares would be two routes to the same

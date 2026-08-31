@@ -3083,6 +3083,8 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     renderTabs();
     renderSidebarContent('explorer');
+    // Rendered so the panel is ready, but left collapsed: the rail button opens it on demand.
+    if (!state.sidebarOpen) sidebar.classList.add('collapsed');
     if (state.activeDocId === '__home__') {
         renderStudioHome();
         setContextualRailVisibility();

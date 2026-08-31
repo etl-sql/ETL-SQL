@@ -61,7 +61,9 @@ export function createStudioState(options = {}) {
         activeActivity: 'explorer',
         filterSidebarOpen: false,
         selectedVisualId: null,
-        sidebarOpen: true,
+        // Studio opens on the canvas and the script, not on a file tree. The Explorer is one click
+        // away on the rail, and starting collapsed gives the work itself the width.
+        sidebarOpen: false,
         editorInstance: null,
         resultsPanel: null,
         dagInstance: null,
