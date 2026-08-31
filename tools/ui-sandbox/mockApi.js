@@ -1268,7 +1268,10 @@ function mockParseVisuals(script) {
     pattern.lastIndex = end;
 
     const options = {};
-    const source = /\bSOURCE\s*=\s*([^,\n]+)/i.exec(body)?.[1]?.trim();
+    // A source may be a parenthesised SELECT containing commas, so it is read by balancing
+    // parentheses rather than stopping at the first comma. Truncating it made an aggregated
+    // visual look broken here: the canvas card could not see the GROUP BY its source declares.
+    const source = mockReadSourceClause(body);
     const dataset = source && source.startsWith('&') ? source : null;
     if (source && !dataset) options.inline_source = source;
 
@@ -1391,4 +1394,24 @@ function mockParseParameters(script) {
     });
   }
   return parameters;
+}
+
+/** The SOURCE clause value, honouring parentheses so a derived-table select survives intact. */
+function mockReadSourceClause(body) {
+  const match = /\bSOURCE\s*=\s*/i.exec(body);
+  if (!match) return null;
+  const start = match.index + match[0].length;
+  if (body[start] !== '(') {
+    const plain = /^[^,\n]+/.exec(body.slice(start));
+    return plain ? plain[0].trim() : null;
+  }
+  let depth = 0;
+  for (let i = start; i < body.length; i++) {
+    if (body[i] === '(') depth++;
+    else if (body[i] === ')') {
+      depth--;
+      if (depth === 0) return body.slice(start, i + 1).trim();
+    }
+  }
+  return null;
 }

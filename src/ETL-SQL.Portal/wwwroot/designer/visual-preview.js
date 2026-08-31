@@ -154,7 +154,15 @@ function emptyState(message, detail) {
  */
 export function renderVisualSample(host, visual, sample) {
     if (!host) return;
-    const { columns, rows } = normalizeRows(sample);
+
+    // A visual whose source is a grouped SELECT plots the aggregate, not the raw rows. The canvas
+    // holds the dataset's own sample, so it must apply the same grouping the source will — otherwise
+    // the measure resolves to a column that does not exist in the sample and every bar reads zero,
+    // which is exactly what a card looked like after the chart builder wrote an aggregate.
+    const derived = aggregationFromSource(visual?.options?.inline_source);
+    const shaped = derived ? aggregateRows(sample, derived) : sample;
+
+    const { columns, rows } = normalizeRows(shaped);
     if (!rows.length) {
         host.innerHTML = emptyState('No sample rows', 'Choose data so this visual can show real values.');
         return;
@@ -493,4 +501,62 @@ export function aggregateRows(sample, { groupBy, measure }) {
     }));
 
     return { columns: [...groupBy, measure.alias], rows, rowCount: rows.length };
+}
+
+/**
+ * Recognises the grouped SELECT that `buildAggregatedSource` emits, so a surface holding the raw
+ * sample can shape it the way the visual's own source will.
+ *
+ * Deliberately strict: it matches only the exact shape Studio generates, and returns null for
+ * anything hand-written. Guessing at arbitrary SQL here would be worse than not trying — a canvas
+ * card that renders a *plausible* number for a query it did not understand is the same confident lie
+ * as a preview that disagrees with its query.
+ */
+export function aggregationFromSource(source) {
+    const text = String(source || '').trim();
+    const match = /^\(\s*SELECT\s+(.+?)\s+FROM\s+([\s\S]+?)(?:\s+GROUP\s+BY\s+(.+?))?\s*\)$/i.exec(text);
+    if (!match) return null;
+
+    const [, projection, , grouping] = match;
+    const parts = splitTopLevel(projection);
+    if (!parts.length) return null;
+
+    const last = parts[parts.length - 1];
+    const measure = /^(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*\)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$/i.exec(last);
+    if (!measure) return null;
+
+    const [, fn, distinct, column, alias] = measure;
+    const groupBy = grouping ? splitTopLevel(grouping).map(entry => entry.trim()) : [];
+
+    // Everything projected before the measure must be a grouping column, or this is not our shape.
+    const projected = parts.slice(0, -1).map(entry => entry.trim());
+    if (projected.length !== groupBy.length || projected.some((entry, index) => entry !== groupBy[index])) return null;
+
+    return {
+        groupBy,
+        measure: {
+            aggregate: distinct ? 'COUNT_DISTINCT' : fn.toUpperCase(),
+            column,
+            alias,
+        },
+    };
+}
+
+/** Splits on commas that are not inside parentheses. */
+function splitTopLevel(list) {
+    const parts = [];
+    let depth = 0;
+    let current = '';
+    for (const character of String(list)) {
+        if (character === '(') depth++;
+        if (character === ')') depth--;
+        if (character === ',' && depth === 0) {
+            parts.push(current.trim());
+            current = '';
+            continue;
+        }
+        current += character;
+    }
+    if (current.trim()) parts.push(current.trim());
+    return parts;
 }
