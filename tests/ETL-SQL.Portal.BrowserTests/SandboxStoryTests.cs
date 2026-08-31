@@ -865,25 +865,17 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
-    public async Task Studio_ExitActionReportsThatTheProjectHostStopped()
+    public async Task Studio_SandboxStory_DoesNotOfferAHostExitAction()
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator("[data-action='exit']").WaitForAsync();
-        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.documents.forEach(document => document.isDirty = false)");
-        await page.Locator("[data-action='exit']").ClickAsync();
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
 
-        await page.WaitForFunctionAsync("() => window.__STUDIO_EXIT_REQUESTS__?.length === 1");
-        var request = await page.EvaluateAsync<System.Text.Json.JsonElement>(
-            "() => window.__STUDIO_EXIT_REQUESTS__[0]");
-
-        Assert.False(request.GetProperty("force").GetBoolean());
-        Assert.Equal(0, request.GetProperty("activeRuns").GetInt32());
-        Assert.Equal(0, request.GetProperty("dirtyDocuments").GetInt32());
-        Assert.Contains("Studio host stopped", await page.Locator("body").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, await page.Locator("[data-action='exit']").CountAsync());
+        Assert.Null(await page.EvaluateAsync<object?>("() => window.__STUDIO_EXIT_REQUESTS__"));
         Assert.Empty(session.PageErrors);
     }
 

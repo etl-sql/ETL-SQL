@@ -154,6 +154,9 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         await exitConfirmation.GetByRole(AriaRole.Button, new() { Name = "Exit Without Saving" }).ClickAsync();
         await firstStopping.WaitAsync(TimeSpan.FromSeconds(10));
         await firstHost.StopAsync();
+        var stoppedPage = firstPage.GetByRole(AriaRole.Status);
+        await stoppedPage.WaitForAsync(new() { Timeout = 10_000 });
+        Assert.Contains("project host exited cleanly", await stoppedPage.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
 
         await using var relaunchedHost = WorkstationEditorApp.Create([], Options(firstWorkspace.Root, renamedFile, "relaunch-token"));
         await relaunchedHost.StartAsync();
@@ -167,6 +170,31 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         Assert.Empty(firstWindow.PageErrors);
         Assert.Empty(secondWindow.PageErrors);
         Assert.Empty(relaunchedWindow.PageErrors);
+    }
+
+    [Fact]
+    public async Task Exit_WaitsForTheProjectHostToStopBeforeReportingSuccess()
+    {
+        using var workspace = new TempWorkspace();
+        var file = Path.Combine(workspace.Root, "exit.etlsql");
+        await File.WriteAllTextAsync(file, "SELECT 1 AS Ready;");
+
+        await using var host = WorkstationEditorApp.Create([], Options(workspace.Root, file, "exit-token"));
+        await host.StartAsync();
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync(StudioUrl(host, "exit-token"));
+        await WaitForStudioAsync(session);
+
+        var stopping = ApplicationStoppingAsync(host);
+        await page.Locator("[data-action='exit']").ClickAsync();
+        await stopping.WaitAsync(TimeSpan.FromSeconds(10));
+        await host.StopAsync();
+
+        var stoppedPage = page.GetByRole(AriaRole.Status);
+        await stoppedPage.WaitForAsync(new() { Timeout = 10_000 });
+        Assert.Contains("project host exited cleanly", await stoppedPage.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(session.PageErrors);
     }
 
     private static WorkstationEditorOptions Options(string root, string file, string token) =>

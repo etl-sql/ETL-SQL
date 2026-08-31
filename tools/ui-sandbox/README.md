@@ -18,6 +18,17 @@ Serves the repo root over loopback and opens
 `http://localhost:8099/tools/ui-sandbox/index.html`. Ctrl+C to stop.
 Port in use? `-Port 8100`. Don't auto-open? `-NoOpen`.
 
+The server prints its PID and records enough local state for a second terminal to stop the exact
+instance cleanly:
+
+```powershell
+pwsh -File tools\ui-sandbox\serve.ps1 -Stop
+```
+
+Pass the matching `-Port` when using a non-default port. The server also stops after 120 minutes
+without a request so a detached development process cannot live forever. Set
+`-IdleTimeoutMinutes 0` only when an intentionally persistent sandbox is needed.
+
 Nothing here needs a build step: every story renders from files the repository tracks, so a clean
 checkout gets the same result as a working tree that has built everything. `SandboxStoryTests`
 asserts that property rather than trusting it — see

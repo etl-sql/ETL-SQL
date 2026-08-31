@@ -46,14 +46,49 @@ internal static class StudioShell
     const authFetch = (url, opts = {}) =>
       fetch(url, { ...opts, headers: { 'X-ETLSQL-EDITOR-TOKEN': token, ...(opts.headers || {}) } });
     const clientId = crypto.randomUUID();
+    const requestTimeoutMs = 5000;
+    const shutdownConfirmationTimeoutMs = 10000;
     let heartbeatTimer = null;
+    let shutdownStarted = false;
+
+    const delay = milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds));
+
+    async function authFetchWithTimeout(url, opts = {}, timeoutMs = requestTimeoutMs) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await authFetch(url, { ...opts, signal: controller.signal });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          const timeoutError = new Error(`Studio lifecycle request timed out after ${timeoutMs} ms.`);
+          timeoutError.name = 'TimeoutError';
+          throw timeoutError;
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
+    function stopHeartbeat() {
+      if (heartbeatTimer) window.clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+
+    function startHeartbeat() {
+      if (heartbeatTimer || shutdownStarted) return;
+      heartbeatTimer = window.setInterval(() => {
+        Promise.all([sendHeartbeat(), checkExternalChanges()]).catch(() => stopHeartbeat());
+      }, 10000);
+    }
 
     function hasDirtyDocuments() {
       return Boolean(window.__STUDIO__?.state?.documents?.some(document => document.isDirty));
     }
 
     async function sendHeartbeat() {
-      await authFetch('/api/studio/heartbeat', {
+      if (shutdownStarted) return;
+      await authFetchWithTimeout('/api/studio/heartbeat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId, dirty: hasDirtyDocuments() })
@@ -80,16 +115,57 @@ internal static class StudioShell
 
     async function exitStudio(state) {
       await sendHeartbeat();
-      const response = await authFetch('/api/studio/shutdown', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force: Boolean(state?.force) })
-      });
-      if (!response.ok) {
+      shutdownStarted = true;
+      stopHeartbeat();
+
+      let requestError = null;
+      let response = null;
+      try {
+        response = await authFetchWithTimeout('/api/studio/shutdown', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: Boolean(state?.force) })
+        });
+      } catch (error) {
+        requestError = error;
+      }
+      if (response && !response.ok) {
+        shutdownStarted = false;
+        startHeartbeat();
         const error = await response.json().catch(() => ({}));
         throw new Error(error.error || 'The Studio host refused the shutdown request.');
       }
-      return true;
+
+      const deadline = Date.now() + shutdownConfirmationTimeoutMs;
+      let consecutiveDisconnects = 0;
+      while (Date.now() < deadline) {
+        await delay(150);
+        try {
+          await authFetchWithTimeout('/api/studio/lifecycle', {}, 750);
+          consecutiveDisconnects = 0;
+        } catch (error) {
+          if (error?.name === 'TimeoutError') {
+            consecutiveDisconnects = 0;
+            continue;
+          }
+          consecutiveDisconnects++;
+          if (consecutiveDisconnects >= 2) {
+            window.setTimeout(() => {
+              document.title = 'ETL-SQL Studio — Stopped';
+              document.body.innerHTML = `<main role="status" style="display:grid;place-items:center;min-height:100%;padding:24px;box-sizing:border-box;text-align:center">
+                <div><h1 style="margin:0 0 8px;font-size:1.25rem">Studio stopped</h1>
+                <p style="margin:0;color:var(--portal-text-soft,#8b949e)">The project host exited cleanly. You can close this tab.</p></div>
+              </main>`;
+            }, 0);
+            return true;
+          }
+        }
+      }
+
+      shutdownStarted = false;
+      startHeartbeat();
+      if (requestError) throw requestError;
+      return false;
     }
 
     async function mutateWorkspace(route, body) {
@@ -222,13 +298,12 @@ internal static class StudioShell
         }
       });
       await sendHeartbeat();
-      heartbeatTimer = window.setInterval(() => {
-        Promise.all([sendHeartbeat(), checkExternalChanges()]).catch(() => window.clearInterval(heartbeatTimer));
-      }, 10000);
+      startHeartbeat();
     }
 
     window.addEventListener('pagehide', () => {
-      if (heartbeatTimer) window.clearInterval(heartbeatTimer);
+      stopHeartbeat();
+      if (shutdownStarted) return;
       const body = new Blob([JSON.stringify({ clientId, dirty: hasDirtyDocuments() })], { type: 'application/json' });
       navigator.sendBeacon('/api/studio/disconnect?token=' + encodeURIComponent(token), body);
     });
