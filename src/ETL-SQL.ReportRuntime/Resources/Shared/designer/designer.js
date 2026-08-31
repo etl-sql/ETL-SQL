@@ -4989,17 +4989,12 @@ export function createDesigner(container, opts = {}) {
         const tableFields = isTable ? availableFields : [];
 
         return `
-            <section class="etlsql-format-inspector" aria-label="Visual formatting">
-                <div class="etlsql-format-profile">
-                    <div><span>Format profile</span><strong>${esc(v.type)} · ${esc(formatValue || 'Auto')}</strong></div>
-                    <div class="etlsql-format-profile-palette" aria-label="${palette.length ? 'Authored palette' : 'Default palette'}">
-                        ${palettePreview.slice(0, 5).map(color => `<i style="--format-color:${esc(toHexColor(color, '#64748b'))}"></i>`).join('')}
-                    </div>
-                </div>
-
                 <details class="etlsql-format-group" open>
                     <summary>Title & number</summary>
                     <div class="etlsql-format-group-body">
+                        <label class="etlsql-dsgn-label">Title
+                            <input id="pp-title" class="form-control" value="${esc(v.title || '')}" placeholder="Visual Title">
+                        </label>
                         <label class="etlsql-dsgn-label">Subtitle
                             <input id="pp-format-subtitle" class="form-control" value="${esc(subtitle.text || '')}" placeholder="Optional context line">
                         </label>
@@ -5110,8 +5105,80 @@ export function createDesigner(container, opts = {}) {
                         </div>
                         <button type="button" class="etlsql-format-add" data-rule-add>+ Add rule</button>
                     </div>
-                </details>` : ''}
-            </section>`;
+                </details>` : ''}`;
+    }
+
+    function bindInspectorSearch(panel) {
+        const searchInput = panel.querySelector('#pp-search-filter');
+        const clearBtn = panel.querySelector('#pp-search-clear');
+        if (!searchInput) return;
+
+        const groups = panel.querySelectorAll('details.etlsql-format-group');
+        const defaultOpenMap = new Map();
+        groups.forEach(g => {
+            defaultOpenMap.set(g, g.hasAttribute('open'));
+        });
+
+        const filter = () => {
+            const q = (searchInput.value || '').trim().toLowerCase();
+            if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+
+            if (!q) {
+                groups.forEach(g => {
+                    g.style.display = '';
+                    if (defaultOpenMap.get(g)) g.setAttribute('open', '');
+                    else g.removeAttribute('open');
+                    g.querySelectorAll('.etlsql-dsgn-label, .etlsql-dsgn-map-row, .etlsql-format-rule, .etlsql-format-field, .etlsql-format-axis-grid, .etlsql-dsgn-grid4, .etlsql-format-toggle, .etlsql-dsgn-chart-quick-controls, .etlsql-dsgn-color-grid').forEach(row => {
+                        row.style.display = '';
+                    });
+                });
+                return;
+            }
+
+            groups.forEach(g => {
+                const summaryText = (g.querySelector('summary')?.textContent || '').toLowerCase();
+                const rows = g.querySelectorAll('.etlsql-dsgn-label, .etlsql-dsgn-map-row, .etlsql-format-rule, .etlsql-format-field, .etlsql-format-axis-grid, .etlsql-dsgn-grid4, .etlsql-format-toggle, .etlsql-dsgn-chart-quick-controls, .etlsql-dsgn-color-grid');
+                let matchCount = 0;
+
+                if (summaryText.includes(q)) {
+                    g.style.display = '';
+                    g.setAttribute('open', '');
+                    rows.forEach(row => { row.style.display = ''; });
+                    return;
+                }
+
+                rows.forEach(row => {
+                    const rowText = row.textContent.toLowerCase();
+                    const inputMeta = Array.from(row.querySelectorAll('input, select, textarea'))
+                        .map(i => `${i.placeholder || ''} ${i.id || ''} ${i.name || ''} ${i.dataset?.role || ''} ${i.dataset?.axisKey || ''}`)
+                        .join(' ').toLowerCase();
+                    const isMatch = rowText.includes(q) || inputMeta.includes(q);
+                    row.style.display = isMatch ? '' : 'none';
+                    if (isMatch) matchCount++;
+                });
+
+                if (matchCount > 0) {
+                    g.style.display = '';
+                    g.setAttribute('open', '');
+                } else {
+                    g.style.display = 'none';
+                }
+            });
+        };
+
+        searchInput.addEventListener('input', filter);
+        searchInput.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                searchInput.value = '';
+                filter();
+                searchInput.blur();
+            }
+        });
+        clearBtn?.addEventListener('click', () => {
+            searchInput.value = '';
+            filter();
+            searchInput.focus();
+        });
     }
 
     function bindVisualFormatInspector(panel, v, columns, rerender) {
@@ -5252,8 +5319,9 @@ export function createDesigner(container, opts = {}) {
         const opacity = v.options?.OPACITY || '';
 
         return `
-            <div class="etlsql-dsgn-props-section etlsql-dsgn-formatting-section">
-                <div class="etlsql-dsgn-props-hdr">Formatting & Style</div>
+            <details class="etlsql-format-group etlsql-dsgn-formatting-section">
+                <summary>Card style <span>${[bg, border, shadow, radius].filter(Boolean).length || 'Default'}</span></summary>
+                <div class="etlsql-format-group-body">
                 
                 <label class="etlsql-dsgn-label">Background Color
                     <div class="etlsql-dsgn-color-picker-row">
@@ -5366,7 +5434,8 @@ export function createDesigner(container, opts = {}) {
                         <input type="text" id="pp-fmt-opacity-text" class="form-control" placeholder="1" value="${esc(opacity)}">
                     </div>
                 </label>
-            </div>
+                </div>
+            </details>
         `;
     }
 
@@ -5590,32 +5659,43 @@ export function createDesigner(container, opts = {}) {
             const themes = ['light', 'dark', 'midnight', 'dracula', 'nord', 'custom'];
 
             propsPanel.innerHTML = `
-                <div class="etlsql-dsgn-props-section">
-                    <div class="etlsql-dsgn-props-hdr">Report & Dashboard Style</div>
-                    <label class="etlsql-dsgn-label">Report Title
-                        <input type="text" id="pp-report-title" class="form-control" value="${esc(reportName)}" placeholder="Dashboard Title">
-                    </label>
-                    <label class="etlsql-dsgn-label">Report Theme
-                        <select id="pp-report-theme" class="form-control">
-                            ${themes.map(t => `<option value="${t}"${currentTheme === t ? ' selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('')}
-                        </select>
-                    </label>
-                    ${currentTheme === 'custom' || style.accent ? `
-                    <div class="etlsql-dsgn-color-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-                        <label class="etlsql-dsgn-label">Accent Color
-                            <input type="color" id="pp-color-accent" class="form-control" value="${style.accent || '#2563eb'}">
-                        </label>
-                        <label class="etlsql-dsgn-label">Background
-                            <input type="color" id="pp-color-bg" class="form-control" value="${style.background || '#ffffff'}">
-                        </label>
-                        <label class="etlsql-dsgn-label">Card Surface
-                            <input type="color" id="pp-color-surface" class="form-control" value="${style.surface || '#ffffff'}">
-                        </label>
-                        <label class="etlsql-dsgn-label">Text Color
-                            <input type="color" id="pp-color-text" class="form-control" value="${style.text || '#1e293b'}">
-                        </label>
-                    </div>` : ''}
-                </div>
+                <section class="etlsql-format-inspector" aria-label="Report properties">
+                    <div class="etlsql-format-profile">
+                        <div><span>Dashboard</span><strong>Report & Dashboard Style</strong></div>
+                    </div>
+                    <div class="etlsql-format-search-wrap">
+                        <input type="search" id="pp-search-filter" class="form-control etlsql-format-search" placeholder="Filter settings... (e.g. title, theme, accent)" autocomplete="off" spellcheck="false">
+                        <button type="button" class="etlsql-format-search-clear" id="pp-search-clear" title="Clear filter" style="display:none;">×</button>
+                    </div>
+                    <details class="etlsql-format-group" open>
+                        <summary>Style & Theme</summary>
+                        <div class="etlsql-format-group-body">
+                            <label class="etlsql-dsgn-label">Report Title
+                                <input type="text" id="pp-report-title" class="form-control" value="${esc(reportName)}" placeholder="Dashboard Title">
+                            </label>
+                            <label class="etlsql-dsgn-label">Report Theme
+                                <select id="pp-report-theme" class="form-control">
+                                    ${themes.map(t => `<option value="${t}"${currentTheme === t ? ' selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('')}
+                                </select>
+                            </label>
+                            ${currentTheme === 'custom' || style.accent ? `
+                            <div class="etlsql-dsgn-color-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+                                <label class="etlsql-dsgn-label">Accent Color
+                                    <input type="color" id="pp-color-accent" class="form-control" value="${style.accent || '#2563eb'}">
+                                </label>
+                                <label class="etlsql-dsgn-label">Background
+                                    <input type="color" id="pp-color-bg" class="form-control" value="${style.background || '#ffffff'}">
+                                </label>
+                                <label class="etlsql-dsgn-label">Card Surface
+                                    <input type="color" id="pp-color-surface" class="form-control" value="${style.surface || '#ffffff'}">
+                                </label>
+                                <label class="etlsql-dsgn-label">Text Color
+                                    <input type="color" id="pp-color-text" class="form-control" value="${style.text || '#1e293b'}">
+                                </label>
+                            </div>` : ''}
+                        </div>
+                    </details>
+                </section>
                 <p class="etlsql-dsgn-props-empty" style="margin-top:16px;">Click any visual card on the grid canvas to edit its properties, mappings, and events.</p>
             `;
 
@@ -5648,6 +5728,7 @@ export function createDesigner(container, opts = {}) {
             bindColor('#pp-color-bg', 'background');
             bindColor('#pp-color-surface', 'surface');
             bindColor('#pp-color-text', 'text');
+            bindInspectorSearch(propsPanel);
             return;
         }
 
@@ -5655,27 +5736,40 @@ export function createDesigner(container, opts = {}) {
             const containerType = v.options?.CONTAINER_TYPE || 'BOX';
             const ctypes = ['BOX', 'SCROLL', 'DRAWER', 'SIDEBAR', 'TABS', 'ACCORDION', 'MODAL', 'POPOVER'];
             propsPanel.innerHTML = `
-                <div class="etlsql-dsgn-props-section">
-                    <div class="etlsql-dsgn-props-hdr">Properties</div>
-                    <label class="etlsql-dsgn-label">Name<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
-                    <label class="etlsql-dsgn-label">Container Type
-                        <select id="pp-container-type" class="form-control">
-                            ${ctypes.map(t => `<option${containerType === t ? ' selected' : ''}>${t}</option>`).join('')}
-                        </select>
-                    </label>
-                    <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
-                </div>
-                ${renderFormattingSectionHtml(v)}
-                <div class="etlsql-dsgn-props-section">
-                    <div class="etlsql-dsgn-props-hdr">Grid Position</div>
-                    <div class="etlsql-dsgn-grid4">
-                        <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
-                        <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
-                        <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
-                        <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                <section class="etlsql-format-inspector" aria-label="Container properties">
+                    <div class="etlsql-format-profile">
+                        <div><span>Container</span><strong>${esc(v.name || 'CONTAINER')} · ${esc(containerType)}</strong></div>
                     </div>
-                    <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Container</button>
-                </div>
+                    <div class="etlsql-format-search-wrap">
+                        <input type="search" id="pp-search-filter" class="form-control etlsql-format-search" placeholder="Filter settings... (e.g. title, type, border)" autocomplete="off" spellcheck="false">
+                        <button type="button" class="etlsql-format-search-clear" id="pp-search-clear" title="Clear filter" style="display:none;">×</button>
+                    </div>
+                    <details class="etlsql-format-group" open>
+                        <summary>Properties</summary>
+                        <div class="etlsql-format-group-body">
+                            <label class="etlsql-dsgn-label">Container Type
+                                <select id="pp-container-type" class="form-control">
+                                    ${ctypes.map(t => `<option${containerType === t ? ' selected' : ''}>${t}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
+                        </div>
+                    </details>
+                    ${renderFormattingSectionHtml(v)}
+                    <details class="etlsql-format-group" open>
+                        <summary>Grid Position & Layout</summary>
+                        <div class="etlsql-format-group-body">
+                            <div class="etlsql-dsgn-grid4">
+                                <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                                <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                                <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                                <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                            </div>
+                            <label class="etlsql-dsgn-label" style="margin-top:6px;">Container Name (ID)<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
+                            <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Container</button>
+                        </div>
+                    </details>
+                </section>
             `;
             on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
             on('#pp-container-type', e => { if(!v.options) v.options = {}; v.options.CONTAINER_TYPE = e.target.value; });
@@ -5685,6 +5779,7 @@ export function createDesigner(container, opts = {}) {
             on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
             on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
             bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
+            bindInspectorSearch(propsPanel);
             propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
             return;
         }
@@ -5693,27 +5788,40 @@ export function createDesigner(container, opts = {}) {
             const buttonType = v.options?.BUTTON_TYPE || 'REFRESH';
             const btypes = ['REFRESH', 'BACK', 'HELP', 'SUBMIT', 'RESET', 'NAVIGATE', 'ACTION'];
             propsPanel.innerHTML = `
-                <div class="etlsql-dsgn-props-section">
-                    <div class="etlsql-dsgn-props-hdr">Properties</div>
-                    <label class="etlsql-dsgn-label">Name<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
-                    <label class="etlsql-dsgn-label">Button Type
-                        <select id="pp-button-type" class="form-control">
-                            ${btypes.map(t => `<option${buttonType === t ? ' selected' : ''}>${t}</option>`).join('')}
-                        </select>
-                    </label>
-                    <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
-                </div>
-                ${renderFormattingSectionHtml(v)}
-                <div class="etlsql-dsgn-props-section">
-                    <div class="etlsql-dsgn-props-hdr">Grid Position</div>
-                    <div class="etlsql-dsgn-grid4">
-                        <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
-                        <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
-                        <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
-                        <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                <section class="etlsql-format-inspector" aria-label="Button properties">
+                    <div class="etlsql-format-profile">
+                        <div><span>Button</span><strong>${esc(v.name || 'BUTTON')} · ${esc(buttonType)}</strong></div>
                     </div>
-                    <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Button</button>
-                </div>
+                    <div class="etlsql-format-search-wrap">
+                        <input type="search" id="pp-search-filter" class="form-control etlsql-format-search" placeholder="Filter settings... (e.g. title, button type, border)" autocomplete="off" spellcheck="false">
+                        <button type="button" class="etlsql-format-search-clear" id="pp-search-clear" title="Clear filter" style="display:none;">×</button>
+                    </div>
+                    <details class="etlsql-format-group" open>
+                        <summary>Properties</summary>
+                        <div class="etlsql-format-group-body">
+                            <label class="etlsql-dsgn-label">Button Type
+                                <select id="pp-button-type" class="form-control">
+                                    ${btypes.map(t => `<option${buttonType === t ? ' selected' : ''}>${t}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
+                        </div>
+                    </details>
+                    ${renderFormattingSectionHtml(v)}
+                    <details class="etlsql-format-group" open>
+                        <summary>Grid Position & Layout</summary>
+                        <div class="etlsql-format-group-body">
+                            <div class="etlsql-dsgn-grid4">
+                                <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                                <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                                <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                                <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                            </div>
+                            <label class="etlsql-dsgn-label" style="margin-top:6px;">Button Name (ID)<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
+                            <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Button</button>
+                        </div>
+                    </details>
+                </section>
             `;
             on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
             on('#pp-button-type', e => { if(!v.options) v.options = {}; v.options.BUTTON_TYPE = e.target.value; });
@@ -5723,6 +5831,7 @@ export function createDesigner(container, opts = {}) {
             on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
             on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
             bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
+            bindInspectorSearch(propsPanel);
             propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
             return;
         }
@@ -5746,30 +5855,31 @@ export function createDesigner(container, opts = {}) {
         const parentType = parentVis?.options?.CONTAINER_TYPE;
         const isTabbedParent = parentType === 'TABS' || parentType === 'ACCORDION';
 
-        const containers = curVis().filter(c => c.type === 'CONTAINER' && c.id !== v.id);
-        const cOpts = containers
-            .map(c => `<option value="${c.id}"${v.containerId === c.id ? ' selected' : ''}>📁 ${esc(c.title || c.name)}</option>`)
+        // Visuals live on the page, not on the root state. Reaching for state.visuals threw a
+        // TypeError inside renderProps, and because renderProps runs *before* onVisualSelect in
+        // selectVisual, the throw took the whole selection with it: the host never learned a visual
+        // had been selected, so the properties panel simply never opened.
+        const cOpts = curVis()
+            .filter(c => c.type === 'CONTAINER' && c.id !== v.id)
+            .map(c => `<option value="${esc(c.id)}"${v.containerId === c.id ? ' selected' : ''}>${esc(c.name || 'Container')} (${esc(c.options?.CONTAINER_TYPE || 'BOX')})</option>`)
             .join('');
 
-        let colOptions = [];
-        if (v.dataset) {
-            if (opts.snapshotPackage && Array.isArray(opts.snapshotPackage.columns)) {
-                colOptions = opts.snapshotPackage.columns;
-            } else if (opts.getDatasetColumns) {
-                colOptions = opts.getDatasetColumns(v.dataset) || [];
-            }
-        }
-        const datalistId = `dsgn-col-list-${v.id}`;
-        const datalistHtml = colOptions.length ? `
-            <datalist id="${datalistId}">
-                ${colOptions.map(c => `<option value="${esc(c)}"></option>`).join('')}
-            </datalist>` : '';
+        const varOpts = (state.variables || [])
+            .map(vr => `<option value="${esc(vr.name)}"${v.options?.['action:TARGET_VAR'] === vr.name ? ' selected' : ''}>@${esc(vr.name)} (${esc(vr.type || 'STRING')})</option>`)
+            .join('');
 
-        const declaredVars = extractDeclaredVariables();
-        const varOpts = declaredVars.map(vname => `<option value="${esc(vname)}">${esc(vname)}</option>`).join('');
+        const ds = state.datasets.find(d => d.name === v.dataset);
+        const colNames = ds?.schema?.map(c => c.name) || ds?.columns || [];
+        const colOptions = colNames.length
+            ? (ds?.schema?.length
+                ? colNames.map(n => { const c = ds.schema.find(s => s.name === n); return `<option value="${esc(n)}">${esc(n)} (${esc(c?.type || 'TEXT')})</option>`; }).join('')
+                : colNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''))
+            : '';
 
-        const isCustomChart = v.type === 'CUSTOM' || Boolean(v.options?.advanced_chart);
-        const isHtmlVisual = v.type === 'HTML' || Boolean(v.options?.html_template);
+        const datalistId = `dsgn-cols-${v.id}`;
+        const datalistHtml = colOptions.length ? `<datalist id="${datalistId}">${colOptions}</datalist>` : '';
+
+        const isCustomChart = v.type === 'CUSTOM';
         const defaultCustomChart = `CHART (
     COORDINATE (TYPE = CARTESIAN),
     SCALES (
@@ -5862,142 +5972,170 @@ export function createDesigner(container, opts = {}) {
     )
 )`;
         const chartCode = v.options?.advanced_chart || defaultCustomChart;
+        const isHtmlVisual = v.type === 'HTML';
         const htmlMode = v.options?.html_mode || 'SINGLE';
         const htmlTemplate = v.options?.html_template || '<article class="custom-card">\n  <h3>{{Title}}</h3>\n  <p>{{Description}}</p>\n</article>';
         const htmlStyle = v.options?.html_style || '';
         const htmlFallback = v.options?.html_fallback || '';
 
+        const formatting = v.formatting || {};
+        const palette = formatting.palette || [];
+        const palettePreview = palette.length ? palette : ['#2563eb', '#16a34a', '#f59e0b', '#dc2626'];
+        const formatValue = v.options?.FORMAT || '';
+        const filledRolesCount = ROLES.filter(r => Boolean(mappings[r])).length;
+
         propsPanel.innerHTML = `
-            <div class="etlsql-dsgn-props-section">
-                <div class="etlsql-dsgn-props-hdr">Properties</div>
-                <label class="etlsql-dsgn-label">Name<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
-                <label class="etlsql-dsgn-label">Type
-                    <select id="pp-type" class="form-control">
-                        ${VTYPES.map(([t]) => `<option${v.type === t ? ' selected' : ''}>${t}</option>`).join('')}
-                    </select>
-                </label>
-                <label class="etlsql-dsgn-label">Container Group
-                    <select id="pp-container-id" class="form-control">
-                        <option value="">— none —</option>${cOpts}
-                    </select>
-                </label>
-                ${isTabbedParent ? `
-                <label class="etlsql-dsgn-label">Tab / Section
-                    <input type="text" id="pp-container-section" class="form-control" placeholder="e.g., Tab 1" value="${esc(v.options?.CONTAINER_SECTION || '')}">
-                </label>` : ''}
-                <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
-                <label class="etlsql-dsgn-label">Dataset
-                    <select id="pp-ds" class="form-control">
-                        <option value="">— none —</option>${dsOpts}
-                    </select>
-                </label>
-                <label class="etlsql-dsgn-label">Width<input id="pp-width" class="form-control" placeholder="auto, 300px, 100%" value="${esc(v.options?.WIDTH || v.width || '')}"></label>
-                <label class="etlsql-dsgn-label">Height<input id="pp-height" class="form-control" placeholder="auto, 200px, 100%" value="${esc(v.options?.HEIGHT || v.height || '')}"></label>
-            </div>
-            ${isCustomChart ? `
-            <div class="etlsql-dsgn-props-section etlsql-dsgn-chart-editor-section">
-                <div class="etlsql-dsgn-props-hdr">Grammar of Graphics (CHART)</div>
-                <div class="etlsql-dsgn-chart-quick-controls" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
-                    <label class="etlsql-dsgn-label">Coordinate
-                        <select id="pp-chart-coord" class="form-control">
-                            <option value="CARTESIAN"${chartCode.includes('CARTESIAN') && !chartCode.includes('TRANSPOSED') ? ' selected' : ''}>CARTESIAN</option>
-                            <option value="TRANSPOSED_CARTESIAN"${chartCode.includes('TRANSPOSED_CARTESIAN') ? ' selected' : ''}>TRANSPOSED</option>
-                            <option value="POLAR"${chartCode.includes('POLAR') ? ' selected' : ''}>POLAR</option>
-                            <option value="GEOGRAPHIC"${chartCode.includes('GEOGRAPHIC') ? ' selected' : ''}>GEOGRAPHIC</option>
-                        </select>
-                    </label>
-                    <label class="etlsql-dsgn-label">Primary Mark
-                        <select id="pp-chart-primary-mark" class="form-control">
-                            <option value="RECT"${chartCode.includes('RECT') ? ' selected' : ''}>RECT (Bar)</option>
-                            <option value="LINE"${chartCode.includes('LINE') ? ' selected' : ''}>LINE (Line)</option>
-                            <option value="AREA"${chartCode.includes('AREA') ? ' selected' : ''}>AREA (Area)</option>
-                            <option value="POINT"${chartCode.includes('POINT') ? ' selected' : ''}>POINT (Scatter)</option>
-                            <option value="RULE"${chartCode.includes('RULE') ? ' selected' : ''}>RULE (Span)</option>
-                            <option value="ARC"${chartCode.includes('ARC') ? ' selected' : ''}>ARC (Radial)</option>
-                            <option value="TEXT"${chartCode.includes('TEXT') ? ' selected' : ''}>TEXT (Label)</option>
-                            <option value="TICK"${chartCode.includes('TICK') ? ' selected' : ''}>TICK (Target)</option>
-                        </select>
-                    </label>
-                    <label class="etlsql-dsgn-label" style="grid-column:1 / -1;">Composition recipe
-                        <select id="pp-chart-recipe" class="form-control">
-                            <option value="">Keep current chart</option>
-                            <option value="boxplot-mean"${/\bQ1\s*=/.test(chartCode) ? ' selected' : ''}>Box plot + mean tick</option>
-                            <option value="candlestick-volume"${/\bOPEN\s*=/.test(chartCode) ? ' selected' : ''}>Candlestick + volume</option>
-                            <option value="layered-map"${/TYPE\s*=\s*GEOGRAPHIC/.test(chartCode) ? ' selected' : ''}>Layered map</option>
-                        </select>
-                    </label>
+            <section class="etlsql-format-inspector" aria-label="Visual formatting">
+                <div class="etlsql-format-profile">
+                    <div><span>Format profile</span><strong>${esc(v.type)} · ${esc(formatValue || 'Auto')}</strong></div>
+                    <div class="etlsql-format-profile-palette" aria-label="${palette.length ? 'Authored palette' : 'Default palette'}">
+                        ${palettePreview.slice(0, 5).map(color => `<i style="--format-color:${esc(toHexColor(color, '#64748b'))}"></i>`).join('')}
+                    </div>
                 </div>
-                <label class="etlsql-dsgn-label">CHART Clauses (Layers, Scales, Encodings, Conditions)
-                    <textarea id="pp-chart-code" class="form-control etlsql-code-editor" rows="12" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(chartCode)}</textarea>
-                </label>
-            </div>` : (isHtmlVisual ? `
-            <div class="etlsql-dsgn-props-section etlsql-dsgn-html-editor-section">
-                <div class="etlsql-dsgn-props-hdr">Constrained HTML Component</div>
-                <label class="etlsql-dsgn-label">Mode
-                    <select id="pp-html-mode" class="form-control">
-                        <option value="SINGLE"${htmlMode === 'SINGLE' ? ' selected' : ''}>SINGLE (First row or static)</option>
-                        <option value="REPEATER"${htmlMode === 'REPEATER' ? ' selected' : ''}>REPEATER (Repeat per row)</option>
-                    </select>
-                </label>
-                <label class="etlsql-dsgn-label" style="margin-top:6px;">HTML Template
-                    <span style="font-size:10px;color:var(--portal-muted,#7a8798);display:block;margin-bottom:2px;">
-                        Substitutions: <code>{{Field}}</code>, <code>{{@Param}}</code>, <code>{{#IF ...}}</code>, <code>{{SPARKLINE(...)}}</code>, <code>{{PROGRESS_BAR(...)}}</code>
-                    </span>
-                    <textarea id="pp-html-template" class="form-control etlsql-code-editor" rows="8" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlTemplate)}</textarea>
-                </label>
-                <label class="etlsql-dsgn-label" style="margin-top:6px;">Scoped CSS (STYLE)
-                    <textarea id="pp-html-style" class="form-control etlsql-code-editor" rows="4" spellcheck="false" placeholder=".custom-card { padding: 8px; }" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlStyle)}</textarea>
-                </label>
-                <label class="etlsql-dsgn-label" style="margin-top:6px;">Fallback Summary (Terminal/Print)
-                    <input type="text" id="pp-html-fallback" class="form-control" placeholder="e.g., Status: {{Title}} - {{Description}}" value="${esc(htmlFallback)}">
-                </label>
-            </div>` : `
-            <div class="etlsql-dsgn-props-section">
-                <div class="etlsql-dsgn-props-hdr">Mappings</div>
-                ${ROLES.map(r => {
-                    const isReq = reqList.includes(r);
-                    const isFilled = Boolean(mappings[r]);
-                    const badge = isReq
-                        ? (isFilled ? '<span class="etlsql-dsgn-role-badge req-ok">✓ Required</span>' : '<span class="etlsql-dsgn-role-badge req-missing">* Required</span>')
-                        : '<span class="etlsql-dsgn-role-badge optional">Optional</span>';
-                    return `
-                        <div class="etlsql-dsgn-map-row">
-                            <span style="display:flex;align-items:center;justify-content:space-between;width:100%;">${r}${badge}</span>
-                            <input type="text" data-role="${r}" class="form-control${isReq && !isFilled ? ' is-required-missing' : ''}" value="${esc(mappings[r] || '')}" placeholder="column or expression" ${colOptions.length ? `list="${datalistId}"` : ''}>
-                        </div>`;
-                }).join('')}
-                ${datalistHtml}
-            </div>`)}
-            <div class="etlsql-dsgn-props-section">
-                <div class="etlsql-dsgn-props-hdr">Actions & Interactions</div>
-                <label class="etlsql-dsgn-label">Target Parameter (@var)
-                    <select id="pp-action-target-var" class="form-control">
-                        <option value="">— Select Target @Variable —</option>
-                        ${varOpts}
-                    </select>
-                </label>
-                <label class="etlsql-dsgn-label">On Change
-                    <input type="text" id="pp-action-on-change" class="form-control" placeholder="e.g., SET_PARAMETER(@var, value)" value="${esc(v.options?.['action:ON_CHANGE'] || '')}">
-                </label>
-                <label class="etlsql-dsgn-label">On Click
-                    <input type="text" id="pp-action-on-click" class="form-control" placeholder="e.g., DRILL_DOWN(Target = Tbl, Key = region)" value="${esc(v.options?.['action:ON_CLICK'] || '')}">
-                </label>
-                <label class="etlsql-dsgn-label">On Select
-                    <input type="text" id="pp-interaction-on-select" class="form-control" placeholder="e.g., HIGHLIGHT" value="${esc(v.options?.['interaction:ON_SELECT'] || '')}">
-                </label>
-            </div>
-            ${renderVisualFormatInspectorHtml(v, colOptions)}
-            ${renderFormattingSectionHtml(v)}
-            <div class="etlsql-dsgn-props-section">
-                <div class="etlsql-dsgn-props-hdr">Grid Position</div>
-                <div class="etlsql-dsgn-grid4">
-                    <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
-                    <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
-                    <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
-                    <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                <div class="etlsql-format-search-wrap">
+                    <input type="search" id="pp-search-filter" class="form-control etlsql-format-search" placeholder="Filter settings... (e.g. title, dataset, axis, color)" autocomplete="off" spellcheck="false">
+                    <button type="button" class="etlsql-format-search-clear" id="pp-search-clear" title="Clear filter" style="display:none;">×</button>
                 </div>
-                <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Visual</button>
-            </div>
+
+                <details class="etlsql-format-group" open>
+                    <summary>Data & Mappings <span>${filledRolesCount}/${ROLES.length}</span></summary>
+                    <div class="etlsql-format-group-body">
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Visual Type
+                                <select id="pp-type" class="form-control">
+                                    ${VTYPES.map(([t]) => `<option${v.type === t ? ' selected' : ''}>${t}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Dataset
+                                <select id="pp-ds" class="form-control">
+                                    <option value="">— none —</option>${dsOpts}
+                                </select>
+                            </label>
+                        </div>
+                        ${isCustomChart ? `
+                        <div class="etlsql-dsgn-chart-quick-controls" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0 6px;">
+                            <label class="etlsql-dsgn-label">Coordinate
+                                <select id="pp-chart-coord" class="form-control">
+                                    <option value="CARTESIAN"${chartCode.includes('CARTESIAN') && !chartCode.includes('TRANSPOSED') ? ' selected' : ''}>CARTESIAN</option>
+                                    <option value="TRANSPOSED_CARTESIAN"${chartCode.includes('TRANSPOSED_CARTESIAN') ? ' selected' : ''}>TRANSPOSED</option>
+                                    <option value="POLAR"${chartCode.includes('POLAR') ? ' selected' : ''}>POLAR</option>
+                                    <option value="GEOGRAPHIC"${chartCode.includes('GEOGRAPHIC') ? ' selected' : ''}>GEOGRAPHIC</option>
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Primary Mark
+                                <select id="pp-chart-primary-mark" class="form-control">
+                                    <option value="RECT"${chartCode.includes('RECT') ? ' selected' : ''}>RECT (Bar)</option>
+                                    <option value="LINE"${chartCode.includes('LINE') ? ' selected' : ''}>LINE (Line)</option>
+                                    <option value="AREA"${chartCode.includes('AREA') ? ' selected' : ''}>AREA (Area)</option>
+                                    <option value="POINT"${chartCode.includes('POINT') ? ' selected' : ''}>POINT (Scatter)</option>
+                                    <option value="RULE"${chartCode.includes('RULE') ? ' selected' : ''}>RULE (Span)</option>
+                                    <option value="ARC"${chartCode.includes('ARC') ? ' selected' : ''}>ARC (Radial)</option>
+                                    <option value="TEXT"${chartCode.includes('TEXT') ? ' selected' : ''}>TEXT (Label)</option>
+                                    <option value="TICK"${chartCode.includes('TICK') ? ' selected' : ''}>TICK (Target)</option>
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label" style="grid-column:1 / -1;">Composition recipe
+                                <select id="pp-chart-recipe" class="form-control">
+                                    <option value="">Keep current chart</option>
+                                    <option value="boxplot-mean"${/\bQ1\s*=/.test(chartCode) ? ' selected' : ''}>Box plot + mean tick</option>
+                                    <option value="candlestick-volume"${/\bOPEN\s*=/.test(chartCode) ? ' selected' : ''}>Candlestick + volume</option>
+                                    <option value="layered-map"${/TYPE\s*=\s*GEOGRAPHIC/.test(chartCode) ? ' selected' : ''}>Layered map</option>
+                                </select>
+                            </label>
+                        </div>
+                        <label class="etlsql-dsgn-label">CHART Clauses (Layers, Scales, Encodings, Conditions)
+                            <textarea id="pp-chart-code" class="form-control etlsql-code-editor" rows="12" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(chartCode)}</textarea>
+                        </label>` : (isHtmlVisual ? `
+                        <label class="etlsql-dsgn-label" style="margin-top:6px;">Mode
+                            <select id="pp-html-mode" class="form-control">
+                                <option value="SINGLE"${htmlMode === 'SINGLE' ? ' selected' : ''}>SINGLE (First row or static)</option>
+                                <option value="REPEATER"${htmlMode === 'REPEATER' ? ' selected' : ''}>REPEATER (Repeat per row)</option>
+                            </select>
+                        </label>
+                        <label class="etlsql-dsgn-label" style="margin-top:6px;">HTML Template
+                            <span style="font-size:10px;color:var(--portal-muted,#7a8798);display:block;margin-bottom:2px;">
+                                Substitutions: <code>{{Field}}</code>, <code>{{@Param}}</code>, <code>{{#IF ...}}</code>, <code>{{SPARKLINE(...)}}</code>, <code>{{PROGRESS_BAR(...)}}</code>
+                            </span>
+                            <textarea id="pp-html-template" class="form-control etlsql-code-editor" rows="8" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlTemplate)}</textarea>
+                        </label>
+                        <label class="etlsql-dsgn-label" style="margin-top:6px;">Scoped CSS (STYLE)
+                            <textarea id="pp-html-style" class="form-control etlsql-code-editor" rows="4" spellcheck="false" placeholder=".custom-card { padding: 8px; }" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlStyle)}</textarea>
+                        </label>
+                        <label class="etlsql-dsgn-label" style="margin-top:6px;">Fallback Summary (Terminal/Print)
+                            <input type="text" id="pp-html-fallback" class="form-control" placeholder="e.g., Status: {{Title}} - {{Description}}" value="${esc(htmlFallback)}">
+                        </label>` : `
+                        <div style="margin-top:8px;">
+                            ${ROLES.map(r => {
+                                const isReq = reqList.includes(r);
+                                const isFilled = Boolean(mappings[r]);
+                                const badge = isReq
+                                    ? (isFilled ? '<span class="etlsql-dsgn-role-badge req-ok">✓ Required</span>' : '<span class="etlsql-dsgn-role-badge req-missing">* Required</span>')
+                                    : '<span class="etlsql-dsgn-role-badge optional">Optional</span>';
+                                return `
+                                    <div class="etlsql-dsgn-map-row">
+                                        <div class="etlsql-dsgn-map-label">
+                                            <span class="etlsql-dsgn-role-name" title="${r}">${r}</span>
+                                            ${badge}
+                                        </div>
+                                        <input type="text" data-role="${r}" class="form-control${isReq && !isFilled ? ' is-required-missing' : ''}" value="${esc(mappings[r] || '')}" placeholder="column or expression" ${colOptions.length ? `list="${datalistId}"` : ''}>
+                                    </div>`;
+                            }).join('')}
+                            ${datalistHtml}
+                        </div>`)}
+                    </div>
+                </details>
+
+                ${renderVisualFormatInspectorHtml(v, colNames)}
+                ${renderFormattingSectionHtml(v)}
+
+                <details class="etlsql-format-group">
+                    <summary>Actions & Interactions</summary>
+                    <div class="etlsql-format-group-body">
+                        <label class="etlsql-dsgn-label">Target Parameter (@var)
+                            <select id="pp-action-target-var" class="form-control">
+                                <option value="">— Select Target @Variable —</option>
+                                ${varOpts}
+                            </select>
+                        </label>
+                        <label class="etlsql-dsgn-label">On Change
+                            <input type="text" id="pp-action-on-change" class="form-control" placeholder="e.g., SET_PARAMETER(@var, value)" value="${esc(v.options?.['action:ON_CHANGE'] || '')}">
+                        </label>
+                        <label class="etlsql-dsgn-label">On Click
+                            <input type="text" id="pp-action-on-click" class="form-control" placeholder="e.g., DRILL_DOWN(Target = Tbl, Key = region)" value="${esc(v.options?.['action:ON_CLICK'] || '')}">
+                        </label>
+                        <label class="etlsql-dsgn-label">On Select
+                            <input type="text" id="pp-interaction-on-select" class="form-control" placeholder="e.g., HIGHLIGHT" value="${esc(v.options?.['interaction:ON_SELECT'] || '')}">
+                        </label>
+                    </div>
+                </details>
+
+                <details class="etlsql-format-group" open>
+                    <summary>Grid Position & Layout</summary>
+                    <div class="etlsql-format-group-body">
+                        <div class="etlsql-dsgn-grid4">
+                            <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                            <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                            <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                            <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                        </div>
+                        <label class="etlsql-dsgn-label">Container Group
+                            <select id="pp-container-id" class="form-control">
+                                <option value="">— none —</option>${cOpts}
+                            </select>
+                        </label>
+                        ${isTabbedParent ? `
+                        <label class="etlsql-dsgn-label">Tab / Section
+                            <input type="text" id="pp-container-section" class="form-control" placeholder="e.g., Tab 1" value="${esc(v.options?.CONTAINER_SECTION || '')}">
+                        </label>` : ''}
+                        <div class="etlsql-dsgn-typography-grid" style="margin-top:6px;">
+                            <label class="etlsql-dsgn-label">Explicit Width<input id="pp-width" class="form-control" placeholder="auto, 300px, 100%" value="${esc(v.options?.WIDTH || v.width || '')}"></label>
+                            <label class="etlsql-dsgn-label">Explicit Height<input id="pp-height" class="form-control" placeholder="auto, 200px, 100%" value="${esc(v.options?.HEIGHT || v.height || '')}"></label>
+                        </div>
+                        <label class="etlsql-dsgn-label" style="margin-top:6px;">Visual Name (ID)<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
+                        <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Visual</button>
+                    </div>
+                </details>
+            </section>
         `;
 
         on('#pp-name',         e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
@@ -6160,7 +6298,8 @@ export function createDesigner(container, opts = {}) {
             }
         }
         bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
-        bindVisualFormatInspector(propsPanel, v, colOptions, renderProps);
+        bindVisualFormatInspector(propsPanel, v, colNames, renderProps);
+        bindInspectorSearch(propsPanel);
         propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
     }
 
