@@ -6278,3 +6278,23 @@ body.vscode-dark .etlsql-cw-missing-hint {
 
 .etlsql-studio-parameter-actions { display: flex; gap: 5px; flex: 0 0 auto; }
 .etlsql-studio-parameter-actions .etlsql-studio-btn { padding: 3px 9px; font-size: 0.6875rem; }
+
+/* ── Measure aggregation in the chart builder ──────────────────────────────── */
+
+.etlsql-studio-role-aggregate { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
+.etlsql-studio-role-aggregate > span {
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.5625rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.etlsql-studio-role-aggregate select,
+.etlsql-studio-role-aggregate input {
+    width: 100%;
+    padding: 3px 5px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 3px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.6875rem;
+}

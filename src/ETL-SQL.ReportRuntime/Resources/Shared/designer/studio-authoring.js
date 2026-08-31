@@ -43,7 +43,10 @@
 import { columnName, columnType, snapshotColumns, updateSnapshotPackage as writeSnapshotPackage } from './studio-data.js';
 import { escapeHtml, noteMarkup as guidedNoteMarkup, sampleGridMarkup as sampleRowsMarkup, sqlPreviewMarkup } from './studio-authoring-ui.js';
 import { createQueryWorkbench } from './studio-query-workbench.js';
-import { STUDIO_VISUAL_GROUPS, missingRequiredRoles, renderVisualSample, rolesForVisualType } from './visual-preview.js';
+import {
+    CHART_AGGREGATES, STUDIO_VISUAL_GROUPS, aggregateRows, buildAggregatedSource, defaultAggregateAlias,
+    missingRequiredRoles, renderVisualSample, rolesForVisualType,
+} from './visual-preview.js';
 
 /** Connection aliases the script itself declares. Host-registered aliases deliberately do not count. */
 export function declaredConnectionNames(scriptText) {
@@ -796,23 +799,73 @@ export function createStudioAuthoringSurfaces({
             type: (seed.type || 'BAR').toUpperCase(),
             title: seed.title || '',
             mappings: { ...(seed.mappings || {}) },
+            // Per measure role: { aggregate, alias }. A chart usually plots a summary rather than a
+            // stored column — "users per day" is a COUNT grouped by day — so the aggregate belongs to
+            // the visual, letting two charts over one dataset summarise it differently.
+            aggregates: {},
         };
         if (!Object.keys(draft.mappings).length) autoAssignRoles(draft, columns);
 
         return await studioDialog({ kicker: seed.kicker || 'Build a chart', title: 'Build a visual', wide: true }, api => {
+            /** The measure role and its aggregate, when one is set. */
+            const activeMeasure = () => {
+                for (const role of rolesForVisualType(draft.type)) {
+                    if (!role.measure) continue;
+                    const setting = draft.aggregates[role.key];
+                    const column = draft.mappings[role.key];
+                    if (!setting || setting.aggregate === 'NONE' || !column) continue;
+                    return {
+                        role: role.key,
+                        column,
+                        aggregate: setting.aggregate,
+                        alias: setting.alias || defaultAggregateAlias(setting.aggregate, column),
+                    };
+                }
+                return null;
+            };
+
+            /** Everything bound that is not the aggregated measure becomes a grouping column. */
+            const groupingColumns = measure => [...new Set(rolesForVisualType(draft.type)
+                .filter(role => role.key !== measure.role && !role.repeatable)
+                .map(role => draft.mappings[role.key])
+                .filter(Boolean))];
+
+            /** Mappings as written: an aggregated role points at the alias, not the source column. */
+            const resolvedMappings = () => {
+                const measure = activeMeasure();
+                if (!measure) return draft.mappings;
+                return { ...draft.mappings, [measure.role]: measure.alias };
+            };
+
+            const sourceExpression = () => {
+                const binding = visualSourceBinding();
+                const base = binding.dataset || binding.options.inline_source || '&dataset';
+                const measure = activeMeasure();
+                return measure
+                    ? buildAggregatedSource({ base, groupBy: groupingColumns(measure), measure })
+                    : base;
+            };
+
+            /** The sample shaped the way the query will shape it, so the preview cannot mislead. */
+            const previewSample = () => {
+                const measure = activeMeasure();
+                return measure
+                    ? aggregateRows(context.snapshot, { groupBy: groupingColumns(measure), measure })
+                    : context.snapshot;
+            };
+
             const previewVisual = () => ({
                 id: 'builder_preview',
                 name: draft.title || `${draft.type.toLowerCase()}_visual`,
                 type: draft.type,
                 title: draft.title,
-                mappings: draft.mappings,
+                mappings: resolvedMappings(),
                 options: {},
             });
 
             const sql = () => {
-                const binding = visualSourceBinding();
-                const source = binding.dataset || binding.options.inline_source || '&dataset';
-                const entries = Object.entries(draft.mappings).filter(([, value]) => value);
+                const source = sourceExpression();
+                const entries = Object.entries(resolvedMappings()).filter(([, value]) => value);
                 return `CREATE VISUAL ${datasetBaseName(draft.title || `${draft.type.toLowerCase()}_visual`)} AS ${draft.type} (\n`
                     + `    SOURCE = ${source}`
                     + (entries.length ? `,\n    MAPPINGS (${entries.map(([role, value]) => `${role} = ${value}`).join(', ')})` : '')
@@ -862,7 +915,7 @@ export function createStudioAuthoringSurfaces({
                     },
                 ],
                 wire: host => {
-                    renderVisualSample(host.querySelector('[data-builder-preview]'), previewVisual(), context.snapshot);
+                    renderVisualSample(host.querySelector('[data-builder-preview]'), previewVisual(), previewSample());
 
                     host.querySelectorAll('[data-builder-type]').forEach(button => button.addEventListener('click', () => {
                         draft.type = button.dataset.builderType;
@@ -903,6 +956,21 @@ export function createStudioAuthoringSurfaces({
 
                     host.querySelectorAll('[data-role-select]').forEach(select => select.addEventListener('change', () =>
                         assignRole(select.dataset.roleSelect, select.value)));
+                    host.querySelectorAll('[data-role-aggregate]').forEach(select => select.addEventListener('change', () => {
+                        const role = select.dataset.roleAggregate;
+                        const column = draft.mappings[role];
+                        draft.aggregates[role] = select.value === 'NONE'
+                            ? { aggregate: 'NONE', alias: '' }
+                            : { aggregate: select.value, alias: defaultAggregateAlias(select.value, column) };
+                        paint();
+                    }));
+                    host.querySelectorAll('[data-role-alias]').forEach(input => input.addEventListener('change', () => {
+                        const role = input.dataset.roleAlias;
+                        // Renaming the alias changes both the AS in the query and what the role maps to,
+                        // which is the whole point of letting it be renamed.
+                        draft.aggregates[role] = { ...draft.aggregates[role], alias: datasetBaseName(input.value) };
+                        paint();
+                    }));
                     host.querySelectorAll('[data-role-clear]').forEach(button => button.addEventListener('click', () =>
                         assignRole(button.dataset.roleClear, '')));
                     host.querySelectorAll('[data-role-add]').forEach(button => button.addEventListener('click', () => {
@@ -924,6 +992,13 @@ export function createStudioAuthoringSurfaces({
             const addVisual = async () => {
                 api.busy(true);
                 const binding = visualSourceBinding();
+                const measure = activeMeasure();
+                // An aggregated visual reads from a grouped SELECT, so it carries an inline source
+                // rather than a bare dataset reference.
+                const source = measure
+                    ? { dataset: null, options: { inline_source: sourceExpression() } }
+                    : binding;
+                const mappings = resolvedMappings();
                 const type = draft.type;
                 const added = await mutate(`Add ${type} visual`, design => {
                     const page = design.pages[0];
@@ -940,9 +1015,9 @@ export function createStudioAuthoringSurfaces({
                         gridColSpan: wide ? 12 : type === 'CARD' ? 3 : 6,
                         gridRowSpan: type === 'CARD' ? 2 : wide ? 6 : 4,
                         title: draft.title || null,
-                        dataset: binding.dataset,
-                        mappings: { ...draft.mappings },
-                        options: { ...binding.options },
+                        dataset: source.dataset,
+                        mappings: { ...mappings },
+                        options: { ...source.options },
                     });
                     return name;
                 });
@@ -955,6 +1030,11 @@ export function createStudioAuthoringSurfaces({
         });
     }
 
+    /** Human-readable form of an aggregate, for the role hint. */
+    function aggregateExpressionLabel(aggregate, column) {
+        return aggregate === 'COUNT_DISTINCT' ? `a distinct count of ${column}` : `${aggregate.toLowerCase()} of ${column}`;
+    }
+
     function roleSlotMarkup(role, draft) {
         const columns = snapshotColumns(activeContext().snapshot).map(columnName);
         const options = column => `<option value="">—</option>${columns.map(item =>
@@ -962,11 +1042,30 @@ export function createStudioAuthoringSurfaces({
 
         if (!role.repeatable) {
             const value = draft.mappings[role.key] || '';
+            const setting = draft.aggregates?.[role.key] || { aggregate: 'NONE', alias: '' };
+            const aggregated = role.measure && value && setting.aggregate !== 'NONE';
+            const alias = setting.alias || (aggregated ? defaultAggregateAlias(setting.aggregate, value) : '');
+
+            // Only a measure role offers an aggregate. Naming the result is part of the same decision:
+            // the alias is what the query says AS, and what the role ends up mapped to.
+            const aggregateControls = role.measure && value
+                ? `<label class="etlsql-studio-role-aggregate"><span>Summarise as</span>
+                        <select data-role-aggregate="${role.key}">${CHART_AGGREGATES.map(option =>
+                            `<option value="${option.id}" ${setting.aggregate === option.id ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select></label>`
+                    + (aggregated
+                        ? `<label class="etlsql-studio-role-aggregate"><span>Call it</span>
+                            <input type="text" data-role-alias="${role.key}" value="${escapeHtml(alias)}" spellcheck="false"></label>`
+                        : '')
+                : '';
+
             return `<div class="etlsql-studio-role-slot${value ? ' is-bound' : ''}${role.required && !value ? ' is-required' : ''}" data-role-slot="${role.key}">
                 <span>${escapeHtml(role.label)}${role.required ? ' *' : ''}</span>
                 <div><select data-role-select="${role.key}">${options(value)}</select>
                 ${value ? `<button type="button" data-role-clear="${role.key}" aria-label="Clear ${escapeHtml(role.label)}">&times;</button>` : ''}</div>
-                <small>${escapeHtml(role.hint || '')}</small>
+                ${aggregateControls}
+                <small>${escapeHtml(aggregated
+                    ? `Plots ${aggregateExpressionLabel(setting.aggregate, value)} per ${role.key === 'VALUE' ? 'group' : 'category'}`
+                    : (role.hint || ''))}</small>
             </div>`;
         }
 

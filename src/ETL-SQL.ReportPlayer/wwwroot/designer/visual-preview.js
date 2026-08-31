@@ -22,17 +22,18 @@ const PALETTE = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787
  *
  * `required` roles gate rendering: a bar chart with no Y has nothing to draw, and saying so is more
  * useful than drawing an empty axis. `kind` is advisory — it drives the suggested field, never a
- * restriction, because a count of text values is a legitimate measure.
+ * restriction, because a count of text values is a legitimate measure. `measure` marks the role that
+ * an aggregate applies to: everything else bound on the visual becomes a grouping column.
  */
 export const VISUAL_ROLES = Object.freeze({
     BAR: [
         { key: 'X', label: 'Category (X)', kind: 'any', required: true, hint: 'One bar per distinct value' },
-        { key: 'Y', label: 'Value (Y)', kind: 'number', required: true, hint: 'Bar height' },
+        { key: 'Y', label: 'Value (Y)', kind: 'number', required: true, measure: true, hint: 'Bar height' },
         { key: 'SERIES', label: 'Series', kind: 'any', hint: 'Split into grouped bars' },
     ],
     LINE: [
         { key: 'X', label: 'Axis (X)', kind: 'any', required: true, hint: 'Usually a date' },
-        { key: 'Y', label: 'Value (Y)', kind: 'number', required: true, hint: 'Line height' },
+        { key: 'Y', label: 'Value (Y)', kind: 'number', required: true, measure: true, hint: 'Line height' },
         { key: 'SERIES', label: 'Series', kind: 'any', hint: 'One line per value' },
     ],
     SCATTER: [
@@ -42,27 +43,27 @@ export const VISUAL_ROLES = Object.freeze({
     ],
     PIE: [
         { key: 'LABEL', label: 'Slice label', kind: 'any', required: true, hint: 'One slice per value' },
-        { key: 'VALUE', label: 'Slice size', kind: 'number', required: true, hint: 'Share of the whole' },
+        { key: 'VALUE', label: 'Slice size', kind: 'number', required: true, measure: true, hint: 'Share of the whole' },
     ],
     GAUGE: [
-        { key: 'VALUE', label: 'Value', kind: 'number', required: true, hint: 'Needle position' },
+        { key: 'VALUE', label: 'Value', kind: 'number', required: true, measure: true, hint: 'Needle position' },
         { key: 'MAX', label: 'Maximum', kind: 'number', hint: 'Full-scale value' },
         { key: 'LABEL', label: 'Label', kind: 'any', hint: 'Caption under the value' },
     ],
     HEATMAP: [
         { key: 'X', label: 'Columns (X)', kind: 'any', required: true, hint: 'Horizontal buckets' },
         { key: 'Y', label: 'Rows (Y)', kind: 'any', required: true, hint: 'Vertical buckets' },
-        { key: 'VALUE', label: 'Intensity', kind: 'number', required: true, hint: 'Cell colour' },
+        { key: 'VALUE', label: 'Intensity', kind: 'number', required: true, measure: true, hint: 'Cell colour' },
     ],
     CARD: [
-        { key: 'VALUE', label: 'Value', kind: 'number', required: true, hint: 'The number on the card' },
+        { key: 'VALUE', label: 'Value', kind: 'number', required: true, measure: true, hint: 'The number on the card' },
         { key: 'LABEL', label: 'Label', kind: 'any', hint: 'Caption under the number' },
         { key: 'GOAL', label: 'Goal', kind: 'number', hint: 'Target to compare against' },
     ],
     MATRIX: [
         { key: 'ROW', label: 'Rows', kind: 'any', required: true, hint: 'One row per value' },
         { key: 'COL', label: 'Columns', kind: 'any', hint: 'One column per value' },
-        { key: 'VALUE', label: 'Value', kind: 'number', required: true, hint: 'Aggregated per cell' },
+        { key: 'VALUE', label: 'Value', kind: 'number', required: true, measure: true, hint: 'Aggregated per cell' },
     ],
     TABLE: [
         { key: 'COLUMNS', label: 'Columns', kind: 'any', required: true, repeatable: true, hint: 'Printed left to right' },
@@ -394,4 +395,102 @@ function seriesMarkup(type, mappings, rows) {
         <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + plotHeight}" stroke="#30363d"/>
         <text x="${padLeft - 4}" y="${padTop + 8}" text-anchor="end" font-size="8" fill="#8b949e">${escapeHtml(formatNumber(max))}</text>
         ${marks}${ticks}</svg>`;
+}
+
+/**
+ * Aggregation for chart measures.
+ *
+ * A chart almost never plots raw rows: "users per day" is a COUNT grouped by day, not a column that
+ * already exists. Setting an aggregate on a measure role rewrites the visual's SOURCE into a grouped
+ * SELECT and points the role at the alias, so the script says exactly what the chart shows.
+ *
+ * The same shaping is applied to the sample here, because a preview that summed while the query
+ * counted would be a confident lie — the one thing a live preview must never be.
+ */
+
+export const CHART_AGGREGATES = Object.freeze([
+    { id: 'NONE', label: 'No aggregate — plot the column' },
+    { id: 'COUNT', label: 'Count' },
+    { id: 'COUNT_DISTINCT', label: 'Count distinct' },
+    { id: 'SUM', label: 'Sum' },
+    { id: 'AVG', label: 'Average' },
+    { id: 'MIN', label: 'Minimum' },
+    { id: 'MAX', label: 'Maximum' },
+]);
+
+/** `COUNT(user_id)`, `COUNT(DISTINCT user_id)`, `SUM(amount)`. */
+export function aggregateExpression(aggregate, column) {
+    if (aggregate === 'COUNT_DISTINCT') return `COUNT(DISTINCT ${column})`;
+    return `${aggregate}(${column})`;
+}
+
+/**
+ * The alias an aggregate gets by default. A COUNT of `user_id` is a count of users, so the trailing
+ * `_id` is dropped — `user_count` reads as what it is, where `user_id_count` reads as a mistake.
+ */
+export function defaultAggregateAlias(aggregate, column) {
+    const base = String(column || 'value').replace(/[^A-Za-z0-9_]/g, '_').toLowerCase();
+    const suffix = aggregate === 'COUNT_DISTINCT' ? 'distinct_count' : String(aggregate).toLowerCase();
+    const stem = (aggregate === 'COUNT' || aggregate === 'COUNT_DISTINCT') ? base.replace(/_id$/, '') : base;
+    return `${stem || 'value'}_${suffix}`;
+}
+
+/**
+ * The grouped SELECT a visual reads from.
+ *
+ * `base` is whatever the visual would otherwise read: `&dataset`, `corp_db.Users`, or an inline
+ * `(SELECT …)`. An inline source is wrapped as a derived table, which the dialect requires be aliased.
+ */
+export function buildAggregatedSource({ base, groupBy, measure }) {
+    const columns = [...groupBy, `${aggregateExpression(measure.aggregate, measure.column)} AS ${measure.alias}`];
+    const from = String(base).trim().startsWith('(') ? `${base} AS source_rows` : base;
+    const grouping = groupBy.length ? ` GROUP BY ${groupBy.join(', ')}` : '';
+    return `(SELECT ${columns.join(', ')} FROM ${from}${grouping})`;
+}
+
+/**
+ * Applies the same grouping to sampled rows so the preview matches the query.
+ *
+ * With no grouping columns the whole sample collapses to one row, which is what a CARD or GAUGE
+ * showing a single aggregate should display.
+ */
+export function aggregateRows(sample, { groupBy, measure }) {
+    const columns = (sample?.columns || []).map(column => (typeof column === 'string' ? column : column?.name));
+    const raw = sample?.rows || [];
+    const asObject = row => (Array.isArray(row)
+        ? Object.fromEntries(columns.map((column, index) => [column, row[index]]))
+        : row);
+
+    const buckets = new Map();
+    for (const source of raw) {
+        const row = asObject(source);
+        const key = groupBy.map(column => String(row?.[column] ?? '')).join(' ');
+        if (!buckets.has(key)) {
+            buckets.set(key, {
+                keys: Object.fromEntries(groupBy.map(column => [column, row?.[column]])),
+                values: [],
+            });
+        }
+        buckets.get(key).values.push(row?.[measure.column]);
+    }
+
+    const reduce = values => {
+        const numbers = values.map(Number).filter(Number.isFinite);
+        switch (measure.aggregate) {
+            case 'COUNT': return values.filter(value => value != null && value !== '').length;
+            case 'COUNT_DISTINCT': return new Set(values.filter(value => value != null && value !== '').map(String)).size;
+            case 'SUM': return numbers.reduce((total, value) => total + value, 0);
+            case 'AVG': return numbers.length ? numbers.reduce((total, value) => total + value, 0) / numbers.length : 0;
+            case 'MIN': return numbers.length ? Math.min(...numbers) : 0;
+            case 'MAX': return numbers.length ? Math.max(...numbers) : 0;
+            default: return numbers.reduce((total, value) => total + value, 0);
+        }
+    };
+
+    const rows = [...buckets.values()].map(bucket => ({
+        ...bucket.keys,
+        [measure.alias]: Math.round(reduce(bucket.values) * 1000) / 1000,
+    }));
+
+    return { columns: [...groupBy, measure.alias], rows, rowCount: rows.length };
 }
