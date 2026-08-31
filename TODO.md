@@ -156,7 +156,7 @@ nothing gets polished before the thing most likely to change it has landed. Entr
 *cross-reference* are existing P4 items listed to make the sequence readable, not duplicate tracking.
 
 Already shipped and not repeated below: the connection creator, the dataset creator (all three
-states — reuse an existing dataset, create a cached one with `REFRESH EVERY`/`TTL`, or bind a live
+states — reuse an existing dataset, create a cached one with a `TTL`, or bind a live
 uncached query), the guided report workflow rail, and the report page designer.
 
 **Stage 0 — Foundations.** Every later wizard either uses these or duplicates them.
@@ -171,10 +171,17 @@ uncached query), the guided report workflow rail, and the report page designer.
   verified to fail when its rule is violated rather than passing vacuously. Visual types moved beside
   their role definitions in `visual-preview.js` so a palette entry can never exist without the roles
   that configure it.
-- [ ] **W0.2 — Wizard test lane**: One required assertion per wizard: clicking the confirm button
-  writes the statement the dialog previewed. The guided steps sat broken because nothing checked
-  this, and the UI sandbox actively concealed it by echoing the script back unchanged from
-  `/api/designer/patch`.
+- [x] **W0.2 — Wizard test lane**: `StudioWizardContractTests` drives each guided surface in a real
+  browser, reads the SQL out of the dialog's preview block, clicks confirm, and requires that exact
+  statement to appear in the buffer — the behavioural half of contract rules 4 and 5 that source
+  inspection cannot reach. It also proves a step that cannot run yet writes nothing and offers the
+  control that fixes it, and that reopening a wizard sees a dataset the author typed by hand.
+  The lane found two real defects on its first run, both from the W0.1 extraction and both hidden by
+  a `catch`: a call to `designerApiJson`, which exists only in the composition layer, left the
+  reuse-an-existing-dataset path permanently disabled behind an honest-looking "None available"; and
+  two module-level constants stayed behind in `studio.js`, so the parameter dialog opened with a
+  header and an empty body. Both classes are now also caught statically by
+  `StudioAuthoringContractTests`, and each guard was verified to fail when its rule is violated.
 - [ ] **W0.3 — The escape-hatch rule**: Every wizard writes SQL the author may then hand-edit.
   Decide and apply one rule uniformly: a wizard reads its starting state from the canonical parse,
   never from what it wrote last time, and never replaces a clause it did not author. The dataset
@@ -283,9 +290,8 @@ the W2.1 spike is *not* a safe substitution; avoiding that rework is why this or
 
 ## Bugs & Triage
 
-### Connection Catalog & Gateway Resource Discovery
-- [ ] **TUI Filters VISUALS (SLICER, DATEPICKER, etc)**  These can be changed now but how do you navigate between them.  Can we hook up the mouse to interact?
-- [x] **ETL-SQL Studio create dataset needed**  Step 1 of the report workflow is now a data wizard covering the three states a report can be in: reuse a dataset this script declares or a registered one the user has permission to (`USE DATASET`), create a cached dataset with `REFRESH EVERY`/`TTL` rules, or bind a live uncached query read from the connection on every run. Creating or living off a connection requires one the script itself declares — a host-registered alias is refused, because a dataset built on an undeclared alias previews correctly and fails for every other reader — and the connection wizard runs inline when there is none. Table picks show the host's real design-time sample; "write a query" embeds the full script editor with completions, hover, lint, and run. Follow-on wizard work is sequenced under "Authoring Wizard Build Order" above.
+- [x] **TUI filter visuals (SLICER, DATEPICKER, etc.)**  Report Preview exposes every parameter-bound control through `Tab`/`Shift+Tab` and a clickable previous/change/next header navigator. `Enter` or the mouse change button uses the same typed interaction path, page navigation remains separate, and the header has a clickable `Run` button even before the first manifest exists.
+- [x] **ETL-SQL Studio create dataset needed**  Step 1 of the report workflow is now a data wizard covering the three states a report can be in: reuse a dataset this script declares or a registered one the user has permission to (`USE DATASET`), create a cached dataset with a `TTL` saying how long its rows stay valid, or bind a live uncached query read from the connection on every run. Creating or living off a connection requires one the script itself declares — a host-registered alias is refused, because a dataset built on an undeclared alias previews correctly and fails for every other reader — and the connection wizard runs inline when there is none. Table picks show the host's real design-time sample; "write a query" embeds the full script editor with completions, hover, lint, and run. Follow-on wizard work is sequenced under "Authoring Wizard Build Order" above.
 - [ ] **ETL-SQL exit doesn't work very well** It hangs and does actually exit after asking the save confirmation.
 - [ ] **`constrained_html_components.rptsql` fails the sample gate on a Card lint error.**
   `Test-AllSamples.ps1` reports `Line 14, Col 1: Visual 'EnvironmentMetric' of type Card is missing

@@ -58,6 +58,12 @@ export function declaredConnectionNames(scriptText) {
     return names;
 }
 
+/** Parameter data types the guided step offers; the script accepts any type the parser knows. */
+const STUDIO_PARAMETER_TYPES = ['VARCHAR', 'INT', 'DECIMAL', 'DATE', 'DATETIME', 'BOOLEAN'];
+
+/** Aggregates a TABLE's GRAND_TOTAL accepts. */
+const STUDIO_TOTAL_AGGREGATES = ['SUM', 'AVG', 'COUNT'];
+
 function escapeHtml(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -249,7 +255,7 @@ export function createStudioAuthoringSurfaces({
     //     signed-in user has permission to read. Reusing a registered one writes `USE DATASET &name`.
     //     No connection is involved; the dataset was produced by some other process.
     //
-    //   * Create a new dataset — cached, with the standard REFRESH EVERY / TTL lifespan rules. Needs a
+    //   * Create a new dataset — cached, with a TTL saying how long its rows stay valid. Needs a
     //     connection to read from, so a script with no `CREATE CONNECTION` cannot reach this path until
     //     the connection wizard has written one.
     //
@@ -268,16 +274,15 @@ export function createStudioAuthoringSurfaces({
     /** Datasets this script declares, from the canonical parse rather than a text scan. */
     async function scriptDatasetNames() {
         try {
-            const parsed = await designerApiJson(routes.parse, {
-                script: shell.getScriptText(),
-            });
+            const parsed = await request(routes.parse, { body: { script: shell.getScriptText() } });
             return (parsed.designState?.datasets || []).map(dataset => ({
                 name: String(dataset.name || '').startsWith('&') ? dataset.name : `&${dataset.name}`,
                 query: dataset.query || '',
             }));
         } catch {
             // A document mid-keystroke does not parse; an empty list is honest, and the wizard's
-            // other path still works.
+            // other path still works. This catch previously swallowed a ReferenceError as well,
+            // which disabled the reuse path entirely behind that same honest-looking message.
             return [];
         }
     }
@@ -317,7 +322,6 @@ export function createStudioAuthoringSurfaces({
             pane: 'start',
             // 'dataset' caches through CREATE DATASET; 'live' binds the query straight to the visuals.
             intent: 'dataset',
-            refreshInterval: '',
             ttl: '',
             scriptDatasets: null,
             registry: null,
@@ -504,10 +508,10 @@ export function createStudioAuthoringSurfaces({
                 if (wizard.intent === 'live') return paintLive();
                 const base = datasetBaseName(wizard.name);
                 const collides = (wizard.scriptDatasets || []).some(dataset => dataset.name.replace(/^&/, '').toLowerCase() === base);
-                const lifespan = [
-                    wizard.refreshInterval.trim() ? ` REFRESH EVERY '${wizard.refreshInterval.trim()}'` : '',
-                    wizard.ttl.trim() ? ` TTL = '${wizard.ttl.trim()}'` : '',
-                ].join('');
+                // TTL only. CREATE DATASET ... REFRESH EVERY is retired and the parser rejects it, so
+                // emitting it produced a script that would not parse — which the patcher refused
+                // wholesale, leaving the wizard reporting success while writing nothing.
+                const lifespan = wizard.ttl.trim() ? ` TTL = '${wizard.ttl.trim()}'` : '';
                 const sql = `CREATE DATASET &${base}${lifespan} AS (
   ${wizardQuery()}
 );`;
@@ -518,13 +522,9 @@ export function createStudioAuthoringSurfaces({
                             <div class="etlsql-studio-prefixed-input"><span>&amp;</span>
                             <input type="text" data-dataset-name value="${escapeHtml(base)}" spellcheck="false"></div></label>`
                         + (collides ? guidedNoteMarkup('This report already has a dataset with that name. Studio will add a numeric suffix unless you change it.', 'warning') : '')
-                        + `<div class="etlsql-studio-guided-row">
-                            <label class="etlsql-studio-guided-field"><span>Refresh every</span>
-                                <input type="text" data-dataset-refresh value="${escapeHtml(wizard.refreshInterval)}" placeholder="30m" spellcheck="false"></label>
-                            <label class="etlsql-studio-guided-field"><span>Keep for (TTL)</span>
-                                <input type="text" data-dataset-ttl value="${escapeHtml(wizard.ttl)}" placeholder="2h" spellcheck="false"></label>
-                          </div>
-                          <p class="etlsql-studio-guided-hint">Durations like <code>30m</code>, <code>2h</code>, <code>1d</code>. Leave both blank to use the host’s defaults — an omitted clause is not the same as a zero one.</p>`
+                        + `<label class="etlsql-studio-guided-field"><span>Keep cached rows for (TTL)</span>
+                            <input type="text" data-dataset-ttl value="${escapeHtml(wizard.ttl)}" placeholder="2h" spellcheck="false"></label>
+                          <p class="etlsql-studio-guided-hint">Durations like <code>30m</code>, <code>2h</code>, <code>1d</code>. Leave it blank to use the host’s default — an omitted TTL is not the same as a zero one. To refresh on a schedule, create a schedule and a job for the report; a dataset cannot carry its own refresh interval.</p>`
                         + sqlPreviewMarkup(sql)
                         + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
                     actions: [
@@ -533,7 +533,6 @@ export function createStudioAuthoringSurfaces({
                     ],
                     wire: host => {
                         host.querySelector('[data-dataset-name]')?.addEventListener('change', event => { wizard.name = event.target.value; paint(); });
-                        host.querySelector('[data-dataset-refresh]')?.addEventListener('change', event => { wizard.refreshInterval = event.target.value; paint(); });
                         host.querySelector('[data-dataset-ttl]')?.addEventListener('change', event => { wizard.ttl = event.target.value; paint(); });
                     },
                 });
@@ -699,7 +698,6 @@ export function createStudioAuthoringSurfaces({
                         id: `studio_ds_${Date.now().toString(36)}`,
                         name: `&${name}`,
                         query,
-                        refreshInterval: wizard.refreshInterval.trim() || null,
                         ttl: wizard.ttl.trim() || null,
                     });
                     return `&${name}`;

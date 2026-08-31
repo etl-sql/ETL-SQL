@@ -1125,13 +1125,21 @@ namespace ETL_SQL.TUI.UI
 
             if (button != 0) return;
 
-            // Report preview: click the page arrows on the top border row; ignore other clicks.
+            // Report preview header: navigate/activate controls or change pages.
             if (ReportVisible)
             {
                 if (y == LayoutCalculator.EditorAreaTopRows)
                 {
-                    if (x >= _lastWidth - 8 && x < _lastWidth - 5) ReportPrevPage();
-                    else if (x >= _lastWidth - 5 && x < _lastWidth - 2) ReportNextPage();
+                    var manifest = CurrentReportManifest;
+                    var controls = manifest is null
+                        ? []
+                        : ReportControlInteraction.GetControls(manifest, ActiveReportPageIndex);
+                    var target = ReportPreviewNavigation.HitTest(
+                        x,
+                        _lastWidth,
+                        controls.Count > 0,
+                        manifest?.Pages.Count > 1);
+                    await HandleReportNavigationTarget(target, controls, editor);
                 }
                 return;
             }
@@ -1283,6 +1291,39 @@ namespace ETL_SQL.TUI.UI
                         Focus = EditorFocus.Messages;
                     }
                 }
+            }
+        }
+
+        internal async Task HandleReportNavigationTarget(
+            ReportPreviewNavigationTarget target,
+            IReadOnlyList<VisualManifest> controls,
+            ConsoleEditor editor)
+        {
+            switch (target)
+            {
+                case ReportPreviewNavigationTarget.PreviousControl when controls.Count > 0:
+                    ActiveReportControlIndex =
+                        (ActiveReportControlIndex - 1 + controls.Count) % controls.Count;
+                    ShowStatus($"Report control: {controls[ActiveReportControlIndex].Name} (Enter or click ↵ to change)");
+                    ForceFullRepaint();
+                    break;
+                case ReportPreviewNavigationTarget.ActivateControl when controls.Count > 0:
+                    await editor.ActivateReportControl();
+                    break;
+                case ReportPreviewNavigationTarget.NextControl when controls.Count > 0:
+                    ActiveReportControlIndex = (ActiveReportControlIndex + 1) % controls.Count;
+                    ShowStatus($"Report control: {controls[ActiveReportControlIndex].Name} (Enter or click ↵ to change)");
+                    ForceFullRepaint();
+                    break;
+                case ReportPreviewNavigationTarget.RunReport:
+                    _ = editor.RunScript();
+                    break;
+                case ReportPreviewNavigationTarget.PreviousPage:
+                    ReportPrevPage();
+                    break;
+                case ReportPreviewNavigationTarget.NextPage:
+                    ReportNextPage();
+                    break;
             }
         }
 

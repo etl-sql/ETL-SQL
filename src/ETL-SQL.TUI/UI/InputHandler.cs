@@ -273,6 +273,13 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
+            // Report Preview owns Tab. Handle it before the editor's snippet/indent paths.
+            if (_renderer.ReportVisible && key.Key == ConsoleKey.Tab)
+            {
+                await HandleReportKey(key);
+                return;
+            }
+
             // Tab / Shift+Tab — snippet placeholder navigation takes priority over indent
             if (key.Key == ConsoleKey.Tab && _renderer.SnippetModeActive)
             {

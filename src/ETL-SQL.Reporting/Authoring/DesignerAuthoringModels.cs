@@ -84,14 +84,17 @@ public sealed record DesignerAuthoringVisual(
     string? ContainerId = null);
 
 /// <summary>
-/// A named, cached query. <c>RefreshInterval</c> and <c>Ttl</c> are the dataset's lifespan rules,
-/// carried as the authored duration text ('30m', '2h') rather than parsed spans — a designer that
-/// round-trips them must not rewrite '60m' into '1h'. Null means the clause is absent, which is not
-/// the same as a zero duration.
+/// A named, cached query. <c>Ttl</c> is how long the cached rows stay valid, carried as the authored
+/// duration text ('2h') rather than a parsed span — a designer that round-trips it must not rewrite
+/// '120m' into '2h'. Null means the clause is absent, which is not the same as a zero duration.
+///
+/// <para>There is deliberately no refresh interval here. <c>CREATE DATASET ... REFRESH EVERY</c> is
+/// retired and the parser rejects it; scheduled refresh is expressed with <c>CREATE SCHEDULE</c> and
+/// <c>CREATE JOB ... FOR REPORT</c>. Emitting it produced a script that would not parse, which the
+/// patcher then refused wholesale — so the designer wrote nothing at all.</para>
 /// </summary>
 public sealed record DesignerAuthoringDataset(
     string Id,
     string Name,
     string Query,
-    string? RefreshInterval = null,
     string? Ttl = null);

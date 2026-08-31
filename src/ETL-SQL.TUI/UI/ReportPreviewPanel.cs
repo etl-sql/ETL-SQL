@@ -38,6 +38,7 @@ namespace ETL_SQL.TUI.UI
                     .Header("Report Preview")
                     .Border(TerminalCapabilities.Current.Box())
                     .Expand());
+                RenderRunButton(console, x, y, width, hasControls: false, hasMultiplePages: false);
                 return;
             }
 
@@ -93,7 +94,7 @@ namespace ETL_SQL.TUI.UI
             var controlInfo = activeControl is null
                 ? string.Empty
                 : $" · Control {_renderer.ActiveReportControlIndex + 1}/{controls.Count}: {Markup.Escape(activeControl.Name)}";
-            string pageInfo = $"[cyan]Page {activePageIndex + 1}/{manifest.Pages.Count}: {Markup.Escape(page.Name)}{controlInfo}[/] [grey](Tab controls · Enter change · ←→ pages · ↑↓ scroll · Esc exit)[/]";
+            string pageInfo = $"[cyan]Page {activePageIndex + 1}/{manifest.Pages.Count}: {Markup.Escape(page.Name)}{controlInfo}[/] [grey](Tab controls · Enter/↵ change · ←→ pages · ↑↓ scroll · Esc exit)[/]";
             var borderStyleStr = _renderer.ResultsFocus ? TuiTheme.Instance.Ui.ResultsFocusedBorder : TuiTheme.Instance.Ui.ResultsUnfocusedBorder;
             var borderStyle = TuiTheme.Instance.GetStyle(borderStyleStr, new Style(_renderer.ResultsFocus ? Color.Yellow : Color.Blue));
 
@@ -112,10 +113,23 @@ namespace ETL_SQL.TUI.UI
                 console.SetCursorPosition(x, y);
                 console.WriteWidget(panel);
 
-                // Clickable page arrows on the top border row (right side).
-                if (manifest.Pages.Count > 1 && width > 10)
+                var hasMultiplePages = manifest.Pages.Count > 1;
+
+                RenderRunButton(console, x, y, width, controls.Count > 0, hasMultiplePages);
+
+                // Mouse-addressable report controls on the top border row: previous, activate, next.
+                if (controls.Count > 0
+                    && ReportPreviewNavigation.ControlStartX(width, hasMultiplePages) >= 0)
                 {
-                    console.SetCursorPosition(x + width - 8, y);
+                    console.SetCursorPosition(
+                        x + ReportPreviewNavigation.ControlStartX(width, hasMultiplePages), y);
+                    console.Markup("[black on cyan] ◀ [/][black on yellow] ↵ [/][black on cyan] ▶ [/]");
+                }
+
+                // Clickable page arrows on the top border row (right side).
+                if (hasMultiplePages && width >= ReportPreviewNavigation.MinimumPageNavigationWidth)
+                {
+                    console.SetCursorPosition(x + ReportPreviewNavigation.PageStartX(width), y);
                     console.Markup("[black on yellow] ◀ [/][black on yellow] ▶ [/]");
                 }
             }
@@ -124,6 +138,20 @@ namespace ETL_SQL.TUI.UI
                 console.SetCursorPosition(x, y);
                 console.Markup($"[red]Render Error: {Markup.Escape(ex.Message)}[/]");
             }
+        }
+
+        private static void RenderRunButton(
+            IConsoleInterface console,
+            int x,
+            int y,
+            int width,
+            bool hasControls,
+            bool hasMultiplePages)
+        {
+            var start = ReportPreviewNavigation.RunStartX(width, hasControls, hasMultiplePages);
+            if (start < 0) return;
+            console.SetCursorPosition(x + start, y);
+            console.Markup("[black on green] Run [/]");
         }
 
         /// <summary>

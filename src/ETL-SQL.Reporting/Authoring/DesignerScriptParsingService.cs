@@ -52,7 +52,6 @@ public sealed class DesignerScriptParsingService
                 $"ds_{i}",
                 NormalizeDatasetName(ds.TempTableName),
                 ExtractAuthoredNode(script, ds.SourceQuery, ds.SourceQuery.ToSql()).Trim().TrimEnd(';'),
-                ds.RefreshInterval,
                 ds.Ttl))
             .ToList();
 

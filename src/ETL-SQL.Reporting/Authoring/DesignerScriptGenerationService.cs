@@ -79,17 +79,12 @@ public sealed class DesignerScriptGenerationService
     /// <summary>
     /// The dataset's cache rules, written exactly as authored. An absent clause stays absent: a
     /// dataset with no TTL is not the same as one with a zero TTL, and inventing a default here would
-    /// silently change how often every report refreshes.
+    /// silently change how long every report's rows stay valid.
     /// </summary>
-    internal static string DatasetLifespanClauses(DesignerAuthoringDataset dataset)
-    {
-        var clauses = new StringBuilder();
-        if (!string.IsNullOrWhiteSpace(dataset.RefreshInterval))
-            clauses.Append($" REFRESH EVERY '{EscapeStr(TrimQuotes(dataset.RefreshInterval))}'");
-        if (!string.IsNullOrWhiteSpace(dataset.Ttl))
-            clauses.Append($" TTL = '{EscapeStr(TrimQuotes(dataset.Ttl))}'");
-        return clauses.ToString();
-    }
+    internal static string DatasetLifespanClauses(DesignerAuthoringDataset dataset) =>
+        string.IsNullOrWhiteSpace(dataset.Ttl)
+            ? string.Empty
+            : $" TTL = '{EscapeStr(TrimQuotes(dataset.Ttl))}'";
 
     /// <summary>Durations round-trip as authored text, which may or may not arrive already quoted.</summary>
     private static string TrimQuotes(string? value) => (value ?? string.Empty).Trim().Trim('\'');

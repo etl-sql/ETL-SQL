@@ -181,8 +181,7 @@ public sealed class DesignerScriptPatcher
             {
                 var sameQuery = string.Equals(statement.SourceQuery.ToSql().Trim().TrimEnd(';'), query, StringComparison.Ordinal);
                 var sameLifespan = string.Equals(
-                    DesignerScriptGenerationService.DatasetLifespanClauses(
-                        dataset with { RefreshInterval = statement.RefreshInterval, Ttl = statement.Ttl }),
+                    DesignerScriptGenerationService.DatasetLifespanClauses(dataset with { Ttl = statement.Ttl }),
                     lifespan,
                     StringComparison.Ordinal);
                 if (sameQuery && sameLifespan)

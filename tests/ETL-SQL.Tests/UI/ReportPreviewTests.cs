@@ -72,6 +72,87 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public async Task HeaderControlButtons_SelectAndActivateControls()
+        {
+            var editor = new ConsoleEditor("test.rptsql", new Dictionary<string, IDataSource>());
+            editor._renderer.Headless = true;
+            editor._renderer.ReportVisible = true;
+            var first = Checkbox("FirstFilter", "@first");
+            var second = Checkbox("SecondFilter", "@second");
+            var page = new PageManifest { Name = "Main" };
+            page.SlotMap["A"] = first.Name;
+            page.SlotMap["B"] = second.Name;
+            var manifest = new ReportManifest();
+            manifest.Pages.Add(page);
+            manifest.Visuals.Add(first);
+            manifest.Visuals.Add(second);
+            manifest.Parameters["@first"] = "false";
+            manifest.Parameters["@second"] = "false";
+            editor._renderer.CurrentReportManifest = manifest;
+            var controls = ReportControlInteraction.GetControls(manifest, 0);
+
+            await editor._renderer.HandleReportNavigationTarget(
+                ReportPreviewNavigationTarget.NextControl, controls, editor);
+            Assert.Equal(1, editor._renderer.ActiveReportControlIndex);
+
+            await editor._renderer.HandleReportNavigationTarget(
+                ReportPreviewNavigationTarget.ActivateControl, controls, editor);
+            Assert.Equal("true", manifest.Parameters["@second"]);
+            Assert.Equal("true", editor._evaluator.GetVariable("@second"));
+
+            await editor._renderer.HandleReportNavigationTarget(
+                ReportPreviewNavigationTarget.PreviousControl, controls, editor);
+            Assert.Equal(0, editor._renderer.ActiveReportControlIndex);
+        }
+
+        [Fact]
+        public async Task TabInReportPreview_CyclesControlsWithoutIndentingScript()
+        {
+            var editor = new ConsoleEditor("test.rptsql", new Dictionary<string, IDataSource>());
+            editor._renderer.Headless = true;
+            editor._renderer.ReportVisible = true;
+            editor._buffer.Load(["SELECT 1;"]);
+            var originalScript = editor._buffer.GetText();
+            var first = Checkbox("FirstFilter", "@first");
+            var second = Checkbox("SecondFilter", "@second");
+            var page = new PageManifest { Name = "Main" };
+            page.SlotMap["A"] = first.Name;
+            page.SlotMap["B"] = second.Name;
+            editor._renderer.CurrentReportManifest = new ReportManifest
+            {
+                Pages = { page },
+                Visuals = { first, second }
+            };
+
+            await editor.HandleKey(new ConsoleKeyInfo('\t', ConsoleKey.Tab, false, false, false));
+
+            Assert.Equal(1, editor._renderer.ActiveReportControlIndex);
+            Assert.Equal(originalScript, editor._buffer.GetText());
+        }
+
+        [Fact]
+        public void HeaderHitTest_TracksControlAndPageButtons()
+        {
+            const int width = 80;
+            var controlStart = ReportPreviewNavigation.ControlStartX(width, hasMultiplePages: true);
+            var pageStart = ReportPreviewNavigation.PageStartX(width);
+            var runStart = ReportPreviewNavigation.RunStartX(width, hasControls: true, hasMultiplePages: true);
+
+            Assert.Equal(ReportPreviewNavigationTarget.RunReport,
+                ReportPreviewNavigation.HitTest(runStart, width, hasControls: true, hasMultiplePages: true));
+            Assert.Equal(ReportPreviewNavigationTarget.PreviousControl,
+                ReportPreviewNavigation.HitTest(controlStart, width, hasControls: true, hasMultiplePages: true));
+            Assert.Equal(ReportPreviewNavigationTarget.ActivateControl,
+                ReportPreviewNavigation.HitTest(controlStart + ReportPreviewNavigation.ButtonWidth, width, true, true));
+            Assert.Equal(ReportPreviewNavigationTarget.NextControl,
+                ReportPreviewNavigation.HitTest(controlStart + 2 * ReportPreviewNavigation.ButtonWidth, width, true, true));
+            Assert.Equal(ReportPreviewNavigationTarget.PreviousPage,
+                ReportPreviewNavigation.HitTest(pageStart, width, true, true));
+            Assert.Equal(ReportPreviewNavigationTarget.NextPage,
+                ReportPreviewNavigation.HitTest(pageStart + ReportPreviewNavigation.ButtonWidth, width, true, true));
+        }
+
+        [Fact]
         public async Task EnterOnCheckbox_UpdatesBoundParameterWithoutLeavingPreview()
         {
             var editor = new ConsoleEditor("test.rptsql", new Dictionary<string, IDataSource>());
@@ -119,6 +200,19 @@ namespace ETL_SQL.Tests.UI
             Assert.Equal("[\"East\",\"West\"]", normalized);
             Assert.False(ReportControlInteraction.TryNormalizeValue(multi, "North", out _, out var choiceError));
             Assert.Contains("not an available choice", choiceError);
+        }
+
+        private static VisualManifest Checkbox(string name, string parameter)
+        {
+            var checkbox = new VisualManifest { Name = name, VisualType = "CHECKBOX", DefaultValue = "false" };
+            checkbox.Actions.Add(new VisualActionManifest
+            {
+                Type = "SET_PARAMETER",
+                Trigger = "ON_CHANGE",
+                ParameterName = parameter,
+                ValueSource = "CONTROL_VALUE"
+            });
+            return checkbox;
         }
     }
 }

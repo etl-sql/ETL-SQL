@@ -491,9 +491,6 @@ export async function createStudioWorkbench(container, opts = {}) {
     // has no way to act on.
     // ---------------------------------------------------------------------------------------------
 
-    const STUDIO_PARAMETER_TYPES = ['VARCHAR', 'INT', 'DECIMAL', 'DATE', 'DATETIME', 'BOOLEAN'];
-    const STUDIO_TOTAL_AGGREGATES = ['SUM', 'AVG', 'COUNT'];
-
     /**
      * Opens a Studio dialog and resolves with whatever `api.close(value)` is given, or null when the
      * author dismisses it. `controller(api)` drives the content: `api.render({ lede, body, actions,

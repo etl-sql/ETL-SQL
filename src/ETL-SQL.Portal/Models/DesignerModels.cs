@@ -204,7 +204,6 @@ public record DesignerDatasetDto(
     string Id,
     string Name,
     string Query,
-    string? RefreshInterval = null,
     string? Ttl = null);
 
 public record ScriptContentRequest(string ScriptText, string? BaseRevision = null);

@@ -31,7 +31,6 @@ internal static class DesignerAuthoringStateAdapter
             dataset.Id,
             dataset.Name,
             dataset.Query,
-            dataset.RefreshInterval,
             dataset.Ttl)).ToList(),
         state.ReportStyle is null
             ? null
