@@ -103,6 +103,7 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
 
         await page.EvaluateAsync("() => { window.__STUDIO__.state.selectedVisualId = 'UsersTable'; }");
         await page.Locator("[data-field='UserName']").ClickAsync();
+        await page.Locator("[data-filter-dialog-apply]").ClickAsync();
         var firstValue = page.Locator("[data-filter-value='UserName']").First;
         await firstValue.CheckAsync();
         await page.WaitForFunctionAsync("() => window.__STUDIO__.state.editorInstance.getValue().includes('ETL-SQL-STUDIO-FILTER')");

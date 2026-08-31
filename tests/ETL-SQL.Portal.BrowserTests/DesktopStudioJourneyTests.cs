@@ -59,6 +59,7 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         await firstPage.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].studioContext.snapshot?.rowCount > 0");
         await firstPage.EvaluateAsync("() => { window.__STUDIO__.state.selectedVisualId = 'UsersTable'; }");
         await firstPage.Locator("[data-field='UserName']").ClickAsync();
+        await firstPage.Locator("[data-filter-dialog-apply]").ClickAsync();
         await firstPage.Locator("[data-filter-value='UserName']").First.CheckAsync();
         await firstPage.WaitForFunctionAsync("() => window.__STUDIO__.state.editorInstance.getValue().includes('ETL-SQL-STUDIO-FILTER')");
 

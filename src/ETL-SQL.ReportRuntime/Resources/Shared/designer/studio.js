@@ -3764,6 +3764,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             const type = _columnType(column, context.snapshot?.rows || []);
             const values = (context.snapshot?.rows || []).map(row => row?.[field]).filter(value => value != null);
             const existing = context.activeFilters[field] || {};
+            const defaultScope = existing.scope || (state.selectedVisualId ? 'visual' : 'dataset');
             let controls = '<div class="etlsql-filter-awaiting-data">Values appear after a sample loads.</div>';
             if (type === 'number' && values.length) {
                 const numbers = values.map(Number).filter(Number.isFinite);
@@ -3786,7 +3787,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                 <div class="etlsql-studio-modal-body etlsql-filter-dialog-body">
                     <label class="etlsql-filter-dialog-field">Field<select data-filter-dialog-field>${names.map(name => `<option value="${_escapeHtml(name)}" ${name === field ? 'selected' : ''}>${_escapeHtml(name)}</option>`).join('')}</select></label>
                     <div class="etlsql-filter-dialog-kind"><span>${type}</span><small>${values.length ? `${values.length} sampled values` : 'No sample values'}</small></div>
-                    <label class="etlsql-filter-dialog-field">Apply to<select data-filter-dialog-scope><option value="dataset" ${existing.scope !== 'visual' ? 'selected' : ''}>Dataset</option><option value="visual" ${existing.scope === 'visual' ? 'selected' : ''} ${state.selectedVisualId ? '' : 'disabled'}>Selected visual</option></select></label>
+                    <label class="etlsql-filter-dialog-field">Apply to<select data-filter-dialog-scope><option value="dataset" ${defaultScope === 'dataset' ? 'selected' : ''}>Dataset</option><option value="visual" ${defaultScope === 'visual' ? 'selected' : ''} ${state.selectedVisualId ? '' : 'disabled'}>Selected visual</option></select></label>
                     ${controls}
                 </div>
                 <div class="etlsql-studio-modal-footer"><button type="button" class="etlsql-studio-btn" data-filter-dialog-close>Cancel</button><button type="button" class="etlsql-studio-btn is-primary" data-filter-dialog-apply>Apply filter</button></div>`;

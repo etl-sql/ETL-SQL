@@ -82,11 +82,11 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
   a folder tree with create, rename, and confirmed delete actions for files and folders. Files drag into
   folders or onto an explicit workspace-root target, open document paths follow moves and folder renames,
   dirty documents block deletion, and every mutation stays inside the authenticated workspace boundary.
-- [ ] **P3 - Sidebar: Data button and Filter button show the same thing** Instead separate so data only shows data and filters
-  only show filters.  Make the data screen new connection button bigger and at the top.  The filters button should
-  also have a new filters button with dialog to choose what to filter based on the tables.  We need a mechanism so that
-  both filters and data sidebars can be open at the same time to be able to drag columns from data to filters and that
-  would be the trigger to filter on that column and open the dialog on how to filter.
+- [x] **P3 - Sidebar: Data button and Filter button show the same thing** Studio now gives Data and
+  Filters independent sidebars that can stay open together. Data owns connection, dataset, table, and
+  field discovery, with New connection promoted to the primary action. Filters owns active rules and a
+  type-aware New filter dialog; clicking a field or dragging it from Data into Filters opens the same
+  categorical, numeric, or date setup flow before the filter is applied to the dataset or selected visual.
 - [x] **P3 — Restore Studio canvas card width at the 1024px breakpoint.** Dashboard Studio now keeps
   the authored 12-column canvas at an 840px working width inside its existing scroll container. Visual
   cards stay above the 200px usability floor at 1024x768 without widening the Studio shell, and the
@@ -145,7 +145,7 @@ interactive dashboard. The script editor remains the escape hatch for advanced o
 ### Connection Catalog & Gateway Resource Discovery
 - [ ] **TUI Filters VISUALS (SLICER, DATEPICKER, etc)**  These can be changed now but how do you navigate between them.  Can we hook up the mouse to interact?
 - [ ] **ETL-SQL Studio create dataset needed**  THe workflow is broken and needs to be streamlined.  1. Create connection (works but is clunky) 2. In order to start adding report items you need a DATASET but there is no way to create one without code.  The parts are in place just not working correctly.
-
+- [ ] **ETL-SQL exit doesn't work very well** It hangs and does actually exit after asking the save confirmation.
 - [ ] **`constrained_html_components.rptsql` fails the sample gate on a Card lint error.**
   `Test-AllSamples.ps1` reports `Line 14, Col 1: Visual 'EnvironmentMetric' of type Card is missing
   the required mapping role: 'VALUE'`, and the script exits 1. Reproduced against a clean `HEAD`

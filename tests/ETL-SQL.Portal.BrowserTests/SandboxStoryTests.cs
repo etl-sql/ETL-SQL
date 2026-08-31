@@ -1107,6 +1107,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         // Wait for studio shell to mount
         var studioShell = page.Locator(".etlsql-studio-shell");
         await studioShell.WaitForAsync();
+        await page.Locator(".etlsql-studio-tab").First.WaitForAsync();
 
         // 1. Verify tabs rendered (Home + 3 documents)
         Assert.Equal(4, await page.Locator(".etlsql-studio-tab").CountAsync());
@@ -1129,12 +1130,19 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         // 3. Test Activity Rail switching and Filter Pane
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
-        Assert.Contains("Build from data", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("New connection", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Connections", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
 
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
-        Assert.Contains("Data & Filters", await page.Locator("[data-sidebar-title]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Region", await page.Locator(".etlsql-filter-card", new() { HasText = "Region" }).InnerTextAsync());
+        Assert.Equal("Data", await page.Locator("[data-sidebar-title]").InnerTextAsync(), ignoreCase: true);
+        Assert.True(await page.Locator("[data-studio-sidebar]").IsVisibleAsync());
+        Assert.True(await page.Locator("[data-filter-sidebar]").IsVisibleAsync());
+        await page.Locator("[data-studio-sidebar] [data-field='region']").ClickAsync();
+        var filterDialog = page.Locator(".etlsql-studio-filter-dialog");
+        await filterDialog.WaitForAsync();
+        Assert.Equal("region", await filterDialog.Locator("[data-filter-dialog-field]").InputValueAsync());
+        await filterDialog.Locator("[data-filter-dialog-field]").PressAsync("Escape");
+        Assert.True(await page.Locator("[data-modal-backdrop]").IsHiddenAsync());
 
         // 4. Assert Phase 2 Live In-Memory Visual Canvas calculations
         var kpiCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='rev_kpi']");
@@ -1247,21 +1255,38 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
 
-        var fields = page.Locator("[data-field]");
-        Assert.Equal(3, await fields.CountAsync());
-        for (var index = 0; index < await fields.CountAsync(); index++)
-            await fields.Nth(index).ClickAsync();
+        var dataSidebar = page.Locator("[data-studio-sidebar]");
+        var filterSidebar = page.Locator("[data-filter-sidebar]");
+        Assert.True(await dataSidebar.IsVisibleAsync());
+        Assert.True(await filterSidebar.IsVisibleAsync());
+        Assert.DoesNotContain("Active filters", await dataSidebar.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Connections", await filterSidebar.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
 
-        Assert.Equal(3, await page.Locator(".etlsql-filter-card").CountAsync());
-        Assert.True(await page.Locator("[data-date-preset='order_date']").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-date-min='order_date']").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-date-max='order_date']").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-min='total_amount']").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-max='total_amount']").IsVisibleAsync());
-        Assert.Equal(4, await page.Locator("[data-filter-value='region']").CountAsync());
-        Assert.Equal(3, await page.Locator("[data-filter-scope]").CountAsync());
+        await dataSidebar.Locator("[data-field='region']").DragToAsync(filterSidebar.Locator("[data-filter-drop]"));
+        var setup = page.Locator(".etlsql-studio-filter-dialog");
+        await setup.WaitForAsync();
+        Assert.Equal("region", await setup.Locator("[data-filter-dialog-field]").InputValueAsync());
+        await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
+
+        await filterSidebar.Locator("[data-new-filter]").ClickAsync();
+        await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("total_amount");
+        await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
+
+        await filterSidebar.Locator("[data-new-filter]").ClickAsync();
+        await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("order_date");
+        await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
+
+        Assert.Equal(3, await filterSidebar.Locator(".etlsql-filter-card").CountAsync());
+        Assert.True(await filterSidebar.Locator("[data-date-preset='order_date']").IsVisibleAsync());
+        Assert.True(await filterSidebar.Locator("[data-filter-date-min='order_date']").IsVisibleAsync());
+        Assert.True(await filterSidebar.Locator("[data-filter-date-max='order_date']").IsVisibleAsync());
+        Assert.True(await filterSidebar.Locator("[data-filter-min='total_amount']").IsVisibleAsync());
+        Assert.True(await filterSidebar.Locator("[data-filter-max='total_amount']").IsVisibleAsync());
+        Assert.Equal(4, await filterSidebar.Locator("[data-filter-value='region']").CountAsync());
+        Assert.Equal(3, await filterSidebar.Locator("[data-filter-scope]").CountAsync());
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }

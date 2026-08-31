@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Split Studio's Data and Filters activity-rail tools into independent sidebars that can remain open
+  together. Data now prioritizes New connection and field discovery, while Filters provides a
+  type-aware New filter dialog, active-rule controls, and drag-and-drop or keyboard field transfer.
+
 - Added a side-by-side Git diff viewer to desktop Studio. The Source Control rail now compares the
   live editor buffer with `HEAD` or a selected local commit, including unsaved changes, aligned line
   numbers, and added/deleted line highlighting.
