@@ -136,8 +136,15 @@ export function createStudioAuthoringSurfaces({
                         class="etlsql-studio-btn${action.primary ? ' is-primary' : ''}"
                         data-dialog-action="${escapeHtml(action.id)}"${action.disabled ? ' disabled' : ''}
                         >${escapeHtml(action.label)}</button>`).join('');
-                    actionHost.querySelectorAll('[data-dialog-action]').forEach(button => button.addEventListener('click', () => {
-                        actions.find(action => action.id === button.dataset.dialogAction)?.run?.();
+                    actionHost.querySelectorAll('[data-dialog-action]').forEach(button => button.addEventListener('click', async () => {
+                        try {
+                            await actions.find(action => action.id === button.dataset.dialogAction)?.run?.();
+                        } catch (error) {
+                            // A dropped promise here is invisible: the mutation may already have landed
+                            // while the dialog silently stops responding. Say so instead.
+                            feedback.notify(error?.message || 'That action could not be completed.',
+                                { title: 'Action failed', tone: 'error' });
+                        }
                     }));
                     wire?.(bodyHost);
                     bodyHost.querySelector('input:not([type=hidden]), select, textarea')?.focus();
@@ -1016,71 +1023,210 @@ export function createStudioAuthoringSurfaces({
 
     // --- Steps 2-8 --------------------------------------------------------------------------------
 
-    async function runParameterStep() {
-        const draft = { name: 'region', type: 'VARCHAR', initial: "'All'", prompt: true };
-        const sql = () => {
-            const initial = draft.initial.trim() ? ` = ${draft.initial.trim()}` : '';
-            return `DECLARE @${datasetBaseName(draft.name)} ${draft.type}${initial}${draft.prompt ? ' INPUT' : ''};`;
-        };
-        await studioDialog({ kicker: 'Step 2 · Define parameters', title: 'Add a report parameter' }, api => {
-            const paint = () => api.render({
-                lede: 'A <strong>parameter</strong> is a value the reader supplies before the report runs. '
-                    + 'Marked as an input prompt, it appears as a field on the report; either way the query can filter on it.',
-                body: `
-                    <label class="etlsql-studio-guided-field"><span>Name</span>
-                        <div class="etlsql-studio-prefixed-input"><span>@</span>
-                        <input type="text" data-parameter-name value="${escapeHtml(draft.name)}" spellcheck="false"></div></label>
-                    <label class="etlsql-studio-guided-field"><span>Type</span>
-                        <select data-parameter-type>${STUDIO_PARAMETER_TYPES.map(type =>
-                            `<option ${draft.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select></label>
-                    <label class="etlsql-studio-guided-field"><span>Default value</span>
-                        <input type="text" data-parameter-initial value="${escapeHtml(draft.initial)}" spellcheck="false"
-                            placeholder="'All'"></label>
-                    <label class="etlsql-studio-guided-check">
-                        <input type="checkbox" data-parameter-prompt ${draft.prompt ? 'checked' : ''}>
-                        Prompt the reader for this value (INPUT)</label>
-                    <p class="etlsql-studio-guided-hint">Text defaults need quotes, the way they appear in the script.</p>`
-                    + sqlPreviewMarkup(sql()),
-                actions: [
-                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
-                    {
-                        id: 'add', label: 'Add parameter', primary: true, run: async () => {
-                            api.busy(true);
-                            const added = await mutate('Add report parameter', design => {
-                                design.parameters ||= [];
-                                const base = datasetBaseName(draft.name);
-                                const taken = new Set(design.parameters.map(item => String(item.name).replace(/^@/, '').toLowerCase()));
-                                let name = base;
-                                let suffix = 2;
-                                while (taken.has(name.toLowerCase())) name = `${base}_${suffix++}`;
-                                design.parameters.push({
-                                    name: `@${name}`,
-                                    dataType: draft.type,
-                                    initialValue: draft.initial.trim() || null,
-                                    isInput: draft.prompt,
-                                    isOutput: false,
-                                    isRequired: false,
-                                    isSensitive: false,
-                                });
-                                return `@${name}`;
-                            });
-                            api.busy(false);
-                            if (added) feedback.notify(`${added} is declared. Reference it in a dataset query to filter on it.`, { title: 'Parameter added', tone: 'success' });
-                            api.close(added);
-                        },
-                    },
-                ],
-                wire: host => {
-                    host.querySelector('[data-parameter-name]').addEventListener('change', event => { draft.name = event.target.value; paint(); });
-                    host.querySelector('[data-parameter-type]').addEventListener('change', event => { draft.type = event.target.value; paint(); });
-                    host.querySelector('[data-parameter-initial]').addEventListener('change', event => { draft.initial = event.target.value; paint(); });
-                    host.querySelector('[data-parameter-prompt]').addEventListener('change', event => { draft.prompt = event.target.checked; paint(); });
-                },
-            });
-            paint();
-        });
+    /** A parameter keeps the author's casing; only dataset names are lowercased. */
+    function parameterName(seed) {
+        const cleaned = String(seed || 'parameter').replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+/, '');
+        return /^[A-Za-z]/.test(cleaned) ? cleaned : `p_${cleaned || 'arameter'}`;
     }
 
+    /**
+     * The parameter manager: list, add, edit, delete.
+     *
+     * A parameter is the most-used concept after data and the only one an author revisits — a default
+     * changes, a prompt gets a better name, a draft parameter turns out to be unnecessary. An add-only
+     * dialog left every one of those as a trip to the script.
+     *
+     * Declarations inside a block are listed but not editable. The patcher deliberately never touches
+     * them: a DECLARE inside procedural code is not part of the report's parameter list, and offering
+     * Edit on one would silently do nothing.
+     */
+    async function runParameterStep() {
+        const draftFor = parameter => ({
+            original: parameter?.name ?? null,
+            name: parameterName(parameter?.name ?? 'region'),
+            type: parameter?.dataType ?? 'VARCHAR',
+            initial: parameter?.initialValue ?? "'All'",
+            prompt: parameter?.isInput ?? true,
+            required: parameter?.isRequired ?? false,
+            sensitive: parameter?.isSensitive ?? false,
+        });
+
+        const declarationSql = draft => {
+            const initial = draft.initial.trim() ? ` = ${draft.initial.trim()}` : '';
+            const flags = [
+                draft.sensitive ? ' PASSWORD' : '',
+                draft.prompt ? ' INPUT' : '',
+                draft.required ? ' REQUIRED' : '',
+            ].join('');
+            return `DECLARE @${parameterName(draft.name)} ${draft.type.trim() || 'VARCHAR'}${initial}${flags};`;
+        };
+
+        await studioDialog({ kicker: 'Step 2 · Define parameters', title: 'Report parameters', wide: true }, api => {
+            let parameters = null;
+
+            const load = async () => {
+                try {
+                    const parsed = await request(routes.parse, { body: { script: shell.getScriptText() } });
+                    parameters = parsed.designState?.parameters || [];
+                } catch {
+                    parameters = [];
+                }
+                paintList();
+            };
+
+            const flagLabels = parameter => [
+                parameter.isInput ? 'prompts' : null,
+                parameter.isRequired ? 'required' : null,
+                parameter.isSensitive ? 'sensitive' : null,
+                parameter.isOutput ? 'output' : null,
+            ].filter(Boolean).join(' · ');
+
+            const paintList = () => api.render({
+                lede: 'A <strong>parameter</strong> is a value supplied before the report runs. Marked as a prompt it '
+                    + 'appears as a field the reader fills in; either way a dataset query can filter on it.',
+                body: parameters === null
+                    ? '<div class="etlsql-studio-loading">Reading the script…</div>'
+                    : (parameters.length
+                        ? `<div class="etlsql-studio-parameter-list">${parameters.map((parameter, index) => `
+                            <div class="etlsql-studio-parameter-row${parameter.isBlockScoped ? ' is-readonly' : ''}">
+                                <div>
+                                    <strong>${escapeHtml(parameter.name)}</strong>
+                                    <span>${escapeHtml(parameter.dataType)}${parameter.initialValue ? ` = ${escapeHtml(parameter.initialValue)}` : ''}</span>
+                                    ${flagLabels(parameter) ? `<small>${escapeHtml(flagLabels(parameter))}</small>` : ''}
+                                </div>
+                                ${parameter.isBlockScoped
+                                    ? '<span class="etlsql-studio-parameter-locked">Declared in a block · edit it in the script</span>'
+                                    : `<div class="etlsql-studio-parameter-actions">
+                                        <button type="button" class="etlsql-studio-btn" data-edit-parameter="${index}">Edit</button>
+                                        <button type="button" class="etlsql-studio-btn" data-delete-parameter="${index}">Delete</button>
+                                    </div>`}
+                            </div>`).join('')}</div>`
+                        : guidedNoteMarkup('This report declares no parameters yet.', 'info')),
+                actions: [
+                    { id: 'close', label: 'Done', run: () => api.close(null) },
+                    { id: 'add', label: 'Add a parameter', primary: true, run: () => paintForm(draftFor(null)) },
+                ],
+                wire: host => {
+                    host.querySelectorAll('[data-edit-parameter]').forEach(button => button.addEventListener('click', () =>
+                        paintForm(draftFor(parameters[Number(button.dataset.editParameter)]))));
+                    host.querySelectorAll('[data-delete-parameter]').forEach(button => button.addEventListener('click', () =>
+                        paintDelete(parameters[Number(button.dataset.deleteParameter)])));
+                },
+            });
+
+            const paintForm = draft => {
+                const isEdit = Boolean(draft.original);
+                const collides = (parameters || []).some(parameter =>
+                    parameter.name.toLowerCase() === `@${parameterName(draft.name)}`.toLowerCase()
+                    && parameter.name !== draft.original);
+
+                api.render({
+                    lede: isEdit
+                        ? `Editing <strong>${escapeHtml(draft.original)}</strong>. Renaming rewrites the declaration; references elsewhere in the script are not renamed for you.`
+                        : 'Name the value, choose its type, and decide whether the reader is prompted for it.',
+                    body: `
+                        <label class="etlsql-studio-guided-field"><span>Name</span>
+                            <div class="etlsql-studio-prefixed-input"><span>@</span>
+                            <input type="text" data-parameter-name value="${escapeHtml(draft.name)}" spellcheck="false"></div></label>
+                        <label class="etlsql-studio-guided-field"><span>Type</span>
+                            <input type="text" data-parameter-type list="etlsql-parameter-types" value="${escapeHtml(draft.type)}" spellcheck="false">
+                            <datalist id="etlsql-parameter-types">${STUDIO_PARAMETER_TYPES.map(type =>
+                                `<option value="${type}"></option>`).join('')}</datalist></label>
+                        <p class="etlsql-studio-guided-hint">Free text, so a sized type such as <code>VARCHAR(50)</code> is kept exactly as written.</p>
+                        <label class="etlsql-studio-guided-field"><span>Default value</span>
+                            <input type="text" data-parameter-initial value="${escapeHtml(draft.initial)}" spellcheck="false" placeholder="'All'"></label>
+                        <label class="etlsql-studio-guided-check"><input type="checkbox" data-parameter-prompt ${draft.prompt ? 'checked' : ''}>
+                            Prompt the reader for this value (INPUT)</label>
+                        <label class="etlsql-studio-guided-check"><input type="checkbox" data-parameter-required ${draft.required ? 'checked' : ''}>
+                            Require a value before the report runs (REQUIRED)</label>
+                        <label class="etlsql-studio-guided-check"><input type="checkbox" data-parameter-sensitive ${draft.sensitive ? 'checked' : ''}>
+                            Hide the value as a secret (PASSWORD)</label>
+                        <p class="etlsql-studio-guided-hint">Text defaults need quotes, exactly as they appear in the script.</p>`
+                        + (collides ? guidedNoteMarkup('Another parameter already uses that name.', 'warning') : '')
+                        + sqlPreviewMarkup(declarationSql(draft)),
+                    actions: [
+                        { id: 'back', label: 'Back', run: paintList },
+                        {
+                            id: isEdit ? 'save' : 'add',
+                            label: isEdit ? 'Save parameter' : 'Add parameter',
+                            primary: true,
+                            disabled: collides,
+                            run: () => apply(draft),
+                        },
+                    ],
+                    wire: host => {
+                        const bind = (selector, read) => host.querySelector(selector)?.addEventListener('change', event => {
+                            read(event.target);
+                            paintForm(draft);
+                        });
+                        bind('[data-parameter-name]', input => { draft.name = input.value; });
+                        bind('[data-parameter-type]', input => { draft.type = input.value; });
+                        bind('[data-parameter-initial]', input => { draft.initial = input.value; });
+                        bind('[data-parameter-prompt]', input => { draft.prompt = input.checked; });
+                        bind('[data-parameter-required]', input => { draft.required = input.checked; });
+                        bind('[data-parameter-sensitive]', input => { draft.sensitive = input.checked; });
+                    },
+                });
+            };
+
+            const apply = async draft => {
+                const name = `@${parameterName(draft.name)}`;
+                api.busy(true);
+                const written = await mutate(draft.original ? `Edit parameter ${draft.original}` : `Add parameter ${name}`, design => {
+                    design.parameters ||= [];
+                    const next = {
+                        name,
+                        dataType: draft.type.trim() || 'VARCHAR',
+                        initialValue: draft.initial.trim() || null,
+                        isInput: draft.prompt,
+                        isOutput: false,
+                        isRequired: draft.required,
+                        isSensitive: draft.sensitive,
+                    };
+                    // Replacing in place keeps the declaration where the author put it. A rename is a
+                    // replace too: the patcher removes the old name and writes the new one.
+                    const at = draft.original
+                        ? design.parameters.findIndex(parameter => parameter.name === draft.original)
+                        : -1;
+                    if (at >= 0) design.parameters[at] = next;
+                    else design.parameters.push(next);
+                    return name;
+                });
+                api.busy(false);
+                if (written) {
+                    feedback.notify(`${written} is declared. Reference it in a dataset query to filter on it.`,
+                        { title: draft.original ? 'Parameter saved' : 'Parameter added', tone: 'success' });
+                }
+                await load();
+            };
+
+            const paintDelete = parameter => api.render({
+                lede: `Delete <strong>${escapeHtml(parameter.name)}</strong>? Anything still referencing it — a dataset `
+                    + 'query, a slicer action — keeps that reference and will not resolve, so check those first.',
+                body: sqlPreviewMarkup(
+                    `DECLARE ${parameter.name} ${parameter.dataType}${parameter.initialValue ? ` = ${parameter.initialValue}` : ''};`,
+                    'Removes this declaration'),
+                actions: [
+                    { id: 'back', label: 'Keep it', run: paintList },
+                    { id: 'delete', label: 'Delete', primary: true, run: () => remove(parameter) },
+                ],
+            });
+
+            const remove = async parameter => {
+                api.busy(true);
+                const removed = await mutate(`Delete parameter ${parameter.name}`, design => {
+                    design.parameters = (design.parameters || []).filter(item => item.name !== parameter.name);
+                    return parameter.name;
+                });
+                api.busy(false);
+                if (removed) feedback.notify(`${removed} was removed.`, { title: 'Parameter deleted', tone: 'success' });
+                await load();
+            };
+
+            paintList();
+            load();
+        });
+    }
     async function runDetailsStep() {
         if (!await requireDataSample('Step 3 · Groups + details')) return;
         const columns = guidedColumnNames();

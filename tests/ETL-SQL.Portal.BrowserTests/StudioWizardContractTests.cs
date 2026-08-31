@@ -129,17 +129,52 @@ public sealed class StudioWizardContractTests(PortalBrowserFixture fixture) : IA
         await NewPaginatedReportAsync(page);
 
         await page.ClickAsync("[data-workflow-step='parameter']");
+
+        // The step opens the parameter list; adding is one step in from there.
+        await page.Locator("[data-dialog-action='add']").WaitForAsync();
+        await page.ClickAsync("[data-dialog-action='add']");
         await page.Locator(".etlsql-studio-sql-preview pre").WaitForAsync();
 
         var previewed = await PreviewedSqlAsync(page);
         Assert.StartsWith("DECLARE", previewed.Trim(), StringComparison.Ordinal);
 
         await page.ClickAsync("[data-dialog-action='add']");
-        await page.Locator("[data-dialog-action='add']").WaitForAsync(
-            new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
+        await page.Locator(".etlsql-studio-parameter-row").First.WaitForAsync();
 
         var script = await page.EvaluateAsync<string>(ScriptTextScript);
         Assert.Contains(Normalize(previewed), Normalize(script), StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ParameterManager_EditsAndDeletesTheDeclarationItListed()
+    {
+        // Add-only was the old behaviour; every change to an existing parameter meant a trip to the
+        // script. The list is also the only place a block-scoped declaration is shown as read-only.
+        await using var session = await fixture.NewSessionAsync();
+        var page = await OpenStudioAsync(session);
+        await NewPaginatedReportAsync(page);
+
+        await page.ClickAsync("[data-workflow-step='parameter']");
+        await page.Locator("[data-dialog-action='add']").WaitForAsync();
+        await page.ClickAsync("[data-dialog-action='add']");
+        await page.ClickAsync("[data-dialog-action='add']");
+        await page.Locator(".etlsql-studio-parameter-row").First.WaitForAsync();
+
+        await page.ClickAsync("[data-edit-parameter='0']");
+        await page.FillAsync("[data-parameter-initial]", "'North'");
+        await page.Locator("[data-parameter-initial]").BlurAsync();
+        await page.ClickAsync("[data-dialog-action='save']");
+        await page.Locator(".etlsql-studio-parameter-row").First.WaitForAsync();
+
+        Assert.Contains("'North'", await page.EvaluateAsync<string>(ScriptTextScript), StringComparison.Ordinal);
+
+        await page.ClickAsync("[data-delete-parameter='0']");
+        await page.ClickAsync("[data-dialog-action='delete']");
+        await page.Locator(".etlsql-studio-parameter-row").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
+
+        Assert.DoesNotContain("DECLARE", await page.EvaluateAsync<string>(ScriptTextScript), StringComparison.Ordinal);
         Assert.Empty(session.PageErrors);
     }
 

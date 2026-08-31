@@ -194,8 +194,10 @@ public sealed class DesignerScriptGenerationService
         }
 
         AppendLine(sb, $"CREATE VISUAL {name} AS {GetVisualTypeKeyword(visual.Type)} (", nl);
-        if (!string.IsNullOrWhiteSpace(visual.Title))
-            AppendLine(sb, $"    TITLE = '{EscapeStr(visual.Title)}',", nl);
+        var titleClause = FormatTextClause("TITLE", visual.Formatting?.Title, visual.Title);
+        if (titleClause is not null) AppendLine(sb, $"    {titleClause},", nl);
+        var subtitleClause = FormatTextClause("SUBTITLE", visual.Formatting?.Subtitle, null);
+        if (subtitleClause is not null) AppendLine(sb, $"    {subtitleClause},", nl);
 
         if (visual.Options.TryGetValue("inline_source", out var inlineSource) && !string.IsNullOrWhiteSpace(inlineSource))
             AppendLine(sb, $"    SOURCE = {inlineSource},", nl);
@@ -246,7 +248,7 @@ public sealed class DesignerScriptGenerationService
 
         var mappings = visual.Mappings
             .Where(mapping => !string.IsNullOrWhiteSpace(mapping.Value))
-            .Select(mapping => $"{mapping.Key.ToUpperInvariant()} = {mapping.Value}")
+            .Select(mapping => FormatVisualMapping(visual, mapping.Key, mapping.Value))
             .ToList();
         if (mappings.Count > 0 && !emittedChartClause)
             AppendLine(sb, $"    MAPPINGS ({string.Join(", ", mappings)}),", nl);
@@ -303,8 +305,27 @@ public sealed class DesignerScriptGenerationService
             styleOptions.Add($"FONT_WEIGHT = '{EscapeStr(fontWeight)}'");
         if (visual.Options.TryGetValue("OPACITY", out var opacity) && !string.IsNullOrWhiteSpace(opacity))
             styleOptions.Add($"OPACITY = '{EscapeStr(opacity)}'");
+        if (visual.Formatting?.Palette is { Count: > 0 } palette)
+            styleOptions.Add($"PALETTE = ({string.Join(", ", palette.Select(color => $"'{EscapeStr(color)}'"))})");
         if (styleOptions.Count > 0)
             AppendLine(sb, $"    STYLE ({string.Join(", ", styleOptions)}),", nl);
+
+        AppendAxisClause(sb, "X", visual.Formatting?.XAxis, nl);
+        AppendAxisClause(sb, "Y", visual.Formatting?.YAxis, nl);
+
+        if (visual.Formatting?.ConditionalRules is { Count: > 0 } rules)
+        {
+            var formattedRules = rules
+                .Where(rule => !string.IsNullOrWhiteSpace(rule.Condition) && !string.IsNullOrWhiteSpace(rule.BackgroundColor))
+                .Select(rule =>
+                    $"WHEN {rule.Condition.Trim()} THEN '{EscapeStr(rule.BackgroundColor)}'"
+                    + (string.IsNullOrWhiteSpace(rule.FontColor)
+                        ? string.Empty
+                        : $" FONT_COLOR '{EscapeStr(rule.FontColor)}'"))
+                .ToList();
+            if (formattedRules.Count > 0)
+                AppendLine(sb, $"    FORMATTING ({string.Join(", ", formattedRules)}),", nl);
+        }
 
         TrimTrailingComma(sb, nl);
         sb.Append(");");
@@ -438,6 +459,73 @@ public sealed class DesignerScriptGenerationService
     };
 
     internal static string EscapeStr(string value) => value.Replace("'", "''");
+
+    private static string? FormatTextClause(
+        string keyword,
+        DesignerAuthoringTextFormatting? formatting,
+        string? fallbackText)
+    {
+        var text = formatting?.Text ?? fallbackText;
+        var hasStyle = formatting is not null &&
+            (!string.IsNullOrWhiteSpace(formatting.Color)
+             || !string.IsNullOrWhiteSpace(formatting.Font)
+             || !string.IsNullOrWhiteSpace(formatting.Size)
+             || !string.IsNullOrWhiteSpace(formatting.Weight)
+             || !string.IsNullOrWhiteSpace(formatting.Align));
+        if (!hasStyle)
+            return string.IsNullOrWhiteSpace(text) ? null : $"{keyword} = '{EscapeStr(text)}'";
+
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(text)) parts.Add($"TEXT = '{EscapeStr(text)}'");
+        if (!string.IsNullOrWhiteSpace(formatting!.Color)) parts.Add($"COLOR = '{EscapeStr(formatting.Color)}'");
+        if (!string.IsNullOrWhiteSpace(formatting.Font)) parts.Add($"FONT = '{EscapeStr(formatting.Font)}'");
+        if (!string.IsNullOrWhiteSpace(formatting.Size)) parts.Add($"SIZE = '{EscapeStr(formatting.Size)}'");
+        if (!string.IsNullOrWhiteSpace(formatting.Weight)) parts.Add($"WEIGHT = '{EscapeStr(formatting.Weight)}'");
+        if (!string.IsNullOrWhiteSpace(formatting.Align)) parts.Add($"ALIGN = {formatting.Align.ToUpperInvariant()}");
+        return $"{keyword} ({string.Join(", ", parts)})";
+    }
+
+    private static string FormatVisualMapping(DesignerAuthoringVisual visual, string role, string column)
+    {
+        if (visual.Formatting?.Fields is null
+            || !visual.Formatting.Fields.TryGetValue(role, out var formatting))
+            return $"{role.ToUpperInvariant()} = {column}";
+
+        var builder = new StringBuilder(column);
+        if (!string.IsNullOrWhiteSpace(formatting.Format))
+            builder.Append($" FORMAT '{EscapeStr(formatting.Format)}'");
+        if (!string.IsNullOrWhiteSpace(formatting.Align))
+            builder.Append($" ALIGN '{EscapeStr(formatting.Align)}'");
+        if (formatting.DataBar)
+        {
+            builder.Append(" DATA_BAR");
+            if (!string.IsNullOrWhiteSpace(formatting.DataBarColor))
+                builder.Append($" COLOR '{EscapeStr(formatting.DataBarColor)}'");
+        }
+        if (!string.IsNullOrWhiteSpace(formatting.ColorScaleFrom))
+        {
+            builder.Append($" COLOR_SCALE FROM '{EscapeStr(formatting.ColorScaleFrom)}'");
+            if (!string.IsNullOrWhiteSpace(formatting.ColorScaleTo))
+                builder.Append($" TO '{EscapeStr(formatting.ColorScaleTo)}'");
+        }
+        if (!string.IsNullOrWhiteSpace(formatting.DisplayName))
+            builder.Append($" AS '{EscapeStr(formatting.DisplayName)}'");
+        return builder.ToString();
+    }
+
+    private static void AppendAxisClause(
+        StringBuilder builder,
+        string axis,
+        Dictionary<string, string>? options,
+        string lineEnding)
+    {
+        if (options is not { Count: > 0 }) return;
+        var body = options
+            .Where(option => !string.IsNullOrWhiteSpace(option.Value))
+            .Select(option => $"{option.Key.ToUpperInvariant()} = {FormatOptionValue(option.Value)}")
+            .ToList();
+        if (body.Count > 0) AppendLine(builder, $"    {axis}_AXIS ({string.Join(", ", body)}),", lineEnding);
+    }
 
     private static string FormatOptionValue(string value)
     {

@@ -50,7 +50,8 @@ internal static class DesignerAuthoringStateAdapter
             parameter.IsInput,
             parameter.IsOutput,
             parameter.IsRequired,
-            parameter.IsSensitive)).ToList());
+            parameter.IsSensitive,
+            parameter.IsBlockScoped)).ToList());
 
     /// <summary>
     /// The way back: host-neutral authoring state to the DTO shape the browser consumes. The
@@ -89,7 +90,8 @@ internal static class DesignerAuthoringStateAdapter
             parameter.IsInput,
             parameter.IsOutput,
             parameter.IsRequired,
-            parameter.IsSensitive)).ToList());
+            parameter.IsSensitive,
+            parameter.IsBlockScoped)).ToList());
 
     private static DesignerBookmarkDto ToBookmarkDto(DesignerAuthoringBookmark bookmark) => new(
         bookmark.Id,
@@ -114,7 +116,8 @@ internal static class DesignerAuthoringStateAdapter
         visual.Dataset,
         visual.Mappings ?? new Dictionary<string, string>(),
         visual.Options ?? new Dictionary<string, string>(),
-        visual.ContainerId);
+        visual.ContainerId,
+        visual.Formatting is null ? null : ToFormattingDto(visual.Formatting));
 
     private static DesignerAuthoringBookmark ToAuthoringBookmark(DesignerBookmarkDto bookmark) => new(
         bookmark.Id,
@@ -139,5 +142,46 @@ internal static class DesignerAuthoringStateAdapter
         visual.Dataset,
         visual.Mappings ?? new Dictionary<string, string>(),
         visual.Options ?? new Dictionary<string, string>(),
-        visual.ContainerId);
+        visual.ContainerId,
+        visual.Formatting is null ? null : ToAuthoringFormatting(visual.Formatting));
+
+    private static DesignerVisualFormattingDto ToFormattingDto(DesignerAuthoringVisualFormatting formatting) => new(
+        formatting.Title is null ? null : new DesignerTextFormattingDto(
+            formatting.Title.Text, formatting.Title.Color, formatting.Title.Font,
+            formatting.Title.Size, formatting.Title.Weight, formatting.Title.Align),
+        formatting.Subtitle is null ? null : new DesignerTextFormattingDto(
+            formatting.Subtitle.Text, formatting.Subtitle.Color, formatting.Subtitle.Font,
+            formatting.Subtitle.Size, formatting.Subtitle.Weight, formatting.Subtitle.Align),
+        formatting.XAxis,
+        formatting.YAxis,
+        formatting.Palette,
+        formatting.ConditionalRules?.Select(rule => new DesignerConditionalFormattingRuleDto(
+            rule.Condition, rule.BackgroundColor, rule.FontColor)).ToList(),
+        formatting.Fields?.ToDictionary(
+            field => field.Key,
+            field => new DesignerFieldFormattingDto(
+                field.Value.Format, field.Value.Align, field.Value.DisplayName,
+                field.Value.DataBar, field.Value.DataBarColor,
+                field.Value.ColorScaleFrom, field.Value.ColorScaleTo),
+            StringComparer.OrdinalIgnoreCase));
+
+    private static DesignerAuthoringVisualFormatting ToAuthoringFormatting(DesignerVisualFormattingDto formatting) => new(
+        formatting.Title is null ? null : new DesignerAuthoringTextFormatting(
+            formatting.Title.Text, formatting.Title.Color, formatting.Title.Font,
+            formatting.Title.Size, formatting.Title.Weight, formatting.Title.Align),
+        formatting.Subtitle is null ? null : new DesignerAuthoringTextFormatting(
+            formatting.Subtitle.Text, formatting.Subtitle.Color, formatting.Subtitle.Font,
+            formatting.Subtitle.Size, formatting.Subtitle.Weight, formatting.Subtitle.Align),
+        formatting.XAxis,
+        formatting.YAxis,
+        formatting.Palette,
+        formatting.ConditionalRules?.Select(rule => new DesignerAuthoringConditionalFormattingRule(
+            rule.Condition, rule.BackgroundColor, rule.FontColor)).ToList(),
+        formatting.Fields?.ToDictionary(
+            field => field.Key,
+            field => new DesignerAuthoringFieldFormatting(
+                field.Value.Format, field.Value.Align, field.Value.DisplayName,
+                field.Value.DataBar, field.Value.DataBarColor,
+                field.Value.ColorScaleFrom, field.Value.ColorScaleTo),
+            StringComparer.OrdinalIgnoreCase));
 }

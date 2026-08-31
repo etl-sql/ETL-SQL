@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Reporting.Authoring;
@@ -215,5 +216,91 @@ public class DesignerAuthoringEmissionTests
         Assert.Contains("TTL = '2h'", patched, System.StringComparison.Ordinal);
         Assert.DoesNotContain("COMPRESS = ON", patched, System.StringComparison.Ordinal);
         Assert.DoesNotContain("ENCRYPT = MACHINE", patched, System.StringComparison.Ordinal);
+    }
+    // ── Parameter editing (W1.2) ──────────────────────────────────────────────────────────────────
+
+    private const string Declared = """
+        DECLARE @country VARCHAR(50) = 'USA';
+        DECLARE @limit INT = 10 REQUIRED;
+
+        CREATE PAGE [Main] AS DASHBOARD ( LAYOUT ( STRUCTURE = '.' ) );
+        """;
+
+    [Fact]
+    public void EditingAParameter_RewritesOnlyThatDeclaration()
+    {
+        var state = Parsing.Parse(Declared);
+        var edited = state.Parameters!
+            .Select(parameter => parameter.Name == "@country" ? parameter with { InitialValue = "'Canada'" } : parameter)
+            .ToList();
+
+        var patched = Patcher.Patch(Declared, state with { Parameters = edited });
+
+        Assert.True(Parses(patched));
+        Assert.Contains("DECLARE @country VARCHAR(50) = 'Canada';", patched, System.StringComparison.Ordinal);
+        // A sized type is authored text, not a designer enum: editing a default must not truncate it.
+        Assert.DoesNotContain("DECLARE @country VARCHAR =", patched, System.StringComparison.Ordinal);
+        Assert.Contains("DECLARE @limit INT = 10 REQUIRED;", patched, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenamingAParameter_ReplacesTheDeclarationRatherThanAddingASecond()
+    {
+        var state = Parsing.Parse(Declared);
+        var renamed = state.Parameters!
+            .Select(parameter => parameter.Name == "@country" ? parameter with { Name = "@nation" } : parameter)
+            .ToList();
+
+        var patched = Patcher.Patch(Declared, state with { Parameters = renamed });
+
+        Assert.True(Parses(patched));
+        Assert.Contains("@nation", patched, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("@country", patched, System.StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(patched, @"DECLARE @nation\b"));
+    }
+
+    [Fact]
+    public void DeletingAParameter_RemovesOnlyThatDeclaration()
+    {
+        var state = Parsing.Parse(Declared);
+        var kept = state.Parameters!.Where(parameter => parameter.Name != "@limit").ToList();
+
+        var patched = Patcher.Patch(Declared, state with { Parameters = kept });
+
+        Assert.True(Parses(patched));
+        Assert.DoesNotContain("@limit", patched, System.StringComparison.Ordinal);
+        Assert.Contains("DECLARE @country VARCHAR(50) = 'USA';", patched, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABlockScopedDeclarationIsReportedAsSuchAndNeverRewritten()
+    {
+        // The manager lists these read-only. Without the flag they look identical to a top-level
+        // parameter, and an Edit button on one would do nothing at all — the patcher refuses by design.
+        const string withBlock = """
+            DECLARE @country VARCHAR(50) = 'USA';
+
+            BEGIN
+                DECLARE @scratch INT = 1;
+                PRINT 'working';
+            END;
+
+            CREATE PAGE [Main] AS DASHBOARD ( LAYOUT ( STRUCTURE = '.' ) );
+            """;
+
+        var state = Parsing.Parse(withBlock);
+        var scratch = state.Parameters!.Single(parameter => parameter.Name == "@scratch");
+        var country = state.Parameters!.Single(parameter => parameter.Name == "@country");
+
+        Assert.True(scratch.IsBlockScoped);
+        Assert.False(country.IsBlockScoped);
+
+        // Even asked to change it, the patcher leaves a block-scoped declaration alone.
+        var edited = state.Parameters!
+            .Select(parameter => parameter.Name == "@scratch" ? parameter with { InitialValue = "999" } : parameter)
+            .ToList();
+
+        Assert.Contains("DECLARE @scratch INT = 1;", Patcher.Patch(withBlock, state with { Parameters = edited }),
+            System.StringComparison.Ordinal);
     }
 }

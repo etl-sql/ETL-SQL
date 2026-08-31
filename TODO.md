@@ -208,12 +208,18 @@ journey. Two of the four are migrations of code that already works.
   moved to `studio-authoring-ui.js` so a second implementation cannot drift. The contract tests now
   run against all three authoring modules, verified by injecting violations into the new one.
   Scope stayed settled: no join inference, no visual query building.
-- [ ] **W1.2 — Parameters wizard**: Create, edit, reorder, and delete declarations; input, required,
-  and sensitive flags; and cascade authoring, which `DesignerScriptPatcher` already supports through
-  the `cascade` option that nothing currently writes. Today there is a single "add a parameter"
-  dialog and no way to edit an existing one. This is the most-used concept after data and spans both
-  report and pipeline documents. Needed by the paginated certification journey; overlaps the P4
-  cascading-slicers item.
+- [x] **W1.2 — Parameters wizard**: Step 2 is now a manager rather than an add-only dialog: it lists
+  the declarations from the canonical parse and offers add, edit, and delete, each previewing the
+  exact `DECLARE` it writes. The type is free text so a sized type such as `VARCHAR(50)` survives an
+  edit — the round trip preserves it, and truncating it would have been silent. Declarations inside a
+  block are listed read-only, because the patcher deliberately never rewrites those and an Edit button
+  on one would do nothing; `IsBlockScoped` now carries that through the authoring model so a surface
+  can be honest about it. Reorder is deliberately not offered: the patcher edits declarations in place
+  and has no reordering primitive, so it would mean deleting and re-emitting the block and losing the
+  author's comments and spacing.
+  Cascade authoring is **not** part of this item, contrary to the original note: `CASCADE` is a clause
+  on a slicer binding it to parent parameters, not a property of a declaration, so it belongs with the
+  P4 cross-visual filtering and cascading-slicers work.
 - [ ] **W1.3 — Surface bookmarks, themes, and styles in Studio**: All three have complete authoring
   UI in `designer.js` and no entry in Studio's rail, which exposes only explorer, catalog, filters,
   palette, git, and settings. The bookmarks icon is already in Studio's icon set, unused. Migration

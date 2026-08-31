@@ -183,16 +183,19 @@ public sealed class DesignerScriptParsingService
 
     private static List<DesignerAuthoringParameter> ParametersToAuthoring(Script ast) =>
         ast.Statements.SelectMany(statement => statement is BlockStatement block
-                ? block.Statements.OfType<DeclareStatement>()
-                : statement is DeclareStatement declaration ? [declaration] : [])
-            .Select(parameter => new DesignerAuthoringParameter(
-                parameter.VariableName,
-                parameter.DataType,
-                parameter.InitialValue?.ToSql(),
-                parameter.IsInput,
-                parameter.IsOutput,
-                parameter.IsRequired,
-                parameter.IsSensitive))
+                ? block.Statements.OfType<DeclareStatement>().Select(declaration => (Declaration: declaration, BlockScoped: true))
+                : statement is DeclareStatement declaration
+                    ? [(Declaration: declaration, BlockScoped: false)]
+                    : [])
+            .Select(item => new DesignerAuthoringParameter(
+                item.Declaration.VariableName,
+                item.Declaration.DataType,
+                item.Declaration.InitialValue?.ToSql(),
+                item.Declaration.IsInput,
+                item.Declaration.IsOutput,
+                item.Declaration.IsRequired,
+                item.Declaration.IsSensitive,
+                item.BlockScoped))
             .ToList();
 
     private static List<DesignerAuthoringBookmark> BookmarksToAuthoring(Script ast) =>
@@ -217,9 +220,10 @@ public sealed class DesignerScriptParsingService
     private static DesignerAuthoringVisual VisualToAuthoring(
         CreateVisualStatement v, int idx, int col, int row, int colSpan, int rowSpan, string? script = null)
     {
-        var title = v.Title is LiteralExpression lit
+        var authoredTitle = v.TitleDefinition?.Text ?? v.Title;
+        var title = authoredTitle is LiteralExpression lit
             ? lit.Value?.ToString()
-            : v.Title?.ToSql().Trim('\'', '"');
+            : authoredTitle?.ToSql().Trim('\'', '"');
 
         var sourceName = v.Source.TempTableName;
         var dataset = !string.IsNullOrWhiteSpace(sourceName) && sourceName.StartsWith('&')
@@ -230,6 +234,22 @@ public sealed class DesignerScriptParsingService
             m => m.Role.ToUpper(),
             m => m.Column,
             StringComparer.OrdinalIgnoreCase);
+
+        var fieldFormatting = v.Mappings
+            .Where(mapping => mapping.Format != null || mapping.Align != null || mapping.DisplayName != null
+                || mapping.DataBar || mapping.DataBarColor != null
+                || mapping.ColorScaleFrom != null || mapping.ColorScaleTo != null)
+            .ToDictionary(
+                mapping => mapping.Role.ToUpperInvariant(),
+                mapping => new DesignerAuthoringFieldFormatting(
+                    mapping.Format,
+                    mapping.Align,
+                    mapping.DisplayName,
+                    mapping.DataBar,
+                    mapping.DataBarColor,
+                    mapping.ColorScaleFrom,
+                    mapping.ColorScaleTo),
+                StringComparer.OrdinalIgnoreCase);
 
         var options = v.Options.ToDictionary(
             o => o.Key,
@@ -301,6 +321,29 @@ public sealed class DesignerScriptParsingService
                 options["html_fallback"] = v.HtmlTemplate.Fallback;
         }
 
+        var titleFormatting = ToAuthoringTextFormatting(v.TitleDefinition, title);
+        var subtitleFormatting = ToAuthoringTextFormatting(v.SubtitleDefinition,
+            v.Subtitle is LiteralExpression subtitleLiteral
+                ? subtitleLiteral.Value?.ToString()
+                : v.Subtitle?.ToSql().Trim('\'', '"'));
+        var xAxis = v.AxisOptions.FirstOrDefault(axis => axis.Axis.Equals("X", StringComparison.OrdinalIgnoreCase))?
+            .Options.ToDictionary(option => option.Key, option => option.Value, StringComparer.OrdinalIgnoreCase);
+        var yAxis = v.AxisOptions.FirstOrDefault(axis => axis.Axis.Equals("Y", StringComparison.OrdinalIgnoreCase))?
+            .Options.ToDictionary(option => option.Key, option => option.Value, StringComparer.OrdinalIgnoreCase);
+        var formatting = titleFormatting is not null || subtitleFormatting is not null
+            || xAxis is not null || yAxis is not null || !v.Palette.IsDefaultOrEmpty
+            || v.FormattingRules.Count > 0 || fieldFormatting.Count > 0
+            ? new DesignerAuthoringVisualFormatting(
+                titleFormatting,
+                subtitleFormatting,
+                xAxis,
+                yAxis,
+                v.Palette.IsDefaultOrEmpty ? null : v.Palette.ToList(),
+                v.FormattingRules.Select(rule => new DesignerAuthoringConditionalFormattingRule(
+                    rule.Condition.ToSql(), rule.Color, rule.FontColor)).ToList(),
+                fieldFormatting.Count == 0 ? null : fieldFormatting)
+            : null;
+
         return new DesignerAuthoringVisual(
             $"v_{v.Name}_{idx}",
             v.Name,
@@ -309,7 +352,22 @@ public sealed class DesignerScriptParsingService
             title,
             dataset,
             mappings,
-            options);
+            options,
+            Formatting: formatting);
+    }
+
+    private static DesignerAuthoringTextFormatting? ToAuthoringTextFormatting(
+        TitleDefinition? definition,
+        string? text)
+    {
+        if (definition is null && string.IsNullOrWhiteSpace(text)) return null;
+        return new DesignerAuthoringTextFormatting(
+            text,
+            definition?.Color,
+            definition?.Font,
+            definition?.Size,
+            definition?.Weight,
+            definition?.Align);
     }
 
     private static string ExtractAuthoredNode(string? script, AstNode node, string fallback)

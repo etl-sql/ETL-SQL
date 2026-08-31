@@ -157,12 +157,16 @@ public sealed class StudioAuthoringContractTests
         // do correctly: an earlier attempt desynchronised on the /'/g literal in this same module
         // and silently stopped checking everything after it. The trade is that a constant passed
         // only as a bare argument is not covered; every one in this module is used as an object.
-        var referenced = Regex.Matches(code, @"(?<![.\w$])([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\s*\.")
+        // Two naming conventions carry module-level bindings here: UPPER_SNAKE constants, and the
+        // leading-underscore privates studio.js uses (_feedback, _escapeHtml). Both have now been
+        // left behind by an extraction, and a `feedback` vs `_feedback` slip is invisible until the
+        // exact line runs.
+        var referenced = Regex.Matches(code, @"(?<![.\w$])(_[A-Za-z][A-Za-z0-9_]*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\s*\.")
             .Select(match => match.Groups[1].Value)
             .Distinct()
             .ToList();
 
-        var available = Regex.Matches(code, @"(?:const|let|var)\s+([A-Z][A-Z0-9_]*)")
+        var available = Regex.Matches(code, @"(?:const|let|var|function)\s+(_?[A-Za-z][A-Za-z0-9_]*)")
             .Select(match => match.Groups[1].Value)
             .Concat(Regex.Matches(code, @"import\s*\{([^}]*)\}")
                 .SelectMany(match => match.Groups[1].Value.Split(','))

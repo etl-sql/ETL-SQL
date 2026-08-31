@@ -894,34 +894,58 @@ function mockNormalizeName(name) {
   return String(name || '').replace(/^&/, '').toLowerCase();
 }
 
+function mockDeclarationText(parameter) {
+  const name = parameter.name.startsWith('@') ? parameter.name : '@' + parameter.name;
+  const initial = parameter.initialValue ? ' = ' + parameter.initialValue : '';
+  const flags = [
+    parameter.isSensitive ? 'PASSWORD' : '',
+    parameter.isInput ? 'INPUT' : '',
+    parameter.isOutput ? 'OUTPUT' : '',
+    parameter.isRequired ? 'REQUIRED' : '',
+  ].filter(Boolean).join(' ');
+  return 'DECLARE ' + name + ' ' + (parameter.dataType || 'VARCHAR') + initial + (flags ? ' ' + flags : '') + ';';
+}
+
 function mockPatchParameters(script, parameters) {
   if (!Array.isArray(parameters)) return script;
   let out = script;
 
   const existing = new Map();
-  const declarePattern = /^[ \t]*DECLARE\s+(@[A-Za-z_][A-Za-z0-9_]*)[^;]*;[ \t]*\r?\n?/gim;
+  const declarePattern = /^[ \t]*DECLARE\s+(@[A-Za-z_][A-Za-z0-9_]*)[^;]*;/gim;
   let match;
   while ((match = declarePattern.exec(out)) !== null) {
-    existing.set(match[1].toLowerCase(), { start: match.index, end: match.index + match[0].length });
+    existing.set(match[1].toLowerCase(), { start: match.index, end: match.index + match[0].length, text: match[0] });
   }
 
-  const desired = new Set(parameters.map(p => (p.name.startsWith('@') ? p.name : '@' + p.name).toLowerCase()));
+  const byName = new Map(parameters.map(parameter => [
+    (parameter.name.startsWith('@') ? parameter.name : '@' + parameter.name).toLowerCase(),
+    parameter,
+  ]));
 
-  // Remove dropped declarations back-to-front so earlier offsets stay valid.
-  const removals = [...existing.entries()].filter(([name]) => !desired.has(name)).map(([, span]) => span);
-  for (const span of removals.sort((a, b) => b.start - a.start)) {
-    out = out.slice(0, span.start) + out.slice(span.end);
+  // Rewrite changed declarations and drop removed ones, back-to-front so earlier offsets stay valid.
+  // This used to only add and remove, so editing a parameter's default or type was a silent no-op in
+  // the sandbox while the real patcher rewrote it — the sandbox reporting a working surface as broken.
+  const edits = [];
+  for (const [name, span] of existing) {
+    const desired = byName.get(name);
+    if (!desired) {
+      let end = span.end;
+      while (end < out.length && /[ \t]/.test(out[end])) end++;
+      if (out.slice(end, end + 2) === '\r\n') end += 2;
+      else if (out[end] === '\n') end += 1;
+      edits.push({ start: span.start, end, text: '' });
+      continue;
+    }
+    const replacement = mockDeclarationText(desired);
+    if (replacement !== span.text.trim()) edits.push({ start: span.start, end: span.end, text: replacement });
+  }
+  for (const edit of edits.sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
   }
 
   const additions = parameters
-    .filter(p => !existing.has((p.name.startsWith('@') ? p.name : '@' + p.name).toLowerCase()))
-    .map(p => {
-      const name = p.name.startsWith('@') ? p.name : '@' + p.name;
-      const initial = p.initialValue ? ' = ' + p.initialValue : '';
-      const flags = [p.isInput ? 'INPUT' : '', p.isOutput ? 'OUTPUT' : '', p.isRequired ? 'REQUIRED' : '', p.isSensitive ? 'SENSITIVE' : '']
-        .filter(Boolean).join(' ');
-      return 'DECLARE ' + name + ' ' + (p.dataType || 'VARCHAR') + initial + (flags ? ' ' + flags : '') + ';';
-    });
+    .filter(parameter => !existing.has((parameter.name.startsWith('@') ? parameter.name : '@' + parameter.name).toLowerCase()))
+    .map(mockDeclarationText);
 
   return additions.length ? additions.join('\n') + '\n\n' + out : out;
 }
@@ -1182,7 +1206,9 @@ function mockParseVisuals(script) {
 
 function mockParseParameters(script) {
   const parameters = [];
-  const pattern = /^[ \t]*DECLARE\s+(@[A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z]+)([^;]*);/gim;
+  // The type may be sized — VARCHAR(50) — and dropping the size made the sandbox show a
+  // truncated type the real parser preserves.
+  const pattern = /^[ \t]*DECLARE\s+(@[A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z]+(?:\s*\([^)]*\))?)([^;]*);/gim;
   let match;
   while ((match = pattern.exec(script)) !== null) {
     const tail = match[3] || '';

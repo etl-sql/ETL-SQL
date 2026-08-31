@@ -144,7 +144,8 @@ public record DesignerParameterDto(
     bool IsInput = false,
     bool IsOutput = false,
     bool IsRequired = false,
-    bool IsSensitive = false);
+    bool IsSensitive = false,
+    bool IsBlockScoped = false);
 
 public record DesignerBookmarkDto(
     string Id,
@@ -198,7 +199,39 @@ public record DesignerVisualDto(
     string? Dataset,
     Dictionary<string, string> Mappings,
     Dictionary<string, string> Options,
-    string? ContainerId = null);
+    string? ContainerId = null,
+    DesignerVisualFormattingDto? Formatting = null);
+
+public record DesignerVisualFormattingDto(
+    DesignerTextFormattingDto? Title = null,
+    DesignerTextFormattingDto? Subtitle = null,
+    Dictionary<string, string>? XAxis = null,
+    Dictionary<string, string>? YAxis = null,
+    List<string>? Palette = null,
+    List<DesignerConditionalFormattingRuleDto>? ConditionalRules = null,
+    Dictionary<string, DesignerFieldFormattingDto>? Fields = null);
+
+public record DesignerTextFormattingDto(
+    string? Text = null,
+    string? Color = null,
+    string? Font = null,
+    string? Size = null,
+    string? Weight = null,
+    string? Align = null);
+
+public record DesignerConditionalFormattingRuleDto(
+    string Condition,
+    string BackgroundColor,
+    string? FontColor = null);
+
+public record DesignerFieldFormattingDto(
+    string? Format = null,
+    string? Align = null,
+    string? DisplayName = null,
+    bool DataBar = false,
+    string? DataBarColor = null,
+    string? ColorScaleFrom = null,
+    string? ColorScaleTo = null);
 
 public record DesignerDatasetDto(
     string Id,

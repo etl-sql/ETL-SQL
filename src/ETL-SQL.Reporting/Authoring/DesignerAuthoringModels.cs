@@ -13,7 +13,14 @@ public sealed record DesignerAuthoringState(
     List<DesignerAuthoringBookmark>? Bookmarks = null,
     List<DesignerAuthoringParameter>? Parameters = null);
 
-/// <summary>A report parameter declaration carried as authored source text for lossless patching.</summary>
+/// <summary>
+/// A report parameter declaration carried as authored source text for lossless patching.
+///
+/// <para><c>IsBlockScoped</c> marks a <c>DECLARE</c> that lives inside a block rather than at the top
+/// level of the script. The patcher deliberately never edits or removes those — a declaration inside
+/// procedural code is not the report's parameter list — so a designer offering Edit or Delete on one
+/// would do nothing at all. Surfaces must show them as read-only rather than pretend.</para>
+/// </summary>
 public sealed record DesignerAuthoringParameter(
     string Name,
     string DataType,
@@ -21,7 +28,8 @@ public sealed record DesignerAuthoringParameter(
     bool IsInput = false,
     bool IsOutput = false,
     bool IsRequired = false,
-    bool IsSensitive = false);
+    bool IsSensitive = false,
+    bool IsBlockScoped = false);
 
 /// <summary>
 /// One author bookmark as the designer edits it. Values are carried as the authored source text
@@ -81,7 +89,44 @@ public sealed record DesignerAuthoringVisual(
     string? Dataset,
     Dictionary<string, string> Mappings,
     Dictionary<string, string> Options,
-    string? ContainerId = null);
+    string? ContainerId = null,
+    DesignerAuthoringVisualFormatting? Formatting = null);
+
+/// <summary>
+/// Typed visual-formatting state. Keeping title typography, axes, palettes, field formats, and
+/// conditional rules out of the generic OPTIONS dictionary lets every host round-trip the actual
+/// Report-SQL clauses without inventing private option names.
+/// </summary>
+public sealed record DesignerAuthoringVisualFormatting(
+    DesignerAuthoringTextFormatting? Title = null,
+    DesignerAuthoringTextFormatting? Subtitle = null,
+    Dictionary<string, string>? XAxis = null,
+    Dictionary<string, string>? YAxis = null,
+    List<string>? Palette = null,
+    List<DesignerAuthoringConditionalFormattingRule>? ConditionalRules = null,
+    Dictionary<string, DesignerAuthoringFieldFormatting>? Fields = null);
+
+public sealed record DesignerAuthoringTextFormatting(
+    string? Text = null,
+    string? Color = null,
+    string? Font = null,
+    string? Size = null,
+    string? Weight = null,
+    string? Align = null);
+
+public sealed record DesignerAuthoringConditionalFormattingRule(
+    string Condition,
+    string BackgroundColor,
+    string? FontColor = null);
+
+public sealed record DesignerAuthoringFieldFormatting(
+    string? Format = null,
+    string? Align = null,
+    string? DisplayName = null,
+    bool DataBar = false,
+    string? DataBarColor = null,
+    string? ColorScaleFrom = null,
+    string? ColorScaleTo = null);
 
 /// <summary>
 /// A named, cached query. <c>Ttl</c> is how long the cached rows stay valid, carried as the authored
