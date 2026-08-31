@@ -257,6 +257,42 @@ To prevent clobbering hand-crafted SQL queries, CTEs, or custom procedural logic
 
 ---
 
+## 6.1 The authoring component contract
+
+Studio's guided wizards — the connection creator, the data wizard, the chart builder, and the guided
+report steps — live in one canonical module, `studio-authoring.js`, and are composed into the
+workbench by `studio.js`. They obey five rules. Each exists because it has already been broken once,
+and each break was invisible until someone clicked the button and nothing happened.
+
+1. **Host-neutral.** No `window`, no `localStorage`, no `document.querySelector` against the Studio
+   shell, no knowledge of which host is running. Everything a surface needs arrives through
+   `createStudioAuthoringSurfaces`. A surface that reaches for the shell works on the host it was
+   written against and degrades silently on the other four.
+2. **No network of its own.** All I/O goes through the injected `request`, the only thing that knows
+   about `authFetch` and the API base. Literal `/api/...` paths are banned; routes come from the
+   injected tables, so a route one host does not serve fails a contract test instead of a user's
+   click. The single exception is `editorTransport`, handed straight to `createScriptEditor` because
+   the embedded editor is a child component owning its own transport.
+3. **No script writing of its own.** Every document change goes through the injected `mutate` — the
+   canonical parse, mutate, patch round-trip — so a hand edit is never clobbered and an unparseable
+   document is never overwritten. `USE DATASET` is the one statement form the patcher cannot express
+   and is confined to a single helper.
+4. **Preview before write.** A surface shows the exact Report-SQL it is about to write and writes only
+   on an explicit confirm. A step that cannot run yet says what is missing and offers the control that
+   fixes it, rather than writing something half-formed or failing into an unactionable toast.
+5. **Read state from the parse.** A surface reads its starting state from the canonical parse of the
+   current document, never from what it wrote last time. This is what makes a wizard safe to reopen
+   after the author has hand-edited the script.
+
+`StudioAuthoringContractTests` enforces rules 1 to 3 by inspection, and the tests are verified to fail
+when each rule is violated. Rules 4 and 5 are behavioural and belong to the wizard test lane.
+
+Visual types are declared once, in `visual-preview.js`, beside the role definitions that say what each
+type binds to. A palette entry with no roles cannot be configured, and roles with no palette entry
+cannot be reached, so the two lists are not allowed to drift apart.
+
+---
+
 ## 7. Pipeline execution-map projection
 
 When opening an `.etlsql` script, Canvas View sends the current bytes to the host-neutral

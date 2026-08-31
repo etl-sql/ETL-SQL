@@ -83,6 +83,19 @@ const ROLE_ALIASES = Object.freeze({
     SEARCH: 'SLICER', CHECKBOX: 'SLICER', SLIDER: 'SLICER',
 });
 
+/**
+ * The visual types the palette offers, grouped as an author browses them. Lives beside the role
+ * definitions because the two answer the same question — what visual types exist, and what does each
+ * one bind to — and a type added to one without the other produces a palette entry that cannot be
+ * configured, or a configurable type nobody can reach.
+ */
+export const STUDIO_VISUAL_GROUPS = Object.freeze([
+    { name: 'Charts', types: ['BAR', 'LINE', 'AREA', 'PIE', 'DONUT', 'HBAR', 'SCATTER', 'GAUGE', 'FUNNEL', 'TREEMAP', 'HEATMAP', 'COMBO', 'BOXPLOT', 'WATERFALL', 'BUBBLE', 'RADAR', 'CANDLESTICK', 'MAP', 'GANTT', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX', 'CUSTOM'] },
+    { name: 'Data & Content', types: ['CARD', 'TABLE', 'TEXT', 'IMAGE', 'HTML'] },
+    { name: 'Filters & Inputs', types: ['SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'] },
+    { name: 'Layout & Actions', types: ['CONTAINER', 'BUTTON'] },
+]);
+
 /** The roles a visual type accepts. Unknown types fall back to a category/value pair. */
 export function rolesForVisualType(type) {
     const key = String(type || '').toUpperCase();

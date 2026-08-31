@@ -161,11 +161,16 @@ uncached query), the guided report workflow rail, and the report page designer.
 
 **Stage 0 — Foundations.** Every later wizard either uses these or duplicates them.
 
-- [ ] **W0.1 — Shared authoring component contract**: The canonical module split landed (P2 above),
-  but the contract a shared authoring component must satisfy is not written down. State it: a
-  component is host-neutral, receives a sample and a document context, returns a statement or a
-  designer-state mutation, and never reaches the network itself. Without this, `studio.js` forks the
-  same wizard scaffolding once per surface — it grew 48 KB adding two of them.
+- [x] **W0.1 — Shared authoring component contract**: The guided wizards and steps now live in the
+  canonical `studio-authoring.js`, composed into the workbench by `studio.js`, which shed 1,360 lines.
+  Five rules are documented at the top of the module and in ADR §6.1: host-neutral; no network of its
+  own (all I/O through an injected `request`, no literal `/api/...` paths); no script writing of its
+  own (every change through the canonical parse-mutate-patch round-trip, with `USE DATASET` the one
+  confined exception the patcher cannot express); preview before write; read state from the parse.
+  `StudioAuthoringContractTests` enforces the first three by inspection, and each assertion was
+  verified to fail when its rule is violated rather than passing vacuously. Visual types moved beside
+  their role definitions in `visual-preview.js` so a palette entry can never exist without the roles
+  that configure it.
 - [ ] **W0.2 — Wizard test lane**: One required assertion per wizard: clicking the confirm button
   writes the statement the dialog previewed. The guided steps sat broken because nothing checked
   this, and the UI sandbox actively concealed it by echoing the script back unchanged from
