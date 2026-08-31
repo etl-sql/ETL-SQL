@@ -254,11 +254,13 @@ boundary question is easier to answer once the authoring surfaces have settled.
 
 **Cross-cutting decisions.** Not build items; each gets harder to change as more wizards exist.
 
-- [ ] **W-D1 — Lazy-load wizard bundles, or keep re-blessing the payload budget**: The browser
-  payload budget was re-blessed to 2,353,317 raw bytes on 2026-08-30 after the Git diff viewer and
-  the guided-workflow work together pushed it 9.9% past the previous baseline. That instance was
-  targeted and accepted. The open question is the next five wizards; decide before Stage 2, which is
-  the largest single addition on this list.
+- [x] **W-D1 — Payload budget: keep re-blessing (decided 2026-08-30)**: Wizard bundles are not
+  lazy-loaded, and payload size does not gate authoring work. When a wizard pushes the browser
+  payload past tolerance, re-bless the budget and say in the commit message why it grew. The budget
+  test stays useful as a notification that the payload moved — it is what caught the Git diff viewer
+  and the guided-workflow work together running 9.9% past baseline — but a red result is a prompt to
+  record the growth, not to stop and optimise. Revisit only if payload becomes an actual problem;
+  no trigger is set for that.
 - [ ] **W-D2 — Wizard versus inspector**: A wizard suits something being *created* from nothing in a
   sequence with prerequisites; an inspector suits a property of something *already selected*. Themes,
   styles, formatting, drillthrough, and scope are all inspector-shaped. Building them as wizards is

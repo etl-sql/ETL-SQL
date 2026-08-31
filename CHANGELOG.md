@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Split the canonical Studio browser implementation into responsibility-owned modules for host
+  contracts, document state, data sampling, Report-SQL mutations, save security, and lease
+  lifecycle. `studio.js` now composes those services with the workbench UI, and Portal-only dataset
+  routes are checked separately from cross-host and desktop-only routes.
+
 - Split Studio's Data and Filters activity-rail tools into independent sidebars that can remain open
   together. Data now prioritizes New connection and field discovery, while Filters provides a
   type-aware New filter dialog, active-rule controls, and drag-and-drop or keyboard field transfer.

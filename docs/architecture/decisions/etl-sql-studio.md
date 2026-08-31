@@ -88,6 +88,24 @@ ETL-SQL Studio adopts the clean, minimalist vector icon design language establis
 - 🌿 **Source Control (Git)**: Active branch indicator, file change status, commit, and diff inspection.
 - ⚙️ **Settings**: Light/Dark theme toggle, font scale, formatter options.
 
+### 2.2 Canonical browser module boundaries
+
+The browser workbench remains canonical under
+`src/ETL-SQL.ReportRuntime/Resources/Shared/designer/`, but it is composed from responsibility-owned
+modules instead of one file owning UI, host, persistence, and query behavior:
+
+- `studio.js` — workbench DOM rendering, interaction wiring, and composition.
+- `studio-contracts.js` — shared, Portal-only, and desktop-only route tables plus starter scripts.
+- `studio-state.js` — workbench state and isolated per-document session contexts.
+- `studio-host.js` — host capability and authenticated-fetch normalization.
+- `studio-data.js` — snapshot metadata, local filter projection, and sample requests.
+- `studio-sql-mutations.js` — serialized parser/patcher mutations and filter persistence.
+- `studio-security.js` — plaintext-secret detection and client-side credential encryption.
+- `studio-lifecycle.js` — edit-lease renewal, page-hide release, and disposal.
+
+These are all canonical shared assets. New behavior belongs in the narrowest module, and every new
+file must be distributed with `node .\scripts\sync-assets.js`. Host copies remain generated output.
+
 ### 2.5 Progressive Disclosure & the Learning Path
 
 ETL-SQL Studio is **script-first**. The visual surfaces exist so that an author who does not yet know

@@ -26,17 +26,17 @@ public sealed class StudioStarterScriptTests
         return dir!.FullName;
     }
 
-    /// <summary>Extracts the starter scripts from their backtick literals in studio.js.</summary>
+    /// <summary>Extracts the starter scripts from their canonical contracts module.</summary>
     public static TheoryData<string, string> Starters()
     {
         var studioJs = File.ReadAllText(Path.Combine(
-            RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio.js"));
+            RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio-contracts.js"));
 
         var table = Regex.Match(
             studioJs,
             @"const\s+STUDIO_STARTER_SCRIPTS\s*=\s*Object\.freeze\(\{(?<body>.*?)\}\);",
             RegexOptions.Singleline);
-        Assert.True(table.Success, "STUDIO_STARTER_SCRIPTS was not found in studio.js.");
+        Assert.True(table.Success, "STUDIO_STARTER_SCRIPTS was not found in studio-contracts.js.");
 
         var data = new TheoryData<string, string>();
         foreach (Match entry in Regex.Matches(
@@ -79,12 +79,12 @@ public sealed class StudioStarterScriptTests
     public void DashboardAndPaginatedWorkflowTemplates_AreParserValidAndDeclareTheirMode()
     {
         var studioJs = File.ReadAllText(Path.Combine(
-            RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio.js"));
+            RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio-contracts.js"));
         var table = Regex.Match(
             studioJs,
             @"const\s+REPORT_WORKFLOW_TEMPLATES\s*=\s*Object\.freeze\(\{(?<body>.*?)\}\);",
             RegexOptions.Singleline);
-        Assert.True(table.Success, "REPORT_WORKFLOW_TEMPLATES was not found in studio.js.");
+        Assert.True(table.Success, "REPORT_WORKFLOW_TEMPLATES was not found in studio-contracts.js.");
 
         var templates = Regex.Matches(
                 table.Groups["body"].Value,

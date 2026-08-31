@@ -15,8 +15,17 @@
 
 import { createScriptEditor, createDesigner, createScriptResultsPanel, normalizeRunTrace, renderDag } from './designer.js';
 import { renderVisualSample, rolesForVisualType, missingRequiredRoles } from './visual-preview.js';
-import { createConnectionWizard, encryptClientPassword } from './connection-wizard.js';
+import { createConnectionWizard } from './connection-wizard.js';
 import { buildSideBySideDiff } from './studio-git-diff.js';
+import { REPORT_WORKFLOW_TEMPLATES, STUDIO_CATALOG_ROUTES, STUDIO_ROUTES, STUDIO_STARTER_SCRIPTS, STUDIO_WORKSPACE_ROUTES } from './studio-contracts.js';
+import { columnName as _columnName, columnType as _columnType, requestSourceSample, snapshotColumns as _snapshotColumns, updateSnapshotPackage as writeSnapshotPackage } from './studio-data.js';
+import { createStudioHostAdapter } from './studio-host.js';
+import { createStudioLeaseLifecycle } from './studio-lifecycle.js';
+import { detectPlaintextSecrets as _detectPlaintextSecrets, secureStudioScriptForSave } from './studio-security.js';
+import { createStudioSqlMutationService } from './studio-sql-mutations.js';
+import { createStudioContextStore, createStudioState } from './studio-state.js';
+
+export { secureStudioScriptForSave } from './studio-security.js';
 
 const _feedback = globalThis.ETLSQLFeedback || {
     notify: (msg, opts) => console.log(`[Notification ${opts?.tone || 'info'}] ${msg}`),
@@ -81,84 +90,7 @@ function _fileIcon(path) {
     return _studioIcon('explorer', 14);
 }
 
-function _detectPlaintextSecrets(scriptText) {
-    if (!scriptText || typeof scriptText !== 'string') return [];
-    const findings = [];
-    const patterns = [
-        { label: 'Plaintext Password', regex: /\b(PASSWORD|PWD)\s*=\s*(['"])(?!ENC:|SECRET:|SHARED:)(.+?)\2/gi },
-        { label: 'Plaintext Secret / API Key', regex: /\b(API_KEY|APIKEY|SECRET_KEY|SECRETKEY|TOKEN|ACCESS_TOKEN)\s*=\s*(['"])(?!ENC:|SECRET:|SHARED:)(.+?)\2/gi }
-    ];
-
-    for (const { label, regex } of patterns) {
-        let match;
-        while ((match = regex.exec(scriptText)) !== null) {
-            const value = match[3] || match[0];
-            const valueOffset = match[0].indexOf(value);
-            findings.push({
-                label,
-                start: match.index + valueOffset,
-                end: match.index + valueOffset + value.length,
-                value
-            });
-        }
-    }
-    return findings;
-}
-
-/**
- * Encrypts only the plaintext credential spans found by Studio's save guard. Replacements run
- * from the end of the document so ciphertext length never invalidates an earlier source span.
- * The injected encryptor keeps this helper deterministic in focused tests while production uses
- * the same PBKDF2 + AES-GCM v2 envelope as the Connection Wizard and engine CryptoUtils.
- */
-export async function secureStudioScriptForSave(scriptText, passphrase, encrypt = encryptClientPassword) {
-    if (!passphrase?.trim()) throw new Error('A passphrase is required to encrypt credentials.');
-    const findings = _detectPlaintextSecrets(scriptText);
-    let secured = scriptText;
-    for (const finding of findings.sort((left, right) => right.start - left.start)) {
-        const encrypted = await encrypt(finding.value, passphrase);
-        if (!encrypted?.startsWith('ENC:')) {
-            throw new Error('Credential encryption is unavailable. The script was not changed or saved.');
-        }
-        secured = secured.slice(0, finding.start) + encrypted + secured.slice(finding.end);
-    }
-    return secured;
-}
-
 const CHART_PALETTE = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787', '#d29922', '#bc8cff'];
-
-// Studio ships as one canonical asset across several hosts (Portal, Workstation Editor, VS Code,
-// Report Player, ui-sandbox). Those hosts do NOT expose identical routes, so every server path used
-// here goes through this table. `/api/designer/*` is the one dialect every Studio host serves; the
-// Workstation Editor also keeps unprefixed aliases for its legacy editor shell, which Studio must
-// not depend on. Adding a route here means adding it to BOTH hosts — see the route-contract test.
-const STUDIO_ROUTES = Object.freeze({
-    analyze: '/api/designer/analyze',
-    complete: '/api/designer/complete',
-    hover: '/api/designer/hover',
-    format: '/api/designer/format',
-    run: '/api/designer/run',
-    dag: '/api/designer/dag',
-    parse: '/api/designer/parse',
-    patch: '/api/designer/patch',
-    queryFilter: '/api/designer/query-filter',
-    optionSource: '/api/designer/option-source',
-    dataSample: '/api/designer/data-sample',
-    schema: '/api/designer/schema',
-    sessionMetadata: '/api/session/metadata',
-    connectorsSchema: '/api/connectors/schema',
-    // Registered datasets the signed-in user may read. Catalog hosts only — `registryDatasets()`
-    // skips it on the desktop, which has no registry rather than an empty one.
-    datasetRegistry: '/api/datasets',
-});
-
-// Desktop-only routes: they read the local workspace filesystem, which the Portal has no equivalent
-// for (it uses the report catalog instead). Guarded by `hasWorkspaceHost` rather than requested
-// blindly, so the Portal shows an honest state instead of silently 404ing.
-const STUDIO_WORKSPACE_ROUTES = Object.freeze({
-    files: '/api/files',
-    connections: '/api/connections',
-});
 
 const STUDIO_VISUAL_GROUPS = [
     { name: 'Charts', types: ['BAR', 'LINE', 'AREA', 'PIE', 'DONUT', 'HBAR', 'SCATTER', 'GAUGE', 'FUNNEL', 'TREEMAP', 'HEATMAP', 'COMBO', 'BOXPLOT', 'WATERFALL', 'BUBBLE', 'RADAR', 'CANDLESTICK', 'MAP', 'GANTT', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX', 'CUSTOM'] },
@@ -167,101 +99,9 @@ const STUDIO_VISUAL_GROUPS = [
     { name: 'Layout & Actions', types: ['CONTAINER', 'BUTTON'] },
 ];
 
-function _columnName(column) {
-    return typeof column === 'string' ? column : String(column?.name || column?.columnName || '');
-}
-
-function _columnType(column, rows = []) {
-    const declared = typeof column === 'object' ? String(column?.type || column?.dataType || '').toUpperCase() : '';
-    if (/DATE|TIME/.test(declared)) return 'date';
-    if (/INT|DECIMAL|NUMERIC|FLOAT|DOUBLE|REAL|MONEY/.test(declared)) return 'number';
-    const name = _columnName(column);
-    const sample = rows.find(row => row?.[name] != null)?.[name];
-    if (sample instanceof Date || (/date|time/i.test(name) && !Number.isNaN(Date.parse(sample)))) return 'date';
-    if (typeof sample === 'number') return 'number';
-    return 'text';
-}
-
-function _snapshotColumns(snap) {
-    if (Array.isArray(snap?.columns) && snap.columns.length) return snap.columns;
-    const firstRow = snap?.rows?.[0];
-    return firstRow && typeof firstRow === 'object'
-        ? Object.keys(firstRow).map(name => ({ name, type: typeof firstRow[name] }))
-        : [];
-}
-
 function _isUntitledPath(path) {
     return /^untitled(?:_|\.)/i.test(String(path || '').split(/[\\/]/).pop() || '');
 }
-
-// Starter scripts backed by MOCKDB, the built-in in-memory sample connector.
-//
-// Without these, a first session is a dead end: the visual palette stays disabled until a data
-// sample exists, and a sample needs a connection the newcomer does not have yet. MOCKDB needs no
-// external database, so "Start with sample data" reaches a working canvas — and a readable script —
-// immediately. Keep these parser-valid; StudioStarterScriptTests parses every one.
-const STUDIO_STARTER_SCRIPTS = Object.freeze({
-    report: `-- Sample dashboard. MOCKDB is a built-in in-memory connector, so this needs no database.
--- Replace the connection below with your own when you are ready.
-SET REPORT TITLE = 'Sample Dashboard';
-
-CREATE CONNECTION demo AS MOCKDB();
-
-SELECT Region, SUM(Total) AS Revenue
-INTO #revenue_by_region
-FROM demo.Orders
-GROUP BY Region;
-
-CREATE VISUAL revenue_by_region AS BAR (
-    SOURCE = #revenue_by_region,
-    MAPPINGS (X = Region, Y = Revenue),
-    OPTIONS (LEGEND = OFF)
-);
-`,
-    etl: `-- Sample pipeline. MOCKDB is a built-in in-memory connector, so this needs no database.
--- Replace the connection below with your own when you are ready.
-CREATE CONNECTION demo AS MOCKDB();
-
--- Stage the rows you care about in a #temp table.
-SELECT SaleID, OrderDate, Region, Total
-INTO #recent_sales
-FROM demo.Orders
-WHERE Total > 100;
-
--- Summarise the staged rows.
-SELECT Region, COUNT(*) AS Orders, SUM(Total) AS Revenue
-INTO #revenue_by_region
-FROM #recent_sales
-GROUP BY Region;
-
-SELECT * FROM #revenue_by_region;
-`,
-    sql: `-- MOCKDB is a built-in in-memory connector, so this needs no database.
-CREATE CONNECTION demo AS MOCKDB();
-
-SELECT Region, COUNT(*) AS Orders, SUM(Total) AS Revenue
-FROM demo.Orders
-GROUP BY Region;
-`,
-});
-
-const REPORT_WORKFLOW_TEMPLATES = Object.freeze({
-    dashboard: `-- Dashboard canvas: add data, then arrange charts, KPIs, tables, and slicers.
-CREATE PAGE [Dashboard] AS DASHBOARD ( LAYOUT ( STRUCTURE = '.' ) );
-`,
-    paginated: `-- Paginated report: build detail bands for a fixed physical page.
-CREATE PAGE [Paginated Report] AS PAGINATED (
-  LAYOUT ( STRUCTURE = '.' ),
-  PRINT_LAYOUT (
-    PAGE_SIZE = 'Letter',
-    ORIENTATION = 'PORTRAIT',
-    MARGINS = (0.75, 0.75, 0.75, 0.75),
-    UNITS = 'in',
-    OVERFLOW = 'SPLIT'
-  )
-);
-`,
-});
 
 // Prefer a structured { error } / { message } body over a raw HTML error page.
 async function _readErrorText(response) {
@@ -291,81 +131,12 @@ export async function createStudioWorkbench(container, opts = {}) {
         document.body.classList.remove('theme-dark');
     }
 
-    const authFetch = opts.authFetch ?? ((url, init) => fetch(url, { ...init, headers: { ...(opts.headers || {}), ...(init?.headers || {}) } }));
-    const apiBase = opts.apiBase || '';
-
-    // Does this host expose a local workspace filesystem (/api/files, /api/connections)? The
-    // Workstation Editor does; the Portal serves the report catalog instead. Callers should say so
-    // explicitly. Inferred for older callers: a host that passed a deploymentMode is the Portal.
-    const hasWorkspaceHost = opts.hasWorkspaceHost ?? !opts.deploymentMode;
-    const hasGitHost = typeof opts.onLoadGitStatus === 'function'
-        && typeof opts.onLoadGitHistory === 'function'
-        && typeof opts.onLoadGitDiff === 'function';
-
-    const workspaceFiles = opts.workspaceFiles || [];
-    const documents = opts.documents ? [...opts.documents] : [];
-    if (!documents.length && (opts.initialFile || opts.initialContent)) {
-        const defaultInitialFile = opts.initialFile || 'untitled_1.rptsql';
-        documents.push({
-            id: 'doc-1',
-            path: defaultInitialFile,
-            name: defaultInitialFile.split('/').pop().split('\\').pop(),
-            content: opts.initialContent || '',
-            isDirty: false,
-            projection: 'split',
-        });
-    }
-
-    const state = {
-        workspaceFiles: workspaceFiles,
-        catalogReports: [...(opts.catalogReports || [])],
-        catalogFolders: [...(opts.catalogFolders || [])],
-        capabilities: new Set(opts.capabilities || []),
-        deploymentMode: opts.deploymentMode || 'Desktop',
-        sourceControlEnabled: Boolean(opts.sourceControlEnabled),
-        documents: documents,
-        workspaceFolders: [...(opts.workspaceFolders || [])],
-        explorerExpanded: new Set((opts.workspaceFolders || []).map(folder => folder.path)),
-        activeDocId: opts.activeDocId || (documents.length > 0 ? documents[0].id : '__home__'),
-        activeActivity: 'explorer',
-        filterSidebarOpen: false,
-        selectedVisualId: null,
-        sidebarOpen: true,
-        editorInstance: null,
-        resultsPanel: null,
-        dagInstance: null,
-        dagDocumentId: null,
-    };
-
-    const homeDocumentContext = createDocumentContext();
-    function createDocumentContext(snapshot = null) {
-        return {
-            snapshot,
-            snapshotPackage: { metadata: { isSampled: true }, columns: [], sampleRows: {} },
-            snapshotCache: new Map(),
-            activeFilters: {},
-            filterFields: [],
-            selectedSource: null,
-            sourceColumns: [],
-            diagnostics: [],
-            runAbort: null,
-            runActive: false,
-            previewAbort: null,
-            dagAbort: null,
-            dagRevision: 0,
-            lastValidDag: null,
-            syncRevision: 0,
-            previewedDatasetSignature: null,
-            resultsTrace: []
-        };
-    }
-    function documentContext(doc) {
-        if (!doc) return homeDocumentContext;
-        doc.studioContext ||= createDocumentContext();
-        return doc.studioContext;
-    }
-    documents.forEach(documentContext);
-    if (opts.initialSnapshot && documents.length) documentContext(documents[0]).snapshot = opts.initialSnapshot;
+    const host = createStudioHostAdapter(opts);
+    const { authFetch, apiBase, hasWorkspaceHost, hasGitHost } = host;
+    const state = createStudioState(opts);
+    const documents = state.documents;
+    const contexts = createStudioContextStore(documents, opts.initialSnapshot);
+    const documentContext = contexts.forDocument;
     function activeDocumentContext() {
         return documentContext(getActiveDoc());
     }
@@ -544,30 +315,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     function updateSnapshotPackage(snapshot) {
-        const context = activeDocumentContext();
-        const studioSnapshotPackage = context.snapshotPackage;
-        const columns = _snapshotColumns(snapshot).map(_columnName);
-        let rows = snapshot?.rows || [];
-        rows = rows.filter(row => Object.entries(context.activeFilters).every(([field, filter]) => {
-            if (!filter) return true;
-            if (filter.kind === 'categorical') return !filter.values?.length || filter.values.includes(String(row?.[field]));
-            if (filter.kind === 'number') {
-                const value = Number(row?.[field]);
-                return Number.isFinite(value)
-                    && (filter.minimum == null || value >= Number(filter.minimum))
-                    && (filter.maximum == null || value <= Number(filter.maximum));
-            }
-            if (filter.kind === 'date') {
-                const value = String(row?.[field] || '').slice(0, 10);
-                return (!filter.minimum || value >= filter.minimum) && (!filter.maximum || value <= filter.maximum);
-            }
-            return true;
-        }));
-        studioSnapshotPackage.columns = columns;
-        studioSnapshotPackage.sampleRows = snapshot?.source
-            ? { [snapshot.source]: rows.map(row => columns.map(column => row?.[column])) }
-            : {};
-        studioSnapshotPackage.metadata = { isSampled: true, source: snapshot?.source || null, rowCount: rows.length };
+        writeSnapshotPackage(activeDocumentContext(), snapshot);
     }
 
     // Results are a per-document trace replayed into one shared panel, not an HTML blob. The panel
@@ -956,7 +704,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     async function registryDatasets() {
         if (hasWorkspaceHost) return [];
         try {
-            const response = await authFetch(apiBase + STUDIO_ROUTES.datasetRegistry);
+            const response = await authFetch(apiBase + STUDIO_CATALOG_ROUTES.datasetRegistry);
             if (!response.ok) return [];
             const data = await response.json();
             return (Array.isArray(data) ? data : data.datasets || [])
@@ -2520,7 +2268,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     function hasCapability(capability) {
-        return state.deploymentMode === 'Desktop' || state.capabilities.has(capability);
+        return host.hasCapability(state, capability);
     }
 
     function showVisualProperties() {
@@ -2568,120 +2316,26 @@ export async function createStudioWorkbench(container, opts = {}) {
         return response.json();
     }
 
-    function filterContract(field, filter) {
-        return {
-            id: filter.id || field,
-            column: field,
-            kind: filter.kind,
-            values: filter.values || null,
-            minimum: filter.minimum == null ? null : String(filter.minimum),
-            maximum: filter.maximum == null ? null : String(filter.maximum),
-            parameterName: filter.parameterName || null,
-            parameterOperator: filter.parameterOperator || null,
-            allValue: filter.allValue || null
-        };
-    }
-
-    async function composeFilteredSource(source, filters, asVisualSource = true) {
-        const result = await designerApiJson(STUDIO_ROUTES.queryFilter, { source, filters, asVisualSource });
-        if (typeof result.source !== 'string') throw new Error('The filter service returned no query source.');
-        return result.source;
-    }
-
-    function matchingFilters(context, scope, target) {
-        return Object.entries(context.activeFilters)
-            .filter(([, filter]) => filter?.scope === scope && filter?.target === target)
-            .map(([field, filter]) => filterContract(field, filter));
-    }
-
-    function resolveFilterTarget(designState, filter) {
-        if (filter.scope === 'dataset') {
-            const snapshotName = String(activeDocumentContext().snapshot?.source || '').replace(/^[&#]/, '');
-            const dataset = (designState.datasets || []).find(item => item.name === filter.target || item.id === filter.target)
-                || (designState.datasets || []).find(item => String(item.name || '').replace(/^[&#]/, '') === snapshotName)
-                || designState.datasets?.[0];
-            if (!dataset) throw new Error('Add or select a CREATE DATASET before applying a dataset-global filter.');
-            return { scope: 'dataset', target: dataset.name, source: dataset.query, item: dataset };
-        }
-
-        const visual = findDesignerVisual(designState, filter.target || state.selectedVisualId);
-        if (!visual) throw new Error('Select a visual before applying a visual-local filter.');
-        const source = visual.options?.inline_source || visual.dataset || activeDocumentContext().snapshot?.source;
-        if (!source) throw new Error(`Visual ${visual.name} has no filterable source.`);
-        return { scope: 'visual', target: visual.name, source, item: visual };
-    }
-
-    function persistFilter(field, removedFilter = null) {
-        const context = activeDocumentContext();
-        const filter = removedFilter || context.activeFilters[field];
-        if (!filter) return Promise.resolve(null);
-        return canonicalDesignerMutation(`Apply ${field} filter`, async designState => {
-            const resolved = resolveFilterTarget(designState, filter);
-            filter.target = resolved.target;
-            const contracts = matchingFilters(context, resolved.scope, resolved.target);
-            const source = await composeFilteredSource(resolved.source, contracts, resolved.scope === 'visual');
-            if (resolved.scope === 'dataset') resolved.item.query = source;
-            else {
-                resolved.item.options ||= {};
-                resolved.item.options.inline_source = source;
-            }
-            return resolved.target;
-        });
-    }
-
-    function findDesignerVisual(designState, visualId) {
-        const visuals = (designState.pages || []).flatMap(page => page.visuals || []);
-        return visuals.find(visual => visual.id === visualId || visual.name === visualId) || null;
-    }
-
-    function uniqueVisualName(designState, baseName) {
-        const names = new Set((designState.pages || []).flatMap(page => page.visuals || []).map(visual => visual.name.toLowerCase()));
-        let candidate = baseName;
-        let suffix = 2;
-        while (names.has(candidate.toLowerCase())) candidate = `${baseName}_${suffix++}`;
-        return candidate;
-    }
-
-    function canonicalDesignerMutation(label, mutate) {
-        const doc = getActiveDoc();
-        if (!doc) return Promise.resolve(null);
-        const context = documentContext(doc);
-        context.patchQueue ||= Promise.resolve();
-        context.patchQueue = context.patchQueue.catch(() => {}).then(async () => {
-            const script = getActiveDoc() === doc && state.editorInstance ? state.editorInstance.getValue() : doc.content;
-            const parsed = await designerApiJson(STUDIO_ROUTES.parse, { script });
-            if (parsed.error) throw new Error(parsed.error);
-            const designState = parsed.designState || { pages: [], datasets: [], bookmarks: null, parameters: null };
-            if (!designState.pages?.length) {
-                designState.pages = [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }];
-            }
-            const mutationResult = await mutate(designState);
-            const patched = await designerApiJson(STUDIO_ROUTES.patch, { script, designState });
-            if (typeof patched.script !== 'string') throw new Error('The canonical patcher returned no script.');
-
-            doc.content = patched.script;
-            doc.isDirty = patched.script !== script || doc.isDirty;
-            if (getActiveDoc() === doc) {
-                // Apply as a ranged edit so the author keeps their cursor and scroll position, then
-                // scroll the generated span into view — the code pane is where a script-first author
-                // learns what the canvas just wrote, so it must not silently swap underneath them.
-                const changed = state.editorInstance?.replaceAll?.(patched.script);
-                if (changed) state.editorInstance?.revealRange?.(changed.from, changed.to);
-                const applied = await state.designerInstance?.applyScriptText?.(patched.script);
-                renderVisualStage();
-                // Repaint the workflow rail from the state this mutation just produced. Waiting for
-                // the editor's debounced sync left the step checklist describing the document as it
-                // was before the click that changed it.
-                renderReportWorkflowChrome(doc, applied?.designState);
-            }
-            renderTabs();
-            return mutationResult;
-        }).catch(error => {
-            _feedback.notify(`${label} failed: ${error.message}`, { title: 'Script Not Changed', tone: 'error' });
-            return null;
-        });
-        return context.patchQueue;
-    }
+    const {
+        canonicalDesignerMutation,
+        composeFilteredSource,
+        filterContract,
+        findDesignerVisual,
+        matchingFilters,
+        persistFilter,
+        resolveFilterTarget,
+        uniqueVisualName
+    } = createStudioSqlMutationService({
+        state,
+        getActiveDocument: getActiveDoc,
+        activeDocumentContext,
+        designerApiJson,
+        routes: STUDIO_ROUTES,
+        renderVisualStage,
+        renderWorkflow: renderReportWorkflowChrome,
+        renderTabs,
+        feedback: _feedback
+    });
 
     async function addVisualToCanvas(type) {
         const uType = (type || 'BAR').toUpperCase();
@@ -3917,10 +3571,15 @@ export async function createStudioWorkbench(container, opts = {}) {
             if (getActiveDoc() === document) { updateSnapshotPackage(cached); state.designerInstance?.refreshSnapshot?.(); renderSidebarContent(state.activeActivity); }
             return;
         }
-        const response = await authFetch(apiBase + STUDIO_ROUTES.dataSample, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceKind: 'connection', connection, table, documentUri: getActiveDoc()?.path || 'studio', script: state.editorInstance?.getValue?.() ?? getActiveDoc()?.content ?? '' }) });
-        if (!response.ok) throw new Error(await response.text() || 'Data sample failed.');
-        const sample = await response.json();
-        context.snapshot = { source: sample.source || key, columns: sample.columns || context.sourceColumns, rowCount: sample.rowCount || sample.rows?.length || 0, rows: sample.rows || [] };
+        const sample = await requestSourceSample({
+            authFetch,
+            url: apiBase + STUDIO_ROUTES.dataSample,
+            connection,
+            table,
+            documentUri: getActiveDoc()?.path || 'studio',
+            script: state.editorInstance?.getValue?.() ?? getActiveDoc()?.content ?? ''
+        });
+        context.snapshot = { ...sample, columns: sample.columns.length ? sample.columns : context.sourceColumns };
         context.snapshotCache.set(key, context.snapshot);
         if (getActiveDoc() === document) { updateSnapshotPackage(context.snapshot); state.designerInstance?.refreshSnapshot?.(); renderSidebarContent(state.activeActivity); }
         _feedback.notify(`Created a reusable sample with ${context.snapshot.rowCount} rows from ${table}.`, { title: 'Data ready', tone: 'success' });
@@ -4709,26 +4368,12 @@ export async function createStudioWorkbench(container, opts = {}) {
         }
     });
 
-    const renewLeaseTimer = opts.onRenewDocument ? window.setInterval(async () => {
-        for (const doc of state.documents.filter(item => item.lease?.acquired)) {
-            try {
-                const lease = await opts.onRenewDocument(doc);
-                if (lease) doc.lease = { ...doc.lease, ...lease, acquired: true };
-            } catch (error) {
-                doc.lease = { ...doc.lease, acquired: false };
-                doc.canSave = false;
-                doc.readOnlyReason = error?.message || 'The edit lease expired. Reopen the report to continue editing.';
-                _feedback.notify(doc.readOnlyReason, { title: 'Edit Lease Lost', tone: 'warning' });
-            }
-        }
-    }, opts.leaseRenewIntervalMs || 240000) : null;
-
-    const releaseLeasesOnPageHide = () => {
-        for (const doc of state.documents.filter(item => item.lease?.acquired)) {
-            void opts.onCloseDocument?.(doc, { keepalive: true });
-        }
-    };
-    if (opts.onCloseDocument) window.addEventListener('pagehide', releaseLeasesOnPageHide);
+    const leaseLifecycle = createStudioLeaseLifecycle({
+        state,
+        options: opts,
+        documentContext,
+        feedback: _feedback
+    });
 
     // The panel overwrites its container's className, so it gets its own child element rather than
     // the host — the host keeps the Studio sizing rules the panel's `height: 100%` depends on.
@@ -4835,19 +4480,11 @@ export async function createStudioWorkbench(container, opts = {}) {
         deleteVisual,
         openCatalogReport,
         dispose: () => {
-            for (const doc of state.documents.filter(item => item.lease?.acquired)) {
-                void opts.onCloseDocument?.(doc, { keepalive: false });
-            }
             document.removeEventListener('click', onOutsideClick);
             document.removeEventListener('keydown', onShellKeyDown);
             window.removeEventListener('beforeunload', onBeforeUnload);
-            window.removeEventListener('pagehide', releaseLeasesOnPageHide);
-            if (renewLeaseTimer) window.clearInterval(renewLeaseTimer);
+            leaseLifecycle.dispose();
             clearTimeout(codeMirrorDebounce);
-            for (const doc of state.documents) {
-                documentContext(doc).previewAbort?.abort();
-                documentContext(doc).dagAbort?.abort();
-            }
             tabResizeObserver?.disconnect();
             disposePipelineDag();
             state.designerInstance?.dispose?.();

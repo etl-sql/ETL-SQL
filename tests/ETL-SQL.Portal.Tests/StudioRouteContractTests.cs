@@ -40,6 +40,9 @@ public sealed class StudioRouteContractTests
     private static string CanonicalStudioJs() => File.ReadAllText(Path.Combine(
         RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio.js"));
 
+    private static string CanonicalStudioContractsJs() => File.ReadAllText(Path.Combine(
+        RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio-contracts.js"));
+
     /// <summary>Pulls the route literals out of a frozen table declared in studio.js.</summary>
     private static IReadOnlyList<string> RouteTable(string studioJs, string tableName)
     {
@@ -47,7 +50,7 @@ public sealed class StudioRouteContractTests
             studioJs,
             $@"const\s+{Regex.Escape(tableName)}\s*=\s*Object\.freeze\(\{{(?<body>.*?)\}}\);",
             RegexOptions.Singleline);
-        Assert.True(table.Success, $"{tableName} was not found in studio.js. Routes must stay in the table so this contract can be checked.");
+        Assert.True(table.Success, $"{tableName} was not found in studio-contracts.js. Routes must stay in the table so this contract can be checked.");
 
         var routes = Regex.Matches(table.Groups["body"].Value, @"'(?<route>/api/[^']+)'")
             .Select(m => m.Groups["route"].Value)
@@ -62,7 +65,7 @@ public sealed class StudioRouteContractTests
     {
         var routes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var controller in new[] { typeof(DesignerController), typeof(StudioController) })
+        foreach (var controller in new[] { typeof(DesignerController), typeof(StudioController), typeof(DatasetController) })
         {
             var prefix = controller.GetCustomAttributes(typeof(RouteAttribute), true)
                 .Cast<RouteAttribute>()
@@ -74,11 +77,10 @@ public sealed class StudioRouteContractTests
                 foreach (var attribute in method.GetCustomAttributes(true).OfType<IRouteTemplateProvider>())
                 {
                     var template = attribute.Template;
-                    if (template is null)
-                        continue;
-
                     // An absolute template escapes the controller prefix, e.g. "/api/session/metadata".
-                    var full = template.StartsWith('/') ? template : $"/{prefix}/{template}";
+                    var full = string.IsNullOrEmpty(template)
+                        ? $"/{prefix}"
+                        : template.StartsWith('/') ? template : $"/{prefix}/{template}";
                     routes.Add(Normalize(full));
                 }
             }
@@ -112,7 +114,7 @@ public sealed class StudioRouteContractTests
     public void EveryStudioRoute_IsServedByThePortal()
     {
         var portal = PortalRoutes();
-        var missing = RouteTable(CanonicalStudioJs(), "STUDIO_ROUTES")
+        var missing = RouteTable(CanonicalStudioContractsJs(), "STUDIO_ROUTES")
             .Where(route => !portal.Contains(Normalize(route)))
             .ToList();
 
@@ -125,7 +127,7 @@ public sealed class StudioRouteContractTests
     public void EveryStudioRoute_IsServedByTheDesktopHost()
     {
         var desktop = DesktopRoutes();
-        var missing = RouteTable(CanonicalStudioJs(), "STUDIO_ROUTES")
+        var missing = RouteTable(CanonicalStudioContractsJs(), "STUDIO_ROUTES")
             .Where(route => !desktop.Contains(Normalize(route)))
             .ToList();
 
@@ -138,9 +140,10 @@ public sealed class StudioRouteContractTests
     public void WorkspaceOnlyRoutes_AreServedByTheDesktopHostAndGuardedInStudio()
     {
         var studioJs = CanonicalStudioJs();
+        var contractsJs = CanonicalStudioContractsJs();
         var desktop = DesktopRoutes();
 
-        var missing = RouteTable(studioJs, "STUDIO_WORKSPACE_ROUTES")
+        var missing = RouteTable(contractsJs, "STUDIO_WORKSPACE_ROUTES")
             .Where(route => !desktop.Contains(Normalize(route)))
             .ToList();
         Assert.True(missing.Count == 0,
@@ -152,17 +155,31 @@ public sealed class StudioRouteContractTests
     }
 
     [Fact]
+    public void CatalogOnlyRoutes_AreServedByThePortalAndGuardedInStudio()
+    {
+        var studioJs = CanonicalStudioJs();
+        var missing = RouteTable(CanonicalStudioContractsJs(), "STUDIO_CATALOG_ROUTES")
+            .Where(route => !PortalRoutes().Contains(Normalize(route)))
+            .ToList();
+
+        Assert.True(missing.Count == 0, "Catalog routes must exist on the Portal: " + string.Join(", ", missing));
+        Assert.Contains("hasWorkspaceHost", studioJs, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StudioJs_DeclaresNoApiRouteOutsideTheRouteTables()
     {
         var studioJs = CanonicalStudioJs();
-        var declared = RouteTable(studioJs, "STUDIO_ROUTES")
-            .Concat(RouteTable(studioJs, "STUDIO_WORKSPACE_ROUTES"))
+        var contractsJs = CanonicalStudioContractsJs();
+        var declared = RouteTable(contractsJs, "STUDIO_ROUTES")
+            .Concat(RouteTable(contractsJs, "STUDIO_CATALOG_ROUTES"))
+            .Concat(RouteTable(contractsJs, "STUDIO_WORKSPACE_ROUTES"))
             .ToHashSet(StringComparer.Ordinal);
 
         // Any other '/api/...' literal is a route that bypasses the tables, and therefore bypasses
         // the cross-host checks above. Comments are stripped first so prose mentioning a path does
         // not read as a call site.
-        var code = Regex.Replace(studioJs, @"/\*.*?\*/", string.Empty, RegexOptions.Singleline);
+        var code = Regex.Replace(studioJs + contractsJs, @"/\*.*?\*/", string.Empty, RegexOptions.Singleline);
         code = Regex.Replace(code, @"^\s*//.*$", string.Empty, RegexOptions.Multiline);
 
         var stray = Regex.Matches(code, @"['`](?<route>/api/[A-Za-z0-9\-_/]*)")
@@ -175,6 +192,34 @@ public sealed class StudioRouteContractTests
             "studio.js hardcodes API routes outside STUDIO_ROUTES/STUDIO_WORKSPACE_ROUTES, which is how "
             + "the Portal/desktop route mismatch went unnoticed. Add them to a table instead: "
             + string.Join(", ", stray));
+    }
+
+    [Fact]
+    public void StudioComposition_ImportsEachResponsibilityModule()
+    {
+        var studioJs = CanonicalStudioJs();
+        var expectedModules = new[]
+        {
+            "studio-contracts.js",
+            "studio-data.js",
+            "studio-host.js",
+            "studio-lifecycle.js",
+            "studio-security.js",
+            "studio-sql-mutations.js",
+            "studio-state.js"
+        };
+
+        Assert.All(expectedModules, module =>
+        {
+            Assert.Contains($"'./{module}'", studioJs, StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(
+                RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", module)),
+                $"Canonical Studio responsibility module is missing: {module}");
+        });
+
+        Assert.DoesNotContain("function createDocumentContext", studioJs, StringComparison.Ordinal);
+        Assert.DoesNotContain("const STUDIO_ROUTES =", studioJs, StringComparison.Ordinal);
+        Assert.DoesNotContain("function canonicalDesignerMutation", studioJs, StringComparison.Ordinal);
     }
 }
 
